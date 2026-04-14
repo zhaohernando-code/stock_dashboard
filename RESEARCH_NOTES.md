@@ -221,3 +221,26 @@
 - 用真实 `Tushare + 巨潮 + Qlib` 结果替换当前 demo validation payload，保持 `validation_snapshot` 和 `factor_breakdown` 的输出结构不变
 - 在用户看板阶段优先消费 `recommendation.factor_breakdown`、`validation_snapshot` 和 trace evidence，而不是重新发明前端侧拼装逻辑
 - 若后续引入真实 LLM 推理服务，必须沿当前 `prompt_version + llm_assessment_factor + capped weight + downgrade_conditions` 结构接入，避免绕开治理层
+
+## 2026-04-15 用户看板与解释闭环实现备注
+
+### 本轮实现结论
+- 已新增面向非专业用户的 dashboard watchlist demo，覆盖 `600519.SH`、`300750.SZ`、`601318.SH`、`002594.SZ` 四只股票，并为每只股票同时生成上一版与当前版 recommendation，用于解释“为何变化”。
+- 已把用户看板抽象为后端聚合 contract，而不是让前端自己拼 recommendation、trace、行情和新闻：
+  - `/dashboard/candidates` 负责候选池排序与摘要
+  - `/stocks/{symbol}/dashboard` 负责单票页、变化原因、风险提示、术语解释和 GPT 追问上下文
+  - `/dashboard/glossary` 负责统一术语口径
+- 已新增 `frontend/` 的 `Vite + React + TypeScript` 工程，可直接构建 GitHub Pages 子页面静态资源。
+
+### 本轮取舍
+- GPT 追问入口当前交付为“可复制的追问包”，而不是直接联通线上 LLM 会话
+  - 原因：当前项目尚未进入真实 OpenAI/LLM 服务接入步骤，先把证据上下文、提问模版和前端入口固化，可以避免后续接模型时重做 UI 和后端 contract
+- 候选页排序暂按 `direction -> confidence -> 20 日趋势` 的轻量规则输出
+  - 原因：当前 watchlist 很小，一期目标是解释闭环而不是做全市场选股器
+- 变化原因依赖“上一版 recommendation”对比，而不是前端对行情做临时 diff
+  - 原因：只有 recommendation-to-recommendation 的对比，才能把方向切换、置信变化、降级标记和因子强弱变动一起解释清楚
+
+### 对下一步的建议
+- 下一步进入“分离式模拟交易与内测准入”时，应直接复用当前 dashboard 的 `simulation_orders` 区块，不要重新设计独立的建议承接入口
+- 若后续接真实 GPT 服务，建议保留当前 `copy_prompt` 结构，并把回答限制继续绑定到 `evidence_packet` 和结构化 recommendation 字段
+- 如果要支持真实 GitHub Pages 部署，需在后端部署时明确 `ASHARE_CORS_ALLOW_ORIGINS`，并把当前默认宽松策略收紧到内测域名白名单
