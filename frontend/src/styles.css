@@ -1,0 +1,561 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap");
+
+:root {
+  color-scheme: light;
+  --bg: #eef3f9;
+  --panel: rgba(255, 255, 255, 0.88);
+  --panel-strong: #ffffff;
+  --panel-dark: #10233c;
+  --text: #10233c;
+  --text-muted: #607086;
+  --line: rgba(16, 35, 60, 0.12);
+  --brand: #0a65ff;
+  --brand-soft: rgba(10, 101, 255, 0.1);
+  --positive: #0f9967;
+  --positive-soft: rgba(15, 153, 103, 0.1);
+  --negative: #c55353;
+  --negative-soft: rgba(197, 83, 83, 0.12);
+  --neutral-soft: rgba(16, 35, 60, 0.08);
+  --shadow: 0 22px 65px rgba(11, 27, 48, 0.08);
+  --radius-lg: 28px;
+  --radius-md: 20px;
+  --radius-sm: 14px;
+  --font-body: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-display: "Space Grotesk", "IBM Plex Sans", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(10, 101, 255, 0.16), transparent 30%),
+    radial-gradient(circle at top right, rgba(15, 153, 103, 0.12), transparent 28%),
+    linear-gradient(180deg, #f7fafc 0%, #eef3f9 100%);
+  min-height: 100vh;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  width: min(1420px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 28px 0 48px;
+}
+
+.hero-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(260px, 0.8fr);
+  gap: 20px;
+  padding: 28px;
+  border-radius: 34px;
+  background:
+    linear-gradient(135deg, rgba(16, 35, 60, 0.98), rgba(18, 53, 96, 0.92)),
+    linear-gradient(135deg, rgba(10, 101, 255, 0.2), transparent);
+  color: #f4f8fc;
+  box-shadow: var(--shadow);
+  animation: rise-in 0.65s ease;
+}
+
+.eyebrow,
+.panel-label {
+  margin: 0 0 10px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(244, 248, 252, 0.68);
+}
+
+.hero-strip h1,
+.stock-hero h2,
+.panel h2,
+.panel h3,
+.candidate-card h3,
+.summary-panel h2 {
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+}
+
+.hero-strip h1 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  line-height: 1.02;
+  max-width: 12ch;
+}
+
+.hero-copy,
+.summary-copy,
+.stock-summary,
+.candidate-why,
+.factor-text,
+.factor-risk,
+.news-card p,
+.glossary-card p,
+.risk-disclaimer,
+.prompt-hint {
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+.hero-copy {
+  max-width: 62ch;
+  color: rgba(244, 248, 252, 0.8);
+}
+
+.hero-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-content: start;
+}
+
+.mini-stat,
+.panel,
+.candidate-card,
+.glossary-card,
+.news-card,
+.evidence-card,
+.order-card,
+.factor-card {
+  border: 1px solid var(--line);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+}
+
+.mini-stat {
+  padding: 18px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mini-stat span,
+.candidate-card p,
+.candidate-card small,
+.muted-text,
+.chart-meta,
+.evidence-meta,
+.change-meta,
+.candidate-footer,
+.prompt-hint,
+.panel small {
+  color: var(--text-muted);
+}
+
+.mini-stat strong {
+  display: block;
+  margin-top: 10px;
+  font-size: 1.25rem;
+  color: #fff;
+}
+
+.view-switch {
+  display: inline-flex;
+  margin: 22px 0 18px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+  position: sticky;
+  top: 16px;
+  z-index: 5;
+}
+
+.view-switch button,
+.ghost-button,
+.chip-button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.view-switch button {
+  padding: 12px 18px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.view-switch button.active {
+  background: var(--panel-dark);
+  color: #fff;
+}
+
+.panel,
+.candidate-card,
+.empty-state,
+.loading-panel {
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+}
+
+.page-grid,
+.split-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.page-grid {
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
+}
+
+.split-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.panel,
+.empty-state,
+.loading-panel {
+  padding: 24px;
+  animation: rise-in 0.45s ease both;
+}
+
+.candidate-panel .candidate-list,
+.news-list,
+.evidence-list,
+.glossary-list,
+.order-list,
+.factor-list {
+  display: grid;
+  gap: 14px;
+}
+
+.candidate-list {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.candidate-card {
+  padding: 18px;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  cursor: pointer;
+}
+
+.candidate-card:hover,
+.candidate-card-active {
+  transform: translateY(-4px);
+  border-color: rgba(10, 101, 255, 0.24);
+  box-shadow: 0 28px 70px rgba(11, 27, 48, 0.12);
+}
+
+.candidate-card-top,
+.candidate-title-row,
+.candidate-footer,
+.panel-header,
+.stock-hero,
+.stock-hero-metrics,
+.news-card-top,
+.evidence-card-top,
+.order-top,
+.factor-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.candidate-rank {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+}
+
+.candidate-title-row h3,
+.stock-hero h2,
+.panel h2,
+.panel h3,
+.glossary-card h4,
+.news-card h4,
+.evidence-card strong {
+  margin: 0;
+}
+
+.candidate-title-row p,
+.candidate-sector,
+.candidate-change,
+.chart-meta,
+.change-meta,
+.evidence-meta,
+.order-card p,
+.order-card small,
+.glossary-card small,
+.news-card small,
+.evidence-card small {
+  margin: 0;
+}
+
+.candidate-price {
+  text-align: right;
+}
+
+.candidate-price strong {
+  display: block;
+}
+
+.candidate-footer,
+.chart-meta,
+.change-meta,
+.evidence-meta {
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+
+.ghost-button,
+.primary-button,
+.chip-button {
+  border-radius: 999px;
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.ghost-button {
+  margin-top: 14px;
+  padding: 10px 14px;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.primary-button {
+  border: 0;
+  padding: 12px 18px;
+  background: var(--panel-dark);
+  color: #fff;
+  cursor: pointer;
+}
+
+.chip-button {
+  padding: 10px 14px;
+  background: rgba(10, 101, 255, 0.08);
+  color: var(--brand);
+}
+
+.ghost-button:hover,
+.primary-button:hover,
+.chip-button:hover {
+  transform: translateY(-1px);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 0.86rem;
+  background: var(--neutral-soft);
+}
+
+.badge-positive {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.badge-negative {
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+.badge-neutral {
+  color: var(--text);
+}
+
+.stock-page {
+  display: grid;
+  gap: 18px;
+}
+
+.stock-hero {
+  align-items: end;
+}
+
+.stock-hero span {
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+
+.stock-hero-metrics {
+  align-items: stretch;
+}
+
+.stock-hero-metrics > div {
+  min-width: 120px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: rgba(10, 101, 255, 0.06);
+}
+
+.stock-hero-metrics span,
+.metric-pill,
+.risk-disclaimer,
+.chart-empty {
+  font-size: 0.9rem;
+}
+
+.stock-hero-metrics strong {
+  display: block;
+  margin-top: 10px;
+}
+
+.stock-badges,
+.metric-pills,
+.prompt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.metric-pill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(16, 35, 60, 0.06);
+  color: var(--text-muted);
+}
+
+.sparkline {
+  width: 100%;
+  height: 220px;
+  display: block;
+}
+
+.sparkline-area {
+  fill: url(#chart-fill);
+}
+
+.sparkline-line {
+  fill: none;
+  stroke: var(--brand);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sparkline-dot {
+  fill: var(--brand);
+  stroke: #fff;
+  stroke-width: 3;
+}
+
+.sparkline-volume {
+  fill: rgba(16, 35, 60, 0.08);
+}
+
+.factor-list {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.factor-card,
+.news-card,
+.evidence-card,
+.glossary-card,
+.order-card {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.factor-score {
+  margin: 10px 0 8px;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+}
+
+.factor-risk {
+  color: var(--negative);
+  margin-top: 10px;
+}
+
+.flat-list {
+  display: grid;
+  gap: 10px;
+  padding-left: 18px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.prompt-editor {
+  width: 100%;
+  min-height: 150px;
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  resize: vertical;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.empty-state,
+.loading-panel {
+  text-align: center;
+}
+
+.empty-state h2,
+.loading-panel {
+  margin-top: 0;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 1100px) {
+  .hero-strip,
+  .page-grid,
+  .split-grid,
+  .stock-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .stock-hero {
+    display: grid;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    width: min(100vw - 16px, 100%);
+    padding-top: 16px;
+  }
+
+  .hero-strip,
+  .panel,
+  .candidate-card,
+  .empty-state,
+  .loading-panel {
+    padding: 18px;
+    border-radius: 22px;
+  }
+
+  .hero-strip h1 {
+    max-width: none;
+    font-size: 2rem;
+  }
+
+  .candidate-list,
+  .factor-list {
+    grid-template-columns: 1fr;
+  }
+
+  .stock-hero-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .view-switch {
+    display: flex;
+    width: 100%;
+  }
+
+  .view-switch button {
+    flex: 1;
+  }
+}
