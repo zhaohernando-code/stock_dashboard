@@ -37,15 +37,22 @@ class RecommendationView(BaseModel):
     direction: str
     confidence_label: str
     confidence_score: float
+    confidence_expression: str | None = None
     horizon_min_days: int
     horizon_max_days: int
+    applicable_period: str | None = None
     summary: str
     generated_at: datetime
+    updated_at: datetime
     as_of_data_time: datetime
     evidence_status: str
     degrade_reason: str | None = None
     core_drivers: list[str] = Field(default_factory=list)
     risk_flags: list[str] = Field(default_factory=list)
+    reverse_risks: list[str] = Field(default_factory=list)
+    downgrade_conditions: list[str] = Field(default_factory=list)
+    factor_breakdown: dict[str, Any] = Field(default_factory=dict)
+    validation_snapshot: dict[str, Any] = Field(default_factory=dict)
     lineage: LineageRecord
 
 
