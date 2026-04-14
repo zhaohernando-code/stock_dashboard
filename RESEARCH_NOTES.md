@@ -195,3 +195,29 @@
 - Backtrader：<https://github.com/mementum/backtrader>
 - RQAlpha：<https://github.com/ricequant/rqalpha>
 - FinGPT：<https://fingpt.ai/>
+
+## 2026-04-15 信号建模与建议引擎实现备注
+
+### 本轮实现结论
+- demo 链路已从“静态 recommendation 样例”升级为“原始行情/新闻证据 -> 因子 -> 融合建议”的可执行结构。
+- 当前推荐的最小可替换架构是：
+  - `price_baseline_factor` 负责 2-8 周波段的价格与量能基线
+  - `news_event_factor` 负责去重、层级映射、发布时间对齐和衰减后的事件打分
+  - `llm_assessment_factor` 负责证据整合和有限度加权，必须绑定历史评估摘要
+  - `fusion_scorecard` 负责权重、冲突惩罚、降级触发和最终方向输出
+- recommendation 输出层已经显式包含方向、置信表达、核心驱动、反向风险、适用周期、更新时间、降级条件、因子拆解和验证快照。
+
+### 本轮取舍
+- 当前 `model_run.metrics_payload` 中的滚动验证指标与 `LLM_FACTOR_EVALUATION` 仍是 demo/offline contract，而不是实时从历史数据库重算
+  - 原因：当前沙箱没有真实 `Tushare / 巨潮 / Qlib` 联网接入，也没有完整历史训练集
+  - 好处：先把验证数据结构、权重治理和降级机制固化，后续接真实回测时不会推翻接口
+- LLM 因子被限制为 `<= 15%` 的 capped weight
+  - 原因：已知目标要求是“LLM 可作为因子，但若增益不稳定不得占主导权重”
+  - 当前实现：如果历史 lift 或稳定性跌破阈值，LLM 因子会自动退回解释层
+- recommendation 主结果仍保留 `14/28/56` 天三个 horizon
+  - 原因：一期场景是 2-8 周波段，不能只给单一 horizon；当前 recommendation 以 28 天作为主解释窗口，14/56 天保留在 model results 中
+
+### 对下一步的建议
+- 用真实 `Tushare + 巨潮 + Qlib` 结果替换当前 demo validation payload，保持 `validation_snapshot` 和 `factor_breakdown` 的输出结构不变
+- 在用户看板阶段优先消费 `recommendation.factor_breakdown`、`validation_snapshot` 和 trace evidence，而不是重新发明前端侧拼装逻辑
+- 若后续引入真实 LLM 推理服务，必须沿当前 `prompt_version + llm_assessment_factor + capped weight + downgrade_conditions` 结构接入，避免绕开治理层
