@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+*.tsbuildinfo
+node_modules/
 build/
 dist/
 data/*.db
