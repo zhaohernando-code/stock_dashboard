@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+build/
+dist/
+data/*.db
+data/*.sqlite
+WORKSPACE_CONTEXT.md
+task-brief.md

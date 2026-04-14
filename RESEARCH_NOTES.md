@@ -162,6 +162,27 @@
 - 若操作者坚持一期就覆盖更完整资讯和更强建议：不要继续打磨免费新闻抓取，应直接进入商业数据询价和授权审查。
 - 无论走哪条路线，第二步数据底座都必须先把授权字段、证据链、滚动验证和降级机制做进系统骨架。
 
+## 2026-04-15 证据化数据底座实现备注
+
+### 具体落地
+- 已用 `FastAPI + SQLAlchemy` 落地证据化后端骨架，覆盖 `行情 / 新闻 / 板块 / 特征 / 模型结果 / 提示词版本 / 建议记录 / 模拟交易 / 采集运行`
+- 每类核心记录都带有 `license_tag`、`usage_scope`、`redistribution_scope`、`source_uri`、`lineage_hash`
+- 当前通过 `DemoLowCostRouteProvider` 写入 `600519.SH` 的完整样例链路，并可从 recommendation trace 反查到原始行情、公告、特征、模型和模拟成交
+
+### 实现取舍
+- 证据链接没有直接做多态外键，而是使用 `recommendation_evidence(evidence_type, evidence_id)` 统一挂载
+  - 原因：证据类型横跨行情、新闻、特征、模型结果和板块归属，多态外键在 SQLite/Postgres 兼容层面不够经济
+  - 代价：trace 查询需要服务层做 artifact resolver
+- `lineage_hash` 改为基于完整规范化记录生成，而不是仅对局部 payload 取 hash
+  - 原因：否则同类记录容易因为共享 payload 模板而得到同一 hash，削弱审计粒度
+- 真实外部 provider 暂未联网接入，优先先把 schema 和 contract 固定
+  - 原因：当前步骤的首要目标是“可回溯底座”，不是“真实信号优劣”
+
+### 对第 3 步的建议
+- 优先补真实 `Tushare / 巨潮 / Qlib` 适配器，保持输出结构与 `DemoLowCostRouteProvider` 一致
+- 建立 `feature_snapshot` 与 `model_run/model_result` 的真实滚动训练产物，不要在第 3 步直接绕过第 2 步表结构落临时 CSV
+- 在建议融合前，先补“证据不足 / 信号冲突 / 数据延迟”的降级规则和阈值配置
+
 ### 参考来源
 - Tushare 官网与文档：<https://tushare.pro/>、<https://tushare.pro/document/1?doc_id=290>
 - AkShare：<https://github.com/akfamily/akshare>、<https://akshare.akfamily.xyz/>

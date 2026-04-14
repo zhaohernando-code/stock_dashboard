@@ -31,14 +31,30 @@
 - LLM 同时参与解释和因子生成会带来漂移与幻觉风险；如果缺少证据绑定、阈值治理和历史校准，系统会把弱信号包装成高确定性建议。
 - 产品方向偏向更强决策支持，意味着合规表达、责任边界、访问控制、建议留档、日志审计与数据许可要求明显高于普通资讯看板，需要在一期内测阶段提前固化。
 
+## Step 2 Delivery Snapshot
+
+2026-04-15 已完成第 2 步“证据化数据底座”的基础实现，当前交付包括：
+
+- 统一的 `LineageMixin`，把 `license_tag`、`usage_scope`、`redistribution_scope`、`source_uri`、`lineage_hash` 落到行情、新闻、板块、特征、模型、提示词、建议、模拟交易和采集审计记录
+- `FastAPI + SQLAlchemy` 后端骨架，可同时兼容本地 SQLite 和后续 Postgres 部署
+- 面向 `Tushare Pro + 巨潮资讯/交易所披露 + Qlib` 的 provider contract，并用 `DemoLowCostRouteProvider` 完成端到端示例采集链路
+- `recommendation -> recommendation_evidence -> domain artifact` 的跨域证据追溯能力
+- `latest recommendation` 与 `trace` API/CLI，可输出股票、时间、模型版本、提示词版本、原始证据和模拟交易关联记录
+- `unittest` 校验，覆盖 mandatory lineage fields、完整 trace 和模拟交易回溯
+
+当前仍保留的边界：
+
+- 真实外部数据源尚未在当前沙箱内联网接入，真实 provider 需要在第 3 步前按同一 contract 补齐
+- 目前完成的是“证据化底座”和示例链路，不包含真实滚动训练、因子评估和融合建议权重治理
+
 ## Execution Steps
 
 - 1. [COMPLETED] Prepare project scaffold
-* 2. [WAITING_DECISION] 数据与开源基线评估 · operator decision required
-- 3. [PENDING] 证据化数据底座
+- 2. [COMPLETED] 数据与开源基线评估 · decision gate resolved
+- 3. [COMPLETED] 证据化数据底座
 - 4. [PENDING] 信号建模与建议引擎
 - 5. [PENDING] 用户看板与解释闭环
 - 6. [PENDING] 分离式模拟交易与内测准入
 
-Current step: 数据与开源基线评估
-Decision status: waiting for operator selection
+Current step: 信号建模与建议引擎
+Last completed milestone: 证据化数据底座
