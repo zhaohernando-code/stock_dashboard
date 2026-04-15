@@ -185,3 +185,13 @@
 - Note: 本轮尝试 `git add` / `git commit` 仍失败，worktree 不能创建 `.git/worktrees/task-mnzvewru-wx9o5x/index.lock`。
 - Commit ID: pending
 - Context: project=一个关于a股的当前数据和投资建议看板, step=Address acceptance feedback
+
+## 2026-04-15
+
+- Problem: 用户在静态前端里想用“自选模式”时，仍被迫理解并配置“在线 API”，实际又分不清这里指的是项目后端还是第三方行情接口，导致自选池在无后端地址时近乎不可用。
+- Resolution: 前端新增浏览器本地离线自选池，离线模式下也支持新增/移除/重分析股票，并在前端本地生成同结构演示分析；同时把文案统一改成“在线 API = 本项目后端，不是 Tushare/AkShare/OpenAI”。
+- Prevention: 后续凡是带离线演示能力的前端，只要存在用户写操作，就必须明确提供“本地模式”或“项目后端模式”二选一，不能再把核心操作默认锁死到隐含后端配置上。
+- Validation: `cd frontend && npm ci --prefer-offline --no-audit --fund=false && npm run build`; `PYTHONPATH=src python3 -m unittest discover -s tests`
+- Note: 当前 worktree 仍未验证 git 提交链路，历史问题仍是 `.git/worktrees/.../index.lock` 写权限受限。
+- Commit ID: pending
+- Context: project=一个关于a股的当前数据和投资建议看板, step=Address acceptance feedback

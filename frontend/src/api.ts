@@ -1,4 +1,5 @@
 import { offlineSnapshot } from "./offlineSnapshot";
+import { offlineLocal } from "./offlineLocal";
 import type {
   CandidateListResponse,
   DashboardBootstrapResponse,
@@ -82,7 +83,7 @@ function getRuntimeConfig(): DashboardRuntimeConfig {
 function describeError(error: unknown): string {
   const hint = getApiBase()
     ? ""
-    : " 当前未显式配置在线 API 地址；如果前后端分离部署，请填写后端地址，例如 http://127.0.0.1:8000。";
+    : " 当前未显式配置在线 API 地址；如果不准备接项目后端，也可以直接切回离线快照并使用本地自选池。";
   if (error instanceof Error) {
     return `${error.message}${hint}`.trim();
   }
@@ -96,10 +97,10 @@ function buildSourceInfo(mode: DataMode, preferredMode: DataMode, fallbackReason
     mode === "online"
       ? `当前通过 ${apiBase || "同源相对路径"} 获取接口数据。`
       : preferredMode === "offline"
-        ? "当前使用仓库内置离线快照，页面可在无 API 的静态部署环境直接运行。"
+        ? "当前使用仓库内置离线快照，并支持在浏览器本地维护自选池；结果为演示分析，不调用第三方接口。"
         : apiBase
-          ? "在线接口未连通，当前自动回退到仓库内置离线快照。"
-          : "当前尚未显式填写在线 API 地址，已回退到离线快照。";
+          ? "在线接口未连通，当前自动回退到仓库内置离线快照，本地自选池仍可继续使用。"
+          : "当前尚未显式填写在线 API 地址，已回退到离线快照，本地自选池仍可继续使用。";
 
   return {
     mode,
@@ -155,11 +156,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 function readOfflineStockDashboard(symbol: string): StockDashboardResponse {
-  return offlineSnapshot.stock_dashboards[symbol] ?? offlineSnapshot.stock_dashboards[offlineSnapshot.bootstrap.symbols[0]];
+  return offlineLocal.getStockDashboard(symbol);
 }
 
 function readOfflineOperationsDashboard(symbol: string): OperationsDashboardResponse {
-  return offlineSnapshot.operations_dashboards[symbol] ?? offlineSnapshot.operations_dashboards[offlineSnapshot.bootstrap.symbols[0]];
+  return offlineLocal.getOperationsDashboard(symbol);
 }
 
 async function resolveData<T>(onlineLoader: () => Promise<T>, offlineLoader: () => T | Promise<T>): Promise<ApiResult<T>> {
@@ -204,14 +205,28 @@ export const api = {
   getPreferredMode,
   setPreferredMode,
   getRuntimeConfig,
-  bootstrapDemo: async (): Promise<ApiResult<DashboardBootstrapResponse>> =>
-    resolveData(
-      () =>
-        request<DashboardBootstrapResponse>("/bootstrap/dashboard-demo", {
+  bootstrapDemo: async (): Promise<ApiResult<DashboardBootstrapResponse>> => {
+    const preferredMode = getPreferredMode();
+    if (preferredMode === "offline") {
+      return {
+        data: offlineLocal.resetDemo(),
+        source: buildSourceInfo("offline", preferredMode, null),
+      };
+    }
+    try {
+      return {
+        data: await request<DashboardBootstrapResponse>("/bootstrap/dashboard-demo", {
           method: "POST",
         }),
-      () => offlineSnapshot.bootstrap,
-    ),
+        source: buildSourceInfo("online", preferredMode, null),
+      };
+    } catch (error) {
+      return {
+        data: offlineLocal.resetDemo(),
+        source: buildSourceInfo("offline", preferredMode, describeError(error)),
+      };
+    }
+  },
   loadShellData: async (): Promise<ApiResult<DashboardShellPayload>> =>
     resolveData(
       async () => {
@@ -222,31 +237,30 @@ export const api = {
         ]);
         return { watchlist, candidates, glossary };
       },
-      () => ({
-        watchlist: offlineSnapshot.watchlist ?? {
-          generated_at: offlineSnapshot.generated_at,
-          items: [],
-        },
-        candidates: offlineSnapshot.candidates,
-        glossary: offlineSnapshot.glossary,
-      }),
+      () => offlineLocal.loadShellData(),
     ),
   addWatchlist: async (symbol: string, name?: string): Promise<WatchlistMutationResponse> =>
-    request<WatchlistMutationResponse>("/watchlist", {
-      method: "POST",
-      body: JSON.stringify({
-        symbol,
-        name: name?.trim() || undefined,
-      }),
-    }),
+    getPreferredMode() === "offline"
+      ? Promise.resolve(offlineLocal.addWatchlist(symbol, name))
+      : request<WatchlistMutationResponse>("/watchlist", {
+          method: "POST",
+          body: JSON.stringify({
+            symbol,
+            name: name?.trim() || undefined,
+          }),
+        }),
   refreshWatchlist: async (symbol: string): Promise<WatchlistMutationResponse> =>
-    request<WatchlistMutationResponse>(`/watchlist/${encodeURIComponent(symbol)}/refresh`, {
-      method: "POST",
-    }),
+    getPreferredMode() === "offline"
+      ? Promise.resolve(offlineLocal.refreshWatchlist(symbol))
+      : request<WatchlistMutationResponse>(`/watchlist/${encodeURIComponent(symbol)}/refresh`, {
+          method: "POST",
+        }),
   removeWatchlist: async (symbol: string): Promise<WatchlistDeleteResponse> =>
-    request<WatchlistDeleteResponse>(`/watchlist/${encodeURIComponent(symbol)}`, {
-      method: "DELETE",
-    }),
+    getPreferredMode() === "offline"
+      ? Promise.resolve(offlineLocal.removeWatchlist(symbol))
+      : request<WatchlistDeleteResponse>(`/watchlist/${encodeURIComponent(symbol)}`, {
+          method: "DELETE",
+        }),
   getStockDashboard: async (symbol: string): Promise<ApiResult<StockDashboardResponse>> =>
     resolveData(
       () => request<StockDashboardResponse>(`/stocks/${encodeURIComponent(symbol)}/dashboard`),

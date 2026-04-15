@@ -130,7 +130,7 @@ function buildInitialSourceInfo(): DataSourceInfo {
         ? runtimeConfig.apiBase
           ? `正在尝试连接 ${runtimeConfig.apiBase}。`
           : "正在尝试连接同源在线接口；若前后端分离部署，请先填写后端 API 地址。"
-        : "当前使用仓库内置离线快照，页面可在无 API 的静态部署环境直接运行。",
+        : "当前使用仓库内置离线快照，并支持在浏览器本地维护自选池；结果为演示分析，不调用第三方接口。",
     apiBase: runtimeConfig.apiBase,
     betaHeaderName: runtimeConfig.betaHeaderName,
     betaKeyPresent: Boolean(api.getBetaAccessKey()),
@@ -412,7 +412,7 @@ function App() {
   const [mutatingWatchlist, setMutatingWatchlist] = useState(false);
   const [watchlistMutationSymbol, setWatchlistMutationSymbol] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const canMutateWatchlist = preferredMode === "online";
+  const canMutateWatchlist = true;
 
   const activeCandidate = useMemo(
     () => candidates.find((item) => item.symbol === selectedSymbol) ?? candidates[0] ?? null,
@@ -574,10 +574,6 @@ function App() {
       messageApi.warning("请先输入股票代码");
       return;
     }
-    if (!canMutateWatchlist) {
-      messageApi.warning("请先切换到在线 API 模式，再修改自选池");
-      return;
-    }
     setMutatingWatchlist(true);
     setWatchlistMutationSymbol(watchlistSymbolDraft.trim().toUpperCase());
     setError(null);
@@ -599,10 +595,6 @@ function App() {
   }
 
   async function handleRefreshWatchlist(symbol: string) {
-    if (!canMutateWatchlist) {
-      messageApi.warning("请先切换到在线 API 模式，再触发重新分析");
-      return;
-    }
     setMutatingWatchlist(true);
     setWatchlistMutationSymbol(symbol);
     setError(null);
@@ -621,10 +613,6 @@ function App() {
   }
 
   async function handleRemoveWatchlist(symbol: string) {
-    if (!canMutateWatchlist) {
-      messageApi.warning("请先切换到在线 API 模式，再移除自选股");
-      return;
-    }
     setMutatingWatchlist(true);
     setWatchlistMutationSymbol(symbol);
     setError(null);
@@ -1016,7 +1004,7 @@ function App() {
             <div className="topbar-kicker">A-Share Advisory Desk</div>
             <Title level={3}>自选股操作台</Title>
             <Paragraph className="topbar-note">
-              直接维护自选池、触发分析、查看候选排序和单票证据。默认支持离线快照，写入类操作请切到在线 API。
+              直接维护自选池、触发分析、查看候选排序和单票证据。离线模式会在浏览器本地生成演示分析；接入项目后端后可切到在线持久化。
             </Paragraph>
             <Space wrap className="header-meta">
               <Tag color="blue">自选池</Tag>
@@ -1120,7 +1108,7 @@ function App() {
                 </Button>
               </div>
               <Paragraph className="deck-note compact-note">
-                在线模式下会把股票写入自选池，并立即生成候选排序和单票分析所需数据。
+                离线模式会在浏览器本地生成一套演示分析；在线模式会把股票写入项目后端并生成同结构数据。
               </Paragraph>
             </Col>
 
@@ -1150,7 +1138,7 @@ function App() {
                 </Button>
               </div>
               <Paragraph className="deck-note compact-note">
-                这里配置的是本项目后端地址，不是 Tushare 或 OpenAI。前后端分离部署时填写 <Text code>http://127.0.0.1:8000</Text>；若已做同源反向代理，可留空走相对路径。
+                这里配置的是本项目后端地址，不是 Tushare、AkShare 或 OpenAI。前后端分离部署时填写 <Text code>http://127.0.0.1:8000</Text>；若不接后端，保持离线模式即可直接使用本地自选池。
               </Paragraph>
               <Space wrap className="inline-tags">
                 <Tag>{runtimeConfig.apiBase || "未配置 API Base"}</Tag>
