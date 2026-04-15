@@ -49,9 +49,9 @@ body {
 .workspace-topbar {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr);
-  gap: 20px;
+  gap: 16px;
   margin-bottom: 18px;
-  padding: 18px 22px;
+  padding: 16px 20px;
   border-radius: 24px;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 255, 0.94)),
@@ -59,8 +59,8 @@ body {
 }
 
 .topbar-main h3.ant-typography {
-  margin: 0 0 6px;
-  font-size: clamp(1.5rem, 2vw, 1.9rem);
+  margin: 0 0 4px;
+  font-size: clamp(1.3rem, 1.65vw, 1.65rem);
   letter-spacing: -0.03em;
 }
 
@@ -74,25 +74,49 @@ body {
 
 .topbar-note {
   max-width: 58ch;
+  margin-top: 0;
   margin-bottom: 0;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .header-meta {
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .topbar-stats {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-content: start;
 }
 
-.topbar-stats .ant-statistic {
-  min-height: 102px;
-  padding: 14px 16px;
+.topbar-stat-item {
+  min-height: 72px;
+  padding: 10px 12px;
   border: 1px solid rgba(16, 35, 60, 0.08);
   border-radius: 18px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(242, 247, 252, 0.92));
+  display: grid;
+  align-content: center;
+  gap: 5px;
+}
+
+.topbar-stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.topbar-stat-value {
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .panel-card,
@@ -362,10 +386,6 @@ body {
   .workspace-topbar {
     grid-template-columns: 1fr;
   }
-
-  .topbar-stats {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 768px) {
@@ -380,7 +400,7 @@ body {
   }
 
   .topbar-stats {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .chart-shell,
@@ -390,5 +410,11 @@ body {
 
   .list-item-row {
     flex-direction: column;
+  }
+}
+
+@media (max-width: 480px) {
+  .topbar-stats {
+    grid-template-columns: 1fr;
   }
 }

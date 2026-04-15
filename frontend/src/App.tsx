@@ -954,6 +954,12 @@ function App() {
     label: `${portfolio.mode_label} · ${portfolio.name}`,
     children: <PortfolioWorkspace portfolio={portfolio} />,
   })) ?? [];
+  const topbarStats = [
+    { label: "自选股", value: String(watchlist.length) },
+    { label: "候选股", value: String(candidates.length) },
+    { label: "当前焦点", value: activeCandidate?.name ?? activeWatchlistItem?.name ?? "--" },
+    { label: "最近刷新", value: formatDate(generatedAt) },
+  ];
 
   return (
     <>
@@ -974,10 +980,14 @@ function App() {
             </Space>
           </div>
           <div className="topbar-stats">
-            <Statistic title="自选股" value={watchlist.length} />
-            <Statistic title="候选股" value={candidates.length} />
-            <Statistic title="当前焦点" value={activeCandidate?.name ?? activeWatchlistItem?.name ?? "--"} />
-            <Statistic title="最近刷新" value={formatDate(generatedAt)} />
+            {topbarStats.map((item) => (
+              <div key={item.label} className="topbar-stat-item">
+                <div className="topbar-stat-label">{item.label}</div>
+                <div className="topbar-stat-value" title={item.value}>
+                  {item.value}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 

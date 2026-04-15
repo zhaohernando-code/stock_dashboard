@@ -157,3 +157,12 @@
 - Prevention: 以后任何“自选池”需求都必须先落到可持久化的 watchlist 模型和统一分析入口，不能再只在前端维护一份静态 symbol 列表。
 - Commit ID: pending
 - Context: project=一个关于a股的当前数据和投资建议看板, step=Address acceptance feedback
+
+## 2026-04-15
+
+- Problem: 顶部 `候选股 / 当前焦点 / 最近刷新` 使用大号 `Statistic` 卡片并以 `2x2` 排列，头部高度被无效信息占据，压缩了真正的操作区。
+- Resolution: 将顶部统计改为自定义紧凑指标条，缩小标题和数值字号、卡片内边距与整体 topbar 间距，并把桌面端统计区调整为四列、移动端调整为两列回落。
+- Prevention: 后续新增顶部摘要信息时，优先采用紧凑指标或标签式表达，避免把非核心摘要做成大号展示卡片。
+- Note: 当前 worktree 仍无法创建 `.git/worktrees/.../index.lock`，本轮变更已完成并验证，但不能在该环境内执行 commit / push。
+- Commit ID: pending
+- Context: project=一个关于a股的当前数据和投资建议看板, step=Address acceptance feedback
