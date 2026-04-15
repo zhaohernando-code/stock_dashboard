@@ -39,6 +39,7 @@ import type {
   CandidateItemView,
   DataMode,
   DataSourceInfo,
+  DashboardRuntimeConfig,
   GlossaryEntryView,
   OperationsDashboardResponse,
   PortfolioNavPointView,
@@ -126,7 +127,9 @@ function buildInitialSourceInfo(): DataSourceInfo {
     label: preferredMode === "online" ? "在线 API" : "离线快照",
     detail:
       preferredMode === "online"
-        ? "正在尝试连接在线接口。"
+        ? runtimeConfig.apiBase
+          ? `正在尝试连接 ${runtimeConfig.apiBase}。`
+          : "正在尝试连接同源在线接口；若前后端分离部署，请先填写后端 API 地址。"
         : "当前使用仓库内置离线快照，页面可在无 API 的静态部署环境直接运行。",
     apiBase: runtimeConfig.apiBase,
     betaHeaderName: runtimeConfig.betaHeaderName,
@@ -386,9 +389,11 @@ function PortfolioWorkspace({ portfolio }: { portfolio: PortfolioSummaryView }) 
 }
 
 function App() {
+  const initialRuntimeConfig = api.getRuntimeConfig();
   const [messageApi, messageContextHolder] = message.useMessage();
   const [view, setView] = useState<ViewMode>("candidates");
-  const [preferredMode, setPreferredMode] = useState<DataMode>(() => api.getPreferredMode());
+  const [preferredMode, setPreferredMode] = useState<DataMode>(() => initialRuntimeConfig.preferredMode);
+  const [runtimeConfig, setRuntimeConfig] = useState<DashboardRuntimeConfig>(initialRuntimeConfig);
   const [sourceInfo, setSourceInfo] = useState<DataSourceInfo>(() => buildInitialSourceInfo());
   const [watchlist, setWatchlist] = useState<WatchlistItemView[]>([]);
   const [candidates, setCandidates] = useState<CandidateItemView[]>([]);
@@ -398,6 +403,7 @@ function App() {
   const [dashboard, setDashboard] = useState<StockDashboardResponse | null>(null);
   const [operations, setOperations] = useState<OperationsDashboardResponse | null>(null);
   const [questionDraft, setQuestionDraft] = useState("");
+  const [apiBaseDraft, setApiBaseDraft] = useState(() => initialRuntimeConfig.apiBase);
   const [betaKeyDraft, setBetaKeyDraft] = useState(() => api.getBetaAccessKey());
   const [watchlistSymbolDraft, setWatchlistSymbolDraft] = useState("");
   const [watchlistNameDraft, setWatchlistNameDraft] = useState("");
@@ -428,6 +434,7 @@ function App() {
     setError(null);
     try {
       const { data, source } = await api.loadShellData();
+      setRuntimeConfig(api.getRuntimeConfig());
       setWatchlist(data.watchlist.items);
       setCandidates(data.candidates.items);
       setGeneratedAt(data.candidates.generated_at);
@@ -498,12 +505,51 @@ function App() {
 
   async function handleModeChange(mode: DataMode) {
     api.setPreferredMode(mode);
+    const nextRuntimeConfig = api.getRuntimeConfig();
     setPreferredMode(mode);
+    setRuntimeConfig(nextRuntimeConfig);
+    setSourceInfo(buildInitialSourceInfo());
+    if (mode === "online" && !nextRuntimeConfig.apiBase) {
+      messageApi.info("这里的在线 API 指本项目后端地址；前后端分离部署时请先填写，例如 http://127.0.0.1:8000。");
+    }
     await reloadEverything();
+  }
+
+  async function handleApplyApiBase() {
+    api.setApiBase(apiBaseDraft);
+    const nextRuntimeConfig = api.getRuntimeConfig();
+    setRuntimeConfig(nextRuntimeConfig);
+    setApiBaseDraft(nextRuntimeConfig.apiBase);
+    setSourceInfo(buildInitialSourceInfo());
+    messageApi.success(
+      nextRuntimeConfig.apiBase
+        ? `在线 API 地址已更新为 ${nextRuntimeConfig.apiBase}`
+        : "已切换为同源相对路径模式",
+    );
+    if (preferredMode === "online") {
+      await reloadEverything();
+    }
+  }
+
+  async function handleResetApiBase() {
+    api.resetApiBase();
+    const nextRuntimeConfig = api.getRuntimeConfig();
+    setRuntimeConfig(nextRuntimeConfig);
+    setApiBaseDraft(nextRuntimeConfig.apiBase);
+    setSourceInfo(buildInitialSourceInfo());
+    messageApi.success(
+      nextRuntimeConfig.apiBase
+        ? `已恢复默认 API 地址 ${nextRuntimeConfig.apiBase}`
+        : "已恢复默认设置；当前未预置在线 API 地址",
+    );
+    if (preferredMode === "online") {
+      await reloadEverything();
+    }
   }
 
   async function handleApplyBetaKey() {
     api.setBetaAccessKey(betaKeyDraft);
+    setRuntimeConfig(api.getRuntimeConfig());
     await reloadEverything();
   }
 
@@ -1079,21 +1125,38 @@ function App() {
             </Col>
 
             <Col xs={24} xl={6}>
-              <div className="deck-section-title">内测访问</div>
-              <Input.Password
-                value={betaKeyDraft}
-                onChange={(event) => setBetaKeyDraft(event.target.value)}
-                placeholder="输入在线 API 的 access key"
-              />
+              <div className="deck-section-title">在线接入</div>
+              <Space direction="vertical" size={10} className="full-width">
+                <Input
+                  value={apiBaseDraft}
+                  onChange={(event) => setApiBaseDraft(event.target.value)}
+                  placeholder="输入后端 API 地址，如 http://127.0.0.1:8000"
+                />
+                <Input.Password
+                  value={betaKeyDraft}
+                  onChange={(event) => setBetaKeyDraft(event.target.value)}
+                  placeholder="可选：输入在线 API 的 access key"
+                />
+              </Space>
               <div className="deck-actions">
+                <Button onClick={() => void handleApplyApiBase()} icon={<ApiOutlined />}>
+                  应用接口地址
+                </Button>
+                <Button onClick={() => void handleResetApiBase()}>
+                  恢复默认
+                </Button>
                 <Button onClick={() => void handleApplyBetaKey()} icon={<SafetyCertificateOutlined />}>
                   应用 access key
                 </Button>
-                <Text type="secondary">{`Header: ${sourceInfo.betaHeaderName}`}</Text>
               </div>
               <Paragraph className="deck-note compact-note">
-                {canMutateWatchlist ? "当前可修改自选池和触发重新分析。" : "离线快照为只读模式，不能新增、移除或重分析自选股。"}
+                这里配置的是本项目后端地址，不是 Tushare 或 OpenAI。前后端分离部署时填写 <Text code>http://127.0.0.1:8000</Text>；若已做同源反向代理，可留空走相对路径。
               </Paragraph>
+              <Space wrap className="inline-tags">
+                <Tag>{runtimeConfig.apiBase || "未配置 API Base"}</Tag>
+                <Tag>{runtimeConfig.apiBaseOverrideActive ? "运行时覆盖" : runtimeConfig.apiBaseDefault ? "构建默认" : "无默认值"}</Tag>
+                <Tag>{`Header: ${sourceInfo.betaHeaderName}`}</Tag>
+              </Space>
             </Col>
           </Row>
         </Card>

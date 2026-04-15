@@ -410,6 +410,16 @@ export interface DataSourceInfo {
   fallbackReason?: string | null;
 }
 
+export interface DashboardRuntimeConfig {
+  apiBase: string;
+  apiBaseDefault: string;
+  apiBaseOverrideActive: boolean;
+  betaHeaderName: string;
+  onlineConfigured: boolean;
+  preferredMode: DataMode;
+  snapshotGeneratedAt: string;
+}
+
 export interface DashboardShellPayload {
   watchlist: WatchlistResponse;
   candidates: CandidateListResponse;

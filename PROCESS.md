@@ -160,6 +160,15 @@
 
 ## 2026-04-15
 
+- Problem: 在线模式之前只读取构建时的 `VITE_API_BASE_URL`，页面里只有 `access key` 输入，没有后端地址配置入口；用户切到在线 API 后并不知道应该填什么地址，也无法在已部署页面上自行接入后端。
+- Resolution: 前端新增运行时 `API Base URL` 配置，持久化到 `localStorage`，并在顶部“在线接入”里同时暴露后端地址、access key、恢复默认和明确提示文案，说明这里填写的是本项目后端地址，例如 `http://127.0.0.1:8000`，不是第三方行情或模型 API。
+- Prevention: 以后凡是前后端分离的静态前端，只要支持“在线模式”，就必须同时提供运行时的后端地址配置入口和示例地址，不能只依赖构建时环境变量。
+- Note: 本轮再次尝试 `git add` / `git commit`，仍然因为 `.git/worktrees/task-mnzv6k65-yigow8/index.lock` 无法创建而失败，提交与推送继续阻塞在 worktree 元数据写权限。
+- Commit ID: pending
+- Context: project=一个关于a股的当前数据和投资建议看板, step=Address acceptance feedback
+
+## 2026-04-15
+
 - Problem: 顶部 `候选股 / 当前焦点 / 最近刷新` 使用大号 `Statistic` 卡片并以 `2x2` 排列，头部高度被无效信息占据，压缩了真正的操作区。
 - Resolution: 将顶部统计改为自定义紧凑指标条，缩小标题和数值字号、卡片内边距与整体 topbar 间距，并把桌面端统计区调整为四列、移动端调整为两列回落。
 - Prevention: 后续新增顶部摘要信息时，优先采用紧凑指标或标签式表达，避免把非核心摘要做成大号展示卡片。

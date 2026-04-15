@@ -2,6 +2,7 @@ import { offlineSnapshot } from "./offlineSnapshot";
 import type {
   CandidateListResponse,
   DashboardBootstrapResponse,
+  DashboardRuntimeConfig,
   DashboardShellPayload,
   DataMode,
   DataSourceInfo,
@@ -13,8 +14,9 @@ import type {
   WatchlistResponse,
 } from "./types";
 
-const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+const envApiBase = normalizeApiBase(import.meta.env.VITE_API_BASE_URL ?? "");
 const betaHeaderName = import.meta.env.VITE_BETA_ACCESS_HEADER ?? "X-Ashare-Beta-Key";
+const apiBaseStorageKey = "ashare-dashboard-api-base";
 const betaStorageKey = "ashare-beta-access-key";
 const preferredModeStorageKey = "ashare-dashboard-preferred-mode";
 const requestTimeoutMs = 8000;
@@ -24,11 +26,28 @@ type ApiResult<T> = {
   source: DataSourceInfo;
 };
 
+function normalizeApiBase(value: string | null | undefined): string {
+  return (value ?? "").trim().replace(/\/$/, "");
+}
+
+function hasApiBaseOverride(): boolean {
+  return window.localStorage.getItem(apiBaseStorageKey) !== null;
+}
+
+function getApiBase(): string {
+  if (hasApiBaseOverride()) {
+    return normalizeApiBase(window.localStorage.getItem(apiBaseStorageKey));
+  }
+  return envApiBase;
+}
+
 function makeUrl(path: string): string {
+  const apiBase = getApiBase();
   return apiBase ? `${apiBase}${path}` : path;
 }
 
 function getDefaultPreferredMode(): DataMode {
+  const apiBase = getApiBase();
   return apiBase ? "online" : "offline";
 }
 
@@ -47,21 +66,40 @@ function getBetaAccessKey(): string {
   return window.localStorage.getItem(betaStorageKey) ?? "";
 }
 
+function getRuntimeConfig(): DashboardRuntimeConfig {
+  const apiBase = getApiBase();
+  return {
+    apiBase,
+    apiBaseDefault: envApiBase,
+    apiBaseOverrideActive: hasApiBaseOverride(),
+    betaHeaderName,
+    onlineConfigured: Boolean(apiBase),
+    preferredMode: getPreferredMode(),
+    snapshotGeneratedAt: offlineSnapshot.generated_at,
+  };
+}
+
 function describeError(error: unknown): string {
+  const hint = getApiBase()
+    ? ""
+    : " 当前未显式配置在线 API 地址；如果前后端分离部署，请填写后端地址，例如 http://127.0.0.1:8000。";
   if (error instanceof Error) {
-    return error.message;
+    return `${error.message}${hint}`.trim();
   }
-  return "在线接口不可用。";
+  return `在线接口不可用。${hint}`.trim();
 }
 
 function buildSourceInfo(mode: DataMode, preferredMode: DataMode, fallbackReason?: string | null): DataSourceInfo {
+  const apiBase = getApiBase();
   const betaKeyPresent = Boolean(getBetaAccessKey());
   const detail =
     mode === "online"
       ? `当前通过 ${apiBase || "同源相对路径"} 获取接口数据。`
       : preferredMode === "offline"
         ? "当前使用仓库内置离线快照，页面可在无 API 的静态部署环境直接运行。"
-        : "在线接口未连通，当前自动回退到仓库内置离线快照。";
+        : apiBase
+          ? "在线接口未连通，当前自动回退到仓库内置离线快照。"
+          : "当前尚未显式填写在线 API 地址，已回退到离线快照。";
 
   return {
     mode,
@@ -147,6 +185,13 @@ async function resolveData<T>(onlineLoader: () => Promise<T>, offlineLoader: () 
 }
 
 export const api = {
+  getApiBase,
+  setApiBase: (value: string) => {
+    window.localStorage.setItem(apiBaseStorageKey, normalizeApiBase(value));
+  },
+  resetApiBase: () => {
+    window.localStorage.removeItem(apiBaseStorageKey);
+  },
   getBetaAccessKey,
   setBetaAccessKey: (value: string) => {
     const trimmed = value.trim();
@@ -158,13 +203,7 @@ export const api = {
   },
   getPreferredMode,
   setPreferredMode,
-  getRuntimeConfig: () => ({
-    apiBase,
-    betaHeaderName,
-    onlineConfigured: Boolean(apiBase),
-    preferredMode: getPreferredMode(),
-    snapshotGeneratedAt: offlineSnapshot.generated_at,
-  }),
+  getRuntimeConfig,
   bootstrapDemo: async (): Promise<ApiResult<DashboardBootstrapResponse>> =>
     resolveData(
       () =>
