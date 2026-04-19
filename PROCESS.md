@@ -195,3 +195,12 @@
 - Note: 当前 worktree 仍未验证 git 提交链路，历史问题仍是 `.git/worktrees/.../index.lock` 写权限受限。
 - Commit ID: pending
 - Context: project=一个关于a股的当前数据和投资建议看板, step=Address acceptance feedback
+
+## 2026-04-19
+
+- Problem: 控制中台里的工具入口仍显示“当前工具还在补齐交付物，暂时不能直接打开”，但 `ashare-dashboard` 实际已经具备 `frontend/package.json`、GitHub Pages workflow 和本地可服务的静态产物，问题不在业务项目缺交付，而在控制台仍把 `self_hosted + pending` 的工具一律拦截。
+- Resolution: 核对了运行态项目记录与已发布静态包，确认当前真正缺的是过时的 `deployment_ready` 门禁；随后刷新控制台发布包，放行 `self_hosted` 且未失败的工具直接打开本地 `/tools/<id>`，避免把已本地发布的项目继续挡在入口页。
+- Prevention: 后续控制台对 UI 项目的可打开判定，不能只依赖陈旧的 `deploymentStatus`；只要存在可服务的本地构建产物且部署提供方为 `self_hosted`，就应优先放行本地工具路由。
+- Validation: `cd /root/codex/release/.codex-system/worktrees/dashboard-ui/task-mo5avwpw-gox7nh && npm install --prefer-offline --include=dev --no-audit --fund=false && npm run build`
+- Commit ID: pending
+- Context: project=一个关于a股的当前数据和投资建议看板, step=tool-entry remediation
