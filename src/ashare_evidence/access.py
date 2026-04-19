@@ -62,3 +62,9 @@ def require_beta_access(request: Request) -> BetaAccessContext:
         )
 
     return BetaAccessContext(mode=config.mode, role=role, token_id=header_value[:8])
+
+
+def require_beta_write_access(access: BetaAccessContext) -> BetaAccessContext:
+    if access.role == "viewer":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="viewer key is read-only for watchlist mutations")
+    return access

@@ -4,7 +4,7 @@
 
 ## 当前实现
 
-- 后端技术栈：`Python 3.12 + FastAPI + SQLAlchemy`
+- 后端技术栈：`Python 3.10+ + FastAPI + SQLAlchemy`
 - 前端技术栈：`Vite 4 + React 18 + TypeScript + Ant Design`
 - 数据路线预留：`Tushare Pro + 巨潮资讯/交易所披露 + Qlib`，当前用 `DemoLowCostRouteProvider` 证明链路
 - 新增 dashboard demo watchlist：`600519.SH`、`300750.SZ`、`601318.SH`、`002594.SZ`

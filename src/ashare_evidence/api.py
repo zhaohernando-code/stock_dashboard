@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-from ashare_evidence.access import BetaAccessContext, require_beta_access
+from ashare_evidence.access import BetaAccessContext, require_beta_access, require_beta_write_access
 from ashare_evidence.dashboard import (
     bootstrap_dashboard_demo,
     get_glossary_entries,
@@ -67,11 +67,6 @@ def create_app(database_url: str | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    def require_beta_write_access(access: BetaAccessContext = Depends(require_beta_access)) -> BetaAccessContext:
-        if access.role == "viewer":
-            raise HTTPException(status_code=403, detail="viewer key is read-only for watchlist mutations")
-        return access
-
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "database_url": resolved_database_url}
@@ -79,16 +74,18 @@ def create_app(database_url: str | None = None) -> FastAPI:
     @app.post("/bootstrap/demo")
     def bootstrap_demo(
         symbol: str = Query(default="600519.SH"),
-        _access: BetaAccessContext = Depends(require_beta_write_access),
+        _access: BetaAccessContext = Depends(require_beta_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        require_beta_write_access(_access)
         return bootstrap_demo_data(session, symbol)
 
     @app.post("/bootstrap/dashboard-demo", response_model=DashboardBootstrapResponse)
     def bootstrap_dashboard_demo_route(
-        _access: BetaAccessContext = Depends(require_beta_write_access),
+        _access: BetaAccessContext = Depends(require_beta_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        require_beta_write_access(_access)
         return bootstrap_dashboard_demo(session)
 
     @app.get("/watchlist", response_model=WatchlistResponse)
@@ -101,9 +98,10 @@ def create_app(database_url: str | None = None) -> FastAPI:
     @app.post("/watchlist", response_model=WatchlistMutationResponse)
     def watchlist_add(
         payload: WatchlistCreateRequest,
-        _access: BetaAccessContext = Depends(require_beta_write_access),
+        _access: BetaAccessContext = Depends(require_beta_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        require_beta_write_access(_access)
         try:
             item = add_watchlist_symbol(session, payload.symbol, stock_name=payload.name)
         except ValueError as exc:
@@ -116,9 +114,10 @@ def create_app(database_url: str | None = None) -> FastAPI:
     @app.post("/watchlist/{symbol}/refresh", response_model=WatchlistMutationResponse)
     def watchlist_refresh(
         symbol: str,
-        _access: BetaAccessContext = Depends(require_beta_write_access),
+        _access: BetaAccessContext = Depends(require_beta_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        require_beta_write_access(_access)
         try:
             item = refresh_watchlist_symbol(session, symbol)
         except ValueError as exc:
@@ -133,9 +132,10 @@ def create_app(database_url: str | None = None) -> FastAPI:
     @app.delete("/watchlist/{symbol}", response_model=WatchlistDeleteResponse)
     def watchlist_remove(
         symbol: str,
-        _access: BetaAccessContext = Depends(require_beta_write_access),
+        _access: BetaAccessContext = Depends(require_beta_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        require_beta_write_access(_access)
         try:
             return remove_watchlist_symbol(session, symbol)
         except ValueError as exc:
