@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import tempfile
 import unittest
 from pathlib import Path
 
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
+
 from ashare_evidence.dashboard import bootstrap_dashboard_demo, get_glossary_entries, get_stock_dashboard, list_candidate_recommendations
 from ashare_evidence.db import init_database, session_scope
+from ashare_evidence.lineage import build_lineage
+from ashare_evidence.models import Sector, SectorMembership, Stock
 from ashare_evidence.operations import build_operations_dashboard
-from ashare_evidence.watchlist import add_watchlist_symbol, list_watchlist_entries, remove_watchlist_symbol
+from ashare_evidence.watchlist import add_watchlist_symbol, list_watchlist_entries, refresh_watchlist_symbol, remove_watchlist_symbol
 
 
 class DashboardViewTests(unittest.TestCase):
@@ -109,6 +115,96 @@ class DashboardViewTests(unittest.TestCase):
             candidates = list_candidate_recommendations(session, limit=10)
 
         self.assertNotIn("688981.SH", {entry["symbol"] for entry in candidates["items"]})
+
+    def test_watchlist_resolves_known_stock_name_and_sector(self) -> None:
+        with session_scope(self.database_url) as session:
+            bootstrap_dashboard_demo(session)
+            item = add_watchlist_symbol(session, "002028")
+
+        self.assertEqual(item["symbol"], "002028.SZ")
+        self.assertEqual(item["name"], "思源电气")
+
+        with session_scope(self.database_url) as session:
+            candidates = list_candidate_recommendations(session, limit=10)
+            dashboard = get_stock_dashboard(session, "002028.SZ")
+
+        candidate = next(entry for entry in candidates["items"] if entry["symbol"] == "002028.SZ")
+        self.assertEqual(candidate["name"], "思源电气")
+        self.assertEqual(candidate["sector"], "电力设备")
+        self.assertEqual(dashboard["stock"]["name"], "思源电气")
+        self.assertIn("电力设备", dashboard["hero"]["sector_tags"])
+        self.assertNotIn("医药生物", dashboard["hero"]["sector_tags"])
+
+    def test_refresh_watchlist_expires_wrong_legacy_sector_membership(self) -> None:
+        with session_scope(self.database_url) as session:
+            bootstrap_dashboard_demo(session)
+            add_watchlist_symbol(session, "002028")
+
+        with session_scope(self.database_url) as session:
+            stock = session.scalar(select(Stock).where(Stock.symbol == "002028.SZ"))
+            self.assertIsNotNone(stock)
+            assert stock is not None
+
+            sector_lineage = build_lineage(
+                {"sector_code": "sw-pharmaceutical-biological", "name": "医药生物"},
+                source_uri="test://sector/sw-pharmaceutical-biological",
+                license_tag="internal-test",
+                usage_scope="internal_research",
+                redistribution_scope="none",
+            )
+            bad_sector = Sector(
+                sector_code="sw-pharmaceutical-biological",
+                name="医药生物",
+                level="industry",
+                definition_payload={"taxonomy": "申万一级", "provider": "test"},
+                **sector_lineage,
+            )
+            session.add(bad_sector)
+            session.flush()
+
+            membership_lineage = build_lineage(
+                {"symbol": "002028.SZ", "sector_code": bad_sector.sector_code},
+                source_uri="test://membership/002028/sw-pharmaceutical-biological",
+                license_tag="internal-test",
+                usage_scope="internal_research",
+                redistribution_scope="none",
+            )
+            session.add(
+                SectorMembership(
+                    membership_key="legacy-membership-002028-sw-pharmaceutical-biological",
+                    stock_id=stock.id,
+                    sector_id=bad_sector.id,
+                    effective_from=datetime(2020, 1, 1, tzinfo=timezone.utc),
+                    effective_to=None,
+                    is_primary=True,
+                    membership_payload={"taxonomy": "申万一级", "weighting_hint": "legacy-wrong"},
+                    **membership_lineage,
+                )
+            )
+            session.commit()
+
+        with session_scope(self.database_url) as session:
+            refreshed = refresh_watchlist_symbol(session, "002028")
+        self.assertEqual(refreshed["name"], "思源电气")
+
+        with session_scope(self.database_url) as session:
+            dashboard = get_stock_dashboard(session, "002028.SZ")
+            as_of = dashboard["recommendation"]["as_of_data_time"]
+            memberships = session.scalars(
+                select(SectorMembership)
+                .join(Stock)
+                .where(Stock.symbol == "002028.SZ")
+                .options(joinedload(SectorMembership.sector))
+                .order_by(SectorMembership.effective_from.asc())
+            ).all()
+            active_at_latest = [
+                membership
+                for membership in memberships
+                if membership.effective_from <= as_of and (membership.effective_to is None or membership.effective_to >= as_of)
+            ]
+        self.assertTrue(active_at_latest)
+        self.assertNotIn("医药生物", {membership.sector.name for membership in active_at_latest})
+        self.assertIn("电力设备", {membership.sector.name for membership in active_at_latest})
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session, joinedload
 from ashare_evidence.dashboard_demo import WATCHLIST_SYMBOLS, build_dashboard_bundle, normalize_symbol
 from ashare_evidence.db import utcnow
 from ashare_evidence.lineage import build_lineage
-from ashare_evidence.models import Recommendation, Stock, WatchlistEntry
+from ashare_evidence.models import Recommendation, Sector, SectorMembership, Stock, WatchlistEntry
 from ashare_evidence.services import ingest_bundle
+from ashare_evidence.stock_master import resolve_stock_profile
 
 ACTIVE_STATUS = "active"
 REMOVED_STATUS = "removed"
@@ -99,12 +100,27 @@ def _analyze_watchlist_symbol(
     source_kind: str,
 ) -> WatchlistEntry:
     normalized_symbol = normalize_symbol(symbol)
-    latest_name = stock_name
+    resolved_profile = resolve_stock_profile(session, symbol=normalized_symbol, preferred_name=stock_name)
+    latest_name = resolved_profile.name or stock_name
     analyzed_at: datetime | None = None
     for snapshot in ("previous", "latest"):
+        bundle = build_dashboard_bundle(
+            normalized_symbol,
+            snapshot=snapshot,
+            stock_name=resolved_profile.name,
+            industry=resolved_profile.industry,
+            listed_date=resolved_profile.listed_date,
+            template_key=resolved_profile.template_key,
+        )
+        _expire_stale_sector_memberships(
+            session,
+            symbol=normalized_symbol,
+            active_sector_codes={record["sector_code"] for record in bundle.sectors},
+            as_of=bundle.recommendation["as_of_data_time"],
+        )
         recommendation = ingest_bundle(
             session,
-            build_dashboard_bundle(normalized_symbol, snapshot=snapshot, stock_name=stock_name),
+            bundle,
         )
         analyzed_at = recommendation.generated_at
         latest_name = recommendation.stock.name
@@ -118,6 +134,31 @@ def _analyze_watchlist_symbol(
         source_kind=source_kind,
         analyzed_at=analyzed_at,
     )
+
+
+def _expire_stale_sector_memberships(
+    session: Session,
+    *,
+    symbol: str,
+    active_sector_codes: set[str],
+    as_of: datetime,
+) -> None:
+    stock = session.scalar(select(Stock).where(Stock.symbol == symbol))
+    if stock is None:
+        return
+    cutoff = as_of - timedelta(seconds=1)
+    memberships = session.scalars(
+        select(SectorMembership)
+        .join(Sector)
+        .where(SectorMembership.stock_id == stock.id)
+        .options(joinedload(SectorMembership.sector))
+    ).all()
+    for membership in memberships:
+        if membership.sector.sector_code in active_sector_codes:
+            continue
+        if membership.effective_to is not None and membership.effective_to < cutoff:
+            continue
+        membership.effective_to = cutoff
 
 
 def _serialize_watchlist_entry(session: Session, entry: WatchlistEntry) -> dict[str, Any]:

@@ -705,8 +705,8 @@ KNOWN_STOCK_NAMES = {
     for symbol, config in SCENARIOS.items()
 }
 
-SECTOR_TEMPLATES: tuple[dict[str, str], ...] = (
-    {
+SECTOR_TEMPLATES: dict[str, dict[str, str]] = {
+    "food_beverage": {
         "industry": "高端消费",
         "primary_sector_code": "sw-food-beverage",
         "primary_sector_name": "食品饮料",
@@ -717,9 +717,9 @@ SECTOR_TEMPLATES: tuple[dict[str, str], ...] = (
         "sector_positive_topic": "内需复苏预期回暖",
         "sector_negative_topic": "税费与渠道库存讨论升温",
     },
-    {
+    "power_equipment": {
         "industry": "新能源设备",
-        "primary_sector_code": "sw-electric-equipment",
+        "primary_sector_code": "sw-power-equipment",
         "primary_sector_name": "电力设备",
         "secondary_sector_code": "concept-energy-storage",
         "secondary_sector_name": "储能",
@@ -728,9 +728,9 @@ SECTOR_TEMPLATES: tuple[dict[str, str], ...] = (
         "sector_positive_topic": "新能源链补库预期回升",
         "sector_negative_topic": "产业链价格下修压力扩大",
     },
-    {
+    "nonbank_finance": {
         "industry": "保险金融",
-        "primary_sector_code": "sw-non-bank-finance",
+        "primary_sector_code": "sw-nonbank-finance",
         "primary_sector_name": "非银金融",
         "secondary_sector_code": "concept-dividend-assets",
         "secondary_sector_name": "高股息资产",
@@ -739,7 +739,7 @@ SECTOR_TEMPLATES: tuple[dict[str, str], ...] = (
         "sector_positive_topic": "低利率环境下高股息偏好抬升",
         "sector_negative_topic": "利差与权益波动压制估值修复",
     },
-    {
+    "electronics": {
         "industry": "半导体",
         "primary_sector_code": "sw-electronics",
         "primary_sector_name": "电子",
@@ -750,7 +750,7 @@ SECTOR_TEMPLATES: tuple[dict[str, str], ...] = (
         "sector_positive_topic": "国产替代与景气改善继续演绎",
         "sector_negative_topic": "终端需求反复压制估值修复",
     },
-    {
+    "pharmaceutical": {
         "industry": "创新药",
         "primary_sector_code": "sw-pharmaceutical-biological",
         "primary_sector_name": "医药生物",
@@ -761,6 +761,25 @@ SECTOR_TEMPLATES: tuple[dict[str, str], ...] = (
         "sector_positive_topic": "创新药情绪修复与海外授权预期升温",
         "sector_negative_topic": "集采与研发兑现节奏引发分歧",
     },
+    "unclassified": {
+        "industry": "待确认行业",
+        "primary_sector_code": "unclassified-industry",
+        "primary_sector_name": "待确认行业",
+        "secondary_sector_code": "concept-watchlist-observe",
+        "secondary_sector_name": "自选观察",
+        "positive_topic": "公司经营节奏仍需结合真实主数据确认",
+        "negative_topic": "当前缺少足够主数据支撑行业归属判断",
+        "sector_positive_topic": "观察池里出现新的正向经营线索",
+        "sector_negative_topic": "主数据尚未完成映射，行业判断暂不输出",
+    },
+}
+
+DYNAMIC_TEMPLATE_ORDER: tuple[str, ...] = (
+    "food_beverage",
+    "power_equipment",
+    "nonbank_finance",
+    "electronics",
+    "pharmaceutical",
 )
 
 
@@ -1022,18 +1041,29 @@ def _dynamic_news_events(
     )
 
 
-def build_dynamic_scenario(symbol: str, *, stock_name: str | None = None) -> ScenarioConfig:
+def build_dynamic_scenario(
+    symbol: str,
+    *,
+    stock_name: str | None = None,
+    industry: str | None = None,
+    listed_date: date | None = None,
+    template_key: str | None = None,
+) -> ScenarioConfig:
     normalized_symbol = normalize_symbol(symbol)
     if normalized_symbol in SCENARIOS:
         return SCENARIOS[normalized_symbol]
 
     ticker, _, suffix = normalized_symbol.partition(".")
     seed = _symbol_seed(normalized_symbol)
-    template = SECTOR_TEMPLATES[seed % len(SECTOR_TEMPLATES)]
-    tier = (seed // len(SECTOR_TEMPLATES)) % 4
-    listed_year = 2004 + seed % 18
-    listed_month = 1 + (seed // 17) % 12
-    listed_day = 1 + (seed // 37) % 27
+    effective_template_key = template_key or "unclassified"
+    template = SECTOR_TEMPLATES.get(effective_template_key, SECTOR_TEMPLATES["unclassified"])
+    tier = (seed // len(DYNAMIC_TEMPLATE_ORDER)) % 4
+    resolved_listed_date = listed_date
+    if resolved_listed_date is None:
+        listed_year = 2004 + seed % 18
+        listed_month = 1 + (seed // 17) % 12
+        listed_day = 1 + (seed // 37) % 27
+        resolved_listed_date = date(listed_year, listed_month, listed_day)
     exchange = _exchange_name(suffix)
     name = stock_name.strip() if stock_name and stock_name.strip() else KNOWN_STOCK_NAMES.get(normalized_symbol, f"自选标的 {ticker}")
     return ScenarioConfig(
@@ -1041,8 +1071,8 @@ def build_dynamic_scenario(symbol: str, *, stock_name: str | None = None) -> Sce
         ticker=ticker,
         exchange=exchange,
         name=name,
-        listed_date=date(listed_year, listed_month, listed_day),
-        industry=template["industry"],
+        listed_date=resolved_listed_date,
+        industry=industry.strip() if industry and industry.strip() else template["industry"],
         start_close=_dynamic_start_close(ticker, seed),
         base_volume=round(9800 + seed % 22000, 2),
         volume_step=round(110 + seed % 260, 2),
@@ -1062,11 +1092,24 @@ def build_dynamic_scenario(symbol: str, *, stock_name: str | None = None) -> Sce
     )
 
 
-def resolve_scenario(symbol: str, *, stock_name: str | None = None) -> ScenarioConfig:
+def resolve_scenario(
+    symbol: str,
+    *,
+    stock_name: str | None = None,
+    industry: str | None = None,
+    listed_date: date | None = None,
+    template_key: str | None = None,
+) -> ScenarioConfig:
     normalized_symbol = normalize_symbol(symbol)
     if normalized_symbol in SCENARIOS:
         return SCENARIOS[normalized_symbol]
-    return build_dynamic_scenario(normalized_symbol, stock_name=stock_name)
+    return build_dynamic_scenario(
+        normalized_symbol,
+        stock_name=stock_name,
+        industry=industry,
+        listed_date=listed_date,
+        template_key=template_key,
+    )
 
 
 def _stock_record(config: ScenarioConfig) -> dict[str, Any]:
@@ -1481,8 +1524,22 @@ def _slice_inputs(
     return bars, sliced_items, sliced_links
 
 
-def build_dashboard_bundle(symbol: str, *, snapshot: str = "latest", stock_name: str | None = None) -> EvidenceBundle:
-    config = resolve_scenario(symbol, stock_name=stock_name)
+def build_dashboard_bundle(
+    symbol: str,
+    *,
+    snapshot: str = "latest",
+    stock_name: str | None = None,
+    industry: str | None = None,
+    listed_date: date | None = None,
+    template_key: str | None = None,
+) -> EvidenceBundle:
+    config = resolve_scenario(
+        symbol,
+        stock_name=stock_name,
+        industry=industry,
+        listed_date=listed_date,
+        template_key=template_key,
+    )
     full_length = len(config.daily_returns)
     if snapshot == "latest":
         as_of_index = full_length - 1
