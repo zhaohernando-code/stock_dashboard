@@ -61,7 +61,53 @@ function getRuntimeConfig(): DashboardRuntimeConfig {
   };
 }
 
+<<<<<<< HEAD
 function buildSourceInfo(): DataSourceInfo {
+=======
+function isJsonContent(contentType: string | null): boolean {
+  const normalized = (contentType ?? "").toLowerCase();
+  return (
+    normalized.includes("application/json")
+    || normalized.includes("application/problem+json")
+    || normalized.includes("text/json")
+    || normalized.includes("+json")
+  );
+}
+
+async function readTextPreview(response: Response, maxChars = 220): Promise<string> {
+  const text = await response.clone().text();
+  const compact = text.replace(/\s+/g, " ").trim();
+  return compact.length > maxChars ? `${compact.slice(0, maxChars)}...` : compact;
+}
+
+async function parseJsonResponse<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get("content-type");
+  if (!isJsonContent(contentType) && contentType !== null) {
+    const preview = await readTextPreview(response);
+    throw new Error(
+      `接口返回非 JSON 内容。content-type="${contentType}". 可能访问到了前端页面或重定向页。响应片段：${preview}`,
+    );
+  }
+
+  try {
+    return (await response.json()) as T;
+  } catch {
+    const preview = await readTextPreview(response);
+    throw new Error(`响应不是有效 JSON。响应片段：${preview}`);
+  }
+}
+
+function describeError(error: unknown): string {
+  const hint = getApiBase()
+    ? ""
+    : " 当前未显式配置在线 API 地址；如果不准备接项目后端，也可以直接切回离线快照并使用本地自选池。";
+  if (error instanceof Error) {
+    return `${error.message}${hint}`.trim();
+  }
+  return `在线接口不可用。${hint}`.trim();
+}
+
+function buildSourceInfo(mode: DataMode, preferredMode: DataMode, fallbackReason?: string | null): DataSourceInfo {
   const apiBase = getApiBase();
   return {
     mode: "online",
@@ -95,15 +141,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (!response.ok) {
       let detail = `${response.status} ${response.statusText}`;
       try {
-        const payload = (await response.json()) as { detail?: string };
-        if (payload.detail) detail = payload.detail;
+        const contentType = response.headers.get("content-type");
+        if (isJsonContent(contentType)) {
+          const payload = (await response.json()) as { detail?: string };
+          if (payload.detail) {
+            detail = payload.detail;
+          }
+        } else {
+          const preview = await readTextPreview(response);
+          if (preview) {
+            detail = `${detail}（响应片段：${preview}）`;
+          }
+        }
       } catch {
         // Preserve fallback detail.
       }
       throw new Error(detail);
     }
 
-    return (await response.json()) as T;
+    return await parseJsonResponse<T>(response);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new Error(`请求超时（>${requestTimeoutMs / 1000}s）`);
