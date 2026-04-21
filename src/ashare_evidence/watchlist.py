@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from ashare_evidence.dashboard_demo import WATCHLIST_SYMBOLS, build_dashboard_bundle, normalize_symbol
-from ashare_evidence.db import utcnow
+from ashare_evidence.db import align_datetime_timezone, utcnow
 from ashare_evidence.lineage import build_lineage
 from ashare_evidence.models import Recommendation, Sector, SectorMembership, Stock, WatchlistEntry
 from ashare_evidence.services import ingest_bundle
@@ -156,7 +156,8 @@ def _expire_stale_sector_memberships(
     for membership in memberships:
         if membership.sector.sector_code in active_sector_codes:
             continue
-        if membership.effective_to is not None and membership.effective_to < cutoff:
+        effective_to = align_datetime_timezone(membership.effective_to, reference=cutoff)
+        if effective_to is not None and effective_to < cutoff:
             continue
         membership.effective_to = cutoff
 

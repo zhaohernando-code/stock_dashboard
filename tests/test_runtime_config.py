@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from ashare_evidence.dashboard import bootstrap_dashboard_demo
 from ashare_evidence.db import init_database, session_scope
@@ -71,6 +72,16 @@ class RuntimeConfigTests(unittest.TestCase):
         source_view = next(item for item in payload["data_sources"] if item["provider_name"] == "tushare")
         self.assertTrue(source_view["credential_configured"])
         self.assertEqual(source_view["base_url"], "https://api.tushare.pro")
+
+    def test_akshare_runtime_status_reflects_real_adapter_readiness(self) -> None:
+        with session_scope(self.database_url) as session:
+            with patch("ashare_evidence.runtime_config.akshare_runtime_ready", return_value=True):
+                payload = get_runtime_settings(session)
+
+        source_view = next(item for item in payload["data_sources"] if item["provider_name"] == "akshare")
+        self.assertFalse(source_view["credential_required"])
+        self.assertTrue(source_view["runtime_ready"])
+        self.assertEqual(source_view["status_label"], "已接入")
 
     def test_follow_up_analysis_supports_default_key_and_failover(self) -> None:
         transport = _FailoverTransport()

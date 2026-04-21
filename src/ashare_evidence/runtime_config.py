@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from ashare_evidence.db import utcnow
 from ashare_evidence.models import AppSetting, ModelApiKey, ProviderCredential
+from ashare_evidence.stock_master import akshare_runtime_ready
 
 DATA_SOURCE_DOCS = {
     "akshare": "https://akshare.akfamily.xyz/data/stock/stock.html",
@@ -22,8 +23,8 @@ PROVIDER_DISPLAY_NAMES = {
 PROVIDER_RUNTIME_STATUS = {
     "akshare": {
         "credential_required": False,
-        "runtime_ready": False,
-        "status_label": "尚未接入实连",
+        "ready_status_label": "已接入",
+        "missing_status_label": "适配器未就绪",
     },
     "tushare": {
         "credential_required": True,
@@ -431,6 +432,13 @@ def get_runtime_settings(session: Session) -> dict[str, Any]:
                 runtimeStatus.get("configured_status_label", "已配置")
                 if credential_configured
                 else runtimeStatus.get("missing_status_label", "需 Token")
+            )
+        elif provider_name == "akshare":
+            runtime_ready = akshare_runtime_ready()
+            status_label = (
+                runtimeStatus.get("ready_status_label", "已接入")
+                if runtime_ready
+                else runtimeStatus.get("missing_status_label", "适配器未就绪")
             )
         elif runtimeStatus:
             status_label = str(runtimeStatus.get("status_label") or status_label)

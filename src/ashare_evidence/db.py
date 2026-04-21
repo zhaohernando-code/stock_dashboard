@@ -21,6 +21,16 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def align_datetime_timezone(value: datetime | None, *, reference: datetime) -> datetime | None:
+    if value is None:
+        return None
+    if reference.tzinfo is None:
+        return value.replace(tzinfo=None) if value.tzinfo is not None else value
+    if value.tzinfo is None:
+        return value.replace(tzinfo=reference.tzinfo)
+    return value.astimezone(reference.tzinfo)
+
+
 def get_database_url(explicit: str | None = None) -> str:
     return explicit or os.getenv("ASHARE_DATABASE_URL") or DEFAULT_DB_URL
 
@@ -50,7 +60,7 @@ def get_session_factory(database_url: str | None = None) -> sessionmaker[Session
     resolved = get_database_url(database_url)
     factory = _SESSION_FACTORY_CACHE.get(resolved)
     if factory is None:
-        factory = sessionmaker(bind=get_engine(resolved), autoflush=False, autocommit=False)
+        factory = sessionmaker(bind=get_engine(resolved), autoflush=False, autocommit=False, expire_on_commit=False)
         _SESSION_FACTORY_CACHE[resolved] = factory
     return factory
 

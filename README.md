@@ -17,7 +17,7 @@
   - `provider_credentials`
   - `model_api_keys`
 - 统一数据源策略：
-  - `AKShare`：实时行情与公开站点补缺
+  - `AKShare`：已接入运行时主数据/公开站点补缺，当前通过 `stock_individual_info_em` 解析股票简称、行业与上市时间
   - `Tushare`：日线/K 线、财报与结构化指标
   - 运行时选源，不在一期固化单一主源
 - 统一缓存策略：
@@ -90,6 +90,7 @@ npm run build
 
 ## 当前边界
 
-- 真实 `AKShare / Tushare` 适配器与 `Redis` 实连尚未在当前受限环境完成联调。
+- `AKShare` 已接入主数据解析链；`Tushare` 仍需要用户提供 Token 后才能启用其结构化主数据/财报能力。
+- `Redis` 实连尚未在当前受限环境完成联调。
 - `frontend_snapshot` 等离线导出工具仍保留在仓库里作为历史产物，但前端主路径已不再依赖它们。
 - LLM 分析接口采用 OpenAI-compatible 协议，当前已完成 Key 选择与故障切换逻辑，但未在本环境对外部模型服务做真实连通验证。

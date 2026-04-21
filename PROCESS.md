@@ -169,6 +169,14 @@
 
 ## 2026-04-21
 
+- Problem: 运行时配置页先展示了 `AKShare` 的“待配置”入口，但后端并没有真实适配器，导致用户误以为只差前端配置；在自托管模式下，这类“前端先行”会掩盖服务端未接通的真实缺陷。
+- Resolution: `AKShare` 已接入后端主数据解析链，`stock_master` 现在会在无 `Tushare` token 时按真实适配器查询 `stock_individual_info_em` 解析股票简称、行业和上市时间；运行态状态也改为按后端适配器真实可用性展示，而不是把未接入能力伪装成“待配置”。
+- Prevention: 以后任何数据源、模型、配置面板或服务开关，只有在后端适配器、验证链路和发布路径都已落地后，前端才能展示入口或状态；若后端尚未接通，UI 必须明确标记为未接入，不能把缺失实现包装成用户可配置项。
+- Commit ID: pending
+- Context: project=一个关于a股的当前数据和投资建议看板, step=runtime provider integration discipline
+
+## 2026-04-21
+
 - Problem: 部署环境已经从 GitHub Pages 迁移到自托管服务器，但项目仍保留“在线 API / 离线快照”双模式、浏览器本地自选池和用户侧在线接入配置，这些静态站假设与新的服务端真实数据模式冲突。
 - Resolution: 前端收口为统一服务端模式；新增 `app_settings`、`provider_credentials`、`model_api_keys` 三类 SQLite 配置实体；新增 `/settings/runtime`、模型 Key 管理、数据源凭据管理和 `/analysis/follow-up` 分析接口；补齐 `AKShare + Tushare` 统一字段映射摘要、`Redis` 关注池缓存 TTL 和模型 Key 默认/显式选择/故障切换逻辑。
 - Prevention: 后续凡是部署形态已经确定为自托管服务器的项目，不再为了静态演示保留离线快照主路径；如果必须保留历史快照工具，也要明确它是非主链路并从 UI 和验收文档中移除。

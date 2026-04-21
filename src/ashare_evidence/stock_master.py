@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from functools import lru_cache
 import json
 from typing import Any
 from urllib import error, request
@@ -13,6 +14,7 @@ from ashare_evidence.models import ProviderCredential
 
 TUSHARE_STOCK_BASIC_FIELDS = "ts_code,symbol,name,industry,list_date"
 DEFAULT_TUSHARE_BASE_URL = "http://api.tushare.pro"
+DEFAULT_AKSHARE_TIMEOUT_SECONDS = 5
 
 
 @dataclass(frozen=True)
@@ -65,12 +67,23 @@ INDUSTRY_TEMPLATE_RULES: tuple[tuple[str, str], ...] = (
 )
 
 
-def _parse_list_date(raw: str | None) -> date | None:
+def _normalize_text(raw: Any) -> str | None:
     if raw is None:
         return None
-    value = raw.strip()
-    if len(value) != 8 or not value.isdigit():
+    value = str(raw).strip()
+    if not value or value in {"-", "--", "nan", "None", "null"}:
         return None
+    return value
+
+
+def _parse_list_date(raw: Any) -> date | None:
+    value = _normalize_text(raw)
+    if value is None:
+        return None
+    digits = "".join(character for character in value if character.isdigit())
+    if len(digits) != 8:
+        return None
+    value = digits
     return date(int(value[0:4]), int(value[4:6]), int(value[6:8]))
 
 
@@ -84,6 +97,17 @@ def _infer_template_key(industry: str | None) -> str | None:
     return None
 
 
+def _industry_needs_tushare_enrichment(industry: str | None) -> bool:
+    if industry is None:
+        return True
+    normalized = industry.strip()
+    if not normalized:
+        return True
+    if len(normalized) >= 2 and normalized[0].isalpha() and normalized[1] == " ":
+        return True
+    return normalized.endswith("行业")
+
+
 def _tushare_credential(session: Session) -> ProviderCredential | None:
     return session.scalar(
         select(ProviderCredential).where(
@@ -91,6 +115,96 @@ def _tushare_credential(session: Session) -> ProviderCredential | None:
             ProviderCredential.enabled.is_(True),
         )
     )
+
+
+@lru_cache(maxsize=1)
+def _load_akshare_module() -> Any:
+    import akshare as akshare  # type: ignore[import-not-found]
+
+    required_adapters = (
+        "stock_info_sz_name_code",
+        "stock_info_sh_name_code",
+        "stock_info_a_code_name",
+        "stock_individual_info_em",
+    )
+    if any(not callable(getattr(akshare, adapter, None)) for adapter in required_adapters):
+        raise ImportError("Required AKShare stock adapters are unavailable")
+    return akshare
+
+
+def akshare_runtime_ready() -> bool:
+    try:
+        _load_akshare_module()
+    except Exception:
+        return False
+    return True
+
+
+def _query_akshare_stock_basic(symbol: str) -> dict[str, Any] | None:
+    try:
+        akshare = _load_akshare_module()
+    except Exception:
+        return None
+
+    ticker = symbol.partition(".")[0].strip()
+    if not ticker:
+        return None
+
+    market = symbol.partition(".")[2].strip().upper()
+    records: dict[str, Any] = {}
+    try:
+        if market == "SZ":
+            frame = akshare.stock_info_sz_name_code(symbol="A股列表")
+            row = frame.loc[frame["A股代码"].astype(str).str.zfill(6) == ticker]
+            if not row.empty:
+                first = row.iloc[0]
+                records = {
+                    "name": first.get("A股简称"),
+                    "industry": first.get("所属行业"),
+                    "list_date": first.get("A股上市日期"),
+                }
+        elif market == "SH":
+            board = "科创板" if ticker.startswith("688") else "主板A股"
+            frame = akshare.stock_info_sh_name_code(symbol=board)
+            row = frame.loc[frame["证券代码"].astype(str).str.zfill(6) == ticker]
+            if not row.empty:
+                first = row.iloc[0]
+                records = {
+                    "name": first.get("证券简称"),
+                    "industry": None,
+                    "list_date": first.get("上市日期"),
+                }
+        elif market == "BJ":
+            frame = akshare.stock_info_a_code_name()
+            row = frame.loc[frame["code"].astype(str).str.zfill(6) == ticker]
+            if not row.empty:
+                first = row.iloc[0]
+                records = {
+                    "name": first.get("name"),
+                    "industry": None,
+                    "list_date": None,
+                }
+    except Exception:
+        records = {}
+
+    detail_records: dict[str, Any] = {}
+    try:
+        detail_frame = akshare.stock_individual_info_em(symbol=ticker, timeout=DEFAULT_AKSHARE_TIMEOUT_SECONDS)
+        if detail_frame is not None and not getattr(detail_frame, "empty", False):
+            detail_records = dict(zip(detail_frame["item"].tolist(), detail_frame["value"].tolist(), strict=False))
+    except Exception:
+        detail_records = {}
+
+    name = _normalize_text(records.get("name")) or _normalize_text(detail_records.get("股票简称"))
+    industry = _normalize_text(records.get("industry")) or _normalize_text(detail_records.get("行业"))
+    listed_date = records.get("list_date") or detail_records.get("上市时间")
+    if name is None and industry is None and _parse_list_date(listed_date) is None:
+        return None
+    return {
+        "name": name,
+        "industry": industry,
+        "list_date": listed_date,
+    }
 
 
 def _post_tushare(
@@ -189,17 +303,34 @@ def resolve_stock_profile(
             source="local_override",
         )
 
-    tushare_row = _query_tushare_stock_basic(session, symbol)
-    if tushare_row is not None:
-        industry = tushare_row.get("industry")
-        name = cleaned_name or tushare_row.get("name")
+    akshare_row = _query_akshare_stock_basic(symbol)
+    akshare_industry = _normalize_text(akshare_row.get("industry")) if akshare_row is not None else None
+    akshare_listed_date = _parse_list_date(akshare_row.get("list_date")) if akshare_row is not None else None
+
+    tushare_row = None
+    if akshare_row is None or _industry_needs_tushare_enrichment(akshare_industry) or akshare_listed_date is None:
+        tushare_row = _query_tushare_stock_basic(session, symbol)
+
+    if akshare_row is not None or tushare_row is not None:
+        tushare_industry = _normalize_text(tushare_row.get("industry")) if tushare_row is not None else None
+        tushare_name = _normalize_text(tushare_row.get("name")) if tushare_row is not None else None
+        prefer_tushare_industry = _industry_needs_tushare_enrichment(akshare_industry)
+        industry = tushare_industry if prefer_tushare_industry and tushare_industry is not None else (akshare_industry or tushare_industry)
+        name = cleaned_name or _normalize_text(akshare_row.get("name")) if akshare_row is not None else None
+        if name is None:
+            name = tushare_name
+        source = "tushare_stock_basic"
+        if akshare_row is not None and tushare_row is not None:
+            source = "akshare_stock_individual_info+tushare_stock_basic"
+        elif akshare_row is not None:
+            source = "akshare_stock_individual_info"
         return StockProfileResolution(
             symbol=symbol,
-            name=name.strip() if isinstance(name, str) and name.strip() else None,
-            industry=industry.strip() if isinstance(industry, str) and industry.strip() else None,
-            listed_date=_parse_list_date(tushare_row.get("list_date")),
-            template_key=_infer_template_key(industry if isinstance(industry, str) else None),
-            source="tushare_stock_basic",
+            name=_normalize_text(name),
+            industry=industry,
+            listed_date=akshare_listed_date or _parse_list_date(tushare_row.get("list_date") if tushare_row is not None else None),
+            template_key=_infer_template_key(industry),
+            source=source,
         )
 
     return StockProfileResolution(

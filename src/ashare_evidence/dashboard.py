@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from ashare_evidence.db import align_datetime_timezone
 from ashare_evidence.models import MarketBar, ModelVersion, NewsEntityLink, Recommendation, SectorMembership, Stock
 from ashare_evidence.services import (
     _serialize_recommendation,
@@ -115,7 +116,11 @@ def _active_memberships(session: Session, stock_id: int, as_of: datetime) -> lis
     active = [
         membership
         for membership in memberships
-        if membership.effective_from <= as_of and (membership.effective_to is None or membership.effective_to >= as_of)
+        if align_datetime_timezone(membership.effective_from, reference=as_of) <= as_of
+        and (
+            align_datetime_timezone(membership.effective_to, reference=as_of) is None
+            or align_datetime_timezone(membership.effective_to, reference=as_of) >= as_of
+        )
     ]
     active.sort(key=lambda item: (not item.is_primary, item.sector.name))
     return active
