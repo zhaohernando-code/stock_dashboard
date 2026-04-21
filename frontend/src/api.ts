@@ -38,9 +38,50 @@ function getApiBase(): string {
   return envApiBase;
 }
 
-function makeUrl(path: string): string {
+function buildRequestUrls(path: string): string[] {
   const apiBase = getApiBase();
-  return apiBase ? `${apiBase}${path}` : path;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const urls = apiBase ? [`${apiBase}${normalizedPath}`] : [normalizedPath];
+
+  if (!apiBase) {
+    const apiPrefixed = `/api${normalizedPath}`;
+    if (apiPrefixed !== normalizedPath) {
+      urls.push(apiPrefixed);
+    }
+  }
+  return urls;
+}
+
+type HtmlErrorContext = {
+  kind: "html";
+  endpoint: string;
+  fullUrl: string;
+  preview: string;
+};
+
+type ApiResponseError = Error & {
+  apiErrorContext?: HtmlErrorContext;
+};
+
+function isHtmlResponseError(error: unknown): error is ApiResponseError {
+  return (
+    Boolean(error)
+    && typeof error === "object"
+    && (error as ApiResponseError).apiErrorContext?.kind === "html"
+  );
+}
+
+function createHtmlError(endpoint: string, fullUrl: string, preview: string): ApiResponseError {
+  const error = new Error(
+    `接口返回 HTML（路径: ${endpoint}，请求地址: ${fullUrl}）。通常表示请求打到了前端页面或前端路由重定向而非 FastAPI 接口。请确认服务端已启动、路径正确，且页面未错误代理到静态站点。响应片段：${preview}`,
+  ) as ApiResponseError;
+  error.apiErrorContext = {
+    kind: "html",
+    endpoint,
+    fullUrl,
+    preview,
+  };
+  return error;
 }
 
 function getBetaAccessKey(): string {
@@ -93,9 +134,7 @@ async function parseJsonResponse<T>(response: Response, endpoint: string): Promi
   const text = await response.text();
 
   if (isLikelyHtmlText(text)) {
-    throw new Error(
-      `接口返回 HTML（路径: ${endpoint}）。通常表示请求打到了前端页面或前端路由重定向而非 FastAPI 接口。请确认服务端已启动、路径正确，且页面未错误代理到静态站点。响应片段：${toPreview(text)}`,
-    );
+    throw createHtmlError(endpoint, response.url, toPreview(text));
   }
 
   if (!isJsonContent(contentType) && contentType !== null) {
@@ -132,40 +171,75 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), requestTimeoutMs);
   const betaAccessKey = getBetaAccessKey();
+  const requestUrls = buildRequestUrls(path);
+  const hasExplicitBase = Boolean(getApiBase());
 
   try {
-    const response = await fetch(makeUrl(path), {
-      headers: {
-        "Content-Type": "application/json",
-        ...(betaAccessKey ? { [betaHeaderName]: betaAccessKey } : {}),
-        ...(init?.headers ?? {}),
-      },
-      ...init,
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      let detail = `${response.status} ${response.statusText}`;
+    for (let index = 0; index < requestUrls.length; index += 1) {
+      const requestUrl = requestUrls[index];
       try {
-        const contentType = response.headers.get("content-type");
-        if (isJsonContent(contentType)) {
-          const payload = JSON.parse(await response.text()) as { detail?: string };
-          if (payload.detail) {
-            detail = payload.detail;
+        const response = await fetch(requestUrl, {
+          headers: {
+            "Content-Type": "application/json",
+            ...(betaAccessKey ? { [betaHeaderName]: betaAccessKey } : {}),
+            ...(init?.headers ?? {}),
+          },
+          ...init,
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          let detail = `${response.status} ${response.statusText}`;
+          try {
+            const contentType = response.headers.get("content-type");
+            if (isJsonContent(contentType)) {
+              const payload = JSON.parse(await response.text()) as { detail?: string };
+              if (payload.detail) {
+                detail = payload.detail;
+              }
+            } else {
+              const preview = await readTextPreview(response);
+              if (
+                preview
+                && !hasExplicitBase
+                && index < requestUrls.length - 1
+                && isLikelyHtmlText(preview)
+              ) {
+                continue;
+              }
+              if (preview) {
+                detail = `${detail}（响应片段：${preview}）`;
+              }
+            }
+          } catch (error) {
+            if (isHtmlResponseError(error) && !hasExplicitBase && index < requestUrls.length - 1) {
+              continue;
+            }
+            throw error;
           }
-        } else {
-          const preview = await readTextPreview(response);
-          if (preview) {
-            detail = `${detail}（响应片段：${preview}）`;
-          }
+
+          throw new Error(detail);
         }
-      } catch {
-        // Preserve fallback detail.
+
+        try {
+          return await parseJsonResponse<T>(response, path);
+        } catch (error) {
+          if (isHtmlResponseError(error) && !hasExplicitBase && index < requestUrls.length - 1) {
+            continue;
+          }
+          throw error;
+        }
+      } catch (error) {
+        if (isHtmlResponseError(error) && !hasExplicitBase && index < requestUrls.length - 1) {
+          continue;
+        }
+        throw error;
       }
-      throw new Error(detail);
     }
 
-    return await parseJsonResponse<T>(response, path);
+    throw new Error(
+      `接口请求失败（路径: ${path}）。已尝试 ${requestUrls.join(" / ")}，但均未返回可解析 JSON 的 API 响应。`,
+    );
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new Error(`请求超时（>${requestTimeoutMs / 1000}s）`);
