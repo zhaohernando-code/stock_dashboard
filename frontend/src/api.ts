@@ -23,6 +23,7 @@ const envApiBase = normalizeApiBase(import.meta.env.VITE_API_BASE_URL ?? "");
 const betaHeaderName = import.meta.env.VITE_BETA_ACCESS_HEADER ?? "X-Ashare-Beta-Key";
 const betaStorageKey = "ashare-beta-access-key";
 const requestTimeoutMs = 10000;
+const htmlPrefixes = ["<!doctype", "<html", "<?xml"];
 
 type ApiResult<T> = {
   data: T;
@@ -77,19 +78,37 @@ async function readTextPreview(response: Response, maxChars = 220): Promise<stri
   return compact.length > maxChars ? `${compact.slice(0, maxChars)}...` : compact;
 }
 
-async function parseJsonResponse<T>(response: Response): Promise<T> {
+function isLikelyHtmlText(text: string): boolean {
+  const compact = text.trim().toLowerCase().slice(0, 64);
+  return htmlPrefixes.some((prefix) => compact.startsWith(prefix));
+}
+
+function toPreview(text: string, maxChars = 220): string {
+  const compact = text.replace(/\s+/g, " ").trim();
+  return compact.length > maxChars ? `${compact.slice(0, maxChars)}...` : compact;
+}
+
+async function parseJsonResponse<T>(response: Response, endpoint: string): Promise<T> {
   const contentType = response.headers.get("content-type");
+  const text = await response.text();
+
+  if (isLikelyHtmlText(text)) {
+    throw new Error(
+      `接口返回 HTML（路径: ${endpoint}）。通常表示请求打到了前端页面或前端路由重定向而非 FastAPI 接口。请确认服务端已启动、路径正确，且页面未错误代理到静态站点。响应片段：${toPreview(text)}`,
+    );
+  }
+
   if (!isJsonContent(contentType) && contentType !== null) {
-    const preview = await readTextPreview(response);
+    const preview = toPreview(text);
     throw new Error(
       `接口返回非 JSON 内容。content-type="${contentType}". 可能访问到了前端页面或重定向页。响应片段：${preview}`,
     );
   }
 
   try {
-    return (await response.json()) as T;
+    return JSON.parse(text) as T;
   } catch {
-    const preview = await readTextPreview(response);
+    const preview = toPreview(text);
     throw new Error(`响应不是有效 JSON。响应片段：${preview}`);
   }
 }
@@ -130,7 +149,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       try {
         const contentType = response.headers.get("content-type");
         if (isJsonContent(contentType)) {
-          const payload = (await response.json()) as { detail?: string };
+          const payload = JSON.parse(await response.text()) as { detail?: string };
           if (payload.detail) {
             detail = payload.detail;
           }
@@ -146,7 +165,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       throw new Error(detail);
     }
 
-    return await parseJsonResponse<T>(response);
+    return await parseJsonResponse<T>(response, path);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new Error(`请求超时（>${requestTimeoutMs / 1000}s）`);
