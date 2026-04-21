@@ -311,6 +311,35 @@ def _measure_payload(builder: Any) -> tuple[dict[str, Any], float, float]:
     return payload, round(elapsed_ms, 1), round(payload_kb, 1)
 
 
+def _preferred_measurement_symbol(
+    *,
+    sample_symbol: str,
+    active_symbols: set[str],
+    replay_items: list[dict[str, Any]],
+    portfolios: list[dict[str, Any]],
+) -> str | None:
+    if sample_symbol in active_symbols:
+        return sample_symbol
+
+    replay_symbol = next((item["symbol"] for item in replay_items if item["symbol"] in active_symbols), None)
+    if replay_symbol is not None:
+        return replay_symbol
+
+    portfolio_symbol = next(
+        (
+            item["symbol"]
+            for portfolio in portfolios
+            for item in portfolio["holdings"]
+            if item["symbol"] in active_symbols
+        ),
+        None,
+    )
+    if portfolio_symbol is not None:
+        return portfolio_symbol
+
+    return sorted(active_symbols)[0] if active_symbols else None
+
+
 def _portfolio_payload(
     portfolio: PaperPortfolio,
     *,
@@ -748,7 +777,20 @@ def build_operations_dashboard(session: Session, sample_symbol: str = "600519.SH
     from ashare_evidence.dashboard import get_stock_dashboard, list_candidate_recommendations
 
     _, candidate_ms, candidate_kb = _measure_payload(lambda: list_candidate_recommendations(session, limit=8))
-    _, stock_ms, stock_kb = _measure_payload(lambda: get_stock_dashboard(session, sample_symbol))
+    measurement_symbol = _preferred_measurement_symbol(
+        sample_symbol=sample_symbol,
+        active_symbols=active_symbols,
+        replay_items=replay_items,
+        portfolios=portfolio_payloads,
+    )
+    stock_ms = 0.0
+    stock_kb = 0.0
+    if measurement_symbol is not None:
+        try:
+            _, stock_ms, stock_kb = _measure_payload(lambda: get_stock_dashboard(session, measurement_symbol))
+        except LookupError:
+            stock_ms = 0.0
+            stock_kb = 0.0
     partial_payload = {
         "overview": {
             "generated_at": datetime.now().astimezone(),

@@ -104,6 +104,26 @@ class DashboardViewTests(unittest.TestCase):
         self.assertNotIn("600519.SH", portfolio_symbols)
         self.assertTrue(portfolio_symbols.issubset(active_watchlist_symbols))
 
+    def test_operations_dashboard_tolerates_missing_sample_symbol(self) -> None:
+        with session_scope(self.database_url) as session:
+            bootstrap_dashboard_demo(session)
+            add_watchlist_symbol(session, "688981", stock_name="中芯国际")
+            remove_watchlist_symbol(session, "600519")
+
+        with session_scope(self.database_url) as session:
+            operations = build_operations_dashboard(session, sample_symbol="000001.SZ")
+
+        replay_symbols = {item["symbol"] for item in operations["recommendation_replay"]}
+        portfolio_symbols = {
+            item["symbol"]
+            for portfolio in operations["portfolios"]
+            for item in [*portfolio["holdings"], *portfolio["recent_orders"]]
+        }
+        self.assertIn("688981.SH", replay_symbols)
+        self.assertNotIn("600519.SH", replay_symbols)
+        self.assertNotIn("600519.SH", portfolio_symbols)
+        self.assertEqual(len(operations["portfolios"]), 2)
+
     def test_glossary_entries_cover_key_user_terms(self) -> None:
         glossary = get_glossary_entries()
         terms = {item["term"] for item in glossary}

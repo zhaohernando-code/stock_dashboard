@@ -496,7 +496,10 @@ function App() {
       setGeneratedAt(data.candidates.generated_at);
       setGlossary(data.glossary);
       setSourceInfo(source);
-      const nextSymbol = data.candidates.items.find((item) => item.symbol === preferredSymbol)?.symbol
+      const nextSymbol = data.watchlist.items.find((item) => item.symbol === preferredSymbol)?.symbol
+        ?? data.watchlist.items.find((item) => item.symbol === selectedSymbol)?.symbol
+        ?? data.watchlist.items[0]?.symbol
+        ?? data.candidates.items.find((item) => item.symbol === preferredSymbol)?.symbol
         ?? data.candidates.items.find((item) => item.symbol === selectedSymbol)?.symbol
         ?? data.candidates.items[0]?.symbol
         ?? null;
