@@ -414,6 +414,9 @@ class RuntimeDataSourceView(BaseModel):
     docs_url: str
     notes: list[str] = Field(default_factory=list)
     credential_configured: bool
+    credential_required: bool
+    runtime_ready: bool
+    status_label: str
     base_url: str | None = None
     enabled: bool
 

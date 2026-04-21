@@ -19,6 +19,20 @@ PROVIDER_DISPLAY_NAMES = {
     "tushare": "Tushare",
 }
 
+PROVIDER_RUNTIME_STATUS = {
+    "akshare": {
+        "credential_required": False,
+        "runtime_ready": False,
+        "status_label": "尚未接入实连",
+    },
+    "tushare": {
+        "credential_required": True,
+        "runtime_ready_if_credential_configured": True,
+        "configured_status_label": "已配置",
+        "missing_status_label": "需 Token",
+    },
+}
+
 DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
     "deployment_profile": {
         "description": "Self-hosted deployment profile and storage selection.",
@@ -402,13 +416,31 @@ def get_runtime_settings(session: Session) -> dict[str, Any]:
 
     data_sources = []
     for provider in provider_value.get("providers", []):
-        credential = provider_records.get(provider["provider_name"])
+        provider_name = provider["provider_name"]
+        credential = provider_records.get(provider_name)
+        credential_configured = bool(
+            credential and (credential["token_configured"] or credential["base_url"])
+        )
+        runtimeStatus = PROVIDER_RUNTIME_STATUS.get(provider_name, {})
+        credential_required = bool(runtimeStatus.get("credential_required"))
+        runtime_ready = bool(runtimeStatus.get("runtime_ready"))
+        status_label = "未配置"
+        if provider_name == "tushare":
+            runtime_ready = credential_configured and bool(runtimeStatus.get("runtime_ready_if_credential_configured"))
+            status_label = (
+                runtimeStatus.get("configured_status_label", "已配置")
+                if credential_configured
+                else runtimeStatus.get("missing_status_label", "需 Token")
+            )
+        elif runtimeStatus:
+            status_label = str(runtimeStatus.get("status_label") or status_label)
         data_sources.append(
             {
                 **provider,
-                "credential_configured": bool(
-                    credential and (credential["token_configured"] or credential["base_url"])
-                ),
+                "credential_configured": credential_configured,
+                "credential_required": credential_required,
+                "runtime_ready": runtime_ready,
+                "status_label": status_label,
                 "base_url": credential["base_url"] if credential else None,
                 "enabled": credential["enabled"] if credential else True,
             }

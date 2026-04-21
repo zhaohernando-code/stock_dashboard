@@ -47,6 +47,7 @@ import type {
   PricePointView,
   ProviderCredentialView,
   RecommendationReplayView,
+  RuntimeDataSourceView,
   RuntimeSettingsResponse,
   StockDashboardResponse,
   WatchlistItemView,
@@ -118,6 +119,12 @@ function statusColor(status: string): string {
   if (["warn", "hold", "pending", "offline"].includes(status)) return "gold";
   if (["fail", "miss", "risk_alert"].includes(status)) return "red";
   return "default";
+}
+
+function dataSourceStatusColor(item: RuntimeDataSourceView): string {
+  if (item.runtime_ready) return "green";
+  if (!item.credential_required) return "default";
+  return item.credential_configured ? "green" : "gold";
 }
 
 function buildInitialSourceInfo(): DataSourceInfo {
@@ -1291,8 +1298,8 @@ function App() {
               </Paragraph>
               <Space wrap className="inline-tags">
                 {(runtimeSettings?.data_sources ?? []).map((item) => (
-                  <Tag key={item.provider_name} color={item.credential_configured ? "green" : "gold"}>
-                    {`${item.provider_name.toUpperCase()} ${item.credential_configured ? "已配置" : "待配置"}`}
+                  <Tag key={item.provider_name} color={dataSourceStatusColor(item)}>
+                    {`${item.provider_name.toUpperCase()} ${item.status_label}`}
                   </Tag>
                 ))}
               </Space>
@@ -1798,8 +1805,8 @@ function App() {
                                 <strong>{item.provider_name.toUpperCase()}</strong>
                                 <div className="muted-line">{item.role}</div>
                               </div>
-                              <Tag color={item.credential_configured ? "green" : "gold"}>
-                                {item.credential_configured ? "已配置" : "待配置"}
+                              <Tag color={dataSourceStatusColor(item)}>
+                                {item.status_label}
                               </Tag>
                             </div>
                             <Paragraph className="panel-description">{item.freshness_note}</Paragraph>
@@ -1822,7 +1829,11 @@ function App() {
                                     [item.provider_name]: { ...draft, accessToken: event.target.value },
                                   }))
                                 }
-                                placeholder={item.provider_name === "akshare" ? "可选：接入层 Token / 代理凭据" : "输入 Tushare Token"}
+                                placeholder={
+                                  item.credential_required
+                                    ? "输入 Tushare Token"
+                                    : "可选：预留给未来代理层/接入层凭据"
+                                }
                               />
                               <Input
                                 value={draft.notes}
@@ -1853,6 +1864,7 @@ function App() {
                             <Space wrap className="inline-tags">
                               <Tag>{saved?.masked_token ?? "未保存 Token"}</Tag>
                               <Tag>{item.docs_url}</Tag>
+                              {!item.credential_required ? <Tag>当前前端不要求你配置此源</Tag> : null}
                             </Space>
                           </div>
                         </List.Item>

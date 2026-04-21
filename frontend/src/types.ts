@@ -443,6 +443,9 @@ export interface RuntimeDataSourceView {
   docs_url: string;
   notes: string[];
   credential_configured: boolean;
+  credential_required: boolean;
+  runtime_ready: boolean;
+  status_label: string;
   base_url?: string | null;
   enabled: boolean;
 }
