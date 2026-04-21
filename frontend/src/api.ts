@@ -23,7 +23,7 @@ const betaHeaderName = import.meta.env.VITE_BETA_ACCESS_HEADER ?? "X-Ashare-Beta
 const betaStorageKey = "ashare-beta-access-key";
 const requestTimeoutMs = 10000;
 const htmlPrefixes = ["<!doctype", "<html", "<?xml"];
-const notFoundSignatures = ["tool not found", "tool_not_found", "not found"];
+const notFoundSignatures = ["tool not found", "tool_not_found"];
 const localApiBaseStorageKey = "ashare-api-base-url";
 
 type ApiResult<T> = {
@@ -66,6 +66,17 @@ function inferLocationBasedBase(): string {
   return normalizeApiBase(`/${segments.slice(0, -1).join("/")}`);
 }
 
+function inferLocalBackendBase(): string {
+  const host = window.location.hostname.toLowerCase();
+  if (!host) {
+    return "";
+  }
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+    return normalizeApiBase(`${window.location.protocol}//${host}:8000`);
+  }
+  return "";
+}
+
 function dedupe(values: string[]): string[] {
   const out: string[] = [];
   for (const value of values) {
@@ -82,6 +93,7 @@ function getApiBases(): string[] {
     readApiBaseFromStorage(),
     inferAssetMountedBase(),
     inferLocationBasedBase(),
+    inferLocalBackendBase(),
   ]).filter(Boolean);
 }
 
@@ -106,22 +118,11 @@ function buildRequestUrls(path: string): string[] {
 
   for (const base of basesToUse) {
     if (base) {
-      const basePath = `${base}${normalizedPath}`;
-      const apiPrefixed = `${base}/api${normalizedPath}`;
-      if (apiPrefixed !== basePath && !base.endsWith("/api")) {
-        urls.push(apiPrefixed);
-      }
-      urls.push(basePath);
+      urls.push(`${base}${normalizedPath}`);
       continue;
     }
 
     urls.push(normalizedPath);
-    if (!explicitBase) {
-      const apiPrefixed = `/api${normalizedPath}`;
-      if (apiPrefixed !== normalizedPath) {
-        urls.push(apiPrefixed);
-      }
-    }
   }
   return dedupe(urls);
 }
