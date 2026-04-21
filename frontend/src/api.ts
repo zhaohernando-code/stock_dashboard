@@ -111,12 +111,15 @@ function dedupe(values: string[]): string[] {
 }
 
 function getApiBases(): string[] {
+  const mountedBase = inferAssetMountedBase();
+  const locationBase = inferLocationBasedBase();
+  const prefersMountedToolApi = Boolean(mountedBase) && mountedBase.startsWith("/tools/");
   return dedupe([
     inferApiBaseFromQuery(),
+    ...(prefersMountedToolApi ? [mountedBase, locationBase] : []),
     envApiBase,
     readApiBaseFromStorage(),
-    inferAssetMountedBase(),
-    inferLocationBasedBase(),
+    ...(prefersMountedToolApi ? [] : [mountedBase, locationBase]),
     inferOriginBase(),
     inferSiblingPortBackendBase(),
     inferLocalBackendBase(),
