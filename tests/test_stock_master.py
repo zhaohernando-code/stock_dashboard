@@ -59,7 +59,7 @@ class StockMasterResolutionTests(unittest.TestCase):
         self.assertEqual(resolved.industry, "电气设备")
         self.assertEqual(resolved.template_key, "power_equipment")
         self.assertEqual(str(resolved.listed_date), "2018-06-11")
-        self.assertEqual(resolved.source, "akshare_stock_individual_info+tushare_stock_basic")
+        self.assertEqual(resolved.source, "akshare_stock_master+tushare_stock_basic")
 
     def test_akshare_stock_basic_can_supply_name_and_industry_without_token(self) -> None:
         mocked_response = {
@@ -75,7 +75,7 @@ class StockMasterResolutionTests(unittest.TestCase):
         self.assertEqual(resolved.industry, "电气设备")
         self.assertEqual(resolved.template_key, "power_equipment")
         self.assertEqual(str(resolved.listed_date), "2018-06-11")
-        self.assertEqual(resolved.source, "akshare_stock_individual_info")
+        self.assertEqual(resolved.source, "akshare_stock_master")
 
     def test_akshare_can_fallback_to_tushare_when_industry_is_missing(self) -> None:
         with session_scope(self.database_url) as session:
@@ -112,7 +112,7 @@ class StockMasterResolutionTests(unittest.TestCase):
         self.assertEqual(resolved.name, "宁德时代")
         self.assertEqual(resolved.industry, "电气设备")
         self.assertEqual(resolved.template_key, "power_equipment")
-        self.assertEqual(resolved.source, "akshare_stock_individual_info+tushare_stock_basic")
+        self.assertEqual(resolved.source, "akshare_stock_master+tushare_stock_basic")
 
 
 if __name__ == "__main__":

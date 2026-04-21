@@ -321,9 +321,9 @@ def resolve_stock_profile(
             name = tushare_name
         source = "tushare_stock_basic"
         if akshare_row is not None and tushare_row is not None:
-            source = "akshare_stock_individual_info+tushare_stock_basic"
+            source = "akshare_stock_master+tushare_stock_basic"
         elif akshare_row is not None:
-            source = "akshare_stock_individual_info"
+            source = "akshare_stock_master"
         return StockProfileResolution(
             symbol=symbol,
             name=_normalize_text(name),
