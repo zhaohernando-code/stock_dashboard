@@ -61,9 +61,6 @@ function getRuntimeConfig(): DashboardRuntimeConfig {
   };
 }
 
-<<<<<<< HEAD
-function buildSourceInfo(): DataSourceInfo {
-=======
 function isJsonContent(contentType: string | null): boolean {
   const normalized = (contentType ?? "").toLowerCase();
   return (
@@ -97,17 +94,7 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   }
 }
 
-function describeError(error: unknown): string {
-  const hint = getApiBase()
-    ? ""
-    : " 当前未显式配置在线 API 地址；如果不准备接项目后端，也可以直接切回离线快照并使用本地自选池。";
-  if (error instanceof Error) {
-    return `${error.message}${hint}`.trim();
-  }
-  return `在线接口不可用。${hint}`.trim();
-}
-
-function buildSourceInfo(mode: DataMode, preferredMode: DataMode, fallbackReason?: string | null): DataSourceInfo {
+function buildSourceInfo(): DataSourceInfo {
   const apiBase = getApiBase();
   return {
     mode: "online",
