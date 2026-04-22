@@ -54,9 +54,11 @@ import type {
   ManualSimulationOrderRequest,
   OperationsDashboardResponse,
   PortfolioNavPointView,
+  PortfolioHoldingView,
   PortfolioSummaryView,
   PricePointView,
   RecommendationReplayView,
+  SimulationModelAdviceView,
   RuntimeDataSourceView,
   RuntimeSettingsResponse,
   SimulationConfigRequest,
@@ -256,6 +258,70 @@ function buildCandidateWorkspaceRows(
   });
 }
 
+type TrackTableRow = {
+  symbol: string;
+  name: string;
+  quantity: number;
+  avg_cost: number;
+  last_price: number;
+  total_pnl: number;
+  holding_pnl_pct?: number | null;
+  today_pnl_amount: number;
+  today_pnl_pct?: number | null;
+  portfolio_weight: number;
+};
+
+function buildTrackTableRows(
+  track: SimulationTrackStateView,
+  watchSymbols: string[],
+  candidateRows: CandidateWorkspaceRow[],
+  symbolNameMap: Map<string, string>,
+  modelAdvices: SimulationModelAdviceView[],
+): TrackTableRow[] {
+  const holdingBySymbol = new Map(track.portfolio.holdings.map((item) => [item.symbol, item] as const));
+  const candidateBySymbol = new Map(candidateRows.map((item) => [item.symbol, item] as const));
+  const adviceBySymbol = new Map(modelAdvices.map((item) => [item.symbol, item] as const));
+  const sourceSymbols = watchSymbols.length > 0
+    ? watchSymbols
+    : track.portfolio.holdings.map((item) => item.symbol);
+
+  return sourceSymbols.map((symbol) => {
+    const holding = holdingBySymbol.get(symbol);
+    const candidateRow = candidateBySymbol.get(symbol);
+    const advice = adviceBySymbol.get(symbol);
+    const resolvedName = symbolNameMap.get(symbol) ?? holding?.name ?? candidateRow?.name ?? advice?.stock_name ?? symbol;
+    const fallbackLastPrice = candidateRow?.candidate?.last_close ?? advice?.reference_price ?? 0;
+
+    if (holding) {
+      return {
+        symbol,
+        name: holding.name || resolvedName,
+        quantity: holding.quantity,
+        avg_cost: holding.avg_cost,
+        last_price: holding.last_price || fallbackLastPrice,
+        total_pnl: holding.total_pnl,
+        holding_pnl_pct: holding.holding_pnl_pct ?? 0,
+        today_pnl_amount: holding.today_pnl_amount,
+        today_pnl_pct: holding.today_pnl_pct ?? 0,
+        portfolio_weight: holding.portfolio_weight,
+      };
+    }
+
+    return {
+      symbol,
+      name: resolvedName,
+      quantity: 0,
+      avg_cost: 0,
+      last_price: fallbackLastPrice,
+      total_pnl: 0,
+      holding_pnl_pct: 0,
+      today_pnl_amount: 0,
+      today_pnl_pct: 0,
+      portfolio_weight: 0,
+    };
+  });
+}
+
 function KlineChart({ points, compact = false }: { points: PricePointView[]; compact?: boolean }) {
   const chartRef = useRef<HTMLDivElement | null>(null);
 
@@ -272,12 +338,25 @@ function KlineChart({ points, compact = false }: { points: PricePointView[]; com
     const lineColor = styles.getPropertyValue("--line").trim() || "rgba(16, 35, 60, 0.08)";
     const upColor = "#d14343";
     const downColor = "#0b8f63";
+    const accentColor = styles.getPropertyValue("--brand").trim() || "#0a5bff";
+    const goldColor = "#d48700";
     const dates = points.map((point) => {
       const parsed = new Date(point.observed_at);
       return Number.isNaN(parsed.getTime())
         ? point.observed_at
         : parsed.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" });
     });
+    const movingAverage = (windowSize: number): Array<number | "-"> =>
+      points.map((_, index) => {
+        if (index < windowSize - 1) {
+          return "-";
+        }
+        const slice = points.slice(index - windowSize + 1, index + 1);
+        const total = slice.reduce((sum, point) => sum + point.close_price, 0);
+        return Number((total / slice.length).toFixed(2));
+      });
+    const ma5 = movingAverage(5);
+    const ma10 = movingAverage(10);
 
     chart.setOption({
       animation: false,
@@ -287,11 +366,38 @@ function KlineChart({ points, compact = false }: { points: PricePointView[]; com
       },
       tooltip: {
         trigger: "axis",
-        axisPointer: { type: "cross" },
+        confine: true,
+        axisPointer: {
+          type: "cross",
+          label: {
+            backgroundColor: "rgba(15, 35, 64, 0.9)",
+          },
+        },
         backgroundColor: "rgba(15, 35, 64, 0.92)",
         borderWidth: 0,
         textStyle: { color: "#f8fbff" },
         extraCssText: "border-radius: 12px; box-shadow: 0 18px 36px rgba(10,24,42,0.24);",
+        formatter: (rawParams: unknown) => {
+          const params = Array.isArray(rawParams)
+            ? rawParams as Array<{ dataIndex?: number }>
+            : [rawParams as { dataIndex?: number }];
+          const index = params[0]?.dataIndex ?? 0;
+          const point = points[index];
+          if (!point) {
+            return "";
+          }
+          const previous = points[index - 1];
+          const changePct = previous?.close_price
+            ? point.close_price / previous.close_price - 1
+            : null;
+          return [
+            `<div style="margin-bottom:6px;font-weight:700;">${dates[index] ?? point.observed_at}</div>`,
+            `开盘 ${formatNumber(point.open_price)} / 收盘 ${formatNumber(point.close_price)}`,
+            `最高 ${formatNumber(point.high_price)} / 最低 ${formatNumber(point.low_price)}`,
+            `成交量 ${formatNumber(point.volume)}`,
+            `日变化 ${formatPercent(changePct)}`,
+          ].join("<br/>");
+        },
       },
       grid: compact
         ? [
@@ -352,6 +458,28 @@ function KlineChart({ points, compact = false }: { points: PricePointView[]; com
           start: points.length > 24 ? Math.max(0, 100 - (24 / points.length) * 100) : 0,
           end: 100,
         },
+        ...(
+          compact
+            ? []
+            : [{
+                type: "slider",
+                xAxisIndex: [0, 1],
+                bottom: 8,
+                height: 20,
+                borderColor: "transparent",
+                backgroundColor: "rgba(16, 35, 60, 0.06)",
+                fillerColor: "rgba(10, 91, 255, 0.14)",
+                dataBackground: {
+                  lineStyle: { color: mutedColor, opacity: 0.45 },
+                  areaStyle: { color: "rgba(10, 91, 255, 0.04)" },
+                },
+                handleStyle: {
+                  color: accentColor,
+                  borderColor: accentColor,
+                },
+                textStyle: { color: mutedColor },
+              }]
+        ),
       ],
       series: [
         {
@@ -368,6 +496,30 @@ function KlineChart({ points, compact = false }: { points: PricePointView[]; com
             itemStyle: {
               borderWidth: 2,
             },
+          },
+        },
+        {
+          name: "MA5",
+          type: "line",
+          data: ma5,
+          showSymbol: false,
+          smooth: true,
+          lineStyle: {
+            width: 1.5,
+            color: accentColor,
+            opacity: 0.9,
+          },
+        },
+        {
+          name: "MA10",
+          type: "line",
+          data: ma10,
+          showSymbol: false,
+          smooth: true,
+          lineStyle: {
+            width: 1.5,
+            color: goldColor,
+            opacity: 0.8,
           },
         },
         {
@@ -439,6 +591,14 @@ function KlinePanel({
   const changePct = latest && previous && previous.close_price
     ? latest.close_price / previous.close_price - 1
     : null;
+  const periodHigh = points.length > 0 ? Math.max(...points.map((point) => point.high_price)) : null;
+  const periodLow = points.length > 0 ? Math.min(...points.map((point) => point.low_price)) : null;
+  const periodChange = latest && points[0]?.close_price
+    ? latest.close_price / points[0].close_price - 1
+    : null;
+  const avgVolume = points.length > 0
+    ? points.reduce((sum, point) => sum + point.volume, 0) / points.length
+    : null;
 
   return (
     <>
@@ -458,7 +618,8 @@ function KlinePanel({
       <Modal
         open={open}
         centered
-        width={isMobile ? "calc(100vw - 20px)" : 1180}
+        wrapClassName="workspace-modal workspace-modal-kline"
+        width={isMobile ? "calc(100vw - 16px)" : 1280}
         footer={null}
         title={title}
         onCancel={() => setOpen(false)}
@@ -481,6 +642,22 @@ function KlinePanel({
               <span>成交量</span>
               <strong>{formatNumber(latest?.volume)}</strong>
             </div>
+            <div className="kline-summary-card">
+              <span>区间涨跌</span>
+              <strong className={`value-${valueTone(periodChange)}`}>{formatPercent(periodChange)}</strong>
+            </div>
+            <div className="kline-summary-card">
+              <span>区间高低</span>
+              <strong>{`${formatNumber(periodHigh)} / ${formatNumber(periodLow)}`}</strong>
+            </div>
+            <div className="kline-summary-card">
+              <span>平均成交量</span>
+              <strong>{formatNumber(avgVolume)}</strong>
+            </div>
+            <div className="kline-summary-card">
+              <span>交互</span>
+              <strong>悬浮 OHLC 与成交量</strong>
+            </div>
           </div>
           <div className="chart-shell chart-shell-modal">
             <KlineChart points={points} />
@@ -492,8 +669,12 @@ function KlinePanel({
               <Descriptions.Item label="最高">{formatNumber(latest.high_price)}</Descriptions.Item>
               <Descriptions.Item label="最低">{formatNumber(latest.low_price)}</Descriptions.Item>
               <Descriptions.Item label="成交量">{formatNumber(latest.volume)}</Descriptions.Item>
+              <Descriptions.Item label="均量">{formatNumber(avgVolume)}</Descriptions.Item>
+              <Descriptions.Item label="区间涨跌">{formatPercent(periodChange)}</Descriptions.Item>
+              <Descriptions.Item label="区间高低">{`${formatNumber(periodHigh)} / ${formatNumber(periodLow)}`}</Descriptions.Item>
               <Descriptions.Item label="刷新时间">{formatDate(lastUpdated)}</Descriptions.Item>
               <Descriptions.Item label="鼠标联动">价格与成交量联动十字准星</Descriptions.Item>
+              <Descriptions.Item label="均线">保留现有配色并叠加 MA5 / MA10</Descriptions.Item>
               <Descriptions.Item label="交互">悬浮查看 OHLC、缩放区间、按轴联动</Descriptions.Item>
             </Descriptions>
           ) : null}
@@ -532,25 +713,41 @@ function NavSparkline({ points }: { points: PortfolioNavPointView[] }) {
 
 function TrackHoldingsTable({
   track,
+  watchSymbols,
+  candidateRows,
+  symbolNameMap,
+  modelAdvices,
   activeSymbol,
   onViewKline,
   onOpenOrder,
 }: {
   track: SimulationTrackStateView;
+  watchSymbols: string[];
+  candidateRows: CandidateWorkspaceRow[];
+  symbolNameMap: Map<string, string>;
+  modelAdvices: SimulationModelAdviceView[];
   activeSymbol?: string | null;
   onViewKline: (symbol: string) => void;
   onOpenOrder?: (symbol: string) => void;
 }) {
   const isUserTrack = track.role === "manual";
+  const rows = useMemo(
+    () => buildTrackTableRows(track, watchSymbols, candidateRows, symbolNameMap, modelAdvices),
+    [candidateRows, modelAdvices, symbolNameMap, track, watchSymbols],
+  );
 
   return (
     <Table
+      className="track-holdings-table"
       size="small"
       pagination={false}
       rowKey={(record) => `${track.role}-${record.symbol}`}
-      dataSource={track.portfolio.holdings}
+      dataSource={rows}
       rowClassName={(record) => (record.symbol === activeSymbol ? "candidate-row-active" : "")}
       scroll={{ x: 980 }}
+      onRow={(record) => ({
+        onClick: () => onViewKline(record.symbol),
+      })}
       columns={[
         {
           title: "标的",
@@ -580,7 +777,7 @@ function TrackHoldingsTable({
           width: 118,
           render: (_, record) => (
             <div className="stacked-value stacked-value-neutral">
-              <strong>{formatNumber(record.last_price)}</strong>
+              <strong>{record.last_price > 0 ? formatNumber(record.last_price) : "--"}</strong>
               <span>{record.avg_cost > 0 ? formatNumber(record.avg_cost) : "--"}</span>
             </div>
           ),
@@ -608,7 +805,7 @@ function TrackHoldingsTable({
           render: (value: number) => (
             <div className="stacked-value stacked-value-neutral">
               <strong>{formatPercent(value)}</strong>
-              <span>{value > 0 ? "已占用" : "空仓"}</span>
+              <span>{value > 0 ? "已占用" : "未持仓"}</span>
             </div>
           ),
         },
@@ -638,11 +835,19 @@ function TrackHoldingsTable({
 
 function SimulationTrackCard({
   track,
+  watchSymbols,
+  candidateRows,
+  symbolNameMap,
+  modelAdvices,
   activeSymbol,
   onViewKline,
   onOpenOrder,
 }: {
   track: SimulationTrackStateView;
+  watchSymbols: string[];
+  candidateRows: CandidateWorkspaceRow[];
+  symbolNameMap: Map<string, string>;
+  modelAdvices: SimulationModelAdviceView[];
   activeSymbol?: string | null;
   onViewKline: (symbol: string) => void;
   onOpenOrder?: (symbol: string) => void;
@@ -680,6 +885,10 @@ function SimulationTrackCard({
       </Descriptions>
       <TrackHoldingsTable
         track={track}
+        watchSymbols={watchSymbols}
+        candidateRows={candidateRows}
+        symbolNameMap={symbolNameMap}
+        modelAdvices={modelAdvices}
         activeSymbol={activeSymbol}
         onViewKline={onViewKline}
         onOpenOrder={onOpenOrder}
@@ -910,7 +1119,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     () => new Map(candidateRows.map((item) => [item.symbol, item.name] as const)),
     [candidateRows],
   );
-  const operationsFocusSymbol = simulationConfigDraft?.focus_symbol ?? simulation?.session.focus_symbol ?? null;
+  const operationsFocusSymbol = selectedSymbol ?? simulation?.session.focus_symbol ?? simulationConfigDraft?.focus_symbol ?? null;
   const manualOrderActiveHolding = useMemo(
     () => simulation?.manual_track.portfolio.holdings.find((item) => item.symbol === manualOrderDraft.symbol) ?? null,
     [manualOrderDraft.symbol, simulation],
@@ -1184,17 +1393,13 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     await runSimulationAction("config", () => api.updateSimulationConfig(simulationConfigDraft));
   }
 
-  async function handleSimulationFocusChange(symbol: string) {
+  function handleSimulationFocusChange(symbol: string) {
+    setSimulationConfigDraft((current) => (
+      current
+        ? { ...current, focus_symbol: symbol }
+        : current
+    ));
     setSelectedSymbol(symbol);
-    if (!simulationConfigDraft) {
-      return;
-    }
-    const nextDraft = {
-      ...simulationConfigDraft,
-      focus_symbol: symbol,
-    };
-    setSimulationConfigDraft(nextDraft);
-    await runSimulationAction("focus", () => api.updateSimulationConfig(nextDraft));
   }
 
   function openManualOrderModal(symbol: string) {
@@ -1877,7 +2082,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   const operationsTabItems = operations ? [
     {
       key: "execution",
-      label: "执行与参数",
+      label: "模拟参数",
       children: (
         <Row gutter={[16, 16]}>
           <Col xs={24} xl={10}>
@@ -2028,7 +2233,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     },
     {
       key: "analysis",
-      label: "差异与复盘",
+      label: "差异复盘",
       children: (
         <div className="panel-stack">
           <Row gutter={[16, 16]}>
@@ -2135,7 +2340,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     },
     {
       key: "governance",
-      label: "运营治理",
+      label: "治理与验收",
       children: (
         <div className="panel-stack">
           <Row gutter={[16, 16]}>
@@ -2541,7 +2746,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                 <div className="topbar-kicker">A-Share Advisory Desk</div>
                 <Title level={2}>自选股工作台</Title>
                 <Paragraph className="topbar-note">
-                  围绕同一关注池完成候选筛选、单票研判与双轨复盘，避免在多个页面来回切换。
+                  候选、自选、单票和运营复盘共用同一批关注标的，切换后工作区会同步联动。
                 </Paragraph>
                 <Space wrap className="header-meta">
                   <Tag color="blue">2-8 周</Tag>
@@ -2554,20 +2759,17 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
 
               <div className="hero-actions-panel">
                 <div className="hero-refresh-note">{`最近刷新 ${formatDate(generatedAt)}`}</div>
-                <div className="hero-action-block">
-                  <Text type="secondary">当前焦点</Text>
+                <div className="hero-action-row">
                   <Select
                     className="global-focus-select"
                     value={selectedSymbol ?? undefined}
-                    placeholder="选择一个标的"
+                    placeholder="切换工作区标的"
                     options={candidateRows.map((item) => ({
                       value: item.symbol,
                       label: `${item.name} · ${item.symbol}`,
                     }))}
                     onChange={(value) => handleCandidateSelect(value)}
                   />
-                </div>
-                <div className="hero-action-row">
                   <Button icon={<ReloadOutlined />} onClick={() => void handleRefresh()}>
                     刷新
                   </Button>
@@ -3023,6 +3225,10 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                       <Col xs={24} xl={12}>
                         <SimulationTrackCard
                           track={simulation.manual_track}
+                          watchSymbols={simulationConfigDraft?.watch_symbols ?? simulation.session.watch_symbols}
+                          candidateRows={candidateRows}
+                          symbolNameMap={symbolNameMap}
+                          modelAdvices={simulation.model_advices}
                           activeSymbol={operationsFocusSymbol}
                           onViewKline={(symbol) => void handleSimulationFocusChange(symbol)}
                           onOpenOrder={openManualOrderModal}
@@ -3031,6 +3237,10 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                       <Col xs={24} xl={12}>
                         <SimulationTrackCard
                           track={simulation.model_track}
+                          watchSymbols={simulationConfigDraft?.watch_symbols ?? simulation.session.watch_symbols}
+                          candidateRows={candidateRows}
+                          symbolNameMap={symbolNameMap}
+                          modelAdvices={simulation.model_advices}
                           activeSymbol={operationsFocusSymbol}
                           onViewKline={(symbol) => void handleSimulationFocusChange(symbol)}
                         />
