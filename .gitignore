@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 *.tsbuildinfo
 node_modules/
+frontend/node_modules
 build/
 dist/
 data/*.db

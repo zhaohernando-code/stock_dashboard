@@ -7,6 +7,14 @@
 - Project scaffold created.
 - Commit ID: pending
 
+## 2026-04-22
+
+- Problem: 本地发布会复用长生命周期的 baseline worktree；一旦该工作树残留了 `frontend/node_modules` 这类依赖符号链接，通用的目录忽略规则 `node_modules/` 不会命中这个 symlink，`git status` 就会把它当未跟踪文件，导致 auto-publish 反复以“无可提交变更但有脏工作树”失败。
+- Resolution: 为前端依赖路径补了精确忽略规则 `frontend/node_modules`，并清理 baseline worktree 里的残留依赖链接，让发布基线重新只反映仓库内真实改动。
+- Prevention: 以后凡是会在工作树内出现的依赖缓存、构建产物或符号链接，不能只依赖“目录型”忽略规则；如果发布/基线工作树可能残留 symlink，必须显式忽略该路径或把依赖放到仓库外。
+- Commit ID: pending
+- Context: project=一个关于a股的当前数据和投资建议看板, step=watchdog publish-state remediation
+
 ## 2026-04-14
 
 - Problem: 免费 A 股数据源在授权、稳定性、字段覆盖和新闻可分发性上差异很大，若不先做基线评估，后续数据底座和建议引擎会反复返工。
@@ -41,14 +49,6 @@
 
 ## 2026-04-15
 
-- Problem: 当前 worktree 沙箱无法在主仓库 `.git/worktrees/...` 下创建 `index.lock`，导致本轮不能执行 `git add` / `git commit` / `git push`。
-- Resolution: 保留已验证的工作树改动并在交付总结中明确说明提交阻塞点。
-- Prevention: 后续如果任务要求强制提交，需要先确认当前 worktree 的 `.git` 元数据目录具备写权限，或切换到具备提交权限的仓库环境。
-- Commit ID: pending
-- Context: project=一个关于a股的当前数据和投资建议看板, step=证据化数据底座
-
-## 2026-04-15
-
 - Problem: 第 3 步如果继续沿用静态 demo recommendation，就无法证明“价格基线 / 新闻因子 / LLM 因子 / 融合评分 / 降级规则”这条链路已经真正落地，后续接真实 provider 时会再次返工。
 - Resolution: 新增 `signal_engine`，把 demo provider 改造成“原始行情和新闻证据 -> 因子快照 -> horizon 模型结果 -> recommendation”的可执行链路，并把 `confidence_expression`、`downgrade_conditions`、`factor_breakdown`、`validation_snapshot` 直接暴露到 API/CLI。
 - Prevention: 后续接入真实 `Tushare / 巨潮 / Qlib` 或真实 LLM 时，必须沿当前 signal engine contract 接入，禁止重新回到在 provider 中手写 recommendation 文本的方式。
@@ -68,14 +68,6 @@
 - Problem: 当前环境里的 `npm` 实际运行在 Node 16，直接使用 `Vite 5` 会触发 engine 不兼容，影响前端 build 验证。
 - Resolution: 将前端工具链调整为 `Vite 4` 兼容组合，并把构建脚本改为 `tsc --noEmit -p tsconfig.app.json && vite build`，避免产生额外的编译输出文件。
 - Prevention: 以后新建前端工程前先确认 `node` 与 `npm` 实际版本，优先选取与当前运行时兼容的 Vite/插件组合。
-- Commit ID: pending
-- Context: project=一个关于a股的当前数据和投资建议看板, step=用户看板与解释闭环
-
-## 2026-04-15
-
-- Problem: 本轮已完成代码与验证，但当前 worktree 仍无法创建 `.git/worktrees/.../index.lock`，导致 `git add -A` 直接失败，不能继续执行 commit/push。
-- Resolution: 已保留所有已验证改动，并在交付总结中明确说明版本提交阻塞来自当前 worktree 的 git 元数据写权限，而不是代码验证失败。
-- Prevention: 后续若任务要求强制提交，需要切换到具备 `.git/worktrees/...` 写权限的仓库环境，或在 canonical repo 中直接执行提交流程。
 - Commit ID: pending
 - Context: project=一个关于a股的当前数据和投资建议看板, step=用户看板与解释闭环
 
