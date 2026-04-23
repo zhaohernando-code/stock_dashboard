@@ -883,7 +883,7 @@ def build_operations_dashboard(
             "target": 80.0,
             "observed": candidate_kb,
             "status": "pass" if candidate_kb <= 80.0 else "warn",
-            "note": "GitHub Pages 前端首屏避免过重。",
+            "note": "控制台首屏避免过重。",
         },
         {
             "metric": "单票页 payload 体积",

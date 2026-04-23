@@ -5001,7 +5001,7 @@
           "target": 80.0,
           "observed": 3.3,
           "status": "pass",
-          "note": "GitHub Pages 前端首屏避免过重。"
+          "note": "控制台首屏避免过重。"
         },
         {
           "metric": "单票页 payload 体积",
@@ -6373,7 +6373,7 @@
           "target": 80.0,
           "observed": 3.3,
           "status": "pass",
-          "note": "GitHub Pages 前端首屏避免过重。"
+          "note": "控制台首屏避免过重。"
         },
         {
           "metric": "单票页 payload 体积",
@@ -7745,7 +7745,7 @@
           "target": 80.0,
           "observed": 3.3,
           "status": "pass",
-          "note": "GitHub Pages 前端首屏避免过重。"
+          "note": "控制台首屏避免过重。"
         },
         {
           "metric": "单票页 payload 体积",
@@ -9117,7 +9117,7 @@
           "target": 80.0,
           "observed": 3.3,
           "status": "pass",
-          "note": "GitHub Pages 前端首屏避免过重。"
+          "note": "控制台首屏避免过重。"
         },
         {
           "metric": "单票页 payload 体积",
