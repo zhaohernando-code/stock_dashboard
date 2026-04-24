@@ -1,5 +1,12 @@
 # PROCESS
 
+## 2026-04-24
+
+- Problem: although the dashboard was already exposed through the server-side `/projects/ashare-dashboard` route, the long-running frontend and backend still started from the editable repo checkout, so unfinished local edits could leak into the live route and there was no repo-level deploy profile to standardize local publish steps.
+- Resolution: the project now declares a `local_runtime_service` deploy profile, documents `~/codex/runtime/projects/ashare-dashboard` as the live runtime tree, and the local publish path is defined as “sync runtime -> restart local frontend/backend -> verify local health checks”.
+- Prevention: any tunnel-exposed local project must keep development and runtime paths separate and version its machine-readable deploy profile alongside the code.
+- Commit ID: pending
+
 ## 2026-04-23
 
 - Problem: 项目已经迁移到“服务器入口 + 本机后端/数据库 + 反向隧道”模式后，活跃文档里仍残留 GitHub Pages、在线 API/离线快照双模式和用户手工配置后端地址等旧假设，容易把后续实现再带回静态站思路。

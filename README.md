@@ -14,6 +14,13 @@
 - 本机后端：`127.0.0.1:8000`
 - 本机前端预览：`127.0.0.1:5173`
 
+## 本机运行拓扑
+
+- 开发目录：`~/codex/projects/stock_dashboard`
+- 运行目录：`~/codex/runtime/projects/ashare-dashboard`
+- 成功任务会由本机 worker 自动把代码同步到运行目录，并重启本机 frontend/backend 的 LaunchAgent
+- 对外服务必须跑在运行目录，不直接跑开发目录
+
 ## 当前实现
 
 - 后端：`Python 3.10+ + FastAPI + SQLAlchemy`
@@ -70,6 +77,11 @@ npm run dev
 ```bash
 export VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
+
+当前长期运行由 LaunchAgent 管理，入口脚本应指向运行目录中的：
+
+- `~/codex/runtime/projects/ashare-dashboard/scripts/start-local-backend.sh`
+- `~/codex/runtime/projects/ashare-dashboard/scripts/start-local-frontend.sh`
 
 ## 验证
 
