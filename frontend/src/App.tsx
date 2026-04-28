@@ -302,21 +302,6 @@ function portfolioTrackSummary(portfolio: PortfolioSummaryView): string {
   return sanitizeDisplayText(portfolio.strategy_summary);
 }
 
-function portfolioStatusNote(portfolio: PortfolioSummaryView): string | null {
-  const parts: string[] = [];
-  if (portfolio.mode === "manual") {
-    parts.push("当前只复盘手动下单结果，不自动调仓。");
-  }
-  if (portfolio.mode === "auto_model") {
-    parts.push("模型轨道仅在模拟盘自动调仓，不会触发真实交易。");
-  }
-  if (portfolio.validation_status !== "verified" || portfolio.performance.validation_mode === "migration_placeholder") {
-    parts.push("组合指标已接入最新研究结果，正式验证仍在补样本。");
-  }
-  const summary = dedupeDisplaySentences(parts.join(" "));
-  return summary || null;
-}
-
 function claimGateDescription(claimGate?: ClaimGateView | null): string {
   if (!claimGate) return "当前缺少结论门槛说明。";
   const parts = [claimGate.note, ...claimGate.blocking_reasons.slice(0, 2)].filter(
@@ -1451,7 +1436,6 @@ function PortfolioWorkspace({ portfolio }: { portfolio: PortfolioSummaryView }) 
   const validationVerified = portfolio.validation_status === "verified";
   const performance = portfolio.performance;
   const executionPolicy = portfolio.execution_policy;
-  const statusNote = portfolioStatusNote(portfolio);
 
   return (
     <div className="portfolio-workspace">
@@ -1476,15 +1460,6 @@ function PortfolioWorkspace({ portfolio }: { portfolio: PortfolioSummaryView }) 
       </Space>
 
       <Paragraph className="panel-description">{portfolioTrackSummary(portfolio)}</Paragraph>
-      {statusNote ? (
-        <Alert
-          className="sub-alert"
-          type={validationVerified ? "info" : "warning"}
-          showIcon
-          message="当前说明"
-          description={statusNote}
-        />
-      ) : null}
 
       <div className="chart-shell compact-chart">
         <NavSparkline points={portfolio.nav_history} />
@@ -3488,13 +3463,6 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                   保存参数
                 </Button>
               </div>
-              <Alert
-                className="sub-alert"
-                type="info"
-                showIcon
-                message="手动下单入口已收口到用户轨道表格"
-                description="点击用户轨道每一行的「操作」，会打开居中的大弹窗，保留当前持仓、参考价和模型建议作为下单上下文。"
-              />
             </Card>
           </Col>
         </Row>
