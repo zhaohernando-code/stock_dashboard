@@ -3,7 +3,7 @@
   "reviewed_at": "2026-04-28",
   "files": {
     "frontend/src/App.tsx": {
-      "lines": 3095,
+      "lines": 2503,
       "reason": "Main app shell (3095 lines, down from 5199). Extracted: utils (400L), chart components (900L), SettingsView (462L), CandidateColumns (330L), ReplayColumns (87L), AddWatchlistOverlay (60L). Remaining: state/handlers (~876L), stockTabItems (~600L), operationsTabItems (~600L), render JSX (~900L).",
       "status": "planned_refactor",
       "reviewed_at": "2026-04-28"
@@ -125,6 +125,12 @@
     "tests/test_dashboard_views.py": {
       "lines": 797,
       "reason": "Large file pending review.",
+      "status": "accepted",
+      "reviewed_at": "2026-04-28"
+    },
+    "frontend/src/components/OperationsTabs.tsx": {
+      "lines": 715,
+      "reason": "Operations dashboard tabs (portfolio, simulation, replay, research validation, launch readiness). Could be further split into per-tab components.",
       "status": "accepted",
       "reviewed_at": "2026-04-28"
     }
