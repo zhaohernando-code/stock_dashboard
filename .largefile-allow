@@ -1,4 +1,2 @@
-# Type definition catalogs naturally grow with API surface.
-frontend/src/types.ts
 # Backend operations module — pending deeper modular extraction.
 src/ashare_evidence/operations.py
