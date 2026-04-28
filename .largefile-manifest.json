@@ -4,7 +4,7 @@
   "files": {
     "frontend/src/App.tsx": {
       "lines": 3675,
-      "reason": "Main app component with 4 page sections (candidates, stock detail, operations, settings). Reduced from 5199 to 3675 via utility and component extraction. Page-level extraction planned — requires shared state context or prop interface design.",
+      "reason": "Main app shell with 4 page sections (candidates, stock, operations, settings). Reduced from 5199 to 3675 via utility and chart component extraction. Page-level extraction requires React Context or custom hook for shared state — SettingsView extraction attempted 2026-04-28 but cascading handler dependencies made incremental extraction fragile. Deferred for dedicated refactoring session with test coverage.",
       "status": "planned_refactor",
       "reviewed_at": "2026-04-28"
     },
