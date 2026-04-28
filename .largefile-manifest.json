@@ -3,8 +3,8 @@
   "reviewed_at": "2026-04-28",
   "files": {
     "frontend/src/App.tsx": {
-      "lines": 3183,
-      "reason": "Main app shell (3183 lines, down from 5199). SettingsView and CandidateColumns extracted to components/. Remaining: stockTabItems (~600L), operationsTabItems (~600L), JSX render (~900L). Page-level extraction ongoing.",
+      "lines": 3095,
+      "reason": "Main app shell (3095 lines, down from 5199). Extracted: utils (400L), chart components (900L), SettingsView (462L), CandidateColumns (330L), ReplayColumns (87L), AddWatchlistOverlay (60L). Remaining: state/handlers (~876L), stockTabItems (~600L), operationsTabItems (~600L), render JSX (~900L).",
       "status": "planned_refactor",
       "reviewed_at": "2026-04-28"
     },
