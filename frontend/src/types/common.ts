@@ -36,6 +36,7 @@ export interface IntradaySourceStatusView {
   message?: string | null;
 }
 
+export type ViewMode = "candidates" | "stock" | "operations" | "settings";
 export type DataMode = "online" | "offline";
 
 export interface DataSourceInfo {
