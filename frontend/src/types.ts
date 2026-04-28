@@ -15,6 +15,91 @@ export interface StockView {
   ticker: string;
 }
 
+export interface QuantCoreView {
+  score?: number | null;
+  score_scale: string;
+  direction: string;
+  confidence_bucket: string;
+  target_horizon_label: string;
+  horizon_min_days: number;
+  horizon_max_days: number;
+  as_of_time: string;
+  available_time: string;
+  model_version: string;
+  policy_version: string;
+}
+
+export interface RecommendationEvidenceView {
+  primary_drivers: string[];
+  supporting_context: string[];
+  conflicts: string[];
+  degrade_flags: string[];
+  data_freshness?: string | null;
+  source_links: string[];
+  factor_cards: {
+    factor_key: string;
+    score?: number | null;
+    direction?: string | null;
+    headline: string;
+    risk_note?: string | null;
+    status?: string | null;
+  }[];
+}
+
+export interface RecommendationRiskView {
+  risk_flags: string[];
+  downgrade_conditions: string[];
+  invalidators: string[];
+  coverage_gaps: string[];
+}
+
+export interface HistoricalValidationView {
+  status: string;
+  note?: string | null;
+  artifact_type?: string | null;
+  artifact_id?: string | null;
+  manifest_id?: string | null;
+  artifact_generated_at?: string | null;
+  label_definition?: string | null;
+  window_definition?: string | null;
+  benchmark_definition?: string | null;
+  cost_definition?: string | null;
+  metrics: Record<string, any>;
+}
+
+export interface ManualLlmReviewView {
+  status: string;
+  trigger_mode: string;
+  model_label?: string | null;
+  requested_at?: string | null;
+  generated_at?: string | null;
+  artifact_id?: string | null;
+  question?: string | null;
+  raw_answer?: string | null;
+  summary?: string | null;
+  risks: string[];
+  disagreements: string[];
+  source_packet: string[];
+  request_id?: number | null;
+  request_key?: string | null;
+  executor_kind?: string | null;
+  status_note?: string | null;
+  review_verdict?: string | null;
+  decision_note?: string | null;
+  stale_reason?: string | null;
+  citations: string[];
+}
+
+export interface ClaimGateView {
+  status: string;
+  headline: string;
+  note?: string | null;
+  public_direction: RecommendationDirection;
+  blocking_reasons: string[];
+  sample_count?: number | null;
+  coverage_ratio?: number | null;
+}
+
 export interface RecommendationView {
   id: number;
   recommendation_key: string;
@@ -24,19 +109,27 @@ export interface RecommendationView {
   confidence_expression: string;
   horizon_min_days: number;
   horizon_max_days: number;
-  applicable_period: string;
+  applicable_period?: string;
   summary: string;
   generated_at: string;
   updated_at: string;
   as_of_data_time: string;
   evidence_status: string;
   degrade_reason?: string | null;
-  core_drivers: string[];
-  risk_flags: string[];
-  reverse_risks: string[];
-  downgrade_conditions: string[];
-  factor_breakdown: Record<string, any>;
-  validation_snapshot: Record<string, any>;
+  core_drivers?: string[];
+  risk_flags?: string[];
+  reverse_risks?: string[];
+  downgrade_conditions?: string[];
+  factor_breakdown?: Record<string, any>;
+  validation_status?: string;
+  validation_note?: string | null;
+  validation_snapshot?: Record<string, any>;
+  core_quant: QuantCoreView;
+  evidence: RecommendationEvidenceView;
+  risk: RecommendationRiskView;
+  historical_validation: HistoricalValidationView;
+  manual_llm_review: ManualLlmReviewView;
+  claim_gate: ClaimGateView;
   lineage: LineageRecord;
 }
 
@@ -145,10 +238,32 @@ export interface RiskPanelView {
   change_hint: string;
 }
 
+export interface FollowUpResearchPacketView {
+  validation_status: string;
+  validation_note?: string | null;
+  validation_artifact_id?: string | null;
+  validation_manifest_id?: string | null;
+  validation_sample_count?: number | null;
+  validation_rank_ic_mean?: number | null;
+  validation_positive_excess_rate?: number | null;
+  manual_request_id?: number | null;
+  manual_request_key?: string | null;
+  manual_review_executor_kind?: string | null;
+  manual_review_status_note?: string | null;
+  manual_review_review_verdict?: string | null;
+  manual_review_stale_reason?: string | null;
+  manual_review_status: string;
+  manual_review_trigger_mode: string;
+  manual_review_source_packet: string[];
+  manual_review_artifact_id?: string | null;
+  manual_review_generated_at?: string | null;
+}
+
 export interface FollowUpView {
   suggested_questions: string[];
   copy_prompt: string;
   evidence_packet: string[];
+  research_packet: FollowUpResearchPacketView;
 }
 
 export interface CandidateItemView {
@@ -158,10 +273,23 @@ export interface CandidateItemView {
   sector: string;
   direction: RecommendationDirection;
   direction_label: string;
+  display_direction: RecommendationDirection;
+  display_direction_label: string;
   confidence_label: string;
   confidence_score: number;
   summary: string;
-  applicable_period: string;
+  applicable_period?: string | null;
+  window_definition: string;
+  target_horizon_label: string;
+  source_classification?: string | null;
+  validation_mode?: string | null;
+  validation_status: string;
+  validation_note?: string | null;
+  validation_artifact_id?: string | null;
+  validation_manifest_id?: string | null;
+  validation_sample_count?: number | null;
+  validation_rank_ic_mean?: number | null;
+  validation_positive_excess_rate?: number | null;
   generated_at: string;
   as_of_data_time: string;
   last_close?: number | null;
@@ -171,6 +299,7 @@ export interface CandidateItemView {
   change_summary: string;
   change_badge: string;
   evidence_status: string;
+  claim_gate: ClaimGateView;
 }
 
 export interface CandidateListResponse {
@@ -210,12 +339,6 @@ export interface WatchlistDeleteResponse {
   removed: boolean;
   active_count: number;
   removed_at: string;
-}
-
-export interface DashboardBootstrapResponse {
-  symbols: string[];
-  recommendation_count: number;
-  candidate_count: number;
 }
 
 export interface StockDashboardResponse {
@@ -272,6 +395,7 @@ export interface PortfolioNavPointView {
   benchmark_nav: number;
   drawdown: number;
   exposure: number;
+  observed_at?: string | null;
 }
 
 export interface PortfolioOrderAuditView {
@@ -289,19 +413,23 @@ export interface PortfolioOrderAuditView {
   checks: TradingRuleCheckView[];
 }
 
-export interface PortfolioSummaryView {
-  portfolio_key: string;
-  name: string;
-  mode: string;
-  mode_label: string;
-  strategy_summary: string;
+export interface BenchmarkContextView {
+  benchmark_id: string;
+  benchmark_type: string;
   benchmark_symbol?: string | null;
+  benchmark_label: string;
+  source: string;
+  source_classification?: string | null;
+  as_of_time?: string | null;
+  available_time?: string | null;
   status: string;
-  starting_cash: number;
-  available_cash: number;
-  market_value: number;
-  net_asset_value: number;
-  invested_ratio: number;
+  note?: string | null;
+  artifact_id?: string | null;
+  manifest_id?: string | null;
+  benchmark_definition?: string | null;
+}
+
+export interface PortfolioPerformanceView {
   total_return: number;
   benchmark_return: number;
   excess_return: number;
@@ -312,9 +440,69 @@ export interface PortfolioSummaryView {
   max_drawdown: number;
   current_drawdown: number;
   order_count: number;
+  annualized_return?: number | null;
+  annualized_excess_return?: number | null;
+  sharpe_like_ratio?: number | null;
+  turnover?: number | null;
+  win_rate_definition?: string | null;
+  win_rate?: number | null;
+  capacity_note?: string | null;
+  artifact_id?: string | null;
+  validation_mode?: string | null;
+  benchmark_definition?: string | null;
+  cost_definition?: string | null;
+  cost_source?: string | null;
+}
+
+export interface ExecutionPolicyView {
+  status: string;
+  label: string;
+  summary: string;
+  policy_type?: string | null;
+  source?: string | null;
+  note?: string | null;
+  constraints: string[];
+}
+
+export interface PortfolioSummaryView {
+  portfolio_key: string;
+  name: string;
+  mode: string;
+  mode_label: string;
+  strategy_summary: string;
+  strategy_label: string;
+  strategy_status?: string;
+  benchmark_symbol?: string | null;
+  status: string;
+  starting_cash: number;
+  available_cash: number;
+  market_value: number;
+  net_asset_value: number;
+  invested_ratio: number;
+  total_return: number;
+  benchmark_return: number;
+  excess_return: number;
+  benchmark_status?: string;
+  benchmark_note?: string | null;
+  realized_pnl: number;
+  unrealized_pnl: number;
+  fee_total: number;
+  tax_total: number;
+  max_drawdown: number;
+  current_drawdown: number;
+  order_count: number;
   active_position_count: number;
   rule_pass_rate: number;
-  recommendation_hit_rate: number;
+  recommendation_hit_rate?: number;
+  market_data_timeframe: string;
+  last_market_data_at?: string | null;
+  benchmark_context: BenchmarkContextView;
+  performance: PortfolioPerformanceView;
+  execution_policy: ExecutionPolicyView;
+  validation_status: string;
+  validation_note?: string | null;
+  validation_artifact_id?: string | null;
+  validation_manifest_id?: string | null;
   alerts: string[];
   rules: TradingRuleCheckView[];
   holdings: PortfolioHoldingView[];
@@ -353,12 +541,20 @@ export interface SimulationSessionView {
   step_trigger_label: string;
   fill_rule_label: string;
   auto_execute_model: boolean;
+  auto_execute_model_requested: boolean;
+  auto_execute_status: string;
+  auto_execute_note?: string | null;
   restart_count: number;
   started_at?: string | null;
   last_resumed_at?: string | null;
   paused_at?: string | null;
   ended_at?: string | null;
   last_data_time?: string | null;
+  market_data_timeframe: string;
+  market_data_interval_seconds: number;
+  last_market_data_at?: string | null;
+  data_latency_seconds?: number | null;
+  intraday_source_status: IntradaySourceStatusView;
   resumable: boolean;
 }
 
@@ -378,7 +574,11 @@ export interface SimulationConfigView {
   initial_cash: number;
   benchmark_symbol?: string | null;
   step_interval_seconds: number;
+  market_data_interval_seconds: number;
   auto_execute_model: boolean;
+  auto_execute_model_requested: boolean;
+  auto_execute_status: string;
+  auto_execute_note?: string | null;
   editable_fields: string[];
 }
 
@@ -425,12 +625,21 @@ export interface SimulationModelAdviceView {
   direction: string;
   direction_label: string;
   action: string;
-  quantity: number;
+  quantity?: number | null;
+  current_weight?: number | null;
+  target_weight?: number | null;
+  trade_delta_weight?: number | null;
+  rank?: number | null;
   reference_price: number;
   confidence_label: string;
   generated_at: string;
   reason: string;
   risk_flags: string[];
+  policy_status: string;
+  policy_type?: string | null;
+  policy_note?: string | null;
+  action_definition?: string | null;
+  quantity_definition?: string | null;
   score: number;
 }
 
@@ -439,6 +648,23 @@ export interface SimulationKlineView {
   stock_name?: string | null;
   last_updated?: string | null;
   points: PricePointView[];
+}
+
+export interface IntradaySourceStatusView {
+  status: string;
+  provider_name?: string | null;
+  provider_label?: string | null;
+  source_kind: string;
+  timeframe: string;
+  decision_interval_seconds: number;
+  market_data_interval_seconds: number;
+  symbol_count: number;
+  last_success_at?: string | null;
+  latest_market_data_at?: string | null;
+  data_latency_seconds?: number | null;
+  fallback_used: boolean;
+  stale: boolean;
+  message?: string | null;
 }
 
 export interface SimulationWorkspaceResponse {
@@ -455,28 +681,96 @@ export interface SimulationWorkspaceResponse {
 }
 
 export interface RecommendationReplayView {
+  source?: string | null;
+  source_classification?: string | null;
+  artifact_type?: string | null;
+  artifact_id?: string | null;
+  manifest_id?: string | null;
   recommendation_id: number;
+  recommendation_key?: string | null;
   symbol: string;
   stock_name: string;
   direction: string;
   generated_at: string;
-  review_window_days: number;
+  label_definition: string;
+  review_window_definition: string;
+  entry_time: string;
+  exit_time: string;
+  review_window_days?: number;
   stock_return: number;
   benchmark_return: number;
   excess_return: number;
   max_favorable_excursion: number;
   max_adverse_excursion: number;
+  benchmark_definition?: string | null;
+  benchmark_source?: string | null;
+  validation_mode?: string | null;
+  hit_definition: string;
   hit_status: string;
+  validation_status: string;
+  validation_note?: string | null;
   summary: string;
   followed_by_portfolios: string[];
 }
 
 export interface OperationsOverviewView {
   generated_at: string;
-  beta_readiness: string;
+  beta_readiness?: string;
   manual_portfolio_count: number;
   auto_portfolio_count: number;
-  recommendation_replay_hit_rate: number;
+  recommendation_replay_hit_rate?: number;
+  replay_validation_status?: string;
+  replay_validation_note?: string | null;
+  rule_pass_rate: number;
+  run_health: OperationsRunHealthView;
+  research_validation: OperationsResearchValidationView;
+  launch_readiness: OperationsLaunchReadinessView;
+}
+
+export interface OperationsRunHealthView {
+  status: string;
+  note?: string | null;
+  market_data_timeframe: string;
+  last_market_data_at?: string | null;
+  data_latency_seconds?: number | null;
+  refresh_cooldown_minutes: number;
+  intraday_source_status: string;
+}
+
+export interface OperationsResearchValidationView {
+  status: string;
+  note?: string | null;
+  recommendation_contract_status: string;
+  benchmark_status: string;
+  benchmark_note?: string | null;
+  replay_validation_status: string;
+  replay_validation_note?: string | null;
+  replay_sample_count: number;
+  verified_replay_count: number;
+  synthetic_replay_count: number;
+  manifest_bound_count: number;
+  metrics_artifact_count: number;
+  artifact_sample_count: number;
+  replay_artifact_bound_count: number;
+  replay_artifact_manifest_count: number;
+  replay_artifact_nonverified_count: number;
+  replay_artifact_backed_projection_count: number;
+  replay_migration_placeholder_count: number;
+  portfolio_backtest_bound_count: number;
+  portfolio_backtest_manifest_count: number;
+  portfolio_backtest_verified_count: number;
+  portfolio_backtest_pending_rebuild_count: number;
+  portfolio_backtest_artifact_backed_projection_count: number;
+  portfolio_backtest_migration_placeholder_count: number;
+}
+
+export interface OperationsLaunchReadinessView {
+  status: string;
+  note?: string | null;
+  blocking_gate_count: number;
+  warning_gate_count: number;
+  synthetic_fields_present: boolean;
+  recommended_next_gate?: string | null;
   rule_pass_rate: number;
 }
 
@@ -524,14 +818,93 @@ export interface LaunchGateView {
   status: string;
 }
 
+export interface ManualResearchRequestCreateRequest {
+  symbol: string;
+  question: string;
+  trigger_source?: string;
+  executor_kind: string;
+  model_api_key_id?: number | null;
+}
+
+export interface ManualResearchRequestExecuteRequest {
+  failover_enabled: boolean;
+}
+
+export interface ManualResearchRequestCompleteRequest {
+  summary: string;
+  review_verdict: string;
+  risks: string[];
+  disagreements: string[];
+  decision_note?: string | null;
+  citations: string[];
+  answer?: string | null;
+}
+
+export interface ManualResearchRequestFailRequest {
+  failure_reason: string;
+}
+
+export interface ManualResearchRequestRetryRequest {
+  requested_by?: string | null;
+}
+
+export interface ManualResearchRequestView {
+  id: number;
+  request_key: string;
+  recommendation_key: string;
+  symbol: string;
+  question: string;
+  trigger_source: string;
+  executor_kind: string;
+  model_api_key_id?: number | null;
+  status: string;
+  status_note?: string | null;
+  requested_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  failed_at?: string | null;
+  artifact_id?: string | null;
+  failure_reason?: string | null;
+  requested_by?: string | null;
+  superseded_by_request_id?: number | null;
+  stale_reason?: string | null;
+  source_packet_hash: string;
+  validation_artifact_id?: string | null;
+  validation_manifest_id?: string | null;
+  source_packet: string[];
+  selected_key?: AnalysisKeySelectionView | null;
+  attempted_keys: AnalysisAttemptView[];
+  failover_used: boolean;
+  manual_llm_review: ManualLlmReviewView;
+}
+
+export interface ManualResearchRequestListResponse {
+  generated_at: string;
+  counts: Record<string, number>;
+  items: ManualResearchRequestView[];
+}
+
+export interface ManualResearchQueueView {
+  generated_at: string;
+  focus_symbol?: string | null;
+  counts: Record<string, number>;
+  focus_request?: ManualResearchRequestView | null;
+  recent_items: ManualResearchRequestView[];
+}
+
 export interface OperationsDashboardResponse {
   overview: OperationsOverviewView;
+  market_data_timeframe: string;
+  last_market_data_at?: string | null;
+  data_latency_seconds?: number | null;
+  intraday_source_status: IntradaySourceStatusView;
   portfolios: PortfolioSummaryView[];
   recommendation_replay: RecommendationReplayView[];
   access_control: AccessControlView;
   refresh_policy: RefreshPolicyView;
   performance_thresholds: PerformanceThresholdView[];
   launch_gates: LaunchGateView[];
+  manual_research_queue: ManualResearchQueueView;
   simulation_workspace?: SimulationWorkspaceResponse | null;
 }
 
@@ -590,16 +963,6 @@ export interface DashboardShellPayload {
   glossary: GlossaryEntryView[];
 }
 
-export interface SnapshotPayload {
-  generated_at: string;
-  bootstrap: DashboardBootstrapResponse;
-  watchlist: WatchlistResponse;
-  candidates: CandidateListResponse;
-  glossary: GlossaryEntryView[];
-  stock_dashboards: Record<string, StockDashboardResponse>;
-  operations_dashboards: Record<string, OperationsDashboardResponse>;
-}
-
 export interface RuntimeDataSourceView {
   provider_name: string;
   role: string;
@@ -610,6 +973,9 @@ export interface RuntimeDataSourceView {
   credential_required: boolean;
   runtime_ready: boolean;
   status_label: string;
+  supports_intraday: boolean;
+  intraday_runtime_ready: boolean;
+  intraday_status_label?: string | null;
   base_url?: string | null;
   enabled: boolean;
 }
@@ -718,7 +1084,7 @@ export interface FollowUpAnalysisRequest {
 }
 
 export interface AnalysisAttemptView {
-  key_id: number;
+  key_id?: number | null;
   name: string;
   provider_name: string;
   model_name: string;
@@ -727,7 +1093,7 @@ export interface AnalysisAttemptView {
 }
 
 export interface AnalysisKeySelectionView {
-  id: number;
+  id?: number | null;
   name: string;
   provider_name: string;
   model_name: string;
@@ -737,10 +1103,16 @@ export interface AnalysisKeySelectionView {
 export interface FollowUpAnalysisResponse {
   symbol: string;
   question: string;
-  answer: string;
-  selected_key: AnalysisKeySelectionView;
+  request_id: number;
+  request_key: string;
+  status: string;
+  executor_kind: string;
+  status_note?: string | null;
+  answer?: string | null;
+  selected_key?: AnalysisKeySelectionView | null;
   failover_used: boolean;
   attempted_keys: AnalysisAttemptView[];
+  manual_review_artifact_id?: string | null;
 }
 
 export interface ModelApiKeyDeleteResponse {

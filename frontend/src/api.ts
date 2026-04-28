@@ -1,6 +1,5 @@
 import type {
   CandidateListResponse,
-  DashboardBootstrapResponse,
   DashboardRuntimeConfig,
   DashboardShellPayload,
   DataSourceInfo,
@@ -10,6 +9,13 @@ import type {
   ModelApiKeyCreateRequest,
   ModelApiKeyDeleteResponse,
   ModelApiKeyUpdateRequest,
+  ManualResearchRequestCompleteRequest,
+  ManualResearchRequestCreateRequest,
+  ManualResearchRequestExecuteRequest,
+  ManualResearchRequestFailRequest,
+  ManualResearchRequestListResponse,
+  ManualResearchRequestRetryRequest,
+  ManualResearchRequestView,
   ManualSimulationOrderRequest,
   OperationsDashboardResponse,
   ProviderCredentialUpsertRequest,
@@ -26,8 +32,10 @@ import type {
 
 const betaHeaderName = import.meta.env.VITE_BETA_ACCESS_HEADER ?? "X-Ashare-Beta-Key";
 const betaStorageKey = "ashare-beta-access-key";
-const requestTimeoutMs = 10000;
-const requestAttemptTimeoutMs = 3000;
+const defaultRequestTimeoutMs = 10000;
+const defaultRequestAttemptTimeoutMs = 3000;
+const longRunningRequestTimeoutMs = 180000;
+const longRunningRequestAttemptTimeoutMs = 60000;
 const htmlPrefixes = ["<!doctype", "<html", "<?xml"];
 const notFoundSignatures = ["tool not found", "tool_not_found", "404 not found"];
 const localApiBaseStorageKey = "ashare-api-base-url";
@@ -113,6 +121,21 @@ function dedupe(values: string[]): string[] {
     }
   }
   return out;
+}
+
+function buildManualResearchQuery(params?: {
+  symbol?: string;
+  status?: string;
+  executorKind?: string;
+  includeSuperseded?: boolean;
+}): string {
+  const query = new URLSearchParams();
+  if (params?.symbol) query.set("symbol", params.symbol);
+  if (params?.status) query.set("status", params.status);
+  if (params?.executorKind) query.set("executor_kind", params.executorKind);
+  if (params?.includeSuperseded) query.set("include_superseded", "true");
+  const serialized = query.toString();
+  return serialized ? `?${serialized}` : "";
 }
 
 function getApiBases(): string[] {
@@ -306,7 +329,12 @@ function buildSourceInfo(): DataSourceInfo {
   };
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+type RequestBehavior = {
+  timeoutMs?: number;
+  attemptTimeoutMs?: number;
+};
+
+async function request<T>(path: string, init?: RequestInit, behavior?: RequestBehavior): Promise<T> {
   const startedAt = Date.now();
   const betaAccessKey = getBetaAccessKey();
   const explicit = hasExplicitApiBase();
@@ -314,9 +342,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...buildRequestUrls(path, explicit),
     ...(explicit ? buildRequestUrls(path, false) : []),
   ]);
+  const timeoutMs = behavior?.timeoutMs ?? defaultRequestTimeoutMs;
+  const attemptTimeoutMsCap = behavior?.attemptTimeoutMs ?? defaultRequestAttemptTimeoutMs;
 
   function remainingMs(): number {
-    return requestTimeoutMs - (Date.now() - startedAt);
+    return timeoutMs - (Date.now() - startedAt);
   }
 
   function nextAttemptTimeout(): number {
@@ -324,14 +354,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (remaining <= 0) {
       return 0;
     }
-    return Math.min(requestAttemptTimeoutMs, remaining);
+    return Math.min(attemptTimeoutMsCap, remaining);
   }
 
   try {
     for (let index = 0; index < requestUrls.length; index += 1) {
       const attemptTimeout = nextAttemptTimeout();
       if (attemptTimeout <= 0) {
-        throw new Error(`请求超时（>${requestTimeoutMs / 1000}s）`);
+        throw new Error(`请求超时（>${timeoutMs / 1000}s）`);
       }
 
       const controller = new AbortController();
@@ -408,11 +438,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     );
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error(`请求超时（>${requestTimeoutMs / 1000}s）`);
+      throw new Error(`请求超时（>${timeoutMs / 1000}s）`);
     }
     throw error;
   }
 }
+
+const manualResearchRequestBehavior: RequestBehavior = {
+  timeoutMs: longRunningRequestTimeoutMs,
+  attemptTimeoutMs: longRunningRequestAttemptTimeoutMs,
+};
 
 export const api = {
   getApiBase,
@@ -437,12 +472,6 @@ export const api = {
       source: buildSourceInfo(),
     };
   },
-  bootstrapDemo: async (): Promise<ApiResult<DashboardBootstrapResponse>> => ({
-    data: await request<DashboardBootstrapResponse>("/bootstrap/dashboard-demo", {
-      method: "POST",
-    }),
-    source: buildSourceInfo(),
-  }),
   addWatchlist: async (symbol: string, name?: string): Promise<WatchlistMutationResponse> =>
     request<WatchlistMutationResponse>("/watchlist", {
       method: "POST",
@@ -542,9 +571,57 @@ export const api = {
     request<ModelApiKeyDeleteResponse>(`/settings/model-api-keys/${keyId}`, {
       method: "DELETE",
     }),
+  createManualResearchRequest: async (
+    payload: ManualResearchRequestCreateRequest,
+  ): Promise<ManualResearchRequestView> =>
+    request<ManualResearchRequestView>("/manual-research/requests", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }, manualResearchRequestBehavior),
+  listManualResearchRequests: async (params?: {
+    symbol?: string;
+    status?: string;
+    executorKind?: string;
+    includeSuperseded?: boolean;
+  }): Promise<ManualResearchRequestListResponse> =>
+    request<ManualResearchRequestListResponse>(`/manual-research/requests${buildManualResearchQuery(params)}`),
+  getManualResearchRequest: async (requestId: number): Promise<ManualResearchRequestView> =>
+    request<ManualResearchRequestView>(`/manual-research/requests/${requestId}`),
+  executeManualResearchRequest: async (
+    requestId: number,
+    payload: ManualResearchRequestExecuteRequest,
+  ): Promise<ManualResearchRequestView> =>
+    request<ManualResearchRequestView>(`/manual-research/requests/${requestId}/execute`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }, manualResearchRequestBehavior),
+  completeManualResearchRequest: async (
+    requestId: number,
+    payload: ManualResearchRequestCompleteRequest,
+  ): Promise<ManualResearchRequestView> =>
+    request<ManualResearchRequestView>(`/manual-research/requests/${requestId}/complete`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  failManualResearchRequest: async (
+    requestId: number,
+    payload: ManualResearchRequestFailRequest,
+  ): Promise<ManualResearchRequestView> =>
+    request<ManualResearchRequestView>(`/manual-research/requests/${requestId}/fail`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  retryManualResearchRequest: async (
+    requestId: number,
+    payload: ManualResearchRequestRetryRequest,
+  ): Promise<ManualResearchRequestView> =>
+    request<ManualResearchRequestView>(`/manual-research/requests/${requestId}/retry`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }, manualResearchRequestBehavior),
   runFollowUpAnalysis: async (payload: FollowUpAnalysisRequest): Promise<FollowUpAnalysisResponse> =>
     request<FollowUpAnalysisResponse>("/analysis/follow-up", {
       method: "POST",
       body: JSON.stringify(payload),
-    }),
+    }, manualResearchRequestBehavior),
 };
