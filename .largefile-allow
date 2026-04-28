@@ -1,3 +1,4 @@
 # Type definition catalogs naturally grow with API surface.
-# Individual model files can be split when a domain has >10 models.
 frontend/src/types.ts
+# Backend operations module — pending deeper modular extraction.
+src/ashare_evidence/operations.py
