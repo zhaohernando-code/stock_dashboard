@@ -40,7 +40,7 @@ export function MobileHome(props: MobileAppShellProps) {
         <div>
           <Text className="mobile-kicker">A-Share Advisory</Text>
           <Title level={2}>工作台</Title>
-          <Text>{`自选与候选合并 · ${props.candidateRows.length} 只`}</Text>
+          <Text>{`今日关注 · ${props.candidateRows.length} 只`}</Text>
         </div>
         <Button shape="circle" icon={<ReloadOutlined />} onClick={() => void props.onRefresh()} />
       </header>
@@ -97,7 +97,7 @@ export function MobileHome(props: MobileAppShellProps) {
       <section className="mobile-list-panel">
         <div className="mobile-section-head">
           <div>
-            <Title level={4}>候选与自选</Title>
+            <Title level={4}>关注池</Title>
             <Text>{`${rows.length} 只符合筛选`}</Text>
           </div>
           <FilterOutlined />

@@ -141,11 +141,11 @@
 
 .mobile-metric strong {
   display: block;
-  overflow: hidden;
   color: #162840;
   font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .mobile-search {

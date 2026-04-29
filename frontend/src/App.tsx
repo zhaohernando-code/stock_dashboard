@@ -218,8 +218,8 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   const navCards: ViewCard[] = [
     {
       key: "candidates",
-      label: "候选与自选",
-      description: "统一查看候选标的、自选维护与快捷操作。",
+      label: "关注池",
+      description: "查看关注标的、候选信号与快捷操作。",
       icon: <StockOutlined />,
     },
     {
