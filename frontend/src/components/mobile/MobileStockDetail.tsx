@@ -1,7 +1,7 @@
 import { ArrowLeftOutlined, CopyOutlined, LineChartOutlined, QuestionCircleOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Alert, Button, Empty, Input, Select, Skeleton, Space, Tag, Typography } from "antd";
 import { useState } from "react";
-import type { MobileAppShellProps } from "./types";
+import type { MobileAppShellProps, MobileStockPanelKey } from "./types";
 import { MobileMetric } from "./MobileMetric";
 import { KlinePanel } from "../KlinePanel";
 import {
@@ -22,10 +22,10 @@ import { directionLabels, factorLabels } from "../../utils/constants";
 const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
 
-type StockPanel = "advice" | "evidence" | "risk" | "question";
-
 export function MobileStockDetail(props: MobileAppShellProps) {
-  const [panel, setPanel] = useState<StockPanel>("advice");
+  const [localPanel, setLocalPanel] = useState<MobileStockPanelKey>("advice");
+  const panel = props.stockPanel ?? localPanel;
+  const setPanel = props.setStockPanel ?? setLocalPanel;
   const dashboard = props.dashboard;
 
   if (props.loadingDetail) {
@@ -115,7 +115,7 @@ export function MobileStockDetail(props: MobileAppShellProps) {
             ["evidence", "证据"],
             ["risk", "风险"],
             ["question", "追问"],
-          ] as Array<[StockPanel, string]>).map(([key, label]) => (
+          ] as Array<[MobileStockPanelKey, string]>).map(([key, label]) => (
             <button key={key} type="button" className={panel === key ? "active" : ""} onClick={() => setPanel(key)}>
               {label}
             </button>

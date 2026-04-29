@@ -34,6 +34,14 @@
   color: #ffffff;
 }
 
+.mobile-focus-card .mobile-focus-price .value-positive {
+  color: #ffd3d3;
+}
+
+.mobile-focus-card .mobile-focus-price .value-negative {
+  color: #bff1d9;
+}
+
 .mobile-focus-card p {
   color: rgba(255, 255, 255, 0.9);
 }
@@ -67,10 +75,10 @@
 .mobile-stock-row p,
 .mobile-mini-card p,
 .mobile-conclusion-card p {
-  margin: 10px 0 0;
+  margin: 9px 0 0;
   color: #40536d;
-  font-size: 14px;
-  line-height: 1.45;
+  font-size: 12.5px;
+  line-height: 1.42;
 }
 
 .mobile-focus-card p {
@@ -193,10 +201,19 @@
   margin-top: 12px;
 }
 
+.mobile-section-plain {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
 .mobile-stock-row {
   position: relative;
   width: 100%;
-  padding: 14px;
+  padding: 13px 14px 12px;
   overflow: hidden;
   border-color: rgba(30, 55, 86, 0.06);
   color: inherit;
@@ -220,6 +237,35 @@
   letter-spacing: -0.025em;
 }
 
+.mobile-stock-row-main > div:first-child {
+  min-width: 0;
+}
+
+.mobile-stock-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.mobile-stock-name-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.mobile-stock-name-line strong {
+  display: inline;
+  font-size: 17px;
+}
+
+.mobile-stock-name-line span {
+  font-size: 12px;
+}
+
 .mobile-stock-row-main span,
 .mobile-holding-row span,
 .mobile-mini-card span,
@@ -234,37 +280,45 @@
 .mobile-stock-row-price {
   display: grid;
   justify-items: end;
-  gap: 4px;
+  gap: 3px;
 }
 
 .mobile-stock-row-price strong {
   font-size: 21px;
+  line-height: 1;
 }
 
 .mobile-mini-trend {
   width: 72px;
   height: 28px;
-  margin-top: 3px;
+  margin-top: 2px;
 }
 
 .mobile-stock-row-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
-  margin-top: 12px;
+  gap: 5px;
+  margin-top: 0;
   padding-right: 0;
+}
+
+.mobile-stock-row-tags .ant-tag {
+  margin-inline-end: 0;
+  padding-inline: 6px;
+  font-size: 11px;
+  line-height: 19px;
 }
 
 .mobile-row-foot {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 9px;
 }
 
 .mobile-section-link {
   color: #075bff;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 850;
   white-space: nowrap;
 }
@@ -272,22 +326,24 @@
 .mobile-quick-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 14px;
+  gap: 9px;
+  margin-top: 11px;
 }
 
 .mobile-quick-grid button {
   display: grid;
-  min-height: 78px;
+  min-height: 62px;
   place-items: center;
   border: 0;
-  border-radius: 18px;
-  background: #f2f6fb;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 10px 24px rgba(28, 50, 78, 0.08);
   color: #183654;
+  font-size: 12px;
   font-weight: 850;
 }
 
 .mobile-quick-grid .anticon {
   color: #075bff;
-  font-size: 22px;
+  font-size: 20px;
 }

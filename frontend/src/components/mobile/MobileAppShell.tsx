@@ -6,7 +6,7 @@ import {
 } from "@ant-design/icons";
 import { Alert, Skeleton } from "antd";
 import { useState } from "react";
-import type { MobileAppShellProps, MobileTabKey } from "./types";
+import type { MobileAppShellProps, MobileStockPanelKey, MobileTabKey } from "./types";
 import { MobileHome } from "./MobileHome";
 import { MobileStockDetail } from "./MobileStockDetail";
 import { MobileOperations } from "./MobileOperations";
@@ -21,6 +21,7 @@ const navItems: Array<{ key: MobileTabKey; label: string; icon: React.ReactNode 
 
 export function MobileAppShell(props: MobileAppShellProps) {
   const [activeTab, setActiveTab] = useState<MobileTabKey>("home");
+  const [stockPanel, setStockPanel] = useState<MobileStockPanelKey>("advice");
 
   function activate(tab: MobileTabKey) {
     setActiveTab(tab);
@@ -39,6 +40,8 @@ export function MobileAppShell(props: MobileAppShellProps) {
     ...props,
     onSelectSymbol: selectSymbol,
     onTabChange: activate,
+    stockPanel,
+    setStockPanel,
   };
 
   return (

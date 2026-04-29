@@ -29,8 +29,8 @@ export function MobileMiniTrendChart({ row }: { row: CandidateWorkspaceRow }) {
         smooth: true,
         showSymbol: false,
         silent: true,
-        lineStyle: { width: 3, color: up ? "#e14f4f" : "#0b8f63" },
-        areaStyle: { color: up ? "rgba(225,79,79,0.12)" : "rgba(11,143,99,0.12)" },
+        lineStyle: { width: 1.6, color: up ? "#e14f4f" : "#0b8f63" },
+        areaStyle: { color: up ? "rgba(225,79,79,0.08)" : "rgba(11,143,99,0.08)" },
       }],
     });
     return () => chart.dispose();

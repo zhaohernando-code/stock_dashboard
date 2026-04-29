@@ -19,6 +19,13 @@ export function MobileStockRow({
 }) {
   const candidate = row.candidate;
   const directionLabel = candidate?.display_direction_label ?? row.latest_direction ?? row.analysis_status;
+  const rowTags = (
+    <div className="mobile-stock-row-tags">
+      <Tag color={candidate ? directionColor(candidate.display_direction) : "default"}>{directionLabel}</Tag>
+      {candidate ? <Tag>{claimGateStatusLabel(candidate.claim_gate.status)}</Tag> : null}
+      {holding ? <Tag color="blue">持仓</Tag> : null}
+    </div>
+  );
   return (
     <button
       type="button"
@@ -27,9 +34,14 @@ export function MobileStockRow({
     >
       <div className="mobile-stock-row-main">
         <div>
-          <Text className="mobile-stock-rank">{candidate?.rank ? `#${candidate.rank}` : row.source_kind === "candidate_only" ? "候选" : "关注"}</Text>
-          <strong>{row.name}</strong>
-          <span>{row.symbol}</span>
+          <div className="mobile-stock-row-meta">
+            <Text className="mobile-stock-rank">{candidate?.rank ? `#${candidate.rank}` : row.source_kind === "candidate_only" ? "候选" : "关注"}</Text>
+            {rowTags}
+          </div>
+          <div className="mobile-stock-name-line">
+            <strong>{row.name}</strong>
+            <span>{row.symbol}</span>
+          </div>
         </div>
         <div className="mobile-stock-row-price">
           <strong className={`value-${valueTone(candidate?.price_return_20d)}`}>{formatPercent(candidate?.price_return_20d)}</strong>
@@ -38,11 +50,6 @@ export function MobileStockRow({
           </span>
           <MobileMiniTrendChart row={row} />
         </div>
-      </div>
-      <div className="mobile-stock-row-tags">
-        <Tag color={candidate ? directionColor(candidate.display_direction) : "default"}>{directionLabel}</Tag>
-        {candidate ? <Tag>{claimGateStatusLabel(candidate.claim_gate.status)}</Tag> : null}
-        {holding ? <Tag color="blue">持仓</Tag> : null}
       </div>
       <p>{candidate?.summary ? sanitizeDisplayText(candidate.summary) : "等待候选分析结果。"}</p>
       <div className="mobile-row-foot">

@@ -18,7 +18,7 @@
   max-width: 480px;
   min-height: calc(100svh - 88px);
   margin: 0 auto;
-  padding: calc(env(safe-area-inset-top) + 16px) 18px calc(env(safe-area-inset-bottom) + 112px);
+  padding: calc(env(safe-area-inset-top) + 13px) 18px calc(env(safe-area-inset-bottom) + 132px);
 }
 
 .mobile-page-centered {
@@ -52,7 +52,7 @@
 .mobile-stock-headline h2.ant-typography {
   margin: 0;
   color: #11243d;
-  font-size: clamp(28px, 7.4vw, 36px);
+  font-size: clamp(23px, 6.2vw, 30px);
   line-height: 0.98;
   letter-spacing: -0.06em;
 }
@@ -70,7 +70,7 @@
 .mobile-analysis-card h4.ant-typography {
   margin: 0;
   color: #10233d;
-  font-size: 24px;
+  font-size: 20px;
   line-height: 1.05;
   letter-spacing: -0.04em;
 }
@@ -79,7 +79,7 @@
 .mobile-stock-headline .ant-typography,
 .mobile-section-head .ant-typography {
   color: #708097;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .mobile-live-dot {
@@ -137,4 +137,3 @@
   margin-bottom: 16px;
   padding: 16px;
 }
-

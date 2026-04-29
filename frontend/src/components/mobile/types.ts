@@ -10,6 +10,7 @@ import type {
 } from "../../types";
 
 export type MobileTabKey = "home" | "stock" | "operations" | "settings";
+export type MobileStockPanelKey = "advice" | "evidence" | "risk" | "question";
 
 export interface MobileAppShellProps {
   themeMode: "light" | "dark";
@@ -46,4 +47,6 @@ export interface MobileAppShellProps {
   onSubmitManualResearch: () => void | Promise<void>;
   onCopyPrompt: () => void | Promise<void>;
   onLoadOperations: () => void | Promise<void>;
+  stockPanel?: MobileStockPanelKey;
+  setStockPanel?: (panel: MobileStockPanelKey) => void;
 }

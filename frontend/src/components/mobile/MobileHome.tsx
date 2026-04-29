@@ -1,4 +1,4 @@
-import { BellOutlined, PlusOutlined, ReloadOutlined, SyncOutlined } from "@ant-design/icons";
+import { BellOutlined, PlusOutlined, QuestionCircleOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Button, Empty, Popover, Space, Tag, Typography } from "antd";
 import { useMemo } from "react";
 import type { MobileAppShellProps } from "./types";
@@ -20,6 +20,13 @@ export function MobileHome(props: MobileAppShellProps) {
     if (props.activeRow) {
       props.onSelectSymbol(props.activeRow.symbol, "stock");
     }
+  };
+  const openQuestionAssistant = () => {
+    if (!props.activeRow) {
+      return;
+    }
+    props.setStockPanel?.("question");
+    props.onSelectSymbol(props.activeRow.symbol, "stock");
   };
 
   return (
@@ -69,7 +76,7 @@ export function MobileHome(props: MobileAppShellProps) {
         </div>
       </section>
 
-      <section className="mobile-list-panel">
+      <section className="mobile-list-panel mobile-section-plain">
         <div className="mobile-section-head">
           <div>
             <Title level={4}>今日候选</Title>
@@ -90,21 +97,13 @@ export function MobileHome(props: MobileAppShellProps) {
         </div>
       </section>
 
-      <section className="mobile-panel-card mobile-quick-actions">
+      <section className="mobile-quick-actions mobile-section-plain">
         <div className="mobile-section-head">
           <div>
             <Title level={4}>快速操作</Title>
           </div>
         </div>
         <div className="mobile-quick-grid">
-          <button type="button" onClick={() => void props.onRefresh()}>
-            <ReloadOutlined />
-            <span>刷新数据</span>
-          </button>
-          <button type="button" onClick={() => props.activeRow && props.onSelectSymbol(props.activeRow.symbol, "stock")} disabled={!props.activeRow}>
-            <SyncOutlined />
-            <span>查看单票</span>
-          </button>
           <Popover
             open={props.addPopoverOpen}
             onOpenChange={props.setAddPopoverOpen}
@@ -114,9 +113,17 @@ export function MobileHome(props: MobileAppShellProps) {
           >
             <button type="button">
               <PlusOutlined />
-              <span>添加标的</span>
+              <span>添加自选</span>
             </button>
           </Popover>
+          <button type="button" onClick={() => void props.onRefresh()}>
+            <ReloadOutlined />
+            <span>刷新数据</span>
+          </button>
+          <button type="button" onClick={openQuestionAssistant} disabled={!props.activeRow}>
+            <QuestionCircleOutlined />
+            <span>提问助手</span>
+          </button>
         </div>
       </section>
     </main>
