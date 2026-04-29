@@ -32,6 +32,8 @@ import type {
 
 const betaHeaderName = import.meta.env.VITE_BETA_ACCESS_HEADER ?? "X-Ashare-Beta-Key";
 const betaStorageKey = "ashare-beta-access-key";
+const actAsStorageKey = "ashare-act-as-login";
+const actAsHeaderName = "X-Ashare-Act-As-Login";
 const defaultRequestTimeoutMs = 10000;
 const defaultRequestAttemptTimeoutMs = 3000;
 const longRunningRequestTimeoutMs = 180000;
@@ -42,6 +44,7 @@ const htmlPrefixes = ["<!doctype", "<html", "<?xml"];
 const notFoundSignatures = ["tool not found", "tool_not_found", "404 not found"];
 const localApiBaseStorageKey = "ashare-api-base-url";
 const queryApiBaseParam = "apiBase";
+let actAsLoginOverride = "";
 
 export type ApiResult<T> = {
   data: T;
@@ -237,6 +240,25 @@ export function getBetaAccessKey(): string {
   return window.localStorage.getItem(betaStorageKey) ?? "";
 }
 
+export function getActAsLogin(): string {
+  if (typeof window === "undefined") {
+    return actAsLoginOverride;
+  }
+  window.sessionStorage.removeItem(actAsStorageKey);
+  window.localStorage.removeItem(actAsStorageKey);
+  return actAsLoginOverride;
+}
+
+export function setActAsLogin(value: string | null | undefined): void {
+  const normalized = (value ?? "").trim();
+  actAsLoginOverride = normalized;
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.sessionStorage.removeItem(actAsStorageKey);
+  window.localStorage.removeItem(actAsStorageKey);
+}
+
 export function getRuntimeConfig(): DashboardRuntimeConfig {
   const apiBase = getApiBase();
   const storageBase = readApiBaseFromStorage();
@@ -339,6 +361,7 @@ export type RequestBehavior = {
 export async function request<T>(path: string, init?: RequestInit, behavior?: RequestBehavior): Promise<T> {
   const startedAt = Date.now();
   const betaAccessKey = getBetaAccessKey();
+  const actAsLogin = getActAsLogin();
   const explicit = hasExplicitApiBase();
   const requestUrls = dedupe([
     ...buildRequestUrls(path, explicit),
@@ -375,6 +398,7 @@ export async function request<T>(path: string, init?: RequestInit, behavior?: Re
           headers: {
             "Content-Type": "application/json",
             ...(betaAccessKey ? { [betaHeaderName]: betaAccessKey } : {}),
+            ...(actAsLogin ? { [actAsHeaderName]: actAsLogin } : {}),
             ...(init?.headers ?? {}),
           },
           ...init,

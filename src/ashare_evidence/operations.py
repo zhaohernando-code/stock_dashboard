@@ -1170,6 +1170,7 @@ def build_operations_dashboard(
     sample_symbol: str = "600519.SH",
     *,
     include_simulation_workspace: bool = False,
+    target_login: str = "root",
 ) -> dict[str, Any]:
     started_at = perf_counter()
     bind = session.get_bind()
@@ -1394,7 +1395,12 @@ def build_operations_dashboard(
     if include_simulation_workspace:
         from ashare_evidence.simulation import get_simulation_workspace
 
-        simulation_workspace = get_simulation_workspace(session)
+        simulation_workspace = get_simulation_workspace(
+            session,
+            owner_login=target_login,
+            actor_login=target_login,
+            actor_role="root",
+        )
 
     from ashare_evidence.dashboard import get_stock_dashboard, list_candidate_recommendations
 

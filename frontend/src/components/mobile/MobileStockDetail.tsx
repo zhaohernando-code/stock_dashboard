@@ -64,6 +64,12 @@ export function MobileStockDetail(props: MobileAppShellProps) {
         icon: index === 0 ? <LineChartOutlined /> : index === 1 ? <CalendarOutlined /> : <WarningOutlined />,
       }))
     : fallbackAdvice;
+  const panelItems: Array<[MobileStockPanelKey, string]> = [
+    ["advice", "建议"],
+    ["evidence", "证据"],
+    ["risk", "风险"],
+    ...(props.canUseManualResearch ? [["question", "追问"] satisfies [MobileStockPanelKey, string]] : []),
+  ];
 
   return (
     <main className="mobile-page mobile-stock-page">
@@ -142,12 +148,7 @@ export function MobileStockDetail(props: MobileAppShellProps) {
 
       <section className="mobile-stock-card mobile-stock-analysis-card">
         <div className="mobile-stock-tabs">
-          {([
-            ["advice", "建议"],
-            ["evidence", "证据"],
-            ["risk", "风险"],
-            ["question", "追问"],
-          ] as Array<[MobileStockPanelKey, string]>).map(([key, label]) => (
+          {panelItems.map(([key, label]) => (
             <button key={key} type="button" className={panel === key ? "active" : ""} onClick={() => setPanel(key)}>
               {label}
             </button>
@@ -206,7 +207,7 @@ export function MobileStockDetail(props: MobileAppShellProps) {
         </div>
       ) : null}
 
-      {panel === "question" ? (
+      {panel === "question" && props.canUseManualResearch ? (
         <div className="mobile-question-panel">
           <div className="mobile-stock-section-head">
             <div>
@@ -255,9 +256,11 @@ export function MobileStockDetail(props: MobileAppShellProps) {
       ) : null}
       </section>
 
-      <Button className="mobile-stock-primary-cta" type="primary" size="large" onClick={() => setPanel("question")}>
-        发起人工追问
-      </Button>
+      {props.canUseManualResearch ? (
+        <Button className="mobile-stock-primary-cta" type="primary" size="large" onClick={() => setPanel("question")}>
+          发起人工追问
+        </Button>
+      ) : null}
     </main>
   );
 }

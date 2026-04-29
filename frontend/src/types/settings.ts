@@ -84,6 +84,24 @@ export interface RuntimeSettingsResponse {
   default_model_api_key_id?: number | null;
 }
 
+export interface RuntimeOverviewResponse {
+  generated_at: string;
+  deployment_mode: string;
+  storage_engine: string;
+  cache_backend: string;
+  watchlist_scope: string;
+  watchlist_cache_only: boolean;
+  llm_failover_enabled: boolean;
+  deployment_notes: string[];
+  provider_selection_mode: string;
+  provider_order: string[];
+  provider_cooldown_seconds: number;
+  field_mappings: RuntimeFieldMappingView[];
+  data_sources: RuntimeDataSourceView[];
+  cache_policies: CacheDatasetPolicyView[];
+  anti_stampede: Record<string, any>;
+}
+
 export interface ModelApiKeyCreateRequest {
   name: string;
   provider_name: string;
@@ -119,4 +137,3 @@ export interface ModelApiKeyDeleteResponse {
   deleted: boolean;
   deleted_at: string;
 }
-

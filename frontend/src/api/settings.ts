@@ -1,5 +1,6 @@
 import { request } from "./core";
 import type {
+  RuntimeOverviewResponse,
   RuntimeSettingsResponse,
   ProviderCredentialUpsertRequest,
   ModelApiKeyCreateRequest,
@@ -9,6 +10,10 @@ import type {
 
 export function getRuntimeSettings(): Promise<RuntimeSettingsResponse> {
   return request<RuntimeSettingsResponse>("/settings/runtime");
+}
+
+export function getRuntimeOverview(): Promise<RuntimeOverviewResponse> {
+  return request<RuntimeOverviewResponse>("/runtime/overview");
 }
 
 export async function upsertProviderCredential(providerName: string, payload: ProviderCredentialUpsertRequest): Promise<void> {

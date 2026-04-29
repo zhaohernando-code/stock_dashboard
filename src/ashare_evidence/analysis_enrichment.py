@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from math import tanh
 from typing import Any
 from urllib import request
 
@@ -41,10 +42,8 @@ def fetch_announcement_body(source_uri: str) -> str | None:
 
 def compute_financial_trends(snapshot: dict[str, Any] | None) -> dict[str, Any]:
     if not snapshot:
-        return {
-            "growth_quality": 0.0, "profitability_quality": 0.0,
-            "cash_flow_quality": 0.0, "composite_score": 0.0, "available": False,
-        }
+        return {"growth_quality": 0.0, "profitability_quality": 0.0,
+                "cash_flow_quality": 0.0, "composite_score": 0.0, "available": False}
 
     def _safe(val: Any) -> float:
         return float(val) if val is not None else 0.0
@@ -55,46 +54,63 @@ def compute_financial_trends(snapshot: dict[str, Any] | None) -> dict[str, Any]:
     eps = _safe(snapshot.get("eps") or snapshot.get("basic_eps"))
     ocfps = _safe(snapshot.get("operating_cashflow_per_share") or snapshot.get("operating_cashflow"))
 
-    growth_score = 0.0
-    if revenue_yoy > 0.20:
-        growth_score += 0.6
-    elif revenue_yoy > 0.10:
-        growth_score += 0.3
-    elif revenue_yoy > 0.05:
-        growth_score += 0.15
-    elif revenue_yoy < 0:
-        growth_score -= 0.5
-    if netprofit_yoy > revenue_yoy:
-        growth_score += 0.2
-    if netprofit_yoy < 0 and revenue_yoy > 0:
-        growth_score -= 0.3
+    # ---- Multi-quarter trend analysis (Piotroski-style) ----
+    history = snapshot.get("quarterly_history") or []
+    num_quarters = len(history)
 
-    profitability_score = 0.0
-    if roe > 0.15:
-        profitability_score += 0.5
-    elif roe > 0.10:
-        profitability_score += 0.3
-    elif roe > 0.05:
-        profitability_score += 0.1
-    elif roe < 0:
-        profitability_score -= 0.4
-    if eps and eps > 0:
-        profitability_score += 0.1
+    # Revenue growth trend: acceleration vs deceleration
+    growth_accel = 0.0
+    if num_quarters >= 3:
+        recent_rev_growth = [_safe(q.get("revenue_yoy_pct")) for q in history[:2] if _safe(q.get("revenue_yoy_pct")) != 0]
+        older_rev_growth = [_safe(q.get("revenue_yoy_pct")) for q in history[2:4] if _safe(q.get("revenue_yoy_pct")) != 0]
+        if recent_rev_growth and older_rev_growth:
+            avg_recent = sum(recent_rev_growth) / len(recent_rev_growth)
+            avg_older = sum(older_rev_growth) / len(older_rev_growth)
+            if avg_older != 0:
+                growth_accel = max(-1.0, min(1.0, (avg_recent - avg_older) / max(abs(avg_older), 0.05)))
+
+    # Profitability trend: ROE direction across quarters
+    roe_trend = 0.0
+    if num_quarters >= 3:
+        roe_values = [_safe(q.get("roe")) for q in history[:4] if _safe(q.get("roe")) != 0 or True]
+        if len(roe_values) >= 2:
+            positive_count = sum(1 for r in roe_values if r > 0.05)
+            roe_trend = max(-1.0, min(1.0, (positive_count / len(roe_values) - 0.4) * 2.0))
+
+    # Cash flow quality: consistency of OCF/EPS across quarters
+    cf_consistency = 0.0
+    if num_quarters >= 2:
+        cf_ratios = []
+        for q in history[:4]:
+            q_eps = _safe(q.get("eps"))
+            q_ocf = _safe(q.get("operating_cashflow_per_share"))
+            if q_eps and q_eps > 0:
+                cf_ratios.append(q_ocf / q_eps)
+        if cf_ratios:
+            pos_count = sum(1 for r in cf_ratios if r > 0.5)
+            cf_consistency = max(-1.0, min(1.0, (pos_count / len(cf_ratios) - 0.5) * 2.0))
+
+    # ---- Single-period scores with smoothed thresholds ----
+    growth_score = max(-1.0, min(1.0, tanh(revenue_yoy / 0.12) * 0.7
+                                   + tanh(netprofit_yoy / 0.15) * 0.3
+                                   + growth_accel * 0.25))
+
+    profitability_score = max(-1.0, min(1.0, tanh(roe / 0.10) * 0.6
+                                         + (0.15 if eps and eps > 0 else -0.15)
+                                         + roe_trend * 0.25))
 
     cashflow_score = 0.0
     if ocfps and eps and eps > 0:
         cf_ratio = ocfps / eps
-        if cf_ratio > 0.8:
-            cashflow_score += 0.2
-        elif cf_ratio < 0:
-            cashflow_score -= 0.4
-        elif cf_ratio < 0.3:
-            cashflow_score -= 0.15
+        cashflow_score = max(-1.0, min(1.0,
+            tanh((cf_ratio - 0.5) / 0.5) * 0.7 + cf_consistency * 0.3))
+    elif ocfps and ocfps < 0:
+        cashflow_score = -0.5
 
     def _clip(v: float) -> float:
         return max(-1.0, min(1.0, v))
 
-    composite = _clip(growth_score * 0.4 + profitability_score * 0.35 + cashflow_score * 0.25)
+    composite = _clip(growth_score * 0.40 + profitability_score * 0.35 + cashflow_score * 0.25)
     return {
         "growth_quality": round(_clip(growth_score), 4),
         "profitability_quality": round(_clip(profitability_score), 4),
@@ -102,6 +118,8 @@ def compute_financial_trends(snapshot: dict[str, Any] | None) -> dict[str, Any]:
         "composite_score": round(composite, 4),
         "available": True,
         "report_period": snapshot.get("report_period"),
+        "num_quarters": num_quarters,
+        "growth_accel": round(growth_accel, 4),
     }
 
 

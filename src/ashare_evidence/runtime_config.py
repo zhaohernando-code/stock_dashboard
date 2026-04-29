@@ -574,6 +574,15 @@ def get_runtime_settings(session: Session) -> dict[str, Any]:
     }
 
 
+def get_runtime_overview(session: Session) -> dict[str, Any]:
+    settings = get_runtime_settings(session)
+    return {
+        key: value
+        for key, value in settings.items()
+        if key not in {"provider_credentials", "model_api_keys", "default_model_api_key_id"}
+    }
+
+
 def record_model_api_key_result(
     session: Session,
     key_id: int,

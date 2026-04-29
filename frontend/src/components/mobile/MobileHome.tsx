@@ -15,6 +15,8 @@ export function MobileHome(props: MobileAppShellProps) {
     [props.simulation],
   );
   const rows = props.candidateRows;
+  const watchlistRows = rows.filter((row) => row.source_kind !== "candidate_only");
+  const candidateOnlyCount = rows.length - watchlistRows.length;
   const activeCandidate = props.activeRow?.candidate ?? null;
   const openActive = () => {
     if (props.activeRow) {
@@ -22,7 +24,7 @@ export function MobileHome(props: MobileAppShellProps) {
     }
   };
   const openQuestionAssistant = () => {
-    if (!props.activeRow) {
+    if (!props.activeRow || !props.canUseManualResearch) {
       return;
     }
     props.setStockPanel?.("question");
@@ -75,12 +77,12 @@ export function MobileHome(props: MobileAppShellProps) {
         <div className="mobile-section-head">
           <div>
             <Title level={4}>关注股票</Title>
-            <Text>{`${rows.length} 只符合筛选`}</Text>
+            <Text>{`${watchlistRows.length} 只属于当前账号自选`}</Text>
           </div>
           <span className="mobile-section-link">向上滑看全部</span>
         </div>
         <div className="mobile-stock-list">
-          {rows.length > 0 ? rows.map((row) => (
+          {watchlistRows.length > 0 ? watchlistRows.map((row) => (
             <MobileStockRow
               key={row.symbol}
               row={row}
@@ -90,7 +92,12 @@ export function MobileHome(props: MobileAppShellProps) {
               onRemove={row.source_kind !== "candidate_only" ? () => props.onRequestRemoveWatchlist?.(row) : undefined}
               removing={props.mutatingWatchlist && props.watchlistMutationSymbol === row.symbol}
             />
-          )) : <Empty description="没有符合条件的标的" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
+          )) : (
+            <Empty
+              description={candidateOnlyCount > 0 ? "当前账号自选为空，下方候选池仍可用于挑选加入" : "当前账号还没有自选股"}
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            />
+          )}
         </div>
       </section>
 
@@ -117,10 +124,12 @@ export function MobileHome(props: MobileAppShellProps) {
             <ReloadOutlined />
             <span>刷新数据</span>
           </button>
-          <button type="button" onClick={openQuestionAssistant} disabled={!props.activeRow}>
-            <QuestionCircleOutlined />
-            <span>提问助手</span>
-          </button>
+          {props.canUseManualResearch ? (
+            <button type="button" onClick={openQuestionAssistant} disabled={!props.activeRow}>
+              <QuestionCircleOutlined />
+              <span>提问助手</span>
+            </button>
+          ) : null}
         </div>
       </section>
     </main>

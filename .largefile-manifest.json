@@ -15,7 +15,7 @@
       "reviewed_at": "2026-04-28"
     },
     "src/ashare_evidence/analysis_pipeline.py": {
-      "lines": 1049,
+      "lines": 927,
       "reason": "Analysis pipeline: announcement body fetching, LLM enrichment, financial trends. Cohesive pipeline definition.",
       "status": "accepted",
       "reviewed_at": "2026-04-30"
@@ -33,7 +33,7 @@
       "reviewed_at": "2026-04-28"
     },
     "src/ashare_evidence/dashboard.py": {
-      "lines": 615,
+      "lines": 609,
       "reason": "Dashboard views with direction labels and factor cards. Minor growth from label additions.",
       "status": "accepted",
       "reviewed_at": "2026-04-30"
@@ -93,13 +93,13 @@
       "reviewed_at": "2026-04-28"
     },
     "src/ashare_evidence/services.py": {
-      "lines": 1609,
+      "lines": 1621,
       "reason": "Service layer: recommendation serialization, claim gate, direction capping.",
       "status": "accepted",
       "reviewed_at": "2026-04-30"
     },
     "src/ashare_evidence/signal_engine_parts/recommendation.py": {
-      "lines": 681,
+      "lines": 452,
       "reason": "Fusion engine with dynamic weights, conflict resolution, multi-factor integration (price/news/fundamental).",
       "status": "accepted",
       "reviewed_at": "2026-04-30"
@@ -133,6 +133,12 @@
       "reason": "Operations dashboard tabs (portfolio, simulation, replay, research validation, launch readiness). Could be further split into per-tab components.",
       "status": "accepted",
       "reviewed_at": "2026-04-28"
+    },
+    "src/ashare_evidence/signal_engine_parts/factors.py": {
+      "lines": 562,
+      "reason": "Multi-factor computation module: price, news, fundamental, size, reversal, liquidity factors with cross-sectional normalization. Cohesive factor definition.",
+      "reviewed_at": "2026-04-30",
+      "status": "accepted"
     }
   }
 }

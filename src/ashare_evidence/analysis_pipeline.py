@@ -227,13 +227,21 @@ def _fetch_daily_bars_tushare(session: Session, symbol: str) -> DailyMarketFetch
             "start_date": start_day.strftime("%Y%m%d"),
             "end_date": end_day.strftime("%Y%m%d"),
         },
-        fields="ts_code,trade_date,turnover_rate",
+        fields="ts_code,trade_date,turnover_rate,total_mv,circ_mv,pe_ttm,pb",
     )
-    turnover_by_day = {
-        str(row["trade_date"]): (_to_float(row.get("turnover_rate")) or 0.0) / 100.0
-        for row in turnover_rows
-        if row.get("trade_date") is not None
-    }
+    turnover_by_day: dict[str, float] = {}
+    basic_mv_by_day: dict[str, dict[str, float | None]] = {}
+    for row in turnover_rows:
+        day = str(row.get("trade_date"))
+        if day is None:
+            continue
+        turnover_by_day[day] = (_to_float(row.get("turnover_rate")) or 0.0) / 100.0
+        basic_mv_by_day[day] = {
+            "total_mv": _to_float(row.get("total_mv")),
+            "circ_mv": _to_float(row.get("circ_mv")),
+            "pe_ttm": _to_float(row.get("pe_ttm")),
+            "pb": _to_float(row.get("pb")),
+        }
     ticker, _ = _normalize_symbol_parts(symbol)
     bars: list[dict[str, Any]] = []
     for row in market_rows:
@@ -260,6 +268,10 @@ def _fetch_daily_bars_tushare(session: Session, symbol: str) -> DailyMarketFetch
             "amount": float(amount),
             "turnover_rate": turnover_by_day.get(trade_day.strftime("%Y%m%d")),
             "adj_factor": None,
+            "total_mv": basic_mv_by_day.get(trade_day.strftime("%Y%m%d"), {}).get("total_mv"),
+            "circ_mv": basic_mv_by_day.get(trade_day.strftime("%Y%m%d"), {}).get("circ_mv"),
+            "pe_ttm": basic_mv_by_day.get(trade_day.strftime("%Y%m%d"), {}).get("pe_ttm"),
+            "pb": basic_mv_by_day.get(trade_day.strftime("%Y%m%d"), {}).get("pb"),
             "raw_payload": {
                 **_json_safe(row),
                 "provider_name": "tushare",
@@ -316,6 +328,10 @@ def _fetch_daily_bars_akshare(symbol: str) -> DailyMarketFetch | None:
             "amount": float(amount),
             "turnover_rate": _to_float(row.get("turnover")),
             "adj_factor": None,
+            "total_mv": None,
+            "circ_mv": None,
+            "pe_ttm": None,
+            "pb": None,
             "raw_payload": {
                 **_json_safe(row),
                 "provider_name": "akshare",
@@ -383,7 +399,6 @@ def _announcement_impact(title: str) -> str:
             return "positive"
     return "neutral"
 
-
 def _announcement_scope(title: str) -> str:
     if any(keyword in title for keyword in ("业绩", "年报", "季报", "中报", "快报")):
         return "earnings"
@@ -392,7 +407,6 @@ def _announcement_scope(title: str) -> str:
     if any(keyword in title for keyword in ("增持", "减持", "回购", "分红")):
         return "capital_action"
     return "announcement"
-
 
 def _fetch_official_announcements(
     symbol: str,
@@ -498,7 +512,6 @@ def _fetch_official_announcements(
     enrich_with_llm_analysis(news_items, news_links)
     return news_items, news_links
 
-
 def build_mapped_news_link(record: dict[str, Any], *, source_uri: str) -> dict[str, Any]:
     return {
         **record,
@@ -511,13 +524,11 @@ def build_mapped_news_link(record: dict[str, Any], *, source_uri: str) -> dict[s
         ),
     }
 
-
 def _first_non_empty_row(frame: Any) -> dict[str, Any] | None:
     if frame is None or getattr(frame, "empty", False):
         return None
     records = frame.to_dict(orient="records")
     return records[0] if records else None
-
 
 def _fetch_financial_snapshot_tushare(session: Session, symbol: str) -> dict[str, Any] | None:
     rows = _tushare_rows(
@@ -528,7 +539,25 @@ def _fetch_financial_snapshot_tushare(session: Session, symbol: str) -> dict[str
     )
     if not rows:
         return None
-    latest = rows[0]
+    rows.sort(key=lambda r: str(r.get("end_date") or ""), reverse=True)
+    seen: set[str] = set()
+    deduped = []
+    for row in rows:
+        period = str(row.get("end_date") or "")
+        if period and period not in seen:
+            seen.add(period)
+            deduped.append(row)
+    latest = deduped[0]
+    history = []
+    for row in deduped[:8]:
+        history.append({
+            "report_period": _normalize_text(row.get("end_date")),
+            "eps": _to_float(row.get("eps")),
+            "roe": _to_float(row.get("roe")),
+            "revenue_yoy_pct": _to_float(row.get("or_yoy")),
+            "netprofit_yoy_pct": _to_float(row.get("netprofit_yoy")),
+            "operating_cashflow_per_share": _to_float(row.get("ocfps")),
+        })
     return {
         "provider_name": "tushare_fina_indicator",
         "report_period": _normalize_text(latest.get("end_date")),
@@ -540,8 +569,8 @@ def _fetch_financial_snapshot_tushare(session: Session, symbol: str) -> dict[str
         "revenue_yoy_pct": _to_float(latest.get("or_yoy")),
         "netprofit_yoy_pct": _to_float(latest.get("netprofit_yoy")),
         "operating_cashflow_per_share": _to_float(latest.get("ocfps")),
+        "quarterly_history": history,
     }
-
 
 def _fetch_financial_snapshot_akshare(symbol: str) -> dict[str, Any] | None:
     akshare = _akshare_module()
@@ -563,7 +592,6 @@ def _fetch_financial_snapshot_akshare(symbol: str) -> dict[str, Any] | None:
         "ending_cash": _to_float(cashflow_row.get("END_CCE") if cashflow_row else None),
     }
 
-
 def _fetch_financial_snapshot(session: Session, symbol: str) -> dict[str, Any] | None:
     for fetcher in (
         lambda: _fetch_financial_snapshot_tushare(session, symbol),
@@ -576,7 +604,6 @@ def _fetch_financial_snapshot(session: Session, symbol: str) -> dict[str, Any] |
         if snapshot:
             return snapshot
     return None
-
 
 def _fetch_research_metadata(symbol: str) -> list[dict[str, Any]]:
     akshare = _akshare_module()
@@ -599,7 +626,6 @@ def _fetch_research_metadata(symbol: str) -> list[dict[str, Any]]:
         )
     return [item for item in metadata if item["title"]]
 
-
 @contextmanager
 def _requests_default_timeout(timeout_seconds: int):
     try:
@@ -619,7 +645,6 @@ def _requests_default_timeout(timeout_seconds: int):
         yield
     finally:
         requests.sessions.Session.request = original_request
-
 
 def _sector_payload(symbol: str, profile: StockProfileResolution) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str | None]:
     if not profile.industry:
@@ -668,7 +693,6 @@ def _sector_payload(symbol: str, profile: StockProfileResolution) -> tuple[list[
         ),
     }
     return [sector_record], [membership_record], sector_code
-
 
 def build_real_evidence_bundle(
     session: Session,
@@ -777,7 +801,6 @@ def build_real_evidence_bundle(
         paper_fills=[],
     )
 
-
 def _recommendation_trade_days(session: Session, symbol: str) -> list[date]:
     rows = session.execute(
         select(Recommendation.as_of_data_time)
@@ -787,7 +810,6 @@ def _recommendation_trade_days(session: Session, symbol: str) -> list[date]:
     ).scalars()
     trade_days = {_trade_day_from_timestamp(as_of_data_time) for as_of_data_time in rows}
     return sorted(trade_days)
-
 
 def _backfill_candidate_trade_days(
     session: Session,
@@ -813,7 +835,6 @@ def _backfill_candidate_trade_days(
         for trade_day in market_trade_days
         if earliest_existing_trade_day <= trade_day < latest_market_trade_day and trade_day not in existing_trade_day_set
     ]
-
 
 def _historical_bundle(base_bundle: EvidenceBundle, *, as_of_day: date) -> EvidenceBundle:
     cutoff = _close_timestamp(as_of_day)
@@ -857,7 +878,6 @@ def _historical_bundle(base_bundle: EvidenceBundle, *, as_of_day: date) -> Evide
         recommendation_evidence=signal_artifacts.recommendation_evidence,
     )
 
-
 def _backfill_missing_recommendation_history(
     session: Session,
     *,
@@ -869,7 +889,6 @@ def _backfill_missing_recommendation_history(
         market_bars=bundle.market_bars,
     ):
         ingest_bundle(session, _historical_bundle(bundle, as_of_day=trade_day))
-
 
 def refresh_real_analysis(
     session: Session,

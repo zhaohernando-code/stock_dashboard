@@ -1,4 +1,5 @@
-import { getApiBase, getBetaAccessKey, getRuntimeConfig } from "./core";
+import { getApiBase, getBetaAccessKey, getRuntimeConfig, getActAsLogin, setActAsLogin } from "./core";
+import { getAuthContext } from "./auth";
 import { loadShellData, getStockDashboard, getOperationsDashboard } from "./dashboard";
 import { addWatchlist, refreshWatchlist, removeWatchlist } from "./watchlist";
 import {
@@ -7,7 +8,7 @@ import {
   endSimulation, submitManualSimulationOrder,
 } from "./simulation";
 import {
-  getRuntimeSettings, upsertProviderCredential, createModelApiKey,
+  getRuntimeSettings, getRuntimeOverview, upsertProviderCredential, createModelApiKey,
   updateModelApiKey, setDefaultModelApiKey, deleteModelApiKey,
 } from "./settings";
 import {
@@ -29,6 +30,9 @@ export const api = {
     }
   },
   getRuntimeConfig,
+  getAuthContext,
+  getActAsLogin,
+  setActAsLogin,
   loadShellData,
   addWatchlist,
   refreshWatchlist,
@@ -45,6 +49,7 @@ export const api = {
   endSimulation,
   submitManualSimulationOrder,
   getRuntimeSettings,
+  getRuntimeOverview,
   upsertProviderCredential,
   createModelApiKey,
   updateModelApiKey,

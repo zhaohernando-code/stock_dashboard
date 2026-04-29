@@ -50,6 +50,7 @@ import type {
   DataSourceInfo,
   DashboardRuntimeConfig,
   GlossaryEntryView,
+  AuthContextResponse,
   ManualResearchRequestView,
   ModelApiKeyView,
   ManualSimulationOrderRequest,
@@ -64,6 +65,7 @@ import type {
   RuntimeFieldMappingView,
   SimulationModelAdviceView,
   RuntimeDataSourceView,
+  RuntimeOverviewResponse,
   RuntimeSettingsResponse,
   SimulationConfigRequest,
   SimulationTrackStateView,
@@ -119,7 +121,9 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   const [view, setView] = useState<ViewMode>("candidates");
   const [runtimeConfig, setRuntimeConfig] = useState<DashboardRuntimeConfig>(initialRuntimeConfig);
   const [sourceInfo, setSourceInfo] = useState<DataSourceInfo>(() => buildInitialSourceInfo());
+  const [authContext, setAuthContext] = useState<AuthContextResponse | null>(null);
   const [runtimeSettings, setRuntimeSettings] = useState<RuntimeSettingsResponse | null>(null);
+  const [runtimeOverview, setRuntimeOverview] = useState<RuntimeOverviewResponse | null>(null);
   const [watchlist, setWatchlist] = useState<WatchlistItemView[]>([]);
   const [candidates, setCandidates] = useState<CandidateItemView[]>([]);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
@@ -179,11 +183,25 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   const [savingConfig, setSavingConfig] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const canMutateWatchlist = true;
+  const isRootUser = authContext?.actor_role === "root";
+  const canUseOperations = isRootUser;
+  const canUseSettings = isRootUser;
+  const canUseManualResearch = isRootUser;
+  const runtimeView = runtimeSettings ?? runtimeOverview;
 
   const candidateRows = useMemo(
     () => buildCandidateWorkspaceRows(watchlist, candidates),
     [watchlist, candidates],
   );
+  const watchlistRows = useMemo(
+    () => candidateRows.filter((item) => item.source_kind !== "candidate_only"),
+    [candidateRows],
+  );
+  const candidateOnlyRows = useMemo(
+    () => candidateRows.filter((item) => item.source_kind === "candidate_only"),
+    [candidateRows],
+  );
+  const candidateOnlyCount = candidateOnlyRows.length;
 
   const activeRow = useMemo(
     () => candidateRows.find((item) => item.symbol === selectedSymbol) ?? candidateRows[0] ?? null,
@@ -243,10 +261,33 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       icon: <SettingOutlined />,
     },
   ];
+  const availableNavCards = navCards.filter((item) => {
+    if (item.key === "operations") return canUseOperations;
+    if (item.key === "settings") return canUseSettings;
+    return true;
+  });
+
+  async function loadAuthContext(retryWithoutActAs = true): Promise<AuthContextResponse> {
+    try {
+      const payload = await api.getAuthContext();
+      setAuthContext(payload);
+      return payload;
+    } catch (error) {
+      const staleActAs = api.getActAsLogin();
+      if (retryWithoutActAs && staleActAs) {
+        api.setActAsLogin("");
+        const payload = await api.getAuthContext();
+        setAuthContext(payload);
+        return payload;
+      }
+      throw error;
+    }
+  }
 
   async function loadRuntimeSettings(): Promise<void> {
     const payload = await api.getRuntimeSettings();
     setRuntimeSettings(payload);
+    setRuntimeOverview(null);
     setAnalysisKeyId((current) => {
       const storedPreference = readAnalysisModelPreference();
       if (storedPreference === "builtin") {
@@ -284,6 +325,19 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       });
       return next;
     });
+  }
+
+  async function loadRuntimeContext(nextAuth?: AuthContextResponse | null): Promise<void> {
+    const access = nextAuth ?? authContext;
+    if (access?.actor_role === "root") {
+      await loadRuntimeSettings();
+      return;
+    }
+    const payload = await api.getRuntimeOverview();
+    setRuntimeOverview(payload);
+    setRuntimeSettings(null);
+    setProviderDrafts({});
+    setAnalysisKeyId(undefined);
   }
 
   function applySimulationWorkspace(workspace: SimulationWorkspaceResponse): void {
@@ -356,6 +410,12 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   }
 
   async function loadOperationsData(symbol: string): Promise<void> {
+    if (!canUseOperations) {
+      setOperations(null);
+      setSimulation(null);
+      setOperationsError("当前账号无运营复盘权限。");
+      return;
+    }
     setOperationsLoading(true);
     setOperationsError(null);
 
@@ -403,13 +463,29 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   useEffect(() => {
     void (async () => {
       try {
-        await loadRuntimeSettings();
+        const access = await loadAuthContext();
+        await loadRuntimeContext(access);
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : "加载运行时配置失败。");
+        setError(loadError instanceof Error ? loadError.message : "加载账号上下文失败。");
       }
       await loadShellData();
     })();
   }, []);
+
+  useEffect(() => {
+    if (!canUseOperations && view === "operations") {
+      setView("candidates");
+    }
+    if (!canUseSettings && view === "settings") {
+      setView("candidates");
+    }
+  }, [canUseOperations, canUseSettings, view]);
+
+  useEffect(() => {
+    if (!canUseManualResearch && stockActiveTab === "followup") {
+      setStockActiveTab("signals");
+    }
+  }, [canUseManualResearch, stockActiveTab]);
 
   useEffect(() => {
     if (!selectedSymbol) {
@@ -436,11 +512,11 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   }, [selectedSymbol]);
 
   useEffect(() => {
-    if (view !== "operations" || !selectedSymbol) {
+    if (!canUseOperations || view !== "operations" || !selectedSymbol) {
       return;
     }
     void loadOperationsData(selectedSymbol);
-  }, [selectedSymbol, view]);
+  }, [canUseOperations, selectedSymbol, view]);
 
   useEffect(() => {
     if (!simulation) return;
@@ -453,12 +529,13 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   }, [selectedSymbol, simulation]);
 
   async function reloadEverything(preferredSymbol?: string | null): Promise<void> {
-    await loadRuntimeSettings();
+    const access = await loadAuthContext();
+    await loadRuntimeContext(access);
     const initialSymbol = await loadShellData(preferredSymbol);
     const resolvedSymbol = preferredSymbol ?? initialSymbol ?? selectedSymbol;
     if (resolvedSymbol) {
       await loadDetailData(resolvedSymbol);
-      if (view === "operations") {
+      if (access.actor_role === "root" && view === "operations") {
         await loadOperationsData(resolvedSymbol);
       }
     }
@@ -478,7 +555,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       const response = await runner();
       applySimulationWorkspace(response.workspace);
       setOperationsError(null);
-      if (selectedSymbol) {
+      if (selectedSymbol && canUseOperations) {
         try {
           const operationsResult = await api.getOperationsDashboard(selectedSymbol);
           setOperations(operationsResult.data);
@@ -884,9 +961,9 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     } else if (tab === "stock") {
       setView("stock");
     } else if (tab === "operations") {
-      setView("operations");
+      setView(canUseOperations ? "operations" : "candidates");
     } else {
-      setView("settings");
+      setView(canUseSettings ? "settings" : "candidates");
     }
   }
 
@@ -898,8 +975,23 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   }
 
   function openManualResearchWorkspace() {
+    if (!canUseManualResearch) {
+      return;
+    }
     setView("stock");
     setStockActiveTab("followup");
+  }
+
+  async function handleSwitchAccount(nextTargetLogin: string) {
+    if (!authContext?.can_act_as) {
+      return;
+    }
+    api.setActAsLogin(nextTargetLogin === authContext.actor_login ? "" : nextTargetLogin);
+    setAnalysisAnswer(null);
+    setDashboard(null);
+    setOperations(null);
+    setSimulation(null);
+    await reloadEverything(selectedSymbol);
   }
 
   async function handleCopyPrompt() {
@@ -1143,15 +1235,23 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                               : "当前没有额外的人工研究摘要。"}
                           </Paragraph>
                           <div className="manual-research-entry-actions">
-                            <Button type="primary" size="small" onClick={openManualResearchWorkspace}>
-                              发起人工研究
-                            </Button>
-                            <Button size="small" onClick={handleCopyPrompt}>
-                              复制追问包
-                            </Button>
-                            <Text type="secondary">
-                              入口在下方"追问与模拟"标签。留空不选模型 Key 时会直接调用本机 Codex，用 `gpt-5.5` 执行 builtin 研究；选择已配置 Key 时则走对应的外部模型 Key。
-                            </Text>
+                            {canUseManualResearch ? (
+                              <>
+                                <Button type="primary" size="small" onClick={openManualResearchWorkspace}>
+                                  发起人工研究
+                                </Button>
+                                <Button size="small" onClick={handleCopyPrompt}>
+                                  复制追问包
+                                </Button>
+                                <Text type="secondary">
+                                  入口在下方"追问与模拟"标签。留空不选模型 Key 时会直接调用本机 Codex，用 `gpt-5.5` 执行 builtin 研究；选择已配置 Key 时则走对应的外部模型 Key。
+                                </Text>
+                              </>
+                            ) : (
+                              <Text type="secondary">
+                                人工研究与追问工作流仅对 root 账号开放。
+                              </Text>
+                            )}
                           </div>
                           {dashboard.recommendation.manual_llm_review.decision_note ? (
                             <Paragraph className="panel-description">
@@ -1523,6 +1623,9 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
         },
       ]
     : [];
+  const visibleStockTabItems = canUseManualResearch
+    ? stockTabItems
+    : stockTabItems.filter((item) => item.key !== "followup");
 
   const portfolioTabs = operations?.portfolios.map((portfolio) => ({
     key: portfolio.portfolio_key,
@@ -1554,7 +1657,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     watchlistNameDraft, setWatchlistNameDraft,
     handleAddWatchlist, canMutateWatchlist, mutatingWatchlist,
   });
-  const settingsTabItems = buildSettingsTabs({
+  const settingsTabItems = canUseSettings ? buildSettingsTabs({
     runtimeSettings,
     sourceInfo,
     generatedAt,
@@ -1569,7 +1672,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     providerDrafts, setProviderDrafts,
     savingConfig, setSavingConfig,
     messageApi, loadRuntimeSettings, setError,
-  });
+  }) : [];
   if (isMobile) {
     return (
       <>
@@ -1588,7 +1691,13 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
           operations={operations}
           simulation={simulation}
           sourceInfo={sourceInfo}
+          authContext={authContext}
+          isRootUser={isRootUser}
+          canUseOperations={canUseOperations}
+          canUseSettings={canUseSettings}
+          canUseManualResearch={canUseManualResearch}
           runtimeSettings={runtimeSettings}
+          runtimeOverview={runtimeOverview}
           modelApiKeys={modelApiKeys}
           generatedAt={generatedAt}
           addWatchlistOverlay={addWatchlistOverlay}
@@ -1611,6 +1720,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
           onTabChange={handleMobileTabChange}
           onSubmitManualResearch={() => void handleSubmitManualResearch()}
           onCopyPrompt={() => void handleCopyPrompt()}
+          onSwitchAccount={(login) => void handleSwitchAccount(login)}
           onLoadOperations={() => {
             if (selectedSymbol) {
               void loadOperationsData(selectedSymbol);
@@ -1643,7 +1753,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
           onOk={() => void handleConfirmRemoveWatchlist()}
         >
           <Paragraph className="panel-description">
-            该标的会从共享自选池中移除，相关候选缓存也会失去预热资格。确认继续吗？
+            该标的会从当前账号自选中移除。若没有其他账号继续关注，它的主动刷新资格也会一并取消。确认继续吗？
           </Paragraph>
         </Modal>
       </>
@@ -1661,12 +1771,24 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                 <div className="topbar-kicker">A-Share Advisory Desk</div>
                 <Title level={2}>自选股工作台</Title>
                 <Paragraph className="topbar-note">
-                  候选、自选、单票和运营复盘共用同一批关注标的，切换后工作区会同步联动。
+                  {isRootUser
+                    ? "当前为 root 运营视角，可切换账号空间查看独立自选与模拟盘。"
+                    : "当前账号只展示自己的自选与模拟盘空间。"}
                 </Paragraph>
+                {authContext?.can_act_as && authContext.target_login !== authContext.actor_login ? (
+                  <Alert
+                    showIcon
+                    type="warning"
+                    className="sub-alert"
+                    message={`当前正在代看 ${authContext.target_login} 空间`}
+                    description="这里不会显示 root 自己的持仓、自选和复盘时间线。若要回到 root 自己的空间，请将上方账号切回 root。"
+                  />
+                ) : null}
                 <Space wrap className="header-meta">
                   <Tag color="cyan">{sourceInfo.label}</Tag>
-                  <Tag icon={<DatabaseOutlined />}>{runtimeSettings?.storage_engine ?? "SQLite"}</Tag>
-                  <Tag>{runtimeSettings?.cache_backend ?? "Redis"}</Tag>
+                  <Tag color={isRootUser ? "gold" : "blue"}>{`空间 ${authContext?.target_login ?? "--"}`}</Tag>
+                  <Tag icon={<DatabaseOutlined />}>{runtimeView?.storage_engine ?? "SQLite"}</Tag>
+                  <Tag>{runtimeView?.cache_backend ?? "Redis"}</Tag>
                   <Tag>{runtimeConfig.apiBase || "同源 API"}</Tag>
                 </Space>
               </div>
@@ -1674,6 +1796,18 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
               <div className="hero-actions-panel">
                 <div className="hero-refresh-note">{`最近刷新 ${formatDate(generatedAt)}`}</div>
                 <div className="hero-action-row">
+                  {authContext?.can_act_as ? (
+                    <Select
+                      className="global-focus-select"
+                      value={authContext.target_login}
+                      placeholder="切换账号空间"
+                      options={authContext.visible_account_spaces.map((item) => ({
+                        value: item.account_login,
+                        label: `${item.account_login}${item.account_login === authContext.actor_login ? " · 当前登录" : ""}`,
+                      }))}
+                      onChange={(value) => void handleSwitchAccount(value)}
+                    />
+                  ) : null}
                   <Select
                     className="global-focus-select"
                     value={selectedSymbol ?? undefined}
@@ -1696,7 +1830,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
           </div>
 
           <div className="workspace-nav">
-            {navCards.map((item) => (
+            {availableNavCards.map((item) => (
               <button
                 key={item.key}
                 type="button"
@@ -1825,10 +1959,10 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
 
               <Card
                 className="panel-card"
-                title="候选股与自选池"
+                title="当前账号自选"
                 extra={(
                   <Space wrap>
-                    <Text type="secondary">{`共 ${candidateRows.length} 只`}</Text>
+                    <Text type="secondary">{`${watchlistRows.length} 只`}</Text>
                     <Popover
                       open={addPopoverOpen}
                       onOpenChange={setAddPopoverOpen}
@@ -1841,14 +1975,19 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                   </Space>
                 )}
               >
-                {candidateRows.length === 0 ? (
-                  <Empty description="当前自选池为空，请先添加股票代码" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                {watchlistRows.length === 0 ? (
+                  <Alert
+                    showIcon
+                    type="info"
+                    message="当前账号自选为空"
+                    description={candidateOnlyCount > 0 ? "当前页下方会单独展示全局候选池，便于你挑选后加入自己的自选。" : "请先添加股票代码，建立当前账号自己的自选池。"}
+                  />
                 ) : (
                   <Table
                     rowKey="symbol"
                     size="middle"
                     pagination={false}
-                    dataSource={candidateRows}
+                    dataSource={watchlistRows}
                     columns={candidateColumns}
                     scroll={{ x: 1240 }}
                     tableLayout="fixed"
@@ -1856,7 +1995,32 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                       onClick: () => handleCandidateSelect(record.symbol),
                     })}
                     rowClassName={(record) => (record.symbol === activeRow?.symbol ? "candidate-row-active" : "")}
-                    locale={{ emptyText: "当前没有候选股" }}
+                    locale={{ emptyText: "当前账号还没有自选股" }}
+                  />
+                )}
+              </Card>
+
+              <Card
+                className="panel-card"
+                title="全局候选池"
+                extra={<Text type="secondary">{`${candidateOnlyCount} 只`}</Text>}
+              >
+                {candidateOnlyRows.length === 0 ? (
+                  <Empty description="当前没有额外全局候选股" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                ) : (
+                  <Table
+                    rowKey="symbol"
+                    size="middle"
+                    pagination={false}
+                    dataSource={candidateOnlyRows}
+                    columns={candidateColumns}
+                    scroll={{ x: 1240 }}
+                    tableLayout="fixed"
+                    onRow={(record) => ({
+                      onClick: () => handleCandidateSelect(record.symbol),
+                    })}
+                    rowClassName={(record) => (record.symbol === activeRow?.symbol ? "candidate-row-active" : "")}
+                    locale={{ emptyText: "当前没有额外候选股" }}
                   />
                 )}
               </Card>
@@ -2030,7 +2194,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                 </Row>
 
                 <Card className="panel-card">
-                  <Tabs activeKey={stockActiveTab} onChange={setStockActiveTab} items={stockTabItems} />
+                  <Tabs activeKey={stockActiveTab} onChange={setStockActiveTab} items={visibleStockTabItems} />
                 </Card>
               </div>
             )

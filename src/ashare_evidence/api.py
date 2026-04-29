@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-from ashare_evidence.access import BetaAccessContext, require_beta_access, require_beta_write_access
+from ashare_evidence.account_space import visible_account_spaces
 from ashare_evidence.dashboard import (
     get_glossary_entries,
     get_stock_dashboard,
@@ -34,6 +34,7 @@ from ashare_evidence.runtime_config import (
     create_model_api_key,
     delete_model_api_key,
     ensure_runtime_defaults,
+    get_runtime_overview,
     get_runtime_settings,
     set_default_model_api_key,
     upsert_provider_credential,
@@ -50,7 +51,9 @@ from ashare_evidence.simulation import (
     step_simulation_session,
     update_simulation_config,
 )
+from ashare_evidence.stock_auth import StockAccessContext, require_stock_access, require_stock_root
 from ashare_evidence.schemas import (
+    AuthContextResponse,
     FollowUpAnalysisRequest,
     FollowUpAnalysisResponse,
     CandidateListResponse,
@@ -69,6 +72,7 @@ from ashare_evidence.schemas import (
     OperationsDashboardResponse,
     ProviderCredentialUpsertRequest,
     RecommendationTraceResponse,
+    RuntimeOverviewResponse,
     RuntimeSettingsResponse,
     SimulationConfigRequest,
     SimulationControlActionResponse,
@@ -109,16 +113,6 @@ def create_app(
             yield session
         finally:
             session.close()
-
-    def require_manual_research_write_access(access: BetaAccessContext) -> BetaAccessContext:
-        require_beta_write_access(access)
-        return access
-
-    def require_operator_manual_research_access(access: BetaAccessContext) -> BetaAccessContext:
-        require_beta_write_access(access)
-        if access.role != "operator":
-            raise HTTPException(status_code=403, detail="manual research workflow is operator-only")
-        return access
 
     tick_interval_seconds = max(int(os.getenv("ASHARE_BACKGROUND_OPS_TICK_SECONDS", "60")), 15)
     background_ops_enabled = (
@@ -179,21 +173,49 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok", "database_url": resolved_database_url}
 
-    @app.get("/settings/runtime", response_model=RuntimeSettingsResponse)
-    def runtime_settings(
-        _access: BetaAccessContext = Depends(require_beta_access),
+    @app.get("/auth/context", response_model=AuthContextResponse)
+    def auth_context(
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        payload = {
+            "actor_login": access.actor_login,
+            "actor_role": access.actor_role,
+            "target_login": access.target_login,
+            "can_act_as": access.can_act_as,
+            "auth_mode": access.auth_mode,
+            "visible_account_spaces": visible_account_spaces(
+                session,
+                actor_login=access.actor_login,
+                actor_role=access.actor_role,
+            ),
+        }
+        session.commit()
+        return payload
+
+    @app.get("/runtime/overview", response_model=RuntimeOverviewResponse)
+    def runtime_overview(
+        _access: StockAccessContext = Depends(require_stock_access),
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        return get_runtime_overview(session)
+
+    @app.get("/settings/runtime", response_model=RuntimeSettingsResponse)
+    def runtime_settings(
+        access: StockAccessContext = Depends(require_stock_access),
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        require_stock_root(access)
         return get_runtime_settings(session)
 
     @app.put("/settings/provider-credentials/{provider_name}")
     def provider_credential_upsert(
         provider_name: str,
         payload: ProviderCredentialUpsertRequest,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_beta_write_access(_access)
+        require_stock_root(access)
         try:
             record = upsert_provider_credential(
                 session,
@@ -211,10 +233,10 @@ def create_app(
     @app.post("/settings/model-api-keys")
     def model_api_key_create(
         payload: ModelApiKeyCreateRequest,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_beta_write_access(_access)
+        require_stock_root(access)
         try:
             record = create_model_api_key(
                 session,
@@ -236,10 +258,10 @@ def create_app(
     def model_api_key_update(
         key_id: int,
         payload: ModelApiKeyUpdateRequest,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_beta_write_access(_access)
+        require_stock_root(access)
         try:
             record = update_model_api_key(
                 session,
@@ -263,10 +285,10 @@ def create_app(
     @app.post("/settings/model-api-keys/{key_id}/default")
     def model_api_key_set_default(
         key_id: int,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_beta_write_access(_access)
+        require_stock_root(access)
         try:
             record = set_default_model_api_key(session, key_id)
         except LookupError as exc:
@@ -277,10 +299,10 @@ def create_app(
     @app.delete("/settings/model-api-keys/{key_id}", response_model=ModelApiKeyDeleteResponse)
     def model_api_key_remove(
         key_id: int,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_beta_write_access(_access)
+        require_stock_root(access)
         try:
             payload = delete_model_api_key(session, key_id)
         except LookupError as exc:
@@ -291,10 +313,10 @@ def create_app(
     @app.post("/analysis/follow-up", response_model=FollowUpAnalysisResponse)
     def follow_up_analysis(
         payload: FollowUpAnalysisRequest,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_manual_research_write_access(_access)
+        require_stock_root(access)
         try:
             return run_follow_up_analysis(
                 session,
@@ -313,17 +335,17 @@ def create_app(
     @app.post("/manual-research/requests", response_model=ManualResearchRequestView)
     def manual_research_request_create(
         payload: ManualResearchRequestCreateRequest,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_manual_research_write_access(_access)
+        require_stock_root(access)
         try:
             result = create_manual_research_request(
                 session,
                 symbol=payload.symbol,
                 question=payload.question,
                 trigger_source=payload.trigger_source,
-                requested_by=_access.token_id,
+                requested_by=access.actor_login,
                 executor_kind=payload.executor_kind,
                 model_api_key_id=payload.model_api_key_id,
             )
@@ -340,9 +362,10 @@ def create_app(
         status: str | None = Query(default=None),
         executor_kind: str | None = Query(default=None),
         include_superseded: bool = Query(default=False),
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        require_stock_root(access)
         return list_manual_research_requests(
             session,
             symbol=symbol,
@@ -354,9 +377,10 @@ def create_app(
     @app.get("/manual-research/requests/{request_id}", response_model=ManualResearchRequestView)
     def manual_research_request_detail(
         request_id: int,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        require_stock_root(access)
         try:
             return get_manual_research_request(session, request_id)
         except LookupError as exc:
@@ -366,10 +390,10 @@ def create_app(
     def manual_research_request_execute(
         request_id: int,
         payload: ManualResearchRequestExecuteRequest,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_manual_research_write_access(_access)
+        require_stock_root(access)
         try:
             result = execute_manual_research_request(
                 session,
@@ -389,10 +413,10 @@ def create_app(
     def manual_research_request_complete(
         request_id: int,
         payload: ManualResearchRequestCompleteRequest,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_operator_manual_research_access(_access)
+        require_stock_root(access)
         try:
             result = complete_manual_research_request(
                 session,
@@ -416,10 +440,10 @@ def create_app(
     def manual_research_request_fail(
         request_id: int,
         payload: ManualResearchRequestFailRequest,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_operator_manual_research_access(_access)
+        require_stock_root(access)
         try:
             result = fail_manual_research_request(
                 session,
@@ -435,15 +459,15 @@ def create_app(
     def manual_research_request_retry(
         request_id: int,
         payload: ManualResearchRequestRetryRequest,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_operator_manual_research_access(_access)
+        require_stock_root(access)
         try:
             result = retry_manual_research_request(
                 session,
                 request_id=request_id,
-                requested_by=payload.requested_by or _access.token_id,
+                requested_by=payload.requested_by or access.actor_login,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -454,20 +478,33 @@ def create_app(
 
     @app.get("/watchlist", response_model=WatchlistResponse)
     def watchlist(
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        return list_watchlist_entries(session)
+        payload = list_watchlist_entries(
+            session,
+            target_login=access.target_login,
+            actor_login=access.actor_login,
+            actor_role=access.actor_role,
+        )
+        session.commit()
+        return payload
 
     @app.post("/watchlist", response_model=WatchlistMutationResponse)
     def watchlist_add(
         payload: WatchlistCreateRequest,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_beta_write_access(_access)
         try:
-            item = add_watchlist_symbol(session, payload.symbol, stock_name=payload.name)
+            item = add_watchlist_symbol(
+                session,
+                payload.symbol,
+                stock_name=payload.name,
+                actor_login=access.actor_login,
+                actor_role=access.actor_role,
+                target_login=access.target_login,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         message = (
@@ -483,12 +520,17 @@ def create_app(
     @app.post("/watchlist/{symbol}/refresh", response_model=WatchlistMutationResponse)
     def watchlist_refresh(
         symbol: str,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_beta_write_access(_access)
         try:
-            item = refresh_watchlist_symbol(session, symbol)
+            item = refresh_watchlist_symbol(
+                session,
+                symbol,
+                actor_login=access.actor_login,
+                actor_role=access.actor_role,
+                target_login=access.target_login,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except LookupError as exc:
@@ -506,12 +548,17 @@ def create_app(
     @app.delete("/watchlist/{symbol}", response_model=WatchlistDeleteResponse)
     def watchlist_remove(
         symbol: str,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_beta_write_access(_access)
         try:
-            return remove_watchlist_symbol(session, symbol)
+            return remove_watchlist_symbol(
+                session,
+                symbol,
+                actor_login=access.actor_login,
+                actor_role=access.actor_role,
+                target_login=access.target_login,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except LookupError as exc:
@@ -520,7 +567,7 @@ def create_app(
     @app.get("/stocks/{symbol}/recommendations/latest", response_model=LatestRecommendationResponse)
     def latest_recommendation(
         symbol: str,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        _access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
         payload = get_latest_recommendation_summary(session, symbol)
@@ -531,7 +578,7 @@ def create_app(
     @app.get("/stocks/{symbol}/dashboard", response_model=StockDashboardResponse)
     def stock_dashboard(
         symbol: str,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        _access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
         try:
@@ -542,43 +589,56 @@ def create_app(
     @app.get("/dashboard/candidates", response_model=CandidateListResponse)
     def dashboard_candidates(
         limit: int = Query(default=8, ge=1, le=20),
-        _access: BetaAccessContext = Depends(require_beta_access),
+        _access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
         return list_candidate_recommendations(session, limit=limit)
 
     @app.get("/dashboard/glossary")
-    def dashboard_glossary(_access: BetaAccessContext = Depends(require_beta_access)) -> list[dict[str, str]]:
+    def dashboard_glossary(_access: StockAccessContext = Depends(require_stock_access)) -> list[dict[str, str]]:
         return get_glossary_entries()
 
     @app.get("/dashboard/operations", response_model=OperationsDashboardResponse)
     def dashboard_operations(
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         sample_symbol: str = Query(default="600519.SH"),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        require_stock_root(access)
         run_operations_tick(session)
-        return build_operations_dashboard(session, sample_symbol, include_simulation_workspace=True)
+        return build_operations_dashboard(
+            session,
+            sample_symbol,
+            include_simulation_workspace=True,
+            target_login=access.target_login,
+        )
 
     @app.get("/simulation/workspace", response_model=SimulationWorkspaceResponse)
     def simulation_workspace(
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        payload = get_simulation_workspace(session)
+        payload = get_simulation_workspace(
+            session,
+            owner_login=access.target_login,
+            actor_login=access.actor_login,
+            actor_role=access.actor_role,
+        )
         session.commit()
         return payload
 
     @app.put("/simulation/config", response_model=SimulationControlActionResponse)
     def simulation_config(
         payload: SimulationConfigRequest,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_beta_write_access(_access)
         try:
             workspace = update_simulation_config(
                 session,
+                owner_login=access.target_login,
+                actor_login=access.actor_login,
+                actor_role=access.actor_role,
                 initial_cash=payload.initial_cash,
                 watch_symbols=payload.watch_symbols,
                 focus_symbol=payload.focus_symbol,
@@ -592,12 +652,16 @@ def create_app(
 
     @app.post("/simulation/start", response_model=SimulationControlActionResponse)
     def simulation_start(
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_beta_write_access(_access)
         try:
-            workspace = start_simulation_session(session)
+            workspace = start_simulation_session(
+                session,
+                owner_login=access.target_login,
+                actor_login=access.actor_login,
+                actor_role=access.actor_role,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         session.commit()
@@ -605,12 +669,16 @@ def create_app(
 
     @app.post("/simulation/pause", response_model=SimulationControlActionResponse)
     def simulation_pause(
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_beta_write_access(_access)
         try:
-            workspace = pause_simulation_session(session)
+            workspace = pause_simulation_session(
+                session,
+                owner_login=access.target_login,
+                actor_login=access.actor_login,
+                actor_role=access.actor_role,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         session.commit()
@@ -618,12 +686,16 @@ def create_app(
 
     @app.post("/simulation/resume", response_model=SimulationControlActionResponse)
     def simulation_resume(
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_beta_write_access(_access)
         try:
-            workspace = resume_simulation_session(session)
+            workspace = resume_simulation_session(
+                session,
+                owner_login=access.target_login,
+                actor_login=access.actor_login,
+                actor_role=access.actor_role,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         session.commit()
@@ -631,12 +703,16 @@ def create_app(
 
     @app.post("/simulation/step", response_model=SimulationControlActionResponse)
     def simulation_step(
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_beta_write_access(_access)
         try:
-            workspace = step_simulation_session(session)
+            workspace = step_simulation_session(
+                session,
+                owner_login=access.target_login,
+                actor_login=access.actor_login,
+                actor_role=access.actor_role,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         session.commit()
@@ -644,23 +720,32 @@ def create_app(
 
     @app.post("/simulation/restart", response_model=SimulationControlActionResponse)
     def simulation_restart(
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_beta_write_access(_access)
-        workspace = restart_simulation_session(session)
+        workspace = restart_simulation_session(
+            session,
+            owner_login=access.target_login,
+            actor_login=access.actor_login,
+            actor_role=access.actor_role,
+        )
         session.commit()
         return {"workspace": workspace, "message": "已重启为新的双轨模拟进程。"}
 
     @app.post("/simulation/end", response_model=SimulationControlActionResponse)
     def simulation_end(
         payload: SimulationEndRequest,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_beta_write_access(_access)
         try:
-            workspace = end_simulation_session(session, confirm=payload.confirm)
+            workspace = end_simulation_session(
+                session,
+                owner_login=access.target_login,
+                actor_login=access.actor_login,
+                actor_role=access.actor_role,
+                confirm=payload.confirm,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         session.commit()
@@ -669,13 +754,15 @@ def create_app(
     @app.post("/simulation/manual-order", response_model=SimulationControlActionResponse)
     def simulation_manual_order(
         payload: ManualSimulationOrderRequest,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_beta_write_access(_access)
         try:
             workspace = place_manual_order(
                 session,
+                owner_login=access.target_login,
+                actor_login=access.actor_login,
+                actor_role=access.actor_role,
                 symbol=payload.symbol,
                 side=payload.side,
                 quantity=payload.quantity,
@@ -692,7 +779,7 @@ def create_app(
     @app.get("/recommendations/{recommendation_id}/trace", response_model=RecommendationTraceResponse)
     def recommendation_trace(
         recommendation_id: int,
-        _access: BetaAccessContext = Depends(require_beta_access),
+        _access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
         try:

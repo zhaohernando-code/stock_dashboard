@@ -24,9 +24,12 @@ TRANSACTION_COST_BPS = float(PHASE2_COST_MODEL["round_trip_cost_bps"])
 VALIDATION_PENDING = pending_rebuild_payload()
 MANUAL_REVIEW_PLACEHOLDER = manual_review_placeholder(PHASE2_MANUAL_REVIEW_NOTE)
 FUSION_WEIGHTS = {
-    "price_baseline": 0.50,
-    "news_event": 0.30,
-    "fundamental": 0.20,
+    "price_baseline": 0.35,
+    "news_event": 0.20,
+    "fundamental": 0.15,
+    "size_factor": 0.10,
+    "reversal": 0.10,
+    "liquidity": 0.10,
 }
 
 

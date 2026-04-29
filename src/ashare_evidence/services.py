@@ -184,6 +184,10 @@ def ingest_bundle(session: Session, bundle: EvidenceBundle) -> Recommendation:
                 "amount": bar_record["amount"],
                 "turnover_rate": bar_record.get("turnover_rate"),
                 "adj_factor": bar_record.get("adj_factor"),
+                "total_mv": bar_record.get("total_mv"),
+                "circ_mv": bar_record.get("circ_mv"),
+                "pe_ttm": bar_record.get("pe_ttm"),
+                "pb": bar_record.get("pb"),
                 "raw_payload": bar_record["raw_payload"],
                 **_extract_lineage(bar_record),
             },
@@ -679,6 +683,15 @@ def _factor_headline_fallback(
         return "事件层暂未形成一致方向，更多用于验证风险是否扩大。"
     if factor_key in {"manual_review_layer", "llm_assessment"}:
         return "人工研究结论会单独展示，当前只作为补充解释，不直接进入量化评分。"
+    if factor_key == "size_factor":
+        fv = raw_value.get("feature_values", {})
+        if isinstance(fv, Mapping) and not fv.get("available", False):
+            return "市值数据暂不可用，当前不参与评分。"
+        if direction == "positive":
+            return "市值偏小，享受小市值溢价作为长期结构性加分。注意：这是长期因子，不适用短线择时。"
+        if direction == "negative":
+            return "市值偏大，大盘股弹性有限，长期超额空间可能受限。"
+        return "市值接近中位数水平，暂无明显倾斜。"
     if "market_data_stale" in degrade_flags:
         return "最新行情刷新偏旧，当前结论先保留在观察区间。"
     if "event_conflict_high" in degrade_flags:
@@ -705,6 +718,8 @@ def _factor_risk_fallback(
         if isinstance(conflict_ratio, (int, float)) and float(conflict_ratio) >= 0.35:
             return "事件冲突仍偏高，新增负面消息会更快触发降级。"
         return "若后续事件方向反转，事件层会率先削弱当前判断。"
+    if factor_key == "size_factor":
+        return "市值信号是长期结构性因子，不应作为短线进出依据。"
     if factor_key in {"manual_review_layer", "llm_assessment"}:
         return "人工研究仍需补充正式记录后才能作为稳定参考。"
     if degrade_flags:

@@ -46,19 +46,40 @@ def _fusion_state(
     price_factor: dict[str, Any],
     news_factor: dict[str, Any],
     fundamental_factor: dict[str, Any] | None = None,
+    size_factor: dict[str, Any] | None = None,
+    reversal_factor: dict[str, Any] | None = None,
+    liquidity_factor: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if fundamental_factor is None:
         fundamental_factor = {
             "score": 0.0, "direction": "neutral", "confidence_score": 0.0,
             "evidence_count": 0, "weight": 0.0,
         }
+    if size_factor is None:
+        size_factor = {
+            "score": 0.0, "direction": "neutral", "confidence_score": 0.0,
+            "evidence_count": 0, "weight": 0.0,
+        }
+    if reversal_factor is None:
+        reversal_factor = {
+            "score": 0.0, "direction": "neutral", "confidence_score": 0.0,
+            "evidence_count": 0,
+        }
+    if liquidity_factor is None:
+        liquidity_factor = {
+            "score": 0.0, "direction": "neutral", "confidence_score": 0.0,
+            "evidence_count": 0,
+        }
 
-    weights = dynamic_weights(price_factor, news_factor, fundamental_factor)
+    weights = dynamic_weights(price_factor, news_factor, fundamental_factor, size_factor, reversal_factor, liquidity_factor)
 
     fusion_score = clip(
         price_factor["score"] * weights["price_baseline"]
         + news_factor["score"] * weights["news_event"]
         + fundamental_factor["score"] * weights["fundamental"]
+        + size_factor["score"] * weights.get("size_factor", 0.10)
+        + reversal_factor["score"] * weights.get("reversal", 0.10)
+        + liquidity_factor["score"] * weights.get("liquidity", 0.10)
     )
 
     stale_hours = (generated_at - as_of_data_time).total_seconds() / 3600
@@ -77,17 +98,28 @@ def _fusion_state(
     resolved_dir, conflict_notes = resolve_factor_conflict(
         price_factor["direction"], news_factor["direction"], fundamental_factor["direction"],
         price_factor["confidence_score"], news_factor["confidence_score"], fundamental_factor["confidence_score"],
+        size_factor["direction"], size_factor["confidence_score"],
+        reversal_factor["direction"], reversal_factor["confidence_score"],
+        liquidity_factor["direction"], liquidity_factor["confidence_score"],
     )
 
-    confidence_score = clip(
-        0.44
-        + abs(fusion_score) * 0.28
-        + price_factor["confidence_score"] * 0.08
-        + news_factor["confidence_score"] * 0.08
-        - stale_penalty * 0.2,
-        0.0,
-        0.9,
-    )
+    # Weighted RMS confidence: measures trust in inputs, orthogonal to fusion_score.
+    w_p = weights.get("price_baseline", 0.35)
+    w_n = weights.get("news_event", 0.20)
+    w_f = weights.get("fundamental", 0.15)
+    w_s = weights.get("size_factor", 0.10)
+    w_r = weights.get("reversal", 0.10)
+    w_l = weights.get("liquidity", 0.10)
+    pc = float(price_factor.get("confidence_score", 0.40))
+    nc = float(news_factor.get("confidence_score", 0.30))
+    fc = float(fundamental_factor.get("confidence_score", 0.25))
+    sc = float(size_factor.get("confidence_score", 0.35))
+    rc = float(reversal_factor.get("confidence_score", 0.30))
+    lc = float(liquidity_factor.get("confidence_score", 0.30))
+    rms_num = w_p**2 * pc**2 + w_n**2 * nc**2 + w_f**2 * fc**2 + w_s**2 * sc**2 + w_r**2 * rc**2 + w_l**2 * lc**2
+    rms_den = w_p**2 + w_n**2 + w_f**2 + w_s**2 + w_r**2 + w_l**2
+    weighted_rms = sqrt(rms_num / rms_den) if rms_den > 0 else 0.35
+    confidence_score = clip(weighted_rms - stale_penalty * 0.15, 0.10, 0.85)
 
     degraded = bool(active_degrade_flags)
     if resolved_dir == "positive":
@@ -138,14 +170,9 @@ def compute_model_results(
             - news_factor["conflict_ratio"] * 0.06,
         )
         expected_return = clip(horizon_score * (0.05 * horizon_scale), -0.15, 0.18)
-        confidence_score = clip(
-            0.45
-            + abs(horizon_score) * 0.24
-            + price_factor["confidence_score"] * 0.10
-            + news_factor["confidence_score"] * 0.08,
-            0.0,
-            0.88,
-        )
+        # Horizon confidence: fusion confidence * model-specific weight
+        f_conf = float(fusion_state.get("confidence_score", 0.40))
+        confidence_score = clip(f_conf * 0.70 + abs(horizon_score) * 0.20, 0.0, 0.85)
         direction = recommendation_direction(horizon_score, False)
         results.append(
             with_internal_lineage(
@@ -194,12 +221,33 @@ def build_recommendation(
     fusion_state: dict[str, Any],
     sector_proxy_available: bool,
     fundamental_factor: dict[str, Any] | None = None,
+    size_factor: dict[str, Any] | None = None,
+    reversal_factor: dict[str, Any] | None = None,
+    liquidity_factor: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     if fundamental_factor is None:
         fundamental_factor = {
             "score": 0.0, "direction": "neutral", "confidence_score": 0.0,
             "drivers": [], "risks": [], "evidence_count": 0, "weight": 0.0,
             "feature_values": {"fundamental_score": 0.0, "available": False},
+        }
+    if size_factor is None:
+        size_factor = {
+            "score": 0.0, "direction": "neutral", "confidence_score": 0.0,
+            "drivers": [], "risks": [], "evidence_count": 0, "weight": 0.0,
+            "feature_values": {"size_score": 0.0, "available": False},
+        }
+    if reversal_factor is None:
+        reversal_factor = {
+            "score": 0.0, "direction": "neutral", "confidence_score": 0.0,
+            "drivers": [], "risks": [], "evidence_count": 0,
+            "feature_values": {},
+        }
+    if liquidity_factor is None:
+        liquidity_factor = {
+            "score": 0.0, "direction": "neutral", "confidence_score": 0.0,
+            "drivers": [], "risks": [], "evidence_count": 0,
+            "feature_values": {},
         }
 
     direction = str(fusion_state["direction"])
@@ -209,12 +257,16 @@ def build_recommendation(
     primary_result = next(result for result in model_results if result["forecast_horizon_days"] == PRIMARY_HORIZON)
 
     core_drivers = []
-    for text in price_factor["drivers"] + news_factor["drivers"] + fundamental_factor.get("drivers", []):
+    for text in (price_factor["drivers"] + news_factor["drivers"] + fundamental_factor.get("drivers", [])
+                 + size_factor.get("drivers", []) + reversal_factor.get("drivers", [])
+                 + liquidity_factor.get("drivers", [])):
         if text not in core_drivers:
             core_drivers.append(text)
 
     reverse_risks = []
-    for text in news_factor["risks"] + fundamental_factor.get("risks", []) + price_factor["risks"]:
+    for text in (news_factor["risks"] + fundamental_factor.get("risks", []) + price_factor["risks"]
+                 + size_factor.get("risks", []) + reversal_factor.get("risks", [])
+                 + liquidity_factor.get("risks", [])):
         if text not in reverse_risks:
             reverse_risks.append(text)
     for note in fusion_state.get("conflict_notes", []):
@@ -222,7 +274,8 @@ def build_recommendation(
             reverse_risks.append(note)
 
     summary = actionable_summary(stock_name, direction,
-                                  price_factor, news_factor, fundamental_factor)
+                                  price_factor, news_factor, fundamental_factor,
+                                  reversal_factor=reversal_factor, liquidity_factor=liquidity_factor)
 
     downgrade_conditions = [
         "近 10 日与 20 日动量同时跌回 0 以下时降级。",
@@ -264,6 +317,36 @@ def build_recommendation(
             "risks": fundamental_factor.get("risks", []),
             "evidence_count": fundamental_factor.get("evidence_count", 0),
             "feature_values": fundamental_factor.get("feature_values", {}),
+        },
+        "size_factor": {
+            "score": size_factor["score"],
+            "weight": effective_weights.get("size_factor", FUSION_WEIGHTS.get("size_factor", 0.10)),
+            "direction": size_factor["direction"],
+            "confidence_score": size_factor["confidence_score"],
+            "drivers": size_factor.get("drivers", []),
+            "risks": size_factor.get("risks", []),
+            "evidence_count": size_factor.get("evidence_count", 0),
+            "feature_values": size_factor.get("feature_values", {}),
+        },
+        "reversal": {
+            "score": reversal_factor["score"],
+            "weight": effective_weights.get("reversal", FUSION_WEIGHTS.get("reversal", 0.10)),
+            "direction": reversal_factor["direction"],
+            "confidence_score": reversal_factor["confidence_score"],
+            "drivers": reversal_factor.get("drivers", []),
+            "risks": reversal_factor.get("risks", []),
+            "evidence_count": reversal_factor.get("evidence_count", 0),
+            "feature_values": reversal_factor.get("feature_values", {}),
+        },
+        "liquidity": {
+            "score": liquidity_factor["score"],
+            "weight": effective_weights.get("liquidity", FUSION_WEIGHTS.get("liquidity", 0.10)),
+            "direction": liquidity_factor["direction"],
+            "confidence_score": liquidity_factor["confidence_score"],
+            "drivers": liquidity_factor.get("drivers", []),
+            "risks": liquidity_factor.get("risks", []),
+            "evidence_count": liquidity_factor.get("evidence_count", 0),
+            "feature_values": liquidity_factor.get("feature_values", {}),
         },
         "manual_review_layer": {
             "score": manual_review_layer["score"],

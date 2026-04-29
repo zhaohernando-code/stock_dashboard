@@ -8,6 +8,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from ashare_evidence.account_space import ROLE_ROOT, ROOT_ACCOUNT_LOGIN, record_account_presence
 from ashare_evidence.dashboard import DIRECTION_LABELS
 from ashare_evidence.db import utcnow
 from ashare_evidence.intraday_market import (
@@ -181,9 +182,11 @@ def _recommendation_risk_flags(recommendation_view: dict[str, Any], *, limit: in
     return [*layered_flags, *invalidators, *coverage_gaps][:limit]
 
 
-def _latest_session(session: Session) -> SimulationSession | None:
+def _latest_session(session: Session, *, owner_login: str) -> SimulationSession | None:
     sessions = session.scalars(
-        select(SimulationSession).order_by(SimulationSession.created_at.desc(), SimulationSession.id.desc())
+        select(SimulationSession)
+        .where(SimulationSession.owner_login == owner_login)
+        .order_by(SimulationSession.created_at.desc(), SimulationSession.id.desc())
     ).all()
     for item in sessions:
         if item.status != "ended":
@@ -212,7 +215,7 @@ def _watch_symbols(session: Session, simulation_session: SimulationSession) -> l
         for symbol in simulation_session.session_payload.get("watch_symbols", [])
         if str(symbol).strip()
     ]
-    active = active_watchlist_symbols(session)
+    active = active_watchlist_symbols(session, account_login=simulation_session.owner_login)
     scope = str(simulation_session.session_payload.get("watch_symbols_scope") or WATCHLIST_SCOPE_ACTIVE)
     if configured:
         if scope != WATCHLIST_SCOPE_CUSTOM and active and configured != active:
@@ -314,6 +317,7 @@ def _create_track_portfolio(session: Session, simulation_session: SimulationSess
     }
     portfolio = PaperPortfolio(
         portfolio_key=portfolio_key,
+        owner_login=simulation_session.owner_login,
         name=name,
         mode=mode,
         benchmark_symbol=simulation_session.benchmark_symbol,
@@ -370,6 +374,7 @@ def _record_event(
     symbol: str | None = None,
     severity: str = "info",
     event_payload: dict[str, Any] | None = None,
+    actor_login: str | None = None,
 ) -> SimulationEvent:
     payload = {
         "session_key": simulation_session.session_key,
@@ -385,6 +390,8 @@ def _record_event(
     }
     event = SimulationEvent(
         event_key=f"{simulation_session.session_key}-{event_type}-{uuid4().hex[:10]}",
+        owner_login=simulation_session.owner_login,
+        actor_login=actor_login or simulation_session.owner_login,
         session_id=simulation_session.id,
         step_index=step_index,
         track=track,
@@ -405,6 +412,7 @@ def _record_event(
 def _new_session(
     session: Session,
     *,
+    owner_login: str,
     name: str,
     status: str,
     initial_cash: float,
@@ -431,6 +439,7 @@ def _new_session(
     }
     simulation_session = SimulationSession(
         session_key=session_key,
+        owner_login=owner_login,
         name=name,
         status=status,
         focus_symbol=focus_symbol,
@@ -454,7 +463,7 @@ def _new_session(
                 "initial_cash": initial_cash,
                 "step_interval_seconds": step_interval_seconds,
             },
-            f"simulation://session/{session_key}",
+            f"simulation://session/{owner_login}/{session_key}",
         ),
     )
     session.add(simulation_session)
@@ -474,8 +483,8 @@ def _new_session(
     return simulation_session
 
 
-def ensure_simulation_session(session: Session) -> SimulationSession:
-    simulation_session = _latest_session(session)
+def ensure_simulation_session(session: Session, *, owner_login: str = ROOT_ACCOUNT_LOGIN) -> SimulationSession:
+    simulation_session = _latest_session(session, owner_login=owner_login)
     if simulation_session is not None:
         requested_auto_execute_model = _auto_execute_requested(simulation_session)
         if simulation_session.auto_execute_model or simulation_session.session_payload.get("requested_auto_execute_model") is None:
@@ -486,10 +495,11 @@ def ensure_simulation_session(session: Session) -> SimulationSession:
             }
         _ensure_session_portfolios(session, simulation_session)
         return simulation_session
-    watch_symbols = active_watchlist_symbols(session)
+    watch_symbols = active_watchlist_symbols(session, account_login=owner_login)
     focus_symbol = watch_symbols[0] if watch_symbols else None
     return _new_session(
         session,
+        owner_login=owner_login,
         name="双轨同步模拟",
         status="draft",
         initial_cash=DEFAULT_INITIAL_CASH,
@@ -922,7 +932,7 @@ def _workspace_payload(session: Session, simulation_session: SimulationSession) 
             "resumable": simulation_session.status in {"paused", "running"},
         },
         "controls": {
-            "can_start": simulation_session.status == "draft",
+            "can_start": simulation_session.status == "draft" and bool(watch_symbols),
             "can_pause": simulation_session.status == "running",
             "can_resume": simulation_session.status == "paused",
             "can_step": simulation_session.status == "running",
@@ -960,8 +970,21 @@ def _workspace_payload(session: Session, simulation_session: SimulationSession) 
     }
 
 
-def get_simulation_workspace(session: Session) -> dict[str, Any]:
-    simulation_session = ensure_simulation_session(session)
+def get_simulation_workspace(
+    session: Session,
+    *,
+    owner_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_role: str = ROLE_ROOT,
+) -> dict[str, Any]:
+    record_account_presence(
+        session,
+        actor_login=actor_login,
+        actor_role=actor_role,
+        target_login=owner_login,
+        mark_acted=False,
+    )
+    simulation_session = ensure_simulation_session(session, owner_login=owner_login)
     session.flush()
     return _workspace_payload(session, simulation_session)
 
@@ -969,20 +992,30 @@ def get_simulation_workspace(session: Session) -> dict[str, Any]:
 def update_simulation_config(
     session: Session,
     *,
+    owner_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_role: str = ROLE_ROOT,
     initial_cash: float,
     watch_symbols: list[str],
     focus_symbol: str | None,
     step_interval_seconds: int,
     auto_execute_model: bool,
 ) -> dict[str, Any]:
-    simulation_session = ensure_simulation_session(session)
+    record_account_presence(
+        session,
+        actor_login=actor_login,
+        actor_role=actor_role,
+        target_login=owner_login,
+        mark_acted=True,
+    )
+    simulation_session = ensure_simulation_session(session, owner_login=owner_login)
     if simulation_session.status == "ended":
         raise ValueError("当前进程已结束，请使用重启创建新进程。")
     if initial_cash <= 0:
         raise ValueError("初始资金必须大于 0。")
     normalized_watch_symbols = [normalize_symbol(symbol) for symbol in watch_symbols if str(symbol).strip()]
     if not normalized_watch_symbols:
-        normalized_watch_symbols = active_watchlist_symbols(session)
+        normalized_watch_symbols = active_watchlist_symbols(session, account_login=owner_login)
     if not normalized_watch_symbols:
         raise ValueError("请至少保留一只自选股票作为模拟池。")
     normalized_focus_symbol = normalize_symbol(focus_symbol) if focus_symbol else normalized_watch_symbols[0]
@@ -990,7 +1023,7 @@ def update_simulation_config(
         normalized_focus_symbol = normalized_watch_symbols[0]
     scope = (
         WATCHLIST_SCOPE_ACTIVE
-        if normalized_watch_symbols == active_watchlist_symbols(session)
+        if normalized_watch_symbols == active_watchlist_symbols(session, account_login=owner_login)
         else WATCHLIST_SCOPE_CUSTOM
     )
     if simulation_session.current_step > 0 and initial_cash != simulation_session.initial_cash:
@@ -1049,12 +1082,27 @@ def update_simulation_config(
     return _workspace_payload(session, simulation_session)
 
 
-def start_simulation_session(session: Session) -> dict[str, Any]:
-    simulation_session = ensure_simulation_session(session)
+def start_simulation_session(
+    session: Session,
+    *,
+    owner_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_role: str = ROLE_ROOT,
+) -> dict[str, Any]:
+    record_account_presence(
+        session,
+        actor_login=actor_login,
+        actor_role=actor_role,
+        target_login=owner_login,
+        mark_acted=True,
+    )
+    simulation_session = ensure_simulation_session(session, owner_login=owner_login)
     if simulation_session.status == "ended":
         raise ValueError("当前进程已结束，请使用重启。")
     if simulation_session.status == "running":
         return _workspace_payload(session, simulation_session)
+    if not _watch_symbols(session, simulation_session):
+        raise ValueError("请先至少关注一只股票，再启动模拟。")
     now = utcnow()
     simulation_session.status = "running"
     simulation_session.started_at = simulation_session.started_at or now
@@ -1072,14 +1120,28 @@ def start_simulation_session(session: Session) -> dict[str, Any]:
         happened_at=now,
         title="模拟已启动",
         detail="用户轨道与模型轨道已对齐到同一时间线，后续按刷新步推进。",
+        actor_login=actor_login,
         event_payload={"auto_execute_model": simulation_session.auto_execute_model},
     )
     session.flush()
     return _workspace_payload(session, simulation_session)
 
 
-def pause_simulation_session(session: Session) -> dict[str, Any]:
-    simulation_session = ensure_simulation_session(session)
+def pause_simulation_session(
+    session: Session,
+    *,
+    owner_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_role: str = ROLE_ROOT,
+) -> dict[str, Any]:
+    record_account_presence(
+        session,
+        actor_login=actor_login,
+        actor_role=actor_role,
+        target_login=owner_login,
+        mark_acted=True,
+    )
+    simulation_session = ensure_simulation_session(session, owner_login=owner_login)
     if simulation_session.status != "running":
         raise ValueError("只有运行中的进程才能暂停。")
     now = utcnow()
@@ -1097,13 +1159,27 @@ def pause_simulation_session(session: Session) -> dict[str, Any]:
         happened_at=now,
         title="模拟已暂停",
         detail="双轨时间线已冻结，可继续查看建议、修改焦点或稍后恢复。",
+        actor_login=actor_login,
     )
     session.flush()
     return _workspace_payload(session, simulation_session)
 
 
-def resume_simulation_session(session: Session) -> dict[str, Any]:
-    simulation_session = ensure_simulation_session(session)
+def resume_simulation_session(
+    session: Session,
+    *,
+    owner_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_role: str = ROLE_ROOT,
+) -> dict[str, Any]:
+    record_account_presence(
+        session,
+        actor_login=actor_login,
+        actor_role=actor_role,
+        target_login=owner_login,
+        mark_acted=True,
+    )
+    simulation_session = ensure_simulation_session(session, owner_login=owner_login)
     if simulation_session.status != "paused":
         raise ValueError("只有暂停中的进程才能恢复。")
     now = utcnow()
@@ -1122,6 +1198,7 @@ def resume_simulation_session(session: Session) -> dict[str, Any]:
         happened_at=now,
         title="模拟已恢复",
         detail="双轨继续沿上次暂停的时间节点推进。",
+        actor_login=actor_login,
     )
     session.flush()
     return _workspace_payload(session, simulation_session)
@@ -1158,6 +1235,7 @@ def _create_fill_for_order(
     reason: str,
     track: str,
     limit_price: float | None = None,
+    actor_login: str | None = None,
 ) -> None:
     fee = round(max(reference_price * quantity * 0.0003, 5.0), 2)
     tax = round(reference_price * quantity * 0.001, 2) if side == "sell" else 0.0
@@ -1172,6 +1250,8 @@ def _create_fill_for_order(
     }
     order = PaperOrder(
         order_key=f"{simulation_session.session_key}-{track}-order-{uuid4().hex[:8]}",
+        owner_login=simulation_session.owner_login,
+        actor_login=actor_login or simulation_session.owner_login,
         portfolio=portfolio,
         stock=stock,
         recommendation=recommendation,
@@ -1196,6 +1276,8 @@ def _create_fill_for_order(
     }
     fill = PaperFill(
         fill_key=f"{simulation_session.session_key}-{track}-fill-{uuid4().hex[:8]}",
+        owner_login=simulation_session.owner_login,
+        actor_login=actor_login or simulation_session.owner_login,
         order=order,
         stock=stock,
         filled_at=requested_at,
@@ -1221,6 +1303,7 @@ def _create_fill_for_order(
         title=f"{TRACK_LABELS[track]}已成交",
         detail=f"{stock.name} 按最新价 {reference_price:.2f} {'买入' if side == 'buy' else '卖出'} {quantity} 股。理由：{reason}",
         severity="success",
+        actor_login=actor_login,
         event_payload={
             "action_summary": order_payload["action_summary"],
             "reason": reason,
@@ -1268,13 +1351,23 @@ def _validate_order_request(
 def place_manual_order(
     session: Session,
     *,
+    owner_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_role: str = ROLE_ROOT,
     symbol: str,
     side: str,
     quantity: int,
     reason: str,
     limit_price: float | None = None,
 ) -> dict[str, Any]:
-    simulation_session = ensure_simulation_session(session)
+    record_account_presence(
+        session,
+        actor_login=actor_login,
+        actor_role=actor_role,
+        target_login=owner_login,
+        mark_acted=True,
+    )
+    simulation_session = ensure_simulation_session(session, owner_login=owner_login)
     if simulation_session.status not in {"running", "paused"}:
         raise ValueError("请先启动模拟，再进行手动下单。")
     manual_portfolio, _model_portfolio = _ensure_session_portfolios(session, simulation_session)
@@ -1309,13 +1402,28 @@ def place_manual_order(
         reason=reason,
         track="manual",
         limit_price=limit_price,
+        actor_login=actor_login,
     )
     session.flush()
     return _workspace_payload(session, simulation_session)
 
 
-def step_simulation_session(session: Session, *, anchor_time: datetime | None = None) -> dict[str, Any]:
-    simulation_session = ensure_simulation_session(session)
+def step_simulation_session(
+    session: Session,
+    *,
+    owner_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_role: str = ROLE_ROOT,
+    anchor_time: datetime | None = None,
+) -> dict[str, Any]:
+    record_account_presence(
+        session,
+        actor_login=actor_login,
+        actor_role=actor_role,
+        target_login=owner_login,
+        mark_acted=True,
+    )
+    simulation_session = ensure_simulation_session(session, owner_login=owner_login)
     if simulation_session.status != "running":
         raise ValueError("只有运行中的模拟才能推进单步。")
     _manual_portfolio, model_portfolio = _ensure_session_portfolios(session, simulation_session)
@@ -1336,6 +1444,7 @@ def step_simulation_session(session: Session, *, anchor_time: datetime | None = 
         happened_at=next_data_time,
         title=f"第 {simulation_session.current_step} 步刷新",
         detail="共享时间线已推进一个刷新步，模型建议与用户轨道对比已重新计算。",
+        actor_login=actor_login,
         event_payload={"watch_symbols": _watch_symbols(session, simulation_session)},
     )
 
@@ -1361,6 +1470,7 @@ def step_simulation_session(session: Session, *, anchor_time: datetime | None = 
             f"{primary['stock_name']} 按等权组合研究策略给出{action_label} {primary['quantity']} 股，"
             f"目标权重 {primary['target_weight']:.0%}，当前权重 {primary['current_weight']:.0%}。主要理由：{reason}"
         ),
+        actor_login=actor_login,
         event_payload={
             "action_summary": f"{action_label} {primary['quantity']} 股",
             "reason_tags": [reason],
@@ -1394,13 +1504,14 @@ def step_simulation_session(session: Session, *, anchor_time: datetime | None = 
             recommendation=recommendation,
             reason=reason,
             track="model",
+            actor_login=actor_login,
         )
     session.flush()
     return _workspace_payload(session, simulation_session)
 
 
-def advance_running_simulation_session(session: Session) -> dict[str, Any] | None:
-    simulation_session = _latest_session(session)
+def advance_running_simulation_session(session: Session, *, owner_login: str = ROOT_ACCOUNT_LOGIN) -> dict[str, Any] | None:
+    simulation_session = _latest_session(session, owner_login=owner_login)
     if simulation_session is None or simulation_session.status != "running":
         return None
     latest_market_data_time = _latest_market_data_time_for_session(session, simulation_session)
@@ -1417,11 +1528,24 @@ def advance_running_simulation_session(session: Session) -> dict[str, Any] | Non
     )
     if comparable_session_time is not None and comparable_session_time >= comparable_market_time:
         return None
-    return step_simulation_session(session, anchor_time=latest_market_data_time)
+    return step_simulation_session(session, owner_login=simulation_session.owner_login, actor_login=simulation_session.owner_login, anchor_time=latest_market_data_time)
 
 
-def restart_simulation_session(session: Session) -> dict[str, Any]:
-    current = ensure_simulation_session(session)
+def restart_simulation_session(
+    session: Session,
+    *,
+    owner_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_role: str = ROLE_ROOT,
+) -> dict[str, Any]:
+    record_account_presence(
+        session,
+        actor_login=actor_login,
+        actor_role=actor_role,
+        target_login=owner_login,
+        mark_acted=True,
+    )
+    current = ensure_simulation_session(session, owner_login=owner_login)
     if current.status != "ended":
         current.status = "ended"
         current.ended_at = utcnow()
@@ -1434,10 +1558,12 @@ def restart_simulation_session(session: Session) -> dict[str, Any]:
             happened_at=current.ended_at,
             title="旧进程已归档",
             detail="当前模拟已归档，系统将基于相同参数创建新的双轨进程。",
+            actor_login=actor_login,
         )
     watch_symbols = _watch_symbols(session, current)
     new_session = _new_session(
         session,
+        owner_login=current.owner_login,
         name=current.name,
         status="running",
         initial_cash=current.initial_cash,
@@ -1461,16 +1587,31 @@ def restart_simulation_session(session: Session) -> dict[str, Any]:
         happened_at=started_at,
         title="新模拟已重启",
         detail="双轨已按同一初始资金和股票池重新对齐。",
+        actor_login=actor_login,
         event_payload={"restart_count": new_session.restart_count},
     )
     session.flush()
     return _workspace_payload(session, new_session)
 
 
-def end_simulation_session(session: Session, *, confirm: bool) -> dict[str, Any]:
+def end_simulation_session(
+    session: Session,
+    *,
+    owner_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_login: str = ROOT_ACCOUNT_LOGIN,
+    actor_role: str = ROLE_ROOT,
+    confirm: bool,
+) -> dict[str, Any]:
     if not confirm:
         raise ValueError("结束模拟需要二次确认。")
-    simulation_session = ensure_simulation_session(session)
+    record_account_presence(
+        session,
+        actor_login=actor_login,
+        actor_role=actor_role,
+        target_login=owner_login,
+        mark_acted=True,
+    )
+    simulation_session = ensure_simulation_session(session, owner_login=owner_login)
     if simulation_session.status == "ended":
         return _workspace_payload(session, simulation_session)
     ended_at = utcnow()
@@ -1489,6 +1630,7 @@ def end_simulation_session(session: Session, *, confirm: bool) -> dict[str, Any]
         title="模拟已结束",
         detail="双轨时间线已停止，当前留痕可继续用于复盘和模型迭代。",
         severity="warn",
+        actor_login=actor_login,
     )
     session.flush()
     return _workspace_payload(session, simulation_session)

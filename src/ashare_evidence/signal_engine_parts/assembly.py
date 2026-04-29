@@ -19,9 +19,12 @@ from ashare_evidence.signal_engine_parts.base import (
 from ashare_evidence.signal_engine_parts.factors import (
     active_sector_codes,
     compute_fundamental_factor,
+    compute_liquidity_factor,
     compute_manual_review_layer,
     compute_news_factor,
     compute_price_factor,
+    compute_reversal_factor,
+    compute_size_factor,
     primary_sector_membership,
 )
 from ashare_evidence.signal_engine_parts.recommendation import (
@@ -67,12 +70,18 @@ def build_signal_artifacts(
         financial_llm=financial_llm,
     )
     manual_review_layer = compute_manual_review_layer(price_factor, news_factor)
+    size_factor = compute_size_factor(market_bars)
+    reversal_factor = compute_reversal_factor(market_bars)
+    liquidity_factor = compute_liquidity_factor(market_bars)
     fusion_state = _fusion_state(
         as_of_data_time=as_of_data_time,
         generated_at=generated_at,
         price_factor=price_factor,
         news_factor=news_factor,
         fundamental_factor=fundamental_factor,
+        size_factor=size_factor,
+        reversal_factor=reversal_factor,
+        liquidity_factor=liquidity_factor,
     )
     model_results = compute_model_results(
         symbol=symbol,
@@ -90,6 +99,9 @@ def build_signal_artifacts(
         price_factor=price_factor,
         news_factor=news_factor,
         fundamental_factor=fundamental_factor,
+        size_factor=size_factor,
+        reversal_factor=reversal_factor,
+        liquidity_factor=liquidity_factor,
         manual_review_layer=manual_review_layer,
         model_results=model_results,
         fusion_state=fusion_state,
@@ -143,15 +155,60 @@ def build_signal_artifacts(
         },
         source_uri=f"pipeline://signal-engine/manual-review-layer/{symbol}/{as_of_data_time:%Y%m%d}",
     )
+    size_snapshot = with_internal_lineage(
+        {
+            "snapshot_key": f"feature-{symbol}-{as_of_data_time:%Y%m%d}-size-factor-v1",
+            "stock_symbol": symbol,
+            "feature_set_name": "size_factor",
+            "feature_set_version": PHASE2_FEATURE_VERSION,
+            "as_of": as_of_data_time,
+            "window_start": market_bars[0]["observed_at"],
+            "window_end": market_bars[-1]["observed_at"],
+            "feature_values": size_factor["feature_values"],
+            "upstream_refs": [{"type": "market_bar", "key": item["bar_key"]} for item in market_bars[-1:]],
+        },
+        source_uri=f"pipeline://signal-engine/size-factor/{symbol}/{as_of_data_time:%Y%m%d}",
+    )
+    reversal_snapshot = with_internal_lineage(
+        {
+            "snapshot_key": f"feature-{symbol}-{as_of_data_time:%Y%m%d}-reversal-factor-v1",
+            "stock_symbol": symbol,
+            "feature_set_name": "reversal_factor",
+            "feature_set_version": PHASE2_FEATURE_VERSION,
+            "as_of": as_of_data_time,
+            "window_start": reversal_factor["window_start"],
+            "window_end": reversal_factor["window_end"],
+            "feature_values": reversal_factor["feature_values"],
+            "upstream_refs": [{"type": "market_bar", "key": item["bar_key"]} for item in market_bars[-6:]],
+        },
+        source_uri=f"pipeline://signal-engine/reversal-factor/{symbol}/{as_of_data_time:%Y%m%d}",
+    )
+    liquidity_snapshot = with_internal_lineage(
+        {
+            "snapshot_key": f"feature-{symbol}-{as_of_data_time:%Y%m%d}-liquidity-factor-v1",
+            "stock_symbol": symbol,
+            "feature_set_name": "liquidity_factor",
+            "feature_set_version": PHASE2_FEATURE_VERSION,
+            "as_of": as_of_data_time,
+            "window_start": liquidity_factor["window_start"],
+            "window_end": liquidity_factor["window_end"],
+            "feature_values": liquidity_factor["feature_values"],
+            "upstream_refs": [{"type": "market_bar", "key": item["bar_key"]} for item in market_bars[-1:]],
+        },
+        source_uri=f"pipeline://signal-engine/liquidity-factor/{symbol}/{as_of_data_time:%Y%m%d}",
+    )
     model_registry = with_internal_lineage(
         {
             "name": "wave_advice_fusion",
             "family": "hybrid_score_fusion",
-            "description": "Phase 2 规则基线：融合价格趋势、确认项与新闻事件，手动研究层只保留为解释层。",
+            "description": "Phase 2 规则基线：融合价格趋势、确认项、新闻事件、市值因子、反转因子与流动性因子，手动研究层只保留为解释层。",
             "registry_payload": {
                 "baseline": f"price_baseline_factor:{PHASE2_FEATURE_VERSION}",
                 "news_factor": f"news_event_factor:{PHASE2_FEATURE_VERSION}",
                 "fundamental_factor": f"fundamental_factor:{PHASE2_FEATURE_VERSION}",
+                "size_factor": f"size_factor:{PHASE2_FEATURE_VERSION}",
+                "reversal_factor": f"reversal_factor:{PHASE2_FEATURE_VERSION}",
+                "liquidity_factor": f"liquidity_factor:{PHASE2_FEATURE_VERSION}",
                 "manual_review_layer": "manual_review_artifact:v1",
                 "policy_version": PHASE2_POLICY_VERSION,
             },
@@ -169,7 +226,8 @@ def build_signal_artifacts(
                 "horizon_days": list(HORIZONS),
                 "universe": "watchlist",
                 "rule_baseline": PHASE2_RULE_BASELINE,
-                "weights": {"price_baseline": 0.50, "news_event": 0.30, "fundamental": 0.20},
+                "weights": {"price_baseline": 0.35, "news_event": 0.20, "fundamental": 0.15,
+                           "size_factor": 0.10, "reversal": 0.10, "liquidity": 0.10},
                 "manual_review_layer": "artifact_backed_only_not_scored",
                 "degrade_policy": PHASE2_POLICY_VERSION,
             },
@@ -207,6 +265,9 @@ def build_signal_artifacts(
                 {"type": "feature_snapshot", "key": price_snapshot["snapshot_key"]},
                 {"type": "feature_snapshot", "key": news_snapshot["snapshot_key"]},
                 {"type": "feature_snapshot", "key": manual_review_snapshot["snapshot_key"]},
+                {"type": "feature_snapshot", "key": size_snapshot["snapshot_key"]},
+                {"type": "feature_snapshot", "key": reversal_snapshot["snapshot_key"]},
+                {"type": "feature_snapshot", "key": liquidity_snapshot["snapshot_key"]},
             ],
         },
         source_uri=f"model://run/wave_advice_fusion/run-wave-advice-{as_of_data_time:%Y%m%d}-phase2-close",
@@ -317,7 +378,8 @@ def build_signal_artifacts(
             )
         )
     return SignalArtifacts(
-        feature_snapshots=[price_snapshot, news_snapshot, manual_review_snapshot, fusion_snapshot],
+        feature_snapshots=[price_snapshot, news_snapshot, manual_review_snapshot, size_snapshot,
+                           reversal_snapshot, liquidity_snapshot, fusion_snapshot],
         model_registry=model_registry,
         model_version=model_version,
         prompt_version=prompt_version,

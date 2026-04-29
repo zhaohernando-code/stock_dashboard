@@ -90,6 +90,42 @@ class RuntimeSettingsResponse(BaseModel):
     default_model_api_key_id: int | None = None
 
 
+class RuntimeOverviewResponse(BaseModel):
+    generated_at: datetime
+    deployment_mode: str
+    storage_engine: str
+    cache_backend: str
+    watchlist_scope: str
+    watchlist_cache_only: bool
+    llm_failover_enabled: bool
+    deployment_notes: list[str] = Field(default_factory=list)
+    provider_selection_mode: str
+    provider_order: list[str] = Field(default_factory=list)
+    provider_cooldown_seconds: int
+    field_mappings: list[RuntimeFieldMappingView] = Field(default_factory=list)
+    data_sources: list[RuntimeDataSourceView] = Field(default_factory=list)
+    cache_policies: list[CacheDatasetPolicyView] = Field(default_factory=list)
+    anti_stampede: dict[str, Any] = Field(default_factory=dict)
+
+
+class AccountSpaceView(BaseModel):
+    account_login: str
+    role_snapshot: str
+    first_seen_at: datetime
+    last_seen_at: datetime | None = None
+    last_acted_at: datetime | None = None
+    created_by_root: bool = False
+
+
+class AuthContextResponse(BaseModel):
+    actor_login: str
+    actor_role: str
+    target_login: str
+    can_act_as: bool
+    auth_mode: str
+    visible_account_spaces: list[AccountSpaceView] = Field(default_factory=list)
+
+
 class ProviderCredentialUpsertRequest(BaseModel):
     access_token: str | None = None
     base_url: str | None = None
@@ -124,5 +160,4 @@ class ModelApiKeyDeleteResponse(BaseModel):
     name: str
     deleted: bool
     deleted_at: datetime
-
 

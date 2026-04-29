@@ -4,6 +4,14 @@
 
 ## 2026-04-29
 
+- **多账号回归要先分清“真串号”和“展示误导”**：这次 canonical 用户反馈里，后端隔离其实已经成立，`member` 的 watchlist/simulation 都是空白；真正误导来自前端把“当前账号自选”和“全局候选池”继续混在一个工作台里展示。排查顺序应先用直连或 canonical API 验证账号态，再决定是修数据层还是修呈现层。
+- **`act_as` 不应跨刷新保留**：root 代看别的账号空间时，如果把 `act_as` 持久化到 storage，用户稍后回到 root 页面会误以为“原持仓消失/复盘停止”。这类空间切换更适合单页内临时状态，刷新或重开标签后默认回到 actor 自己的空间。
+- **canonical member 验证不一定非靠手点 dropdown**：当浏览器自动化无法稳定选中账号切换器时，可以用真实根域签名 session 直接请求 canonical `/projects/ashare-dashboard/api/*`，再带 `X-Ashare-Act-As-Login` 验证 edge 注入和成员空间返回值。对这轮问题，这条路径足以证明 `member-a/amoeba` 的真实 canonical watchlist 为空且 simulation 仍是 draft。
+
+- **多账号隔离落地顺序**：先把身份上下文和数据归属改完，再改前端初始化。member 一旦还沿用旧的 `loadRuntimeSettings()` 启动顺序，就会在 `/settings/runtime` 上直接 403，造成整页白屏；正确顺序必须是 `/auth/context` → root 走 `/settings/runtime`，member 走 `/runtime/overview`。
+- **关注池隔离不能等于分析断流**：自选列表要按账号隔离，但 symbol 级日更/分析资格必须按所有账号 active follows 的并集判断。移除某账号关注时只能删除该账号 follow；只有最后一个 follow 消失时，才允许全局 `watchlist_entries` 失去 active tracking。
+- **模拟盘空白首登约束**：member 首次进入必须拿到独立 draft session，但 `can_start` 不能在空 `watch_symbols` 上误报 true。后端要同时在 workspace controls 和 `start_simulation_session()` 上都加护栏，避免 UI 隐藏了按钮但 API 仍可启动空 session。
+- **局部回归要去掉重 fixture 依赖**：当前仓里已有一组与本次任务无关的 signal-engine fixture 回归（`build_signal_artifacts -> _fusion_state(...)` 参数漂移）。新增多账号测试如果继续复用 `seed_watchlist_fixture()`，会在进本次逻辑前先被旧回归拦住；这种情况下应改成最小自包含测试，只覆盖本轮 contract。
 - **移动端设置 affordance**：只读状态行不能默认带右箭头；只有真实可操作且已接 handler/API 的项目才显示导航 affordance。二态偏好优先用 `Switch`，多选或模型选择才进入二级菜单。
 - **移动端滑动操作视觉**：左滑删除这类 destructive action 的红色背景只能在展开状态出现；闭合态要避免卡片抗锯齿透出红色，展开态要取消卡片相邻侧圆角，避免出现双圆角边框。滑动释放后需吞掉下一次 click，防止误打开详情。
 - **浏览器自动化恢复**：Playwright CLI 验收后必须运行 `scripts/cleanup-browser-automation.sh`。清理范围只包括 `playwright-core` daemon 和 `playwright_chromiumdev_profile-*` Chrome，不能 `pkill Chrome` 误伤用户普通浏览器。

@@ -10,7 +10,7 @@ const { Title } = Typography;
 type SettingsPanelKey = "model" | null;
 
 export function MobileSettings(props: MobileAppShellProps) {
-  const runtime = props.runtimeSettings;
+  const runtime = props.runtimeSettings ?? props.runtimeOverview;
   const [panel, setPanel] = useState<SettingsPanelKey>(null);
   const [savingModel, setSavingModel] = useState(false);
   const themeLabel = props.themeMode === "dark" ? "夜间模式" : "浅色模式";
