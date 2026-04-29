@@ -36,12 +36,42 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
+LOCK_DIR="$HOME/.codex-system/locks"
+PUBLISH_LOCK="$LOCK_DIR/publish.lock"
+LOCK_MAX_AGE_SECONDS=300
+
+acquire_publish_lock() {
+  mkdir -p "$LOCK_DIR"
+  if [[ -f "$PUBLISH_LOCK" ]]; then
+    local lock_age
+    lock_age="$(($(date +%s) - $(stat -f %m "$PUBLISH_LOCK" 2>/dev/null || date +%s)))"
+    if [[ "$lock_age" -lt "$LOCK_MAX_AGE_SECONDS" ]]; then
+      echo "Refusing to publish: lock file exists (age=${lock_age}s)." >&2
+      echo "Another publish may be in progress. Remove $PUBLISH_LOCK if this is stale." >&2
+      exit 1
+    fi
+    echo "Stale lock file (age=${lock_age}s) — overwriting." >&2
+  fi
+  printf "pid=%s\nstarted=%s\noperation=publish\n" "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$PUBLISH_LOCK"
+}
+
+release_publish_lock() {
+  rm -f "$PUBLISH_LOCK"
+}
+
+trap release_publish_lock EXIT
+
 DIRTY_STATUS="$(git -C "$REPO_ROOT" status --short --untracked-files=normal)"
 if [[ -n "$DIRTY_STATUS" ]]; then
   echo "Refusing to publish from a dirty worktree. Commit or stash changes first." >&2
   echo "$DIRTY_STATUS" >&2
   exit 1
 fi
+
+# Pause scheduled refresh during publish to avoid concurrent DB writes
+SCHEDULED_LABEL="com.codex.ashare-dashboard.scheduled-refresh"
+echo "[publish] Pausing scheduled-refresh"
+launchctl stop "$SCHEDULED_LABEL" 2>/dev/null || true
 
 COMMIT_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 
@@ -127,6 +157,9 @@ MANIFEST_PATH="$(
 mkdir -p "$RUNTIME_ROOT/output/releases"
 cp "$MANIFEST_PATH" "$RUNTIME_ROOT/output/releases/latest-successful.json"
 printf '%s\n' "$COMMIT_SHA" > "$RUNTIME_ROOT/output/releases/latest-successful.commit"
+
+echo "[publish] Resuming scheduled-refresh"
+launchctl start "$SCHEDULED_LABEL" 2>/dev/null || true
 
 echo "[publish] Runtime frontend matches repo build"
 echo "[publish] Backend healthy at $BACKEND_URL"
