@@ -17,19 +17,17 @@ from ashare_evidence.dashboard import (
     list_candidate_recommendations,
 )
 from ashare_evidence.event_triggers import TriggerEvent
+from ashare_evidence.external_data import fetch_external_data
 from ashare_evidence.llm_service import AnthropicCompatibleTransport, OpenAICompatibleTransport, route_model
 from ashare_evidence.phase2 import phase2_target_horizon_label
 
 EVENT_ANALYSIS_DIR = "event_analysis"
 
-
 def _artifact_dir(artifact_root: str) -> Path:
     return Path(artifact_root) / EVENT_ANALYSIS_DIR
 
-
 def _snapshot_hash(*parts: str) -> str:
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:12]
-
 
 def _price_summary(bars: list[dict[str, Any]], days: int = 20) -> str:
     if not bars:
@@ -70,7 +68,6 @@ def _price_summary(bars: list[dict[str, Any]], days: int = 20) -> str:
         f"最近5日成交量：{', '.join(f'{v:.0f}' for v in volumes[-5:])}",
     ]
     return "\n".join(lines)
-
 
 def _factor_table(dashboard: dict[str, Any]) -> str:
     evidence = dashboard["recommendation"].get("evidence", {})
@@ -151,34 +148,6 @@ def _peer_comparison(session: Session, symbol: str, dashboard: dict[str, Any]) -
     return "\n".join(rows) if len(rows) > 2 else "无同板块对比数据"
 
 
-def _fetch_external_data(symbol: str) -> dict[str, Any]:
-    result: dict[str, Any] = {"news_flow": [], "source": "无外部数据源"}
-    try:
-        import akshare as ak  # type: ignore[import-untyped]
-
-        df = ak.stock_individual_info_flow(symbol=symbol)
-        if df is not None and not df.empty:
-            records = df.head(10).to_dict(orient="records")
-            result["news_flow"] = [
-                {"title": str(r.get("title", r.get("note", ""))), "time": str(r.get("time", r.get("datetime", "")))}
-                for r in records
-            ]
-            result["source"] = "新浪/东方财富个股信息流（AKShare）"
-    except Exception:
-        try:
-            import akshare as ak  # type: ignore[import-untyped]
-
-            df = ak.stock_zh_a_spot_em()
-            if df is not None and not df.empty:
-                row = df[df["代码"] == symbol]
-                if not row.empty:
-                    result["spot"] = row.iloc[0].to_dict()
-                    result["source"] = "东方财富实时行情（AKShare）"
-        except Exception:
-            pass
-    return result
-
-
 def _build_event_analysis_prompt(
     dashboard: dict[str, Any],
     trigger: TriggerEvent,
@@ -192,14 +161,45 @@ def _build_event_analysis_prompt(
     validation_rank_ic_mean = _historical_validation_metric(reco, "rank_ic_mean")
     validation_positive_excess_rate = _historical_validation_metric(reco, "positive_excess_rate")
 
-    # External news
+    # External data rendering
     external_lines: list[str] = []
+    ext_source = external_data.get("source", "外部")
+
     news_flow = external_data.get("news_flow", [])
     if news_flow:
-        external_lines.append(f"来源：{external_data.get('source', '外部')}")
+        external_lines.append(f"### 个股信息流（{ext_source}）")
         for nf in news_flow[:8]:
             external_lines.append(f"- {nf.get('time', '')} {nf.get('title', '')}")
-    external_text = "\n".join(external_lines) if external_lines else "暂无外部实时信息流数据"
+
+    stock_news = external_data.get("stock_news", [])
+    if stock_news:
+        external_lines.append("### 个股新闻（东方财富）")
+        for sn in stock_news[:6]:
+            src = sn.get("source", "")
+            external_lines.append(f"- [{src}] {sn.get('time', '')} {sn.get('title', '')}")
+            content = sn.get("content", "")
+            if content:
+                external_lines.append(f"  {content}")
+
+    macro_news = external_data.get("macro_news", [])
+    if macro_news:
+        external_lines.append("### 主流媒体快讯（财新）")
+        for mn in macro_news[:8]:
+            tag = mn.get("tag", "")
+            tag_label = f"[{tag}] " if tag else ""
+            external_lines.append(f"- {tag_label}{mn.get('title', '')}")
+
+    sector_flow = external_data.get("sector_flow", [])
+    if sector_flow:
+        external_lines.append("### 板块资金流向（主力净流入 Top 8）")
+        for sf in sector_flow:
+            external_lines.append(f"- {sf.get('sector', '')}：净额 {sf.get('net_flow', '')}，占比 {sf.get('net_rate', '')}")
+
+    fund_rank = external_data.get("fund_flow_rank", {})
+    if fund_rank and fund_rank.get("net_flow"):
+        external_lines.append(f"### 个股资金流排名：全市场第 {fund_rank.get('rank', '?')} 位，主力净流入 {fund_rank.get('net_flow', '')}（净占比 {fund_rank.get('net_rate', '')}）")
+
+    external_text = "\n".join(external_lines) if external_lines else "暂无外部实时信息数据"
 
     # Validation
     validation_parts: list[str] = []
@@ -283,7 +283,7 @@ def run_event_analysis(
     }
 
     peer_text = _peer_comparison(session, symbol, dashboard)
-    external_data = _fetch_external_data(symbol)
+    external_data = fetch_external_data(symbol)
     prompt = _build_event_analysis_prompt(dashboard, trigger, internal_blocks, external_data, peer_text)
 
     # Data snapshot for staleness detection

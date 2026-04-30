@@ -134,6 +134,12 @@
       "status": "accepted",
       "reviewed_at": "2026-04-28"
     },
+    "src/ashare_evidence/event_analyzer.py": {
+      "lines": 526,
+      "reason": "Event-driven analysis pipeline: external data fetching (5 AKShare sources), internal data gathering, prompt construction, LLM execution, and JSON artifact persistence. Single cohesive workflow.",
+      "reviewed_at": "2026-04-30",
+      "status": "accepted"
+    },
     "src/ashare_evidence/signal_engine_parts/factors.py": {
       "lines": 562,
       "reason": "Multi-factor computation module: price, news, fundamental, size, reversal, liquidity factors with cross-sectional normalization. Cohesive factor definition.",
