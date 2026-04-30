@@ -400,10 +400,11 @@ def _announcement_impact(title: str) -> str:
     return "neutral"
 
 def _announcement_scope(title: str) -> str:
-    if any(keyword in title for keyword in ("业绩", "年报", "季报", "中报", "快报")):
-        return "earnings"
-    if any(keyword in title for keyword in ("调研", "说明会", "路演")):
+    # Roadshow/meeting check first: "说明会/路演/调研" about reports is still a roadshow, not earnings
+    if any(keyword in title for keyword in ("说明会", "路演", "调研")):
         return "roadshow"
+    if any(keyword in title for keyword in ("业绩", "年报", "年度报告", "季报", "季度", "中报", "快报")):
+        return "earnings"
     if any(keyword in title for keyword in ("增持", "减持", "回购", "分红")):
         return "capital_action"
     return "announcement"
