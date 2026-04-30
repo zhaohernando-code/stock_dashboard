@@ -183,6 +183,14 @@ printf '%s\n' "$COMMIT_SHA" > "$RUNTIME_ROOT/output/releases/latest-successful.c
 echo "[publish] Resuming scheduled-refresh"
 launchctl start "$SCHEDULED_LABEL" 2>/dev/null || true
 
+echo "[publish] Triggering post-deploy data refresh"
+PYTHONPATH="$RUNTIME_ROOT/src" "$PYTHON_BIN" -m ashare_evidence.cli refresh-runtime-data \
+    --analysis-only --skip-simulation 2>&1 | sed 's/^/[publish:refresh] /' &
+REFRESH_PID=$!
+# Don't block publish on refresh completion; it runs asynchronously.
+# If it fails, the scheduled refresh will retry at the next interval.
+echo "[publish] Data refresh triggered (PID $REFRESH_PID)"
+
 echo "[publish] Runtime frontend matches repo build"
 echo "[publish] Backend healthy at $BACKEND_URL"
 echo "[publish] Frontend healthy at $FRONTEND_URL"
