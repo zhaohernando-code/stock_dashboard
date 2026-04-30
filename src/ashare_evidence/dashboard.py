@@ -138,16 +138,18 @@ def _active_memberships(session: Session, stock_id: int, as_of: datetime) -> lis
     active.sort(key=lambda item: (not item.is_primary, item.sector.name))
     return active
 
-
 def _recent_bars(session: Session, stock_id: int, limit: int = 28) -> list[MarketBar]:
+    from ashare_evidence.market_bar_qa import dedup_daily_bars
+
     bars = session.scalars(
         select(MarketBar)
         .where(MarketBar.stock_id == stock_id, MarketBar.timeframe == "1d")
         .order_by(MarketBar.observed_at.desc())
         .limit(limit)
     ).all()
-    return list(reversed(bars))
-
+    bars = list(reversed(bars))
+    deduped = dedup_daily_bars(bars)
+    return deduped if len(deduped) < len(bars) else bars
 
 def _today_intraday_bars(session: Session, stock_id: int, daily_bars: list[MarketBar]) -> list[MarketBar]:
     latest_intraday = session.scalar(
@@ -175,7 +177,6 @@ def _today_intraday_bars(session: Session, stock_id: int, daily_bars: list[Marke
         .order_by(MarketBar.observed_at.asc())
     ).all()
     return list(intraday_bars)
-
 
 def _recent_news(
     session: Session,
@@ -213,7 +214,6 @@ def _recent_news(
         if len(deduped) >= limit:
             continue
     return list(deduped.values())[:limit]
-
 
 def _direction_rank(direction: str) -> int:
     return {"buy": 3, "watch": 2, "reduce": 1, "risk_alert": 0}.get(direction, 0)
