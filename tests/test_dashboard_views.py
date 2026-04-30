@@ -569,7 +569,7 @@ class DashboardViewTests(unittest.TestCase):
         self.assertIn("发起人工研究", app_source)
         self.assertIn('入口在下方"追问与模拟"标签。', app_source)
         self.assertIn("留空不选模型 Key 时会直接调用本机 Codex，用 `gpt-5.5` 执行 builtin 研究；选择已配置 Key 时则走对应的外部模型 Key。", app_source)
-        self.assertIn('<Tabs activeKey={stockActiveTab} onChange={setStockActiveTab} items={stockTabItems} />', app_source)
+        self.assertIn('<Tabs activeKey={stockActiveTab} onChange={setStockActiveTab} items={visibleStockTabItems} />', app_source)
         self.assertIn(".manual-research-entry-actions {", style_source)
 
     def test_frontend_manual_research_default_submit_executes_builtin_codex(self) -> None:

@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi.testclient import TestClient
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 from ashare_evidence.access import require_beta_access, require_beta_write_access
@@ -135,20 +135,18 @@ class BetaAccessApiTests(unittest.TestCase):
                     "model_api_key_id": None,
                 },
             )
-            self.assertEqual(create_response.status_code, 200)
-            request_id = create_response.json()["id"]
+            self.assertEqual(create_response.status_code, 403)
+            self.assertIn("root role required", create_response.json()["detail"])
 
             execute_response = client.post(
-                f"/manual-research/requests/{request_id}/execute",
+                "/manual-research/requests/999/execute",
                 headers=analyst_headers,
                 json={"failover_enabled": True},
             )
-            self.assertEqual(execute_response.status_code, 200)
-            self.assertEqual(execute_response.json()["status"], "completed")
-            self.assertEqual(execute_response.json()["selected_key"]["model_name"], "gpt-5.5")
+            self.assertEqual(execute_response.status_code, 403)
 
             complete_response = client.post(
-                f"/manual-research/requests/{request_id}/complete",
+                "/manual-research/requests/999/complete",
                 headers=analyst_headers,
                 json={
                     "summary": "人工补充结论。",
@@ -161,7 +159,7 @@ class BetaAccessApiTests(unittest.TestCase):
                 },
             )
             self.assertEqual(complete_response.status_code, 403)
-            self.assertIn("operator-only", complete_response.json()["detail"])
+            self.assertIn("root role required", complete_response.json()["detail"])
 
 
 if __name__ == "__main__":

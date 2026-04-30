@@ -37,7 +37,7 @@ class _FakeResponse:
     def __init__(self, payload: str) -> None:
         self.payload = payload.encode("utf-8")
 
-    def __enter__(self) -> "_FakeResponse":
+    def __enter__(self) -> _FakeResponse:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
@@ -211,7 +211,7 @@ class RuntimeConfigTests(unittest.TestCase):
 
         self.assertEqual(answer, "ok")
         self.assertEqual(captured["timeout"], OPENAI_COMPATIBLE_TIMEOUT_SECONDS)
-        self.assertFalse(bool(captured["disable_proxies"]))
+        self.assertTrue(bool(captured["disable_proxies"]))
 
 
 if __name__ == "__main__":
