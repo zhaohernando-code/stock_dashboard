@@ -567,7 +567,6 @@ def _artifact_payload(evidence_type: str, instance: Any) -> dict[str, Any]:
         }
     return {}
 
-
 def _artifact_label(evidence_type: str, instance: Any) -> str:
     if evidence_type == "market_bar":
         return f"{instance.stock.symbol} {instance.timeframe} {instance.observed_at.date()}"
@@ -581,18 +580,15 @@ def _artifact_label(evidence_type: str, instance: Any) -> str:
         return f"{instance.stock.symbol} -> {instance.sector.name}"
     return evidence_type
 
-
 def _mapping_list(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
     return [dict(item) for item in value if isinstance(item, Mapping)]
 
-
 def _string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if item]
-
 
 PLACEHOLDER_FUSION_HEADLINE = "用于汇总价格、事件与降级状态的融合层。"
 LEGACY_SUPPORTING_CONTEXT = "价格趋势、确认项和事件冲突共同构成当前 Phase 2 规则基线的结构化输入。"
@@ -602,13 +598,11 @@ DEGRADE_FLAG_DISPLAY = {
     "market_data_stale": "最新行情刷新偏旧，短线结论需要谨慎使用。",
 }
 
-
 def _clean_display_text(value: Any) -> str | None:
     if value is None:
         return None
     text = str(value).strip()
     return text or None
-
 
 def _is_internal_explanatory_text(value: Any) -> bool:
     text = _clean_display_text(value)
@@ -616,17 +610,14 @@ def _is_internal_explanatory_text(value: Any) -> bool:
         return True
     return text == PLACEHOLDER_FUSION_HEADLINE or text == LEGACY_SUPPORTING_CONTEXT or "Phase 2 规则基线" in text
 
-
 def _display_ready_text(value: Any) -> str | None:
     text = _clean_display_text(value)
     if not text or _is_internal_explanatory_text(text):
         return None
     return text
 
-
 def _display_ready_list(value: Any) -> list[str]:
     return [text for item in _string_list(value) if (text := _display_ready_text(item))]
-
 
 def _humanize_degrade_flag(flag: str) -> str:
     cleaned = _clean_display_text(flag)
@@ -885,6 +876,15 @@ def _build_evidence_layer(
         )
         for key in factor_keys
     ]
+    # Compute factor contributions (score × weight, normalized to sum 1.0)
+    raw_contributions = [
+        float(card.get("score") or 0) * float(card.get("weight") or 0)
+        for card in factor_cards
+    ]
+    total_contribution = sum(raw_contributions)
+    for idx, card in enumerate(factor_cards):
+        card["contribution"] = round(raw_contributions[idx] / total_contribution, 4) if total_contribution > 0 else 0.0
+
     price_factor = factor_breakdown.get("price_baseline", {})
     news_factor = factor_breakdown.get("news_event", {})
     manual_review_factor = factor_breakdown.get(

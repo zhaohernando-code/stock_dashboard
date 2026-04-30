@@ -218,10 +218,8 @@ def _recent_news(
 def _direction_rank(direction: str) -> int:
     return {"buy": 3, "watch": 2, "reduce": 1, "risk_alert": 0}.get(direction, 0)
 
-
 def _list_payload(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
-
 
 def _factor_score(summary: dict[str, Any], key: str) -> float:
     evidence = summary["recommendation"].get("evidence", {})
@@ -602,4 +600,6 @@ def get_stock_dashboard(session: Session, symbol: str) -> dict[str, Any]:
     trace["glossary"] = get_glossary_entries()
     trace["risk_panel"] = _risk_panel(trace, change, recent_news)
     trace["follow_up"] = _follow_up_payload(trace, change, trace["evidence"])
+    from ashare_evidence.horizon_readout import build_horizon_readout
+    trace["research_horizon_readout"] = build_horizon_readout(str(artifact_root) if artifact_root else "")
     return trace
