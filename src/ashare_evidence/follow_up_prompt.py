@@ -45,6 +45,16 @@ def build_validation_lines(
         lines.append(f"RankIC 均值：{validation_rank_ic_mean}（>0.05 有一定区分能力，>0.10 较强）")
     if validation_positive_excess_rate is not None:
         lines.append(f"正超额占比：{validation_positive_excess_rate}（>55% 方向判断优于随机，>60% 较可靠）")
+    if (
+        isinstance(validation_rank_ic_mean, (int, float))
+        and isinstance(validation_positive_excess_rate, (int, float))
+        and float(validation_rank_ic_mean) < 0
+        and float(validation_positive_excess_rate) > 0.55
+    ):
+        lines.append(
+            "验证冲突：RankIC 为负，但正超额占比较高，"
+            "说明当前信号可能受市场方向或样本结构影响，排序能力尚未成立。"
+        )
     return lines
 
 

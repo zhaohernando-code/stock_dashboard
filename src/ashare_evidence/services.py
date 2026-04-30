@@ -56,10 +56,8 @@ TRACE_MODEL_MAP = {
     "sector_membership": SectorMembership,
 }
 
-
 def _extract_lineage(record: Mapping[str, Any]) -> dict[str, str]:
     return {field: str(record[field]) for field in REQUIRED_LINEAGE_FIELDS}
-
 
 def _upsert_one(session: Session, model: type[Any], lookup: dict[str, Any], values: dict[str, Any]) -> Any:
     instance = session.scalar(select(model).filter_by(**lookup))
@@ -72,7 +70,6 @@ def _upsert_one(session: Session, model: type[Any], lookup: dict[str, Any], valu
             setattr(instance, key, value)
     session.flush()
     return instance
-
 
 def _record_ingestion_run(
     session: Session,
@@ -113,7 +110,6 @@ def _record_ingestion_run(
             **lineage,
         },
     )
-
 
 def ingest_bundle(session: Session, bundle: EvidenceBundle) -> Recommendation:
     reference_ids: dict[tuple[str, str], int] = {}
@@ -493,7 +489,6 @@ def _serialize_lineage(instance: Any) -> dict[str, str]:
         "lineage_hash": instance.lineage_hash,
     }
 
-
 def _serialize_fill(fill: PaperFill) -> dict[str, Any]:
     return {
         "filled_at": fill.filled_at,
@@ -504,7 +499,6 @@ def _serialize_fill(fill: PaperFill) -> dict[str, Any]:
         "slippage_bps": fill.slippage_bps,
         "lineage": _serialize_lineage(fill),
     }
-
 
 def _serialize_order(order: PaperOrder) -> dict[str, Any]:
     return {
@@ -519,14 +513,12 @@ def _serialize_order(order: PaperOrder) -> dict[str, Any]:
         "lineage": _serialize_lineage(order),
     }
 
-
 def _artifact_timestamp(instance: Any) -> datetime | None:
     for attr_name in ("observed_at", "published_at", "as_of", "as_of_data_time", "effective_from"):
         value = getattr(instance, attr_name, None)
         if value is not None:
             return value
     return None
-
 
 def _artifact_payload(evidence_type: str, instance: Any) -> dict[str, Any]:
     if evidence_type == "market_bar":
@@ -1081,6 +1073,14 @@ def _build_historical_validation(
     )
     historical_validation["status"] = normalized_status
     historical_validation["note"] = normalized_note
+    rank_ic = metrics.get("rank_ic_mean")
+    pos_excess = metrics.get("positive_excess_rate")
+    if isinstance(rank_ic, (int, float)) and isinstance(pos_excess, (int, float)):
+        if float(rank_ic) < 0 and float(pos_excess) > 0.55:
+            historical_validation["validation_conflict"] = (
+                "验证冲突：RankIC 为负，但正超额占比较高，"
+                "说明当前信号可能受市场方向或样本结构影响，排序能力尚未成立。"
+            )
     return historical_validation
 
 

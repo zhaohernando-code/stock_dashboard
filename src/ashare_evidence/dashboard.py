@@ -92,7 +92,6 @@ def _all_recommendations(session: Session) -> list[Recommendation]:
         .order_by(*recommendation_recency_ordering(stock_id=True))
     ).all()
 
-
 def _latest_recommendations(session: Session) -> list[Recommendation]:
     histories_by_stock: dict[int, list[Recommendation]] = {}
     for recommendation in _all_recommendations(session):
@@ -105,7 +104,6 @@ def _latest_recommendations(session: Session) -> list[Recommendation]:
         )
         if collapsed
     ]
-
 
 def _recommendation_history(session: Session, symbol: str, limit: int = 2) -> list[Recommendation]:
     recommendations = session.scalars(
@@ -121,7 +119,6 @@ def _recommendation_history(session: Session, symbol: str, limit: int = 2) -> li
         .order_by(*recommendation_recency_ordering())
     ).all()
     return collapse_recommendation_history(recommendations, limit=limit)
-
 
 def _active_memberships(session: Session, stock_id: int, as_of: datetime) -> list[SectorMembership]:
     memberships = session.scalars(
@@ -386,6 +383,9 @@ def _risk_panel(summary: dict[str, Any], change: dict[str, Any], recent_news: li
     prompt = summary["prompt"]
     risk_layer = recommendation.get("risk", {})
     items: list[str] = []
+    validation_conflict = recommendation.get("historical_validation", {}).get("validation_conflict")
+    if validation_conflict:
+        items.append(str(validation_conflict))
     items.extend(risk_layer.get("risk_flags", [])[:3])
     if recent_news:
         negative_event = next((item for item in recent_news if item["impact_direction"] == "negative"), None)
