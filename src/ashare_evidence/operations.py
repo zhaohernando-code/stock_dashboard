@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
-import json
 from time import perf_counter
 from typing import Any
 
@@ -25,11 +25,13 @@ from ashare_evidence.phase2.holding_policy_study import (
 )
 from ashare_evidence.phase2.horizon_study import build_phase5_horizon_study, phase5_horizon_study_artifact_id
 from ashare_evidence.phase2.phase5_contract import (
-    PHASE5_SIMULATION_POLICY,
     phase5_benchmark_definition,
     phase5_simulation_policy_context,
 )
-from ashare_evidence.research_artifacts import normalize_product_validation_status
+from ashare_evidence.recommendation_selection import (
+    collapse_recommendation_history,
+    recommendation_recency_ordering,
+)
 from ashare_evidence.research_artifact_store import (
     artifact_root_from_database_url,
     read_phase5_holding_policy_study_artifact_if_exists,
@@ -37,10 +39,7 @@ from ashare_evidence.research_artifact_store import (
     read_replay_alignment_artifact_if_exists,
     resolve_backtest_artifact,
 )
-from ashare_evidence.recommendation_selection import (
-    collapse_recommendation_history,
-    recommendation_recency_ordering,
-)
+from ashare_evidence.research_artifacts import normalize_product_validation_status
 from ashare_evidence.services import _serialize_recommendation
 from ashare_evidence.watchlist import active_watchlist_symbols
 
@@ -105,7 +104,6 @@ REFRESH_SCHEDULE = [
     },
 ]
 
-
 @dataclass
 class PositionState:
     symbol: str
@@ -117,7 +115,6 @@ class PositionState:
     @property
     def avg_cost(self) -> float:
         return self.cost_value / self.quantity if self.quantity else 0.0
-
 
 def _latest_recommendations(session: Session) -> list[Recommendation]:
     histories_by_stock: dict[int, list[Recommendation]] = {}
@@ -142,7 +139,6 @@ def _latest_recommendations(session: Session) -> list[Recommendation]:
         if collapsed
     ]
 
-
 def _recommendation_histories(session: Session) -> dict[str, list[Recommendation]]:
     raw_histories: dict[str, list[Recommendation]] = defaultdict(list)
     recommendations = session.scalars(
@@ -162,7 +158,6 @@ def _recommendation_histories(session: Session) -> dict[str, list[Recommendation
         symbol: collapse_recommendation_history(records)
         for symbol, records in raw_histories.items()
     }
-
 
 def _market_history(
     session: Session,
@@ -195,11 +190,9 @@ def _market_history(
     observed_points.sort()
     return price_history, stock_names, observed_points
 
-
 def _distinct_trade_days(observed_points: list[datetime]) -> list[date]:
     trade_days = sorted({item.date() for item in observed_points})
     return trade_days
-
 
 def _price_map_from_history(
     price_history: dict[str, list[tuple[datetime, float]]],
@@ -1713,4 +1706,10 @@ def build_operations_dashboard(
         "launch_gates": launch_gates,
         "manual_research_queue": manual_research_queue,
         "simulation_workspace": simulation_workspace,
+        "sector_exposure": _sector_exposure_snapshot(session),
     }
+
+
+def _sector_exposure_snapshot(session: Session) -> dict[str, Any]:
+    from ashare_evidence.sector_exposure import build_sector_exposure
+    return build_sector_exposure(session)

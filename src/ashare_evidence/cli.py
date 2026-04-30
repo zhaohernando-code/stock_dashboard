@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ashare_evidence.cli_event import add_event_check_parser, handle_event_check, run_refresh_event_checks
+from ashare_evidence.cli_research import add_research_parsers, handle_factor_observation, handle_weight_sweep
 from ashare_evidence.dashboard import get_glossary_entries, get_stock_dashboard, list_candidate_recommendations
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.intraday_market import sync_intraday_market
@@ -111,7 +112,6 @@ def _phase5_holding_policy_study_output(
             "reused_existing_snapshot": prior_artifact is not None,
         },
     }
-
 def _phase5_holding_policy_experiment_output(
     session,
     *,
@@ -304,6 +304,7 @@ def build_parser() -> argparse.ArgumentParser:
     glossary = subparsers.add_parser("glossary", help="Show the dashboard glossary entries.")
     glossary.add_argument("--database-url", default=None)
     add_event_check_parser(subparsers)
+    add_research_parsers(subparsers)
 
     refresh_runtime = subparsers.add_parser(
         "refresh-runtime-data",
@@ -328,7 +329,6 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-
     if args.command == "init-db":
         init_database(args.database_url)
         print("database initialized")
@@ -336,7 +336,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if _should_initialize_database(args.database_url):
         init_database(args.database_url)
-
     if args.command == "latest":
         with session_scope(args.database_url) as session:
             payload = get_latest_recommendation_summary(session, args.symbol)
@@ -345,25 +344,21 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         _print_json(payload)
         return 0
-
     if args.command == "candidates":
         with session_scope(args.database_url) as session:
             payload = list_candidate_recommendations(session, limit=args.limit)
         _print_json(payload)
         return 0
-
     if args.command == "stock-dashboard":
         with session_scope(args.database_url) as session:
             payload = get_stock_dashboard(session, args.symbol)
         _print_json(payload)
         return 0
-
     if args.command == "operations":
         with session_scope(args.database_url) as session:
             payload = build_operations_dashboard(session, sample_symbol=args.sample_symbol)
         _print_json(payload)
         return 0
-
     if args.command == "phase5-horizon-study":
         with session_scope(args.database_url) as session:
             payload = _phase5_horizon_study_output(
@@ -375,7 +370,6 @@ def main(argv: list[str] | None = None) -> int:
             )
         _print_json(payload)
         return 0
-
     if args.command == "phase5-holding-policy-study":
         with session_scope(args.database_url) as session:
             payload = _phase5_holding_policy_study_output(
@@ -386,7 +380,6 @@ def main(argv: list[str] | None = None) -> int:
             )
         _print_json(payload)
         return 0
-
     if args.command == "phase5-holding-policy-experiment":
         with session_scope(args.database_url) as session:
             payload = _phase5_holding_policy_experiment_output(
@@ -398,7 +391,6 @@ def main(argv: list[str] | None = None) -> int:
             )
         _print_json(payload)
         return 0
-
     if args.command == "phase5-producer-contract-study":
         with session_scope(args.database_url) as session:
             payload = _phase5_producer_contract_study_output(
@@ -410,13 +402,11 @@ def main(argv: list[str] | None = None) -> int:
             )
         _print_json(payload)
         return 0
-
     if args.command == "trace":
         with session_scope(args.database_url) as session:
             payload = get_recommendation_trace(session, args.recommendation_id)
         _print_json(payload)
         return 0
-
     if args.command == "glossary":
         _print_json(get_glossary_entries())
         return 0
@@ -425,6 +415,16 @@ def main(argv: list[str] | None = None) -> int:
         with session_scope(args.database_url) as session:
             collected = handle_event_check(session, symbol=args.symbol, run=args.run, database_url=args.database_url)
         _print_json(collected)
+        return 0
+
+    if args.command == "factor-observation":
+        with session_scope(args.database_url) as session:
+            _print_json(handle_factor_observation(session, database_url=args.database_url))
+        return 0
+
+    if args.command == "weight-sweep":
+        with session_scope(args.database_url) as session:
+            _print_json(handle_weight_sweep(session, database_url=args.database_url))
         return 0
 
     if args.command == "refresh-runtime-data":
