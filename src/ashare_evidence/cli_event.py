@@ -29,7 +29,7 @@ def handle_event_check(session: Session, *, symbol: str | None, run: bool, datab
     collected: list[dict[str, Any]] = []
     for sym in symbols:
         existing = list_event_analyses(sym, artifact_root=artifact_root, limit=20)
-        triggers = check_triggers(session, symbol=sym, artifact_root=artifact_root, existing_analyses=existing)
+        triggers = check_triggers(session, symbol=sym, existing_analyses=existing)
         entry: dict[str, Any] = {
             "symbol": sym,
             "trigger_count": len(triggers),
@@ -61,7 +61,7 @@ def run_refresh_event_checks(session: Session, symbols: list[str]) -> list[dict[
     for sym in symbols:
         try:
             existing = list_event_analyses(sym, artifact_root=artifact_root, limit=20)
-            triggers = check_triggers(session, symbol=sym, artifact_root=artifact_root, existing_analyses=existing)
+            triggers = check_triggers(session, symbol=sym, existing_analyses=existing)
             for trigger in triggers:
                 try:
                     result = run_event_analysis(session, symbol=sym, trigger=trigger, artifact_root=artifact_root)

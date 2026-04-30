@@ -16,8 +16,6 @@ TRIGGER_MAJOR_ANNOUNCEMENT = "major_announcement"
 TRIGGER_WEEKLY_REVIEW = "weekly_review"
 
 PRICE_SHOCK_THRESHOLD = 0.05
-CONFIDENCE_COLLAPSE_THRESHOLD = 0.10
-FACTOR_CONFLICT_CONFIDENCE_THRESHOLD = 0.4
 MAJOR_ANNOUNCEMENT_IMPORTANCE_THRESHOLD = 0.7
 DAILY_MAX_PER_SYMBOL = 2
 COOLDOWN_DAYS_PER_TYPE = 3
@@ -36,7 +34,6 @@ def check_triggers(
     session: Session,
     *,
     symbol: str,
-    artifact_root: str | None = None,
     now: datetime | None = None,
     existing_analyses: list[dict[str, Any]] | None = None,
 ) -> list[TriggerEvent]:

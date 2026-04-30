@@ -20,20 +20,11 @@ from ashare_evidence.event_triggers import TriggerEvent
 from ashare_evidence.llm_service import AnthropicCompatibleTransport, OpenAICompatibleTransport, route_model
 from ashare_evidence.phase2 import phase2_target_horizon_label
 
-DEEP_ANALYSIS_TIMEOUT_SECONDS = 120
 EVENT_ANALYSIS_DIR = "event_analysis"
 
 
 def _artifact_dir(artifact_root: str) -> Path:
     return Path(artifact_root) / EVENT_ANALYSIS_DIR
-
-
-def _nested_get(d: dict[str, Any], *keys: str, default: Any = None) -> Any:
-    for key in keys:
-        if not isinstance(d, dict):
-            return default
-        d = d.get(key, {})
-    return d if d != {} else default
 
 
 def _snapshot_hash(*parts: str) -> str:
