@@ -1,4 +1,5 @@
 import {
+  BarChartOutlined,
   DatabaseOutlined,
   DeleteOutlined,
   LineChartOutlined,
@@ -95,16 +96,15 @@ import { buildCandidateWorkspaceRows, buildInitialSourceInfo, mergeSourceInfo, r
 import { directionColor, formatDate, formatNumber, formatPercent, formatSignedNumber, simulationAdviceActionLabel, simulationAdvicePolicyLabel, statusColor, valueTone } from "./utils/format";
 import { buildPendingDetailMessage, canCompleteManualResearch, canExecuteManualResearch, canFailManualResearch, canRetryManualResearch, candidateValidationSummary, claimGateAlertType, claimGateDescription, claimGateStatusLabel, dataSourceStatusColor, deploymentModeLabel, displayBenchmarkLabel, displayLabelDefinition, displayWindowLabel, eventDirectionLabel, eventDirectionStatus, eventEvidenceText, eventTriggerLabel, fieldMappingLabel, formatMarketFreshness, horizonLabel, manualResearchActionStatusMessage, manualReviewModelLabel, manualReviewStatusLabel, operationsValidationDescription, operationsValidationMessage, parseMultilineItems, portfolioTrackLabel, providerSelectionModeLabel, publicValidationSummary, sanitizeDisplayText, validationStatusLabel, watchlistScopeLabel } from "./utils/labels";
 import { directionLabels, factorLabels, manualResearchVerdictOptions } from "./utils/constants";
-
 const { Paragraph, Text, Title } = Typography;
 const { TextArea } = Input;
 type ViewMode = "candidates" | "stock" | "operations" | "settings";
 type ThemeMode = "light" | "dark";
-
 type ViewCard = {
   key: ViewMode;
   label: string;
   icon: ReactNode;
+  description?: string;
 };
 
 function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme: () => void }) {
