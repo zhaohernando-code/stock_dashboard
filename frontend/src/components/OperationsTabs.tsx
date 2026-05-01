@@ -1,6 +1,6 @@
 import {
   Alert, Button, Card, Col, Collapse, Descriptions, Empty,
-  Form, InputNumber, List, Modal, Row, Select, Space,
+  Form, InputNumber, List, Modal, Row, Select, Skeleton, Space,
   Switch, Table, Tag, Tabs, Timeline, Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -367,7 +367,7 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
             </Card>
           </Col>
         </Row>
-      )),
+      ),
     },
     {
       key: "analysis",
@@ -755,13 +755,13 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
                 title="人工研究队列"
                 extra={loadingSections.has("manual_queue") && !operations.manual_research_queue?.generated_at ? null : <Text type="secondary">{`快照时间 ${formatDate(operations.manual_research_queue.generated_at)}`}</Text>}
               >
-                {loadingSections.has("manual_queue") && !operations.manual_research_queue?.generated_at ? <Skeleton active paragraph={{ rows: 4 }}/> : (<Space wrap className="inline-tags">
+                {loadingSections.has("manual_queue") && !operations.manual_research_queue?.generated_at ? <Skeleton active paragraph={{ rows: 4 }}/> : <Space wrap className="inline-tags">
                   <Tag>{`排队 ${operations.manual_research_queue.counts.queued ?? 0}`}</Tag>
                   <Tag>{`执行中 ${operations.manual_research_queue.counts.in_progress ?? 0}`}</Tag>
                   <Tag>{`失败 ${operations.manual_research_queue.counts.failed ?? 0}`}</Tag>
                   <Tag>{`当前完成 ${operations.manual_research_queue.counts.completed_current ?? 0}`}</Tag>
                   <Tag>{`过期 ${operations.manual_research_queue.counts.completed_stale ?? 0}`}</Tag>
-                </Space>
+                </Space>}
                 <List
                   dataSource={operations.manual_research_queue.recent_items}
                   locale={{ emptyText: "当前关注池还没有人工研究请求" }}
@@ -832,7 +832,6 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
                     </List.Item>
                   )}
                 />
-                )}
               </Card>
             </Col>
             <Col xs={24} xl={10}>
