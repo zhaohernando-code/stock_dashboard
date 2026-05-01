@@ -4,6 +4,7 @@
 
 ## 2026-05-01
 
+- **计划池控制面边界必须先写死再开发**：这轮出现偏移的根因不是功能实现本身，而是“服务器入口”和“权威任务后端”在文档里没有被明确区分。当前约束固定为：股票看板创建 Plan 任务默认命中本机 control-plane `127.0.0.1:8787`；`/middle` 只可视为认证后的入口/观察面，不能被默认当成创建任务的 canonical backend。未来若要切远端权威后端，必须先改两边规范和运维流程，再改代码。
 - **计划池动作必须创建可审视的中台 Plan 任务**：`accepted_for_plan` 不能停留在股票看板本地状态。按钮需要先让用户选择执行模型，然后通过中台 `/api/tasks` 创建 `planMode=true / approvalRequired=true` 的任务，并把页面中的建议、证据、双模型审计、最终判断和生成计划写入任务描述。中台返回的 task id 必须回写到 suggestion snapshot，方便股票页和中台互相追踪。
 - **中台任务 schema 需要向前兼容新增字段**：股票看板创建任务时会传 `provider`，老的本地 SQLite `tasks` 表没有该列会导致控制面后端启动失败。`local-control-server` 的 schema 初始化必须为既有 DB 补 `tasks.provider TEXT NOT NULL DEFAULT ''`，不能只修改新建表结构。
 - **公网中台验收受统一登录层约束**：无登录态 headless 浏览器访问 `https://hernando-zhao.cn/middle` 会被重定向到统一登录页，这是预期认证行为。此类场景需要至少保留本地中台 API 验收结果；若要声明公网页面可见，必须使用已登录浏览器会话或由用户侧确认。
