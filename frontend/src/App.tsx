@@ -1,5 +1,4 @@
 import {
-  BarChartOutlined,
   DatabaseOutlined,
   DeleteOutlined,
   LineChartOutlined,
@@ -90,8 +89,10 @@ import { buildOperationsTabs } from "./components/OperationsTabs";
 import { MobileAppShell } from "./components/mobile/MobileAppShell";
 import { MobileManualOrderModal } from "./components/mobile/MobileManualOrderModal";
 import { readAnalysisModelPreference, selectMobileAnalysisModel } from "./components/mobile/modelSelection";
+import type { MobileTabKey } from "./components/mobile/types";
 
 import { buildCandidateWorkspaceRows, buildInitialSourceInfo, mergeSourceInfo, resolveSimulationFocusSymbol } from "./utils/data";
+import { directionColor, formatDate, formatNumber, formatPercent, formatSignedNumber, simulationAdviceActionLabel, simulationAdvicePolicyLabel, statusColor, valueTone } from "./utils/format";
 import { buildPendingDetailMessage, canCompleteManualResearch, canExecuteManualResearch, canFailManualResearch, canRetryManualResearch, candidateValidationSummary, claimGateAlertType, claimGateDescription, claimGateStatusLabel, dataSourceStatusColor, deploymentModeLabel, displayBenchmarkLabel, displayLabelDefinition, displayWindowLabel, eventDirectionLabel, eventDirectionStatus, eventEvidenceText, eventTriggerLabel, fieldMappingLabel, formatMarketFreshness, horizonLabel, manualResearchActionStatusMessage, manualReviewModelLabel, manualReviewStatusLabel, operationsValidationDescription, operationsValidationMessage, parseMultilineItems, portfolioTrackLabel, providerSelectionModeLabel, publicValidationSummary, sanitizeDisplayText, validationStatusLabel, watchlistScopeLabel } from "./utils/labels";
 import { directionLabels, factorLabels, manualResearchVerdictOptions } from "./utils/constants";
 
@@ -105,7 +106,6 @@ type ViewCard = {
   label: string;
   icon: ReactNode;
 };
-
 
 function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme: () => void }) {
   const initialRuntimeConfig = api.getRuntimeConfig();
