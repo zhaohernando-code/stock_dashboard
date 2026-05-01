@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,7 +10,6 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from ashare_evidence.api import create_app
-from ashare_evidence.control_plane_client import control_plane_endpoint_label
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.improvement_suggestions import (
     _run_reviewer,
@@ -287,7 +285,7 @@ class ImprovementSuggestionTests(unittest.TestCase):
                 reviewer_overrides={"gpt": reviewer, "deepseek": reviewer},
             )
             first_id = snapshot["suggestions"][0]["suggestion_id"]
-            with patch("ashare_evidence.control_plane_client.urlopen", side_effect=fake_urlopen):
+            with patch("ashare_evidence.improvement_suggestions.urlopen", side_effect=fake_urlopen):
                 accepted = accept_suggestion_for_plan(
                     session,
                     suggestion_id=first_id,
@@ -307,68 +305,6 @@ class ImprovementSuggestionTests(unittest.TestCase):
         self.assertEqual(accepted["status"], "accepted_for_plan")
         self.assertEqual(accepted["control_plane_task"]["id"], "task-plan-1")
         self.assertEqual(accepted["status_history"][-1]["model"], "gpt-5.5")
-
-    def test_accept_plan_defaults_to_live_control_plane_ssh_relay(self) -> None:
-        with session_scope(self.database_url) as session:
-            seed_watchlist_fixture(session)
-        self._write_event_analysis()
-        reviewer = {
-            "stance": "support",
-            "confidence": 0.72,
-            "main_reason": "建议可转成清晰开发任务。",
-            "evidence_refs_used": ["event_analysis/600519.SH/20260501T090000_factor_conflict.json"],
-            "missing_evidence": [],
-            "implementation_notes": ["在 Operations 展示。"],
-            "red_flags": [],
-            "safe_to_plan": True,
-            "safe_to_auto_apply": False,
-        }
-        captured: dict[str, object] = {}
-
-        def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-            captured["cmd"] = cmd
-            captured["timeout"] = kwargs.get("timeout")
-            return subprocess.CompletedProcess(
-                cmd,
-                0,
-                stdout=json.dumps({"task": {"id": "task-live-1", "status": "blocked"}}),
-                stderr="",
-            )
-
-        with session_scope(self.database_url) as session:
-            snapshot = run_improvement_suggestion_review(
-                session,
-                window_days=30,
-                reviewer_overrides={"gpt": reviewer, "deepseek": reviewer},
-            )
-            first_id = snapshot["suggestions"][0]["suggestion_id"]
-            with patch.dict(
-                os.environ,
-                {
-                    "ASHARE_CONTROL_PLANE_API_BASE": "",
-                    "ASHARE_CONTROL_PLANE_SSH_TARGET": "codex-server",
-                    "ASHARE_CONTROL_PLANE_REMOTE_API_BASE": "http://127.0.0.1:8787",
-                },
-                clear=False,
-            ):
-                with patch("ashare_evidence.control_plane_client.subprocess.run", side_effect=fake_run):
-                    accepted = accept_suggestion_for_plan(
-                        session,
-                        suggestion_id=first_id,
-                        model="gpt-5.4",
-                        reason="进入计划池",
-                    )
-
-        cmd = captured["cmd"]
-        self.assertIsInstance(cmd, list)
-        self.assertEqual(cmd[0:2], ["ssh", "codex-server"])
-        self.assertIn("http://127.0.0.1:8787/api/tasks", cmd[2])
-        self.assertEqual(captured["timeout"], 45)
-        self.assertEqual(accepted["control_plane_task"]["id"], "task-live-1")
-        self.assertEqual(
-            accepted["control_plane_task"]["api_base"],
-            control_plane_endpoint_label(),
-        )
 
     def test_api_permissions_and_degraded_run(self) -> None:
         os.environ["ASHARE_BETA_ACCESS_MODE"] = "allowlist"
@@ -436,16 +372,15 @@ class ImprovementSuggestionTests(unittest.TestCase):
         )
         self.assertEqual(denied.status_code, 403)
 
-        with patch.dict(os.environ, {"ASHARE_CONTROL_PLANE_API_BASE": "http://control.test"}, clear=False):
-            with patch(
-                "ashare_evidence.control_plane_client.urlopen",
-                return_value=_FakeResponse(json.dumps({"task": {"id": "task-plan-api", "status": "blocked"}})),
-            ):
-                accepted = client.post(
-                    f"/dashboard/improvement-suggestions/{first_id}/accept-plan",
-                    json={"model": "gpt-5.4", "reason": "进入计划池"},
-                    headers={"X-Ashare-Beta-Key": "operator-token"},
-                )
+        with patch(
+            "ashare_evidence.improvement_suggestions.urlopen",
+            return_value=_FakeResponse(json.dumps({"task": {"id": "task-plan-api", "status": "blocked"}})),
+        ):
+            accepted = client.post(
+                f"/dashboard/improvement-suggestions/{first_id}/accept-plan",
+                json={"model": "gpt-5.4", "reason": "进入计划池"},
+                headers={"X-Ashare-Beta-Key": "operator-token"},
+            )
         self.assertEqual(accepted.status_code, 200)
         self.assertEqual(accepted.json()["control_plane_task"]["id"], "task-plan-api")
 
