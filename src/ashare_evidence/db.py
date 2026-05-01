@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterator
 
 from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 DEFAULT_DB_PATH = Path("data/ashare_dashboard.db")
@@ -18,7 +19,7 @@ _SESSION_FACTORY_CACHE: dict[str, sessionmaker[Session]] = {}
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def align_datetime_timezone(value: datetime | None, *, reference: datetime) -> datetime | None:
@@ -56,6 +57,24 @@ def get_engine(database_url: str | None = None) -> Engine:
     return engine
 
 
+def preflight_database_writable(database_url: str | None = None) -> None:
+    """Raise RuntimeError early if the SQLite database is not writable."""
+    resolved_url = str(get_engine(database_url).url.render_as_string(hide_password=False))
+    if not resolved_url.startswith("sqlite:///") or resolved_url == "sqlite:///:memory:":
+        return
+    try:
+        with get_engine(database_url).connect() as connection:
+            connection.exec_driver_sql("BEGIN IMMEDIATE")
+            connection.exec_driver_sql("CREATE TABLE __ashare_write_preflight_probe (id INTEGER)")
+            connection.exec_driver_sql("DROP TABLE __ashare_write_preflight_probe")
+            connection.exec_driver_sql("ROLLBACK")
+    except OperationalError as exc:
+        raise RuntimeError(
+            "database write preflight failed; this refresh needs a writable SQLite database and writable parent "
+            f"directory. database_url={resolved_url!r}. Original error: {exc}"
+        ) from exc
+
+
 def get_session_factory(database_url: str | None = None) -> sessionmaker[Session]:
     resolved = get_database_url(database_url)
     factory = _SESSION_FACTORY_CACHE.get(resolved)
@@ -68,7 +87,12 @@ def get_session_factory(database_url: str | None = None) -> sessionmaker[Session
 def init_database(database_url: str | None = None) -> Engine:
     from ashare_evidence import models  # noqa: F401
     from ashare_evidence.account_space import ROOT_ACCOUNT_LOGIN
-    from ashare_evidence.models import AccountSpace, AppSetting, SimulationEvent, SimulationSession, WatchlistEntry, WatchlistFollow
+    from ashare_evidence.models import (
+        AccountSpace,
+        AppSetting,
+        WatchlistEntry,
+        WatchlistFollow,
+    )
 
     engine = get_engine(database_url)
     Base.metadata.create_all(engine)

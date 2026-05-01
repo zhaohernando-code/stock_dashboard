@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from ashare_evidence.cli import main
 from ashare_evidence.dashboard import list_candidate_recommendations
-from ashare_evidence.db import init_database, session_scope
+from ashare_evidence.db import get_engine, init_database, session_scope
 from ashare_evidence.models import PaperPortfolio, SimulationSession
 from ashare_evidence.research_artifact_store import (
     artifact_root_from_database_url,
@@ -175,6 +175,18 @@ class CliRuntimeRefreshTests(unittest.TestCase):
                 payload_view.get("validation_manifest_id"),
                 "rolling-validation:phase2-portfolio-backtests",
             )
+
+    def test_phase5_daily_refresh_fails_fast_when_sqlite_database_is_not_writable(self) -> None:
+        database_path = Path(self.temp_dir.name) / "readonly-runtime.db"
+        database_url = f"sqlite:///{database_path}"
+        init_database(database_url)
+        get_engine(database_url).dispose()
+        database_path.chmod(0o444)
+        try:
+            with self.assertRaisesRegex(RuntimeError, "database write preflight failed"):
+                main(["phase5-daily-refresh", "--database-url", database_url, "--skip-simulation"])
+        finally:
+            database_path.chmod(0o644)
 
     def test_phase5_daily_refresh_rebuilds_stepped_model_portfolio_in_same_run(self) -> None:
         with session_scope(self.database_url) as session:

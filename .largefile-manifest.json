@@ -28,7 +28,7 @@
     },
     "src/ashare_evidence/cli.py": {
       "lines": 532,
-      "reason": "CLI command group: data refresh, cache management, admin operations, and event/improvement audit triggers. The current growth still belongs to one operational surface.",
+      "reason": "CLI command group: data refresh, cache management, admin operations, event/improvement audit triggers, and database write preflight (delegated to db.py). The current growth still belongs to one operational surface.",
       "status": "accepted",
       "reviewed_at": "2026-05-01"
     },

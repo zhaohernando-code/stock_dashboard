@@ -8,7 +8,7 @@ from typing import Any
 from ashare_evidence.cli_event import add_event_check_parser, handle_event_check, run_refresh_event_checks
 from ashare_evidence.cli_research import add_research_parsers, handle_factor_observation, handle_weight_sweep
 from ashare_evidence.dashboard import get_glossary_entries, get_stock_dashboard, list_candidate_recommendations
-from ashare_evidence.db import init_database, session_scope
+from ashare_evidence.db import init_database, preflight_database_writable, session_scope
 from ashare_evidence.improvement_suggestions import run_improvement_suggestion_review
 from ashare_evidence.intraday_market import sync_intraday_market
 from ashare_evidence.operations import build_operations_dashboard
@@ -435,9 +435,11 @@ def main(argv: list[str] | None = None) -> int:
             _print_json(handle_weight_sweep(session, database_url=args.database_url))
         return 0
 
-    if args.command == "refresh-runtime-data":
+    if args.command in ("refresh-runtime-data", "phase5-daily-refresh"):
         if args.analysis_only and args.ops_only:
             parser.error("--analysis-only 和 --ops-only 不能同时传入")
+        preflight_database_writable(args.database_url)
+    if args.command == "refresh-runtime-data":
         with session_scope(args.database_url) as session:
             payload = _refresh_runtime_data_output(
                 session,
@@ -455,8 +457,6 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "phase5-daily-refresh":
-        if args.analysis_only and args.ops_only:
-            parser.error("--analysis-only 和 --ops-only 不能同时传入")
         with session_scope(args.database_url) as session:
             refresh_payload = _refresh_runtime_data_output(
                 session,

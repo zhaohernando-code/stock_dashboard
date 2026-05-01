@@ -12,6 +12,10 @@ data/*.db
 data/*.sqlite
 WORKSPACE_CONTEXT.md
 task-brief.md
+data/artifacts/backtests/
+data/artifacts/manifests/
+data/artifacts/validation/
+data/artifacts/studies/
 data/artifacts/event_analysis/
 artifacts/
 output/playwright/
