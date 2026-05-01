@@ -56,10 +56,8 @@ TRACE_MODEL_MAP = {
     "sector_membership": SectorMembership,
 }
 
-
 def _extract_lineage(record: Mapping[str, Any]) -> dict[str, str]:
     return {field: str(record[field]) for field in REQUIRED_LINEAGE_FIELDS}
-
 
 def _upsert_one(session: Session, model: type[Any], lookup: dict[str, Any], values: dict[str, Any]) -> Any:
     instance = session.scalar(select(model).filter_by(**lookup))
@@ -72,7 +70,6 @@ def _upsert_one(session: Session, model: type[Any], lookup: dict[str, Any], valu
             setattr(instance, key, value)
     session.flush()
     return instance
-
 
 def _record_ingestion_run(
     session: Session,
@@ -113,7 +110,6 @@ def _record_ingestion_run(
             **lineage,
         },
     )
-
 
 def ingest_bundle(session: Session, bundle: EvidenceBundle) -> Recommendation:
     reference_ids: dict[tuple[str, str], int] = {}
@@ -493,7 +489,6 @@ def _serialize_lineage(instance: Any) -> dict[str, str]:
         "lineage_hash": instance.lineage_hash,
     }
 
-
 def _serialize_fill(fill: PaperFill) -> dict[str, Any]:
     return {
         "filled_at": fill.filled_at,
@@ -504,7 +499,6 @@ def _serialize_fill(fill: PaperFill) -> dict[str, Any]:
         "slippage_bps": fill.slippage_bps,
         "lineage": _serialize_lineage(fill),
     }
-
 
 def _serialize_order(order: PaperOrder) -> dict[str, Any]:
     return {
@@ -519,14 +513,12 @@ def _serialize_order(order: PaperOrder) -> dict[str, Any]:
         "lineage": _serialize_lineage(order),
     }
 
-
 def _artifact_timestamp(instance: Any) -> datetime | None:
     for attr_name in ("observed_at", "published_at", "as_of", "as_of_data_time", "effective_from"):
         value = getattr(instance, attr_name, None)
         if value is not None:
             return value
     return None
-
 
 def _artifact_payload(evidence_type: str, instance: Any) -> dict[str, Any]:
     if evidence_type == "market_bar":
@@ -575,7 +567,6 @@ def _artifact_payload(evidence_type: str, instance: Any) -> dict[str, Any]:
         }
     return {}
 
-
 def _artifact_label(evidence_type: str, instance: Any) -> str:
     if evidence_type == "market_bar":
         return f"{instance.stock.symbol} {instance.timeframe} {instance.observed_at.date()}"
@@ -589,18 +580,15 @@ def _artifact_label(evidence_type: str, instance: Any) -> str:
         return f"{instance.stock.symbol} -> {instance.sector.name}"
     return evidence_type
 
-
 def _mapping_list(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
     return [dict(item) for item in value if isinstance(item, Mapping)]
 
-
 def _string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if item]
-
 
 PLACEHOLDER_FUSION_HEADLINE = "用于汇总价格、事件与降级状态的融合层。"
 LEGACY_SUPPORTING_CONTEXT = "价格趋势、确认项和事件冲突共同构成当前 Phase 2 规则基线的结构化输入。"
@@ -610,13 +598,11 @@ DEGRADE_FLAG_DISPLAY = {
     "market_data_stale": "最新行情刷新偏旧，短线结论需要谨慎使用。",
 }
 
-
 def _clean_display_text(value: Any) -> str | None:
     if value is None:
         return None
     text = str(value).strip()
     return text or None
-
 
 def _is_internal_explanatory_text(value: Any) -> bool:
     text = _clean_display_text(value)
@@ -624,17 +610,14 @@ def _is_internal_explanatory_text(value: Any) -> bool:
         return True
     return text == PLACEHOLDER_FUSION_HEADLINE or text == LEGACY_SUPPORTING_CONTEXT or "Phase 2 规则基线" in text
 
-
 def _display_ready_text(value: Any) -> str | None:
     text = _clean_display_text(value)
     if not text or _is_internal_explanatory_text(text):
         return None
     return text
 
-
 def _display_ready_list(value: Any) -> list[str]:
     return [text for item in _string_list(value) if (text := _display_ready_text(item))]
-
 
 def _humanize_degrade_flag(flag: str) -> str:
     cleaned = _clean_display_text(flag)
@@ -653,6 +636,19 @@ def _dedupe_text_items(items: list[str]) -> list[str]:
         seen.add(normalized)
         deduped.append(normalized)
     return deduped
+
+
+def _display_factor_score(factor_key: str, score: Any) -> Any:
+    if factor_key != "news_event":
+        return score
+    numeric_score = _metric_number(score)
+    if numeric_score is None:
+        return score
+    if numeric_score >= 0.99:
+        return 0.98
+    if numeric_score <= -0.99:
+        return -0.98
+    return score
 
 
 def _factor_headline_fallback(
@@ -735,9 +731,21 @@ def _build_display_factor_card(
     recommendation_direction: str,
     degrade_flags: list[str],
 ) -> dict[str, Any]:
+    score = _display_factor_score(factor_key, payload_card.get("score", raw_value.get("score")))
+    dynamic_weight = payload_card.get("dynamic_weight", payload_card.get("weight", raw_value.get("weight")))
+    numeric_score = _metric_number(score) or 0.0
+    numeric_weight = _metric_number(dynamic_weight) or 0.0
     return {
         "factor_key": factor_key,
-        "score": payload_card.get("score", raw_value.get("score")),
+        "score": score,
+        "dynamic_weight": dynamic_weight,
+        "weight": dynamic_weight,
+        "score_contribution": round(numeric_score * numeric_weight, 6),
+        "rolling_ic": payload_card.get("rolling_ic", raw_value.get("rolling_ic")),
+        "ic_confidence_note": payload_card.get(
+            "ic_confidence_note",
+            raw_value.get("ic_confidence_note", "因子可信度来自滚动 IC/IC_IR 研究；当前卡片只展示即时贡献。"),
+        ),
         "direction": payload_card.get("direction", raw_value.get("direction")),
         "headline": (
             _display_ready_text(payload_card.get("headline"))
@@ -893,6 +901,15 @@ def _build_evidence_layer(
         )
         for key in factor_keys
     ]
+    # Compute factor contributions (score × weight, normalized to sum 1.0)
+    raw_contributions = [
+        float(card.get("score_contribution") or 0)
+        for card in factor_cards
+    ]
+    total_contribution = sum(abs(value) for value in raw_contributions)
+    for idx, card in enumerate(factor_cards):
+        card["contribution"] = round(abs(raw_contributions[idx]) / total_contribution, 4) if total_contribution > 0 else 0.0
+
     price_factor = factor_breakdown.get("price_baseline", {})
     news_factor = factor_breakdown.get("news_event", {})
     manual_review_factor = factor_breakdown.get(
@@ -1081,6 +1098,14 @@ def _build_historical_validation(
     )
     historical_validation["status"] = normalized_status
     historical_validation["note"] = normalized_note
+    rank_ic = metrics.get("rank_ic_mean")
+    pos_excess = metrics.get("positive_excess_rate")
+    if isinstance(rank_ic, (int, float)) and isinstance(pos_excess, (int, float)):
+        if float(rank_ic) < 0 and float(pos_excess) > 0.55:
+            historical_validation["validation_conflict"] = (
+                "验证冲突：RankIC 为负，但正超额占比较高，"
+                "说明当前信号可能受市场方向或样本结构影响，排序能力尚未成立。"
+            )
     return historical_validation
 
 
@@ -1525,6 +1550,9 @@ def _serialize_recommendation(recommendation: Recommendation, *, artifact_root: 
             "as_of_data_time": recommendation.as_of_data_time,
             "evidence_status": recommendation.evidence_status,
             "degrade_reason": recommendation.degrade_reason,
+            "data_freshness": evidence_layer.get("data_freshness"),
+            "degraded_sources": list(evidence_layer.get("degrade_flags") or []),
+            "confidence_ceiling_reasons": list(claim_gate.get("blocking_reasons") or []),
             "core_quant": core_quant,
             "evidence": evidence_layer,
             "risk": risk_layer,

@@ -8,6 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from ashare_evidence.db import align_datetime_timezone
+from ashare_evidence.follow_up_prompt import (
+    build_evidence_lines,
+    build_market_lines,
+    build_news_lines,
+    build_validation_lines,
+)
 from ashare_evidence.intraday_market import INTRADAY_MARKET_TIMEFRAME
 from ashare_evidence.models import MarketBar, ModelVersion, NewsEntityLink, Recommendation, SectorMembership, Stock
 from ashare_evidence.phase2 import phase2_target_horizon_label
@@ -60,24 +66,19 @@ GLOSSARY_ENTRIES: list[dict[str, str]] = [
     },
 ]
 
-
 def get_glossary_entries() -> list[dict[str, str]]:
     return list(GLOSSARY_ENTRIES)
-
 
 def _artifact_source_classification(*, artifact_id: str | None) -> str:
     return "artifact_backed" if artifact_id else "migration_placeholder"
 
-
 def _artifact_validation_mode(*, validation_status: str) -> str:
     return "artifact_backed" if validation_status == "verified" else "migration_placeholder"
-
 
 def _candidate_compat_projection(*, window_definition: str) -> dict[str, str]:
     return {
         "applicable_period": window_definition,
     }
-
 
 def _all_recommendations(session: Session) -> list[Recommendation]:
     return session.scalars(
@@ -91,7 +92,6 @@ def _all_recommendations(session: Session) -> list[Recommendation]:
         .order_by(*recommendation_recency_ordering(stock_id=True))
     ).all()
 
-
 def _latest_recommendations(session: Session) -> list[Recommendation]:
     histories_by_stock: dict[int, list[Recommendation]] = {}
     for recommendation in _all_recommendations(session):
@@ -104,7 +104,6 @@ def _latest_recommendations(session: Session) -> list[Recommendation]:
         )
         if collapsed
     ]
-
 
 def _recommendation_history(session: Session, symbol: str, limit: int = 2) -> list[Recommendation]:
     recommendations = session.scalars(
@@ -120,7 +119,6 @@ def _recommendation_history(session: Session, symbol: str, limit: int = 2) -> li
         .order_by(*recommendation_recency_ordering())
     ).all()
     return collapse_recommendation_history(recommendations, limit=limit)
-
 
 def _active_memberships(session: Session, stock_id: int, as_of: datetime) -> list[SectorMembership]:
     memberships = session.scalars(
@@ -140,16 +138,18 @@ def _active_memberships(session: Session, stock_id: int, as_of: datetime) -> lis
     active.sort(key=lambda item: (not item.is_primary, item.sector.name))
     return active
 
-
 def _recent_bars(session: Session, stock_id: int, limit: int = 28) -> list[MarketBar]:
+    from ashare_evidence.market_bar_qa import dedup_daily_bars
+
     bars = session.scalars(
         select(MarketBar)
         .where(MarketBar.stock_id == stock_id, MarketBar.timeframe == "1d")
         .order_by(MarketBar.observed_at.desc())
         .limit(limit)
     ).all()
-    return list(reversed(bars))
-
+    bars = list(reversed(bars))
+    deduped = dedup_daily_bars(bars)
+    return deduped if len(deduped) < len(bars) else bars
 
 def _today_intraday_bars(session: Session, stock_id: int, daily_bars: list[MarketBar]) -> list[MarketBar]:
     latest_intraday = session.scalar(
@@ -177,7 +177,6 @@ def _today_intraday_bars(session: Session, stock_id: int, daily_bars: list[Marke
         .order_by(MarketBar.observed_at.asc())
     ).all()
     return list(intraday_bars)
-
 
 def _recent_news(
     session: Session,
@@ -216,14 +215,11 @@ def _recent_news(
             continue
     return list(deduped.values())[:limit]
 
-
 def _direction_rank(direction: str) -> int:
     return {"buy": 3, "watch": 2, "reduce": 1, "risk_alert": 0}.get(direction, 0)
 
-
 def _list_payload(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
-
 
 def _factor_score(summary: dict[str, Any], key: str) -> float:
     evidence = summary["recommendation"].get("evidence", {})
@@ -252,9 +248,49 @@ def _candidate_primary_driver(recommendation: dict[str, Any]) -> str:
 
 
 def _candidate_primary_risk(recommendation: dict[str, Any]) -> str | None:
+    historical_validation = recommendation.get("historical_validation", {})
+    metrics = historical_validation.get("metrics", {})
+    rank_ic = metrics.get("rank_ic_mean")
+    positive_excess_rate = metrics.get("positive_excess_rate")
+    if isinstance(rank_ic, (int, float)) and isinstance(positive_excess_rate, (int, float)):
+        if float(rank_ic) < 0 and float(positive_excess_rate) > 0.55:
+            return (
+                f"验证冲突：RankIC {float(rank_ic):.3f} 为负，但正超额占比 "
+                f"{float(positive_excess_rate):.1%} 偏高，当前信号更像方向受益，排序能力尚未成立。"
+            )
+    validation_conflict = historical_validation.get("validation_conflict")
+    if validation_conflict:
+        return str(validation_conflict)
+
     risk = recommendation.get("risk", {})
-    risk_flags = risk.get("risk_flags") or []
-    return str(risk_flags[0]) if risk_flags else None
+    risk_flags = [str(item) for item in (risk.get("risk_flags") or []) if item]
+    coverage_gaps = [str(item) for item in (risk.get("coverage_gaps") or []) if item]
+    if not risk_flags and coverage_gaps:
+        return coverage_gaps[0]
+
+    generic_news_risks = (
+        "若 7 日内出现负向公告或行业监管扰动，新闻因子会优先转负。",
+        "7 日内新增负向公告/监管事件并使新闻因子转负时降级。",
+    )
+    concrete_risks = [item for item in risk_flags if item not in generic_news_risks]
+    priority_terms = (
+        "风险公告",
+        "验证冲突",
+        "基本面风险",
+        "现金流",
+        "盈利",
+        "价格已明显",
+        "追价性价比",
+        "趋势",
+        "流动性",
+    )
+    for term in priority_terms:
+        match = next((item for item in concrete_risks if term in item), None)
+        if match:
+            return match
+    if concrete_risks:
+        return concrete_risks[0]
+    return risk_flags[0] if risk_flags else None
 
 
 def _historical_validation_metric(
@@ -385,6 +421,9 @@ def _risk_panel(summary: dict[str, Any], change: dict[str, Any], recent_news: li
     prompt = summary["prompt"]
     risk_layer = recommendation.get("risk", {})
     items: list[str] = []
+    validation_conflict = recommendation.get("historical_validation", {}).get("validation_conflict")
+    if validation_conflict:
+        items.append(str(validation_conflict))
     items.extend(risk_layer.get("risk_flags", [])[:3])
     if recent_news:
         negative_event = next((item for item in recent_news if item["impact_direction"] == "negative"), None)
@@ -408,6 +447,41 @@ def _risk_panel(summary: dict[str, Any], change: dict[str, Any], recent_news: li
     }
 
 
+def _event_analysis_payload(symbol: str, artifact_root: Any, *, limit: int = 3) -> list[dict[str, Any]]:
+    if not artifact_root:
+        return []
+
+    from ashare_evidence.event_analyzer import list_event_analyses, read_event_analysis
+
+    analyses: list[dict[str, Any]] = []
+    for item in list_event_analyses(symbol, artifact_root=str(artifact_root), limit=limit):
+        filename = str(item.get("file") or "")
+        detail = read_event_analysis(symbol, filename, artifact_root=str(artifact_root)) if filename else None
+        detail = detail if isinstance(detail, dict) else {}
+        confidence = item.get("confidence")
+        if confidence is None:
+            confidence = detail.get("confidence")
+        analyses.append(
+            {
+                "file": filename,
+                "trigger_type": item.get("trigger_type") or detail.get("trigger_type") or "unknown",
+                "triggered_at": item.get("triggered_at") or detail.get("triggered_at"),
+                "generated_at": item.get("generated_at") or detail.get("generated_at"),
+                "status": item.get("status") or detail.get("status") or "unknown",
+                "independent_direction": item.get("independent_direction") or detail.get("independent_direction"),
+                "confidence": confidence,
+                "trigger_detail": detail.get("trigger_detail"),
+                "key_evidence": detail.get("key_evidence") or [],
+                "risks": detail.get("risks") or [],
+                "information_gaps": detail.get("information_gaps") or [],
+                "next_checkpoint": detail.get("next_checkpoint"),
+                "correction_suggestion": detail.get("correction_suggestion"),
+                "model_used": detail.get("model_used"),
+            }
+        )
+    return analyses
+
+
 def _follow_up_payload(summary: dict[str, Any], change: dict[str, Any], evidence: list[dict[str, Any]]) -> dict[str, Any]:
     recommendation = summary["recommendation"]
     evidence_layer = recommendation.get("evidence", {})
@@ -415,47 +489,46 @@ def _follow_up_payload(summary: dict[str, Any], change: dict[str, Any], evidence
     historical_validation = recommendation.get("historical_validation", {})
     core_quant = recommendation.get("core_quant", {})
     manual_llm_review = recommendation.get("manual_llm_review", {})
-    evidence_lines = [
-        f"{item['label']} | {item['lineage']['source_uri']}"
-        for item in evidence[:4]
-    ]
-    validation_sample_count = _historical_validation_metric(recommendation, "sample_count")
-    validation_rank_ic_mean = _historical_validation_metric(recommendation, "rank_ic_mean")
-    validation_positive_excess_rate = _historical_validation_metric(recommendation, "positive_excess_rate")
+    hero, recent_news = summary.get("hero", {}), summary.get("recent_news", [])
+    evidence_lines = build_evidence_lines(evidence)
+    news_lines = build_news_lines(recent_news)
+    v_sc, v_ric, v_per = (
+        _historical_validation_metric(recommendation, k)
+        for k in ("sample_count", "rank_ic_mean", "positive_excess_rate")
+    )
+    validation_lines = build_validation_lines(v_sc, v_ric, v_per)
     suggested_questions = [
         "如果我只关注未来两周，哪些证据最值得盯？",
         "这条建议最可能因为什么条件而失效？",
         "最近一版建议为什么比上一版更强/更弱？",
         "如果只允许保守跟踪，应该先看哪些风险信号？",
     ]
-    copy_prompt = "\n".join(
-        [
-            "请基于以下结构化证据回答我的追问，不要补充未给出的事实。",
-            "你的任务是做二次解释，不是重复包装已有结论；如果信息不足，请直接说明不足。",
-            "先区分“已知事实”和“你的推断”。如果验证指标之间存在张力或冲突，必须先解释冲突，再决定是否能给方向性判断。",
-            f"股票：{summary['stock']['name']}（{summary['stock']['symbol']}）",
-            "已知事实：",
-            f"观察窗口：{_candidate_window_definition(recommendation)}",
-            f"目标 horizon：{core_quant.get('target_horizon_label', phase2_target_horizon_label())}",
-            f"历史验证状态：{historical_validation.get('status', 'pending_rebuild')}",
-            f"验证 artifact：{historical_validation.get('artifact_id') or '未绑定'}",
-            f"验证 manifest：{historical_validation.get('manifest_id') or '未绑定'}",
-            f"验证样本量：{validation_sample_count if validation_sample_count is not None else '未提供'}",
-            f"RankIC 均值：{validation_rank_ic_mean if validation_rank_ic_mean is not None else '未提供'}",
-            f"正超额占比：{validation_positive_excess_rate if validation_positive_excess_rate is not None else '未提供'}",
-            f"人工研究状态：{manual_llm_review.get('status', 'manual_trigger_required')} / {manual_llm_review.get('trigger_mode', 'manual')}",
-            "核心驱动：",
-            *[f"- {item}" for item in evidence_layer.get("primary_drivers", [])[:3]],
-            "主要风险：",
-            *[f"- {item}" for item in risk_layer.get("risk_flags", [])[:3]],
-            f"系统当前结论（仅供参考，不是必须采纳）：{DIRECTION_LABELS.get(recommendation['direction'], recommendation['direction'])}；{recommendation['confidence_expression']}",
-            f"最近变化：{change['summary']}",
-            "关键证据：",
-            *[f"- {line}" for line in evidence_lines],
-            "请回答这个问题：<在这里替换成你的追问>",
-            "回答要求：明确哪些是事实、哪些是推断；如果证据不足以支持买入/卖出/强化动作，要直接说明；写出失效条件，并指出下一次最值得更新观察的时间点或事件。",
-        ]
-    )
+    prompt_blocks: list[str] = [
+        "请基于以下结构化证据回答我的追问，不要补充未给出的事实。",
+        "你的任务是做二次解释，不是重复包装已有结论；如果信息不足，请直接说明不足。",
+        "先区分“已知事实”和“你的推断”。如果验证指标之间存在张力或冲突，必须先解释冲突，再决定是否能给方向性判断。",
+        f"股票：{summary['stock']['name']}（{summary['stock']['symbol']}）",
+        *build_market_lines(hero),
+        f"观察窗口：{_candidate_window_definition(recommendation)}",
+        f"目标周期：{core_quant.get('target_horizon_label', phase2_target_horizon_label())}",
+        "核心驱动：",
+        *[f"- {item}" for item in evidence_layer.get("primary_drivers", [])[:3]],
+        "主要风险：",
+        *[f"- {item}" for item in risk_layer.get("risk_flags", [])[:3]],
+        f"系统当前建议（仅供参考，不是必须采纳）：{DIRECTION_LABELS.get(recommendation['direction'], recommendation['direction'])}；{recommendation['confidence_expression']}",
+        f"最近变化：{change['summary']}",
+        "关键证据：",
+        *evidence_lines,
+    ]
+    if news_lines:
+        prompt_blocks.extend(["近期事件：", *news_lines])
+    if validation_lines:
+        prompt_blocks.extend(["验证数据（用于评估建议可靠性）：", *validation_lines])
+    prompt_blocks.extend([
+        "请回答这个问题：<在这里替换成你的追问>",
+        "回答要求：明确哪些是事实、哪些是推断；如果证据不足以支持买入/卖出/强化动作，要直接说明；写出失效条件，并指出下一次最值得更新观察的时间点或事件。",
+    ])
+    copy_prompt = "\n".join(prompt_blocks)
     return {
         "suggested_questions": suggested_questions,
         "copy_prompt": copy_prompt,
@@ -465,9 +538,9 @@ def _follow_up_payload(summary: dict[str, Any], change: dict[str, Any], evidence
             "validation_note": historical_validation.get("note"),
             "validation_artifact_id": historical_validation.get("artifact_id"),
             "validation_manifest_id": historical_validation.get("manifest_id"),
-            "validation_sample_count": validation_sample_count,
-            "validation_rank_ic_mean": validation_rank_ic_mean,
-            "validation_positive_excess_rate": validation_positive_excess_rate,
+            "validation_sample_count": v_sc,
+            "validation_rank_ic_mean": v_ric,
+            "validation_positive_excess_rate": v_per,
             "manual_request_id": manual_llm_review.get("request_id"),
             "manual_request_key": manual_llm_review.get("request_key"),
             "manual_review_executor_kind": manual_llm_review.get("executor_kind"),
@@ -602,4 +675,38 @@ def get_stock_dashboard(session: Session, symbol: str) -> dict[str, Any]:
     trace["glossary"] = get_glossary_entries()
     trace["risk_panel"] = _risk_panel(trace, change, recent_news)
     trace["follow_up"] = _follow_up_payload(trace, change, trace["evidence"])
+    from ashare_evidence.benchmark import benchmark_context_summary
+    from ashare_evidence.data_quality import build_stock_data_quality
+    from ashare_evidence.factor_observation import build_factor_observations
+
+    trace["data_quality"] = build_stock_data_quality(
+        session,
+        latest.stock,
+        as_of=latest.as_of_data_time,
+    )
+    try:
+        factor_study = build_factor_observations(
+            session,
+            artifact_root=str(artifact_root or ""),
+            persist=False,
+        )
+        trace["factor_validation"] = {
+            "status": factor_study.get("status"),
+            "note": factor_study.get("note"),
+            "observation_count": factor_study.get("observation_count", 0),
+            "distinct_as_of_date_count": factor_study.get("distinct_as_of_date_count", 0),
+            "benchmark_context": factor_study.get("benchmark_context", {}),
+        }
+    except Exception as exc:
+        trace["factor_validation"] = {
+            "status": "unavailable",
+            "note": f"因子验证摘要暂不可用：{exc}",
+            "observation_count": 0,
+            "distinct_as_of_date_count": 0,
+            "benchmark_context": {},
+        }
+    trace["benchmark_context"] = benchmark_context_summary(session)
+    from ashare_evidence.horizon_readout import build_horizon_readout
+    trace["research_horizon_readout"] = build_horizon_readout(str(artifact_root) if artifact_root else "")
+    trace["event_analyses"] = _event_analysis_payload(latest.stock.symbol, artifact_root)
     return trace

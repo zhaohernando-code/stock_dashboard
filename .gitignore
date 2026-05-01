@@ -12,3 +12,8 @@ data/*.db
 data/*.sqlite
 WORKSPACE_CONTEXT.md
 task-brief.md
+data/artifacts/event_analysis/
+artifacts/
+output/playwright/
+output/releases/*/
+!output/releases/latest-successful.json
