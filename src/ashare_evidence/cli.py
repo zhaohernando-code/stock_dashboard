@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ashare_evidence.benchmark import sync_benchmark_index_bars
 from ashare_evidence.cli_event import add_event_check_parser, handle_event_check, run_refresh_event_checks
 from ashare_evidence.cli_research import add_research_parsers, handle_factor_observation, handle_weight_sweep
 from ashare_evidence.dashboard import get_glossary_entries, get_stock_dashboard, list_candidate_recommendations
@@ -193,6 +194,7 @@ def _refresh_runtime_data_output(
     refreshed = [refresh_watchlist_symbol(session, symbol) for symbol in symbols] if run_analysis_refresh else []
     event_results = run_refresh_event_checks(session, [item["symbol"] for item in refreshed]) if run_analysis_refresh and refreshed else []
     intraday = sync_intraday_market(session, symbols) if run_ops_refresh else None
+    benchmark_bars = sync_benchmark_index_bars(session) if run_ops_refresh else None
     simulation = None
     if not skip_simulation and run_analysis_refresh:
         restart_simulation_session(session)
@@ -212,6 +214,7 @@ def _refresh_runtime_data_output(
             for item in refreshed
         },
         "intraday_market": intraday,
+        "benchmark_index_bars": benchmark_bars,
         "simulation_last_data_time": None if simulation is None else simulation["session"]["last_data_time"],
         "simulation_current_step": None if simulation is None else simulation["session"]["current_step"], "event_analyses_triggered": len(event_results), "event_analyses": event_results[:3] if event_results else [],
     }
@@ -222,11 +225,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     init_db = subparsers.add_parser("init-db", help="Create database tables.")
     init_db.add_argument("--database-url", default=None)
-
     latest = subparsers.add_parser("latest", help="Show the latest recommendation for a stock.")
     latest.add_argument("--database-url", default=None)
     latest.add_argument("--symbol", default="600519.SH")
-
     candidates = subparsers.add_parser("candidates", help="Show ranked dashboard candidates.")
     candidates.add_argument("--database-url", default=None)
     candidates.add_argument("--limit", type=int, default=8)
@@ -341,7 +342,6 @@ def main(argv: list[str] | None = None) -> int:
         init_database(args.database_url)
         print("database initialized")
         return 0
-
     if _should_initialize_database(args.database_url):
         init_database(args.database_url)
     if args.command == "latest":

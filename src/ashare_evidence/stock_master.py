@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import date
 from functools import lru_cache
-import json
 from typing import Any
 from urllib import error, request
 
@@ -40,6 +40,24 @@ LOCAL_STOCK_MASTER_OVERRIDES: dict[str, dict[str, Any]] = {
         "industry": "半导体",
         "listed_date": date(2020, 7, 16),
         "template_key": "electronics",
+    },
+    "000300.SH": {
+        "name": "沪深300",
+        "industry": "指数",
+        "listed_date": date(2005, 4, 8),
+        "template_key": "benchmark_index",
+    },
+    "000905.SH": {
+        "name": "中证500",
+        "industry": "指数",
+        "listed_date": date(2007, 1, 15),
+        "template_key": "benchmark_index",
+    },
+    "000852.SH": {
+        "name": "中证1000",
+        "industry": "指数",
+        "listed_date": date(2014, 10, 17),
+        "template_key": "benchmark_index",
     },
 }
 
