@@ -111,8 +111,8 @@
       "reviewed_at": "2026-04-28"
     },
     "src/ashare_evidence/improvement_suggestions.py": {
-      "lines": 1012,
-      "reason": "Suggestion audit workflow: ledger extraction, dual-model review orchestration, confidence aggregation, snapshot persistence, and control-plane plan handoff. The file is large because the artifact-driven workflow is still cohesive and shares one contract surface; further split can happen later around reviewer transport and snapshot rendering.",
+      "lines": 991,
+      "reason": "Suggestion audit workflow: ledger extraction, dual-model review orchestration, confidence aggregation, snapshot persistence, and control-plane plan handoff. The live control-plane relay has been split into `control_plane_client.py`, so this file is back under the previous growth ceiling while the artifact workflow remains cohesive.",
       "status": "accepted",
       "reviewed_at": "2026-05-01"
     },

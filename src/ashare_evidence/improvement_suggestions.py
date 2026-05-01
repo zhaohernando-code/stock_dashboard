@@ -7,16 +7,17 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib import request
-from urllib.error import HTTPError, URLError
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ashare_evidence.control_plane_client import (
+    control_plane_endpoint_label,
+    post_control_plane_task,
+)
 from ashare_evidence.dashboard import get_stock_dashboard, list_candidate_recommendations
 from ashare_evidence.data_quality import build_stock_data_quality
 from ashare_evidence.db import utcnow
-from ashare_evidence.http_client import urlopen
 from ashare_evidence.llm_service import AnthropicCompatibleTransport, OpenAICompatibleTransport
 from ashare_evidence.models import ManualResearchRequest, ModelApiKey, Stock
 from ashare_evidence.research_artifact_store import (
@@ -43,7 +44,6 @@ SUGGESTION_STATUSES = {"new", "reviewed", "accepted_for_plan", "rejected", "moni
 FINAL_CONFIDENCE = {"high", "moderate", "low", "reject"}
 RECOMMENDED_ACTIONS = {"ignore", "monitor", "create_plan", "create_experiment"}
 REVIEWER_NAMES = ("gpt", "deepseek")
-DEFAULT_CONTROL_PLANE_API_BASE = "http://127.0.0.1:8787"
 DEFAULT_CONTROL_PLANE_PROJECT_ID = "ashare-dashboard"
 CONTROL_PLANE_TASK_MODELS = {
     "gpt-5.5",
@@ -895,32 +895,8 @@ def _build_control_plane_task_description(item: dict[str, Any], *, selected_mode
     )
 
 
-def _control_plane_api_base() -> str:
-    return (os.getenv("ASHARE_CONTROL_PLANE_API_BASE") or DEFAULT_CONTROL_PLANE_API_BASE).strip().rstrip("/")
-
-
 def _control_plane_project_id() -> str:
     return (os.getenv("ASHARE_CONTROL_PLANE_PROJECT_ID") or DEFAULT_CONTROL_PLANE_PROJECT_ID).strip()
-
-
-def _post_control_plane_task(payload: dict[str, Any], *, api_base: str | None = None) -> dict[str, Any]:
-    base = (api_base or _control_plane_api_base()).rstrip("/")
-    endpoint = f"{base}/api/tasks"
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    http_request = request.Request(
-        endpoint,
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urlopen(http_request, timeout=30, disable_proxies=True) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="ignore") or str(exc)
-        raise RuntimeError(f"Control-plane task creation failed with HTTP {exc.code}: {detail}") from exc
-    except URLError as exc:
-        raise RuntimeError(f"Control-plane task creation failed: {exc.reason}") from exc
 
 
 def accept_suggestion_for_plan(
@@ -965,7 +941,7 @@ def accept_suggestion_for_plan(
     }
     if provider:
         task_payload["provider"] = provider
-    created = _post_control_plane_task(task_payload, api_base=api_base)
+    created = post_control_plane_task(task_payload, api_base=api_base)
     task = created.get("task") if isinstance(created, dict) else {}
     target["status"] = "accepted_for_plan"
     target["control_plane_task"] = {
@@ -975,7 +951,7 @@ def accept_suggestion_for_plan(
         "model": normalized_model,
         "project_id": _control_plane_project_id(),
         "plan_mode": True,
-        "api_base": api_base or _control_plane_api_base(),
+        "api_base": control_plane_endpoint_label(api_base=api_base),
     }
     history = list(target.get("status_history") or [])
     history.append(
