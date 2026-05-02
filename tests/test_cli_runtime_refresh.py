@@ -160,7 +160,10 @@ class CliRuntimeRefreshTests(unittest.TestCase):
         )
         self.assertEqual(
             payload["phase5_holding_policy_study"]["redesign_primary_experiment_ids"],
-            ["profitability_signal_threshold_sweep_v1"],
+            [
+                "profitability_signal_threshold_sweep_v1",
+                "construction_max_position_count_sweep_v1",
+            ],
         )
         with session_scope(self.database_url) as session:
             portfolios = session.scalars(select(PaperPortfolio).order_by(PaperPortfolio.portfolio_key.asc())).all()
