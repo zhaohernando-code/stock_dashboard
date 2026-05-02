@@ -114,6 +114,8 @@ scripts/publish-local-runtime.sh
 - Default branch name: `task/stock_dashboard/<yyyymmdd>-<slug>`
 - Before calling work complete, update `DECISIONS.md`, `PROCESS.md`, and `PROJECT_STATUS.json` when the change affects durable decisions, reusable lessons, or current handoff state.
 - Live-facing work is not complete until publish and real browser verification have both finished.
+- Unless the user explicitly asks to keep a task branch open, closeout does not stop at a branch-local commit: merge the task branch back into `main`, switch to `main`, and leave `git status --short` empty before declaring the task done.
+- Final git state is part of acceptance. If a change is committed but not merged, or merged but the repo is left on a dirty task branch, the response must say so explicitly instead of presenting the task as fully closed.
 
 ## 开发测试必读
 

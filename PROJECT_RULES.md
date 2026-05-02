@@ -12,6 +12,8 @@
 - Live browser acceptance must follow the `README.md` `开发测试必读` flow. A single blank Chrome tab, one failed click, or an unrefreshed authenticated tab is not enough evidence to declare publish failure or success; verification must distinguish runtime health, hydration delay, browser-state false negatives, and canonical-route rendering.
 - If the main repo is dirty and `scripts/publish-local-runtime.sh` refuses to run, do not bypass publish and do not patch runtime directly. Create a temporary clean snapshot from the current `HEAD`, publish from that snapshot, then record the snapshot path and browser-verification result in `PROCESS.md`.
 - If the canonical verifier cannot complete because credentials are missing, the task is still incomplete until both localhost preview and the authenticated canonical route have been manually rechecked in a real browser and that fallback path has been written into the durable logs.
+- For this repo, closeout is not complete at a task-branch commit. Unless the user explicitly wants the branch left open, the final repo state must be `main` fast-forwarded or merged to include the task commits, with a clean working tree.
+- Final responses must report whether the change is on `main` or still branch-local. Do not imply “已收尾” while the relevant commits only exist on `task/*`.
 - Durable research or rollout decisions go to `DECISIONS.md`; reusable lessons or rollback causes go to `PROCESS.md`; current progress and blockers go to `PROJECT_STATUS.json`.
 - Active contracts belong in `docs/contracts/`; historical audit and research notes belong in `docs/archive/`.
 - 用户访问入口当前是 `https://hernando-zhao.cn/stocks`；底层规范挂载路径仍是 `https://hernando-zhao.cn/projects/ashare-dashboard/`。文档和 UI 文案需要区分这两层，不要把业务别名和运行时挂载写成同一个概念。
