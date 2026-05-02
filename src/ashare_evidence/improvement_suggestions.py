@@ -39,7 +39,7 @@ SUGGESTION_CATEGORIES = {
     "horizon_experiment",
     "operations_workflow",
 }
-SUGGESTION_STATUSES = {"new", "reviewed", "accepted_for_plan", "rejected", "monitoring"}
+SUGGESTION_STATUSES = {"new", "reviewed", "accepted_for_plan", "rejected", "monitoring", "completed"}
 FINAL_CONFIDENCE = {"high", "moderate", "low", "reject"}
 RECOMMENDED_ACTIONS = {"ignore", "monitor", "create_plan", "create_experiment"}
 REVIEWER_NAMES = ("gpt", "deepseek")
@@ -1000,8 +1000,8 @@ def update_suggestion_status(
     status: str,
     reason: str,
 ) -> dict[str, Any]:
-    if status not in {"accepted_for_plan", "rejected", "monitoring"}:
-        raise ValueError("status must be accepted_for_plan, rejected, or monitoring.")
+    if status not in {"accepted_for_plan", "rejected", "monitoring", "completed"}:
+        raise ValueError("status must be accepted_for_plan, rejected, monitoring, or completed.")
     if not reason.strip():
         raise ValueError("reason is required.")
     root, snapshot, target = _latest_suggestion_item(session, suggestion_id)

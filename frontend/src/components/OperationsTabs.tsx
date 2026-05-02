@@ -423,11 +423,20 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
                         <Button
                           key="plan"
                           type="link"
-                          disabled={item.status === "accepted_for_plan"}
+                          disabled={item.status === "accepted_for_plan" || item.status === "completed"}
                           onClick={() => openImprovementPlanModelPicker(item, handleAcceptImprovementSuggestionForPlan)}
                         >
                           进入计划池
                         </Button>,
+                        item.status === "accepted_for_plan" ? (
+                          <Button
+                            key="complete"
+                            type="link"
+                            onClick={() => void handleUpdateImprovementSuggestionStatus(item.suggestion_id, "completed", "计划已执行完毕")}
+                          >
+                            标记完成
+                          </Button>
+                        ) : null,
                         <Button
                           key="monitor"
                           type="link"
@@ -445,7 +454,7 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
                         >
                           拒绝
                         </Button>,
-                      ]}
+                      ].filter(Boolean)}
                     >
                       <div className="watchlist-entry">
                         <div className="list-item-row">

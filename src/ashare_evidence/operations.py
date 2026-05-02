@@ -1271,6 +1271,50 @@ def _summary_payload_from_dashboard(payload: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
+def _lookup_gate_plan_status(session: Session, gate_name: str) -> dict[str, Any] | None:
+    """Check the latest suggestion review snapshot for an improvement plan targeting *gate_name*.
+
+    Returns the best-matching suggestion (prioritizing ``"completed"`` > ``"accepted_for_plan"``)
+    or ``None`` when no plan exists.
+    """
+    try:
+        from pathlib import Path
+
+        review_root = artifact_root_from_database_url(
+            session.get_bind().url.render_as_string(hide_password=False)
+            if session.get_bind()
+            else None
+        )
+        review_dir = Path(review_root) / "suggestion_reviews"
+        index_path = review_dir / "index.json"
+        if not index_path.exists():
+            return None
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        if not index:
+            return None
+        index.sort(key=lambda item: str(item.get("generated_at", "")), reverse=True)
+        snapshot_path = review_dir / str(index[0].get("file", ""))
+        if not snapshot_path.exists():
+            return None
+        snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, Exception):
+        return None
+
+    source_ref = f"launch_gate/{gate_name}"
+    candidates: list[dict[str, Any]] = []
+    for item in snapshot.get("suggestions", []):
+        if item.get("source_ref") == source_ref:
+            candidates.append(item)
+
+    if not candidates:
+        return None
+
+    # Prefer completed → accepted_for_plan → reviewed → other
+    priority = {"completed": 0, "accepted_for_plan": 1}
+    candidates.sort(key=lambda c: priority.get(str(c.get("status") or ""), 99))
+    return candidates[0]
+
+
 def build_operations_summary(
     session: Session,
     sample_symbol: str = "600519.SH",
@@ -1655,6 +1699,21 @@ def build_operations_dashboard(
     manual_portfolio = next((item for item in portfolio_payloads if item["mode"] == "manual"), None)
     auto_portfolio = next((item for item in portfolio_payloads if item["mode"] == "auto_model"), None)
     portfolio_artifact_projection = _portfolio_backtest_projection(portfolio_payloads)
+    coverage_plan = _lookup_gate_plan_status(session, "建议命中复盘覆盖")
+    coverage_gate_status = (
+        "pass"
+        if coverage_plan and coverage_plan.get("status") == "completed"
+        else "warn"
+    )
+    coverage_gate_value = (
+        f"改进计划已完成（{coverage_plan.get('control_plane_task', {}).get('id', 'N/A')}）。"
+        if coverage_plan and coverage_plan.get("status") == "completed"
+        else (
+            f"改进计划已执行中（{coverage_plan.get('control_plane_task', {}).get('id', 'N/A')}），等待验收。"
+            if coverage_plan and coverage_plan.get("status") == "accepted_for_plan"
+            else "当前仍是演示口径，已从正式上线判定中降级。"
+        )
+    )
     launch_gates = [
         {
             "gate": "分离式模拟交易",
@@ -1707,8 +1766,8 @@ def build_operations_dashboard(
         {
             "gate": "建议命中复盘覆盖",
             "threshold": "真实 benchmark 与正式复盘口径完成重建后，才允许恢复该门槛。",
-            "current_value": "当前仍是演示口径，已从正式上线判定中降级。",
-            "status": "warn",
+            "current_value": coverage_gate_value,
+            "status": coverage_gate_status,
         },
         {
             "gate": "访问控制",

@@ -57,7 +57,7 @@
       "reviewed_at": "2026-04-28"
     },
     "src/ashare_evidence/operations.py": {
-      "lines": 1920,
+      "lines": 1979,
       "reason": "Operations dashboard builder with tightly coupled payload functions, order checks, summary/detail split, and suggestion-audit surfaces. Extraction was considered, but the current payload-building path still shares too much domain state to split safely in this closeout turn.",
       "status": "accepted",
       "reviewed_at": "2026-05-01"
@@ -111,7 +111,7 @@
       "reviewed_at": "2026-04-28"
     },
     "src/ashare_evidence/improvement_suggestions.py": {
-      "lines": 1012,
+      "lines": 1014,
       "reason": "Suggestion audit workflow: ledger extraction, dual-model review orchestration, confidence aggregation, snapshot persistence, and control-plane plan handoff. The file is large because the artifact-driven workflow is still cohesive and shares one contract surface; further split can happen later around reviewer transport and snapshot rendering.",
       "status": "accepted",
       "reviewed_at": "2026-05-01"
@@ -135,7 +135,7 @@
       "reviewed_at": "2026-05-01"
     },
     "frontend/src/components/OperationsTabs.tsx": {
-      "lines": 1014,
+      "lines": 994,
       "reason": "Operations dashboard tabs: suggestion-audit, filter state, model-picking modal, per-section loading skeletons for simulation_workspace, improvement_suggestions, manual_queue, replay, portfolios. Future split into per-tab components still desirable.",
       "status": "accepted",
       "reviewed_at": "2026-05-01"
