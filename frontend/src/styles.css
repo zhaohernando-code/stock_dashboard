@@ -662,6 +662,23 @@ body[data-theme="dark"] {
   font-weight: 700;
 }
 
+.suggestion-entry-completed {
+  padding: 14px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 14px;
+  background: rgba(148, 163, 184, 0.08);
+  opacity: 0.72;
+}
+
+.suggestion-list-item-completed .ant-list-item-action {
+  display: none;
+}
+
+.suggestion-entry-completed .compact-collapse > .ant-collapse-item {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(255, 255, 255, 0.3);
+}
+
 /* === equal-height row: force left/right columns to match === */
 .equal-height-row > .ant-col {
   display: flex;

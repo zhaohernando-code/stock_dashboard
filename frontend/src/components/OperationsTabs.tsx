@@ -107,6 +107,16 @@ function suggestionActionLabel(value?: string | null): string {
   if (value === "create_experiment") return "进入实验";
   return value || "未给出";
 }
+
+function improvementSuggestionStatusLabel(value?: string | null): string {
+  if (value === "accepted_for_plan") return "计划执行中";
+  if (value === "completed") return "已完成";
+  if (value === "monitoring") return "观察中";
+  if (value === "rejected") return "已拒绝";
+  if (value === "reviewed") return "已审计";
+  return value || "未处理";
+}
+
 function reviewerSummary(item: ImprovementSuggestionView, reviewer: string): string {
   const review = item.reviews?.[reviewer];
   if (!review) return "未返回审计";
@@ -420,46 +430,50 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
                 <List
                   dataSource={filteredImprovementSuggestions}
                   locale={{ emptyText: "暂无可审计建议" }}
-                  renderItem={(item) => (
+                  renderItem={(item) => {
+                    const isCompleted = item.status === "completed";
+                    const actions = isCompleted ? [] : [
+                      <Button
+                        key="plan"
+                        type="link"
+                        disabled={item.status === "accepted_for_plan"}
+                        onClick={() => openImprovementPlanModelPicker(item, handleAcceptImprovementSuggestionForPlan)}
+                      >
+                        进入计划池
+                      </Button>,
+                      item.status === "accepted_for_plan" ? (
+                        <Button
+                          key="complete"
+                          type="link"
+                          onClick={() => void handleUpdateImprovementSuggestionStatus(item.suggestion_id, "completed", "计划已执行完毕")}
+                        >
+                          标记完成
+                        </Button>
+                      ) : null,
+                      <Button
+                        key="monitor"
+                        type="link"
+                        disabled={item.status === "monitoring"}
+                        onClick={() => void handleUpdateImprovementSuggestionStatus(item.suggestion_id, "monitoring", "标记观察")}
+                      >
+                        标记观察
+                      </Button>,
+                      <Button
+                        key="reject"
+                        type="link"
+                        danger
+                        disabled={item.status === "rejected"}
+                        onClick={() => void handleUpdateImprovementSuggestionStatus(item.suggestion_id, "rejected", "当前不采纳")}
+                      >
+                        拒绝
+                      </Button>,
+                    ].filter(Boolean);
+                    return (
                     <List.Item
-                      actions={[
-                        <Button
-                          key="plan"
-                          type="link"
-                          disabled={item.status === "accepted_for_plan" || item.status === "completed"}
-                          onClick={() => openImprovementPlanModelPicker(item, handleAcceptImprovementSuggestionForPlan)}
-                        >
-                          进入计划池
-                        </Button>,
-                        item.status === "accepted_for_plan" ? (
-                          <Button
-                            key="complete"
-                            type="link"
-                            onClick={() => void handleUpdateImprovementSuggestionStatus(item.suggestion_id, "completed", "计划已执行完毕")}
-                          >
-                            标记完成
-                          </Button>
-                        ) : null,
-                        <Button
-                          key="monitor"
-                          type="link"
-                          disabled={item.status === "monitoring"}
-                          onClick={() => void handleUpdateImprovementSuggestionStatus(item.suggestion_id, "monitoring", "标记观察")}
-                        >
-                          标记观察
-                        </Button>,
-                        <Button
-                          key="reject"
-                          type="link"
-                          danger
-                          disabled={item.status === "rejected"}
-                          onClick={() => void handleUpdateImprovementSuggestionStatus(item.suggestion_id, "rejected", "当前不采纳")}
-                        >
-                          拒绝
-                        </Button>,
-                      ].filter(Boolean)}
+                      className={isCompleted ? "suggestion-list-item-completed" : undefined}
+                      actions={actions}
                     >
-                      <div className="watchlist-entry">
+                      <div className={`watchlist-entry suggestion-entry ${isCompleted ? "suggestion-entry-completed" : ""}`}>
                         <div className="list-item-row">
                           <div>
                             <strong>{sanitizeDisplayText(item.claim)}</strong>
@@ -467,6 +481,9 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
                           </div>
                           <Space wrap>
                             <Tag>{item.category}</Tag>
+                            <Tag color={statusColor(item.status ?? "pending")}>
+                              {improvementSuggestionStatusLabel(item.status)}
+                            </Tag>
                             <Tag color={statusColor(item.final_confidence ?? "pending")}>
                               {suggestionConfidenceLabel(item.final_confidence)}
                             </Tag>
@@ -523,7 +540,8 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
                         />
                       </div>
                     </List.Item>
-                  )}
+                    );
+                  }}
                 />
               </>
             ) : (

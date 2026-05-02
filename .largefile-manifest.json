@@ -135,10 +135,10 @@
       "reviewed_at": "2026-05-01"
     },
     "frontend/src/components/OperationsTabs.tsx": {
-      "lines": 997,
-      "reason": "Operations dashboard tabs: suggestion-audit, filter state, model-picking modal, per-section loading skeletons for simulation_workspace, improvement_suggestions, manual_queue, replay, portfolios. The latest growth adds completed-queue handling to keep finished suggestions out of the default worklist; future split into per-tab components is still desirable.",
+      "lines": 1015,
+      "reason": "Operations dashboard tabs: suggestion-audit, filter state, model-picking modal, per-section loading skeletons for simulation_workspace, improvement_suggestions, manual_queue, replay, portfolios. The latest growth adds explicit completed-state rendering and hides worklist actions for finished suggestions; future split into per-tab components is still desirable.",
       "status": "accepted",
-      "reviewed_at": "2026-05-02"
+      "reviewed_at": "2026-05-03"
     },
     "src/ashare_evidence/event_analyzer.py": {
       "lines": 526,
