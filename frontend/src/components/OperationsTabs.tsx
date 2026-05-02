@@ -114,6 +114,7 @@ function reviewerSummary(item: ImprovementSuggestionView, reviewer: string): str
 }
 
 function improvementSuggestionFilterLabel(value?: string | null): string {
+  if (value === "completed") return "已完成";
   if (value === "reviewed") return "已审计";
   if (value === "high_confidence") return "高置信";
   if (value === "moderate_confidence") return "中置信";
@@ -124,7 +125,8 @@ function improvementSuggestionFilterLabel(value?: string | null): string {
   return "本周建议";
 }
 function filterImprovementSuggestions(items: ImprovementSuggestionView[], filter: string | null): ImprovementSuggestionView[] {
-  if (!filter) return items;
+  if (!filter) return items.filter((item) => item.status !== "completed");
+  if (filter === "completed") return items.filter((item) => item.status === "completed");
   if (filter === "reviewed") return items.filter((item) => item.status === "reviewed" || Boolean(item.reviews));
   if (filter === "high_confidence") return items.filter((item) => item.final_confidence === "high");
   if (filter === "moderate_confidence") return items.filter((item) => item.final_confidence === "moderate");
@@ -193,6 +195,7 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
   const filteredImprovementSuggestions = filterImprovementSuggestions(improvementSuggestionItems, improvementSuggestionFilter);
   const improvementSuggestionStatFilters = improvementSuggestions ? [
     { key: null, label: "本周建议", value: improvementSuggestions.summary.total ?? 0 },
+    { key: "completed", label: "已完成", value: improvementSuggestions.summary.by_status?.completed ?? 0 },
     { key: "reviewed", label: "已审计", value: improvementSuggestions.summary.reviewed ?? 0 },
     { key: "high_confidence", label: "高置信", value: improvementSuggestions.summary.high_confidence ?? 0 },
     { key: "moderate_confidence", label: "中置信", value: improvementSuggestions.summary.moderate_confidence ?? 0 },
