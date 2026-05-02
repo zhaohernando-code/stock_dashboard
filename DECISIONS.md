@@ -1,5 +1,15 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-05-02T23:20:00+08:00] Launch gate feedback must read suggestion review snapshots, not stay hardcoded:
+
+运营门禁的状态不能硬编码。当某个门禁被标记为 warn 且提示"需要形成改进计划"时，门禁必须动态读取最新的 suggestion review snapshot，根据对应计划的状态（accepted_for_plan / completed）决定门禁的实际 status 和 current_value。硬编码 placeholder 只在尚未建立 suggestion review 管线的过渡期可接受，一旦管线就位必须替换为动态查询。
+
+补充说明
+- `operations.py` 的 `_lookup_gate_plan_status()` 通过 `source_ref = "launch_gate/{gate_name}"` 匹配快照中的建议，优先 completed > accepted_for_plan。
+- 计划 completed → gate pass；计划 accepted_for_plan → gate warn + 任务 ID；无计划 → 保持原始 warn。
+- `improvement_suggestions.py` 的 `SUGGESTION_STATUSES` 同步增加了 `"completed"` 状态，前端审计台增加对应的"标记完成"按钮。
+- 注意：suggestion review snapshot 是按次生成的点状快照，下一次 `run_improvement_suggestion_review` 会生成新快照；若计划已完成（门禁变 pass），新的收集循环不会再为该门禁创建建议。
+
 [2026-05-01T18:40:00+08:00] Improvement plan-pool control-plane boundary decision:
 
 股票看板的“进入计划池”默认只允许把任务交给本机控制面后端处理。`/middle` 或其他服务器侧入口只能被视为认证后的可视化入口/转接面，不能再被当成股票看板创建 Plan 任务时的默认权威后端。
