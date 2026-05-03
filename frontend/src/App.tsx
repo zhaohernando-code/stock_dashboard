@@ -13,6 +13,7 @@ import {
   ThunderboltOutlined,
 } from "@ant-design/icons";
 import {
+  App as AntdApp,
   Alert,
   Button,
   Card,
@@ -38,7 +39,6 @@ import {
   Tag,
   Timeline,
   Typography,
-  message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { MouseEvent, ReactNode } from "react";
@@ -116,7 +116,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   const initialRuntimeConfig = api.getRuntimeConfig();
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
-  const [messageApi, messageContextHolder] = message.useMessage();
+  const { message: messageApi, modal } = AntdApp.useApp();
   const [view, setView] = useState<ViewMode>("candidates");
   const [runtimeConfig, setRuntimeConfig] = useState<DashboardRuntimeConfig>(initialRuntimeConfig);
   const [sourceInfo, setSourceInfo] = useState<DataSourceInfo>(() => buildInitialSourceInfo());
@@ -804,7 +804,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   }
 
   function handleEndSimulation() {
-    Modal.confirm({
+    modal.confirm({
       title: "结束当前双轨模拟？",
       content: "结束后时间线会停止推进，但当前留痕会保留用于复盘。",
       okText: "确认结束",
@@ -1850,6 +1850,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     improvementSuggestionReviewNotice,
     handleAcceptImprovementSuggestionForPlan,
     handleUpdateImprovementSuggestionStatus,
+    modalApi: modal,
     improvementSuggestionFilter,
     setImprovementSuggestionFilter,
     loadingSections,
@@ -1874,12 +1875,11 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     newKeyPriority, setNewKeyPriority,
     providerDrafts, setProviderDrafts,
     savingConfig, setSavingConfig,
-    messageApi, loadRuntimeSettings, setError,
+    messageApi, modalApi: modal, loadRuntimeSettings, setError,
   }) : [];
   if (isMobile) {
     return (
       <>
-        {messageContextHolder}
         <MobileAppShell
           themeMode={themeMode}
           loadingShell={loadingShell}
@@ -1965,7 +1965,6 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
 
   return (
     <>
-      {messageContextHolder}
       <div className="app-theme-shell" data-theme={themeMode}>
         <div className="workspace-shell">
           <div className="workspace-hero panel-card">

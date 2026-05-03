@@ -46,6 +46,7 @@ import { KlinePanel } from "./KlinePanel";
 import { CompactAnalysisReport } from "./CompactAnalysisReport";
 
 const { Paragraph, Text, Title } = Typography;
+type ModalApi = { confirm: typeof Modal.confirm };
 const IMPROVEMENT_TASK_MODEL_OPTIONS = [
   { label: "GPT-5.5 高级审计 / 仲裁", value: "gpt-5.5" },
   { label: "GPT-5.4", value: "gpt-5.4" },
@@ -70,6 +71,7 @@ export interface BuildOperationsTabsInput {
   openCompleteManualResearchModal: (item: any) => void;
   openFailManualResearchModal: (item: any) => void;
   messageApi: { warning: (msg: string) => void; success: (msg: string) => void; error: (msg: string) => void };
+  modalApi: ModalApi;
   simulationAction: string | null;
   setSimulationAction: (v: string | null) => void;
   operationsFocusSymbol: string | null;
@@ -155,9 +157,10 @@ function filterImprovementSuggestions(items: ImprovementSuggestionView[], filter
 function openImprovementPlanModelPicker(
   item: ImprovementSuggestionView,
   handleAcceptImprovementSuggestionForPlan: (suggestionId: string, model: string) => Promise<void>,
+  modalApi: ModalApi,
 ) {
   let selectedModel = "gpt-5.4";
-  Modal.confirm({
+  modalApi.confirm({
     title: "选择执行模型",
     okText: "进入计划池并创建中台任务",
     cancelText: "取消",
@@ -193,7 +196,7 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
     handleCandidateSelect, handleSaveSimulationConfig,
     handleExecuteManualResearch, handleRetryManualResearch,
     openCompleteManualResearchModal, openFailManualResearchModal,
-    messageApi,
+    messageApi, modalApi,
     simulationAction, setSimulationAction,
     operationsFocusSymbol, setOperationsFocusSymbol,
     loadingDetail, setLoadingDetail,
@@ -462,7 +465,7 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
                         key="plan"
                         type="link"
                         disabled={item.status === "accepted_for_plan"}
-                        onClick={() => openImprovementPlanModelPicker(item, handleAcceptImprovementSuggestionForPlan)}
+                        onClick={() => openImprovementPlanModelPicker(item, handleAcceptImprovementSuggestionForPlan, modalApi)}
                       >
                         进入计划池
                       </Button>,

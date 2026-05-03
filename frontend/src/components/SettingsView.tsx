@@ -22,6 +22,7 @@ import { formatDate } from "../utils/format";
 
 const { Paragraph, Text, Title } = Typography;
 const { TextArea } = Input;
+type ModalApi = { confirm: typeof Modal.confirm };
 
 export interface BuildSettingsTabsInput {
   runtimeSettings: RuntimeSettingsResponse | null;
@@ -46,6 +47,7 @@ export interface BuildSettingsTabsInput {
   savingConfig: boolean;
   setSavingConfig: (v: boolean) => void;
   messageApi: { warning: (msg: string) => void; success: (msg: string) => void; error: (msg: string) => void };
+  modalApi: ModalApi;
   loadRuntimeSettings: () => Promise<void>;
   setError: (err: string | null) => void;
 }
@@ -65,7 +67,7 @@ export function buildSettingsTabs(input: BuildSettingsTabsInput) {
     newKeyPriority, setNewKeyPriority,
     providerDrafts, setProviderDrafts,
     savingConfig, setSavingConfig,
-    messageApi, loadRuntimeSettings, setError,
+    messageApi, modalApi, loadRuntimeSettings, setError,
   } = input;
 
   async function handleCreateModelApiKey() {
@@ -133,7 +135,7 @@ export function buildSettingsTabs(input: BuildSettingsTabsInput) {
   }
 
   async function handleDeleteModelApiKey(item: ModelApiKeyView) {
-    Modal.confirm({
+    modalApi.confirm({
       title: "确认删除",
       content: `确定要删除「${item.name}」吗？不可撤销。`,
       okText: "删除",

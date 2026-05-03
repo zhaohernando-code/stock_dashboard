@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ReactDOM from "react-dom/client";
-import { ConfigProvider, theme as antTheme } from "antd";
+import { App as AntdApp, ConfigProvider, theme as antTheme } from "antd";
 import "antd/dist/reset.css";
 import App from "./App";
 import "./styles.css";
@@ -156,10 +156,12 @@ function Root() {
 
   return (
     <ConfigProvider theme={themeConfig}>
-      <App
-        themeMode={themeMode}
-        onToggleTheme={() => setThemeMode((current) => (current === "dark" ? "light" : "dark"))}
-      />
+      <AntdApp>
+        <App
+          themeMode={themeMode}
+          onToggleTheme={() => setThemeMode((current) => (current === "dark" ? "light" : "dark"))}
+        />
+      </AntdApp>
     </ConfigProvider>
   );
 }

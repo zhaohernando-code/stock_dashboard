@@ -995,18 +995,12 @@ body[data-theme="dark"] {
   border-block-end-color: var(--line);
 }
 body[data-theme="dark"] .ant-card,
-body[data-theme="dark"] .ant-modal-content,
-body[data-theme="dark"] .ant-popover-inner,
-body[data-theme="dark"] .ant-select-selector,
 body[data-theme="dark"] .ant-input,
 body[data-theme="dark"] .ant-input-affix-wrapper,
 body[data-theme="dark"] .ant-input-number,
 body[data-theme="dark"] .ant-descriptions-view,
 body[data-theme="dark"] .candidate-mobile-card,
 .app-theme-shell[data-theme="dark"] .ant-card,
-.app-theme-shell[data-theme="dark"] .ant-modal-content,
-.app-theme-shell[data-theme="dark"] .ant-popover-inner,
-.app-theme-shell[data-theme="dark"] .ant-select-selector,
 .app-theme-shell[data-theme="dark"] .ant-input,
 .app-theme-shell[data-theme="dark"] .ant-input-affix-wrapper,
 .app-theme-shell[data-theme="dark"] .ant-input-number,
@@ -1014,17 +1008,6 @@ body[data-theme="dark"] .candidate-mobile-card,
 .app-theme-shell[data-theme="dark"] .candidate-mobile-card {
   background: var(--panel-bg);
 }
-
-body[data-theme="dark"] .ant-select-dropdown,
-.app-theme-shell[data-theme="dark"] .ant-select-dropdown { background: var(--panel-bg); }
-body[data-theme="dark"] .ant-select-selection-item,
-body[data-theme="dark"] .ant-select-item,
-.app-theme-shell[data-theme="dark"] .ant-select-selection-item,
-.app-theme-shell[data-theme="dark"] .ant-select-item { color: var(--text-main); }
-body[data-theme="dark"] .ant-select-item-option-selected,
-.app-theme-shell[data-theme="dark"] .ant-select-item-option-selected { background: var(--brand-soft); color: var(--text-main); }
-body[data-theme="dark"] .ant-select-item-option-active,
-.app-theme-shell[data-theme="dark"] .ant-select-item-option-active { background: var(--surface-1); }
 
 body[data-theme="dark"] .ant-btn-default,
 body[data-theme="dark"] .workspace-nav-card,
