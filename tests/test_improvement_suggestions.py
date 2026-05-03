@@ -13,11 +13,14 @@ from ashare_evidence.api import create_app
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.improvement_suggestions import (
     _run_reviewer,
+    _snapshot_counts,
     _transport_for_model_key,
+    _write_snapshot,
     accept_suggestion_for_plan,
     collect_improvement_suggestions,
     parse_reviewer_json,
     run_improvement_suggestion_review,
+    suggestion_details,
     summarize_suggestion_review,
     update_suggestion_status,
 )
@@ -128,6 +131,75 @@ class ImprovementSuggestionTests(unittest.TestCase):
         self.assertIn("重新运行数据质量与改进建议审计", grouped["proposed_change"])
         self.assertEqual(grouped["raw_source"]["aggregation"], "degraded_source_group")
         self.assertEqual(grouped["raw_source"]["symbol_count"], 2)
+        self.assertEqual(grouped["raw_source"]["symbols"], ["300750.SZ", "600519.SH"])
+        self.assertEqual(
+            sorted(grouped["evidence_refs"]),
+            ["data_quality/300750.SZ", "data_quality/600519.SH"],
+        )
+
+    def test_legacy_data_quality_snapshot_is_grouped_on_read(self) -> None:
+        root = artifact_root_from_database_url(self.database_url)
+        suggestions = [
+            {
+                "suggestion_id": "suggestion:old-a",
+                "source_type": "data_quality",
+                "source_ref": "data_quality/600519.SH/latest",
+                "symbol": "600519.SH",
+                "category": "data_quality",
+                "claim": "600519.SH 数据质量为 warn，降级来源：financial_data_stale, profile_incomplete。",
+                "proposed_change": "优先补齐或突出该股票的数据覆盖缺口。",
+                "evidence_refs": ["data_quality/600519.SH"],
+                "status": "reviewed",
+                "created_at": "2026-05-01T04:00:00+00:00",
+                "raw_source": {
+                    "symbol": "600519.SH",
+                    "status": "warn",
+                    "degraded_sources": ["financial_data_stale", "profile_incomplete"],
+                },
+                "final_confidence": "moderate",
+                "reviews": {"gpt": {"status": "completed"}},
+            },
+            {
+                "suggestion_id": "suggestion:old-b",
+                "source_type": "data_quality",
+                "source_ref": "data_quality/300750.SZ/latest",
+                "symbol": "300750.SZ",
+                "category": "data_quality",
+                "claim": "300750.SZ 数据质量为 warn，降级来源：profile_incomplete, financial_data_stale。",
+                "proposed_change": "优先补齐或突出该股票的数据覆盖缺口。",
+                "evidence_refs": ["data_quality/300750.SZ"],
+                "status": "reviewed",
+                "created_at": "2026-05-01T04:01:00+00:00",
+                "raw_source": {
+                    "symbol": "300750.SZ",
+                    "status": "warn",
+                    "degraded_sources": ["profile_incomplete", "financial_data_stale"],
+                },
+                "final_confidence": "low",
+                "reviews": {"gpt": {"status": "completed"}},
+            },
+        ]
+        snapshot = {
+            "artifact_type": "suggestion_review_snapshot",
+            "generated_at": "2026-05-01T04:02:00+00:00",
+            "status": "ok",
+            "window_days": 7,
+            "model_status": {"gpt": "ok", "deepseek": "ok", "overall": "ok"},
+            "summary": _snapshot_counts(suggestions),
+            "suggestions": suggestions,
+        }
+        _write_snapshot(root, snapshot)
+
+        with session_scope(self.database_url) as session:
+            payload = suggestion_details(session, category="data_quality")
+
+        self.assertEqual(payload["summary"]["total"], 1)
+        self.assertEqual(len(payload["suggestions"]), 1)
+        grouped = payload["suggestions"][0]
+        self.assertIsNone(grouped["symbol"])
+        self.assertTrue(grouped["source_ref"].startswith("data_quality/group/"))
+        self.assertIn("2 只股票数据质量为 warn", grouped["claim"])
+        self.assertIn("共同降级来源：financial_data_stale, profile_incomplete", grouped["claim"])
         self.assertEqual(grouped["raw_source"]["symbols"], ["300750.SZ", "600519.SH"])
         self.assertEqual(
             sorted(grouped["evidence_refs"]),

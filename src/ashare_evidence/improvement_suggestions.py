@@ -678,6 +678,88 @@ def _snapshot_counts(items: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _data_quality_group_signature(item: dict[str, Any]) -> tuple[str, ...] | None:
+    if item.get("source_type") != "data_quality":
+        return None
+    raw_source = item.get("raw_source") if isinstance(item.get("raw_source"), dict) else {}
+    if raw_source.get("aggregation") == "degraded_source_group":
+        return None
+    degraded_sources = _coerce_list(raw_source.get("degraded_sources"))
+    return tuple(sorted(degraded_sources)) if degraded_sources else None
+
+
+def _status_rank(status: str) -> int:
+    return {"pass": 0, "warn": 1, "fail": 2}.get(status, 1)
+
+
+def _project_grouped_data_quality_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    passthrough: list[dict[str, Any]] = []
+    grouped: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+    for item in items:
+        signature = _data_quality_group_signature(item)
+        if signature is None:
+            passthrough.append(item)
+            continue
+        grouped.setdefault(signature, []).append(item)
+
+    projected = list(passthrough)
+    for degraded_sources, group_items in grouped.items():
+        if len(group_items) == 1:
+            projected.append(group_items[0])
+            continue
+        group_items = sorted(group_items, key=lambda item: str(item.get("symbol") or ""))
+        symbols = [str(item.get("symbol") or "") for item in group_items if item.get("symbol")]
+        worst_status = max(
+            (str((item.get("raw_source") or {}).get("status") or item.get("status") or "warn") for item in group_items),
+            key=_status_rank,
+            default="warn",
+        )
+        sample = "、".join(symbols[:8])
+        suffix = "等" if len(symbols) > 8 else ""
+        representative = dict(group_items[0])
+        representative.update(
+            {
+                "suggestion_id": _suggestion_id(
+                    source_type="data_quality",
+                    source_ref=f"data_quality/group/{'-'.join(degraded_sources)}",
+                    claim=(
+                        f"{len(group_items)} 只股票数据质量为 {worst_status}，"
+                        f"共同降级来源：{', '.join(degraded_sources)}。受影响：{sample}{suffix}。"
+                    ),
+                ),
+                "source_ref": f"data_quality/group/{'-'.join(degraded_sources)}",
+                "symbol": None,
+                "claim": (
+                    f"{len(group_items)} 只股票数据质量为 {worst_status}，"
+                    f"共同降级来源：{', '.join(degraded_sources)}。受影响：{sample}{suffix}。"
+                ),
+                "proposed_change": (
+                    "按共同降级来源先做一次批量根因修复，修复后重新运行数据质量与改进建议审计；"
+                    "只有残留个股仍异常时，再进入逐股补齐。"
+                ),
+                "evidence_refs": sorted({ref for item in group_items for ref in _coerce_list(item.get("evidence_refs"))}),
+                "raw_source": {
+                    "aggregation": "degraded_source_group",
+                    "degraded_sources": list(degraded_sources),
+                    "status": worst_status,
+                    "symbol_count": len(group_items),
+                    "symbols": symbols,
+                    "status_counts": dict(
+                        Counter(str((item.get("raw_source") or {}).get("status") or "warn") for item in group_items)
+                    ),
+                    "items": group_items,
+                },
+            }
+        )
+        plan = dict(representative.get("generated_plan") or {})
+        if plan:
+            plan["title"] = representative["claim"][:80]
+            plan["summary"] = representative["proposed_change"]
+            representative["generated_plan"] = plan
+        projected.append(representative)
+    return sorted(projected, key=lambda item: str(item.get("created_at", "")), reverse=True)
+
+
 def _write_snapshot(root: Path, snapshot: dict[str, Any]) -> Path:
     directory = _review_dir(root)
     directory.mkdir(parents=True, exist_ok=True)
@@ -723,6 +805,8 @@ def latest_suggestion_review_snapshot(*, root: Path) -> dict[str, Any] | None:
     except (json.JSONDecodeError, OSError):
         return None
     payload["_snapshot_file"] = path.name
+    payload["suggestions"] = _project_grouped_data_quality_items(list(payload.get("suggestions", [])))
+    payload["summary"] = _snapshot_counts(list(payload.get("suggestions", [])))
     return payload
 
 
