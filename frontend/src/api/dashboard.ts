@@ -1,4 +1,4 @@
-import { request, buildSourceInfo, operationsDashboardRequestBehavior } from "./core";
+import { request, buildSourceInfo, longRunningRequestBehavior, operationsDashboardRequestBehavior } from "./core";
 import type { DashboardShellPayload, WatchlistResponse, CandidateListResponse, GlossaryEntryView, ImprovementSuggestionView, ImprovementSuggestionsPayload, OperationsDashboardResponse, StockDashboardResponse } from "../types";
 
 export function loadShellData(): Promise<{ data: DashboardShellPayload; source: ReturnType<typeof buildSourceInfo> }> {
@@ -83,7 +83,7 @@ export function runImprovementSuggestionReview(windowDays = 7) {
     data: await request<ImprovementSuggestionsPayload>(
       `/dashboard/improvement-suggestions/run?window_days=${encodeURIComponent(String(windowDays))}`,
       { method: "POST" },
-      operationsDashboardRequestBehavior,
+      longRunningRequestBehavior,
     ),
     source: buildSourceInfo(),
   }))();

@@ -488,10 +488,12 @@ export async function request<T>(path: string, init?: RequestInit, behavior?: Re
   }
 }
 
-export const manualResearchRequestBehavior: RequestBehavior = {
+export const longRunningRequestBehavior: RequestBehavior = {
   timeoutMs: longRunningRequestTimeoutMs,
   attemptTimeoutMs: longRunningRequestAttemptTimeoutMs,
 };
+
+export const manualResearchRequestBehavior: RequestBehavior = longRunningRequestBehavior;
 
 export const operationsDashboardRequestBehavior: RequestBehavior = {
   timeoutMs: operationsDashboardTimeoutMs,
