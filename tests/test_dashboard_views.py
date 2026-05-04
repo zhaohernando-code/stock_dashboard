@@ -692,6 +692,7 @@ class DashboardViewTests(unittest.TestCase):
 
     def test_frontend_operations_exposes_improvement_suggestion_audit_without_auto_apply(self) -> None:
         frontend_root = Path(__file__).resolve().parents[1] / "frontend" / "src"
+        app_source = (frontend_root / "App.tsx").read_text(encoding="utf-8")
         operations_source = (frontend_root / "components" / "OperationsTabs.tsx").read_text(encoding="utf-8")
         api_source = (frontend_root / "api" / "dashboard.ts").read_text(encoding="utf-8")
         type_source = (frontend_root / "types" / "operations.ts").read_text(encoding="utf-8")
@@ -707,6 +708,12 @@ class DashboardViewTests(unittest.TestCase):
         self.assertIn("中台任务", operations_source)
         self.assertIn("标记观察", operations_source)
         self.assertIn("重新审计", operations_source)
+        self.assertIn("improvementSuggestionReviewNotice", operations_source)
+        self.assertIn("improvementSuggestionReviewRunning", operations_source)
+        self.assertIn('message={improvementSuggestionReviewNotice.message}', operations_source)
+        self.assertIn("正在重新审计", app_source)
+        self.assertIn("系统正在调用双模型重新审计改进建议", app_source)
+        self.assertIn("重新审计完成", app_source)
         self.assertIn("suggestion-stat-button", operations_source)
         self.assertIn("filterImprovementSuggestions", operations_source)
         self.assertIn("当前筛选", operations_source)

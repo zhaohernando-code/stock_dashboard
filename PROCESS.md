@@ -2,6 +2,10 @@
 
 反回归笔记和可复用经验。状态快照见 PROJECT_STATUS.json。
 
+## 2026-05-04
+
+- **长耗时按钮必须有面板内持续状态**：`重新审计` 这类会触发双模型和后端生成的动作不能只等接口返回后弹 message；点击后必须立即在当前工作面板显示 `进行中` 状态，并让按钮进入 loading/disabled。成功或失败也要保留在面板内，避免用户无法判断任务是否已经启动。
+
 ## 2026-05-03
 
 - **数据质量 profile 完整性要复用全局板块规则**：`profile_incomplete` 不应因为历史 `profile_payload` 尚未落 `board` 字段而重复报警；只要 `board_rule()` 能根据 symbol/profile 给出已验证板块，就应作为质量检查的全局兜底。财报 freshness 仍必须来自真实财报快照或 feature snapshot，不能用调低阈值消除 `financial_data_stale`。

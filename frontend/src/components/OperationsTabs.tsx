@@ -85,6 +85,11 @@ export interface BuildOperationsTabsInput {
   manualResearchAction: string | null;
   setManualResearchAction: (v: string | null) => void;
   handleRunImprovementSuggestionReview: () => Promise<void>;
+  improvementSuggestionReviewNotice: {
+    status: "idle" | "running" | "success" | "error";
+    message: string;
+    description?: string;
+  };
   handleAcceptImprovementSuggestionForPlan: (suggestionId: string, model: string) => Promise<void>;
   handleUpdateImprovementSuggestionStatus: (suggestionId: string, status: string, reason: string) => Promise<void>;
   improvementSuggestionFilter: string | null;
@@ -195,12 +200,18 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
     setSelectedSymbol, setStockActiveTab, setView,
     setOperations, setOperationsLoading, setOperationsError,
     manualResearchAction, setManualResearchAction,
-    handleRunImprovementSuggestionReview, handleAcceptImprovementSuggestionForPlan, handleUpdateImprovementSuggestionStatus,
+    handleRunImprovementSuggestionReview, improvementSuggestionReviewNotice, handleAcceptImprovementSuggestionForPlan, handleUpdateImprovementSuggestionStatus,
     improvementSuggestionFilter, setImprovementSuggestionFilter,
     loadingSections,
   } = input;
   if (!operations) return [];
   const improvementSuggestions = operations.improvement_suggestions;
+  const improvementSuggestionReviewRunning = improvementSuggestionReviewNotice.status === "running";
+  const improvementSuggestionReviewAlertType = improvementSuggestionReviewNotice.status === "error"
+    ? "error"
+    : improvementSuggestionReviewNotice.status === "success"
+      ? "success"
+      : "info";
   const improvementSuggestionItems = improvementSuggestions?.suggestions ?? improvementSuggestions?.top_suggestions ?? [];
   const filteredImprovementSuggestions = filterImprovementSuggestions(improvementSuggestionItems, improvementSuggestionFilter);
   const improvementSuggestionStatFilters = improvementSuggestions ? [
@@ -391,11 +402,25 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
             className="panel-card"
             title="改进建议审计台"
             extra={(
-              <Button size="small" icon={<ReloadOutlined />} onClick={() => void handleRunImprovementSuggestionReview()}>
+              <Button
+                size="small"
+                icon={<ReloadOutlined />}
+                loading={improvementSuggestionReviewRunning}
+                disabled={improvementSuggestionReviewRunning}
+                onClick={() => void handleRunImprovementSuggestionReview()}
+              >
                 重新审计
               </Button>
             )}
           >
+            {improvementSuggestionReviewNotice.status !== "idle" ? (
+              <Alert
+                showIcon
+                type={improvementSuggestionReviewAlertType}
+                message={improvementSuggestionReviewNotice.message}
+                description={improvementSuggestionReviewNotice.description}
+              />
+            ) : null}
             {loadingSections.has("improvement_suggestions") && !operations.improvement_suggestions ? <Skeleton active paragraph={{ rows: 4 }}/> : operations.improvement_suggestions ? (
               <>
                 <div className="suggestion-stat-grid">

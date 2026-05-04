@@ -100,6 +100,11 @@ const { Paragraph, Text, Title } = Typography;
 const { TextArea } = Input;
 type ViewMode = "candidates" | "stock" | "operations" | "settings";
 type ThemeMode = "light" | "dark";
+type ImprovementSuggestionReviewNotice = {
+  status: "idle" | "running" | "success" | "error";
+  message: string;
+  description?: string;
+};
 type ViewCard = {
   key: ViewMode;
   label: string;
@@ -131,6 +136,10 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   const [operationsDetailSectionsLoaded, setOperationsDetailSectionsLoaded] = useState<string[]>([]);
   const [loadingSections, setLoadingSections] = useState<Set<string>>(new Set());
   const [improvementSuggestionFilter, setImprovementSuggestionFilter] = useState<string | null>(null);
+  const [improvementSuggestionReviewNotice, setImprovementSuggestionReviewNotice] = useState<ImprovementSuggestionReviewNotice>({
+    status: "idle",
+    message: "",
+  });
   const [operationsFocusSymbol, setOperationsFocusSymbol] = useState<string | null>(null);
   const [orderModalSymbol, setOrderModalSymbol] = useState<string | null>(null);
   const [analysisReportSymbol, setAnalysisReportSymbol] = useState<string | null>(null);
@@ -518,13 +527,32 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   }
 
   async function handleRunImprovementSuggestionReview(): Promise<void> {
+    if (improvementSuggestionReviewNotice.status === "running") {
+      return;
+    }
+    setImprovementSuggestionReviewNotice({
+      status: "running",
+      message: "正在重新审计",
+      description: "系统正在调用双模型重新审计改进建议，完成后会自动刷新列表。",
+    });
     try {
       const result = await api.runImprovementSuggestionReview(7);
       setOperations((current) => (current ? { ...current, improvement_suggestions: result.data } : current));
       setOperationsDetailSectionsLoaded((current) => Array.from(new Set([...current, "improvement_suggestions"])));
+      setImprovementSuggestionReviewNotice({
+        status: "success",
+        message: "重新审计完成",
+        description: `已刷新 ${result.data.summary?.total ?? 0} 条改进建议。`,
+      });
       messageApi.success("改进建议审计已完成");
     } catch (reviewError) {
-      messageApi.error(reviewError instanceof Error ? reviewError.message : "改进建议审计失败。");
+      const errorMessage = reviewError instanceof Error ? reviewError.message : "改进建议审计失败。";
+      setImprovementSuggestionReviewNotice({
+        status: "error",
+        message: "重新审计失败",
+        description: errorMessage,
+      });
+      messageApi.error(errorMessage);
     }
   }
 
@@ -1819,6 +1847,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     setOperations, setOperationsLoading, setOperationsError,
     manualResearchAction, setManualResearchAction,
     handleRunImprovementSuggestionReview,
+    improvementSuggestionReviewNotice,
     handleAcceptImprovementSuggestionForPlan,
     handleUpdateImprovementSuggestionStatus,
     improvementSuggestionFilter,

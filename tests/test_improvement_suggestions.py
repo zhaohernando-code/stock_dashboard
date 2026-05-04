@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from sqlalchemy import delete, select
 
 from ashare_evidence.api import create_app
 from ashare_evidence.db import init_database, session_scope
@@ -25,7 +26,7 @@ from ashare_evidence.improvement_suggestions import (
     update_suggestion_status,
 )
 from ashare_evidence.llm_service import AnthropicCompatibleTransport, OpenAICompatibleTransport
-from ashare_evidence.models import ModelApiKey
+from ashare_evidence.models import FeatureSnapshot, ModelApiKey, Stock
 from ashare_evidence.research_artifact_store import artifact_root_from_database_url
 from tests.fixtures import seed_watchlist_fixture
 
@@ -117,6 +118,16 @@ class ImprovementSuggestionTests(unittest.TestCase):
     def test_data_quality_suggestions_are_grouped_by_degraded_sources(self) -> None:
         with session_scope(self.database_url) as session:
             seed_watchlist_fixture(session, symbols=("600519.SH", "300750.SZ"))
+            session.execute(delete(FeatureSnapshot))
+            for stock in session.scalars(select(Stock).where(Stock.symbol.in_(("600519.SH", "300750.SZ")))):
+                stock.listed_date = None
+                stock.provider_symbol = ""
+                stock.profile_payload = {
+                    key: value
+                    for key, value in stock.profile_payload.items()
+                    if key not in {"financial_snapshot", "board", "market_board", "board_name"}
+                }
+            session.commit()
 
         with session_scope(self.database_url) as session:
             suggestions = collect_improvement_suggestions(session, window_days=30)
