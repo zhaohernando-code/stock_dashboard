@@ -15,6 +15,7 @@
 - **暗色弹框回归最终收尾记录**：修复提交 `ec81aa819fe0200a41de2225ce5832b3a1932a73` 已进入 `main/origin/main`，发布 manifest 为 `output/releases/20260504T145606Z-ec81aa819fe0/manifest.json`，deploy verifier 为 `19 passed, 0 failed`。Safari 已验证 localhost `http://127.0.0.1:5173/` 夜间模式下“进入计划池”模型选择弹框标题、说明、Select 当前值、任务说明和操作按钮可读；canonical `https://hernando-zhao.cn/projects/ashare-dashboard/` 已加载同一 runtime 页面与暗色主题。
 - **验证冲突是解释优先级，不是普通指标**：RankIC 为负但正超额占比偏高时，用户首先需要知道“方向受益不等于排序能力成立”。这种冲突必须作为结构化字段从 API 保留下来，并在当前建议摘要、历史验证层、追问研究包、精简报告和移动端风险列表里排在普通风险或原始指标之前。
 - **计划池提示词只能让用户审业务，不审代码**：改进建议进入中台 Plan 时，任务描述应把可审视内容限制在业务结果、风险边界、验收方式和真实外部决策。文件、字段、接口、测试命令、代码路径等实现细节由 AI 自行判断，只能作为内部参考，不能转成用户待回答问题。
+- **600522 验证冲突收尾记录**：修复发布源提交 `54a0c2e18a43e54c054e5bac4bb072a08d8c370a`，release manifest 为 `output/releases/20260504T155249Z-54a0c2e18a43/manifest.json`，deploy verifier 为 `19 passed, 0 failed`。运行态 API 已确认 `historical_validation.validation_conflict`、`follow_up.research_packet.validation_conflict`、候选主风险和 copy prompt 均包含验证冲突；浏览器验收截图为 `output/playwright/600522-validation-conflict-local.png`。本轮还用中台 API 将原本模板化的计划反馈为业务可读计划，确认后续进入计划池的描述不应让用户审代码细节。
 
 ## 2026-05-03
 
