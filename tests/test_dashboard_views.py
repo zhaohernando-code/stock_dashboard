@@ -26,6 +26,7 @@ from ashare_evidence.operations import build_operations_dashboard
 from ashare_evidence.phase2 import PHASE2_WINDOW_DEFINITION, phase2_target_horizon_label
 from ashare_evidence.release_verifier import audit_user_visible_operations_text
 from ashare_evidence.research_artifact_store import artifact_root_from_database_url
+from ashare_evidence.schemas.stock import StockDashboardResponse
 from ashare_evidence.improvement_suggestions import _snapshot_counts, _write_snapshot
 from ashare_evidence.watchlist import (
     add_watchlist_symbol,
@@ -185,6 +186,8 @@ class DashboardViewTests(unittest.TestCase):
         self.assertIn("验证冲突", conflict)
         self.assertIn("排序能力尚未成立", conflict)
         self.assertEqual(dashboard["follow_up"]["research_packet"]["validation_conflict"], conflict)
+        serialized = StockDashboardResponse.model_validate(dashboard).model_dump(mode="json")
+        self.assertEqual(serialized["follow_up"]["research_packet"]["validation_conflict"], conflict)
         candidate = next(item for item in candidates["items"] if item["symbol"] == "600519.SH")
         self.assertIn("验证冲突", candidate["primary_risk"])
 

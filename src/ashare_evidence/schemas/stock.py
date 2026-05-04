@@ -242,6 +242,7 @@ class EventAnalysisView(BaseModel):
 class FollowUpResearchPacketView(BaseModel):
     validation_status: str = STATUS_PENDING_REBUILD
     validation_note: str | None = None
+    validation_conflict: str | None = None
     validation_artifact_id: str | None = None
     validation_manifest_id: str | None = None
     validation_sample_count: int | None = None
