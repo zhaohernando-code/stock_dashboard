@@ -91,6 +91,30 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertNotIn("financial_data_stale", item["degraded_sources"])
         self.assertNotIn("profile_incomplete", item["degraded_sources"])
 
+    def test_data_quality_accepts_verified_board_rule_as_profile_fallback(self) -> None:
+        with session_scope(self.database_url) as session:
+            seed_watchlist_fixture(session, symbols=("600519.SH",))
+            stock = session.scalar(select(Stock).where(Stock.symbol == "600519.SH"))
+            assert stock is not None
+            session.execute(delete(FeatureSnapshot).where(FeatureSnapshot.stock_id == stock.id))
+            stock.profile_payload = {
+                key: value
+                for key, value in stock.profile_payload.items()
+                if key not in {"board", "market_board", "board_name"}
+            }
+            stock.profile_payload["financial_snapshot"] = {
+                "provider_name": "tushare_fina_indicator",
+                "ann_date": "20260425",
+                "report_period": "2026一季报",
+            }
+            session.commit()
+
+        with session_scope(self.database_url) as session:
+            item = build_data_quality_summary(session, symbols=["600519.SH"])["items"][0]
+
+        self.assertEqual(item["profile_completeness"]["status"], "pass")
+        self.assertNotIn("profile_incomplete", item["degraded_sources"])
+
     def test_factor_ic_and_weight_sweep_emit_insufficient_sample_not_fake_precision(self) -> None:
         with session_scope(self.database_url) as session:
             seed_watchlist_fixture(session, symbols=("600519.SH", "300750.SZ", "601318.SH", "002594.SZ"))

@@ -217,6 +217,7 @@ def _financial_freshness(session: Session, stock: Stock, *, as_of: datetime) -> 
 
 def _profile_completeness(stock: Stock, *, as_of: datetime) -> dict[str, Any]:
     profile = stock.profile_payload or {}
+    rule = board_rule(stock.symbol, stock_profile=stock, as_of=as_of.date())
     missing: list[str] = []
     if not stock.listed_date:
         missing.append("listed_date")
@@ -224,9 +225,9 @@ def _profile_completeness(stock: Stock, *, as_of: datetime) -> dict[str, Any]:
         missing.append("name")
     if not stock.provider_symbol:
         missing.append("provider_symbol")
-    if not (profile.get("board") or profile.get("market_board") or profile.get("board_name")):
+    resolved_board = profile.get("board") or profile.get("market_board") or profile.get("board_name") or rule.get("board")
+    if not resolved_board:
         missing.append("board")
-    rule = board_rule(stock.symbol, stock_profile=stock, as_of=as_of.date())
     if rule.get("rule_status") == "wip_unknown":
         missing.append("board_rule")
     score = max(1.0 - len(set(missing)) * 0.2, 0.0)
