@@ -64,6 +64,23 @@ class OperationsRunHealthView(BaseModel):
     intraday_source_status: str
 
 
+class ScheduledRefreshStatusView(BaseModel):
+    status: str
+    label: str
+    message: str
+    target_date: str
+    slot: str
+    scheduled_time: str
+    started_at: str | None = None
+    completed_at: str | None = None
+    failed_at: str | None = None
+    deferred_at: str | None = None
+    exit_code: int | None = None
+    pid: int | None = None
+    state_updated_at: str | None = None
+    next_action: str | None = None
+
+
 class Phase5HorizonSelectionSummaryView(BaseModel):
     approval_state: str
     candidate_frontier: list[int] = Field(default_factory=list)

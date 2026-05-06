@@ -9,6 +9,7 @@ import {
   getOperationsDashboard,
   getOperationsDetails,
   getOperationsSummary,
+  getScheduledRefreshStatus,
   runImprovementSuggestionReview,
   updateImprovementSuggestionStatus,
 } from "./dashboard";
@@ -60,6 +61,7 @@ export const api = {
   getOperationsDashboard,
   getOperationsSummary,
   getOperationsDetails,
+  getScheduledRefreshStatus,
   getImprovementSuggestionSummary,
   getImprovementSuggestionDetails,
   runImprovementSuggestionReview,

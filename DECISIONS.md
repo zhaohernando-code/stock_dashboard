@@ -1,5 +1,14 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-05-06T20:35:00+08:00] Scheduled daily refresh status must be visible on the dashboard:
+
+每日分析调度不能只依赖终端命令或 LaunchAgent 日志判断是否完成。股票看板首页必须展示 `16:20` 盘后 daily refresh 的可读状态，包括正在跑、已完成、失败待重试、待补跑和等待触发。
+
+补充说明
+- `scripts/run-scheduled-refresh.sh` 继续负责实际调度，同时写出本地状态 marker：运行锁 context、成功 `.ok`、失败 `.failed`、断网等待 `.deferred`。
+- 后端通过 `/dashboard/scheduled-refresh-status` 暴露只读状态，前端桌面首页和移动首页都直接展示该状态。
+- 失败不代表当天放弃；失败 marker 用于反馈和诊断，下一次 5 分钟轮询仍会自动重试，成功后覆盖为 `.ok`。
+
 [2026-05-06T20:00:00+08:00] Daily refresh schedule uses a single post-market slot with catch-up:
 
 每日分析刷新从 `08:10 / 16:20 / 19:20 / 21:15` 收口为 `16:20` 盘后单一 daily slot。`08:10` 不再主动跑重刷新；`19:20` 与 `21:15` 不再作为独立 daily refresh 时点。盘后日线、日终增量字段、财务指标、主 recommendation 和 Phase 5 artifact 重建集中在 `16:20`。

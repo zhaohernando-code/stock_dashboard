@@ -7,6 +7,7 @@ import type {
   OperationsDashboardResponse,
   RuntimeOverviewResponse,
   RuntimeSettingsResponse,
+  ScheduledRefreshStatusView,
   SimulationWorkspaceResponse,
   StockDashboardResponse,
 } from "../../types";
@@ -35,6 +36,7 @@ export interface MobileAppShellProps {
   sourceInfo: DataSourceInfo;
   runtimeSettings: RuntimeSettingsResponse | null;
   runtimeOverview: RuntimeOverviewResponse | null;
+  scheduledRefreshStatus: ScheduledRefreshStatusView | null;
   modelApiKeys: ModelApiKeyView[];
   generatedAt: string | null;
   addWatchlistOverlay: ReactNode;

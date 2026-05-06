@@ -233,6 +233,10 @@
   backdrop-filter: none;
 }
 
+.mobile-refresh-status {
+  text-align: left;
+}
+
 .mobile-stock-swipe {
   position: relative;
   overflow: hidden;

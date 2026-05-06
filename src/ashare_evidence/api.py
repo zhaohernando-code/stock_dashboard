@@ -48,6 +48,7 @@ from ashare_evidence.runtime_config import (
     upsert_provider_credential,
 )
 from ashare_evidence.runtime_ops import run_operations_tick
+from ashare_evidence.scheduled_refresh_status import get_scheduled_refresh_status
 from ashare_evidence.schemas import (
     AuthContextResponse,
     CandidateListResponse,
@@ -70,6 +71,7 @@ from ashare_evidence.schemas import (
     RecommendationTraceResponse,
     RuntimeOverviewResponse,
     RuntimeSettingsResponse,
+    ScheduledRefreshStatusView,
     ShortpickCandidateListResponse,
     ShortpickCandidateView,
     ShortpickRunCreateRequest,
@@ -706,6 +708,12 @@ def create_app(
     @app.get("/dashboard/glossary")
     def dashboard_glossary(_access: StockAccessContext = Depends(require_stock_access)) -> list[dict[str, str]]:
         return get_glossary_entries()
+
+    @app.get("/dashboard/scheduled-refresh-status", response_model=ScheduledRefreshStatusView)
+    def dashboard_scheduled_refresh_status(
+        _access: StockAccessContext = Depends(require_stock_access),
+    ) -> dict[str, object]:
+        return get_scheduled_refresh_status()
 
     @app.get("/dashboard/operations", response_model=OperationsDashboardResponse)
     def dashboard_operations(

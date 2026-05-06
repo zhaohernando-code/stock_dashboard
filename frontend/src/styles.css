@@ -203,6 +203,10 @@ body[data-theme="dark"] {
   border-color: rgba(10, 91, 255, 0.22);
 }
 
+.scheduled-refresh-alert {
+  text-align: left;
+}
+
 .workspace-nav {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

@@ -161,6 +161,7 @@ export ASHARE_RELEASE_OUTPUT_ROOT="$PWD/output/releases"
 - `16:20`：盘后合并刷新，集中刷新日线、日终增量字段、财务指标和主 recommendation
 - 交易时段：仅对关注池和模拟持仓做 `5 分钟` 分钟行情同步，优先复用本地缓存
 - 补跑保护：LaunchAgent 仍每 `5 分钟` 唤醒一次；如果因为移动、断网或电脑休眠错过 `16:20` daily refresh，脚本会在检测到已解除休眠且联网后按本地状态文件自动补执行一次，不重复跑已成功的同一 slot
+- 状态反馈：股票看板会读取 `/dashboard/scheduled-refresh-status`，直接显示每日分析正在跑、已完成、失败待重试或待补跑；不需要再靠 `pgrep` 和日志判断
 
 ## 验证
 

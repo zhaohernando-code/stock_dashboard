@@ -121,6 +121,18 @@ release_run_lock() {
   fi
 }
 
+write_run_context() {
+  local target_date="$1"
+  local slot_name="$2"
+  mkdir -p "$RUN_LOCK_DIR"
+  {
+    printf 'pid=%s\n' "$$"
+    printf 'target_date=%s\n' "$target_date"
+    printf 'slot=%s\n' "$slot_name"
+    printf 'started_at=%s\n' "$(TZ="$TIMEZONE" date '+%Y-%m-%dT%H:%M:%S%z')"
+  } > "$RUN_LOCK_DIR/context"
+}
+
 run_with_timeout() {
   local timeout_seconds="$1"
   shift
@@ -162,6 +174,37 @@ mark_slot_completed() {
     printf 'slot=%s\n' "$slot_name"
     printf 'completed_at=%s\n' "$(TZ="$TIMEZONE" date '+%Y-%m-%dT%H:%M:%S%z')"
   } > "$(slot_state_file "$target_date" "$slot_name")"
+  rm -f "$(slot_state_file "$target_date" "$slot_name" | sed 's/\.ok$/.failed/')" \
+    "$(slot_state_file "$target_date" "$slot_name" | sed 's/\.ok$/.deferred/')"
+}
+
+mark_slot_deferred() {
+  local target_date="$1"
+  local slot_name="$2"
+  local reason="$3"
+  mkdir -p "$REFRESH_STATE_DIR"
+  {
+    printf 'target_date=%s\n' "$target_date"
+    printf 'slot=%s\n' "$slot_name"
+    printf 'deferred_at=%s\n' "$(TZ="$TIMEZONE" date '+%Y-%m-%dT%H:%M:%S%z')"
+    printf 'reason=%s\n' "$reason"
+  } > "$(slot_state_file "$target_date" "$slot_name" | sed 's/\.ok$/.deferred/')"
+}
+
+mark_slot_failed() {
+  local target_date="$1"
+  local slot_name="$2"
+  local exit_code="$3"
+  local started_at="$4"
+  mkdir -p "$REFRESH_STATE_DIR"
+  {
+    printf 'target_date=%s\n' "$target_date"
+    printf 'slot=%s\n' "$slot_name"
+    printf 'started_at=%s\n' "$started_at"
+    printf 'failed_at=%s\n' "$(TZ="$TIMEZONE" date '+%Y-%m-%dT%H:%M:%S%z')"
+    printf 'exit_code=%s\n' "$exit_code"
+    printf 'reason=%s\n' "daily refresh 执行失败，将等待下一次 5 分钟轮询重试。"
+  } > "$(slot_state_file "$target_date" "$slot_name" | sed 's/\.ok$/.failed/')"
 }
 
 run_daily_refresh_slot() {
@@ -171,11 +214,15 @@ run_daily_refresh_slot() {
     return 0
   fi
   if ! network_available; then
+    mark_slot_deferred "$target_date" "$slot_name" "当前未联网，daily refresh 等待联网后补跑。"
     return 0
   fi
   if ! acquire_run_lock; then
     return 0
   fi
+  local started_at
+  started_at="$(TZ="$TIMEZONE" date '+%Y-%m-%dT%H:%M:%S%z')"
+  write_run_context "$target_date" "$slot_name"
   trap release_run_lock EXIT
   echo "Running ${slot_name} daily refresh for ${target_date} at ${NOW_HHMM}."
   if run_with_timeout "$DAILY_REFRESH_TIMEOUT_SECONDS" run_phase5_daily_refresh --analysis-only; then
@@ -184,6 +231,8 @@ run_daily_refresh_slot() {
     trap - EXIT
     return 0
   fi
+  local exit_code=$?
+  mark_slot_failed "$target_date" "$slot_name" "$exit_code" "$started_at"
   release_run_lock
   trap - EXIT
   return 1
@@ -199,11 +248,15 @@ run_shortpick_lab_slot() {
     return 0
   fi
   if ! network_available; then
+    mark_slot_deferred "$target_date" "$slot_name" "当前未联网，短投试验田等待联网后补跑。"
     return 0
   fi
   if ! acquire_run_lock; then
     return 0
   fi
+  local started_at
+  started_at="$(TZ="$TIMEZONE" date '+%Y-%m-%dT%H:%M:%S%z')"
+  write_run_context "$target_date" "$slot_name"
   trap release_run_lock EXIT
   echo "Running shortpick lab for ${target_date} at ${NOW_HHMM}."
   if run_with_timeout "$SHORTPICK_TIMEOUT_SECONDS" run_shortpick_lab; then
@@ -212,6 +265,8 @@ run_shortpick_lab_slot() {
     trap - EXIT
     return 0
   fi
+  local exit_code=$?
+  mark_slot_failed "$target_date" "$slot_name" "$exit_code" "$started_at"
   release_run_lock
   trap - EXIT
   return 1

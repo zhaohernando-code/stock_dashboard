@@ -1,6 +1,23 @@
 // watchlist domain types
 import type { CandidateItemView, CandidateListResponse, GlossaryEntryView } from "./stock";
 
+export interface ScheduledRefreshStatusView {
+  status: string;
+  label: string;
+  message: string;
+  target_date: string;
+  slot: string;
+  scheduled_time: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  failed_at?: string | null;
+  deferred_at?: string | null;
+  exit_code?: number | null;
+  pid?: number | null;
+  state_updated_at?: string | null;
+  next_action?: string | null;
+}
+
 export type CandidateWorkspaceRow = WatchlistItemView & {
   candidate: CandidateItemView | null;
 };
@@ -43,5 +60,5 @@ export interface DashboardShellPayload {
   watchlist: WatchlistResponse;
   candidates: CandidateListResponse;
   glossary: GlossaryEntryView[];
+  scheduled_refresh_status?: ScheduledRefreshStatusView | null;
 }
-

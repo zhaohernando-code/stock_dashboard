@@ -1,5 +1,5 @@
 import { PlusOutlined, QuestionCircleOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Button, Empty, Popover, Space, Tag, Typography } from "antd";
+import { Alert, Button, Empty, Popover, Space, Tag, Typography } from "antd";
 import { useMemo } from "react";
 import type { MobileAppShellProps } from "./types";
 import { MobileMetric } from "./MobileMetric";
@@ -8,6 +8,21 @@ import { directionColor, formatDate, formatNumber, formatPercent, valueTone } fr
 import { claimGateStatusLabel, sanitizeDisplayText, validationStatusLabel } from "../../utils/labels";
 
 const { Text, Title } = Typography;
+
+function refreshAlertType(status?: string): "success" | "info" | "warning" | "error" {
+  if (status === "success") return "success";
+  if (status === "running") return "info";
+  if (status === "failed") return "error";
+  return "warning";
+}
+
+function refreshTagColor(status?: string): string {
+  if (status === "success") return "green";
+  if (status === "running") return "blue";
+  if (status === "failed") return "red";
+  if (status === "scheduled") return "cyan";
+  return "gold";
+}
 
 export function MobileHome(props: MobileAppShellProps) {
   const holdingSymbols = useMemo(
@@ -72,6 +87,26 @@ export function MobileHome(props: MobileAppShellProps) {
           <MobileMetric label="刷新时间" value={formatDate(props.activeRow?.last_analyzed_at ?? props.activeRow?.updated_at)} />
         </div>
       </section>
+
+      {props.scheduledRefreshStatus ? (
+        <section className="mobile-section-plain">
+          <Alert
+            showIcon
+            className="mobile-refresh-status"
+            type={refreshAlertType(props.scheduledRefreshStatus.status)}
+            message={(
+              <Space wrap>
+                <span>每日分析</span>
+                <Tag color={refreshTagColor(props.scheduledRefreshStatus.status)}>
+                  {props.scheduledRefreshStatus.label}
+                </Tag>
+                <Text type="secondary">{props.scheduledRefreshStatus.target_date}</Text>
+              </Space>
+            )}
+            description={sanitizeDisplayText(props.scheduledRefreshStatus.message)}
+          />
+        </section>
+      ) : null}
 
       <section className="mobile-list-panel mobile-section-plain">
         <div className="mobile-section-head">

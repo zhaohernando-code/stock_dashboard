@@ -68,6 +68,7 @@ import type {
   RuntimeDataSourceView,
   RuntimeOverviewResponse,
   RuntimeSettingsResponse,
+  ScheduledRefreshStatusView,
   SimulationConfigRequest,
   SimulationTrackStateView,
   SimulationWorkspaceResponse,
@@ -114,6 +115,34 @@ type ViewCard = {
   description?: string;
 };
 
+function scheduledRefreshAlertType(status?: string): "success" | "info" | "warning" | "error" {
+  if (status === "success") return "success";
+  if (status === "running") return "info";
+  if (status === "failed") return "error";
+  return "warning";
+}
+
+function scheduledRefreshTagColor(status?: string): string {
+  if (status === "success") return "green";
+  if (status === "running") return "blue";
+  if (status === "failed") return "red";
+  if (status === "scheduled") return "cyan";
+  return "gold";
+}
+
+function scheduledRefreshTime(status: ScheduledRefreshStatusView | null): string {
+  if (!status) return "--";
+  return status.completed_at ?? status.failed_at ?? status.deferred_at ?? status.started_at ?? status.state_updated_at ?? "--";
+}
+
+function scheduledRefreshFallbackLabel(status?: string): string {
+  if (status === "running") return "正在跑";
+  if (status === "success") return "成功";
+  if (status === "failed") return "失败";
+  if (status === "scheduled") return "等待";
+  return "待补跑";
+}
+
 function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme: () => void }) {
   const initialRuntimeConfig = api.getRuntimeConfig();
   const screens = Grid.useBreakpoint();
@@ -128,6 +157,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   const [watchlist, setWatchlist] = useState<WatchlistItemView[]>([]);
   const [candidates, setCandidates] = useState<CandidateItemView[]>([]);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [scheduledRefreshStatus, setScheduledRefreshStatus] = useState<ScheduledRefreshStatusView | null>(null);
   const [glossary, setGlossary] = useState<GlossaryEntryView[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [stockActiveTab, setStockActiveTab] = useState("signals");
@@ -381,6 +411,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       setWatchlist(data.watchlist.items);
       setCandidates(data.candidates.items);
       setGeneratedAt(data.candidates.generated_at);
+      setScheduledRefreshStatus(data.scheduled_refresh_status ?? null);
       setGlossary(data.glossary);
       setSourceInfo(source);
       const nextSymbol = data.watchlist.items.find((item) => item.symbol === preferredSymbol)?.symbol
@@ -470,6 +501,15 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     const fallbackMessage = lastError instanceof Error ? lastError.message : "加载运营复盘工作区失败。";
     setOperationsError(fallbackMessage);
     setOperationsLoading(false);
+  }
+
+  async function loadScheduledRefreshStatus(): Promise<void> {
+    try {
+      const result = await api.getScheduledRefreshStatus();
+      setScheduledRefreshStatus(result.data);
+    } catch {
+      setScheduledRefreshStatus((current) => current);
+    }
   }
 
   async function loadOperationsDetailSections(sections: string[], symbol: string): Promise<void> {
@@ -598,6 +638,13 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       }
       await loadShellData();
     })();
+  }, []);
+
+  useEffect(() => {
+    const refreshTimer = window.setInterval(() => {
+      void loadScheduledRefreshStatus();
+    }, 30000);
+    return () => window.clearInterval(refreshTimer);
   }, []);
 
   useEffect(() => {
@@ -1927,6 +1974,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
           canUseManualResearch={canUseManualResearch}
           runtimeSettings={runtimeSettings}
           runtimeOverview={runtimeOverview}
+          scheduledRefreshStatus={scheduledRefreshStatus}
           modelApiKeys={modelApiKeys}
           generatedAt={generatedAt}
           addWatchlistOverlay={addWatchlistOverlay}
@@ -2053,6 +2101,30 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                     {themeMode === "dark" ? "浅色模式" : "夜间模式"}
                   </Button>
                 </div>
+                {scheduledRefreshStatus ? (
+                  <Alert
+                    showIcon
+                    className="scheduled-refresh-alert"
+                    type={scheduledRefreshAlertType(scheduledRefreshStatus.status)}
+                    message={(
+                      <Space wrap>
+                        <span>每日分析</span>
+                        <Tag color={scheduledRefreshTagColor(scheduledRefreshStatus.status)}>
+                          {scheduledRefreshStatus.label || scheduledRefreshFallbackLabel(scheduledRefreshStatus.status)}
+                        </Tag>
+                        <Text type="secondary">{`目标日 ${scheduledRefreshStatus.target_date} · ${scheduledRefreshStatus.scheduled_time}`}</Text>
+                      </Space>
+                    )}
+                    description={(
+                      <Space direction="vertical" size={2}>
+                        <Text>{sanitizeDisplayText(scheduledRefreshStatus.message)}</Text>
+                        <Text type="secondary">
+                          {`状态时间 ${formatDate(scheduledRefreshTime(scheduledRefreshStatus))} · ${sanitizeDisplayText(scheduledRefreshStatus.next_action ?? "等待下一次状态刷新。")}`}
+                        </Text>
+                      </Space>
+                    )}
+                  />
+                ) : null}
               </div>
             </div>
           </div>

@@ -1,18 +1,26 @@
 import { request, buildSourceInfo, longRunningRequestBehavior, operationsDashboardRequestBehavior } from "./core";
-import type { DashboardShellPayload, WatchlistResponse, CandidateListResponse, GlossaryEntryView, ImprovementSuggestionView, ImprovementSuggestionsPayload, OperationsDashboardResponse, StockDashboardResponse } from "../types";
+import type { DashboardShellPayload, WatchlistResponse, CandidateListResponse, GlossaryEntryView, ImprovementSuggestionView, ImprovementSuggestionsPayload, OperationsDashboardResponse, ScheduledRefreshStatusView, StockDashboardResponse } from "../types";
 
 export function loadShellData(): Promise<{ data: DashboardShellPayload; source: ReturnType<typeof buildSourceInfo> }> {
   return (async () => {
-    const [watchlist, candidates, glossary] = await Promise.all([
+    const [watchlist, candidates, glossary, scheduledRefreshStatus] = await Promise.all([
       request<WatchlistResponse>("/watchlist"),
       request<CandidateListResponse>("/dashboard/candidates?limit=8"),
       request<GlossaryEntryView[]>("/dashboard/glossary"),
+      request<ScheduledRefreshStatusView>("/dashboard/scheduled-refresh-status"),
     ]);
     return {
-      data: { watchlist, candidates, glossary },
+      data: { watchlist, candidates, glossary, scheduled_refresh_status: scheduledRefreshStatus },
       source: buildSourceInfo(),
     };
   })();
+}
+
+export function getScheduledRefreshStatus() {
+  return (async () => ({
+    data: await request<ScheduledRefreshStatusView>("/dashboard/scheduled-refresh-status"),
+    source: buildSourceInfo(),
+  }))();
 }
 
 export function getStockDashboard(symbol: string) {
