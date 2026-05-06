@@ -2,6 +2,10 @@
 
 反回归笔记和可复用经验。状态快照见 PROJECT_STATUS.json。
 
+## 2026-05-07
+
+- **AntD Tabs 选中态不再做胶囊圆角**：全局 Tabs 样式过去给 `.ant-tabs-tab` 和 `.ant-tabs-ink-bar` 统一加 `999px` 圆角，导致 `试验田` 等切换式 tab 的选中态变成圆角块。现在全局改为 `border-radius: 0`，并补充 `ant-tabs-card` 覆盖，避免后续 card-style Tabs 重新带回圆角。本地任务预览 `http://127.0.0.1:5174/` 已用 Chrome headless 进入 `试验田` 验证，`今日批次 / 历史验证 / 模型反馈` 三个 tab 的计算圆角均为 `0px`，截图为 `output/playwright/tabs-no-radius-shortpick-local-final.png`。
+
 ## 2026-05-06
 
 - **短投试验田长期运行要有历史验证工作台**：每天 10 条推荐长期积累后，最新批次视图不足以回答“之前推荐验证在哪里看”。试验田页面必须拆为 `今日批次 / 历史验证 / 模型反馈`，历史验证走服务端分页，默认 50 条，按 candidate-horizon 展示 `1/3/5/10/20` 交易日状态和收益反馈。
