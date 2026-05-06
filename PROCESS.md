@@ -8,6 +8,7 @@
 - **停牌/缺行情短投候选不能进入正常研究池**：`600958.SH 东方证券` 出现在 2026-05-06 试验田批次，是因为模型抓到了“收购上海证券 + 5月7日复牌”的公开事件催化，原始实验记录可保留；但验证层已判定信号日后无可交易入场价、最新日线只到 2026-04-17，这类 `suspended_or_no_current_bar` 样本不能继续作为正常研究池候选展示或统计。
 - **短投可交易性门禁必须写回候选分桶**：后验验证发现 `pending_market_data`、`pending_entry_bar`、`suspended_or_no_current_bar`、`entry_unfillable_limit_up`、`tradeability_uncertain` 时，将候选持久标记为 `tradeability_blocked` 并计算 `display_bucket=diagnostic`；前端研究池只展示 `display_bucket=normal`，异常候选进入失败/异常诊断区，保留来源与原始模型输出留痕。
 - **发布脚本不能假设新 worktree 已有前端依赖**：`scripts/publish-local-runtime.sh` 在临时干净快照或新 worktree 中运行时，`frontend/node_modules` 通常不存在，直接 `npm run build` 会在 `tsc` 上失败。发布脚本现在在 build 前检查 `frontend/node_modules/.bin/tsc` 和 `vite`，缺失时先按锁文件执行 `npm ci`；runtime 的 `scripts/start-local-frontend.sh` 也补同样检查，避免 runtime node_modules 被清理或首次启动时失败。
+- **发布脚本的 repo build 必须复用 frontend env**：runtime 前端 LaunchAgent 会 source `~/.config/codex/ashare-dashboard.frontend.env` 后执行 `npm run build`，其中 PATH 会切到 Node 22。发布脚本如果不用同一 env 先构建 repo，可能用另一套 Node 产出不同 JS hash，导致 served asset parity 误报 repo/runtime 不一致。发布脚本现在在命令检查和 build 前读取同一个 frontend env。
 
 ## 2026-05-06
 

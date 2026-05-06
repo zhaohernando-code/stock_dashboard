@@ -36,3 +36,11 @@ def test_publish_installs_frontend_dependencies_before_build() -> None:
     assert 'node_modules/.bin/vite' in script
     assert 'npm --prefix "$FRONTEND_DIR" ci' in script
     assert 'ensure_frontend_dependencies\nnpm --prefix "$FRONTEND_DIR" run build' in script
+
+
+def test_publish_build_uses_same_frontend_env_as_runtime() -> None:
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert 'FRONTEND_ENV_FILE="${ASHARE_LOCAL_FRONTEND_ENV_FILE:-$HOME/.config/codex/ashare-dashboard.frontend.env}"' in script
+    assert 'source "$FRONTEND_ENV_FILE"' in script
+    assert script.index('source "$FRONTEND_ENV_FILE"') < script.index('command -v npm')

@@ -9,12 +9,20 @@ FRONTEND_URL="${ASHARE_LOCAL_FRONTEND_URL:-http://127.0.0.1:5173/}"
 LOCAL_API_BASE_URL="${ASHARE_LOCAL_API_BASE_URL:-http://127.0.0.1:8000/}"
 CANONICAL_BASE_URL="${ASHARE_CANONICAL_BASE_URL:-https://hernando-zhao.cn/projects/ashare-dashboard/}"
 BACKEND_ENV_FILE="${ASHARE_LOCAL_BACKEND_ENV_FILE:-$HOME/.config/codex/ashare-dashboard.backend.env}"
+FRONTEND_ENV_FILE="${ASHARE_LOCAL_FRONTEND_ENV_FILE:-$HOME/.config/codex/ashare-dashboard.frontend.env}"
 RSYNC_BIN="${RSYNC_BIN:-rsync}"
 MAX_WAIT_SECONDS="${ASHARE_PUBLISH_MAX_WAIT_SECONDS:-30}"
 REFRESH_MODE="${ASHARE_PUBLISH_REFRESH_MODE:-sync}"
 REFRESH_TIMEOUT_SECONDS="${ASHARE_PUBLISH_REFRESH_TIMEOUT_SECONDS:-900}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 FRONTEND_DIR="$REPO_ROOT/frontend"
+
+if [[ -f "$FRONTEND_ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$FRONTEND_ENV_FILE"
+  set +a
+fi
 
 if ! command -v "$RSYNC_BIN" >/dev/null 2>&1; then
   echo "Missing required command: $RSYNC_BIN" >&2
