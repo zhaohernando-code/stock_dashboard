@@ -2,6 +2,11 @@
 
 反回归笔记和可复用经验。状态快照见 PROJECT_STATUS.json。
 
+## 2026-05-06
+
+- **短投试验田不能只存在手动入口**：盘后 daily 既要跑主分析，也要跑短投试验田的验证闭环。`run-scheduled-refresh.sh` 的 shortpick slot 默认启用，先执行 `shortpick-lab-validate-recent` 刷新近期旧批次的行情/基准复盘，再生成当天新 run；如确需停用，显式设置 `ASHARE_ENABLE_SHORTPICK_LAB=0`。
+- **每日分析状态必须暴露子任务**：用户看到“每日分析已完成”时不能掩盖试验田未跑。`/dashboard/scheduled-refresh-status` 现在返回 `components`，前端展示 `主分析 / 试验田` 各自的成功、运行、失败或待补跑状态。
+
 ## 2026-05-05
 
 - **短投试验田必须保持旁路隔离**：`shortpick_lab` 的 run/round/candidate/consensus/validation 只能进入独立表和独立 artifact，不能回写 `Recommendation`、`ModelResult`、watchlist、候选池或 simulation auto-model。后续任何把短投结果展示到单票/候选/模拟盘主链路的改动，都需要先补 `DECISIONS.md`。

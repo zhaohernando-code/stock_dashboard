@@ -150,6 +150,11 @@ function scheduledRefreshDismissKey(status: ScheduledRefreshStatusView | null): 
     status.slot,
     status.status,
     status.state_updated_at ?? status.completed_at ?? status.failed_at ?? status.deferred_at ?? status.started_at ?? "",
+    ...(status.components ?? []).map((component) => [
+      component.slot,
+      component.status,
+      component.state_updated_at ?? component.completed_at ?? component.failed_at ?? component.deferred_at ?? component.started_at ?? "",
+    ].join(":")),
   ].join("|");
 }
 
@@ -2144,6 +2149,15 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                     description={(
                       <Space direction="vertical" size={2}>
                         <Text>{sanitizeDisplayText(visibleScheduledRefreshStatus.message)}</Text>
+                        {visibleScheduledRefreshStatus.components?.length ? (
+                          <Space wrap>
+                            {visibleScheduledRefreshStatus.components.map((component) => (
+                              <Tag key={component.slot} color={scheduledRefreshTagColor(component.status)}>
+                                {`${component.slot === "shortpick_lab" ? "试验田" : component.label}：${component.status_label}`}
+                              </Tag>
+                            ))}
+                          </Space>
+                        ) : null}
                         <Text type="secondary">
                           {`状态时间 ${formatDate(scheduledRefreshTime(visibleScheduledRefreshStatus))} · ${sanitizeDisplayText(visibleScheduledRefreshStatus.next_action ?? "等待下一次状态刷新。")}`}
                         </Text>

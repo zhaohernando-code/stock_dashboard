@@ -64,6 +64,20 @@ class OperationsRunHealthView(BaseModel):
     intraday_source_status: str
 
 
+class ScheduledRefreshComponentView(BaseModel):
+    slot: str
+    label: str
+    status: str
+    status_label: str
+    message: str
+    started_at: str | None = None
+    completed_at: str | None = None
+    failed_at: str | None = None
+    deferred_at: str | None = None
+    exit_code: int | None = None
+    state_updated_at: str | None = None
+
+
 class ScheduledRefreshStatusView(BaseModel):
     status: str
     label: str
@@ -79,6 +93,7 @@ class ScheduledRefreshStatusView(BaseModel):
     pid: int | None = None
     state_updated_at: str | None = None
     next_action: str | None = None
+    components: list[ScheduledRefreshComponentView] = Field(default_factory=list)
 
 
 class Phase5HorizonSelectionSummaryView(BaseModel):

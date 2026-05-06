@@ -31,3 +31,12 @@ def test_daily_refresh_has_catchup_guards() -> None:
     assert "network_available" in script
     assert "acquire_run_lock" in script
     assert "run_with_timeout" in script
+
+
+def test_shortpick_lab_is_part_of_postmarket_daily_cycle() -> None:
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert 'ASHARE_ENABLE_SHORTPICK_LAB:-1' in script
+    assert "shortpick-lab-validate-recent" in script
+    assert "run_shortpick_daily_cycle" in script
+    assert "run_shortpick_lab_slot \"$TODAY_STR\"" in script

@@ -1,6 +1,20 @@
 // watchlist domain types
 import type { CandidateItemView, CandidateListResponse, GlossaryEntryView } from "./stock";
 
+export interface ScheduledRefreshComponentView {
+  slot: string;
+  label: string;
+  status: string;
+  status_label: string;
+  message: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  failed_at?: string | null;
+  deferred_at?: string | null;
+  exit_code?: number | null;
+  state_updated_at?: string | null;
+}
+
 export interface ScheduledRefreshStatusView {
   status: string;
   label: string;
@@ -16,6 +30,7 @@ export interface ScheduledRefreshStatusView {
   pid?: number | null;
   state_updated_at?: string | null;
   next_action?: string | null;
+  components?: ScheduledRefreshComponentView[];
 }
 
 export type CandidateWorkspaceRow = WatchlistItemView & {

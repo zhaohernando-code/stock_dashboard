@@ -40,7 +40,7 @@ from ashare_evidence.research_artifact_store import (
     write_phase5_producer_contract_study_artifact,
 )
 from ashare_evidence.services import get_latest_recommendation_summary, get_recommendation_trace
-from ashare_evidence.shortpick_lab import run_shortpick_experiment, validate_shortpick_run
+from ashare_evidence.shortpick_lab import run_shortpick_experiment, validate_recent_shortpick_runs, validate_shortpick_run
 from ashare_evidence.simulation import restart_simulation_session, step_simulation_session
 from ashare_evidence.watchlist import active_watchlist_symbols, refresh_watchlist_symbol
 
@@ -342,6 +342,15 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_validate.add_argument("--run-id", type=int, required=True)
     shortpick_validate.add_argument("--horizon", type=int, action="append", default=None)
 
+    shortpick_validate_recent = subparsers.add_parser(
+        "shortpick-lab-validate-recent",
+        help="Refresh post-pick validation snapshots for recent completed short-pick lab runs.",
+    )
+    shortpick_validate_recent.add_argument("--database-url", default=None)
+    shortpick_validate_recent.add_argument("--days", type=int, default=30)
+    shortpick_validate_recent.add_argument("--limit", type=int, default=20)
+    shortpick_validate_recent.add_argument("--horizon", type=int, action="append", default=None)
+
     phase5_daily = subparsers.add_parser(
         "phase5-daily-refresh",
         help="Run the daily Phase 5 refresh workflow: refresh runtime data, then write latest/history horizon-study snapshots.",
@@ -489,6 +498,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "shortpick-lab-validate":
         with session_scope(args.database_url) as session:
             payload = validate_shortpick_run(session, args.run_id, horizons=args.horizon)
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-lab-validate-recent":
+        with session_scope(args.database_url) as session:
+            payload = validate_recent_shortpick_runs(
+                session,
+                days=args.days,
+                limit=args.limit,
+                horizons=args.horizon,
+            )
         _print_json(payload)
         return 0
 

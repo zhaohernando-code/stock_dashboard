@@ -105,7 +105,20 @@ export function MobileHome(props: MobileAppShellProps) {
                 <Text type="secondary">{props.scheduledRefreshStatus.target_date}</Text>
               </Space>
             )}
-            description={sanitizeDisplayText(props.scheduledRefreshStatus.message)}
+            description={(
+              <Space direction="vertical" size={4}>
+                <Text>{sanitizeDisplayText(props.scheduledRefreshStatus.message)}</Text>
+                {props.scheduledRefreshStatus.components?.length ? (
+                  <Space wrap>
+                    {props.scheduledRefreshStatus.components.map((component) => (
+                      <Tag key={component.slot} color={refreshTagColor(component.status)}>
+                        {`${component.slot === "shortpick_lab" ? "试验田" : component.label}：${component.status_label}`}
+                      </Tag>
+                    ))}
+                  </Space>
+                ) : null}
+              </Space>
+            )}
           />
         </section>
       ) : null}

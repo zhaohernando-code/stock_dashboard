@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 import json
 import os
 from pathlib import Path
@@ -798,6 +798,48 @@ def validate_shortpick_run(
     }
     session.flush()
     return {"run_id": run_id, "updated_validation_count": updated, "horizons": target_horizons, "summary": summary}
+
+
+def validate_recent_shortpick_runs(
+    session: Session,
+    *,
+    days: int = 30,
+    limit: int = 20,
+    horizons: list[int] | None = None,
+) -> dict[str, Any]:
+    """Refresh validation snapshots for recent completed short-pick lab runs."""
+
+    target_horizons = horizons or SHORTPICK_DEFAULT_HORIZONS
+    cutoff = datetime.now(UTC).date() - timedelta(days=max(1, int(days)))
+    run_limit = max(1, min(int(limit), 100))
+    runs = session.scalars(
+        select(ShortpickExperimentRun)
+        .where(
+            ShortpickExperimentRun.status == "completed",
+            ShortpickExperimentRun.run_date >= cutoff,
+        )
+        .order_by(ShortpickExperimentRun.run_date.desc(), ShortpickExperimentRun.id.desc())
+        .limit(run_limit)
+    ).all()
+    refreshed: list[dict[str, Any]] = []
+    for run in runs:
+        result = validate_shortpick_run(session, run.id, horizons=target_horizons)
+        refreshed.append(
+            {
+                "run_id": run.id,
+                "run_key": run.run_key,
+                "run_date": run.run_date.isoformat(),
+                "updated_validation_count": result["updated_validation_count"],
+                "summary": result["summary"],
+            }
+        )
+    return {
+        "refreshed_run_count": len(refreshed),
+        "days": max(1, int(days)),
+        "limit": run_limit,
+        "horizons": target_horizons,
+        "runs": refreshed,
+    }
 
 
 def _upsert_validation_snapshot(

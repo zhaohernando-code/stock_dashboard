@@ -21,6 +21,7 @@ from ashare_evidence.shortpick_lab import (
     StaticShortpickExecutor,
     default_shortpick_executors,
     run_shortpick_experiment,
+    validate_recent_shortpick_runs,
 )
 
 
@@ -174,6 +175,28 @@ class ShortpickLabTests(unittest.TestCase):
         with session_scope(self.database_url) as session:
             self.assertEqual(session.scalar(select(WatchlistFollow).where(WatchlistFollow.symbol == "688981.SH")), None)
             self.assertEqual(session.scalar(select(Recommendation).limit(1)), None)
+
+    def test_validate_recent_shortpick_runs_refreshes_completed_runs(self) -> None:
+        self._seed_daily_bars()
+        executors = [
+            StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("688981.SH", "中芯国际", "半导体国产替代", "https://a.example/news")),
+        ]
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
+            with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
+                with session_scope(self.database_url) as session:
+                    run_shortpick_experiment(
+                        session,
+                        run_date=date(2026, 5, 5),
+                        rounds_per_model=1,
+                        triggered_by="root",
+                        executors=executors,
+                    )
+                    payload = validate_recent_shortpick_runs(session, days=10, limit=5, horizons=[1])
+
+        self.assertEqual(payload["refreshed_run_count"], 1)
+        self.assertEqual(payload["runs"][0]["updated_validation_count"], 1)
+        self.assertEqual(payload["runs"][0]["summary"]["completed_validation_count"], 3)
 
     def test_parse_failure_keeps_research_lab_artifact_and_candidate_boundary(self) -> None:
         executors = [StaticShortpickExecutor("openai", "gpt-test", "fake", "not-json")]

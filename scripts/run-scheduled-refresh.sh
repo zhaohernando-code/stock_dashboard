@@ -32,6 +32,8 @@ REFRESH_STATE_DIR="${ASHARE_SCHEDULED_REFRESH_STATE_DIR:-$HOME/.cache/codex/asha
 RUN_LOCK_DIR="$REFRESH_STATE_DIR/run.lock"
 DAILY_REFRESH_TIMEOUT_SECONDS="${ASHARE_DAILY_REFRESH_TIMEOUT_SECONDS:-7200}"
 SHORTPICK_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_TIMEOUT_SECONDS:-7200}"
+SHORTPICK_VALIDATE_RECENT_DAYS="${ASHARE_SHORTPICK_VALIDATE_RECENT_DAYS:-30}"
+SHORTPICK_VALIDATE_RECENT_LIMIT="${ASHARE_SHORTPICK_VALIDATE_RECENT_LIMIT:-20}"
 NETWORK_CHECK_ENABLED="${ASHARE_REFRESH_NETWORK_CHECK:-1}"
 NETWORK_PROBES="${ASHARE_REFRESH_NETWORK_PROBES:-https://www.baidu.com/ https://push2.eastmoney.com/}"
 
@@ -53,6 +55,18 @@ run_shortpick_lab() {
   "$PYTHON_BIN" -m ashare_evidence.cli shortpick-lab-run \
     --database-url "$ASHARE_DATABASE_URL" \
     --rounds-per-model "${ASHARE_SHORTPICK_ROUNDS_PER_MODEL:-5}"
+}
+
+run_shortpick_validation_refresh() {
+  "$PYTHON_BIN" -m ashare_evidence.cli shortpick-lab-validate-recent \
+    --database-url "$ASHARE_DATABASE_URL" \
+    --days "$SHORTPICK_VALIDATE_RECENT_DAYS" \
+    --limit "$SHORTPICK_VALIDATE_RECENT_LIMIT"
+}
+
+run_shortpick_daily_cycle() {
+  run_shortpick_validation_refresh
+  run_shortpick_lab
 }
 
 time_ge() {
@@ -241,7 +255,7 @@ run_daily_refresh_slot() {
 run_shortpick_lab_slot() {
   local target_date="$1"
   local slot_name="shortpick_lab"
-  if [[ "${ASHARE_ENABLE_SHORTPICK_LAB:-0}" != "1" ]]; then
+  if [[ "${ASHARE_ENABLE_SHORTPICK_LAB:-1}" != "1" ]]; then
     return 0
   fi
   if slot_completed "$target_date" "$slot_name"; then
@@ -259,7 +273,7 @@ run_shortpick_lab_slot() {
   write_run_context "$target_date" "$slot_name"
   trap release_run_lock EXIT
   echo "Running shortpick lab for ${target_date} at ${NOW_HHMM}."
-  if run_with_timeout "$SHORTPICK_TIMEOUT_SECONDS" run_shortpick_lab; then
+  if run_with_timeout "$SHORTPICK_TIMEOUT_SECONDS" run_shortpick_daily_cycle; then
     mark_slot_completed "$target_date" "$slot_name"
     release_run_lock
     trap - EXIT

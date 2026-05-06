@@ -13,13 +13,37 @@ def test_scheduled_refresh_status_reads_success_marker(tmp_path, monkeypatch) ->
         "target_date=2026-05-06\nslot=postmarket\ncompleted_at=2026-05-06T16:45:00+0800\n",
         encoding="utf-8",
     )
+    (tmp_path / "daily-2026-05-06-shortpick_lab.ok").write_text(
+        "target_date=2026-05-06\nslot=shortpick_lab\ncompleted_at=2026-05-06T17:20:00+0800\n",
+        encoding="utf-8",
+    )
 
     payload = get_scheduled_refresh_status(datetime(2026, 5, 6, 20, 0, tzinfo=ZoneInfo("Asia/Shanghai")))
 
     assert payload["status"] == "success"
     assert payload["label"] == "已完成"
     assert payload["target_date"] == "2026-05-06"
-    assert payload["completed_at"] == "2026-05-06T16:45:00+0800"
+    assert payload["completed_at"] == "2026-05-06T17:20:00+0800"
+    assert [(item["slot"], item["status"]) for item in payload["components"]] == [
+        ("postmarket", "success"),
+        ("shortpick_lab", "success"),
+    ]
+
+
+def test_scheduled_refresh_status_reports_shortpick_pending_when_main_done(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("ASHARE_SCHEDULED_REFRESH_STATE_DIR", str(tmp_path))
+    (tmp_path / "daily-2026-05-06-postmarket.ok").write_text(
+        "target_date=2026-05-06\nslot=postmarket\ncompleted_at=2026-05-06T16:45:00+0800\n",
+        encoding="utf-8",
+    )
+
+    payload = get_scheduled_refresh_status(datetime(2026, 5, 6, 20, 0, tzinfo=ZoneInfo("Asia/Shanghai")))
+
+    assert payload["status"] == "pending_catchup"
+    assert payload["slot"] == "shortpick_lab"
+    assert payload["components"][0]["status"] == "success"
+    assert payload["components"][1]["status"] == "pending_catchup"
+    assert payload["components"][1]["label"] == "试验田"
 
 
 def test_scheduled_refresh_status_prefers_running_lock(tmp_path, monkeypatch) -> None:
@@ -37,6 +61,7 @@ def test_scheduled_refresh_status_prefers_running_lock(tmp_path, monkeypatch) ->
     assert payload["label"] == "正在跑"
     assert payload["pid"] == os.getpid()
     assert payload["started_at"] == "2026-05-06T16:20:05+0800"
+    assert payload["components"][0]["status"] == "running"
 
 
 def test_scheduled_refresh_status_reports_failed_marker(tmp_path, monkeypatch) -> None:
@@ -58,5 +83,5 @@ def test_scheduled_refresh_status_reports_failed_marker(tmp_path, monkeypatch) -
     payload = get_scheduled_refresh_status(datetime(2026, 5, 6, 20, 0, tzinfo=ZoneInfo("Asia/Shanghai")))
 
     assert payload["status"] == "failed"
-    assert payload["label"] == "失败待重试"
+    assert payload["label"] == "部分失败"
     assert payload["exit_code"] == 124
