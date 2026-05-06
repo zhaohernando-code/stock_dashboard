@@ -153,7 +153,7 @@ export function MobileStockDetail(props: MobileAppShellProps) {
         </section>
       ) : null}
 
-      <section className="mobile-stock-card mobile-stock-analysis-card">
+      <section className="mobile-stock-card mobile-stock-analysis-card mobile-event-analysis-card">
         <div className="mobile-stock-section-head">
           <div>
             <Title level={4}>事件深度分析</Title>

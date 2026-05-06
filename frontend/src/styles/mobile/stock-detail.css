@@ -183,6 +183,17 @@
   overflow: hidden;
 }
 
+.mobile-event-analysis-card.mobile-stock-analysis-card {
+  padding: 10px;
+}
+
+.mobile-event-analysis-card > p {
+  margin: 10px 0 0;
+  color: var(--mobile-color-muted);
+  font-size: var(--mobile-font-body);
+  line-height: 1.45;
+}
+
 .mobile-stock-tabs {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

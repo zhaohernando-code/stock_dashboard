@@ -89,7 +89,7 @@ export function MobileHome(props: MobileAppShellProps) {
       </section>
 
       {props.scheduledRefreshStatus ? (
-        <section className="mobile-section-plain">
+        <section className="mobile-section-plain mobile-refresh-status-wrap">
           <Alert
             showIcon
             closable

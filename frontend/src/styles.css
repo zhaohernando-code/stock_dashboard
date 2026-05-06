@@ -245,10 +245,12 @@ body[data-theme="dark"] {
 
 .workspace-nav-icon {
   display: flex;
+  flex: 0 0 44px;
   align-items: center;
   justify-content: center;
   width: 44px;
   height: 44px;
+  aspect-ratio: 1;
   border-radius: 16px;
   background: var(--brand-soft);
   font-size: 18px;
@@ -257,6 +259,7 @@ body[data-theme="dark"] {
 .workspace-nav-copy {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .workspace-nav-copy strong {
@@ -346,6 +349,32 @@ body[data-theme="dark"] {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
+}
+
+.shortpick-feedback-summary .ant-statistic {
+  min-height: 96px;
+  padding: 18px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background: var(--panel-bg);
+  text-align: center;
+}
+
+.shortpick-feedback-summary .ant-statistic-title,
+.shortpick-feedback-summary .ant-statistic-content {
+  text-align: center;
+}
+
+.shortpick-feedback-table .ant-table-thead > tr > th,
+.shortpick-feedback-table .ant-table-tbody > tr > td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.shortpick-centered-cell {
+  justify-content: center;
+  width: 100%;
+  text-align: center;
 }
 
 .shortpick-failure-table {

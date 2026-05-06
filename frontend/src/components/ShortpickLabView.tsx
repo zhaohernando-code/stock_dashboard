@@ -378,8 +378,9 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
     {
       title: "模型",
       key: "model",
+      align: "center",
       render: (_, item) => (
-        <Space direction="vertical" size={0}>
+        <Space direction="vertical" size={0} align="center" className="shortpick-centered-cell">
           <Text strong>{item.provider_name}:{item.model_name}</Text>
           <Text type="secondary">{item.executor_kind}</Text>
         </Space>
@@ -388,8 +389,9 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
     {
       title: "轮次质量",
       key: "rounds",
+      align: "center",
       render: (_, item) => (
-        <Space direction="vertical" size={0}>
+        <Space direction="vertical" size={0} align="center" className="shortpick-centered-cell">
           <Text>{item.completed_round_count} / {item.round_count} 成功</Text>
           <Text type="secondary">失败 {item.failed_round_count} · 可重跑 {item.retryable_failed_round_count} · 解析失败 {item.parse_failed_candidate_count}</Text>
         </Space>
@@ -399,13 +401,15 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
       title: "成功率",
       dataIndex: "success_rate",
       key: "success_rate",
+      align: "center",
       render: (value?: number | null) => <Text>{formatPercent(value)}</Text>,
     },
     {
       title: "来源质量",
       key: "sources",
+      align: "center",
       render: (_, item) => (
-        <Space wrap>
+        <Space wrap className="shortpick-centered-cell">
           {Object.entries(item.source_credibility_counts).map(([key, value]) => (
             <Tag key={key} color={sourceCredibilityColor(key)}>{sourceCredibilityLabel(key)} {value}</Tag>
           ))}
@@ -805,7 +809,7 @@ function ModelFeedbackTab({
   const overall = feedback?.overall ?? {};
   return (
     <>
-      <Row gutter={[16, 16]} className="shortpick-metrics">
+      <Row gutter={[16, 16]} className="shortpick-metrics shortpick-feedback-summary">
         <Col xs={24} md={6}>
           <Statistic title="批次数" value={Number(overall.run_count ?? 0)} />
         </Col>
@@ -821,6 +825,7 @@ function ModelFeedbackTab({
       </Row>
       <Card className="panel-card" title="模型反馈">
         <Table
+          className="shortpick-feedback-table"
           rowKey={(item) => `${item.provider_name}:${item.model_name}:${item.executor_kind}`}
           size="middle"
           loading={loading}

@@ -234,7 +234,12 @@
 }
 
 .mobile-refresh-status {
+  margin-bottom: 14px;
   text-align: left;
+}
+
+.mobile-refresh-status-wrap {
+  margin-bottom: 14px;
 }
 
 .mobile-stock-swipe {

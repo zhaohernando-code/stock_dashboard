@@ -1163,6 +1163,8 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       setView("stock");
     } else if (tab === "operations") {
       setView(canUseOperations ? "operations" : "candidates");
+    } else if (tab === "shortpick") {
+      setView("shortpick");
     } else {
       setView(canUseSettings ? "settings" : "candidates");
     }

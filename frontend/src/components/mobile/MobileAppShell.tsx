@@ -1,16 +1,19 @@
 import {
   BarChartOutlined,
+  ExperimentOutlined,
   HomeOutlined,
   LineChartOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
 import { Alert, Button, Select, Skeleton, Tag } from "antd";
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { MobileAppShellProps, MobileStockPanelKey, MobileTabKey } from "./types";
 import { MobileHome } from "./MobileHome";
 import { MobileStockDetail } from "./MobileStockDetail";
 import { MobileOperations } from "./MobileOperations";
 import { MobileSettings } from "./MobileSettings";
+import { ShortpickLabView } from "../ShortpickLabView";
 
 export function MobileAppShell(props: MobileAppShellProps) {
   const [activeTab, setActiveTab] = useState<MobileTabKey>("home");
@@ -20,6 +23,7 @@ export function MobileAppShell(props: MobileAppShellProps) {
       { key: "home", label: "首页", icon: <HomeOutlined /> },
       { key: "stock", label: "单票", icon: <LineChartOutlined /> },
       ...(props.canUseOperations ? [{ key: "operations", label: "复盘", icon: <BarChartOutlined /> }] : []),
+      { key: "shortpick", label: "试验", icon: <ExperimentOutlined /> },
       ...(props.canUseSettings ? [{ key: "settings", label: "设置", icon: <SettingOutlined /> }] : []),
     ] as Array<{ key: MobileTabKey; label: string; icon: React.ReactNode }>),
     [props.canUseOperations, props.canUseSettings],
@@ -127,11 +131,20 @@ export function MobileAppShell(props: MobileAppShellProps) {
             {activeTab === "home" ? <MobileHome {...mobileProps} /> : null}
             {activeTab === "stock" ? <MobileStockDetail {...mobileProps} /> : null}
             {activeTab === "operations" ? <MobileOperations {...mobileProps} /> : null}
+            {activeTab === "shortpick" ? (
+              <main className="mobile-page mobile-page-shortpick">
+                <ShortpickLabView canTrigger={props.isRootUser} />
+              </main>
+            ) : null}
             {activeTab === "settings" ? <MobileSettings {...mobileProps} /> : null}
           </>
         )}
 
-        <nav className="mobile-bottom-nav" aria-label="移动端导航">
+        <nav
+          className="mobile-bottom-nav"
+          aria-label="移动端导航"
+          style={{ "--mobile-nav-count": navItems.length } as CSSProperties}
+        >
           {navItems.map((item) => (
             <button
               key={item.key}
