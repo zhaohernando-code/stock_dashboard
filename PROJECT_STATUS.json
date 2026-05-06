@@ -91,7 +91,7 @@
     "shortpick_lab_research_surface": "published_runtime_verified",
     "shortpick_lab_deepseek_search_provenance": "published_runtime_verified",
     "shortpick_lab_history_validation_workspace": "published_runtime_verified",
-    "shortpick_lab_validation_optimization_plan": "planned"
+    "shortpick_lab_validation_optimization_plan": "p0_p3_implemented_p4_gate_scaffold_pending_peer_baselines"
   },
   "latest_findings": [
     {

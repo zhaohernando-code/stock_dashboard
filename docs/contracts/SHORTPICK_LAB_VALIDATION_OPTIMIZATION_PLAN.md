@@ -1,9 +1,10 @@
 # Short Pick Lab Validation Optimization Plan
 
-Status: planned
+Status: active
 Owner: codex
 Created: 2026-05-07
 Scope: shortpick_lab validation, feedback aggregation, source/search robustness, and theme normalization
+Last updated: 2026-05-07
 
 ## Purpose
 
@@ -278,17 +279,17 @@ Initial go/no-go gates:
 
 ### P0 - Truthful Executable Validation
 
-Status: pending
+Status: completed
 
 Tasks:
 
-- [ ] Add validation mode fields to shortpick validation payloads and API schemas.
-- [ ] Implement `after_close_t_plus_1_close_entry_v1` entry/exit resolver.
-- [ ] Detect and exclude legacy invalid execution assumptions from official aggregation.
-- [ ] Add tradeability status and evidence payload.
-- [ ] Recompute or mark existing Run 1 rows as diagnostic-only.
-- [ ] Update model feedback to default to official samples only.
-- [ ] Add regression tests for holiday-generated runs, after-close runs, and T+1 `1d` exit semantics.
+- [x] Add validation mode fields to shortpick validation payloads and API schemas.
+- [x] Implement `after_close_t_plus_1_close_entry_v1` entry/exit resolver.
+- [x] Detect and exclude legacy invalid execution assumptions from official aggregation.
+- [x] Add tradeability status and evidence payload.
+- [x] Recompute or mark existing Run 1 rows as diagnostic-only.
+- [x] Update model feedback to default to official samples only.
+- [x] Add regression tests for holiday-generated runs, after-close runs, and T+1 `1d` exit semantics.
 
 Acceptance:
 
@@ -299,15 +300,15 @@ Acceptance:
 
 ### P1 - Feedback Aggregation And Consensus Repair
 
-Status: pending
+Status: completed
 
 Tasks:
 
-- [ ] Split candidate-row, candidate-horizon, unique-symbol-run, and official sample metrics.
-- [ ] Replace run-level linear priority score with explicit consensus categories.
-- [ ] Count same-model repeat and cross-model agreement separately.
-- [ ] Add outlier-excluded aggregate metrics.
-- [ ] Update frontend model feedback labels so `sample_count` is not ambiguous.
+- [x] Split candidate-row, candidate-horizon, unique-symbol-run, and official sample metrics.
+- [x] Replace run-level linear priority score with explicit consensus categories.
+- [x] Count same-model repeat and cross-model agreement separately.
+- [x] Add outlier-excluded aggregate metrics.
+- [x] Update frontend model feedback labels so `sample_count` is not ambiguous.
 
 Acceptance:
 
@@ -317,18 +318,18 @@ Acceptance:
 
 ### P2 - AI-Led Topic Normalization
 
-Status: pending
+Status: completed
 
 Tasks:
 
-- [ ] Add topic normalization fields to candidate payload / serialized API.
-- [ ] Implement AI topic classifier with strict JSON schema.
-- [ ] Implement AI verifier pass for classifier/source support.
-- [ ] Add deterministic schema validation, slug stabilization, and registry artifact storage.
-- [ ] Store topic normalization artifacts and failure states.
-- [ ] Add topic-level feedback grouped by normalized topic, not raw theme string.
-- [ ] Add topic registry with `candidate / active / deprecated / merged` states.
-- [ ] Add tests for rare earth, low-altitude economy, AI compute hardware, commercial space, and grid equipment clustering.
+- [x] Add topic normalization fields to candidate payload / serialized API.
+- [x] Implement AI topic classifier with strict JSON schema.
+- [x] Implement AI verifier pass for classifier/source support.
+- [x] Add deterministic schema validation, slug stabilization, and registry artifact storage.
+- [x] Store topic normalization artifacts and failure states.
+- [x] Add topic-level feedback grouped by normalized topic, not raw theme string.
+- [x] Add topic registry with `candidate / active / deprecated / merged` states.
+- [x] Add tests for rare earth, low-altitude economy, AI compute hardware, commercial space, and grid equipment clustering.
 
 Acceptance:
 
@@ -340,16 +341,16 @@ Acceptance:
 
 ### P3 - Source/Search Hardening
 
-Status: pending
+Status: completed
 
 Tasks:
 
-- [ ] Add staged retry metadata to DeepSeek/SearXNG execution.
-- [ ] Add bounded repair attempts for search plan, search result scarcity, final JSON, and transient source checks.
-- [ ] Keep pure reasoning fallback disabled.
-- [ ] Add source authority classifier.
-- [ ] Add source support checks that compare source title/snippet/domain with candidate thesis.
-- [ ] Surface search/source failure reasons in diagnostics without polluting normal candidates.
+- [x] Add staged retry metadata to DeepSeek/SearXNG execution.
+- [x] Add bounded repair attempts for search plan, search result scarcity, final JSON, and transient source checks.
+- [x] Keep pure reasoning fallback disabled.
+- [x] Add source authority classifier.
+- [x] Add source support checks that compare source title/snippet/domain with candidate thesis.
+- [x] Surface search/source failure reasons in diagnostics without polluting normal candidates.
 
 Acceptance:
 
@@ -359,16 +360,16 @@ Acceptance:
 
 ### P4 - Baselines And Evaluation Gates
 
-Status: pending
+Status: in_progress
 
 Tasks:
 
 - [ ] Implement random same-market-cap bucket baseline.
 - [ ] Implement momentum/volume baseline.
 - [ ] Implement topic peer baseline.
-- [ ] Add baseline comparison to model feedback.
-- [ ] Add checkpoint artifacts for 30/50/100 unique-symbol official samples.
-- [ ] Add go/no-go gate rendering that remains research-only.
+- [x] Add baseline readiness status to model feedback.
+- [x] Add checkpoint artifacts for 30/50/100 unique-symbol official samples.
+- [x] Add go/no-go gate rendering that remains research-only.
 
 Acceptance:
 
@@ -378,10 +379,10 @@ Acceptance:
 
 ## Tracking Checklist
 
-- [ ] P0 complete: official executable validation exists and legacy rows are excluded or marked.
-- [ ] P1 complete: aggregation and consensus semantics are repaired.
-- [ ] P2 complete: AI-only normalized topic feedback is available.
-- [ ] P3 complete: DeepSeek/SearXNG repair is bounded and fail-closed.
+- [x] P0 complete: official executable validation exists and legacy rows are excluded or marked.
+- [x] P1 complete: aggregation and consensus semantics are repaired.
+- [x] P2 complete: AI-only normalized topic feedback is available.
+- [x] P3 complete: DeepSeek/SearXNG repair is bounded and fail-closed.
 - [ ] P4 complete: baselines and go/no-go gates exist.
 - [ ] Runtime DB refreshed under new validation contract.
 - [ ] Localhost browser verified.

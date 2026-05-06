@@ -39,18 +39,25 @@ const { Paragraph, Text, Title } = Typography;
 const DEFAULT_VALIDATION_PAGE_SIZE = 50;
 
 function priorityLabel(value: string): string {
+  if (value === "cross_model_same_symbol") return "跨模型同票";
+  if (value === "same_model_repeat_symbol") return "同模型重复";
+  if (value === "cross_model_same_topic") return "跨模型同题材";
+  if (value === "single_model_high_conviction") return "单模型高置信";
   if (value === "high_convergence") return "高收敛";
   if (value === "theme_convergence") return "题材收敛";
   if (value === "divergent_novel") return "发散新颖";
   if (value === "watch_only") return "观察";
+  if (value === "failed_or_unusable") return "不可用";
   return "待聚合";
 }
 
 function priorityColor(value: string): string {
-  if (value === "high_convergence") return "red";
-  if (value === "theme_convergence") return "gold";
+  if (value === "cross_model_same_symbol" || value === "high_convergence") return "red";
+  if (value === "cross_model_same_topic" || value === "theme_convergence") return "gold";
+  if (value === "same_model_repeat_symbol" || value === "single_model_high_conviction") return "orange";
   if (value === "divergent_novel") return "blue";
   if (value === "watch_only") return "default";
+  if (value === "failed_or_unusable") return "red";
   return "default";
 }
 
@@ -75,6 +82,9 @@ function statusLabel(value: string): string {
     pending_forward_window: "待窗口",
     pending_entry_bar: "待入场价",
     pending_benchmark_data: "待基准",
+    suspended_or_no_current_bar: "停牌/缺行情",
+    entry_unfillable_limit_up: "入场涨停不可成交",
+    tradeability_uncertain: "可交易性待确认",
   };
   return labels[value] ?? value;
 }
@@ -145,6 +155,32 @@ function sourceCredibilityColor(value?: string | null): string {
   if (value === "reachable_restricted") return "gold";
   if (value === "suspicious" || value === "unreachable" || value === "missing_url") return "red";
   return "default";
+}
+
+function sourceAuthorityLabel(value?: string | null): string {
+  const labels: Record<string, string> = {
+    exchange_or_company_disclosure: "公告/交易所",
+    designated_disclosure_media: "指定披露媒体",
+    mainstream_financial_media: "主流财经",
+    vertical_industry_media: "行业媒体",
+    broker_research_or_pdf: "券商/PDF",
+    community_or_forum: "社区论坛",
+    aggregator_or_unknown: "聚合/未知",
+  };
+  return labels[value || ""] ?? "聚合/未知";
+}
+
+function sourceSupportLabel(value?: string | null): string {
+  if (value === "supported_by_source_text") return "文本支持";
+  if (value === "weak_or_unverified_source_support") return "弱支持";
+  return "未检查";
+}
+
+function topicLabel(candidate: ShortpickCandidateView): string {
+  const topic = candidate.topic_normalization ?? {};
+  const label = typeof topic.label_zh === "string" ? topic.label_zh.trim() : "";
+  if (label) return label;
+  return candidate.normalized_theme || "未归类题材";
 }
 
 export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
@@ -295,7 +331,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
       render: (_, item) => (
         <Space direction="vertical" size={0}>
           <Text strong>{item.name} · {item.symbol}</Text>
-          <Text type="secondary">{item.normalized_theme || "未归类题材"}</Text>
+          <Text type="secondary">{topicLabel(item)}</Text>
         </Space>
       ),
     },
@@ -620,9 +656,11 @@ function TodayRunTab({
                   : "--"}
               </Descriptions.Item>
               <Descriptions.Item label="领先题材">
-                {Array.isArray(run.consensus.summary.leader_themes)
-                  ? (run.consensus.summary.leader_themes as string[]).join(" / ") || "--"
-                  : "--"}
+                {recordValue<Record<string, string>>(run.consensus.summary, "leader_theme_labels")
+                  ? Object.values(recordValue<Record<string, string>>(run.consensus.summary, "leader_theme_labels") ?? {}).join(" / ") || "--"
+                  : Array.isArray(run.consensus.summary.leader_themes)
+                    ? (run.consensus.summary.leader_themes as string[]).join(" / ") || "--"
+                    : "--"}
               </Descriptions.Item>
               <Descriptions.Item label="解释">
                 {String(run.consensus.summary.interpretation ?? "模型一致性只代表研究优先级。")}
@@ -807,6 +845,8 @@ function ModelFeedbackTab({
   columns: ColumnsType<ShortpickModelFeedbackItem>;
 }) {
   const overall = feedback?.overall ?? {};
+  const checkpoints = recordValue<Record<string, unknown>>(overall, "evaluation_checkpoints");
+  const checkpointStatus = String(checkpoints?.status ?? "not_ready");
   return (
     <>
       <Row gutter={[16, 16]} className="shortpick-metrics shortpick-feedback-summary">
@@ -823,6 +863,13 @@ function ModelFeedbackTab({
           <Statistic title="验证快照" value={Number(overall.validation_count ?? 0)} />
         </Col>
       </Row>
+      <Alert
+        className="panel-card"
+        type={checkpointStatus === "pass" ? "success" : checkpointStatus === "fail" ? "error" : "warning"}
+        showIcon
+        message={`能力评估门禁：${checkpointStatus === "pass" ? "通过" : checkpointStatus === "fail" ? "未通过" : "样本不足"}`}
+        description={`5日官方唯一标的样本 ${Number(checkpoints?.official_5d_unique_symbol_run_count ?? 0)}；未达到门禁前不得把试验田表现解释为模型选股能力。`}
+      />
       <Card className="panel-card" title="模型反馈">
         <Table
           className="shortpick-feedback-table"
@@ -862,8 +909,10 @@ function FeedbackGroupList({ title, groups }: { title: string; groups: Shortpick
           <List.Item>
             <Space wrap>
               <Text strong>{group.label}</Text>
-              <Text>样本 {group.completed_validation_count}/{group.sample_count}</Text>
+              <Text>官方样本 {group.completed_official_sample_count ?? group.completed_validation_count}/{group.official_sample_count ?? group.sample_count}</Text>
+              <Text type="secondary">原始 {group.sample_count}</Text>
               <Text className={`value-${valueTone(group.mean_excess_return)}`}>平均超额 {formatPercent(group.mean_excess_return)}</Text>
+              <Text className={`value-${valueTone(group.trimmed_mean_excess_return)}`}>去极值 {formatPercent(group.trimmed_mean_excess_return)}</Text>
               <Text>正超额 {formatPercent(group.positive_excess_rate)}</Text>
               <Text type="secondary">最大回撤 {formatPercent(group.max_drawdown)}</Text>
             </Space>
@@ -920,6 +969,10 @@ function SourceList({ candidate }: { candidate: ShortpickCandidateView }) {
                 <Tag color={sourceCredibilityColor(source.credibility_status)}>
                   {sourceCredibilityLabel(source.credibility_status)}
                   {source.http_status ? ` ${source.http_status}` : ""}
+                </Tag>
+                <Tag>{sourceAuthorityLabel(source.authority_class)}</Tag>
+                <Tag color={source.support_status === "supported_by_source_text" ? "green" : "gold"}>
+                  {sourceSupportLabel(source.support_status)}
                 </Tag>
               </Space>
               <Text type="secondary">{source.published_at || "发布时间未声明"} · {source.why_it_matters || "未说明"}</Text>

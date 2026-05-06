@@ -29,6 +29,7 @@ from ashare_evidence.shortpick_lab import (
     DeepseekLobeChatSearchShortpickExecutor,
     OpenAICompatibleShortpickExecutor,
     StaticShortpickExecutor,
+    _normalize_shortpick_topic,
     build_shortpick_model_feedback,
     default_shortpick_executors,
     list_shortpick_runs,
@@ -39,34 +40,65 @@ from ashare_evidence.shortpick_lab import (
 )
 
 
-def _answer(symbol: str, name: str, theme: str, url: str) -> str:
-    return json.dumps(
-        {
-            "as_of_date": "2026-05-05",
-            "information_mode": "native_web_open_discovery",
-            "primary_pick": {
-                "symbol": symbol,
-                "name": name,
-                "theme": theme,
-                "horizon_trading_days": 5,
-                "confidence": 0.66,
-                "thesis": f"{theme} 催化下的短线研究候选。",
-                "catalysts": [theme],
-                "invalidation": ["题材热度回落"],
-                "risks": ["短线拥挤"],
-            },
-            "sources_used": [
-                {
-                    "title": "公开新闻",
-                    "url": url,
-                    "published_at": "2026-05-05",
-                    "why_it_matters": theme,
-                }
-            ],
-            "alternative_picks": [],
-            "novelty_note": "来自公开网络的旁路发现。",
-            "limitations": ["只代表研究优先级"],
+def _answer(
+    symbol: str,
+    name: str,
+    theme: str,
+    url: str,
+    *,
+    topic_cluster_id: str | None = None,
+    topic_label: str | None = None,
+    topic_confidence: float = 0.82,
+) -> str:
+    payload = {
+        "as_of_date": "2026-05-05",
+        "information_mode": "native_web_open_discovery",
+        "primary_pick": {
+            "symbol": symbol,
+            "name": name,
+            "theme": theme,
+            "horizon_trading_days": 5,
+            "confidence": 0.66,
+            "thesis": f"{theme} 催化下的短线研究候选。",
+            "catalysts": [theme],
+            "invalidation": ["题材热度回落"],
+            "risks": ["短线拥挤"],
         },
+        "sources_used": [
+            {
+                "title": "公开新闻",
+                "url": url,
+                "published_at": "2026-05-05",
+                "why_it_matters": theme,
+            }
+        ],
+        "alternative_picks": [],
+        "novelty_note": "来自公开网络的旁路发现。",
+        "limitations": ["只代表研究优先级"],
+    }
+    if topic_cluster_id is not None:
+        payload["topic_analysis"] = {
+            "primary_topic": {
+                "topic_cluster_id": topic_cluster_id,
+                "label_zh": topic_label or theme,
+                "confidence": topic_confidence,
+                "reason": f"{theme} 支撑 {topic_label or topic_cluster_id} 题材归类。",
+                "supporting_evidence_refs": [0],
+                "driver_types": ["price_change", "market_hotspot"],
+                "topic_keywords": [theme],
+            },
+            "secondary_topics": [],
+            "new_topic_proposal": None,
+            "not_topic_reason": None,
+        }
+        payload["topic_verification"] = {
+            "verdict": "supported",
+            "confidence": topic_confidence,
+            "unsupported_claims": [],
+            "suggested_topic_cluster_id": None,
+        }
+    return json.dumps(
+        payload,
         ensure_ascii=False,
     )
 
@@ -182,15 +214,96 @@ class ShortpickLabTests(unittest.TestCase):
 
         self.assertEqual(payload["status"], "completed")
         self.assertEqual(payload["summary"]["completed_round_count"], 2)
-        self.assertEqual(payload["consensus"]["research_priority"], "high_convergence")
+        self.assertEqual(payload["consensus"]["research_priority"], "cross_model_same_symbol")
         self.assertEqual(payload["consensus"]["summary"]["leader_symbols"], ["688981.SH"])
+        self.assertEqual(payload["consensus"]["summary"]["cross_model_symbols"], ["688981.SH"])
         self.assertEqual(len(payload["candidates"]), 2)
-        self.assertTrue(all(item["research_priority"] == "high_convergence" for item in payload["candidates"]))
+        self.assertTrue(all(item["research_priority"] == "cross_model_same_symbol" for item in payload["candidates"]))
         self.assertTrue(any(v["status"] == "completed" for v in payload["candidates"][0]["validations"]))
 
         with session_scope(self.database_url) as session:
             self.assertEqual(session.scalar(select(WatchlistFollow).where(WatchlistFollow.symbol == "688981.SH")), None)
             self.assertEqual(session.scalar(select(Recommendation).limit(1)), None)
+
+    def test_ai_topic_normalization_clusters_cross_model_topic_without_string_match(self) -> None:
+        self._seed_stock_bars("000831.SZ", "中国稀土", [40 + index for index in range(8)])
+        self._seed_stock_bars("600111.SH", "北方稀土", [30 + index * 0.5 for index in range(8)])
+        self._seed_stock_bars("000300.SH", "沪深300", [200 + index for index in range(8)])
+        self._seed_stock_bars("000852.SH", "中证1000", [300 + index * 1.5 for index in range(8)])
+        executors = [
+            StaticShortpickExecutor(
+                "openai",
+                "gpt-test",
+                "fake",
+                _answer(
+                    "000831.SZ",
+                    "中国稀土",
+                    "稀土价格上行与战略资源约束",
+                    "https://a.example/rare-earth-price",
+                    topic_cluster_id="rare_earth_price_security",
+                    topic_label="稀土价格与战略资源安全",
+                ),
+            ),
+            StaticShortpickExecutor(
+                "deepseek",
+                "deepseek-test",
+                "fake",
+                _answer(
+                    "600111.SH",
+                    "北方稀土",
+                    "央企稀土整合预期",
+                    "https://b.example/rare-earth-soe",
+                    topic_cluster_id="rare_earth_price_security",
+                    topic_label="稀土价格与战略资源安全",
+                ),
+            ),
+        ]
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
+            with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
+                with session_scope(self.database_url) as session:
+                    payload = run_shortpick_experiment(
+                        session,
+                        run_date=date(2026, 5, 5),
+                        rounds_per_model=1,
+                        triggered_by="root",
+                        executors=executors,
+                    )
+                    feedback = build_shortpick_model_feedback(session)
+
+        self.assertEqual(payload["consensus"]["research_priority"], "cross_model_same_topic")
+        self.assertEqual(payload["consensus"]["summary"]["cross_model_themes"], ["rare_earth_price_security"])
+        self.assertEqual(payload["consensus"]["summary"]["cross_model_theme_labels"]["rare_earth_price_security"], "稀土价格与战略资源安全")
+        self.assertEqual(payload["consensus"]["summary"]["topic_registry"][0]["status"], "active")
+        self.assertTrue(all(item["research_priority"] == "cross_model_same_topic" for item in payload["candidates"]))
+        self.assertEqual(payload["candidates"][0]["topic_normalization"]["topic_cluster_id"], "rare_earth_price_security")
+        openai_feedback = next(item for item in feedback["models"] if item["provider_name"] == "openai")
+        topic_group = next(group for group in openai_feedback["validation_by_theme"] if group["group_key"] == "rare_earth_price_security")
+        self.assertEqual(topic_group["label"], "稀土价格与战略资源安全")
+        self.assertGreater(topic_group["official_sample_count"], 0)
+
+    def test_ai_topic_normalization_fixture_clusters_without_keyword_rules(self) -> None:
+        cases = [
+            ("通航订单与低空基础设施", "low_altitude_economy", "低空经济"),
+            ("国产算力芯片服务器交付", "ai_compute_hardware", "AI 算力硬件"),
+            ("卫星互联网发射服务", "commercial_space", "商业航天"),
+            ("特高压设备招标放量", "grid_equipment", "电网设备"),
+        ]
+        for theme, topic_id, label in cases:
+            parsed = json.loads(
+                _answer(
+                    "001234.SZ",
+                    "测试股份",
+                    theme,
+                    "https://news.cn/topic",
+                    topic_cluster_id=topic_id,
+                    topic_label=label,
+                )
+            )
+            topic = _normalize_shortpick_topic(parsed)
+            self.assertEqual(topic["topic_cluster_id"], topic_id)
+            self.assertEqual(topic["label_zh"], label)
+            self.assertEqual(topic["status"], "classified")
 
     def test_validate_recent_shortpick_runs_refreshes_completed_runs(self) -> None:
         self._seed_daily_bars()
@@ -290,11 +403,12 @@ class ShortpickLabTests(unittest.TestCase):
             def search(self, query: str):
                 return [
                     {
-                        "title": "半导体公开新闻",
-                        "url": "https://news.cn/finance/test",
+                        "title": f"半导体公开新闻 {index}",
+                        "url": "https://news.cn/finance/test" if index == 0 else f"https://news.cn/finance/test-{index}",
                         "published_at": "2026-05-05",
                         "why_it_matters": query,
                     }
+                    for index in range(3)
                 ]
 
         executor = DeepseekLobeChatSearchShortpickExecutor(
@@ -313,8 +427,70 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(parsed["_executor_trace"]["search_backend"], "lobechat_searxng")
         self.assertEqual(parsed["_executor_trace"]["search_queries"], ["A股 半导体 国产替代 短线 新闻"])
         self.assertEqual(parsed["sources_used"][0]["url"], "https://news.cn/finance/test")
+        self.assertEqual(parsed["_executor_trace"]["search_result_count"], 3)
         self.assertEqual([item.get("enable_search") for item in calls], [None, None])
         self.assertEqual(executor.executor_kind, "deepseek_tool_search_lobechat_searxng_v1")
+
+    def test_deepseek_executor_fails_closed_when_search_results_stay_insufficient(self) -> None:
+        def fake_complete(_self, **kwargs):
+            prompt = str(kwargs["prompt"])
+            if "只生成搜索计划" in prompt:
+                return json.dumps({"search_queries": ["A股 稀土 新闻"]}, ensure_ascii=False)
+            return _answer("000831.SZ", "中国稀土", "稀土价格", "https://news.cn/rare-earth")
+
+        class SparseSearchClient:
+            def search(self, query: str):
+                return [
+                    {
+                        "title": "稀土公开新闻",
+                        "url": "https://news.cn/rare-earth",
+                        "published_at": "2026-05-05",
+                        "why_it_matters": query,
+                    }
+                ]
+
+        executor = DeepseekLobeChatSearchShortpickExecutor(
+            key_id=1,
+            provider_name="deepseek",
+            model_name="deepseek-v4-pro",
+            base_url="https://api.deepseek.com",
+            api_key="secret",
+            search_client=SparseSearchClient(),
+        )
+        with patch("ashare_evidence.shortpick_lab.OpenAICompatibleTransport.complete", new=fake_complete):
+            with self.assertRaisesRegex(RuntimeError, "fail_closed_no_pure_reasoning_fallback"):
+                executor.complete("prompt")
+
+    def test_deepseek_executor_rejects_final_sources_outside_search_results(self) -> None:
+        def fake_complete(_self, **kwargs):
+            prompt = str(kwargs["prompt"])
+            if "只生成搜索计划" in prompt:
+                return json.dumps({"search_queries": ["A股 半导体 新闻"]}, ensure_ascii=False)
+            return _answer("688981.SH", "中芯国际", "半导体国产替代", "https://fabricated.example/news")
+
+        class SearchClient:
+            def search(self, query: str):
+                return [
+                    {
+                        "title": f"半导体公开新闻 {index}",
+                        "url": f"https://news.cn/finance/real-{index}",
+                        "published_at": "2026-05-05",
+                        "why_it_matters": query,
+                    }
+                    for index in range(3)
+                ]
+
+        executor = DeepseekLobeChatSearchShortpickExecutor(
+            key_id=1,
+            provider_name="deepseek",
+            model_name="deepseek-v4-pro",
+            base_url="https://api.deepseek.com",
+            api_key="secret",
+            search_client=SearchClient(),
+        )
+        with patch("ashare_evidence.shortpick_lab.OpenAICompatibleTransport.complete", new=fake_complete):
+            with self.assertRaisesRegex(RuntimeError, "final_source_not_in_search_results"):
+                executor.complete("prompt")
 
     def test_default_deepseek_executor_uses_lobechat_search_not_official_native_api(self) -> None:
         with session_scope(self.database_url) as session:
@@ -382,12 +558,16 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(first_validation["status"], "completed")
         self.assertEqual(first_validation["benchmark_symbol"], "000300.SH")
         self.assertEqual(first_validation["benchmark_label"], "沪深300")
-        self.assertAlmostEqual(first_validation["stock_return"], 0.02)
-        self.assertAlmostEqual(first_validation["benchmark_return"], 0.005)
-        self.assertAlmostEqual(first_validation["excess_return"], 0.015)
+        self.assertEqual(first_validation["validation_mode"], "after_close_t_plus_1_close_entry_v1")
+        self.assertTrue(first_validation["official_validation"])
+        self.assertEqual(first_validation["tradeability_status"], "tradeable")
+        self.assertAlmostEqual(first_validation["stock_return"], 104 / 102 - 1)
+        self.assertAlmostEqual(first_validation["benchmark_return"], 202 / 201 - 1)
+        self.assertAlmostEqual(first_validation["excess_return"], (104 / 102 - 1) - (202 / 201 - 1))
         self.assertIn("000852.SH", first_validation["benchmark_returns"])
         self.assertGreater(payload["summary"]["completed_validation_count"], 0)
         self.assertEqual(payload["summary"]["measured_candidate_count"], 1)
+        self.assertEqual(payload["summary"]["official_validation_mode"], "after_close_t_plus_1_close_entry_v1")
         self.assertIn("1", payload["summary"]["validation_by_horizon"])
 
     def test_candidate_market_sync_creates_only_stock_and_market_bars(self) -> None:
@@ -441,10 +621,12 @@ class ShortpickLabTests(unittest.TestCase):
 
         first_validation = payload["candidates"][0]["validations"][0]
         self.assertEqual(first_validation["status"], "pending_forward_window")
-        self.assertEqual(first_validation["entry_close"], 100)
-        self.assertEqual(first_validation["available_forward_bars"], 0)
+        self.assertIsNone(first_validation["entry_close"])
+        self.assertIsNone(first_validation["available_forward_bars"])
         self.assertEqual(first_validation["required_forward_bars"], 1)
-        self.assertIn("needs 1 forward trading-day close", first_validation["pending_reason"])
+        self.assertIn("No completed tradeable entry close after signal day", first_validation["pending_reason"])
+        self.assertFalse(first_validation["official_validation"])
+        self.assertEqual(first_validation["tradeability_status"], "pending_market_data")
 
         with session_scope(self.database_url) as session:
             snapshot = session.scalar(select(ShortpickValidationSnapshot).where(ShortpickValidationSnapshot.horizon_days == 1))
@@ -457,11 +639,11 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(legacy_item["required_forward_bars"], 1)
         self.assertIn("needs 1 forward trading-day close", legacy_item["pending_reason"])
 
-    def test_validation_uses_previous_trading_close_for_holiday_run_date(self) -> None:
-        trading_days = [date(2026, 4, 30), date(2026, 5, 6)]
-        self._seed_stock_bars("688981.SH", "中芯国际", [100, 110], dates=trading_days)
-        self._seed_stock_bars("000300.SH", "沪深300", [200, 210], dates=trading_days)
-        self._seed_stock_bars("000852.SH", "中证1000", [300, 315], dates=trading_days)
+    def test_validation_uses_next_trade_close_entry_for_holiday_run_date(self) -> None:
+        trading_days = [date(2026, 4, 30), date(2026, 5, 6), date(2026, 5, 7)]
+        self._seed_stock_bars("688981.SH", "中芯国际", [100, 110, 121], dates=trading_days)
+        self._seed_stock_bars("000300.SH", "沪深300", [200, 210, 214.2], dates=trading_days)
+        self._seed_stock_bars("000852.SH", "中证1000", [300, 315, 318], dates=trading_days)
         executors = [StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("688981.SH", "中芯国际", "半导体国产替代", "https://a.example/news"))]
 
         with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
@@ -477,12 +659,53 @@ class ShortpickLabTests(unittest.TestCase):
 
         first_validation = payload["candidates"][0]["validations"][0]
         self.assertEqual(first_validation["status"], "completed")
-        self.assertEqual(first_validation["entry_at"].date(), date(2026, 4, 30))
-        self.assertEqual(first_validation["exit_at"].date(), date(2026, 5, 6))
-        self.assertEqual(first_validation["entry_close"], 100)
-        self.assertEqual(first_validation["exit_close"], 110)
+        self.assertEqual(first_validation["entry_at"].date(), date(2026, 5, 6))
+        self.assertEqual(first_validation["exit_at"].date(), date(2026, 5, 7))
+        self.assertEqual(first_validation["entry_close"], 110)
+        self.assertEqual(first_validation["exit_close"], 121)
         self.assertAlmostEqual(first_validation["stock_return"], 0.1)
-        self.assertAlmostEqual(first_validation["benchmark_return"], 0.05)
+        self.assertAlmostEqual(first_validation["benchmark_return"], 0.02)
+        self.assertEqual(first_validation["validation_mode"], "after_close_t_plus_1_close_entry_v1")
+        self.assertTrue(first_validation["official_validation"])
+
+    def test_validation_excludes_unfillable_one_price_limit_up_entry(self) -> None:
+        trading_days = [date(2026, 5, 5), date(2026, 5, 6), date(2026, 5, 7)]
+        self._seed_stock_bars("001234.SZ", "测试股份", [10, 11, 12], dates=trading_days)
+        self._seed_stock_bars("000300.SH", "沪深300", [200, 202, 204], dates=trading_days)
+        self._seed_stock_bars("000852.SH", "中证1000", [300, 303, 306], dates=trading_days)
+        executors = [StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("001234.SZ", "测试股份", "短投题材", "https://a.example/news"))]
+
+        with session_scope(self.database_url) as session:
+            stock = session.scalar(select(Stock).where(Stock.symbol == "001234.SZ"))
+            assert stock is not None
+            entry_bar = session.scalar(
+                select(MarketBar).where(
+                    MarketBar.stock_id == stock.id,
+                    MarketBar.observed_at == datetime(2026, 5, 6, 7, 0, tzinfo=timezone.utc),
+                )
+            )
+            assert entry_bar is not None
+            entry_bar.open_price = 11
+            entry_bar.high_price = 11
+            entry_bar.low_price = 11
+            entry_bar.close_price = 11
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
+            with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
+                with session_scope(self.database_url) as session:
+                    payload = run_shortpick_experiment(
+                        session,
+                        run_date=date(2026, 5, 5),
+                        rounds_per_model=1,
+                        triggered_by="root",
+                        executors=executors,
+                    )
+
+        first_validation = payload["candidates"][0]["validations"][0]
+        self.assertEqual(first_validation["status"], "entry_unfillable_limit_up")
+        self.assertEqual(first_validation["tradeability_status"], "entry_unfillable_limit_up")
+        self.assertFalse(first_validation["official_validation"])
+        self.assertIsNone(first_validation["stock_return"])
 
     def test_validation_pending_benchmark_when_primary_window_missing(self) -> None:
         self._seed_stock_bars("688981.SH", "中芯国际", [100 + index * 2 for index in range(8)])

@@ -14,7 +14,11 @@ export interface ShortpickSourceView {
   why_it_matters?: string | null;
   credibility_status?: string | null;
   credibility_reason?: string | null;
+  authority_class?: string | null;
+  support_status?: string | null;
+  support_evidence_terms?: string[];
   http_status?: number | null;
+  attempt_count?: number | null;
   checked_at?: string | null;
 }
 
@@ -58,6 +62,10 @@ export interface ShortpickValidationView {
   benchmark_symbol?: string | null;
   benchmark_label?: string | null;
   benchmark_returns?: Record<string, unknown>;
+  validation_mode?: string | null;
+  official_validation?: boolean;
+  tradeability_status?: string | null;
+  tradeability_evidence?: Record<string, unknown>;
   available_forward_bars?: number | null;
   required_forward_bars?: number | null;
   pending_reason?: string | null;
@@ -72,6 +80,7 @@ export interface ShortpickCandidateView {
   symbol: string;
   name: string;
   normalized_theme?: string | null;
+  topic_normalization?: Record<string, unknown>;
   horizon_trading_days?: number | null;
   confidence?: number | null;
   thesis?: string | null;
@@ -164,6 +173,10 @@ export interface ShortpickValidationQueueItem {
   max_drawdown?: number | null;
   benchmark_symbol?: string | null;
   benchmark_label?: string | null;
+  validation_mode?: string | null;
+  official_validation?: boolean;
+  tradeability_status?: string | null;
+  tradeability_evidence?: Record<string, unknown>;
   available_forward_bars?: number | null;
   required_forward_bars?: number | null;
   pending_reason?: string | null;
@@ -182,9 +195,13 @@ export interface ShortpickFeedbackGroup {
   group_key: string;
   label: string;
   sample_count: number;
+  official_sample_count?: number;
+  unique_symbol_run_count?: number;
   completed_validation_count: number;
+  completed_official_sample_count?: number;
   mean_stock_return?: number | null;
   mean_excess_return?: number | null;
+  trimmed_mean_excess_return?: number | null;
   positive_excess_rate?: number | null;
   max_drawdown?: number | null;
   max_favorable_return?: number | null;
@@ -200,6 +217,11 @@ export interface ShortpickModelFeedbackItem {
   failed_round_count: number;
   retryable_failed_round_count: number;
   parse_failed_candidate_count: number;
+  candidate_row_count?: number;
+  candidate_horizon_row_count?: number;
+  unique_symbol_run_count?: number;
+  official_sample_count?: number;
+  completed_official_sample_count?: number;
   success_rate?: number | null;
   source_credibility_counts: Record<string, number>;
   validation_by_horizon: ShortpickFeedbackGroup[];

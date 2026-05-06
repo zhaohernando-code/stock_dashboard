@@ -26,7 +26,11 @@ class ShortpickSourceView(BaseModel):
     why_it_matters: str | None = None
     credibility_status: str | None = None
     credibility_reason: str | None = None
+    authority_class: str | None = None
+    support_status: str | None = None
+    support_evidence_terms: list[str] = Field(default_factory=list)
     http_status: int | None = None
+    attempt_count: int | None = None
     checked_at: str | None = None
 
 
@@ -70,6 +74,10 @@ class ShortpickValidationView(BaseModel):
     benchmark_symbol: str | None = None
     benchmark_label: str | None = None
     benchmark_returns: dict[str, Any] = Field(default_factory=dict)
+    validation_mode: str | None = None
+    official_validation: bool = False
+    tradeability_status: str | None = None
+    tradeability_evidence: dict[str, Any] = Field(default_factory=dict)
     available_forward_bars: int | None = None
     required_forward_bars: int | None = None
     pending_reason: str | None = None
@@ -84,6 +92,7 @@ class ShortpickCandidateView(BaseModel):
     symbol: str
     name: str
     normalized_theme: str | None = None
+    topic_normalization: dict[str, Any] = Field(default_factory=dict)
     horizon_trading_days: int | None = None
     confidence: float | None = None
     thesis: str | None = None
@@ -178,6 +187,10 @@ class ShortpickValidationQueueItem(BaseModel):
     max_drawdown: float | None = None
     benchmark_symbol: str | None = None
     benchmark_label: str | None = None
+    validation_mode: str | None = None
+    official_validation: bool = False
+    tradeability_status: str | None = None
+    tradeability_evidence: dict[str, Any] = Field(default_factory=dict)
     available_forward_bars: int | None = None
     required_forward_bars: int | None = None
     pending_reason: str | None = None
@@ -196,9 +209,13 @@ class ShortpickFeedbackGroup(BaseModel):
     group_key: str
     label: str
     sample_count: int = 0
+    official_sample_count: int = 0
+    unique_symbol_run_count: int = 0
     completed_validation_count: int = 0
+    completed_official_sample_count: int = 0
     mean_stock_return: float | None = None
     mean_excess_return: float | None = None
+    trimmed_mean_excess_return: float | None = None
     positive_excess_rate: float | None = None
     max_drawdown: float | None = None
     max_favorable_return: float | None = None
@@ -214,6 +231,11 @@ class ShortpickModelFeedbackItem(BaseModel):
     failed_round_count: int
     retryable_failed_round_count: int
     parse_failed_candidate_count: int
+    candidate_row_count: int = 0
+    candidate_horizon_row_count: int = 0
+    unique_symbol_run_count: int = 0
+    official_sample_count: int = 0
+    completed_official_sample_count: int = 0
     success_rate: float | None = None
     source_credibility_counts: dict[str, int] = Field(default_factory=dict)
     validation_by_horizon: list[ShortpickFeedbackGroup] = Field(default_factory=list)

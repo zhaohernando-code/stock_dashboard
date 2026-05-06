@@ -42,12 +42,19 @@ from ashare_evidence.stock_master import resolve_stock_profile
 SHORTPICK_PROMPT_VERSION = "native_web_open_discovery_v1"
 SHORTPICK_INFORMATION_MODE = "native_web_open_discovery"
 SHORTPICK_DEFAULT_HORIZONS = [1, 3, 5, 10, 20]
+SHORTPICK_OFFICIAL_VALIDATION_MODE = "after_close_t_plus_1_close_entry_v1"
+SHORTPICK_LEGACY_VALIDATION_MODE = "legacy_previous_close_entry"
+SHORTPICK_SIGNAL_REACTION_MODE = "signal_reaction_close_to_close"
+SHORTPICK_OFFICIAL_TRADEABILITY_STATUS = "tradeable"
 SHORTPICK_PRIMARY_BENCHMARK_ID = "CSI300"
 SHORTPICK_RESEARCH_BENCHMARK_IDS = ["CSI1000"]
 SHORTPICK_CODEX_TIMEOUT_SECONDS = 240
 SHORTPICK_SOURCE_CHECK_TIMEOUT_SECONDS = 3
+SHORTPICK_SOURCE_CHECK_RETRY_ATTEMPTS = 2
 SHORTPICK_SEARXNG_TIMEOUT_SECONDS = 12
 SHORTPICK_DEEPSEEK_SEARCH_TIMEOUT_SECONDS = 180
+SHORTPICK_DEEPSEEK_MIN_SEARCH_RESULTS = 3
+SHORTPICK_DEEPSEEK_QUERY_RETRY_ATTEMPTS = 2
 SHORTPICK_LOBECHAT_SEARXNG_URL_ENV = "SHORTPICK_LOBECHAT_SEARXNG_URL"
 SHORTPICK_LOBECHAT_SEARXNG_DEFAULT_URL = "http://127.0.0.1:18080"
 SUSPICIOUS_SOURCE_PATTERNS = (
@@ -56,6 +63,12 @@ SUSPICIOUS_SOURCE_PATTERNS = (
     re.compile(r"(?:xxxx|abc123|example|placeholder|dummy)", re.IGNORECASE),
 )
 RETRYABLE_FAILURE_CATEGORIES = {"retryable_search_failure", "retryable_parse_failure"}
+LIMIT_UP_BANDS = {
+    "default": 0.10,
+    "star_or_chinext": 0.20,
+    "beijing": 0.30,
+    "st": 0.05,
+}
 
 
 class ShortpickExecutor(Protocol):
@@ -188,23 +201,49 @@ class DeepseekLobeChatSearchShortpickExecutor:
                 "你的任务是先自主决定需要搜索哪些公开信息，不要输出股票推荐，只输出 JSON。"
             ),
         )
-        plan = extract_shortpick_json(plan_raw)
+        plan = _extract_json_with_one_llm_repair(
+            transport=transport,
+            base_url=self.base_url,
+            api_key=self.api_key,
+            model_name=self.model_name,
+            raw_answer=plan_raw,
+            stage="search_plan_json_repair",
+        )
         queries = _coerce_search_queries(plan.get("search_queries") or plan.get("queries"))
         if not queries:
             raise RuntimeError("deepseek search planning produced no search queries.")
 
         search_results: list[dict[str, Any]] = []
         seen_urls: set[str] = set()
+        search_attempts: list[dict[str, Any]] = []
         for query in queries:
-            for result in search_client.search(query):
+            for result in _search_with_retries(search_client, query, attempts=search_attempts):
                 url = str(result.get("url") or "").strip()
                 if not url or url in seen_urls:
                     continue
                 seen_urls.add(url)
                 search_results.append(result)
 
-        if not search_results:
-            raise RuntimeError("LobeChat/SearXNG returned no usable search results for DeepSeek search plan.")
+        if len(search_results) < SHORTPICK_DEEPSEEK_MIN_SEARCH_RESULTS:
+            for query in _expand_deepseek_queries(queries):
+                for result in _search_with_retries(search_client, query, attempts=search_attempts):
+                    url = str(result.get("url") or "").strip()
+                    if not url or url in seen_urls:
+                        continue
+                    seen_urls.add(url)
+                    search_results.append(result)
+                if len(search_results) >= SHORTPICK_DEEPSEEK_MIN_SEARCH_RESULTS:
+                    break
+
+        if len(search_results) < SHORTPICK_DEEPSEEK_MIN_SEARCH_RESULTS:
+            raise RuntimeError(
+                _format_deepseek_search_failure(
+                    failure_stage="search_result_scarcity",
+                    queries=queries,
+                    search_attempts=search_attempts,
+                    usable_result_count=len(search_results),
+                )
+            )
 
         final_raw = transport.complete(
             base_url=self.base_url,
@@ -216,7 +255,20 @@ class DeepseekLobeChatSearchShortpickExecutor:
                 "你只能基于用户问题和系统提供的公开搜索结果进行分析；sources_used 必须来自这些搜索结果，不能编造 URL。只输出 JSON。"
             ),
         )
-        return _attach_deepseek_search_trace(final_raw, plan=plan, search_results=search_results, executor_kind=self.executor_kind)
+        final_answer = _repair_final_answer_json_if_needed(
+            transport=transport,
+            base_url=self.base_url,
+            api_key=self.api_key,
+            model_name=self.model_name,
+            raw_answer=final_raw,
+        )
+        return _attach_deepseek_search_trace(
+            final_answer,
+            plan=plan,
+            search_results=search_results,
+            search_attempts=search_attempts,
+            executor_kind=self.executor_kind,
+        )
 
 
 @dataclass(frozen=True)
@@ -289,6 +341,25 @@ def build_shortpick_prompt(*, run_date: date, round_index: int, provider_name: s
       "why_it_matters": "..."
     }}
   ],
+  "topic_analysis": {{
+    "primary_topic": {{
+      "topic_cluster_id": "short_stable_english_slug",
+      "label_zh": "中文题材标签",
+      "confidence": 0.0,
+      "reason": "为什么这个候选属于该题材",
+      "supporting_evidence_refs": [0],
+      "driver_types": ["policy", "price_change", "earnings", "contract_order", "market_hotspot", "industry_chain"]
+    }},
+    "secondary_topics": [],
+    "new_topic_proposal": null,
+    "not_topic_reason": null
+  }},
+  "topic_verification": {{
+    "verdict": "supported",
+    "confidence": 0.0,
+    "unsupported_claims": [],
+    "suggested_topic_cluster_id": null
+  }},
   "alternative_picks": [],
   "novelty_note": "这个推荐与常规历史数据/量化视角相比，可能提供的新视角是什么",
   "limitations": ["..."]
@@ -337,6 +408,124 @@ def _build_deepseek_final_prompt(*, prompt: str, plan: dict[str, Any], search_re
 """.strip()
 
 
+def _extract_json_with_one_llm_repair(
+    *,
+    transport: OpenAICompatibleTransport,
+    base_url: str,
+    api_key: str,
+    model_name: str,
+    raw_answer: str,
+    stage: str,
+) -> dict[str, Any]:
+    try:
+        return extract_shortpick_json(raw_answer)
+    except ValueError:
+        repaired = transport.complete(
+            base_url=base_url,
+            api_key=api_key,
+            model_name=model_name,
+            prompt=_build_json_repair_prompt(raw_answer, stage=stage),
+            system="只修复 JSON 格式，不要新增事实、股票、来源或解释。只输出 JSON。",
+        )
+        return extract_shortpick_json(repaired)
+
+
+def _repair_final_answer_json_if_needed(
+    *,
+    transport: OpenAICompatibleTransport,
+    base_url: str,
+    api_key: str,
+    model_name: str,
+    raw_answer: str,
+) -> str:
+    try:
+        extract_shortpick_json(raw_answer)
+        return raw_answer
+    except ValueError:
+        repaired = transport.complete(
+            base_url=base_url,
+            api_key=api_key,
+            model_name=model_name,
+            prompt=_build_json_repair_prompt(raw_answer, stage="final_answer_json_repair"),
+            system="只修复 JSON 格式，不要新增事实、股票、来源或解释。只输出 JSON。",
+        )
+        extract_shortpick_json(repaired)
+        return repaired
+
+
+def _build_json_repair_prompt(raw_answer: str, *, stage: str) -> str:
+    return f"""
+下面内容应该是一个 JSON 对象，但解析失败。请只做格式修复，不要新增或删除事实，不要编造 URL。
+
+阶段：{stage}
+
+原始内容：
+{raw_answer[:12000]}
+""".strip()
+
+
+def _search_with_retries(
+    search_client: SearxngSearchClient,
+    query: str,
+    *,
+    attempts: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    last_error: str | None = None
+    for attempt_index in range(1, SHORTPICK_DEEPSEEK_QUERY_RETRY_ATTEMPTS + 1):
+        try:
+            results = search_client.search(query)
+            attempts.append(
+                {
+                    "query": query,
+                    "attempt": attempt_index,
+                    "status": "success",
+                    "result_count": len(results),
+                }
+            )
+            return results
+        except Exception as exc:  # pragma: no cover - exercised through integration backends.
+            last_error = str(exc)[:240]
+            attempts.append(
+                {
+                    "query": query,
+                    "attempt": attempt_index,
+                    "status": "failed",
+                    "error": last_error,
+                }
+            )
+    raise RuntimeError(f"LobeChat/SearXNG query failed after retries: {query}: {last_error}")
+
+
+def _expand_deepseek_queries(queries: list[str]) -> list[str]:
+    expanded: list[str] = []
+    for query in queries:
+        for suffix in (" 公告 新闻 A股", " 产业链 价格 政策 A股", " 短线 催化 证券"):
+            item = f"{query}{suffix}"[:180]
+            if item not in queries and item not in expanded:
+                expanded.append(item)
+        if len(expanded) >= 5:
+            break
+    return expanded
+
+
+def _format_deepseek_search_failure(
+    *,
+    failure_stage: str,
+    queries: list[str],
+    search_attempts: list[dict[str, Any]],
+    usable_result_count: int,
+) -> str:
+    payload = {
+        "failure_stage": failure_stage,
+        "usable_result_count": usable_result_count,
+        "required_result_count": SHORTPICK_DEEPSEEK_MIN_SEARCH_RESULTS,
+        "search_queries": queries,
+        "search_attempts": search_attempts,
+        "policy": "fail_closed_no_pure_reasoning_fallback",
+    }
+    return f"LobeChat/SearXNG returned insufficient usable search results: {json.dumps(payload, ensure_ascii=False)}"
+
+
 def _coerce_search_queries(value: Any) -> list[str]:
     items = value if isinstance(value, list) else []
     queries: list[str] = []
@@ -355,15 +544,35 @@ def _attach_deepseek_search_trace(
     *,
     plan: dict[str, Any],
     search_results: list[dict[str, Any]],
+    search_attempts: list[dict[str, Any]],
     executor_kind: str,
 ) -> str:
     parsed = extract_shortpick_json(raw_answer)
+    allowed_urls = {str(item.get("url") or "").strip() for item in search_results if item.get("url")}
+    used_urls = {
+        str(source.get("url") or "").strip()
+        for source in (parsed.get("sources_used") if isinstance(parsed.get("sources_used"), list) else [])
+        if isinstance(source, dict) and source.get("url")
+    }
+    unexpected_urls = sorted(url for url in used_urls if url not in allowed_urls)
+    if unexpected_urls:
+        raise RuntimeError(
+            _format_deepseek_search_failure(
+                failure_stage="final_source_not_in_search_results",
+                queries=_coerce_search_queries(plan.get("search_queries") or plan.get("queries")),
+                search_attempts=search_attempts,
+                usable_result_count=len(search_results),
+            )
+            + f"; unexpected_source_urls={unexpected_urls[:5]}"
+        )
     parsed["_executor_trace"] = {
         "executor_kind": executor_kind,
         "search_backend": "lobechat_searxng",
         "search_queries": _coerce_search_queries(plan.get("search_queries") or plan.get("queries")),
         "search_result_count": len(search_results),
         "search_result_urls": [str(item.get("url") or "") for item in search_results[:20] if item.get("url")],
+        "search_attempts": search_attempts,
+        "repair_policy": "bounded_repair_fail_closed",
     }
     return json.dumps(parsed, ensure_ascii=False, indent=2)
 
@@ -632,7 +841,12 @@ def _shortpick_failure_category(error_message: str | None) -> str | None:
     if not error_message:
         return None
     normalized = error_message.lower()
-    if "searxng returned no usable search results" in normalized or "search planning produced no search queries" in normalized:
+    if (
+        "searxng returned no usable search results" in normalized
+        or "insufficient usable search results" in normalized
+        or "final_source_not_in_search_results" in normalized
+        or "search planning produced no search queries" in normalized
+    ):
         return "retryable_search_failure"
     if "did not contain a json object" in normalized or "parse" in normalized or "json" in normalized:
         return "retryable_parse_failure"
@@ -660,6 +874,11 @@ def _candidate_from_round(
     symbol = _normalize_symbol(str(pick.get("symbol") or "PARSE_FAILED"))
     name = str(pick.get("name") or symbol).strip()[:64] or symbol
     theme = str(pick.get("theme") or _infer_theme(pick) or "").strip() or None
+    thesis = _coerce_text(pick.get("thesis"))
+    catalysts = _coerce_string_list(pick.get("catalysts"))
+    sources_payload = list(round_record.sources_payload or _normalize_sources(parsed.get("sources_used")))
+    for source in sources_payload:
+        source.update(_source_support_check(source, theme=theme, thesis=thesis, catalysts=catalysts))
     base_candidate_key = f"shortpick-candidate:{round_record.id}"
     existing_count = session.scalar(
         select(func.count(ShortpickCandidate.id)).where(ShortpickCandidate.candidate_key.like(f"{base_candidate_key}%"))
@@ -673,11 +892,11 @@ def _candidate_from_round(
         normalized_theme=theme,
         horizon_trading_days=_coerce_int(pick.get("horizon_trading_days")),
         confidence=_coerce_float(pick.get("confidence")),
-        thesis=_coerce_text(pick.get("thesis")),
-        catalysts=_coerce_string_list(pick.get("catalysts")),
+        thesis=thesis,
+        catalysts=catalysts,
         invalidation=_coerce_string_list(pick.get("invalidation")),
         risks=_coerce_string_list(pick.get("risks")),
-        sources_payload=list(round_record.sources_payload or _normalize_sources(parsed.get("sources_used"))),
+        sources_payload=sources_payload,
         novelty_note=_coerce_text(parsed.get("novelty_note")),
         limitations=_coerce_string_list(parsed.get("limitations")),
         convergence_group=None,
@@ -687,6 +906,7 @@ def _candidate_from_round(
         candidate_payload={
             "information_mode": parsed.get("information_mode"),
             "alternative_picks": parsed.get("alternative_picks") if isinstance(parsed.get("alternative_picks"), list) else [],
+            "topic_normalization": _normalize_shortpick_topic(parsed),
             "model": {
                 "provider_name": round_record.provider_name,
                 "model_name": round_record.model_name,
@@ -699,6 +919,96 @@ def _candidate_from_round(
     return candidate
 
 
+def _normalize_shortpick_topic(parsed: dict[str, Any]) -> dict[str, Any]:
+    raw = parsed.get("topic_analysis")
+    verification = parsed.get("topic_verification") if isinstance(parsed.get("topic_verification"), dict) else {}
+    if not isinstance(raw, dict):
+        return {
+            "topic_cluster_id": "unclassified",
+            "label_zh": "未归类题材",
+            "topic_confidence": 0.0,
+            "normalization_method": "ai_structured_missing",
+            "status": "unclassified",
+            "reason": "Model output did not include structured topic_analysis.",
+        }
+    primary = raw.get("primary_topic") if isinstance(raw.get("primary_topic"), dict) else {}
+    topic_id = _stable_topic_slug(primary.get("topic_cluster_id") or primary.get("label_zh"))
+    label = _coerce_text(primary.get("label_zh")) or topic_id.replace("_", " ")
+    confidence = _coerce_float(primary.get("confidence")) or 0.0
+    evidence_refs = primary.get("supporting_evidence_refs")
+    if not isinstance(evidence_refs, list):
+        evidence_refs = []
+    driver_types = [
+        _stable_topic_slug(item)
+        for item in (primary.get("driver_types") if isinstance(primary.get("driver_types"), list) else [])
+        if _coerce_text(item)
+    ]
+    if not topic_id or topic_id in {"none", "null", "unclassified"}:
+        return {
+            "topic_cluster_id": "unclassified",
+            "label_zh": "未归类题材",
+            "topic_confidence": confidence,
+            "normalization_method": "ai_structured_v1",
+            "status": "unclassified",
+            "reason": _coerce_text(raw.get("not_topic_reason")) or "AI topic classifier did not provide a usable topic id.",
+            "raw_topic_analysis": raw,
+            "topic_verification": verification,
+        }
+    verification_verdict = _coerce_text(verification.get("verdict"))
+    verification_confidence = _coerce_float(verification.get("confidence"))
+    verification_supported = verification_verdict in {None, "supported"} or (
+        verification_verdict == "partially_supported" and (verification_confidence or 0.0) >= 0.65
+    )
+    status = "classified" if confidence >= 0.5 and verification_supported else "topic_uncertain"
+    return {
+        "topic_cluster_id": topic_id,
+        "label_zh": label,
+        "topic_confidence": max(0.0, min(1.0, confidence)),
+        "topic_keywords": _coerce_string_list(primary.get("topic_keywords")),
+        "topic_drivers": driver_types,
+        "topic_evidence_refs": [item for item in evidence_refs if isinstance(item, int)],
+        "normalization_method": "ai_structured_v1",
+        "status": status,
+        "reason": _coerce_text(primary.get("reason")),
+        "secondary_topics": raw.get("secondary_topics") if isinstance(raw.get("secondary_topics"), list) else [],
+        "new_topic_proposal": raw.get("new_topic_proposal") if isinstance(raw.get("new_topic_proposal"), dict) else None,
+        "topic_verification": verification,
+        "raw_topic_analysis": raw,
+    }
+
+
+def _stable_topic_slug(value: Any) -> str:
+    text = _coerce_text(value)
+    if not text:
+        return ""
+    lowered = text.lower().strip()
+    cleaned = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "_", lowered)
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    return cleaned[:80]
+
+
+def _candidate_topic(candidate: ShortpickCandidate) -> dict[str, Any]:
+    payload = candidate.candidate_payload if isinstance(candidate.candidate_payload, dict) else {}
+    topic = payload.get("topic_normalization") if isinstance(payload.get("topic_normalization"), dict) else {}
+    return topic
+
+
+def _candidate_topic_key(candidate: ShortpickCandidate) -> str:
+    topic = _candidate_topic(candidate)
+    topic_id = _coerce_text(topic.get("topic_cluster_id"))
+    if topic_id and topic_id != "unclassified" and topic.get("status") != "topic_uncertain":
+        return topic_id
+    return "unclassified"
+
+
+def _candidate_topic_label(candidate: ShortpickCandidate) -> str:
+    topic = _candidate_topic(candidate)
+    label = _coerce_text(topic.get("label_zh"))
+    if label:
+        return label
+    return candidate.normalized_theme or "未归类题材"
+
+
 def build_shortpick_consensus(session: Session, run: ShortpickExperimentRun) -> ShortpickConsensusSnapshot:
     candidates = session.scalars(
         select(ShortpickCandidate).where(ShortpickCandidate.run_id == run.id).order_by(ShortpickCandidate.id.asc())
@@ -707,17 +1017,28 @@ def build_shortpick_consensus(session: Session, run: ShortpickExperimentRun) -> 
     total = max(len(parsed), 1)
     symbol_counts: dict[str, int] = {}
     theme_counts: dict[str, int] = {}
+    topic_labels: dict[str, str] = {}
     model_by_symbol: dict[str, set[str]] = {}
+    model_counts_by_symbol: dict[str, dict[str, int]] = {}
+    model_by_theme: dict[str, set[str]] = {}
     source_hosts: set[str] = set()
     all_source_urls: set[str] = set()
     source_status_counts: dict[str, int] = {}
     for candidate in parsed:
         symbol_counts[candidate.symbol] = symbol_counts.get(candidate.symbol, 0) + 1
-        if candidate.normalized_theme:
-            theme_counts[candidate.normalized_theme] = theme_counts.get(candidate.normalized_theme, 0) + 1
+        topic_key = _candidate_topic_key(candidate)
+        if topic_key != "unclassified":
+            theme_counts[topic_key] = theme_counts.get(topic_key, 0) + 1
+            topic_labels.setdefault(topic_key, _candidate_topic_label(candidate))
         round_record = session.get(ShortpickModelRound, candidate.round_id) if candidate.round_id else None
         if round_record is not None:
             model_by_symbol.setdefault(candidate.symbol, set()).add(round_record.provider_name)
+            model_counts_by_symbol.setdefault(candidate.symbol, {})
+            model_counts_by_symbol[candidate.symbol][round_record.provider_name] = (
+                model_counts_by_symbol[candidate.symbol].get(round_record.provider_name, 0) + 1
+            )
+            if topic_key != "unclassified":
+                model_by_theme.setdefault(topic_key, set()).add(round_record.provider_name)
         for source in candidate.sources_payload:
             credibility = str(source.get("credibility_status") or "unchecked")
             source_status_counts[credibility] = source_status_counts.get(credibility, 0) + 1
@@ -736,23 +1057,53 @@ def build_shortpick_consensus(session: Session, run: ShortpickExperimentRun) -> 
         1,
     )
     novelty_score = sum(1 for item in parsed if item.is_system_external) / total
-    priority_score = (
-        stock_convergence * 0.35
-        + theme_convergence * 0.2
-        + source_diversity * 0.15
-        + model_independence * 0.15
-        + novelty_score * 0.15
+    cross_model_symbols = sorted(symbol for symbol, models in model_by_symbol.items() if len(models) >= 2)
+    same_model_repeat_symbols = sorted(
+        symbol
+        for symbol, provider_counts in model_counts_by_symbol.items()
+        if any(count >= 2 for count in provider_counts.values())
     )
-    priority = "high_convergence" if priority_score >= 0.68 else "theme_convergence" if theme_convergence >= 0.45 else "divergent_novel"
+    cross_model_themes = sorted(theme for theme, models in model_by_theme.items() if len(models) >= 2)
+    priority = (
+        "cross_model_same_symbol"
+        if cross_model_symbols
+        else "cross_model_same_topic"
+        if cross_model_themes
+        else "divergent_novel"
+    )
     leader_symbols = [symbol for symbol, count in symbol_counts.items() if count == max_symbol_count and count > 0]
     leader_themes = [theme for theme, count in theme_counts.items() if count == max_theme_count and count > 0]
+    topic_registry = [
+        {
+            "topic_cluster_id": topic_id,
+            "label_zh": topic_labels.get(topic_id, topic_id),
+            "candidate_count": theme_counts.get(topic_id, 0),
+            "provider_count": len(model_by_theme.get(topic_id, set())),
+            "status": "active" if topic_id in cross_model_themes else "candidate",
+            "source": "ai_structured_topic_normalization",
+        }
+        for topic_id in sorted(theme_counts)
+    ]
     for candidate in parsed:
-        if candidate.symbol in leader_symbols and max_symbol_count > 1:
+        round_record = session.get(ShortpickModelRound, candidate.round_id) if candidate.round_id else None
+        provider_name = round_record.provider_name if round_record is not None else ""
+        topic_key = _candidate_topic_key(candidate)
+        source_quality_ok = any(
+            str(source.get("credibility_status") or "") in {"verified", "reachable_restricted"}
+            for source in candidate.sources_payload
+        )
+        if candidate.symbol in cross_model_symbols:
             candidate.convergence_group = "stock"
-            candidate.research_priority = "high_convergence"
-        elif candidate.normalized_theme in leader_themes and max_theme_count > 1:
+            candidate.research_priority = "cross_model_same_symbol"
+        elif candidate.symbol in same_model_repeat_symbols and model_counts_by_symbol.get(candidate.symbol, {}).get(provider_name, 0) >= 2:
+            candidate.convergence_group = "stock"
+            candidate.research_priority = "same_model_repeat_symbol"
+        elif topic_key in cross_model_themes:
             candidate.convergence_group = "theme"
-            candidate.research_priority = "theme_convergence"
+            candidate.research_priority = "cross_model_same_topic"
+        elif (candidate.confidence or 0.0) >= 0.65 and source_quality_ok and candidate.is_system_external:
+            candidate.convergence_group = "conviction"
+            candidate.research_priority = "single_model_high_conviction"
         elif candidate.is_system_external:
             candidate.convergence_group = "novel"
             candidate.research_priority = "divergent_novel"
@@ -763,7 +1114,14 @@ def build_shortpick_consensus(session: Session, run: ShortpickExperimentRun) -> 
     summary_payload = {
         "leader_symbols": leader_symbols,
         "leader_themes": leader_themes,
-        "priority_score": round(priority_score, 4),
+        "leader_theme_labels": {theme: topic_labels.get(theme, theme) for theme in leader_themes},
+        "priority_score": None,
+        "priority_method": "explicit_consensus_categories_v1",
+        "cross_model_symbols": cross_model_symbols,
+        "same_model_repeat_symbols": same_model_repeat_symbols,
+        "cross_model_themes": cross_model_themes,
+        "cross_model_theme_labels": {theme: topic_labels.get(theme, theme) for theme in cross_model_themes},
+        "topic_registry": topic_registry,
         "candidate_count": len(candidates),
         "parsed_candidate_count": len(parsed),
         "source_credibility_counts": source_status_counts,
@@ -1093,18 +1451,75 @@ def _upsert_validation_snapshot(
         _clear_validation_metrics(existing)
         existing.validation_payload = {
             "reason": "No daily bars found for candidate symbol.",
+            "validation_mode": SHORTPICK_OFFICIAL_VALIDATION_MODE,
+            "official_validation": False,
+            "tradeability_status": "pending_market_data",
             "market_data_sync": market_sync or {},
         }
         return existing
-    entry_index = next((idx for idx, bar in reversed(list(enumerate(bars))) if bar.observed_at.date() <= run.run_date), None)
+
+    round_record = session.get(ShortpickModelRound, candidate.round_id) if candidate.round_id else None
+    signal_available_at = _shortpick_signal_available_at(run, round_record)
+    signal_trade_day = signal_available_at.date()
+    latest_bar_day = bars[-1].observed_at.date()
+    if latest_bar_day <= signal_trade_day:
+        existing.status = "suspended_or_no_current_bar" if latest_bar_day < signal_trade_day else "pending_forward_window"
+        _clear_validation_metrics(existing)
+        existing.validation_payload = {
+            "reason": (
+                f"No completed tradeable entry close after signal day {signal_trade_day.isoformat()}; "
+                f"latest daily bar is {latest_bar_day.isoformat()}."
+            ),
+            "validation_mode": SHORTPICK_OFFICIAL_VALIDATION_MODE,
+            "official_validation": False,
+            "tradeability_status": "suspended_or_no_current_bar" if latest_bar_day < signal_trade_day else "pending_market_data",
+            "signal_available_at": signal_available_at.isoformat(),
+            "signal_trade_day": signal_trade_day.isoformat(),
+            "latest_trade_day": latest_bar_day.isoformat(),
+            "market_data_sync": market_sync or {},
+        }
+        return existing
+
+    entry_index = next((idx for idx, bar in enumerate(bars) if bar.observed_at.date() > signal_trade_day), None)
     if entry_index is None:
         existing.status = "pending_entry_bar"
         _clear_validation_metrics(existing)
         existing.validation_payload = {
-            "reason": "No completed entry bar at or before run_date.",
+            "reason": "No completed entry bar after signal availability.",
+            "validation_mode": SHORTPICK_OFFICIAL_VALIDATION_MODE,
+            "official_validation": False,
+            "tradeability_status": "pending_market_data",
+            "signal_available_at": signal_available_at.isoformat(),
+            "signal_trade_day": signal_trade_day.isoformat(),
             "market_data_sync": market_sync or {},
         }
         return existing
+
+    tradeability = _shortpick_entry_tradeability(candidate=candidate, bars=bars, entry_index=entry_index)
+    if tradeability["tradeability_status"] != SHORTPICK_OFFICIAL_TRADEABILITY_STATUS:
+        entry = bars[entry_index]
+        existing.status = str(tradeability["tradeability_status"])
+        existing.entry_at = entry.observed_at
+        existing.entry_close = entry.close_price
+        existing.exit_at = None
+        existing.exit_close = None
+        existing.stock_return = None
+        existing.benchmark_return = None
+        existing.excess_return = None
+        existing.max_favorable_return = None
+        existing.max_drawdown = None
+        existing.validation_payload = {
+            "validation_mode": SHORTPICK_OFFICIAL_VALIDATION_MODE,
+            "official_validation": False,
+            "tradeability_status": tradeability["tradeability_status"],
+            "tradeability_evidence": tradeability,
+            "signal_available_at": signal_available_at.isoformat(),
+            "signal_trade_day": signal_trade_day.isoformat(),
+            "entry_trade_day": entry.observed_at.date().isoformat(),
+            "market_data_sync": market_sync or {},
+        }
+        return existing
+
     exit_index = entry_index + horizon
     if exit_index >= len(bars):
         available_forward_bars = max(len(bars) - entry_index - 1, 0)
@@ -1122,9 +1537,16 @@ def _upsert_validation_snapshot(
             "available_forward_bars": available_forward_bars,
             "required_forward_bars": horizon,
             "pending_reason": (
-                f"Entry close before or on run_date is available at {bars[entry_index].observed_at.isoformat()}; "
+                f"Official entry close after signal availability is {bars[entry_index].observed_at.isoformat()}; "
                 f"needs {horizon} forward trading-day close(s), currently has {available_forward_bars}."
             ),
+            "validation_mode": SHORTPICK_OFFICIAL_VALIDATION_MODE,
+            "official_validation": False,
+            "tradeability_status": SHORTPICK_OFFICIAL_TRADEABILITY_STATUS,
+            "tradeability_evidence": tradeability,
+            "signal_available_at": signal_available_at.isoformat(),
+            "signal_trade_day": signal_trade_day.isoformat(),
+            "entry_trade_day": bars[entry_index].observed_at.date().isoformat(),
             "market_data_sync": market_sync or {},
         }
         return existing
@@ -1157,10 +1579,97 @@ def _upsert_validation_snapshot(
     existing.validation_payload = {
         "benchmark": primary,
         "benchmark_returns": benchmark_returns,
+        "validation_mode": SHORTPICK_OFFICIAL_VALIDATION_MODE,
+        "official_validation": primary_return is not None,
+        "tradeability_status": SHORTPICK_OFFICIAL_TRADEABILITY_STATUS,
+        "tradeability_evidence": tradeability,
+        "signal_available_at": signal_available_at.isoformat(),
+        "signal_trade_day": signal_trade_day.isoformat(),
+        "entry_trade_day": entry.observed_at.date().isoformat(),
+        "exit_trade_day": exit_bar.observed_at.date().isoformat(),
         "market_data_sync": market_sync or {},
         "note": "后验验证只读取行情，不回写主量化推荐或模拟盘。",
     }
     return existing
+
+
+def _shortpick_signal_available_at(
+    run: ShortpickExperimentRun,
+    round_record: ShortpickModelRound | None,
+) -> datetime:
+    """Return the effective signal timestamp for validation.
+
+    Historical backfills and tests can create a run_date in the past while the
+    actual row is inserted much later. In that case, treat the requested
+    run_date as an after-close signal day instead of letting test/runtime repair
+    timestamps push the entry arbitrarily forward.
+    """
+
+    candidate_time = round_record.completed_at if round_record is not None and round_record.completed_at else None
+    candidate_time = candidate_time or run.completed_at or run.started_at
+    if run.trigger_source != "scheduled_cli" and candidate_time.date() != run.run_date:
+        return datetime(run.run_date.year, run.run_date.month, run.run_date.day, 15, 30, tzinfo=UTC)
+    return candidate_time
+
+
+def _shortpick_entry_tradeability(
+    *,
+    candidate: ShortpickCandidate,
+    bars: list[MarketBar],
+    entry_index: int,
+) -> dict[str, Any]:
+    entry = bars[entry_index]
+    previous = bars[entry_index - 1] if entry_index > 0 else None
+    limit_band = _infer_shortpick_limit_band(candidate)
+    evidence: dict[str, Any] = {
+        "tradeability_status": SHORTPICK_OFFICIAL_TRADEABILITY_STATUS,
+        "entry_open": entry.open_price,
+        "entry_high": entry.high_price,
+        "entry_low": entry.low_price,
+        "entry_close": entry.close_price,
+        "entry_trade_day": entry.observed_at.date().isoformat(),
+        "inferred_limit_band": limit_band,
+    }
+    if previous is not None:
+        day_return = (entry.close_price / previous.close_price) - 1 if previous.close_price else None
+        evidence.update(
+            {
+                "previous_close": previous.close_price,
+                "previous_trade_day": previous.observed_at.date().isoformat(),
+                "entry_day_return": day_return,
+            }
+        )
+        one_price = (
+            _float_near(entry.open_price, entry.high_price)
+            and _float_near(entry.high_price, entry.low_price)
+            and _float_near(entry.low_price, entry.close_price)
+        )
+        if day_return is not None and one_price and day_return >= limit_band * 0.95:
+            evidence["tradeability_status"] = "entry_unfillable_limit_up"
+            evidence["reason"] = "Entry day appears to be one-price limit-up, so official validation cannot assume a fill."
+    else:
+        evidence["tradeability_status"] = "tradeability_uncertain"
+        evidence["reason"] = "No previous close exists to infer limit-up fillability."
+    return evidence
+
+
+def _infer_shortpick_limit_band(candidate: ShortpickCandidate) -> float:
+    symbol = candidate.symbol.upper()
+    name = candidate.name.upper()
+    if "ST" in name:
+        return LIMIT_UP_BANDS["st"]
+    if symbol.endswith(".BJ"):
+        return LIMIT_UP_BANDS["beijing"]
+    ticker = symbol.split(".", 1)[0]
+    if ticker.startswith(("300", "301", "688")):
+        return LIMIT_UP_BANDS["star_or_chinext"]
+    return LIMIT_UP_BANDS["default"]
+
+
+def _float_near(left: float | None, right: float | None, *, tolerance: float = 1e-6) -> bool:
+    if left is None or right is None:
+        return False
+    return abs(float(left) - float(right)) <= tolerance
 
 
 def _daily_bars_for_symbol(session: Session, symbol: str) -> list[MarketBar]:
@@ -1410,18 +1919,29 @@ def _shortpick_validation_summary(session: Session, *, run_id: int) -> dict[str,
     status_counts: dict[str, int] = {}
     by_horizon: dict[int, list[ShortpickValidationSnapshot]] = {}
     completed: list[ShortpickValidationSnapshot] = []
+    official_completed: list[ShortpickValidationSnapshot] = []
+    official_total = 0
+    diagnostic_total = 0
     for validation in validations:
         status_counts[validation.status] = status_counts.get(validation.status, 0) + 1
         by_horizon.setdefault(validation.horizon_days, []).append(validation)
         if validation.status == "completed":
             completed.append(validation)
+        if _validation_is_official(validation):
+            official_total += 1
+            if validation.status == "completed":
+                official_completed.append(validation)
+        else:
+            diagnostic_total += 1
     horizon_summary: dict[str, dict[str, Any]] = {}
     for horizon, items in sorted(by_horizon.items()):
-        completed_items = [item for item in items if item.status == "completed"]
+        official_items = [item for item in items if _validation_is_official(item)]
+        completed_items = [item for item in official_items if item.status == "completed"]
         stock_returns = [float(item.stock_return) for item in completed_items if item.stock_return is not None]
         excess_returns = [float(item.excess_return) for item in completed_items if item.excess_return is not None]
         horizon_summary[str(horizon)] = {
             "validation_count": len(items),
+            "official_sample_count": len(official_items),
             "completed_count": len(completed_items),
             "mean_stock_return": _mean_or_none(stock_returns),
             "mean_excess_return": _mean_or_none(excess_returns),
@@ -1434,14 +1954,40 @@ def _shortpick_validation_summary(session: Session, *, run_id: int) -> dict[str,
     return {
         "validation_status_counts": status_counts,
         "completed_validation_count": len(completed),
+        "official_sample_count": official_total,
+        "completed_official_sample_count": len(official_completed),
+        "diagnostic_or_pending_sample_count": diagnostic_total,
         "measured_candidate_count": len({item.candidate_id for item in completed}),
+        "measured_official_candidate_count": len({item.candidate_id for item in official_completed}),
         "validation_by_horizon": horizon_summary,
         "primary_benchmark": _shortpick_primary_benchmark(),
+        "official_validation_mode": SHORTPICK_OFFICIAL_VALIDATION_MODE,
     }
 
 
 def _mean_or_none(values: list[float]) -> float | None:
     return round(sum(values) / len(values), 6) if values else None
+
+
+def _validation_payload(snapshot: ShortpickValidationSnapshot) -> dict[str, Any]:
+    return dict(snapshot.validation_payload or {})
+
+
+def _validation_mode(snapshot: ShortpickValidationSnapshot) -> str:
+    return str(_validation_payload(snapshot).get("validation_mode") or SHORTPICK_LEGACY_VALIDATION_MODE)
+
+
+def _validation_tradeability_status(snapshot: ShortpickValidationSnapshot) -> str:
+    return str(_validation_payload(snapshot).get("tradeability_status") or "unknown")
+
+
+def _validation_is_official(snapshot: ShortpickValidationSnapshot) -> bool:
+    payload = _validation_payload(snapshot)
+    return (
+        payload.get("validation_mode") == SHORTPICK_OFFICIAL_VALIDATION_MODE
+        and payload.get("official_validation") is True
+        and payload.get("tradeability_status") == SHORTPICK_OFFICIAL_TRADEABILITY_STATUS
+    )
 
 
 def serialize_shortpick_run(session: Session, run: ShortpickExperimentRun, *, include_raw: bool) -> dict[str, Any]:
@@ -1502,6 +2048,8 @@ def _run_operational_summary(
         )
     ).all() if parsed_candidates else []
     completed_validation_count = sum(1 for validation in validations if validation.status == "completed")
+    official_validations = [validation for validation in validations if _validation_is_official(validation)]
+    completed_official_validation_count = sum(1 for validation in official_validations if validation.status == "completed")
     operational_status = run.status
     if run.status == "completed" and failed_rounds:
         operational_status = "partial_completed"
@@ -1516,7 +2064,14 @@ def _run_operational_summary(
         "has_retryable_failed_rounds": bool(retryable_failed),
         "validation_total_count": len(validations),
         "validation_completed_count": completed_validation_count,
+        "official_validation_total_count": len(official_validations),
+        "official_validation_completed_count": completed_official_validation_count,
         "validation_completion_rate": round(completed_validation_count / len(validations), 6) if validations else None,
+        "official_validation_completion_rate": (
+            round(completed_official_validation_count / len(official_validations), 6)
+            if official_validations
+            else None
+        ),
         "failed_rounds": [
             {
                 "id": round_record.id,
@@ -1561,6 +2116,8 @@ def serialize_shortpick_round(round_record: ShortpickModelRound, *, include_raw:
 
 def serialize_shortpick_candidate(session: Session, candidate: ShortpickCandidate, *, include_raw: bool) -> dict[str, Any]:
     round_record = session.get(ShortpickModelRound, candidate.round_id) if candidate.round_id else None
+    payload = candidate.candidate_payload if isinstance(candidate.candidate_payload, dict) else {}
+    topic_normalization = payload.get("topic_normalization") if isinstance(payload.get("topic_normalization"), dict) else {}
     return {
         "id": candidate.id,
         "candidate_key": candidate.candidate_key,
@@ -1569,6 +2126,7 @@ def serialize_shortpick_candidate(session: Session, candidate: ShortpickCandidat
         "symbol": candidate.symbol,
         "name": candidate.name,
         "normalized_theme": candidate.normalized_theme,
+        "topic_normalization": topic_normalization,
         "horizon_trading_days": candidate.horizon_trading_days,
         "confidence": candidate.confidence,
         "thesis": candidate.thesis,
@@ -1769,6 +2327,15 @@ def build_shortpick_model_feedback(session: Session) -> dict[str, Any]:
         validation_rows = _validation_feedback_rows(session, model_candidates)
         completed_round_count = sum(1 for round_record in model_rounds if round_record.status == "completed")
         failed_round_count = sum(1 for round_record in model_rounds if round_record.status == "failed")
+        unique_symbol_runs = {
+            (candidate.run_id, candidate.symbol)
+            for candidate in model_candidates
+        }
+        official_rows = [row for row in validation_rows if _validation_is_official(row["validation"])]
+        completed_official_rows = [
+            row for row in official_rows
+            if row["validation"].status == "completed"
+        ]
         items.append(
             {
                 "provider_name": provider_name,
@@ -1779,18 +2346,29 @@ def build_shortpick_model_feedback(session: Session) -> dict[str, Any]:
                 "failed_round_count": failed_round_count,
                 "retryable_failed_round_count": sum(1 for round_record in model_rounds if _round_retryable(round_record)),
                 "parse_failed_candidate_count": _parse_failed_count_for_rounds(session, round_ids),
+                "candidate_row_count": len(model_candidates),
+                "candidate_horizon_row_count": len(validation_rows),
+                "unique_symbol_run_count": len(unique_symbol_runs),
+                "official_sample_count": len(official_rows),
+                "completed_official_sample_count": len(completed_official_rows),
                 "success_rate": round(completed_round_count / len(model_rounds), 6) if model_rounds else None,
                 "source_credibility_counts": source_counts,
                 "validation_by_horizon": _feedback_groups(validation_rows, key_fn=lambda row: str(row["validation"].horizon_days), label_fn=lambda row: f"{row['validation'].horizon_days}日"),
                 "validation_by_priority": _feedback_groups(validation_rows, key_fn=lambda row: row["candidate"].research_priority, label_fn=lambda row: row["candidate"].research_priority),
                 "validation_by_theme": _feedback_groups(
                     validation_rows,
-                    key_fn=lambda row: row["candidate"].normalized_theme or "未归类题材",
-                    label_fn=lambda row: row["candidate"].normalized_theme or "未归类题材",
+                    key_fn=lambda row: _candidate_topic_key(row["candidate"]),
+                    label_fn=lambda row: _candidate_topic_label(row["candidate"]),
                     limit=12,
                 ),
             }
         )
+    all_validation_rows = _validation_feedback_rows(session, candidates)
+    completed_official_rows = [
+        row
+        for row in all_validation_rows
+        if _validation_is_official(row["validation"]) and row["validation"].status == "completed"
+    ]
     return {
         "generated_at": utcnow(),
         "models": items,
@@ -1799,6 +2377,10 @@ def build_shortpick_model_feedback(session: Session) -> dict[str, Any]:
             "round_count": len(rounds),
             "candidate_count": len(candidates),
             "validation_count": session.scalar(select(func.count(ShortpickValidationSnapshot.id))) or 0,
+            "unique_symbol_run_count": len({(candidate.run_id, candidate.symbol) for candidate in candidates}),
+            "official_validation_mode": SHORTPICK_OFFICIAL_VALIDATION_MODE,
+            "evaluation_checkpoints": _shortpick_evaluation_checkpoints(completed_official_rows),
+            "baseline_status": _shortpick_baseline_status(completed_official_rows),
             "boundary": "independent_research_lab_no_main_pool_write",
         },
     }
@@ -1849,6 +2431,10 @@ def _serialize_validation_queue_item(
         "max_drawdown": validation.max_drawdown,
         "benchmark_symbol": validation_payload.get("benchmark_symbol"),
         "benchmark_label": validation_payload.get("benchmark_label"),
+        "validation_mode": validation_payload.get("validation_mode") or _validation_mode(validation),
+        "official_validation": _validation_is_official(validation),
+        "tradeability_status": validation_payload.get("tradeability_status") or _validation_tradeability_status(validation),
+        "tradeability_evidence": validation_payload.get("tradeability_evidence") or {},
         "available_forward_bars": validation_payload.get("available_forward_bars"),
         "required_forward_bars": required_forward_bars,
         "pending_reason": validation_payload.get("pending_reason") or validation_payload.get("reason"),
@@ -1897,7 +2483,9 @@ def _feedback_groups(
     output: list[dict[str, Any]] = []
     for key, group_rows in grouped.items():
         validations = [row["validation"] for row in group_rows]
-        completed = [validation for validation in validations if validation.status == "completed"]
+        official_rows = [row for row in group_rows if _validation_is_official(row["validation"])]
+        official_validations = [row["validation"] for row in official_rows]
+        completed = [validation for validation in official_validations if validation.status == "completed"]
         stock_returns = [float(validation.stock_return) for validation in completed if validation.stock_return is not None]
         excess_returns = [float(validation.excess_return) for validation in completed if validation.excess_return is not None]
         favorable_returns = [
@@ -1914,9 +2502,13 @@ def _feedback_groups(
                 "group_key": key,
                 "label": labels[key],
                 "sample_count": len(validations),
+                "official_sample_count": len(official_validations),
+                "unique_symbol_run_count": len({(row["candidate"].run_id, row["candidate"].symbol) for row in group_rows}),
                 "completed_validation_count": len(completed),
+                "completed_official_sample_count": len(completed),
                 "mean_stock_return": _mean_or_none(stock_returns),
                 "mean_excess_return": _mean_or_none(excess_returns),
+                "trimmed_mean_excess_return": _trimmed_mean_or_none(excess_returns),
                 "positive_excess_rate": (
                     round(sum(1 for item in excess_returns if item > 0) / len(excess_returns), 6)
                     if excess_returns
@@ -1927,8 +2519,92 @@ def _feedback_groups(
                 "status_counts": status_counts,
             }
         )
-    output.sort(key=lambda item: (item["completed_validation_count"], item["sample_count"], item["label"]), reverse=True)
+    output.sort(key=lambda item: (item["completed_official_sample_count"], item["official_sample_count"], item["sample_count"], item["label"]), reverse=True)
     return output[:limit] if limit is not None else output
+
+
+def _shortpick_evaluation_checkpoints(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    horizon_rows = [row for row in rows if row["validation"].horizon_days == 5]
+    unique_5d = {
+        (row["candidate"].run_id, row["candidate"].symbol)
+        for row in horizon_rows
+    }
+    excess_returns = [
+        float(row["validation"].excess_return)
+        for row in horizon_rows
+        if row["validation"].excess_return is not None
+    ]
+    checkpoints = {
+        "checkpoint_a_30_unique_symbol_3d": _checkpoint_status(rows, horizon=3, required_unique_symbol_runs=30),
+        "checkpoint_b_50_unique_symbol_5d": _checkpoint_status(rows, horizon=5, required_unique_symbol_runs=50),
+        "checkpoint_c_100_unique_symbol_5d": _checkpoint_status(rows, horizon=5, required_unique_symbol_runs=100),
+    }
+    status = "not_ready"
+    if len(unique_5d) >= 50 and excess_returns:
+        status = "pass" if (_trimmed_mean_or_none(excess_returns) or 0.0) > 0 and _positive_rate(excess_returns) >= 0.55 else "fail"
+    return {
+        "status": status,
+        "official_5d_unique_symbol_run_count": len(unique_5d),
+        "official_5d_trimmed_mean_excess_return": _trimmed_mean_or_none(excess_returns),
+        "official_5d_positive_excess_rate": _positive_rate(excess_returns),
+        "checkpoints": checkpoints,
+        "policy": "no_model_capability_claim_until_checkpoint_b_and_baselines_ready",
+    }
+
+
+def _checkpoint_status(rows: list[dict[str, Any]], *, horizon: int, required_unique_symbol_runs: int) -> dict[str, Any]:
+    unique_symbol_runs = {
+        (row["candidate"].run_id, row["candidate"].symbol)
+        for row in rows
+        if row["validation"].horizon_days == horizon
+    }
+    return {
+        "horizon_days": horizon,
+        "required_unique_symbol_runs": required_unique_symbol_runs,
+        "completed_unique_symbol_runs": len(unique_symbol_runs),
+        "status": "ready" if len(unique_symbol_runs) >= required_unique_symbol_runs else "not_ready",
+    }
+
+
+def _shortpick_baseline_status(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    unique_symbol_runs = {
+        (row["candidate"].run_id, row["candidate"].symbol)
+        for row in rows
+        if row["validation"].horizon_days == 5
+    }
+    readiness = "not_ready" if len(unique_symbol_runs) < 50 else "needs_peer_universe"
+    return [
+        {
+            "baseline_id": "random_same_market_cap_bucket",
+            "status": readiness,
+            "required_data": "candidate market-cap bucket peer universe with matching entry/exit bars",
+        },
+        {
+            "baseline_id": "momentum_volume_baseline",
+            "status": readiness,
+            "required_data": "tradable universe momentum and volume snapshots before signal availability",
+        },
+        {
+            "baseline_id": "topic_peer_baseline",
+            "status": readiness,
+            "required_data": "AI-normalized topic peer set with same validation windows",
+        },
+    ]
+
+
+def _positive_rate(values: list[float]) -> float | None:
+    if not values:
+        return None
+    return round(sum(1 for item in values if item > 0) / len(values), 6)
+
+
+def _trimmed_mean_or_none(values: list[float]) -> float | None:
+    if not values:
+        return None
+    if len(values) < 5:
+        return _mean_or_none(values)
+    ordered = sorted(values)
+    return _mean_or_none(ordered[1:-1])
 
 
 def _serialize_consensus(snapshot: ShortpickConsensusSnapshot | None) -> dict[str, Any] | None:
@@ -1963,7 +2639,7 @@ def _serialize_validation(snapshot: ShortpickValidationSnapshot) -> dict[str, An
         if available_forward_bars is None:
             available_forward_bars = 0
         pending_reason = (
-            f"Entry close before or on run_date is available at {snapshot.entry_at.isoformat() if snapshot.entry_at else 'entry close'}; "
+            f"Official entry close after signal availability is {snapshot.entry_at.isoformat() if snapshot.entry_at else 'entry close'}; "
             f"needs {required_forward_bars} forward trading-day close(s), currently has {available_forward_bars}."
         )
     return {
@@ -1982,6 +2658,10 @@ def _serialize_validation(snapshot: ShortpickValidationSnapshot) -> dict[str, An
         "benchmark_symbol": benchmark.get("symbol"),
         "benchmark_label": benchmark.get("label"),
         "benchmark_returns": benchmark_returns,
+        "validation_mode": payload.get("validation_mode") or SHORTPICK_LEGACY_VALIDATION_MODE,
+        "official_validation": _validation_is_official(snapshot),
+        "tradeability_status": payload.get("tradeability_status") or "unknown",
+        "tradeability_evidence": payload.get("tradeability_evidence") or {},
         "available_forward_bars": payload.get("available_forward_bars"),
         "required_forward_bars": required_forward_bars,
         "pending_reason": pending_reason,
@@ -2122,10 +2802,12 @@ def _normalize_sources(value: Any) -> list[dict[str, Any]]:
 def _source_credibility(url: str | None) -> dict[str, Any]:
     normalized = (url or "").strip()
     checked_at = utcnow().isoformat()
+    authority_class = _source_authority_class(normalized)
     if not normalized:
         return {
             "credibility_status": "missing_url",
             "credibility_reason": "source omitted url",
+            "authority_class": authority_class,
             "checked_at": checked_at,
         }
     parsed = urlparse(normalized)
@@ -2133,21 +2815,87 @@ def _source_credibility(url: str | None) -> dict[str, Any]:
         return {
             "credibility_status": "suspicious",
             "credibility_reason": "invalid url format",
+            "authority_class": authority_class,
             "checked_at": checked_at,
         }
     if _looks_like_placeholder_url(normalized):
         return {
             "credibility_status": "suspicious",
             "credibility_reason": "placeholder-like url pattern",
+            "authority_class": authority_class,
             "checked_at": checked_at,
         }
     if parsed.hostname and parsed.hostname.endswith(".example"):
         return {
             "credibility_status": "suspicious",
             "credibility_reason": "reserved example domain",
+            "authority_class": authority_class,
             "checked_at": checked_at,
         }
-    return _probe_source_url(normalized, checked_at=checked_at)
+    result = _probe_source_url(normalized, checked_at=checked_at)
+    result["authority_class"] = authority_class
+    return result
+
+
+def _source_authority_class(url: str) -> str:
+    hostname = (urlparse(url).hostname or "").lower()
+    if not hostname:
+        return "aggregator_or_unknown"
+    if hostname.endswith(("sse.com.cn", "szse.cn", "bse.cn", "cninfo.com.cn")):
+        return "exchange_or_company_disclosure"
+    if hostname.endswith(("cs.com.cn", "stcn.com", "cnstock.com", "zqrb.cn")):
+        return "designated_disclosure_media"
+    if hostname.endswith(("eastmoney.com", "hexun.com", "cls.cn", "yicai.com", "21jingji.com", "caixin.com")):
+        return "mainstream_financial_media"
+    if hostname.endswith(("mysteel.com", "smm.cn", "cinn.cn", "ofweek.com", "gg-lb.com")):
+        return "vertical_industry_media"
+    if hostname.endswith(("pdf.dfcfw.com", "research.cicc.com", "cmschina.com")):
+        return "broker_research_or_pdf"
+    if hostname.endswith(("xueqiu.com", "guba.eastmoney.com", "weibo.com")):
+        return "community_or_forum"
+    return "aggregator_or_unknown"
+
+
+def _source_support_check(
+    source: dict[str, Any],
+    *,
+    theme: str | None,
+    thesis: str | None,
+    catalysts: list[str],
+) -> dict[str, Any]:
+    source_text = " ".join(
+        item
+        for item in [
+            _coerce_text(source.get("title")),
+            _coerce_text(source.get("why_it_matters")),
+            _coerce_text(source.get("url")),
+        ]
+        if item
+    )
+    claim_text = " ".join(item for item in [theme, thesis, *catalysts] if item)
+    source_terms = _support_terms(source_text)
+    claim_terms = _support_terms(claim_text)
+    overlap = sorted(source_terms & claim_terms)
+    if overlap:
+        return {
+            "support_status": "supported_by_source_text",
+            "support_evidence_terms": overlap[:12],
+        }
+    return {
+        "support_status": "weak_or_unverified_source_support",
+        "support_evidence_terms": [],
+    }
+
+
+def _support_terms(text: str) -> set[str]:
+    normalized = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]+", " ", text.lower())
+    terms = {item for item in normalized.split() if len(item) >= 2}
+    chinese = re.findall(r"[\u4e00-\u9fff]{2,}", normalized)
+    for phrase in chinese:
+        terms.add(phrase)
+        terms.update(phrase[index : index + 2] for index in range(max(len(phrase) - 1, 0)))
+        terms.update(phrase[index : index + 3] for index in range(max(len(phrase) - 2, 0)))
+    return terms
 
 
 def _looks_like_placeholder_url(url: str) -> bool:
@@ -2156,54 +2904,62 @@ def _looks_like_placeholder_url(url: str) -> bool:
 
 def _probe_source_url(url: str, *, checked_at: str) -> dict[str, Any]:
     for method in ("HEAD", "GET"):
-        http_request = request.Request(
-            url,
-            headers={
-                "User-Agent": "ashare-shortpick-lab-source-check/1.0",
-                **({"Range": "bytes=0-0"} if method == "GET" else {}),
-            },
-            method=method,
-        )
-        try:
-            with urlopen(
-                http_request,
-                timeout=SHORTPICK_SOURCE_CHECK_TIMEOUT_SECONDS,
-                disable_proxies=True,
-            ) as response:
-                status = int(getattr(response, "status", 200) or 200)
-            return {
-                "credibility_status": "verified" if status < 400 else "unreachable",
-                "credibility_reason": f"{method} HTTP {status}",
-                "http_status": status,
-                "checked_at": checked_at,
-            }
-        except HTTPError as exc:
-            if method == "HEAD" and exc.code in {403, 405}:
-                continue
-            if exc.code in {401, 403}:
+        for attempt in range(1, SHORTPICK_SOURCE_CHECK_RETRY_ATTEMPTS + 1):
+            http_request = request.Request(
+                url,
+                headers={
+                    "User-Agent": "ashare-shortpick-lab-source-check/1.0",
+                    **({"Range": "bytes=0-0"} if method == "GET" else {}),
+                },
+                method=method,
+            )
+            try:
+                with urlopen(
+                    http_request,
+                    timeout=SHORTPICK_SOURCE_CHECK_TIMEOUT_SECONDS,
+                    disable_proxies=True,
+                ) as response:
+                    status = int(getattr(response, "status", 200) or 200)
                 return {
-                    "credibility_status": "reachable_restricted",
-                    "credibility_reason": f"{method} HTTP {exc.code}",
-                    "http_status": exc.code,
+                    "credibility_status": "verified" if status < 400 else "unreachable",
+                    "credibility_reason": f"{method} HTTP {status}",
+                    "http_status": status,
+                    "attempt_count": attempt,
                     "checked_at": checked_at,
                 }
-            return {
-                "credibility_status": "unreachable",
-                "credibility_reason": f"{method} HTTP {exc.code}",
-                "http_status": exc.code,
-                "checked_at": checked_at,
-            }
-        except (TimeoutError, URLError, OSError) as exc:
-            if method == "HEAD":
-                continue
-            return {
-                "credibility_status": "unreachable",
-                "credibility_reason": str(getattr(exc, "reason", exc))[:160],
-                "checked_at": checked_at,
-            }
+            except HTTPError as exc:
+                if method == "HEAD" and exc.code in {403, 405}:
+                    break
+                if exc.code in {401, 403}:
+                    return {
+                        "credibility_status": "reachable_restricted",
+                        "credibility_reason": f"{method} HTTP {exc.code}",
+                        "http_status": exc.code,
+                        "attempt_count": attempt,
+                        "checked_at": checked_at,
+                    }
+                return {
+                    "credibility_status": "unreachable",
+                    "credibility_reason": f"{method} HTTP {exc.code}",
+                    "http_status": exc.code,
+                    "attempt_count": attempt,
+                    "checked_at": checked_at,
+                }
+            except (TimeoutError, URLError, OSError) as exc:
+                if attempt < SHORTPICK_SOURCE_CHECK_RETRY_ATTEMPTS:
+                    continue
+                if method == "HEAD":
+                    break
+                return {
+                    "credibility_status": "unreachable",
+                    "credibility_reason": str(getattr(exc, "reason", exc))[:160],
+                    "attempt_count": attempt,
+                    "checked_at": checked_at,
+                }
     return {
         "credibility_status": "unchecked",
         "credibility_reason": "source check skipped",
+        "attempt_count": SHORTPICK_SOURCE_CHECK_RETRY_ATTEMPTS,
         "checked_at": checked_at,
     }
 
