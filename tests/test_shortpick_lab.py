@@ -14,7 +14,17 @@ from sqlalchemy import select
 from ashare_evidence.api import create_app
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.lineage import compute_lineage_hash
-from ashare_evidence.models import MarketBar, ModelApiKey, ModelResult, Recommendation, ShortpickCandidate, ShortpickExperimentRun, Stock, WatchlistFollow
+from ashare_evidence.models import (
+    MarketBar,
+    ModelApiKey,
+    ModelResult,
+    Recommendation,
+    ShortpickCandidate,
+    ShortpickExperimentRun,
+    ShortpickValidationSnapshot,
+    Stock,
+    WatchlistFollow,
+)
 from ashare_evidence.shortpick_lab import (
     DeepseekLobeChatSearchShortpickExecutor,
     OpenAICompatibleShortpickExecutor,
@@ -433,6 +443,17 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(first_validation["available_forward_bars"], 0)
         self.assertEqual(first_validation["required_forward_bars"], 1)
         self.assertIn("needs 1 forward trading-day close", first_validation["pending_reason"])
+
+        with session_scope(self.database_url) as session:
+            snapshot = session.scalar(select(ShortpickValidationSnapshot).where(ShortpickValidationSnapshot.horizon_days == 1))
+            assert snapshot is not None
+            snapshot.validation_payload = {"available_forward_bars": 0, "market_data_sync": {"status": "existing_current"}}
+            session.flush()
+            queue = list_shortpick_validation_queue(session, horizon=1)
+
+        legacy_item = queue["items"][0]
+        self.assertEqual(legacy_item["required_forward_bars"], 1)
+        self.assertIn("needs 1 forward trading-day close", legacy_item["pending_reason"])
 
     def test_validation_pending_benchmark_when_primary_window_missing(self) -> None:
         self._seed_stock_bars("688981.SH", "中芯国际", [100 + index * 2 for index in range(8)])

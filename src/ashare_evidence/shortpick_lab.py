@@ -1818,6 +1818,9 @@ def _serialize_validation_queue_item(
     round_record: ShortpickModelRound | None,
 ) -> dict[str, Any]:
     validation_payload = _serialize_validation(validation)
+    required_forward_bars = validation_payload.get("required_forward_bars")
+    if validation.status == "pending_forward_window" and required_forward_bars is None:
+        required_forward_bars = validation.horizon_days
     return {
         "validation_id": validation.id,
         "candidate_id": candidate.id,
@@ -1847,7 +1850,7 @@ def _serialize_validation_queue_item(
         "benchmark_symbol": validation_payload.get("benchmark_symbol"),
         "benchmark_label": validation_payload.get("benchmark_label"),
         "available_forward_bars": validation_payload.get("available_forward_bars"),
-        "required_forward_bars": validation_payload.get("required_forward_bars"),
+        "required_forward_bars": required_forward_bars,
         "pending_reason": validation_payload.get("pending_reason") or validation_payload.get("reason"),
         "market_data_sync": validation_payload.get("market_data_sync") or {},
     }
@@ -1951,6 +1954,18 @@ def _serialize_validation(snapshot: ShortpickValidationSnapshot) -> dict[str, An
     payload = dict(snapshot.validation_payload or {})
     benchmark = payload.get("benchmark") if isinstance(payload.get("benchmark"), dict) else _shortpick_primary_benchmark()
     benchmark_returns = payload.get("benchmark_returns") if isinstance(payload.get("benchmark_returns"), dict) else {}
+    required_forward_bars = payload.get("required_forward_bars")
+    if snapshot.status == "pending_forward_window" and required_forward_bars is None:
+        required_forward_bars = snapshot.horizon_days
+    pending_reason = payload.get("pending_reason") or payload.get("reason")
+    if snapshot.status == "pending_forward_window" and not pending_reason:
+        available_forward_bars = payload.get("available_forward_bars")
+        if available_forward_bars is None:
+            available_forward_bars = 0
+        pending_reason = (
+            f"Entry close is available at {snapshot.entry_at.isoformat() if snapshot.entry_at else 'entry close'}; "
+            f"needs {required_forward_bars} forward trading-day close(s), currently has {available_forward_bars}."
+        )
     return {
         "id": snapshot.id,
         "horizon_days": snapshot.horizon_days,
@@ -1968,8 +1983,8 @@ def _serialize_validation(snapshot: ShortpickValidationSnapshot) -> dict[str, An
         "benchmark_label": benchmark.get("label"),
         "benchmark_returns": benchmark_returns,
         "available_forward_bars": payload.get("available_forward_bars"),
-        "required_forward_bars": payload.get("required_forward_bars"),
-        "pending_reason": payload.get("pending_reason") or payload.get("reason"),
+        "required_forward_bars": required_forward_bars,
+        "pending_reason": pending_reason,
         "market_data_sync": payload.get("market_data_sync") or {},
     }
 
