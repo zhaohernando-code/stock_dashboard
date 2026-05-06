@@ -17,7 +17,7 @@
     "Validation manifests and portfolio backtests have now been rebuilt on the real database under the expanding-watchlist join-date-forward benchmark contract, but replay artifacts still cannot materialize on current real data because none of the active-watchlist recommendations yet have a full 20-trading-day forward review window. The replay builder bug that previously hard-coded `records[1]` is fixed, so this is now a data-window blocker rather than a rebuild-path blocker.",
     "The simulation model track now has a concrete `phase5_simulation_topk_equal_weight_v1` research-candidate target-weight policy, the live runtime database has a durable `phase5_holding_policy_study` snapshot, and the published refresh path no longer stalls at zero-step sessions or one-cycle pending rebuilds: the latest live refresh has already lifted holding-policy to `9portfolios` with `excluded_reasons={}`, `mean_turnover=0.037037`, `mean_invested_ratio=0.079822`, `mean_active_position_count=0.444444`, and `mean_annualized_excess_return_after_baseline_cost=0.000581`. However, the policy still remains non-promotable. `mean_rebalance_interval_days` is still missing because all live rebalance evidence still sits on the same trading date, `mean_invested_ratio` and `mean_active_position_count` remain weak even after four real order events, and horizon artifacts are still narrow at `3` symbols / `2` as-of dates while `002270.SZ` continues to look like a `20d/40d` instability outlier. The active blocker is therefore no longer missing runtime artifact wiring, a dead simulation evidence path, or same-run rebuild lag, but insufficient multi-date / multi-rebalance breadth to prove that the repaired validation path and newer producer contract materially improve primary-horizon selection and holding-policy credibility on real runtime data."
   ],
-  "next_step": "Publish and browser-verify the Short Pick Lab historical validation workspace. After enough completed post-pick windows accumulate, evaluate source-authority scoring beyond URL reachability and per-model confidence calibration, without connecting trial feedback to main recommendations until separately approved.",
+  "next_step": "Short Pick Lab historical validation workspace is published and browser-verified. After enough completed post-pick windows accumulate, evaluate source-authority scoring beyond URL reachability and per-model confidence calibration, without connecting trial feedback to main recommendations until separately approved.",
   "linked_docs": [
     {
       "path": "/Users/hernando_zhao/codex/projects/stock_dashboard/PROJECT_PLAN.md",
@@ -86,7 +86,7 @@
     "rankic_validation_conflict_priority": "published_runtime_verified",
     "shortpick_lab_research_surface": "published_runtime_verified",
     "shortpick_lab_deepseek_search_provenance": "published_runtime_verified",
-    "shortpick_lab_history_validation_workspace": "in_progress"
+    "shortpick_lab_history_validation_workspace": "published_runtime_verified"
   },
   "latest_findings": [
     {

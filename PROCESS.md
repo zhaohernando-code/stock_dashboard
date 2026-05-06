@@ -6,6 +6,7 @@
 
 - **短投试验田长期运行要有历史验证工作台**：每天 10 条推荐长期积累后，最新批次视图不足以回答“之前推荐验证在哪里看”。试验田页面必须拆为 `今日批次 / 历史验证 / 模型反馈`，历史验证走服务端分页，默认 50 条，按 candidate-horizon 展示 `1/3/5/10/20` 交易日状态和收益反馈。
 - **短投失败不能混入正常研究池**：`PARSE_FAILED` 与 failed round 进入失败诊断区；DeepSeek/SearXNG 无搜索结果和 JSON 解析失败归为 retryable，模型配置缺失归为 configuration failure。重跑只处理失败轮次，旧失败 artifact id 与错误原因写入 retry history，不能删除失败痕迹。
+- **短投历史验证工作台发布验收记录**：实现提交 `89e0de29a640724017020dc69665bda52c6c8636` 已合入 `main` 并通过临时干净快照 `/tmp/ashare-shortpick-history-publish.XbLpCS` 发布到 runtime；release manifest 为 `/private/tmp/ashare-shortpick-history-publish.XbLpCS/output/releases/20260506T135644Z-89e0de29a640/manifest.json`，deploy verifier 为 `19 passed, 0 failed`。运行态 API 已确认 `/shortpick-lab/runs` 返回 `2026-05-06` 批次 `operational_status=retryable_failures`、`retryable_failed_round_count=1`，`/shortpick-lab/validation-queue` 返回 95 条 candidate-horizon 验证行，`/shortpick-lab/model-feedback` 返回 GPT/DeepSeek 模型反馈。Chrome headless 桌面验收已验证 localhost `http://127.0.0.1:5173/` 与 canonical `https://hernando-zhao.cn/projects/ashare-dashboard/` 均可进入 `试验田`，并显示 `今日批次 / 历史验证 / 模型反馈 / 失败诊断 / 重跑失败轮次`；截图位于 `/tmp/ashare-shortpick-history-validation.png` 与 `/tmp/ashare-shortpick-history-canonical.png`。
 - **短投试验田不能只存在手动入口**：盘后 daily 既要跑主分析，也要跑短投试验田的验证闭环。`run-scheduled-refresh.sh` 的 shortpick slot 默认启用，先执行 `shortpick-lab-validate-recent` 刷新近期旧批次的行情/基准复盘，再生成当天新 run；如确需停用，显式设置 `ASHARE_ENABLE_SHORTPICK_LAB=0`。
 - **每日分析状态必须暴露子任务**：用户看到“每日分析已完成”时不能掩盖试验田未跑。`/dashboard/scheduled-refresh-status` 现在返回 `components`，前端展示 `主分析 / 试验田` 各自的成功、运行、失败或待补跑状态。
 
