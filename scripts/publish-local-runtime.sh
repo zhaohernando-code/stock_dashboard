@@ -108,7 +108,9 @@ echo "[publish] Building repo frontend"
 npm --prefix "$REPO_ROOT/frontend" run build
 
 echo "[publish] Syncing repo to runtime"
+rm -rf "$RUNTIME_ROOT/.git"
 "$RSYNC_BIN" -a --delete \
+  --exclude ".git" \
   --exclude "data" \
   --exclude ".venv" \
   --exclude ".venv-mac" \
@@ -169,18 +171,19 @@ if [[ "$repo_assets" != "$served_assets" ]]; then
 fi
 
 echo "[publish] Verifying repo/runtime/canonical parity"
+mkdir -p "$RUNTIME_ROOT/output/releases"
 MANIFEST_PATH="$(
   cd "$REPO_ROOT"
-  PYTHONPATH=src python3 -m ashare_evidence.release_verifier \
+  PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.release_verifier \
     --repo-root "$REPO_ROOT" \
     --runtime-root "$RUNTIME_ROOT" \
     --local-frontend-url "$FRONTEND_URL" \
     --local-api-base-url "$LOCAL_API_BASE_URL" \
     --canonical-base-url "$CANONICAL_BASE_URL" \
-    --expected-commit-sha "$COMMIT_SHA"
+    --expected-commit-sha "$COMMIT_SHA" \
+    --release-output-root "$RUNTIME_ROOT/output/releases"
 )"
 
-mkdir -p "$RUNTIME_ROOT/output/releases"
 cp "$MANIFEST_PATH" "$RUNTIME_ROOT/output/releases/latest-successful.json"
 printf '%s\n' "$COMMIT_SHA" > "$RUNTIME_ROOT/output/releases/latest-successful.commit"
 
