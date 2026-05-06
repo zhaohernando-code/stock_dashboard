@@ -1,6 +1,6 @@
 # Short Pick Lab Validation Optimization Plan
 
-Status: p0_p3_completed_p4_gate_scaffold_published
+Status: p0_p3_completed_p4_gate_scaffold_topic_backfill_fix_in_progress
 Owner: codex
 Created: 2026-05-07
 Scope: shortpick_lab validation, feedback aggregation, source/search robustness, and theme normalization
@@ -383,6 +383,7 @@ Acceptance:
 - [x] P1 complete: aggregation and consensus semantics are repaired.
 - [x] P2 complete: AI-only normalized topic feedback is available.
 - [x] P3 complete: DeepSeek/SearXNG repair is bounded and fail-closed.
+- [ ] Runtime topic backfill regenerated after missing `topic_analysis` detection.
 - [ ] P4 complete: baselines and go/no-go gates exist.
 - [x] Runtime DB refreshed under new validation contract.
 - [x] Localhost browser verified.
@@ -390,6 +391,7 @@ Acceptance:
 
 ## Notes For Future Implementers
 
+- 2026-05-07 runtime inspection found valid candidates without `topic_normalization`, which collapsed topic convergence to `0.0` and model feedback topic groups to one `unclassified` bucket. The flow now needs automatic AI topic backfill for parsed candidates whose source model omitted `topic_analysis`.
 - Do not add manual review queues or operator labeling requirements to this plan.
 - Do not make old diagnostic returns disappear; keep them explainable, but exclude them from official aggregates.
 - Do not treat `high_convergence` as advice. It is only a research priority.

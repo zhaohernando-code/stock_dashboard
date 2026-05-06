@@ -31,9 +31,11 @@ from ashare_evidence.shortpick_lab import (
     StaticShortpickExecutor,
     _normalize_shortpick_topic,
     build_shortpick_model_feedback,
+    build_shortpick_consensus,
     default_shortpick_executors,
     list_shortpick_runs,
     list_shortpick_validation_queue,
+    normalize_shortpick_candidate_topics,
     retry_failed_shortpick_rounds,
     run_shortpick_experiment,
     validate_recent_shortpick_runs,
@@ -281,6 +283,50 @@ class ShortpickLabTests(unittest.TestCase):
         topic_group = next(group for group in openai_feedback["validation_by_theme"] if group["group_key"] == "rare_earth_price_security")
         self.assertEqual(topic_group["label"], "稀土价格与战略资源安全")
         self.assertGreater(topic_group["official_sample_count"], 0)
+
+    def test_ai_topic_backfill_repairs_missing_model_topic_output(self) -> None:
+        self._seed_stock_bars("600673.SH", "东阳光", [20 + index for index in range(8)])
+        self._seed_stock_bars("002156.SZ", "通富微电", [30 + index for index in range(8)])
+        self._seed_stock_bars("000300.SH", "沪深300", [200 + index for index in range(8)])
+        self._seed_stock_bars("000852.SH", "中证1000", [300 + index for index in range(8)])
+        executors = [
+            StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("600673.SH", "东阳光", "AI算力服务大额合同", "https://a.example/compute")),
+            StaticShortpickExecutor("deepseek", "deepseek-test", "fake", _answer("002156.SZ", "通富微电", "先进封测与AI算力链扩散", "https://b.example/compute")),
+        ]
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
+            with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
+                with session_scope(self.database_url) as session:
+                    payload = run_shortpick_experiment(
+                        session,
+                        run_date=date(2026, 5, 5),
+                        rounds_per_model=1,
+                        triggered_by="root",
+                        executors=executors,
+                    )
+                    run = session.get(ShortpickExperimentRun, payload["id"])
+                    assert run is not None
+
+                    def classifier(_packet: dict[str, object]) -> dict[str, object]:
+                        return {
+                            "topic_cluster_id": "ai_compute_hardware",
+                            "label_zh": "AI 算力硬件",
+                            "topic_confidence": 0.86,
+                            "normalization_method": "ai_backfill_v1",
+                            "status": "classified",
+                            "reason": "测试夹具模拟 AI 归类。",
+                        }
+
+                    result = normalize_shortpick_candidate_topics(session, run_id=run.id, force=True, classifier=classifier)
+                    consensus = build_shortpick_consensus(session, run)
+                    feedback = build_shortpick_model_feedback(session)
+
+        self.assertEqual(result["updated_count"], 2)
+        self.assertEqual(consensus.theme_convergence, 1.0)
+        self.assertEqual(consensus.research_priority, "cross_model_same_topic")
+        openai_feedback = next(item for item in feedback["models"] if item["provider_name"] == "openai")
+        self.assertEqual(openai_feedback["validation_by_theme"][0]["group_key"], "ai_compute_hardware")
+        self.assertEqual(openai_feedback["validation_by_theme"][0]["label"], "AI 算力硬件")
 
     def test_ai_topic_normalization_fixture_clusters_without_keyword_rules(self) -> None:
         cases = [

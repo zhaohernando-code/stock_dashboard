@@ -21,7 +21,7 @@ from ashare_evidence.benchmark import CSI_BENCHMARKS, benchmark_close_maps, sync
 from ashare_evidence.db import utcnow
 from ashare_evidence.http_client import urlopen
 from ashare_evidence.lineage import build_lineage
-from ashare_evidence.llm_service import OpenAICompatibleTransport
+from ashare_evidence.llm_service import OpenAICompatibleTransport, route_model
 from ashare_evidence.models import (
     MarketBar,
     ModelApiKey,
@@ -618,6 +618,10 @@ def _executor_from_key(key: ModelApiKey) -> DeepseekLobeChatSearchShortpickExecu
     )
 
 
+def _should_auto_topic_backfill(executors: list[ShortpickExecutor]) -> bool:
+    return any(not isinstance(executor, StaticShortpickExecutor) for executor in executors)
+
+
 def run_shortpick_experiment(
     session: Session,
     *,
@@ -677,6 +681,8 @@ def run_shortpick_experiment(
         for round_index in range(1, normalized_rounds + 1):
             _execute_shortpick_round(session, run, executor, round_index)
 
+    if _should_auto_topic_backfill(active_executors):
+        normalize_shortpick_candidate_topics(session, run_id=run.id)
     consensus = build_shortpick_consensus(session, run)
     validation_result = validate_shortpick_run(session, run.id, horizons=SHORTPICK_DEFAULT_HORIZONS)
     completed_count = session.scalar(
@@ -1009,6 +1015,163 @@ def _candidate_topic_label(candidate: ShortpickCandidate) -> str:
     return candidate.normalized_theme or "未归类题材"
 
 
+def normalize_shortpick_candidate_topics(
+    session: Session,
+    *,
+    run_id: int | None = None,
+    force: bool = False,
+    classifier: Any | None = None,
+) -> dict[str, Any]:
+    query = select(ShortpickCandidate).where(
+        ShortpickCandidate.parse_status == "parsed",
+        ShortpickCandidate.symbol != "PARSE_FAILED",
+    )
+    if run_id is not None:
+        query = query.where(ShortpickCandidate.run_id == run_id)
+    candidates = session.scalars(query.order_by(ShortpickCandidate.id.asc())).all()
+    updated: list[dict[str, Any]] = []
+    skipped = 0
+    failed: list[dict[str, Any]] = []
+    for candidate in candidates:
+        existing = _candidate_topic(candidate)
+        if not force and _coerce_text(existing.get("topic_cluster_id")) and existing.get("status") not in {None, "unclassified"}:
+            skipped += 1
+            continue
+        packet = _shortpick_topic_candidate_packet(session, candidate)
+        try:
+            normalized = classifier(packet) if classifier is not None else _classify_shortpick_topic_with_ai(packet)
+        except Exception as exc:
+            failed.append({"candidate_id": candidate.id, "symbol": candidate.symbol, "error": str(exc)[:240]})
+            normalized = {
+                "topic_cluster_id": "unclassified",
+                "label_zh": candidate.normalized_theme or "未归类题材",
+                "topic_confidence": 0.0,
+                "normalization_method": "ai_backfill_failed",
+                "status": "unclassified",
+                "reason": str(exc)[:240],
+            }
+        payload = dict(candidate.candidate_payload or {})
+        payload["topic_normalization"] = normalized
+        candidate.candidate_payload = payload
+        updated.append(
+            {
+                "candidate_id": candidate.id,
+                "symbol": candidate.symbol,
+                "topic_cluster_id": normalized.get("topic_cluster_id"),
+                "status": normalized.get("status"),
+            }
+        )
+    session.flush()
+    return {
+        "candidate_count": len(candidates),
+        "updated_count": len(updated),
+        "skipped_count": skipped,
+        "failed_count": len(failed),
+        "updated": updated,
+        "failed": failed,
+    }
+
+
+def _shortpick_topic_candidate_packet(session: Session, candidate: ShortpickCandidate) -> dict[str, Any]:
+    round_record = session.get(ShortpickModelRound, candidate.round_id) if candidate.round_id else None
+    return {
+        "candidate_id": candidate.id,
+        "run_id": candidate.run_id,
+        "symbol": candidate.symbol,
+        "name": candidate.name,
+        "raw_theme": candidate.normalized_theme,
+        "thesis": candidate.thesis,
+        "catalysts": list(candidate.catalysts or []),
+        "risks": list(candidate.risks or []),
+        "limitations": list(candidate.limitations or []),
+        "sources": [
+            {
+                "index": index,
+                "title": source.get("title"),
+                "url": source.get("url"),
+                "why_it_matters": source.get("why_it_matters"),
+                "authority_class": source.get("authority_class"),
+                "credibility_status": source.get("credibility_status"),
+            }
+            for index, source in enumerate(candidate.sources_payload or [])
+            if isinstance(source, dict)
+        ],
+        "model": {
+            "provider_name": round_record.provider_name if round_record is not None else None,
+            "model_name": round_record.model_name if round_record is not None else None,
+            "executor_kind": round_record.executor_kind if round_record is not None else None,
+        },
+    }
+
+
+def _classify_shortpick_topic_with_ai(packet: dict[str, Any]) -> dict[str, Any]:
+    transport, base_url, api_key, model_name = route_model("shortpick_topic_normalization")
+    raw = transport.complete(
+        base_url=base_url,
+        api_key=api_key,
+        model_name=model_name,
+        prompt=_build_shortpick_topic_backfill_prompt(packet),
+        system=(
+            "你是 A 股短投试验田的题材归一化器。"
+            "只能基于输入候选包判断题材，不要联网，不要新增事实。只输出 JSON。"
+        ),
+    )
+    parsed = extract_shortpick_json(raw)
+    return _normalize_topic_classifier_response(parsed)
+
+
+def _build_shortpick_topic_backfill_prompt(packet: dict[str, Any]) -> str:
+    return f"""
+请把下面短投试验田候选归入一个语义稳定的题材簇。不要使用人工标签，不要按硬关键词机械匹配；要判断驱动是否真的一致。
+
+输出 JSON，不要代码块：
+{{
+  "topic_analysis": {{
+    "primary_topic": {{
+      "topic_cluster_id": "stable_english_slug",
+      "label_zh": "中文题材标签",
+      "confidence": 0.0,
+      "reason": "为什么属于该题材",
+      "supporting_evidence_refs": [0],
+      "driver_types": ["policy", "price_change", "earnings", "contract_order", "market_hotspot", "industry_chain"],
+      "topic_keywords": ["..."]
+    }},
+    "secondary_topics": [],
+    "new_topic_proposal": null,
+    "not_topic_reason": null
+  }},
+  "topic_verification": {{
+    "verdict": "supported",
+    "confidence": 0.0,
+    "unsupported_claims": [],
+    "suggested_topic_cluster_id": null
+  }}
+}}
+
+候选包：
+{json.dumps(packet, ensure_ascii=False, indent=2)[:12000]}
+""".strip()
+
+
+def _normalize_topic_classifier_response(parsed: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(parsed.get("topic_analysis"), dict):
+        normalized = _normalize_shortpick_topic(parsed)
+    else:
+        normalized = _normalize_shortpick_topic(
+            {
+                "topic_analysis": {
+                    "primary_topic": parsed.get("primary_topic") if isinstance(parsed.get("primary_topic"), dict) else parsed,
+                    "secondary_topics": parsed.get("secondary_topics") if isinstance(parsed.get("secondary_topics"), list) else [],
+                    "new_topic_proposal": parsed.get("new_topic_proposal") if isinstance(parsed.get("new_topic_proposal"), dict) else None,
+                    "not_topic_reason": parsed.get("not_topic_reason"),
+                },
+                "topic_verification": parsed.get("topic_verification") if isinstance(parsed.get("topic_verification"), dict) else {},
+            }
+        )
+    normalized["normalization_method"] = "ai_backfill_v1"
+    return normalized
+
+
 def build_shortpick_consensus(session: Session, run: ShortpickExperimentRun) -> ShortpickConsensusSnapshot:
     candidates = session.scalars(
         select(ShortpickCandidate).where(ShortpickCandidate.run_id == run.id).order_by(ShortpickCandidate.id.asc())
@@ -1281,6 +1444,8 @@ def retry_failed_shortpick_rounds(
         retried.append(_retry_existing_shortpick_round(session, run, round_record, executor))
 
     if retried:
+        if _should_auto_topic_backfill(executors):
+            normalize_shortpick_candidate_topics(session, run_id=run.id)
         consensus = build_shortpick_consensus(session, run)
         validation_result = validate_shortpick_run(session, run.id, horizons=SHORTPICK_DEFAULT_HORIZONS)
         completed_count = session.scalar(
