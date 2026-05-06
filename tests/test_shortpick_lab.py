@@ -81,7 +81,9 @@ class ShortpickLabTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
-    def _seed_stock_bars(self, symbol: str, name: str, prices: list[float]) -> None:
+    def _seed_stock_bars(self, symbol: str, name: str, prices: list[float], *, dates: list[date] | None = None) -> None:
+        if dates is not None and len(dates) != len(prices):
+            raise ValueError("dates must match prices length")
         with session_scope(self.database_url) as session:
             ticker, _, market = symbol.partition(".")
             stock = Stock(
@@ -101,14 +103,14 @@ class ShortpickLabTests(unittest.TestCase):
             )
             session.add(stock)
             session.flush()
-            start = datetime(2026, 5, 5, 7, 0, tzinfo=timezone.utc)
             for index, price in enumerate(prices):
+                observed_day = dates[index] if dates is not None else date(2026, 5, 5) + timedelta(days=index)
                 session.add(
                     MarketBar(
                         bar_key=f"bar-{symbol.lower().replace('.', '-')}-{index}",
                         stock_id=stock.id,
                         timeframe="1d",
-                        observed_at=start + timedelta(days=index),
+                        observed_at=datetime(observed_day.year, observed_day.month, observed_day.day, 7, 0, tzinfo=timezone.utc),
                         open_price=price - 1,
                         high_price=price + 1,
                         low_price=price - 2,
@@ -454,6 +456,33 @@ class ShortpickLabTests(unittest.TestCase):
         legacy_item = queue["items"][0]
         self.assertEqual(legacy_item["required_forward_bars"], 1)
         self.assertIn("needs 1 forward trading-day close", legacy_item["pending_reason"])
+
+    def test_validation_uses_previous_trading_close_for_holiday_run_date(self) -> None:
+        trading_days = [date(2026, 4, 30), date(2026, 5, 6)]
+        self._seed_stock_bars("688981.SH", "中芯国际", [100, 110], dates=trading_days)
+        self._seed_stock_bars("000300.SH", "沪深300", [200, 210], dates=trading_days)
+        self._seed_stock_bars("000852.SH", "中证1000", [300, 315], dates=trading_days)
+        executors = [StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("688981.SH", "中芯国际", "半导体国产替代", "https://a.example/news"))]
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
+            with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
+                with session_scope(self.database_url) as session:
+                    payload = run_shortpick_experiment(
+                        session,
+                        run_date=date(2026, 5, 5),
+                        rounds_per_model=1,
+                        triggered_by="root",
+                        executors=executors,
+                    )
+
+        first_validation = payload["candidates"][0]["validations"][0]
+        self.assertEqual(first_validation["status"], "completed")
+        self.assertEqual(first_validation["entry_at"].date(), date(2026, 4, 30))
+        self.assertEqual(first_validation["exit_at"].date(), date(2026, 5, 6))
+        self.assertEqual(first_validation["entry_close"], 100)
+        self.assertEqual(first_validation["exit_close"], 110)
+        self.assertAlmostEqual(first_validation["stock_return"], 0.1)
+        self.assertAlmostEqual(first_validation["benchmark_return"], 0.05)
 
     def test_validation_pending_benchmark_when_primary_window_missing(self) -> None:
         self._seed_stock_bars("688981.SH", "中芯国际", [100 + index * 2 for index in range(8)])

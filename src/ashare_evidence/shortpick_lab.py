@@ -1096,12 +1096,12 @@ def _upsert_validation_snapshot(
             "market_data_sync": market_sync or {},
         }
         return existing
-    entry_index = next((idx for idx, bar in enumerate(bars) if bar.observed_at.date() >= run.run_date), None)
+    entry_index = next((idx for idx, bar in reversed(list(enumerate(bars))) if bar.observed_at.date() <= run.run_date), None)
     if entry_index is None:
         existing.status = "pending_entry_bar"
         _clear_validation_metrics(existing)
         existing.validation_payload = {
-            "reason": "No entry bar at or after run_date.",
+            "reason": "No completed entry bar at or before run_date.",
             "market_data_sync": market_sync or {},
         }
         return existing
@@ -1122,7 +1122,7 @@ def _upsert_validation_snapshot(
             "available_forward_bars": available_forward_bars,
             "required_forward_bars": horizon,
             "pending_reason": (
-                f"Entry close is available at {bars[entry_index].observed_at.isoformat()}; "
+                f"Entry close before or on run_date is available at {bars[entry_index].observed_at.isoformat()}; "
                 f"needs {horizon} forward trading-day close(s), currently has {available_forward_bars}."
             ),
             "market_data_sync": market_sync or {},
@@ -1963,7 +1963,7 @@ def _serialize_validation(snapshot: ShortpickValidationSnapshot) -> dict[str, An
         if available_forward_bars is None:
             available_forward_bars = 0
         pending_reason = (
-            f"Entry close is available at {snapshot.entry_at.isoformat() if snapshot.entry_at else 'entry close'}; "
+            f"Entry close before or on run_date is available at {snapshot.entry_at.isoformat() if snapshot.entry_at else 'entry close'}; "
             f"needs {required_forward_bars} forward trading-day close(s), currently has {available_forward_bars}."
         )
     return {

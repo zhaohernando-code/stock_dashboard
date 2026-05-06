@@ -13,6 +13,7 @@ RSYNC_BIN="${RSYNC_BIN:-rsync}"
 MAX_WAIT_SECONDS="${ASHARE_PUBLISH_MAX_WAIT_SECONDS:-30}"
 REFRESH_MODE="${ASHARE_PUBLISH_REFRESH_MODE:-sync}"
 REFRESH_TIMEOUT_SECONDS="${ASHARE_PUBLISH_REFRESH_TIMEOUT_SECONDS:-300}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 if ! command -v "$RSYNC_BIN" >/dev/null 2>&1; then
   echo "Missing required command: $RSYNC_BIN" >&2
@@ -34,8 +35,8 @@ if ! command -v curl >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "Missing required command: python3" >&2
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  echo "Missing required command: $PYTHON_BIN" >&2
   exit 1
 fi
 
