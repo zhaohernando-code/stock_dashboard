@@ -37,6 +37,7 @@ export interface MobileAppShellProps {
   runtimeSettings: RuntimeSettingsResponse | null;
   runtimeOverview: RuntimeOverviewResponse | null;
   scheduledRefreshStatus: ScheduledRefreshStatusView | null;
+  onDismissScheduledRefreshStatus: () => void;
   modelApiKeys: ModelApiKeyView[];
   generatedAt: string | null;
   addWatchlistOverlay: ReactNode;

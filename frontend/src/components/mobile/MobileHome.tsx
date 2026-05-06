@@ -92,6 +92,8 @@ export function MobileHome(props: MobileAppShellProps) {
         <section className="mobile-section-plain">
           <Alert
             showIcon
+            closable
+            onClose={props.onDismissScheduledRefreshStatus}
             className="mobile-refresh-status"
             type={refreshAlertType(props.scheduledRefreshStatus.status)}
             message={(

@@ -143,6 +143,16 @@ function scheduledRefreshFallbackLabel(status?: string): string {
   return "待补跑";
 }
 
+function scheduledRefreshDismissKey(status: ScheduledRefreshStatusView | null): string {
+  if (!status) return "";
+  return [
+    status.target_date,
+    status.slot,
+    status.status,
+    status.state_updated_at ?? status.completed_at ?? status.failed_at ?? status.deferred_at ?? status.started_at ?? "",
+  ].join("|");
+}
+
 function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme: () => void }) {
   const initialRuntimeConfig = api.getRuntimeConfig();
   const screens = Grid.useBreakpoint();
@@ -158,6 +168,9 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   const [candidates, setCandidates] = useState<CandidateItemView[]>([]);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [scheduledRefreshStatus, setScheduledRefreshStatus] = useState<ScheduledRefreshStatusView | null>(null);
+  const [dismissedScheduledRefreshKey, setDismissedScheduledRefreshKey] = useState(
+    () => window.localStorage.getItem("ashare-dismissed-scheduled-refresh") ?? "",
+  );
   const [glossary, setGlossary] = useState<GlossaryEntryView[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [stockActiveTab, setStockActiveTab] = useState("signals");
@@ -247,6 +260,10 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   );
 
   const activeCandidate = activeRow?.candidate ?? null;
+  const scheduledRefreshKey = scheduledRefreshDismissKey(scheduledRefreshStatus);
+  const visibleScheduledRefreshStatus = scheduledRefreshStatus && scheduledRefreshKey !== dismissedScheduledRefreshKey
+    ? scheduledRefreshStatus
+    : null;
   const analysisReportRow = useMemo(
     () => candidateRows.find((item) => item.symbol === analysisReportSymbol) ?? null,
     [analysisReportSymbol, candidateRows],
@@ -510,6 +527,12 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     } catch {
       setScheduledRefreshStatus((current) => current);
     }
+  }
+
+  function dismissScheduledRefreshStatus(): void {
+    if (!scheduledRefreshKey) return;
+    window.localStorage.setItem("ashare-dismissed-scheduled-refresh", scheduledRefreshKey);
+    setDismissedScheduledRefreshKey(scheduledRefreshKey);
   }
 
   async function loadOperationsDetailSections(sections: string[], symbol: string): Promise<void> {
@@ -1974,7 +1997,8 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
           canUseManualResearch={canUseManualResearch}
           runtimeSettings={runtimeSettings}
           runtimeOverview={runtimeOverview}
-          scheduledRefreshStatus={scheduledRefreshStatus}
+          scheduledRefreshStatus={visibleScheduledRefreshStatus}
+          onDismissScheduledRefreshStatus={dismissScheduledRefreshStatus}
           modelApiKeys={modelApiKeys}
           generatedAt={generatedAt}
           addWatchlistOverlay={addWatchlistOverlay}
@@ -2101,25 +2125,27 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                     {themeMode === "dark" ? "浅色模式" : "夜间模式"}
                   </Button>
                 </div>
-                {scheduledRefreshStatus ? (
+                {visibleScheduledRefreshStatus ? (
                   <Alert
                     showIcon
+                    closable
+                    onClose={dismissScheduledRefreshStatus}
                     className="scheduled-refresh-alert"
-                    type={scheduledRefreshAlertType(scheduledRefreshStatus.status)}
+                    type={scheduledRefreshAlertType(visibleScheduledRefreshStatus.status)}
                     message={(
                       <Space wrap>
                         <span>每日分析</span>
-                        <Tag color={scheduledRefreshTagColor(scheduledRefreshStatus.status)}>
-                          {scheduledRefreshStatus.label || scheduledRefreshFallbackLabel(scheduledRefreshStatus.status)}
+                        <Tag color={scheduledRefreshTagColor(visibleScheduledRefreshStatus.status)}>
+                          {visibleScheduledRefreshStatus.label || scheduledRefreshFallbackLabel(visibleScheduledRefreshStatus.status)}
                         </Tag>
-                        <Text type="secondary">{`目标日 ${scheduledRefreshStatus.target_date} · ${scheduledRefreshStatus.scheduled_time}`}</Text>
+                        <Text type="secondary">{`目标日 ${visibleScheduledRefreshStatus.target_date} · ${visibleScheduledRefreshStatus.scheduled_time}`}</Text>
                       </Space>
                     )}
                     description={(
                       <Space direction="vertical" size={2}>
-                        <Text>{sanitizeDisplayText(scheduledRefreshStatus.message)}</Text>
+                        <Text>{sanitizeDisplayText(visibleScheduledRefreshStatus.message)}</Text>
                         <Text type="secondary">
-                          {`状态时间 ${formatDate(scheduledRefreshTime(scheduledRefreshStatus))} · ${sanitizeDisplayText(scheduledRefreshStatus.next_action ?? "等待下一次状态刷新。")}`}
+                          {`状态时间 ${formatDate(scheduledRefreshTime(visibleScheduledRefreshStatus))} · ${sanitizeDisplayText(visibleScheduledRefreshStatus.next_action ?? "等待下一次状态刷新。")}`}
                         </Text>
                       </Space>
                     )}
