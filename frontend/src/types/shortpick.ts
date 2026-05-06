@@ -94,6 +94,8 @@ export interface ShortpickCandidateView {
   research_priority: string;
   parse_status: string;
   is_system_external: boolean;
+  display_bucket?: string;
+  diagnostic_reason?: string | null;
   validations: ShortpickValidationView[];
   raw_round?: ShortpickRoundView | null;
 }

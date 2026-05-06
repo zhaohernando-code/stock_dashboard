@@ -199,11 +199,11 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
 
   const latestRun = selectedRun ?? runs[0] ?? null;
   const normalCandidates = useMemo(
-    () => candidates.filter((item) => item.parse_status === "parsed" && item.symbol !== "PARSE_FAILED"),
+    () => candidates.filter((item) => item.parse_status === "parsed" && item.symbol !== "PARSE_FAILED" && item.display_bucket !== "diagnostic"),
     [candidates],
   );
   const failedCandidates = useMemo(
-    () => candidates.filter((item) => item.parse_status !== "parsed" || item.symbol === "PARSE_FAILED"),
+    () => candidates.filter((item) => item.parse_status !== "parsed" || item.symbol === "PARSE_FAILED" || item.display_bucket === "diagnostic"),
     [candidates],
   );
   const failedRounds = useMemo(
@@ -626,7 +626,9 @@ function TodayRunTab({
         </Col>
       </Row>
 
-      {failedRounds.length ? <FailureDiagnostics failedRounds={failedRounds} failedCandidates={failedCandidates} /> : null}
+      {failedRounds.length || failedCandidates.length ? (
+        <FailureDiagnostics failedRounds={failedRounds} failedCandidates={failedCandidates} />
+      ) : null}
 
       <Card
         className="panel-card"
@@ -723,39 +725,67 @@ function FailureDiagnostics({
   failedCandidates: ShortpickCandidateView[];
 }) {
   return (
-    <Card className="panel-card" title="失败诊断">
+    <Card className="panel-card" title="失败/异常诊断">
       <Alert
         type="warning"
         showIcon
-        message="本批次存在失败轮次"
-        description="失败轮次不会进入正常研究池。DeepSeek/SearXNG 无结果或 JSON 解析失败可重跑；配置类失败需要先修复模型配置。"
+        message={failedRounds.length ? "本批次存在失败轮次" : "本批次存在不可进入研究池的候选"}
+        description="失败轮次、解析失败、停牌/缺行情或入场不可成交候选不会进入正常研究池。可重跑失败轮次；可交易性异常需要等待行情或人工复核。"
       />
-      <Table
-        className="shortpick-failure-table"
-        rowKey="id"
-        size="small"
-        columns={[
-          {
-            title: "轮次",
-            key: "round",
-            render: (_, item: ShortpickRoundView) => <Text strong>{roundModelLabel(item)}</Text>,
-          },
-          {
-            title: "分类",
-            key: "category",
-            render: (_, item: ShortpickRoundView) => <Tag color={item.retryable ? "gold" : "red"}>{failureCategoryLabel(item.failure_category)}</Tag>,
-          },
-          {
-            title: "错误",
-            dataIndex: "error_message",
-            key: "error_message",
-            render: (value?: string | null) => <Text>{value || "--"}</Text>,
-          },
-        ]}
-        dataSource={failedRounds}
-        pagination={false}
-      />
-      {failedCandidates.length ? <Text type="secondary">已隔离异常候选 {failedCandidates.length} 条，包含 PARSE_FAILED，不参与正常候选统计。</Text> : null}
+      {failedRounds.length ? (
+        <Table
+          className="shortpick-failure-table"
+          rowKey="id"
+          size="small"
+          columns={[
+            {
+              title: "轮次",
+              key: "round",
+              render: (_, item: ShortpickRoundView) => <Text strong>{roundModelLabel(item)}</Text>,
+            },
+            {
+              title: "分类",
+              key: "category",
+              render: (_, item: ShortpickRoundView) => <Tag color={item.retryable ? "gold" : "red"}>{failureCategoryLabel(item.failure_category)}</Tag>,
+            },
+            {
+              title: "错误",
+              dataIndex: "error_message",
+              key: "error_message",
+              render: (value?: string | null) => <Text>{value || "--"}</Text>,
+            },
+          ]}
+          dataSource={failedRounds}
+          pagination={false}
+        />
+      ) : null}
+      {failedCandidates.length ? (
+        <Table
+          className="shortpick-failure-table"
+          rowKey="id"
+          size="small"
+          columns={[
+            {
+              title: "标的",
+              key: "symbol",
+              render: (_, item: ShortpickCandidateView) => <Text strong>{`${item.name} · ${item.symbol}`}</Text>,
+            },
+            {
+              title: "状态",
+              key: "status",
+              render: (_, item: ShortpickCandidateView) => <Tag color={item.display_bucket === "diagnostic" ? "gold" : "red"}>{validationSummary(item)}</Tag>,
+            },
+            {
+              title: "原因",
+              key: "reason",
+              render: (_, item: ShortpickCandidateView) => <Text>{item.diagnostic_reason || item.thesis || "--"}</Text>,
+            },
+          ]}
+          dataSource={failedCandidates}
+          pagination={false}
+        />
+      ) : null}
+      {failedCandidates.length ? <Text type="secondary">已隔离异常候选 {failedCandidates.length} 条，不参与正常候选统计。</Text> : null}
     </Card>
   );
 }

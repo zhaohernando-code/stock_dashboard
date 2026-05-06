@@ -753,6 +753,33 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertFalse(first_validation["official_validation"])
         self.assertIsNone(first_validation["stock_return"])
 
+    def test_suspended_or_no_current_bar_candidate_is_quarantined_from_research_pool(self) -> None:
+        self._seed_stock_bars("600958.SH", "东方证券", [9.34], dates=[date(2026, 4, 17)])
+        self._seed_stock_bars("000300.SH", "沪深300", [200, 202, 204], dates=[date(2026, 5, 6), date(2026, 5, 7), date(2026, 5, 8)])
+        self._seed_stock_bars("000852.SH", "中证1000", [300, 303, 306], dates=[date(2026, 5, 6), date(2026, 5, 7), date(2026, 5, 8)])
+        executors = [StaticShortpickExecutor("deepseek", "deepseek-test", "fake", _answer("600958.SH", "东方证券", "券商重组复牌", "https://a.example/news"))]
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
+            with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
+                with session_scope(self.database_url) as session:
+                    payload = run_shortpick_experiment(
+                        session,
+                        run_date=date(2026, 5, 6),
+                        rounds_per_model=1,
+                        triggered_by="root",
+                        executors=executors,
+                    )
+
+        candidate = payload["candidates"][0]
+        statuses = {item["status"] for item in candidate["validations"]}
+        self.assertEqual(statuses, {"suspended_or_no_current_bar"})
+        self.assertEqual(candidate["display_bucket"], "diagnostic")
+        self.assertEqual(candidate["research_priority"], "tradeability_blocked")
+        self.assertIn("latest daily bar is 2026-04-17", candidate["diagnostic_reason"])
+        self.assertEqual(payload["summary"]["normal_candidate_count"], 0)
+        self.assertEqual(payload["summary"]["diagnostic_candidate_count"], 1)
+        self.assertEqual(payload["summary"]["candidate_display_gate"]["blocked_symbols"], ["600958.SH"])
+
     def test_validation_pending_benchmark_when_primary_window_missing(self) -> None:
         self._seed_stock_bars("688981.SH", "中芯国际", [100 + index * 2 for index in range(8)])
         executors = [StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("688981.SH", "中芯国际", "半导体国产替代", "https://a.example/news"))]

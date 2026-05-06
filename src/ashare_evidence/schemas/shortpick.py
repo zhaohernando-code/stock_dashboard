@@ -106,6 +106,8 @@ class ShortpickCandidateView(BaseModel):
     research_priority: str
     parse_status: str
     is_system_external: bool
+    display_bucket: str = "normal"
+    diagnostic_reason: str | None = None
     validations: list[ShortpickValidationView] = Field(default_factory=list)
     raw_round: ShortpickRoundView | None = None
 

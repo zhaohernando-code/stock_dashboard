@@ -46,6 +46,16 @@ SHORTPICK_OFFICIAL_VALIDATION_MODE = "after_close_t_plus_1_close_entry_v1"
 SHORTPICK_LEGACY_VALIDATION_MODE = "legacy_previous_close_entry"
 SHORTPICK_SIGNAL_REACTION_MODE = "signal_reaction_close_to_close"
 SHORTPICK_OFFICIAL_TRADEABILITY_STATUS = "tradeable"
+SHORTPICK_TRADEABILITY_BLOCKED_PRIORITY = "tradeability_blocked"
+SHORTPICK_DIAGNOSTIC_CANDIDATE_BUCKET = "diagnostic"
+SHORTPICK_NORMAL_CANDIDATE_BUCKET = "normal"
+SHORTPICK_DIAGNOSTIC_VALIDATION_STATUSES = {
+    "pending_market_data",
+    "pending_entry_bar",
+    "suspended_or_no_current_bar",
+    "entry_unfillable_limit_up",
+    "tradeability_uncertain",
+}
 SHORTPICK_PRIMARY_BENCHMARK_ID = "CSI300"
 SHORTPICK_RESEARCH_BENCHMARK_IDS = ["CSI1000"]
 SHORTPICK_CODEX_TIMEOUT_SECONDS = 240
@@ -1356,7 +1366,11 @@ def validate_shortpick_run(
                 market_sync=market_sync,
             )
             updated += 1
-    summary = _shortpick_validation_summary(session, run_id=run_id)
+    display_gate = _apply_shortpick_candidate_display_gates(session, run_id=run_id)
+    summary = {
+        **_shortpick_validation_summary(session, run_id=run_id),
+        "candidate_display_gate": display_gate,
+    }
     run.summary_payload = {
         **dict(run.summary_payload or {}),
         **summary,
@@ -2155,6 +2169,108 @@ def _validation_is_official(snapshot: ShortpickValidationSnapshot) -> bool:
     )
 
 
+def _candidate_is_diagnostic(validations: list[ShortpickValidationSnapshot]) -> bool:
+    if not validations:
+        return False
+    if any(_validation_is_official(validation) for validation in validations):
+        return False
+    statuses = {validation.status for validation in validations}
+    return bool(statuses & SHORTPICK_DIAGNOSTIC_VALIDATION_STATUSES)
+
+
+def _candidate_display_bucket(validations: list[ShortpickValidationSnapshot]) -> str:
+    return SHORTPICK_DIAGNOSTIC_CANDIDATE_BUCKET if _candidate_is_diagnostic(validations) else SHORTPICK_NORMAL_CANDIDATE_BUCKET
+
+
+def _candidate_diagnostic_reason(validations: list[ShortpickValidationSnapshot]) -> str | None:
+    for validation in validations:
+        if validation.status not in SHORTPICK_DIAGNOSTIC_VALIDATION_STATUSES:
+            continue
+        payload = _validation_payload(validation)
+        reason = payload.get("pending_reason") or payload.get("reason")
+        if reason:
+            return str(reason)
+        return validation.status
+    return None
+
+
+def _shortpick_validations_by_candidate(
+    session: Session,
+    candidates: list[ShortpickCandidate],
+) -> dict[int, list[ShortpickValidationSnapshot]]:
+    candidate_ids = [candidate.id for candidate in candidates]
+    if not candidate_ids:
+        return {}
+    rows = session.scalars(
+        select(ShortpickValidationSnapshot)
+        .where(ShortpickValidationSnapshot.candidate_id.in_(candidate_ids))
+        .order_by(ShortpickValidationSnapshot.horizon_days.asc(), ShortpickValidationSnapshot.id.asc())
+    ).all()
+    by_candidate: dict[int, list[ShortpickValidationSnapshot]] = {candidate_id: [] for candidate_id in candidate_ids}
+    for row in rows:
+        by_candidate.setdefault(row.candidate_id, []).append(row)
+    return by_candidate
+
+
+def _apply_shortpick_candidate_display_gates(session: Session, *, run_id: int) -> dict[str, Any]:
+    candidates = session.scalars(
+        select(ShortpickCandidate)
+        .where(
+            ShortpickCandidate.run_id == run_id,
+            ShortpickCandidate.parse_status == "parsed",
+            ShortpickCandidate.symbol != "PARSE_FAILED",
+        )
+        .order_by(ShortpickCandidate.id.asc())
+    ).all()
+    validations_by_candidate = _shortpick_validations_by_candidate(session, candidates)
+    blocked: list[str] = []
+    restored: list[str] = []
+    for candidate in candidates:
+        validations = validations_by_candidate.get(candidate.id, [])
+        payload = dict(candidate.candidate_payload or {})
+        display_gate = dict(payload.get("display_gate") or {})
+        if _candidate_is_diagnostic(validations):
+            if candidate.research_priority != SHORTPICK_TRADEABILITY_BLOCKED_PRIORITY:
+                display_gate.setdefault("previous_research_priority", candidate.research_priority)
+                display_gate.setdefault("previous_convergence_group", candidate.convergence_group)
+            display_gate.update(
+                {
+                    "status": SHORTPICK_TRADEABILITY_BLOCKED_PRIORITY,
+                    "display_bucket": SHORTPICK_DIAGNOSTIC_CANDIDATE_BUCKET,
+                    "reason": _candidate_diagnostic_reason(validations),
+                    "updated_at": utcnow().isoformat(),
+                }
+            )
+            payload["display_gate"] = display_gate
+            candidate.candidate_payload = payload
+            candidate.research_priority = SHORTPICK_TRADEABILITY_BLOCKED_PRIORITY
+            candidate.convergence_group = SHORTPICK_DIAGNOSTIC_CANDIDATE_BUCKET
+            blocked.append(candidate.symbol)
+            continue
+
+        if display_gate.get("status") == SHORTPICK_TRADEABILITY_BLOCKED_PRIORITY:
+            previous_priority = str(display_gate.get("previous_research_priority") or "divergent_novel")
+            previous_group = display_gate.get("previous_convergence_group")
+            payload["display_gate"] = {
+                **display_gate,
+                "status": "restored",
+                "display_bucket": SHORTPICK_NORMAL_CANDIDATE_BUCKET,
+                "restored_at": utcnow().isoformat(),
+            }
+            candidate.candidate_payload = payload
+            candidate.research_priority = previous_priority
+            candidate.convergence_group = str(previous_group) if previous_group else None
+            restored.append(candidate.symbol)
+    session.flush()
+    return {
+        "blocked_candidate_count": len(blocked),
+        "restored_candidate_count": len(restored),
+        "blocked_symbols": blocked,
+        "restored_symbols": restored,
+        "blocked_statuses": sorted(SHORTPICK_DIAGNOSTIC_VALIDATION_STATUSES),
+    }
+
+
 def serialize_shortpick_run(session: Session, run: ShortpickExperimentRun, *, include_raw: bool) -> dict[str, Any]:
     rounds = session.scalars(
         select(ShortpickModelRound).where(ShortpickModelRound.run_id == run.id).order_by(ShortpickModelRound.id.asc())
@@ -2207,6 +2323,17 @@ def _run_operational_summary(
     failed_rounds = [round_record for round_record in rounds if round_record.status == "failed"]
     retryable_failed = [round_record for round_record in failed_rounds if _round_retryable(round_record)]
     parsed_candidates = [candidate for candidate in candidates if candidate.parse_status == "parsed" and candidate.symbol != "PARSE_FAILED"]
+    validations_by_candidate = _shortpick_validations_by_candidate(session, parsed_candidates)
+    normal_candidates = [
+        candidate
+        for candidate in parsed_candidates
+        if _candidate_display_bucket(validations_by_candidate.get(candidate.id, [])) == SHORTPICK_NORMAL_CANDIDATE_BUCKET
+    ]
+    diagnostic_candidates = [
+        candidate
+        for candidate in parsed_candidates
+        if _candidate_display_bucket(validations_by_candidate.get(candidate.id, [])) == SHORTPICK_DIAGNOSTIC_CANDIDATE_BUCKET
+    ]
     validations = session.scalars(
         select(ShortpickValidationSnapshot).where(
             ShortpickValidationSnapshot.candidate_id.in_([candidate.id for candidate in parsed_candidates])
@@ -2223,7 +2350,8 @@ def _run_operational_summary(
     return {
         "operational_status": operational_status,
         "parsed_candidate_count": len(parsed_candidates),
-        "normal_candidate_count": len(parsed_candidates),
+        "normal_candidate_count": len(normal_candidates),
+        "diagnostic_candidate_count": len(diagnostic_candidates),
         "failed_candidate_count": len(candidates) - len(parsed_candidates),
         "retryable_failed_round_count": len(retryable_failed),
         "has_retryable_failed_rounds": bool(retryable_failed),
@@ -2283,6 +2411,12 @@ def serialize_shortpick_candidate(session: Session, candidate: ShortpickCandidat
     round_record = session.get(ShortpickModelRound, candidate.round_id) if candidate.round_id else None
     payload = candidate.candidate_payload if isinstance(candidate.candidate_payload, dict) else {}
     topic_normalization = payload.get("topic_normalization") if isinstance(payload.get("topic_normalization"), dict) else {}
+    validations = session.scalars(
+        select(ShortpickValidationSnapshot)
+        .where(ShortpickValidationSnapshot.candidate_id == candidate.id)
+        .order_by(ShortpickValidationSnapshot.horizon_days.asc())
+    ).all()
+    display_bucket = _candidate_display_bucket(validations)
     return {
         "id": candidate.id,
         "candidate_key": candidate.candidate_key,
@@ -2305,13 +2439,15 @@ def serialize_shortpick_candidate(session: Session, candidate: ShortpickCandidat
         "research_priority": candidate.research_priority,
         "parse_status": candidate.parse_status,
         "is_system_external": candidate.is_system_external,
+        "display_bucket": display_bucket,
+        "diagnostic_reason": (
+            _candidate_diagnostic_reason(validations)
+            if display_bucket == SHORTPICK_DIAGNOSTIC_CANDIDATE_BUCKET
+            else None
+        ),
         "validations": [
             _serialize_validation(item)
-            for item in session.scalars(
-                select(ShortpickValidationSnapshot)
-                .where(ShortpickValidationSnapshot.candidate_id == candidate.id)
-                .order_by(ShortpickValidationSnapshot.horizon_days.asc())
-            ).all()
+            for item in validations
         ],
         "raw_round": serialize_shortpick_round(round_record, include_raw=include_raw) if round_record is not None else None,
     }
