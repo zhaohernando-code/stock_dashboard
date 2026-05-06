@@ -1,6 +1,6 @@
 # Short Pick Lab Validation Optimization Plan
 
-Status: active
+Status: p0_p3_completed_p4_gate_scaffold_published
 Owner: codex
 Created: 2026-05-07
 Scope: shortpick_lab validation, feedback aggregation, source/search robustness, and theme normalization
@@ -384,8 +384,8 @@ Acceptance:
 - [x] P2 complete: AI-only normalized topic feedback is available.
 - [x] P3 complete: DeepSeek/SearXNG repair is bounded and fail-closed.
 - [ ] P4 complete: baselines and go/no-go gates exist.
-- [ ] Runtime DB refreshed under new validation contract.
-- [ ] Localhost browser verified.
+- [x] Runtime DB refreshed under new validation contract.
+- [x] Localhost browser verified.
 - [ ] Canonical browser verified if any frontend/runtime behavior changes are shipped.
 
 ## Notes For Future Implementers
