@@ -529,6 +529,7 @@ def _execute_shortpick_round(
     )
     session.add(round_record)
     session.commit()
+    round_record_id = round_record.id
     session.refresh(run)
     prompt = build_shortpick_prompt(
         run_date=run.run_date,
@@ -536,6 +537,7 @@ def _execute_shortpick_round(
         provider_name=executor.provider_name,
         model_name=executor.model_name,
     )
+    raw_answer: str | None = None
     try:
         raw_answer = executor.complete(prompt)
         round_record.raw_answer = raw_answer
@@ -552,11 +554,15 @@ def _execute_shortpick_round(
         _write_round_artifact(session, run, round_record, prompt=prompt)
         _candidate_from_round(session, run, round_record, parsed, parse_status="parsed")
     except Exception as exc:
+        session.rollback()
+        round_record = session.get(ShortpickModelRound, round_record_id)
+        if round_record is None:
+            return
         round_record.status = "failed"
         round_record.error_message = str(exc)
         round_record.completed_at = utcnow()
         round_record.artifact_id = f"shortpick-round:{round_record.id}"
-        round_record.raw_answer = round_record.raw_answer or None
+        round_record.raw_answer = raw_answer
         _write_round_artifact(session, run, round_record, prompt=prompt)
         _candidate_from_round(
             session,

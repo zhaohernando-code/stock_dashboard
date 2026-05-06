@@ -239,13 +239,14 @@ run_daily_refresh_slot() {
   write_run_context "$target_date" "$slot_name"
   trap release_run_lock EXIT
   echo "Running ${slot_name} daily refresh for ${target_date} at ${NOW_HHMM}."
-  if run_with_timeout "$DAILY_REFRESH_TIMEOUT_SECONDS" run_phase5_daily_refresh --analysis-only; then
+  run_with_timeout "$DAILY_REFRESH_TIMEOUT_SECONDS" run_phase5_daily_refresh --analysis-only
+  local exit_code=$?
+  if [[ "$exit_code" == "0" ]]; then
     mark_slot_completed "$target_date" "$slot_name"
     release_run_lock
     trap - EXIT
     return 0
   fi
-  local exit_code=$?
   mark_slot_failed "$target_date" "$slot_name" "$exit_code" "$started_at"
   release_run_lock
   trap - EXIT
@@ -273,13 +274,14 @@ run_shortpick_lab_slot() {
   write_run_context "$target_date" "$slot_name"
   trap release_run_lock EXIT
   echo "Running shortpick lab for ${target_date} at ${NOW_HHMM}."
-  if run_with_timeout "$SHORTPICK_TIMEOUT_SECONDS" run_shortpick_daily_cycle; then
+  run_with_timeout "$SHORTPICK_TIMEOUT_SECONDS" run_shortpick_daily_cycle
+  local exit_code=$?
+  if [[ "$exit_code" == "0" ]]; then
     mark_slot_completed "$target_date" "$slot_name"
     release_run_lock
     trap - EXIT
     return 0
   fi
-  local exit_code=$?
   mark_slot_failed "$target_date" "$slot_name" "$exit_code" "$started_at"
   release_run_lock
   trap - EXIT

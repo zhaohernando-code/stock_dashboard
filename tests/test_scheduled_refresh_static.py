@@ -31,6 +31,7 @@ def test_daily_refresh_has_catchup_guards() -> None:
     assert "network_available" in script
     assert "acquire_run_lock" in script
     assert "run_with_timeout" in script
+    assert "run_with_timeout \"$DAILY_REFRESH_TIMEOUT_SECONDS\" run_phase5_daily_refresh --analysis-only\n  local exit_code=$?" in script
 
 
 def test_shortpick_lab_is_part_of_postmarket_daily_cycle() -> None:
@@ -40,3 +41,4 @@ def test_shortpick_lab_is_part_of_postmarket_daily_cycle() -> None:
     assert "shortpick-lab-validate-recent" in script
     assert "run_shortpick_daily_cycle" in script
     assert "run_shortpick_lab_slot \"$TODAY_STR\"" in script
+    assert "run_with_timeout \"$SHORTPICK_TIMEOUT_SECONDS\" run_shortpick_daily_cycle\n  local exit_code=$?" in script

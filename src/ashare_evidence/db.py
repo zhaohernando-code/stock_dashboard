@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy import create_engine, event, inspect, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -51,8 +51,13 @@ def get_engine(database_url: str | None = None) -> Engine:
     engine = _ENGINE_CACHE.get(resolved)
     if engine is None:
         _prepare_sqlite_parent(resolved)
-        connect_args = {"check_same_thread": False} if resolved.startswith("sqlite") else {}
+        connect_args = {"check_same_thread": False, "timeout": 30} if resolved.startswith("sqlite") else {}
         engine = create_engine(resolved, future=True, connect_args=connect_args)
+        if resolved.startswith("sqlite"):
+            @event.listens_for(engine, "connect")
+            def _set_sqlite_busy_timeout(dbapi_connection, _connection_record):  # type: ignore[no-untyped-def]
+                dbapi_connection.execute("PRAGMA busy_timeout=30000")
+
         _ENGINE_CACHE[resolved] = engine
     return engine
 
