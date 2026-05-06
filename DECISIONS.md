@@ -1,5 +1,14 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-05-06T20:00:00+08:00] Daily refresh schedule uses a single post-market slot with catch-up:
+
+每日分析刷新从 `08:10 / 16:20 / 19:20 / 21:15` 收口为 `16:20` 盘后单一 daily slot。`08:10` 不再主动跑重刷新；`19:20` 与 `21:15` 不再作为独立 daily refresh 时点。盘后日线、日终增量字段、财务指标、主 recommendation 和 Phase 5 artifact 重建集中在 `16:20`。
+
+补充说明
+- LaunchAgent 继续保留 `StartInterval=300`，但 5 分钟轮询的职责变成盘中 ops-only 与 daily slot catch-up。若移动、断网或电脑休眠导致 `16:20` 没有成功，脚本会在醒来且联网后读取本地 state file，自动补执行未完成的 postmarket slot；已成功的 slot 不重复跑。
+- `scripts/run-scheduled-refresh.sh` 增加运行锁、联网预检和 daily/shortpick 超时保护，避免长时间挂起或并发写入 runtime SQLite。
+- 短投试验田仍受 `ASHARE_ENABLE_SHORTPICK_LAB=1` 控制；如果启用，它跟随盘后 slot 的 catch-up 机制运行，但不影响主 daily slot 的完成标记。
+
 [2026-05-05T04:05:00+08:00] Short Pick Lab is an isolated native-web research lab, not a quant pool input:
 
 短投推荐试验田正式定义为独立研究课题：GPT/Codex 与 DeepSeek 在隔离执行环境中使用各自原生联网/搜索能力，从全 A 股自由发现 1-10 个交易日短线候选；系统只负责调度、留痕、解析、混合收敛聚合和后验行情验证。
