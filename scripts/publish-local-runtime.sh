@@ -14,6 +14,7 @@ MAX_WAIT_SECONDS="${ASHARE_PUBLISH_MAX_WAIT_SECONDS:-30}"
 REFRESH_MODE="${ASHARE_PUBLISH_REFRESH_MODE:-sync}"
 REFRESH_TIMEOUT_SECONDS="${ASHARE_PUBLISH_REFRESH_TIMEOUT_SECONDS:-900}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+FRONTEND_DIR="$REPO_ROOT/frontend"
 
 if ! command -v "$RSYNC_BIN" >/dev/null 2>&1; then
   echo "Missing required command: $RSYNC_BIN" >&2
@@ -39,6 +40,20 @@ if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   echo "Missing required command: $PYTHON_BIN" >&2
   exit 1
 fi
+
+ensure_frontend_dependencies() {
+  if [[ ! -f "$FRONTEND_DIR/package-lock.json" ]]; then
+    echo "Frontend package-lock.json missing: $FRONTEND_DIR/package-lock.json" >&2
+    exit 1
+  fi
+
+  if [[ -x "$FRONTEND_DIR/node_modules/.bin/tsc" && -x "$FRONTEND_DIR/node_modules/.bin/vite" ]]; then
+    return 0
+  fi
+
+  echo "[publish] Installing frontend dependencies with npm ci"
+  npm --prefix "$FRONTEND_DIR" ci
+}
 
 LOCK_DIR="$HOME/.codex-system/locks"
 PUBLISH_LOCK="$LOCK_DIR/publish.lock"
@@ -105,7 +120,8 @@ if [ "$backup_count" -gt "$MAX_BACKUPS" ]; then
   echo "[publish] Rotated backups, keeping last $MAX_BACKUPS"
 fi
 echo "[publish] Building repo frontend"
-npm --prefix "$REPO_ROOT/frontend" run build
+ensure_frontend_dependencies
+npm --prefix "$FRONTEND_DIR" run build
 
 echo "[publish] Syncing repo to runtime"
 rm -rf "$RUNTIME_ROOT/.git"

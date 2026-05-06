@@ -25,3 +25,14 @@ def test_publish_python_bin_covers_verifier_and_refresh() -> None:
     assert 'PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.release_verifier' in script
     assert '--release-output-root "$RUNTIME_ROOT/output/releases"' in script
     assert 'PYTHONPATH="$RUNTIME_ROOT/src" "$PYTHON_BIN" -m ashare_evidence.cli refresh-runtime-data' in script
+
+
+def test_publish_installs_frontend_dependencies_before_build() -> None:
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert 'FRONTEND_DIR="$REPO_ROOT/frontend"' in script
+    assert 'ensure_frontend_dependencies' in script
+    assert 'node_modules/.bin/tsc' in script
+    assert 'node_modules/.bin/vite' in script
+    assert 'npm --prefix "$FRONTEND_DIR" ci' in script
+    assert 'ensure_frontend_dependencies\nnpm --prefix "$FRONTEND_DIR" run build' in script

@@ -7,6 +7,7 @@
 - **AntD Tabs 选中态不再做胶囊圆角**：全局 Tabs 样式过去给 `.ant-tabs-tab` 和 `.ant-tabs-ink-bar` 统一加 `999px` 圆角，导致 `试验田` 等切换式 tab 的选中态变成圆角块。现在全局改为 `border-radius: 0`，并补充 `ant-tabs-card` 覆盖，避免后续 card-style Tabs 重新带回圆角。本地任务预览 `http://127.0.0.1:5174/` 已用 Chrome headless 进入 `试验田` 验证，`今日批次 / 历史验证 / 模型反馈` 三个 tab 的计算圆角均为 `0px`，截图为 `output/playwright/tabs-no-radius-shortpick-local-final.png`。
 - **停牌/缺行情短投候选不能进入正常研究池**：`600958.SH 东方证券` 出现在 2026-05-06 试验田批次，是因为模型抓到了“收购上海证券 + 5月7日复牌”的公开事件催化，原始实验记录可保留；但验证层已判定信号日后无可交易入场价、最新日线只到 2026-04-17，这类 `suspended_or_no_current_bar` 样本不能继续作为正常研究池候选展示或统计。
 - **短投可交易性门禁必须写回候选分桶**：后验验证发现 `pending_market_data`、`pending_entry_bar`、`suspended_or_no_current_bar`、`entry_unfillable_limit_up`、`tradeability_uncertain` 时，将候选持久标记为 `tradeability_blocked` 并计算 `display_bucket=diagnostic`；前端研究池只展示 `display_bucket=normal`，异常候选进入失败/异常诊断区，保留来源与原始模型输出留痕。
+- **发布脚本不能假设新 worktree 已有前端依赖**：`scripts/publish-local-runtime.sh` 在临时干净快照或新 worktree 中运行时，`frontend/node_modules` 通常不存在，直接 `npm run build` 会在 `tsc` 上失败。发布脚本现在在 build 前检查 `frontend/node_modules/.bin/tsc` 和 `vite`，缺失时先按锁文件执行 `npm ci`；runtime 的 `scripts/start-local-frontend.sh` 也补同样检查，避免 runtime node_modules 被清理或首次启动时失败。
 
 ## 2026-05-06
 
