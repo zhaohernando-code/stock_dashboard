@@ -19,7 +19,11 @@ from ashare_evidence.shortpick_lab import (
     DeepseekLobeChatSearchShortpickExecutor,
     OpenAICompatibleShortpickExecutor,
     StaticShortpickExecutor,
+    build_shortpick_model_feedback,
     default_shortpick_executors,
+    list_shortpick_runs,
+    list_shortpick_validation_queue,
+    retry_failed_shortpick_rounds,
     run_shortpick_experiment,
     validate_recent_shortpick_runs,
 )
@@ -472,6 +476,147 @@ class ShortpickLabTests(unittest.TestCase):
         )
         self.assertEqual(create_response.status_code, 403)
         self.assertIn("root role required", create_response.json()["detail"])
+
+    def test_run_list_supports_pagination_filters_and_retryable_summary(self) -> None:
+        self._seed_daily_bars()
+        executors = [
+            StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("688981.SH", "中芯国际", "半导体国产替代", "https://a.example/news")),
+        ]
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
+            with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
+                with session_scope(self.database_url) as session:
+                    run_shortpick_experiment(
+                        session,
+                        run_date=date(2026, 5, 5),
+                        rounds_per_model=1,
+                        triggered_by="root",
+                        executors=executors,
+                    )
+                    run_shortpick_experiment(
+                        session,
+                        run_date=date(2026, 5, 6),
+                        rounds_per_model=1,
+                        triggered_by="root",
+                        executors=[StaticShortpickExecutor("openai", "gpt-test", "fake", "not-json")],
+                    )
+                    payload = list_shortpick_runs(
+                        session,
+                        status="completed",
+                        date_from=date(2026, 5, 5),
+                        date_to=date(2026, 5, 5),
+                        limit=1,
+                        offset=0,
+                        include_raw=True,
+                    )
+
+        self.assertEqual(payload["total"], 1)
+        self.assertEqual(payload["limit"], 1)
+        self.assertEqual(payload["offset"], 0)
+        self.assertEqual(payload["items"][0]["run_date"], date(2026, 5, 5))
+        self.assertIn("validation_completion_rate", payload["items"][0]["summary"])
+
+    def test_validation_queue_filters_candidate_horizon_rows(self) -> None:
+        self._seed_daily_bars()
+        executors = [
+            StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("688981.SH", "中芯国际", "半导体国产替代", "https://a.example/news")),
+        ]
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
+            with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
+                with session_scope(self.database_url) as session:
+                    run_shortpick_experiment(
+                        session,
+                        run_date=date(2026, 5, 5),
+                        rounds_per_model=1,
+                        triggered_by="root",
+                        executors=executors,
+                    )
+                    payload = list_shortpick_validation_queue(
+                        session,
+                        horizon=1,
+                        status="completed",
+                        model="gpt",
+                        symbol="688981.SH",
+                        limit=50,
+                        offset=0,
+                    )
+
+        self.assertEqual(payload["total"], 1)
+        item = payload["items"][0]
+        self.assertEqual(item["run_date"], date(2026, 5, 5))
+        self.assertEqual(item["symbol"], "688981.SH")
+        self.assertEqual(item["provider_name"], "openai")
+        self.assertEqual(item["model_name"], "gpt-test")
+        self.assertEqual(item["horizon_days"], 1)
+        self.assertEqual(item["status"], "completed")
+        self.assertIn("excess_return", item)
+
+    def test_model_feedback_aggregates_round_quality_sources_and_horizons(self) -> None:
+        self._seed_daily_bars()
+        executors = [
+            StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("688981.SH", "中芯国际", "半导体国产替代", "https://a.example/news")),
+            StaticShortpickExecutor("deepseek", "deepseek-test", "fake", "not-json"),
+        ]
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
+            with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
+                with patch("ashare_evidence.shortpick_lab._source_credibility", return_value={"credibility_status": "verified", "credibility_reason": "test"}):
+                    with session_scope(self.database_url) as session:
+                        run_shortpick_experiment(
+                            session,
+                            run_date=date(2026, 5, 5),
+                            rounds_per_model=1,
+                            triggered_by="root",
+                            executors=executors,
+                        )
+                        payload = build_shortpick_model_feedback(session)
+
+        self.assertEqual(payload["overall"]["round_count"], 2)
+        openai_feedback = next(item for item in payload["models"] if item["provider_name"] == "openai")
+        deepseek_feedback = next(item for item in payload["models"] if item["provider_name"] == "deepseek")
+        self.assertEqual(openai_feedback["completed_round_count"], 1)
+        self.assertEqual(openai_feedback["source_credibility_counts"]["verified"], 1)
+        self.assertTrue(any(group["group_key"] == "1" for group in openai_feedback["validation_by_horizon"]))
+        self.assertEqual(deepseek_feedback["failed_round_count"], 1)
+        self.assertEqual(deepseek_feedback["parse_failed_candidate_count"], 1)
+
+    def test_retry_failed_rounds_replaces_only_retryable_rounds_and_keeps_failure_history(self) -> None:
+        self._seed_daily_bars()
+        failing_executor = StaticShortpickExecutor("openai", "gpt-test", "fake", "not-json")
+        retry_executor = StaticShortpickExecutor(
+            "openai",
+            "gpt-test",
+            "fake",
+            _answer("688981.SH", "中芯国际", "半导体国产替代", "https://a.example/news"),
+        )
+
+        with session_scope(self.database_url) as session:
+            failed_payload = run_shortpick_experiment(
+                session,
+                run_date=date(2026, 5, 5),
+                rounds_per_model=1,
+                triggered_by="root",
+                executors=[failing_executor],
+            )
+            run_id = failed_payload["id"]
+
+        with patch("ashare_evidence.shortpick_lab.default_shortpick_executors", return_value=[retry_executor]):
+            with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
+                with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
+                    with patch("ashare_evidence.shortpick_lab._source_credibility", return_value={"credibility_status": "verified", "credibility_reason": "test"}):
+                        with session_scope(self.database_url) as session:
+                            payload = retry_failed_shortpick_rounds(session, run_id)
+
+        self.assertEqual(payload["retried_round_count"], 1)
+        self.assertEqual(payload["run"]["status"], "completed")
+        self.assertEqual(payload["run"]["summary"]["failed_round_count"], 0)
+        self.assertEqual(payload["run"]["summary"]["normal_candidate_count"], 1)
+        self.assertEqual(payload["run"]["summary"]["failed_candidate_count"], 1)
+        self.assertEqual(payload["retried"][0]["failure_category"], "retryable_parse_failure")
+        retry_history = payload["run"]["rounds"][0]["retry_history"]
+        self.assertEqual(retry_history[0]["failure_category"], "retryable_parse_failure")
+        self.assertIn("shortpick-round:", retry_history[0]["artifact_id"])
 
 
 if __name__ == "__main__":

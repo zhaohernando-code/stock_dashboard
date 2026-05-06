@@ -33,8 +33,11 @@ import {
   createShortpickRun,
   getShortpickCandidate,
   getShortpickCandidates,
+  getShortpickModelFeedback,
   getShortpickRun,
   getShortpickRuns,
+  getShortpickValidationQueue,
+  retryShortpickFailedRounds,
   validateShortpickRun,
 } from "./shortpick";
 
@@ -95,6 +98,9 @@ export const api = {
   getShortpickRun,
   createShortpickRun,
   validateShortpickRun,
+  retryShortpickFailedRounds,
   getShortpickCandidates,
   getShortpickCandidate,
+  getShortpickValidationQueue,
+  getShortpickModelFeedback,
 };

@@ -4,6 +4,8 @@
 
 ## 2026-05-06
 
+- **短投试验田长期运行要有历史验证工作台**：每天 10 条推荐长期积累后，最新批次视图不足以回答“之前推荐验证在哪里看”。试验田页面必须拆为 `今日批次 / 历史验证 / 模型反馈`，历史验证走服务端分页，默认 50 条，按 candidate-horizon 展示 `1/3/5/10/20` 交易日状态和收益反馈。
+- **短投失败不能混入正常研究池**：`PARSE_FAILED` 与 failed round 进入失败诊断区；DeepSeek/SearXNG 无搜索结果和 JSON 解析失败归为 retryable，模型配置缺失归为 configuration failure。重跑只处理失败轮次，旧失败 artifact id 与错误原因写入 retry history，不能删除失败痕迹。
 - **短投试验田不能只存在手动入口**：盘后 daily 既要跑主分析，也要跑短投试验田的验证闭环。`run-scheduled-refresh.sh` 的 shortpick slot 默认启用，先执行 `shortpick-lab-validate-recent` 刷新近期旧批次的行情/基准复盘，再生成当天新 run；如确需停用，显式设置 `ASHARE_ENABLE_SHORTPICK_LAB=0`。
 - **每日分析状态必须暴露子任务**：用户看到“每日分析已完成”时不能掩盖试验田未跑。`/dashboard/scheduled-refresh-status` 现在返回 `components`，前端展示 `主分析 / 试验田` 各自的成功、运行、失败或待补跑状态。
 

@@ -291,6 +291,22 @@ body[data-theme="dark"] {
   color: var(--brand-strong);
 }
 
+.shortpick-run-select {
+  min-width: 220px;
+}
+
+.shortpick-workspace-tabs .ant-tabs-nav {
+  margin-bottom: 16px;
+}
+
+.shortpick-filter-bar {
+  margin-bottom: 14px;
+}
+
+.shortpick-filter-input {
+  width: 150px;
+}
+
 .shortpick-metrics {
   margin: 0;
 }
@@ -324,6 +340,16 @@ body[data-theme="dark"] {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 0.8fr) minmax(280px, 1fr);
   gap: 18px;
+}
+
+.shortpick-feedback-detail {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.shortpick-failure-table {
+  margin: 14px 0 10px;
 }
 
 .shortpick-raw-collapse {
@@ -1117,6 +1143,10 @@ body[data-theme="dark"] .chart-shell,
   .shortpick-detail-grid {
     grid-template-columns: 1fr;
   }
+
+  .shortpick-feedback-detail {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 768px) {
@@ -1160,6 +1190,11 @@ body[data-theme="dark"] .chart-shell,
 
   .shortpick-lab-title {
     display: grid;
+  }
+
+  .shortpick-run-select,
+  .shortpick-filter-input {
+    width: 100%;
   }
 
   .chart-shell,

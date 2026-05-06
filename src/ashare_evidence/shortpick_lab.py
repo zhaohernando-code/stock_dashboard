@@ -55,6 +55,7 @@ SUSPICIOUS_SOURCE_PATTERNS = (
     re.compile(r"(.)\1{5,}"),
     re.compile(r"(?:xxxx|abc123|example|placeholder|dummy)", re.IGNORECASE),
 )
+RETRYABLE_FAILURE_CATEGORIES = {"retryable_search_failure", "retryable_parse_failure"}
 
 
 class ShortpickExecutor(Protocol):
@@ -627,6 +628,26 @@ def _web_source_integrity_failure(*, executor: ShortpickExecutor, parsed: dict[s
     return None
 
 
+def _shortpick_failure_category(error_message: str | None) -> str | None:
+    if not error_message:
+        return None
+    normalized = error_message.lower()
+    if "searxng returned no usable search results" in normalized or "search planning produced no search queries" in normalized:
+        return "retryable_search_failure"
+    if "did not contain a json object" in normalized or "parse" in normalized or "json" in normalized:
+        return "retryable_parse_failure"
+    if "no shortpick executor is available" in normalized or "executor" in normalized and "not available" in normalized:
+        return "configuration_failure"
+    return "round_execution_failure"
+
+
+def _round_retryable(round_record: ShortpickModelRound) -> bool:
+    return (
+        round_record.status == "failed"
+        and _shortpick_failure_category(round_record.error_message) in RETRYABLE_FAILURE_CATEGORIES
+    )
+
+
 def _candidate_from_round(
     session: Session,
     run: ShortpickExperimentRun,
@@ -639,10 +660,14 @@ def _candidate_from_round(
     symbol = _normalize_symbol(str(pick.get("symbol") or "PARSE_FAILED"))
     name = str(pick.get("name") or symbol).strip()[:64] or symbol
     theme = str(pick.get("theme") or _infer_theme(pick) or "").strip() or None
+    base_candidate_key = f"shortpick-candidate:{round_record.id}"
+    existing_count = session.scalar(
+        select(func.count(ShortpickCandidate.id)).where(ShortpickCandidate.candidate_key.like(f"{base_candidate_key}%"))
+    ) or 0
     candidate = ShortpickCandidate(
         run_id=run.id,
         round_id=round_record.id,
-        candidate_key=f"shortpick-candidate:{round_record.id}",
+        candidate_key=base_candidate_key if existing_count == 0 else f"{base_candidate_key}:retry-{existing_count + 1}",
         symbol=symbol,
         name=name,
         normalized_theme=theme,
@@ -735,29 +760,43 @@ def build_shortpick_consensus(session: Session, run: ShortpickExperimentRun) -> 
             candidate.convergence_group = "low"
             candidate.research_priority = "watch_only"
     generated_at = utcnow()
-    snapshot = ShortpickConsensusSnapshot(
-        run_id=run.id,
-        snapshot_key=f"shortpick-consensus:{run.id}",
-        artifact_id=f"shortpick-consensus:{run.id}",
-        generated_at=generated_at,
-        status="completed" if parsed else "insufficient_parsed_rounds",
-        stock_convergence=stock_convergence,
-        theme_convergence=theme_convergence,
-        source_diversity=source_diversity,
-        model_independence=model_independence,
-        novelty_score=novelty_score,
-        research_priority=priority,
-        summary_payload={
-            "leader_symbols": leader_symbols,
-            "leader_themes": leader_themes,
-            "priority_score": round(priority_score, 4),
-            "candidate_count": len(candidates),
-            "parsed_candidate_count": len(parsed),
-            "source_credibility_counts": source_status_counts,
-            "interpretation": "模型一致性只代表研究优先级，不代表交易建议。",
-        },
-    )
-    session.add(snapshot)
+    summary_payload = {
+        "leader_symbols": leader_symbols,
+        "leader_themes": leader_themes,
+        "priority_score": round(priority_score, 4),
+        "candidate_count": len(candidates),
+        "parsed_candidate_count": len(parsed),
+        "source_credibility_counts": source_status_counts,
+        "interpretation": "模型一致性只代表研究优先级，不代表交易建议。",
+    }
+    snapshot_key = f"shortpick-consensus:{run.id}"
+    snapshot = session.scalar(select(ShortpickConsensusSnapshot).where(ShortpickConsensusSnapshot.snapshot_key == snapshot_key))
+    if snapshot is None:
+        snapshot = ShortpickConsensusSnapshot(
+            run_id=run.id,
+            snapshot_key=snapshot_key,
+            artifact_id=snapshot_key,
+            generated_at=generated_at,
+            status="completed" if parsed else "insufficient_parsed_rounds",
+            stock_convergence=stock_convergence,
+            theme_convergence=theme_convergence,
+            source_diversity=source_diversity,
+            model_independence=model_independence,
+            novelty_score=novelty_score,
+            research_priority=priority,
+            summary_payload=summary_payload,
+        )
+        session.add(snapshot)
+    else:
+        snapshot.generated_at = generated_at
+        snapshot.status = "completed" if parsed else "insufficient_parsed_rounds"
+        snapshot.stock_convergence = stock_convergence
+        snapshot.theme_convergence = theme_convergence
+        snapshot.source_diversity = source_diversity
+        snapshot.model_independence = model_independence
+        snapshot.novelty_score = novelty_score
+        snapshot.research_priority = priority
+        snapshot.summary_payload = summary_payload
     session.flush()
     _write_consensus_artifact(session, run, snapshot)
     return snapshot
@@ -845,6 +884,182 @@ def validate_recent_shortpick_runs(
         "limit": run_limit,
         "horizons": target_horizons,
         "runs": refreshed,
+    }
+
+
+def retry_failed_shortpick_rounds(
+    session: Session,
+    run_id: int,
+    *,
+    max_rounds: int | None = None,
+) -> dict[str, Any]:
+    run = session.get(ShortpickExperimentRun, run_id)
+    if run is None:
+        raise LookupError(f"Shortpick run {run_id} not found.")
+    failed_rounds = session.scalars(
+        select(ShortpickModelRound)
+        .where(ShortpickModelRound.run_id == run_id, ShortpickModelRound.status == "failed")
+        .order_by(ShortpickModelRound.id.asc())
+    ).all()
+    retryable_rounds = [round_record for round_record in failed_rounds if _round_retryable(round_record)]
+    if max_rounds is not None:
+        retryable_rounds = retryable_rounds[: max(1, int(max_rounds))]
+    executors = default_shortpick_executors(session)
+    retried: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for round_record in retryable_rounds:
+        executor = _matching_executor_for_round(executors, round_record)
+        if executor is None:
+            skipped.append(
+                {
+                    "round_id": round_record.id,
+                    "round_index": round_record.round_index,
+                    "provider_name": round_record.provider_name,
+                    "model_name": round_record.model_name,
+                    "reason": "configuration_failure",
+                }
+            )
+            continue
+        retried.append(_retry_existing_shortpick_round(session, run, round_record, executor))
+
+    if retried:
+        consensus = build_shortpick_consensus(session, run)
+        validation_result = validate_shortpick_run(session, run.id, horizons=SHORTPICK_DEFAULT_HORIZONS)
+        completed_count = session.scalar(
+            select(func.count(ShortpickModelRound.id)).where(
+                ShortpickModelRound.run_id == run.id,
+                ShortpickModelRound.status == "completed",
+            )
+        ) or 0
+        failed_count = session.scalar(
+            select(func.count(ShortpickModelRound.id)).where(
+                ShortpickModelRound.run_id == run.id,
+                ShortpickModelRound.status == "failed",
+            )
+        ) or 0
+        parse_failed_count = session.scalar(
+            select(func.count(ShortpickCandidate.id)).where(
+                ShortpickCandidate.run_id == run.id,
+                ShortpickCandidate.parse_status == "parse_failed",
+            )
+        ) or 0
+        run.status = "completed" if completed_count else "failed"
+        run.completed_at = utcnow() if completed_count else None
+        run.failed_at = None if completed_count else utcnow()
+        run.summary_payload = {
+            **dict(run.summary_payload or {}),
+            "completed_round_count": completed_count,
+            "failed_round_count": failed_count,
+            "parse_failed_count": parse_failed_count,
+            "candidate_count": session.scalar(select(func.count(ShortpickCandidate.id)).where(ShortpickCandidate.run_id == run.id)) or 0,
+            "consensus_priority": consensus.research_priority,
+            "boundary": "independent_research_lab_no_main_pool_write",
+            **dict(validation_result.get("summary") or {}),
+        }
+    session.flush()
+    return {
+        "run_id": run_id,
+        "retryable_failed_round_count": len(retryable_rounds),
+        "retried_round_count": len(retried),
+        "skipped_round_count": len(skipped),
+        "retried": retried,
+        "skipped": skipped,
+        "run": serialize_shortpick_run(session, run, include_raw=True),
+    }
+
+
+def _matching_executor_for_round(executors: list[ShortpickExecutor], round_record: ShortpickModelRound) -> ShortpickExecutor | None:
+    for executor in executors:
+        if (
+            executor.provider_name == round_record.provider_name
+            and executor.model_name == round_record.model_name
+            and executor.executor_kind == round_record.executor_kind
+        ):
+            return executor
+    for executor in executors:
+        if executor.provider_name == round_record.provider_name and executor.model_name == round_record.model_name:
+            return executor
+    return None
+
+
+def _retry_existing_shortpick_round(
+    session: Session,
+    run: ShortpickExperimentRun,
+    round_record: ShortpickModelRound,
+    executor: ShortpickExecutor,
+) -> dict[str, Any]:
+    round_id = round_record.id
+    retry_started_at = utcnow()
+    previous_artifact_id = round_record.artifact_id
+    previous_error = round_record.error_message
+    previous_status = round_record.status
+    previous_raw_answer = round_record.raw_answer
+    retry_history = list((round_record.parsed_payload or {}).get("_retry_history") or [])
+    retry_history.append(
+        {
+            "artifact_id": previous_artifact_id,
+            "error_message": previous_error,
+            "status": previous_status,
+            "raw_answer": previous_raw_answer,
+            "retried_at": retry_started_at.isoformat(),
+            "failure_category": _shortpick_failure_category(previous_error),
+        }
+    )
+    round_record.status = "running"
+    round_record.error_message = None
+    round_record.raw_answer = None
+    round_record.sources_payload = []
+    round_record.parsed_payload = {"_retry_history": retry_history}
+    round_record.started_at = retry_started_at
+    round_record.completed_at = None
+    round_record.artifact_id = f"shortpick-round:{round_record.id}:retry-{retry_started_at:%Y%m%d%H%M%S%f}"
+    session.commit()
+    session.refresh(round_record)
+
+    prompt = build_shortpick_prompt(
+        run_date=run.run_date,
+        round_index=round_record.round_index,
+        provider_name=executor.provider_name,
+        model_name=executor.model_name,
+    )
+    raw_answer: str | None = None
+    try:
+        raw_answer = executor.complete(prompt)
+        parsed = extract_shortpick_json(raw_answer)
+        sources = _normalize_sources(parsed.get("sources_used"))
+        source_failure = _web_source_integrity_failure(executor=executor, parsed=parsed, sources=sources)
+        if source_failure:
+            raise RuntimeError(source_failure)
+        parsed["_retry_history"] = retry_history
+        round_record.raw_answer = raw_answer
+        round_record.parsed_payload = parsed
+        round_record.sources_payload = sources
+        round_record.status = "completed"
+        round_record.completed_at = utcnow()
+        round_record.error_message = None
+        _write_round_artifact(session, run, round_record, prompt=prompt)
+        _candidate_from_round(session, run, round_record, parsed, parse_status="parsed")
+    except Exception as exc:
+        session.rollback()
+        round_record = session.get(ShortpickModelRound, round_id)
+        if round_record is None:
+            return {"round_id": None, "status": "missing_after_retry", "error_message": str(exc)}
+        round_record.status = "failed"
+        round_record.error_message = str(exc)
+        round_record.completed_at = utcnow()
+        round_record.raw_answer = raw_answer
+        round_record.parsed_payload = {"_retry_history": retry_history}
+        _write_round_artifact(session, run, round_record, prompt=prompt)
+    session.flush()
+    return {
+        "round_id": round_record.id,
+        "round_index": round_record.round_index,
+        "provider_name": round_record.provider_name,
+        "model_name": round_record.model_name,
+        "status": round_record.status,
+        "previous_artifact_id": previous_artifact_id,
+        "previous_error_message": previous_error,
+        "failure_category": _shortpick_failure_category(previous_error),
     }
 
 
@@ -1224,6 +1439,12 @@ def _mean_or_none(values: list[float]) -> float | None:
 
 
 def serialize_shortpick_run(session: Session, run: ShortpickExperimentRun, *, include_raw: bool) -> dict[str, Any]:
+    rounds = session.scalars(
+        select(ShortpickModelRound).where(ShortpickModelRound.run_id == run.id).order_by(ShortpickModelRound.id.asc())
+    ).all()
+    candidates = session.scalars(
+        select(ShortpickCandidate).where(ShortpickCandidate.run_id == run.id).order_by(ShortpickCandidate.id.asc())
+    ).all()
     return {
         "id": run.id,
         "run_key": run.run_key,
@@ -1237,12 +1458,13 @@ def serialize_shortpick_run(session: Session, run: ShortpickExperimentRun, *, in
         "completed_at": run.completed_at,
         "failed_at": run.failed_at,
         "model_config": dict(run.model_config or {}),
-        "summary": dict(run.summary_payload or {}),
+        "summary": {
+            **dict(run.summary_payload or {}),
+            **_run_operational_summary(session, run, rounds=rounds, candidates=candidates),
+        },
         "rounds": [
             serialize_shortpick_round(item, include_raw=include_raw)
-            for item in session.scalars(
-                select(ShortpickModelRound).where(ShortpickModelRound.run_id == run.id).order_by(ShortpickModelRound.id.asc())
-            ).all()
+            for item in rounds
         ],
         "consensus": _serialize_consensus(
             session.scalar(
@@ -1253,9 +1475,53 @@ def serialize_shortpick_run(session: Session, run: ShortpickExperimentRun, *, in
         ),
         "candidates": [
             serialize_shortpick_candidate(session, item, include_raw=include_raw)
-            for item in session.scalars(
-                select(ShortpickCandidate).where(ShortpickCandidate.run_id == run.id).order_by(ShortpickCandidate.id.asc())
-            ).all()
+            for item in candidates
+        ],
+    }
+
+
+def _run_operational_summary(
+    session: Session,
+    run: ShortpickExperimentRun,
+    *,
+    rounds: list[ShortpickModelRound],
+    candidates: list[ShortpickCandidate],
+) -> dict[str, Any]:
+    failed_rounds = [round_record for round_record in rounds if round_record.status == "failed"]
+    retryable_failed = [round_record for round_record in failed_rounds if _round_retryable(round_record)]
+    parsed_candidates = [candidate for candidate in candidates if candidate.parse_status == "parsed" and candidate.symbol != "PARSE_FAILED"]
+    validations = session.scalars(
+        select(ShortpickValidationSnapshot).where(
+            ShortpickValidationSnapshot.candidate_id.in_([candidate.id for candidate in parsed_candidates])
+        )
+    ).all() if parsed_candidates else []
+    completed_validation_count = sum(1 for validation in validations if validation.status == "completed")
+    operational_status = run.status
+    if run.status == "completed" and failed_rounds:
+        operational_status = "partial_completed"
+    if run.status == "completed" and retryable_failed:
+        operational_status = "retryable_failures"
+    return {
+        "operational_status": operational_status,
+        "parsed_candidate_count": len(parsed_candidates),
+        "normal_candidate_count": len(parsed_candidates),
+        "failed_candidate_count": len(candidates) - len(parsed_candidates),
+        "retryable_failed_round_count": len(retryable_failed),
+        "has_retryable_failed_rounds": bool(retryable_failed),
+        "validation_total_count": len(validations),
+        "validation_completed_count": completed_validation_count,
+        "validation_completion_rate": round(completed_validation_count / len(validations), 6) if validations else None,
+        "failed_rounds": [
+            {
+                "id": round_record.id,
+                "provider_name": round_record.provider_name,
+                "model_name": round_record.model_name,
+                "round_index": round_record.round_index,
+                "failure_category": _shortpick_failure_category(round_record.error_message),
+                "retryable": _round_retryable(round_record),
+                "error_message": round_record.error_message,
+            }
+            for round_record in failed_rounds
         ],
     }
 
@@ -1277,6 +1543,9 @@ def serialize_shortpick_round(round_record: ShortpickModelRound, *, include_raw:
         "confidence": _coerce_float(pick.get("confidence")) if isinstance(pick, dict) else None,
         "sources": round_record.sources_payload,
         "artifact_id": round_record.artifact_id,
+        "failure_category": _shortpick_failure_category(round_record.error_message),
+        "retryable": _round_retryable(round_record),
+        "retry_history": (round_record.parsed_payload or {}).get("_retry_history", []) if include_raw else [],
         "error_message": round_record.error_message if include_raw else None,
         "raw_answer": round_record.raw_answer if include_raw else None,
         "started_at": round_record.started_at,
@@ -1319,11 +1588,38 @@ def serialize_shortpick_candidate(session: Session, candidate: ShortpickCandidat
     }
 
 
-def list_shortpick_runs(session: Session, *, limit: int = 20, include_raw: bool = False) -> dict[str, Any]:
+def list_shortpick_runs(
+    session: Session,
+    *,
+    status: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    limit: int = 20,
+    offset: int = 0,
+    include_raw: bool = False,
+) -> dict[str, Any]:
+    normalized_limit = max(1, min(int(limit), 100))
+    normalized_offset = max(0, int(offset))
+    query = select(ShortpickExperimentRun)
+    if status:
+        query = query.where(ShortpickExperimentRun.status == status)
+    if date_from is not None:
+        query = query.where(ShortpickExperimentRun.run_date >= date_from)
+    if date_to is not None:
+        query = query.where(ShortpickExperimentRun.run_date <= date_to)
+    total = session.scalar(select(func.count()).select_from(query.subquery())) or 0
     runs = session.scalars(
-        select(ShortpickExperimentRun).order_by(ShortpickExperimentRun.started_at.desc(), ShortpickExperimentRun.id.desc()).limit(limit)
+        query.order_by(ShortpickExperimentRun.started_at.desc(), ShortpickExperimentRun.id.desc())
+        .limit(normalized_limit)
+        .offset(normalized_offset)
     ).all()
-    return {"generated_at": utcnow(), "items": [serialize_shortpick_run(session, run, include_raw=include_raw) for run in runs]}
+    return {
+        "generated_at": utcnow(),
+        "items": [serialize_shortpick_run(session, run, include_raw=include_raw) for run in runs],
+        "total": total,
+        "limit": normalized_limit,
+        "offset": normalized_offset,
+    }
 
 
 def get_shortpick_run(session: Session, run_id: int, *, include_raw: bool) -> dict[str, Any]:
@@ -1371,11 +1667,255 @@ def list_shortpick_candidates(
     return {"generated_at": utcnow(), "items": [serialize_shortpick_candidate(session, item, include_raw=include_raw) for item in candidates]}
 
 
+def list_shortpick_validation_queue(
+    session: Session,
+    *,
+    run_id: int | None = None,
+    status: str | None = None,
+    horizon: int | None = None,
+    model: str | None = None,
+    symbol: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict[str, Any]:
+    normalized_limit = max(1, min(int(limit), 200))
+    normalized_offset = max(0, int(offset))
+    query = (
+        select(ShortpickValidationSnapshot, ShortpickCandidate, ShortpickExperimentRun, ShortpickModelRound)
+        .join(ShortpickCandidate, ShortpickValidationSnapshot.candidate_id == ShortpickCandidate.id)
+        .join(ShortpickExperimentRun, ShortpickCandidate.run_id == ShortpickExperimentRun.id)
+        .outerjoin(ShortpickModelRound, ShortpickCandidate.round_id == ShortpickModelRound.id)
+        .where(ShortpickCandidate.parse_status == "parsed", ShortpickCandidate.symbol != "PARSE_FAILED")
+    )
+    if run_id is not None:
+        query = query.where(ShortpickCandidate.run_id == run_id)
+    if status:
+        query = query.where(ShortpickValidationSnapshot.status == status)
+    if horizon is not None:
+        query = query.where(ShortpickValidationSnapshot.horizon_days == int(horizon))
+    if symbol:
+        query = query.where(ShortpickCandidate.symbol == _normalize_symbol(symbol))
+    if date_from is not None:
+        query = query.where(ShortpickExperimentRun.run_date >= date_from)
+    if date_to is not None:
+        query = query.where(ShortpickExperimentRun.run_date <= date_to)
+    if model:
+        normalized_model = model.lower()
+        query = query.where(
+            func.lower(ShortpickModelRound.provider_name).contains(normalized_model)
+            | func.lower(ShortpickModelRound.model_name).contains(normalized_model)
+        )
+    total = session.scalar(select(func.count()).select_from(query.subquery())) or 0
+    rows = session.execute(
+        query.order_by(
+            ShortpickExperimentRun.run_date.desc(),
+            ShortpickValidationSnapshot.status.asc(),
+            ShortpickValidationSnapshot.horizon_days.asc(),
+            ShortpickCandidate.id.desc(),
+        )
+        .limit(normalized_limit)
+        .offset(normalized_offset)
+    ).all()
+    return {
+        "generated_at": utcnow(),
+        "items": [
+            _serialize_validation_queue_item(validation, candidate, run, round_record)
+            for validation, candidate, run, round_record in rows
+        ],
+        "total": total,
+        "limit": normalized_limit,
+        "offset": normalized_offset,
+    }
+
+
+def build_shortpick_model_feedback(session: Session) -> dict[str, Any]:
+    rounds = session.scalars(select(ShortpickModelRound).order_by(ShortpickModelRound.id.asc())).all()
+    candidates = session.scalars(
+        select(ShortpickCandidate).where(ShortpickCandidate.parse_status == "parsed", ShortpickCandidate.symbol != "PARSE_FAILED")
+    ).all()
+    model_keys = sorted(
+        {
+            (round_record.provider_name, round_record.model_name, round_record.executor_kind)
+            for round_record in rounds
+        }
+    )
+    items: list[dict[str, Any]] = []
+    for provider_name, model_name, executor_kind in model_keys:
+        model_rounds = [
+            round_record
+            for round_record in rounds
+            if (
+                round_record.provider_name,
+                round_record.model_name,
+                round_record.executor_kind,
+            )
+            == (provider_name, model_name, executor_kind)
+        ]
+        round_ids = {round_record.id for round_record in model_rounds}
+        model_candidates = [candidate for candidate in candidates if candidate.round_id in round_ids]
+        source_counts: dict[str, int] = {}
+        for candidate in model_candidates:
+            for source in candidate.sources_payload or []:
+                status = str(source.get("credibility_status") or "unchecked")
+                source_counts[status] = source_counts.get(status, 0) + 1
+        validation_rows = _validation_feedback_rows(session, model_candidates)
+        completed_round_count = sum(1 for round_record in model_rounds if round_record.status == "completed")
+        failed_round_count = sum(1 for round_record in model_rounds if round_record.status == "failed")
+        items.append(
+            {
+                "provider_name": provider_name,
+                "model_name": model_name,
+                "executor_kind": executor_kind,
+                "round_count": len(model_rounds),
+                "completed_round_count": completed_round_count,
+                "failed_round_count": failed_round_count,
+                "retryable_failed_round_count": sum(1 for round_record in model_rounds if _round_retryable(round_record)),
+                "parse_failed_candidate_count": _parse_failed_count_for_rounds(session, round_ids),
+                "success_rate": round(completed_round_count / len(model_rounds), 6) if model_rounds else None,
+                "source_credibility_counts": source_counts,
+                "validation_by_horizon": _feedback_groups(validation_rows, key_fn=lambda row: str(row["validation"].horizon_days), label_fn=lambda row: f"{row['validation'].horizon_days}日"),
+                "validation_by_priority": _feedback_groups(validation_rows, key_fn=lambda row: row["candidate"].research_priority, label_fn=lambda row: row["candidate"].research_priority),
+                "validation_by_theme": _feedback_groups(
+                    validation_rows,
+                    key_fn=lambda row: row["candidate"].normalized_theme or "未归类题材",
+                    label_fn=lambda row: row["candidate"].normalized_theme or "未归类题材",
+                    limit=12,
+                ),
+            }
+        )
+    return {
+        "generated_at": utcnow(),
+        "models": items,
+        "overall": {
+            "run_count": session.scalar(select(func.count(ShortpickExperimentRun.id))) or 0,
+            "round_count": len(rounds),
+            "candidate_count": len(candidates),
+            "validation_count": session.scalar(select(func.count(ShortpickValidationSnapshot.id))) or 0,
+            "boundary": "independent_research_lab_no_main_pool_write",
+        },
+    }
+
+
 def get_shortpick_candidate(session: Session, candidate_id: int, *, include_raw: bool) -> dict[str, Any]:
     candidate = session.get(ShortpickCandidate, candidate_id)
     if candidate is None:
         raise LookupError(f"Shortpick candidate {candidate_id} not found.")
     return serialize_shortpick_candidate(session, candidate, include_raw=include_raw)
+
+
+def _serialize_validation_queue_item(
+    validation: ShortpickValidationSnapshot,
+    candidate: ShortpickCandidate,
+    run: ShortpickExperimentRun,
+    round_record: ShortpickModelRound | None,
+) -> dict[str, Any]:
+    validation_payload = _serialize_validation(validation)
+    return {
+        "validation_id": validation.id,
+        "candidate_id": candidate.id,
+        "run_id": run.id,
+        "run_key": run.run_key,
+        "run_date": run.run_date,
+        "provider_name": round_record.provider_name if round_record is not None else None,
+        "model_name": round_record.model_name if round_record is not None else None,
+        "executor_kind": round_record.executor_kind if round_record is not None else None,
+        "round_index": round_record.round_index if round_record is not None else None,
+        "symbol": candidate.symbol,
+        "name": candidate.name,
+        "normalized_theme": candidate.normalized_theme,
+        "research_priority": candidate.research_priority,
+        "convergence_group": candidate.convergence_group,
+        "horizon_days": validation.horizon_days,
+        "status": validation.status,
+        "entry_at": validation.entry_at,
+        "exit_at": validation.exit_at,
+        "entry_close": validation.entry_close,
+        "exit_close": validation.exit_close,
+        "stock_return": validation.stock_return,
+        "benchmark_return": validation.benchmark_return,
+        "excess_return": validation.excess_return,
+        "max_favorable_return": validation.max_favorable_return,
+        "max_drawdown": validation.max_drawdown,
+        "benchmark_symbol": validation_payload.get("benchmark_symbol"),
+        "benchmark_label": validation_payload.get("benchmark_label"),
+    }
+
+
+def _validation_feedback_rows(session: Session, candidates: list[ShortpickCandidate]) -> list[dict[str, Any]]:
+    if not candidates:
+        return []
+    candidate_by_id = {candidate.id: candidate for candidate in candidates}
+    validations = session.scalars(
+        select(ShortpickValidationSnapshot).where(ShortpickValidationSnapshot.candidate_id.in_(candidate_by_id))
+    ).all()
+    return [
+        {"validation": validation, "candidate": candidate_by_id[validation.candidate_id]}
+        for validation in validations
+        if validation.candidate_id in candidate_by_id
+    ]
+
+
+def _parse_failed_count_for_rounds(session: Session, round_ids: set[int]) -> int:
+    if not round_ids:
+        return 0
+    return session.scalar(
+        select(func.count(ShortpickCandidate.id)).where(
+            ShortpickCandidate.round_id.in_(round_ids),
+            ShortpickCandidate.parse_status == "parse_failed",
+        )
+    ) or 0
+
+
+def _feedback_groups(
+    rows: list[dict[str, Any]],
+    *,
+    key_fn: Any,
+    label_fn: Any,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    labels: dict[str, str] = {}
+    for row in rows:
+        key = str(key_fn(row))
+        grouped.setdefault(key, []).append(row)
+        labels.setdefault(key, str(label_fn(row)))
+    output: list[dict[str, Any]] = []
+    for key, group_rows in grouped.items():
+        validations = [row["validation"] for row in group_rows]
+        completed = [validation for validation in validations if validation.status == "completed"]
+        stock_returns = [float(validation.stock_return) for validation in completed if validation.stock_return is not None]
+        excess_returns = [float(validation.excess_return) for validation in completed if validation.excess_return is not None]
+        favorable_returns = [
+            float(validation.max_favorable_return)
+            for validation in completed
+            if validation.max_favorable_return is not None
+        ]
+        drawdowns = [float(validation.max_drawdown) for validation in completed if validation.max_drawdown is not None]
+        status_counts: dict[str, int] = {}
+        for validation in validations:
+            status_counts[validation.status] = status_counts.get(validation.status, 0) + 1
+        output.append(
+            {
+                "group_key": key,
+                "label": labels[key],
+                "sample_count": len(validations),
+                "completed_validation_count": len(completed),
+                "mean_stock_return": _mean_or_none(stock_returns),
+                "mean_excess_return": _mean_or_none(excess_returns),
+                "positive_excess_rate": (
+                    round(sum(1 for item in excess_returns if item > 0) / len(excess_returns), 6)
+                    if excess_returns
+                    else None
+                ),
+                "max_drawdown": min(drawdowns) if drawdowns else None,
+                "max_favorable_return": max(favorable_returns) if favorable_returns else None,
+                "status_counts": status_counts,
+            }
+        )
+    output.sort(key=lambda item: (item["completed_validation_count"], item["sample_count"], item["label"]), reverse=True)
+    return output[:limit] if limit is not None else output
 
 
 def _serialize_consensus(snapshot: ShortpickConsensusSnapshot | None) -> dict[str, Any] | None:

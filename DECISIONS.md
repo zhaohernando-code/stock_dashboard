@@ -1,5 +1,15 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-05-06T22:20:00+08:00] Short Pick Lab must expose historical validation and retryable failure handling:
+
+短投试验田不再只以“最新批次”为主产品形态。它必须同时支持今日批次、历史验证和模型反馈三层视图，让旧推荐的 `1/3/5/10/20` 交易日阶梯复盘、模型轮次失败、来源质量和长期反馈都能被运营查看。
+
+补充说明
+- 历史验证按 candidate-horizon 粒度服务端分页，默认每页 50 条；前端不得通过一次性拉全量候选来模拟分页。
+- `PARSE_FAILED` 或失败轮次不能混入正常研究池，必须进入失败诊断区；DeepSeek/SearXNG 无结果与 JSON 解析失败归为可重跑失败，配置缺失归为配置失败。
+- 重跑失败轮次只重跑 retryable failed rounds，不整批重跑；旧失败 artifact id、错误原因和失败分类必须保留在 retry history 中。
+- 模型反馈只能作为研究观察：展示轮次成功率、失败率、验证收益、超额收益、收敛/题材表现和来源可达性分布；v1 不把这些反馈接入主推荐评分、候选池、自选池、模拟盘或生产权重。
+
 [2026-05-06T20:35:00+08:00] Scheduled daily refresh status must be visible on the dashboard:
 
 每日分析调度不能只依赖终端命令或 LaunchAgent 日志判断是否完成。股票看板首页必须展示 `16:20` 盘后 daily refresh 的可读状态，包括正在跑、已完成、失败待重试、待补跑和等待触发。

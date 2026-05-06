@@ -15,6 +15,10 @@ class ShortpickRunValidateRequest(BaseModel):
     horizons: list[int] = Field(default_factory=lambda: [1, 3, 5, 10, 20])
 
 
+class ShortpickRetryFailedRoundsRequest(BaseModel):
+    max_rounds: int | None = Field(default=None, ge=1, le=20)
+
+
 class ShortpickSourceView(BaseModel):
     title: str | None = None
     url: str | None = None
@@ -41,6 +45,9 @@ class ShortpickRoundView(BaseModel):
     confidence: float | None = None
     sources: list[ShortpickSourceView] = Field(default_factory=list)
     artifact_id: str | None = None
+    failure_category: str | None = None
+    retryable: bool = False
+    retry_history: list[dict[str, Any]] = Field(default_factory=list)
     error_message: str | None = None
     raw_answer: str | None = None
     started_at: datetime
@@ -129,8 +136,84 @@ class ShortpickRunView(BaseModel):
 class ShortpickRunListResponse(BaseModel):
     generated_at: datetime
     items: list[ShortpickRunView] = Field(default_factory=list)
+    total: int | None = None
+    limit: int | None = None
+    offset: int | None = None
 
 
 class ShortpickCandidateListResponse(BaseModel):
     generated_at: datetime
     items: list[ShortpickCandidateView] = Field(default_factory=list)
+
+
+class ShortpickValidationQueueItem(BaseModel):
+    validation_id: int
+    candidate_id: int
+    run_id: int
+    run_key: str
+    run_date: date
+    provider_name: str | None = None
+    model_name: str | None = None
+    executor_kind: str | None = None
+    round_index: int | None = None
+    symbol: str
+    name: str
+    normalized_theme: str | None = None
+    research_priority: str
+    convergence_group: str | None = None
+    horizon_days: int
+    status: str
+    entry_at: datetime | None = None
+    exit_at: datetime | None = None
+    entry_close: float | None = None
+    exit_close: float | None = None
+    stock_return: float | None = None
+    benchmark_return: float | None = None
+    excess_return: float | None = None
+    max_favorable_return: float | None = None
+    max_drawdown: float | None = None
+    benchmark_symbol: str | None = None
+    benchmark_label: str | None = None
+
+
+class ShortpickValidationQueueResponse(BaseModel):
+    generated_at: datetime
+    items: list[ShortpickValidationQueueItem] = Field(default_factory=list)
+    total: int
+    limit: int
+    offset: int
+
+
+class ShortpickFeedbackGroup(BaseModel):
+    group_key: str
+    label: str
+    sample_count: int = 0
+    completed_validation_count: int = 0
+    mean_stock_return: float | None = None
+    mean_excess_return: float | None = None
+    positive_excess_rate: float | None = None
+    max_drawdown: float | None = None
+    max_favorable_return: float | None = None
+    status_counts: dict[str, int] = Field(default_factory=dict)
+
+
+class ShortpickModelFeedbackItem(BaseModel):
+    provider_name: str
+    model_name: str
+    executor_kind: str
+    round_count: int
+    completed_round_count: int
+    failed_round_count: int
+    retryable_failed_round_count: int
+    parse_failed_candidate_count: int
+    success_rate: float | None = None
+    source_credibility_counts: dict[str, int] = Field(default_factory=dict)
+    validation_by_horizon: list[ShortpickFeedbackGroup] = Field(default_factory=list)
+    validation_by_priority: list[ShortpickFeedbackGroup] = Field(default_factory=list)
+    validation_by_theme: list[ShortpickFeedbackGroup] = Field(default_factory=list)
+
+
+class ShortpickModelFeedbackResponse(BaseModel):
+    generated_at: datetime
+    models: list[ShortpickModelFeedbackItem] = Field(default_factory=list)
+    overall: dict[str, Any] = Field(default_factory=dict)
