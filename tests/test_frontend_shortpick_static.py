@@ -23,6 +23,8 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("超额收益", component_source)
         self.assertIn("pending_benchmark_data", component_source)
         self.assertIn("待基准", component_source)
+        self.assertIn("前向K线", component_source)
+        self.assertIn("重跑接口返回 404", component_source)
         self.assertIn("/shortpick-lab/runs", api_source)
         self.assertIn("/shortpick-lab/candidates", api_source)
         self.assertNotIn("addWatchlist", component_source)

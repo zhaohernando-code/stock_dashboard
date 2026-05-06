@@ -70,6 +70,10 @@ class ShortpickValidationView(BaseModel):
     benchmark_symbol: str | None = None
     benchmark_label: str | None = None
     benchmark_returns: dict[str, Any] = Field(default_factory=dict)
+    available_forward_bars: int | None = None
+    required_forward_bars: int | None = None
+    pending_reason: str | None = None
+    market_data_sync: dict[str, Any] = Field(default_factory=dict)
 
 
 class ShortpickCandidateView(BaseModel):
@@ -174,6 +178,10 @@ class ShortpickValidationQueueItem(BaseModel):
     max_drawdown: float | None = None
     benchmark_symbol: str | None = None
     benchmark_label: str | None = None
+    available_forward_bars: int | None = None
+    required_forward_bars: int | None = None
+    pending_reason: str | None = None
+    market_data_sync: dict[str, Any] = Field(default_factory=dict)
 
 
 class ShortpickValidationQueueResponse(BaseModel):

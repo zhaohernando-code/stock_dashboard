@@ -101,6 +101,14 @@ function validationSummary(candidate: ShortpickCandidateView): string {
   return `${shortest.horizon_days}日 个股 ${formatPercent(shortest.stock_return)} / 沪深300超额 ${formatPercent(shortest.excess_return)}`;
 }
 
+function validationWindowNote(item: ShortpickValidationView | ShortpickValidationQueueItem): string | null {
+  if (item.status !== "pending_forward_window") return null;
+  const available = item.available_forward_bars ?? 0;
+  const required = item.required_forward_bars ?? item.horizon_days;
+  const entry = item.entry_at ? formatDate(item.entry_at) : "入场收盘";
+  return `前向K线 ${available}/${required}；入场为 ${entry}，等待第 ${required} 个后续交易日收盘。`;
+}
+
 function recordValue<T>(record: Record<string, unknown> | undefined, key: string): T | undefined {
   return record?.[key] as T | undefined;
 }
@@ -262,7 +270,12 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
       await loadValidationQueue(validationPage.current, validationPage.pageSize);
       await loadFeedback();
     } catch (retryError) {
-      setError(retryError instanceof Error ? retryError.message : "重跑失败轮次失败。");
+      const message = retryError instanceof Error ? retryError.message : "重跑失败轮次失败。";
+      setError(
+        message.includes("404")
+          ? "重跑接口返回 404。通常是页面仍在使用旧版本或边缘路由尚未刷新；请刷新页面后重试。如果失败轮次已经被后台补跑，刷新后按钮会自动消失。"
+          : message,
+      );
     } finally {
       setAction(null);
     }
@@ -354,6 +367,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
       render: (_, item) => (
         <Space direction="vertical" size={0}>
           <Text>{item.entry_at ? formatDate(item.entry_at) : "等待入场"} → {item.exit_at ? formatDate(item.exit_at) : "等待窗口"}</Text>
+          {validationWindowNote(item) ? <Text type="secondary">{validationWindowNote(item)}</Text> : null}
           <Text type="secondary">浮盈 {formatPercent(item.max_favorable_return)} / 回撤 {formatPercent(item.max_drawdown)}</Text>
         </Space>
       ),
@@ -933,13 +947,16 @@ function ValidationList({ items }: { items: ShortpickValidationView[] }) {
       dataSource={items}
       renderItem={(item) => (
         <List.Item>
-          <Space wrap>
-            <Tag color={statusColor(item.status)}>{item.horizon_days}日 · {statusLabel(item.status)}</Tag>
-            <Text className={`value-${valueTone(item.stock_return)}`}>个股收益 {formatPercent(item.stock_return)}</Text>
-            <Text className={`value-${valueTone(item.excess_return)}`}>超额收益 {formatPercent(item.excess_return)}</Text>
-            <Text type="secondary">{item.benchmark_label || "沪深300"} {formatPercent(item.benchmark_return)}</Text>
-            <Text type="secondary">{item.exit_at ? formatDate(item.exit_at) : "等待窗口"}</Text>
-            <Text type="secondary">浮盈 {formatPercent(item.max_favorable_return)} / 回撤 {formatPercent(item.max_drawdown)}</Text>
+          <Space direction="vertical" size={0}>
+            <Space wrap>
+              <Tag color={statusColor(item.status)}>{item.horizon_days}日 · {statusLabel(item.status)}</Tag>
+              <Text className={`value-${valueTone(item.stock_return)}`}>个股收益 {formatPercent(item.stock_return)}</Text>
+              <Text className={`value-${valueTone(item.excess_return)}`}>超额收益 {formatPercent(item.excess_return)}</Text>
+              <Text type="secondary">{item.benchmark_label || "沪深300"} {formatPercent(item.benchmark_return)}</Text>
+              <Text type="secondary">{item.exit_at ? formatDate(item.exit_at) : "等待窗口"}</Text>
+              <Text type="secondary">浮盈 {formatPercent(item.max_favorable_return)} / 回撤 {formatPercent(item.max_drawdown)}</Text>
+            </Space>
+            {validationWindowNote(item) ? <Text type="secondary">{validationWindowNote(item)}</Text> : null}
           </Space>
         </List.Item>
       )}

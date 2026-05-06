@@ -1107,6 +1107,7 @@ def _upsert_validation_snapshot(
         return existing
     exit_index = entry_index + horizon
     if exit_index >= len(bars):
+        available_forward_bars = max(len(bars) - entry_index - 1, 0)
         existing.status = "pending_forward_window"
         existing.entry_at = bars[entry_index].observed_at
         existing.entry_close = bars[entry_index].close_price
@@ -1118,7 +1119,12 @@ def _upsert_validation_snapshot(
         existing.max_favorable_return = None
         existing.max_drawdown = None
         existing.validation_payload = {
-            "available_forward_bars": max(len(bars) - entry_index - 1, 0),
+            "available_forward_bars": available_forward_bars,
+            "required_forward_bars": horizon,
+            "pending_reason": (
+                f"Entry close is available at {bars[entry_index].observed_at.isoformat()}; "
+                f"needs {horizon} forward trading-day close(s), currently has {available_forward_bars}."
+            ),
             "market_data_sync": market_sync or {},
         }
         return existing
@@ -1840,6 +1846,10 @@ def _serialize_validation_queue_item(
         "max_drawdown": validation.max_drawdown,
         "benchmark_symbol": validation_payload.get("benchmark_symbol"),
         "benchmark_label": validation_payload.get("benchmark_label"),
+        "available_forward_bars": validation_payload.get("available_forward_bars"),
+        "required_forward_bars": validation_payload.get("required_forward_bars"),
+        "pending_reason": validation_payload.get("pending_reason") or validation_payload.get("reason"),
+        "market_data_sync": validation_payload.get("market_data_sync") or {},
     }
 
 
@@ -1957,6 +1967,10 @@ def _serialize_validation(snapshot: ShortpickValidationSnapshot) -> dict[str, An
         "benchmark_symbol": benchmark.get("symbol"),
         "benchmark_label": benchmark.get("label"),
         "benchmark_returns": benchmark_returns,
+        "available_forward_bars": payload.get("available_forward_bars"),
+        "required_forward_bars": payload.get("required_forward_bars"),
+        "pending_reason": payload.get("pending_reason") or payload.get("reason"),
+        "market_data_sync": payload.get("market_data_sync") or {},
     }
 
 

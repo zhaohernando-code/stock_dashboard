@@ -58,6 +58,10 @@ export interface ShortpickValidationView {
   benchmark_symbol?: string | null;
   benchmark_label?: string | null;
   benchmark_returns?: Record<string, unknown>;
+  available_forward_bars?: number | null;
+  required_forward_bars?: number | null;
+  pending_reason?: string | null;
+  market_data_sync?: Record<string, unknown>;
 }
 
 export interface ShortpickCandidateView {
@@ -160,6 +164,10 @@ export interface ShortpickValidationQueueItem {
   max_drawdown?: number | null;
   benchmark_symbol?: string | null;
   benchmark_label?: string | null;
+  available_forward_bars?: number | null;
+  required_forward_bars?: number | null;
+  pending_reason?: string | null;
+  market_data_sync?: Record<string, unknown>;
 }
 
 export interface ShortpickValidationQueueResponse {

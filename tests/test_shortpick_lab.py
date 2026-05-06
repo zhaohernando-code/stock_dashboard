@@ -430,6 +430,9 @@ class ShortpickLabTests(unittest.TestCase):
         first_validation = payload["candidates"][0]["validations"][0]
         self.assertEqual(first_validation["status"], "pending_forward_window")
         self.assertEqual(first_validation["entry_close"], 100)
+        self.assertEqual(first_validation["available_forward_bars"], 0)
+        self.assertEqual(first_validation["required_forward_bars"], 1)
+        self.assertIn("needs 1 forward trading-day close", first_validation["pending_reason"])
 
     def test_validation_pending_benchmark_when_primary_window_missing(self) -> None:
         self._seed_stock_bars("688981.SH", "中芯国际", [100 + index * 2 for index in range(8)])
