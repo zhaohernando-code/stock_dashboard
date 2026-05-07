@@ -44,6 +44,15 @@
 - 发布后必须在真实 served 页面验证：切换 `沪深300 / 中证1000 / 同板块` 时，同一历史验证行的 benchmark label 和超额收益随之变化；缺数据维度显示待补原因。
 - 发布验收不得只看 API 或单元测试；这是用户可见的试验田工作台能力，必须完成 runtime 发布和浏览器验证。
 
+## Closeout
+
+2026-05-07 已落地并发布验收：
+
+- Runtime 发布 manifest：`/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260507T111724Z-211dc0291542/manifest.json`，deploy verifier `19 passed, 0 failed`。
+- 运行态补跑近期验证后，2026-05-05 批次已有 `10` 条 completed 验证快照。
+- API 验证确认 `/shortpick-lab/validation-queue` 和 `/shortpick-lab/model-feedback` 都返回 `hs300 / csi1000 / sector_equal_weight` 三维数据。
+- 真实 served 页面 `http://127.0.0.1:5173/?verify=shortpick-multibenchmark` 已验证历史验证表头切换：同一条 `2026-05-05 · 002384.SZ · 1日 · 已完成` 行在 `沪深300 / 中证1000 / 同板块` 三个维度下分别显示不同 benchmark label 与超额收益。
+
 ## Non-Goals
 
 - 不把短投试验田收益反馈写回主 `Recommendation`。

@@ -10,6 +10,7 @@
 - 同板块等权不是用行业名做展示装饰，而是必须按可得同行日线构造真实基准；同行样本不足、缺板块映射或缺中证行情时显示 pending 原因，不允许静默回退成绝对收益或沪深300。
 - 该计划只属于短投试验田后验验证和模型反馈展示，不回写主推荐、不改模拟盘自动调仓、不调整生产权重，也不替代 Phase 5 当前主研究 benchmark。
 - 落地时保持兼容字段不变：`benchmark_return / excess_return` 仍是默认沪深300；新增多维 map 和聚合指标承载中证1000与同板块口径，避免旧消费层把多 benchmark 误读成主推荐验证已经升级。
+- 2026-05-07 落地后确认：该能力已发布到 runtime 并在 served `试验田 -> 历史验证` 页面验收；表头切换只改变收益反馈维度，不改变候选状态或实验隔离边界。
 
 [2026-05-06T22:20:00+08:00] Short Pick Lab must expose historical validation and retryable failure handling:
 
