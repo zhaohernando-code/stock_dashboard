@@ -5,7 +5,7 @@ import type { MobileAppShellProps } from "./types";
 import { MobileMetric } from "./MobileMetric";
 import { MobileStockRow } from "./MobileStockRow";
 import { directionColor, formatDate, formatNumber, formatPercent, valueTone } from "../../utils/format";
-import { claimGateStatusLabel, sanitizeDisplayText, validationStatusLabel } from "../../utils/labels";
+import { sanitizeDisplayText } from "../../utils/labels";
 
 const { Text, Title } = Typography;
 
@@ -77,8 +77,6 @@ export function MobileHome(props: MobileAppShellProps) {
         </div>
         <Space wrap className="mobile-chip-row">
           {activeCandidate ? <Tag color={directionColor(activeCandidate.display_direction)}>{activeCandidate.display_direction_label}</Tag> : <Tag>等待分析</Tag>}
-          {activeCandidate ? <Tag>{claimGateStatusLabel(activeCandidate.claim_gate.status)}</Tag> : null}
-          {activeCandidate ? <Tag>{validationStatusLabel(activeCandidate.validation_status)}</Tag> : null}
         </Space>
         <p>{activeCandidate?.summary ? sanitizeDisplayText(activeCandidate.summary) : "当前没有最新候选信号，可刷新自选池后查看。"}</p>
         <div className="mobile-metric-grid mobile-metric-grid-glass">

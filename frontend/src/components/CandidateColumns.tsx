@@ -10,14 +10,10 @@ import type {
 } from "../types";
 import {
   candidateValidationSummary,
-  claimGateAlertType,
-  claimGateStatusLabel,
   compactValidationNote,
   publicValidationSummary,
   sanitizeDisplayText,
   validationStatusLabel,
-  displayWindowLabel,
-  horizonLabel,
 } from "../utils/labels";
 import { directionColor, formatDate, formatNumber, formatPercent, formatSignedNumber, statusColor, valueTone } from "../utils/format";
 import { directionLabels, factorLabels } from "../utils/constants";
@@ -87,16 +83,7 @@ export function buildCandidateColumns(input: CandidateColumnsInput): ColumnsType
         record.candidate ? (
           <Space direction="vertical" size={2}>
             <Tag color={directionColor(record.candidate.display_direction)}>{record.candidate.display_direction_label}</Tag>
-            <Text type="secondary">{`${record.candidate.confidence_label}置信 · ${displayWindowLabel(record.candidate.window_definition)}`}</Text>
-            <Space size={4} wrap>
-              <Tag>{horizonLabel(record.candidate.target_horizon_label)}</Tag>
-              <Tag color={claimGateAlertType(record.candidate.claim_gate.status)}>
-                {claimGateStatusLabel(record.candidate.claim_gate.status)}
-              </Tag>
-              <Tag color={record.candidate.validation_status === "verified" ? "green" : "gold"}>
-                {validationStatusLabel(record.candidate.validation_status)}
-              </Tag>
-            </Space>
+            <Text type="secondary">{`${record.candidate.confidence_label}置信`}</Text>
             <Text type="secondary">{candidateValidationSummary(record.candidate)}</Text>
           </Space>
         ) : (
@@ -221,16 +208,7 @@ export function buildCandidateColumns(input: CandidateColumnsInput): ColumnsType
         record.candidate ? (
           <Space direction="vertical" size={2}>
             <Tag color={directionColor(record.candidate.display_direction)}>{record.candidate.display_direction_label}</Tag>
-            <Text type="secondary">{`${record.candidate.confidence_label}置信 · ${displayWindowLabel(record.candidate.window_definition)}`}</Text>
-            <Space size={4} wrap>
-              <Tag>{horizonLabel(record.candidate.target_horizon_label)}</Tag>
-              <Tag color={claimGateAlertType(record.candidate.claim_gate.status)}>
-                {claimGateStatusLabel(record.candidate.claim_gate.status)}
-              </Tag>
-              <Tag color={record.candidate.validation_status === "verified" ? "green" : "gold"}>
-                {validationStatusLabel(record.candidate.validation_status)}
-              </Tag>
-            </Space>
+            <Text type="secondary">{`${record.candidate.confidence_label}置信`}</Text>
             <Text type="secondary">{candidateValidationSummary(record.candidate)}</Text>
           </Space>
         ) : (
