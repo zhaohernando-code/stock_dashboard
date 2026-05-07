@@ -89,13 +89,16 @@ def _direct_config_read_violations() -> list[dict[str, Any]]:
         if (
             "PolicyConfigVersion" in text
             or "from policy_config_versions" in lower_text
+            or "delete from policy_config_versions" in lower_text
             or "update policy_config_versions" in lower_text
             or "insert into policy_config_versions" in lower_text
+            or "session.add(PolicyConfigVersion" in text
+            or "session.merge(PolicyConfigVersion" in text
         ):
             violations.append(
                 {
                     "file": _relative(path),
-                    "reason": "Business code must use policy_config_loader instead of reading policy_config_versions directly.",
+                    "reason": "Business code must use policy_config_loader instead of reading or writing policy_config_versions directly.",
                 }
             )
     return violations

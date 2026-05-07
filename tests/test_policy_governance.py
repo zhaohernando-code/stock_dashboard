@@ -21,6 +21,7 @@ from ashare_evidence.models import NewsEntityLink, NewsItem, PolicyConfigVersion
 from ashare_evidence.policy_audit import assert_policy_audit, build_policy_audit_report
 from ashare_evidence.policy_config_loader import (
     activate_policy_config_version,
+    build_policy_governance_summary,
     compute_policy_config_checksum,
     create_policy_config_version,
     get_active_policy_config,
@@ -138,6 +139,32 @@ class PolicyGovernanceTests(unittest.TestCase):
                     payload={"weights": {}},
                     reason="Malformed payload must fail.",
                 )
+
+    def test_active_policy_config_is_immutable_after_activation(self) -> None:
+        payload = default_policy_config_payload(POLICY_SCOPE_STOCK_DASHBOARD, DATA_QUALITY_CONFIG_KEY)
+        with session_scope(self.database_url) as session:
+            record = create_policy_config_version(
+                session,
+                scope=POLICY_SCOPE_STOCK_DASHBOARD,
+                config_key=DATA_QUALITY_CONFIG_KEY,
+                version="2026-05-07-immutable",
+                payload=payload,
+                reason="Immutability test.",
+                status="active",
+                approved_by="root",
+            )
+            record.payload = {**payload, "weights": {**payload["weights"], "profile": 0.1}}
+            with self.assertRaisesRegex(ValueError, "Active policy config versions are immutable"):
+                session.flush()
+            session.rollback()
+
+    def test_policy_governance_summary_can_omit_large_payload_details(self) -> None:
+        with session_scope(self.database_url) as session:
+            summary = build_policy_governance_summary(session, include_details=False)
+
+        self.assertGreaterEqual(summary["default_config_count"], 1)
+        self.assertNotIn("payload", summary["active_configs"][0])
+        self.assertIn("checksum", summary["active_configs"][0])
 
     def test_policy_audit_hard_constraints_and_cli(self) -> None:
         report = assert_policy_audit(

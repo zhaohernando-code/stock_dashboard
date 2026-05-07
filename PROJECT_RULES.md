@@ -21,3 +21,4 @@
 - 任何数据源、配置入口、状态标签或“待配置/已接入”提示，只有在对应后端适配器、验证链路和真实发布路径都已落地后才能出现在前端；禁止前端先行占位制造“只差用户配置”的假象。
 - 参数与公式治理是运行合同的一部分：新增或修改评分权重、阈值、窗口、TopK、惩罚系数、promotion gate、数据质量规则、融合公式或用户可见业务阈值时，必须先分类到 `stable_rule / research_assumption / tunable_policy / formula / allowed_literal / test_fixture`，再更新默认配置、公式纯函数、测试和决策日志。业务代码不得直接读写 `policy_config_versions`，只能通过 `policy_config_loader`；公式模块不得读取数据库、环境变量、当前时间或网络。任务收尾必须运行 `python -m ashare_evidence.cli policy-audit --fail-on-new-unclassified --fail-on-direct-config-read --fail-on-formula-side-effects --fail-on-missing-config-lineage`，失败时不得标记完成；确需豁免的字面量必须有原因、所属模块和复查条件。
 - 默认 `pytest` 只允许承担开发快回归职责，不放入 Phase 5 日刷、发布刷新、真实数据长链路或类似量级的集成任务。这类任务必须拆成更小的单元/契约测试；确需真实运行时验收时，走发布或专项验收流程，并明确记录为慢验收而不是普通开发测试。
+- 本项目必须安装并保留 pre-push hook：`scripts/install-git-hooks.sh` 会把共享 `../../.githooks/pre-push` 连接到 `scripts/hooks/pre-push-stock-dashboard.sh`。push 前必须工作树干净，并自动跑默认 fast pytest 与 policy audit；推 `origin/main` 时必须推本地 `main` tip，避免任务分支或未收尾提交被误当完成。

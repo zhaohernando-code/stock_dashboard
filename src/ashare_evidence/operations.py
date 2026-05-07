@@ -1541,7 +1541,7 @@ def build_operations_dashboard(
             },
             "benchmark_context": benchmark_context_summary(session),
             "policy_governance": {
-                **build_policy_governance_summary(session),
+                **build_policy_governance_summary(session, include_details=False),
                 "audit": build_policy_audit_report(),
             },
             "today_at_a_glance": {
@@ -1966,7 +1966,7 @@ def build_operations_dashboard(
         "factor_observation_summary": factor_observation_summary,
         "benchmark_context": benchmark_context,
         "policy_governance": {
-            **build_policy_governance_summary(session),
+            **build_policy_governance_summary(session, include_details=False),
             "audit": build_policy_audit_report(),
         },
         "today_at_a_glance": today_at_a_glance,

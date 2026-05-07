@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import event, inspect, select
 from sqlalchemy.orm import Session
 
 from ashare_evidence.default_policy_configs import (
@@ -21,6 +21,36 @@ STATUS_DRAFT = "draft"
 STATUS_ACTIVE = "active"
 STATUS_RETIRED = "retired"
 POLICY_CONFIG_STATUSES = {STATUS_DRAFT, STATUS_ACTIVE, STATUS_RETIRED}
+
+
+@event.listens_for(Session, "before_flush")
+def _prevent_active_policy_config_mutation(session: Session, _flush_context: object, _instances: object) -> None:
+    immutable_fields = {
+        "scope",
+        "config_key",
+        "version",
+        "payload",
+        "payload_schema",
+        "reason",
+        "evidence_refs",
+        "created_by",
+        "approved_by",
+        "effective_from",
+        "supersedes_version",
+        "checksum",
+    }
+    for instance in session.dirty:
+        if not isinstance(instance, PolicyConfigVersion):
+            continue
+        state = inspect(instance)
+        status_history = state.attrs.status.history
+        original_status = status_history.deleted[0] if status_history.deleted else instance.status
+        if original_status != STATUS_ACTIVE:
+            continue
+        changed = {name for name in immutable_fields if state.attrs[name].history.has_changes()}
+        if changed:
+            joined = ", ".join(sorted(changed))
+            raise ValueError(f"Active policy config versions are immutable; create a new version instead of changing: {joined}")
 
 
 def compute_policy_config_checksum(payload: dict[str, Any]) -> str:
@@ -158,6 +188,20 @@ def serialize_policy_config_version(record: PolicyConfigVersion, *, source: str 
     }
 
 
+def compact_policy_config_version(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": record.get("id"),
+        "scope": record.get("scope"),
+        "config_key": record.get("config_key"),
+        "version": record.get("version"),
+        "status": record.get("status"),
+        "source": record.get("source"),
+        "reason": record.get("reason"),
+        "checksum": record.get("checksum"),
+        "effective_from": record.get("effective_from"),
+    }
+
+
 def default_policy_config_view(scope: str, config_key: str) -> dict[str, Any]:
     payload = default_policy_config_payload(scope, config_key)
     return {
@@ -220,17 +264,19 @@ def list_policy_config_versions(
     return [serialize_policy_config_version(record) for record in session.scalars(query).all()]
 
 
-def build_policy_governance_summary(session: Session) -> dict[str, Any]:
+def build_policy_governance_summary(session: Session, *, include_details: bool = True) -> dict[str, Any]:
     active_configs = [
         get_active_policy_config(session, scope=scope, config_key=config_key)
         for scope, config_key, _payload in iter_default_policy_configs()
     ]
     history = list_policy_config_versions(session)
+    projected_active_configs = active_configs if include_details else [compact_policy_config_version(item) for item in active_configs]
+    projected_history = history[:20] if include_details else [compact_policy_config_version(item) for item in history[:10]]
     return {
         "generated_at": datetime.now(UTC).isoformat(),
         "status": "pass",
-        "active_configs": active_configs,
-        "history": history[:20],
+        "active_configs": projected_active_configs,
+        "history": projected_history,
         "default_config_count": len(active_configs),
         "database_config_count": len(history),
         "hard_constraints": {
