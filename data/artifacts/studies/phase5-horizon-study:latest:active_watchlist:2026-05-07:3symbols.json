@@ -1,0 +1,292 @@
+{
+  "artifact_id": "phase5-horizon-study:latest:active_watchlist:2026-05-07:3symbols",
+  "artifact_type": "phase5_horizon_study",
+  "contract_version": "phase5-validation-policy-contract-v1",
+  "created_at": "2026-05-07T16:28:22.681943+08:00",
+  "decision": {
+    "approval_state": "split_leadership",
+    "candidate_frontier": [
+      40,
+      20
+    ],
+    "lagging_horizons": [
+      10
+    ],
+    "note": "40d 与 20d 之间仍然存在 split leadership；10d 可以继续视为劣后候选。"
+  },
+  "generated_at": "2026-05-07T16:28:22.681943+08:00",
+  "leaderboard": [
+    {
+      "horizon": 40,
+      "leader_count": 2,
+      "leader_share": 0.666667,
+      "mean_net_excess_return": 0.150213,
+      "mean_positive_excess_rate": 0.670412,
+      "mean_rank_ic_mean": -0.123516
+    },
+    {
+      "horizon": 20,
+      "leader_count": 1,
+      "leader_share": 0.333333,
+      "mean_net_excess_return": 0.086679,
+      "mean_positive_excess_rate": 0.64794,
+      "mean_rank_ic_mean": 0.074974
+    },
+    {
+      "horizon": 10,
+      "leader_count": 0,
+      "leader_share": 0.0,
+      "mean_net_excess_return": 0.039834,
+      "mean_positive_excess_rate": 0.666667,
+      "mean_rank_ic_mean": 0.169033
+    }
+  ],
+  "pairwise_net_excess": [
+    {
+      "left_horizon": 10,
+      "left_wins": 0,
+      "mean_net_excess_spread": -0.046846,
+      "right_horizon": 20,
+      "right_wins": 3,
+      "sample_count": 3,
+      "ties": 0
+    },
+    {
+      "left_horizon": 10,
+      "left_wins": 0,
+      "mean_net_excess_spread": -0.110379,
+      "right_horizon": 40,
+      "right_wins": 3,
+      "sample_count": 3,
+      "ties": 0
+    },
+    {
+      "left_horizon": 20,
+      "left_wins": 1,
+      "mean_net_excess_spread": -0.063533,
+      "right_horizon": 40,
+      "right_wins": 2,
+      "sample_count": 3,
+      "ties": 0
+    }
+  ],
+  "primary_horizon_status": "pending_phase5_selection",
+  "records": [
+    {
+      "as_of_data_time": "2026-05-07T15:00:00",
+      "as_of_date": "2026-05-07",
+      "benchmark_definition": "active_watchlist_equal_weight_proxy",
+      "candidates": [
+        {
+          "artifact_id": "validation-metrics:reco-002028.SZ-20260507-phase2:40d",
+          "horizon": 40,
+          "net_excess_return": 0.126703,
+          "positive_excess_rate": 0.629213,
+          "rank": 1,
+          "rank_ic_mean": 0.098536,
+          "sample_count": 89,
+          "turnover_mean": 0.138169
+        },
+        {
+          "artifact_id": "validation-metrics:reco-002028.SZ-20260507-phase2:20d",
+          "horizon": 20,
+          "net_excess_return": 0.068467,
+          "positive_excess_rate": 0.573034,
+          "rank": 2,
+          "rank_ic_mean": 0.213006,
+          "sample_count": 89,
+          "turnover_mean": 0.138169
+        },
+        {
+          "artifact_id": "validation-metrics:reco-002028.SZ-20260507-phase2:10d",
+          "horizon": 10,
+          "net_excess_return": 0.037894,
+          "positive_excess_rate": 0.595506,
+          "rank": 3,
+          "rank_ic_mean": 0.244518,
+          "sample_count": 89,
+          "turnover_mean": 0.138169
+        }
+      ],
+      "contract_version": "phase5-validation-policy-contract-v1",
+      "coverage_status": "full_baseline",
+      "exclusion_reason": null,
+      "generated_at": "2026-05-07T16:27:10.086227",
+      "include_in_aggregate": true,
+      "leader_horizon": 40,
+      "leader_rank": 1,
+      "name": "思源电气",
+      "primary_horizon_status": "pending_phase5_selection",
+      "recommendation_key": "reco-002028.SZ-20260507-phase2",
+      "selection_readiness": "comparison_ready",
+      "symbol": "002028.SZ",
+      "walk_forward_window_count": 30
+    },
+    {
+      "as_of_data_time": "2026-05-07T15:00:00",
+      "as_of_date": "2026-05-07",
+      "benchmark_definition": "active_watchlist_equal_weight_proxy",
+      "candidates": [
+        {
+          "artifact_id": "validation-metrics:reco-002270.SZ-20260507-phase2:20d",
+          "horizon": 20,
+          "net_excess_return": 0.041968,
+          "positive_excess_rate": 0.595506,
+          "rank": 1,
+          "rank_ic_mean": 0.085427,
+          "sample_count": 89,
+          "turnover_mean": 0.041023
+        },
+        {
+          "artifact_id": "validation-metrics:reco-002270.SZ-20260507-phase2:40d",
+          "horizon": 40,
+          "net_excess_return": 0.034407,
+          "positive_excess_rate": 0.41573,
+          "rank": 2,
+          "rank_ic_mean": -0.19399,
+          "sample_count": 89,
+          "turnover_mean": 0.041023
+        },
+        {
+          "artifact_id": "validation-metrics:reco-002270.SZ-20260507-phase2:10d",
+          "horizon": 10,
+          "net_excess_return": 0.016207,
+          "positive_excess_rate": 0.640449,
+          "rank": 3,
+          "rank_ic_mean": 0.272114,
+          "sample_count": 89,
+          "turnover_mean": 0.041023
+        }
+      ],
+      "contract_version": "phase5-validation-policy-contract-v1",
+      "coverage_status": "full_baseline",
+      "exclusion_reason": null,
+      "generated_at": "2026-05-07T16:26:39.880493",
+      "include_in_aggregate": true,
+      "leader_horizon": 20,
+      "leader_rank": 1,
+      "name": "华明装备",
+      "primary_horizon_status": "pending_phase5_selection",
+      "recommendation_key": "reco-002270.SZ-20260507-phase2",
+      "selection_readiness": "comparison_ready",
+      "symbol": "002270.SZ",
+      "walk_forward_window_count": 30
+    },
+    {
+      "as_of_data_time": "2026-05-07T15:00:00",
+      "as_of_date": "2026-05-07",
+      "benchmark_definition": "active_watchlist_equal_weight_proxy",
+      "candidates": [
+        {
+          "artifact_id": "validation-metrics:reco-600522.SH-20260507-phase2:40d",
+          "horizon": 40,
+          "net_excess_return": 0.289528,
+          "positive_excess_rate": 0.966292,
+          "rank": 1,
+          "rank_ic_mean": -0.275094,
+          "sample_count": 89,
+          "turnover_mean": 0.04991
+        },
+        {
+          "artifact_id": "validation-metrics:reco-600522.SH-20260507-phase2:20d",
+          "horizon": 20,
+          "net_excess_return": 0.149603,
+          "positive_excess_rate": 0.775281,
+          "rank": 2,
+          "rank_ic_mean": -0.07351,
+          "sample_count": 89,
+          "turnover_mean": 0.04991
+        },
+        {
+          "artifact_id": "validation-metrics:reco-600522.SH-20260507-phase2:10d",
+          "horizon": 10,
+          "net_excess_return": 0.0654,
+          "positive_excess_rate": 0.764045,
+          "rank": 3,
+          "rank_ic_mean": -0.009534,
+          "sample_count": 89,
+          "turnover_mean": 0.04991
+        }
+      ],
+      "contract_version": "phase5-validation-policy-contract-v1",
+      "coverage_status": "full_baseline",
+      "exclusion_reason": null,
+      "generated_at": "2026-05-07T16:27:50.318258",
+      "include_in_aggregate": true,
+      "leader_horizon": 40,
+      "leader_rank": 1,
+      "name": "中天科技",
+      "primary_horizon_status": "pending_phase5_selection",
+      "recommendation_key": "reco-600522.SH-20260507-phase2",
+      "selection_readiness": "comparison_ready",
+      "symbol": "600522.SH",
+      "walk_forward_window_count": 30
+    }
+  ],
+  "required_benchmark_definition": "active_watchlist_equal_weight_proxy",
+  "scope": {
+    "active_watchlist_symbols": [
+      "600522.SH",
+      "002028.SZ",
+      "002270.SZ"
+    ],
+    "include_history": false,
+    "selection_mode": "latest_per_symbol",
+    "symbols": [
+      "600522.SH",
+      "002028.SZ",
+      "002270.SZ"
+    ]
+  },
+  "summary": {
+    "excluded_reasons": {},
+    "excluded_record_count": 0,
+    "included_as_of_date_count": 1,
+    "included_record_count": 3,
+    "included_symbol_count": 3,
+    "selected_record_count": 3
+  },
+  "time_stability": {
+    "stable_symbol_count": 3,
+    "symbol_count": 3,
+    "symbols": [
+      {
+        "as_of_dates": [
+          "2026-05-07"
+        ],
+        "is_stable": true,
+        "leader_horizons": [
+          40
+        ],
+        "name": "思源电气",
+        "snapshot_count": 1,
+        "symbol": "002028.SZ"
+      },
+      {
+        "as_of_dates": [
+          "2026-05-07"
+        ],
+        "is_stable": true,
+        "leader_horizons": [
+          20
+        ],
+        "name": "华明装备",
+        "snapshot_count": 1,
+        "symbol": "002270.SZ"
+      },
+      {
+        "as_of_dates": [
+          "2026-05-07"
+        ],
+        "is_stable": true,
+        "leader_horizons": [
+          40
+        ],
+        "name": "中天科技",
+        "snapshot_count": 1,
+        "symbol": "600522.SH"
+      }
+    ],
+    "unstable_symbol_count": 0
+  }
+}

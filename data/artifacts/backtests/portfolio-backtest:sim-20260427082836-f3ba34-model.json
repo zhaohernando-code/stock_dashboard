@@ -1,5 +1,5 @@
 {
-  "annualized_excess_return": -0.0022,
+  "annualized_excess_return": 0.0025,
   "annualized_return": 0.0,
   "artifact_id": "portfolio-backtest:sim-20260427082836-f3ba34-model",
   "artifact_type": "portfolio_backtest",
@@ -6132,6 +6132,46 @@
       "nav": 200000.0,
       "observed_at": "2026-04-27T15:00:00",
       "trade_date": "2026-04-27"
+    },
+    {
+      "benchmark_nav": 192193.36,
+      "drawdown": 0.0,
+      "exposure": 0.0,
+      "nav": 200000.0,
+      "observed_at": "2026-04-28T15:00:00",
+      "trade_date": "2026-04-28"
+    },
+    {
+      "benchmark_nav": 191278.36,
+      "drawdown": 0.0,
+      "exposure": 0.0,
+      "nav": 200000.0,
+      "observed_at": "2026-04-29T15:00:00",
+      "trade_date": "2026-04-29"
+    },
+    {
+      "benchmark_nav": 185993.01,
+      "drawdown": 0.0,
+      "exposure": 0.0,
+      "nav": 200000.0,
+      "observed_at": "2026-04-30T15:00:00",
+      "trade_date": "2026-04-30"
+    },
+    {
+      "benchmark_nav": 193259.27,
+      "drawdown": 0.0,
+      "exposure": 0.0,
+      "nav": 200000.0,
+      "observed_at": "2026-05-06T15:00:00",
+      "trade_date": "2026-05-06"
+    },
+    {
+      "benchmark_nav": 199497.94,
+      "drawdown": 0.0,
+      "exposure": 0.0,
+      "nav": 200000.0,
+      "observed_at": "2026-05-07T15:00:00",
+      "trade_date": "2026-05-07"
     }
   ],
   "execution_assumptions": "daily_close_marking + paper_fills + T+1 + price_limit_checks",
@@ -6151,13 +6191,13 @@
     "active_position_count": 0,
     "rule_pass_rate": 1.0
   },
-  "sharpe_like_ratio": -0.22,
+  "sharpe_like_ratio": 0.25,
   "status": "research_candidate",
   "status_note": "组合回测已切到真实 daily 价格与 proxy benchmark；模型轨道的 simulation baseline 已升级为 constrained TopK，但仍处于 research candidate。",
   "strategy_definition": "模型按目标权重自动调仓、独立资金池运行，适合验证组合纪律与执行损耗。",
   "stress_period_summary": [
     {
-      "excess_return": -0.0022,
+      "excess_return": 0.0025,
       "max_drawdown": 0.0,
       "period": "phase2_fixture_window"
     }
@@ -6167,6 +6207,6 @@
   "turnover_stats": {
     "turnover": 0.0
   },
-  "win_rate": 0.994764,
+  "win_rate": 0.994798,
   "win_rate_definition": "positive_excess_nav_point_ratio_against_phase2_proxy"
 }

@@ -23,8 +23,8 @@
   "coverage_ratio": 1.0,
   "feature_drift_summary": {
     "coverage_status": "full_baseline",
-    "evaluation_observation_count": 84,
-    "feature_snapshot_count": 684,
+    "evaluation_observation_count": 89,
+    "feature_snapshot_count": 689,
     "horizon": 40,
     "status": "stable_fixture_snapshot"
   },
@@ -47,7 +47,7 @@
       "mean_excess_return": 0.28965,
       "mean_return": 0.28965,
       "sample_count": 77,
-      "walk_forward_window_count": 25
+      "walk_forward_window_count": 30
     }
   ],
   "positive_excess_rate": 0.961039,
@@ -56,7 +56,7 @@
   "rank_ic_std": 0.03573,
   "sample_count": 77,
   "status": "research_candidate",
-  "status_note": "Phase 2 规则基线已完成 walk-forward 产物生成，但尚未进入 verified 审批。",
+  "status_note": "已有滚动验证产物，当前仍处于观察阶段，尚未完成正式验证。",
   "subperiod_stats": [
     {
       "positive_excess_rate": 1.0,

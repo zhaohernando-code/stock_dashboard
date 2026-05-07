@@ -1,6 +1,6 @@
 {
-  "annualized_excess_return": 0.2096,
-  "annualized_return": 0.2118,
+  "annualized_excess_return": 0.2134,
+  "annualized_return": 0.2109,
   "artifact_id": "portfolio-backtest:portfolio-manual-sandbox",
   "artifact_type": "portfolio_backtest",
   "benchmark": {
@@ -17,7 +17,7 @@
   },
   "drawdown_series_ref": "phase2-drawdown:portfolio-manual-sandbox",
   "drawdown_stats": {
-    "current_drawdown": -0.0163,
+    "current_drawdown": -0.0171,
     "max_drawdown": -0.0775
   },
   "equity_curve": [
@@ -6132,12 +6132,52 @@
       "nav": 1090651.91,
       "observed_at": "2026-04-27T15:00:00",
       "trade_date": "2026-04-27"
+    },
+    {
+      "benchmark_nav": 864870.11,
+      "drawdown": -0.0286,
+      "exposure": 0.205,
+      "nav": 1077006.91,
+      "observed_at": "2026-04-28T15:00:00",
+      "trade_date": "2026-04-28"
+    },
+    {
+      "benchmark_nav": 860752.6,
+      "drawdown": -0.0271,
+      "exposure": 0.2063,
+      "nav": 1078700.91,
+      "observed_at": "2026-04-29T15:00:00",
+      "trade_date": "2026-04-29"
+    },
+    {
+      "benchmark_nav": 836968.53,
+      "drawdown": -0.0292,
+      "exposure": 0.2046,
+      "nav": 1076437.91,
+      "observed_at": "2026-04-30T15:00:00",
+      "trade_date": "2026-04-30"
+    },
+    {
+      "benchmark_nav": 869666.71,
+      "drawdown": -0.0181,
+      "exposure": 0.2136,
+      "nav": 1088732.91,
+      "observed_at": "2026-05-06T15:00:00",
+      "trade_date": "2026-05-06"
+    },
+    {
+      "benchmark_nav": 897740.72,
+      "drawdown": -0.0171,
+      "exposure": 0.2144,
+      "nav": 1089813.91,
+      "observed_at": "2026-05-07T15:00:00",
+      "trade_date": "2026-05-07"
     }
   ],
   "execution_assumptions": "daily_close_marking + paper_fills + T+1 + price_limit_checks",
   "exposure_summary": {
     "active_position_count": 3,
-    "invested_ratio": 0.215
+    "invested_ratio": 0.2144
   },
   "manifest_id": "rolling-validation:phase2-portfolio-backtests",
   "max_drawdown": -0.0775,
@@ -6151,13 +6191,13 @@
     "active_position_count": 3,
     "rule_pass_rate": 0.75
   },
-  "sharpe_like_ratio": 2.704516,
+  "sharpe_like_ratio": 2.753548,
   "status": "research_candidate",
   "status_note": "组合回测已切到真实 daily 价格与 proxy benchmark；模型轨道的 simulation baseline 已升级为 constrained TopK，但仍处于 research candidate。",
   "strategy_definition": "研究员逐笔确认、单独记账，适合复盘“人是否正确理解建议”。",
   "stress_period_summary": [
     {
-      "excess_return": 0.2096,
+      "excess_return": 0.2134,
       "max_drawdown": -0.0775,
       "period": "phase2_fixture_window"
     }
@@ -6167,6 +6207,6 @@
   "turnover_stats": {
     "turnover": 0.75
   },
-  "win_rate": 0.979058,
+  "win_rate": 0.979194,
   "win_rate_definition": "positive_excess_nav_point_ratio_against_phase2_proxy"
 }

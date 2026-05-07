@@ -3,74 +3,74 @@
   "bucket_returns": [
     {
       "bucket": "bottom",
-      "mean_excess_return": -0.02632,
-      "sample_count": 28
+      "mean_excess_return": -0.068933,
+      "sample_count": 29
     },
     {
       "bucket": "middle",
-      "mean_excess_return": 0.201189,
-      "sample_count": 28
+      "mean_excess_return": 0.220985,
+      "sample_count": 29
     },
     {
       "bucket": "top",
-      "mean_excess_return": 0.048851,
-      "sample_count": 28
+      "mean_excess_return": 0.055713,
+      "sample_count": 31
     }
   ],
-  "bucket_spread_mean": 0.075171,
-  "bucket_spread_std": 0.17054,
+  "bucket_spread_mean": 0.124646,
+  "bucket_spread_std": 0.167336,
   "coverage": 1.0,
   "coverage_ratio": 1.0,
   "feature_drift_summary": {
     "coverage_status": "full_baseline",
-    "evaluation_observation_count": 84,
-    "feature_snapshot_count": 684,
+    "evaluation_observation_count": 89,
+    "feature_snapshot_count": 689,
     "horizon": 20,
     "status": "stable_fixture_snapshot"
   },
   "horizon": 20,
-  "ic_mean": 0.519526,
+  "ic_mean": 0.528423,
   "industry_slice_metrics": [],
   "manifest_id": "rolling-validation:reco-002028.SZ-20260420-phase2",
   "market_regime_metrics": [
     {
       "coverage_status": "full_baseline",
       "market_regime_tag": "phase5_active_watchlist_research_candidate",
-      "net_excess_return": 0.074144,
-      "rank_ic_mean": 0.148466
+      "net_excess_return": 0.068467,
+      "rank_ic_mean": 0.213006
     }
   ],
-  "net_excess_return": 0.074144,
+  "net_excess_return": 0.068467,
   "period_metrics": [
     {
       "horizon": 20,
-      "mean_excess_return": 0.074573,
-      "mean_return": 0.074573,
-      "sample_count": 84,
-      "walk_forward_window_count": 25
+      "mean_excess_return": 0.068951,
+      "mean_return": 0.068951,
+      "sample_count": 89,
+      "walk_forward_window_count": 30
     }
   ],
-  "positive_excess_rate": 0.595238,
-  "rank_ic_ir": 9.165151,
-  "rank_ic_mean": 0.148466,
-  "rank_ic_std": 0.016199,
-  "sample_count": 84,
+  "positive_excess_rate": 0.573034,
+  "rank_ic_ir": 9.433981,
+  "rank_ic_mean": 0.213006,
+  "rank_ic_std": 0.022579,
+  "sample_count": 89,
   "status": "research_candidate",
-  "status_note": "Phase 2 规则基线已完成 walk-forward 产物生成，但尚未进入 verified 审批。",
+  "status_note": "已有滚动验证产物，当前仍处于观察阶段，尚未完成正式验证。",
   "subperiod_stats": [
     {
-      "positive_excess_rate": 0.928571,
-      "rank_ic_mean": -0.621911,
-      "sample_count": 42,
+      "positive_excess_rate": 0.931818,
+      "rank_ic_mean": -0.619873,
+      "sample_count": 44,
       "slice_label": "early"
     },
     {
-      "positive_excess_rate": 0.261905,
-      "rank_ic_mean": 0.078195,
-      "sample_count": 42,
+      "positive_excess_rate": 0.222222,
+      "rank_ic_mean": 0.008696,
+      "sample_count": 45,
       "slice_label": "late"
     }
   ],
-  "turnover": 0.122725,
-  "turnover_mean": 0.122725
+  "turnover": 0.138169,
+  "turnover_mean": 0.138169
 }
