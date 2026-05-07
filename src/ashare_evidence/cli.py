@@ -40,7 +40,12 @@ from ashare_evidence.research_artifact_store import (
     write_phase5_producer_contract_study_artifact,
 )
 from ashare_evidence.services import get_latest_recommendation_summary, get_recommendation_trace
-from ashare_evidence.shortpick_lab import run_shortpick_experiment, validate_recent_shortpick_runs, validate_shortpick_run
+from ashare_evidence.shortpick_lab import (
+    retry_failed_shortpick_rounds,
+    run_shortpick_experiment,
+    validate_recent_shortpick_runs,
+    validate_shortpick_run,
+)
 from ashare_evidence.simulation import restart_simulation_session, step_simulation_session
 from ashare_evidence.watchlist import active_watchlist_symbols, refresh_watchlist_symbol
 
@@ -351,6 +356,14 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_validate_recent.add_argument("--limit", type=int, default=20)
     shortpick_validate_recent.add_argument("--horizon", type=int, action="append", default=None)
 
+    shortpick_retry_failed = subparsers.add_parser(
+        "shortpick-lab-retry-failed",
+        help="Retry retryable failed rounds for one short-pick lab run.",
+    )
+    shortpick_retry_failed.add_argument("--database-url", default=None)
+    shortpick_retry_failed.add_argument("--run-id", type=int, required=True)
+    shortpick_retry_failed.add_argument("--max-rounds", type=int, default=None)
+
     phase5_daily = subparsers.add_parser(
         "phase5-daily-refresh",
         help="Run the daily Phase 5 refresh workflow: refresh runtime data, then write latest/history horizon-study snapshots.",
@@ -509,6 +522,12 @@ def main(argv: list[str] | None = None) -> int:
                 limit=args.limit,
                 horizons=args.horizon,
             )
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-lab-retry-failed":
+        with session_scope(args.database_url) as session:
+            payload = retry_failed_shortpick_rounds(session, args.run_id, max_rounds=args.max_rounds)
         _print_json(payload)
         return 0
 

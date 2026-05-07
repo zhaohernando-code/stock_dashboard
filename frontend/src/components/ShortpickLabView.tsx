@@ -10,7 +10,6 @@ import {
   Progress,
   Row,
   Col,
-  Segmented,
   Select,
   Space,
   Statistic,
@@ -373,13 +372,15 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
   }, []);
 
   const benchmarkSwitcher = (
-    <Space size={8} wrap>
+    <Space size={8} className="shortpick-benchmark-switcher">
       <span>收益反馈</span>
-      <Segmented
+      <Select
+        className="shortpick-benchmark-select"
         size="small"
         options={BENCHMARK_OPTIONS}
         value={selectedBenchmark}
-        onChange={(value) => setSelectedBenchmark(String(value))}
+        onChange={(value) => setSelectedBenchmark(value)}
+        popupMatchSelectWidth={false}
       />
     </Space>
   );
@@ -888,7 +889,7 @@ function ValidationQueueTab({
   onPageChange: (pagination: TablePaginationConfig) => void;
 }) {
   return (
-    <Card className="panel-card" title="历史验证">
+    <Card className="panel-card shortpick-validation-card" title="历史验证">
       <Space wrap className="shortpick-filter-bar">
         <Select
           allowClear
@@ -925,6 +926,7 @@ function ValidationQueueTab({
         <Button onClick={onSearch} loading={loading}>查询</Button>
       </Space>
       <Table
+        className="shortpick-validation-table"
         rowKey="validation_id"
         size="middle"
         loading={loading}

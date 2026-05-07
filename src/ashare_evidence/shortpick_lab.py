@@ -68,6 +68,7 @@ SHORTPICK_BENCHMARK_DIMENSIONS = [
     SHORTPICK_BENCHMARK_DIMENSION_SECTOR,
 ]
 SHORTPICK_MIN_SECTOR_PEER_SYMBOLS = 2
+SHORTPICK_TARGET_SECTOR_PEER_SYMBOLS = 10
 SHORTPICK_CODEX_TIMEOUT_SECONDS = 240
 SHORTPICK_SOURCE_CHECK_TIMEOUT_SECONDS = 3
 SHORTPICK_SOURCE_CHECK_RETRY_ATTEMPTS = 2
@@ -83,11 +84,261 @@ SUSPICIOUS_SOURCE_PATTERNS = (
     re.compile(r"(?:xxxx|abc123|example|placeholder|dummy)", re.IGNORECASE),
 )
 RETRYABLE_FAILURE_CATEGORIES = {"retryable_search_failure", "retryable_parse_failure"}
+
+
+@dataclass(frozen=True)
+class _ShortpickPeerCandidate:
+    symbol: str
+    name: str
+
+
 LIMIT_UP_BANDS = {
     "default": 0.10,
     "star_or_chinext": 0.20,
     "beijing": 0.30,
     "st": 0.05,
+}
+SHORTPICK_SECTOR_PEER_UNIVERSE: dict[str, list[tuple[str, str]]] = {
+    "C 制造业": [
+        ("000333.SZ", "美的集团"),
+        ("000651.SZ", "格力电器"),
+        ("000725.SZ", "京东方A"),
+        ("002371.SZ", "北方华创"),
+        ("002415.SZ", "海康威视"),
+        ("002475.SZ", "立讯精密"),
+        ("300750.SZ", "宁德时代"),
+        ("600031.SH", "三一重工"),
+        ("600309.SH", "万华化学"),
+        ("600660.SH", "福耀玻璃"),
+    ],
+    "制造业": [
+        ("000333.SZ", "美的集团"),
+        ("000651.SZ", "格力电器"),
+        ("000725.SZ", "京东方A"),
+        ("002371.SZ", "北方华创"),
+        ("002415.SZ", "海康威视"),
+        ("002475.SZ", "立讯精密"),
+        ("300750.SZ", "宁德时代"),
+        ("600031.SH", "三一重工"),
+        ("600309.SH", "万华化学"),
+        ("600660.SH", "福耀玻璃"),
+    ],
+    "半导体": [
+        ("688981.SH", "中芯国际"),
+        ("688012.SH", "中微公司"),
+        ("688008.SH", "澜起科技"),
+        ("688396.SH", "华润微"),
+        ("688126.SH", "沪硅产业"),
+        ("688072.SH", "拓荆科技"),
+        ("688256.SH", "寒武纪"),
+        ("002371.SZ", "北方华创"),
+        ("300604.SZ", "长川科技"),
+        ("603986.SH", "兆易创新"),
+    ],
+    "semiconductor": [
+        ("688981.SH", "中芯国际"),
+        ("688012.SH", "中微公司"),
+        ("688008.SH", "澜起科技"),
+        ("688396.SH", "华润微"),
+        ("688126.SH", "沪硅产业"),
+        ("688072.SH", "拓荆科技"),
+        ("688256.SH", "寒武纪"),
+        ("002371.SZ", "北方华创"),
+        ("300604.SZ", "长川科技"),
+        ("603986.SH", "兆易创新"),
+    ],
+    "通信设备": [
+        ("000063.SZ", "中兴通讯"),
+        ("000938.SZ", "紫光股份"),
+        ("002281.SZ", "光迅科技"),
+        ("002463.SZ", "沪电股份"),
+        ("300308.SZ", "中际旭创"),
+        ("300394.SZ", "天孚通信"),
+        ("300502.SZ", "新易盛"),
+        ("300628.SZ", "亿联网络"),
+        ("600487.SH", "亨通光电"),
+        ("600522.SH", "中天科技"),
+    ],
+    "电力设备": [
+        ("002074.SZ", "国轩高科"),
+        ("002129.SZ", "TCL中环"),
+        ("002202.SZ", "金风科技"),
+        ("002459.SZ", "晶澳科技"),
+        ("002466.SZ", "天齐锂业"),
+        ("002812.SZ", "恩捷股份"),
+        ("300014.SZ", "亿纬锂能"),
+        ("300274.SZ", "阳光电源"),
+        ("300750.SZ", "宁德时代"),
+        ("601012.SH", "隆基绿能"),
+    ],
+    "锂电池": [
+        ("002074.SZ", "国轩高科"),
+        ("002460.SZ", "赣锋锂业"),
+        ("002466.SZ", "天齐锂业"),
+        ("002709.SZ", "天赐材料"),
+        ("002812.SZ", "恩捷股份"),
+        ("300014.SZ", "亿纬锂能"),
+        ("300037.SZ", "新宙邦"),
+        ("300073.SZ", "当升科技"),
+        ("300750.SZ", "宁德时代"),
+        ("600884.SH", "杉杉股份"),
+    ],
+    "证券": [
+        ("000166.SZ", "申万宏源"),
+        ("000776.SZ", "广发证券"),
+        ("002736.SZ", "国信证券"),
+        ("600030.SH", "中信证券"),
+        ("600061.SH", "国投资本"),
+        ("600109.SH", "国金证券"),
+        ("600837.SH", "海通证券"),
+        ("600958.SH", "东方证券"),
+        ("601688.SH", "华泰证券"),
+        ("601995.SH", "中金公司"),
+    ],
+    "保险": [
+        ("000627.SZ", "天茂集团"),
+        ("601318.SH", "中国平安"),
+        ("601319.SH", "中国人保"),
+        ("601336.SH", "新华保险"),
+        ("601601.SH", "中国太保"),
+        ("601628.SH", "中国人寿"),
+        ("601688.SH", "华泰证券"),
+        ("600030.SH", "中信证券"),
+        ("600837.SH", "海通证券"),
+        ("000776.SZ", "广发证券"),
+    ],
+    "汽车整车": [
+        ("000625.SZ", "长安汽车"),
+        ("000800.SZ", "一汽解放"),
+        ("000957.SZ", "中通客车"),
+        ("002594.SZ", "比亚迪"),
+        ("600006.SH", "东风汽车"),
+        ("600104.SH", "上汽集团"),
+        ("600418.SH", "江淮汽车"),
+        ("600686.SH", "金龙汽车"),
+        ("601127.SH", "赛力斯"),
+        ("601633.SH", "长城汽车"),
+    ],
+    "白酒": [
+        ("000568.SZ", "泸州老窖"),
+        ("000596.SZ", "古井贡酒"),
+        ("000799.SZ", "酒鬼酒"),
+        ("000858.SZ", "五粮液"),
+        ("002304.SZ", "洋河股份"),
+        ("600519.SH", "贵州茅台"),
+        ("600559.SH", "老白干酒"),
+        ("600702.SH", "舍得酒业"),
+        ("600779.SH", "水井坊"),
+        ("603369.SH", "今世缘"),
+    ],
+    "IT服务": [
+        ("000938.SZ", "紫光股份"),
+        ("002230.SZ", "科大讯飞"),
+        ("002410.SZ", "广联达"),
+        ("300033.SZ", "同花顺"),
+        ("300168.SZ", "万达信息"),
+        ("300212.SZ", "易华录"),
+        ("300253.SZ", "卫宁健康"),
+        ("300454.SZ", "深信服"),
+        ("600570.SH", "恒生电子"),
+        ("688111.SH", "金山办公"),
+    ],
+    "F 批发零售": [
+        ("000417.SZ", "合肥百货"),
+        ("000785.SZ", "居然之家"),
+        ("002024.SZ", "ST易购"),
+        ("002419.SZ", "天虹股份"),
+        ("600693.SH", "东百集团"),
+        ("600697.SH", "欧亚集团"),
+        ("600729.SH", "重庆百货"),
+        ("600827.SH", "百联股份"),
+        ("600859.SH", "王府井"),
+        ("601933.SH", "永辉超市"),
+    ],
+    "批发零售": [
+        ("000417.SZ", "合肥百货"),
+        ("000785.SZ", "居然之家"),
+        ("002024.SZ", "ST易购"),
+        ("002419.SZ", "天虹股份"),
+        ("600693.SH", "东百集团"),
+        ("600697.SH", "欧亚集团"),
+        ("600729.SH", "重庆百货"),
+        ("600827.SH", "百联股份"),
+        ("600859.SH", "王府井"),
+        ("601933.SH", "永辉超市"),
+    ],
+    "G 运输仓储": [
+        ("000089.SZ", "深圳机场"),
+        ("600009.SH", "上海机场"),
+        ("600018.SH", "上港集团"),
+        ("600029.SH", "南方航空"),
+        ("600115.SH", "中国东航"),
+        ("601006.SH", "大秦铁路"),
+        ("601111.SH", "中国国航"),
+        ("601816.SH", "京沪高铁"),
+        ("601872.SH", "招商轮船"),
+        ("601919.SH", "中远海控"),
+    ],
+    "运输仓储": [
+        ("000089.SZ", "深圳机场"),
+        ("600009.SH", "上海机场"),
+        ("600018.SH", "上港集团"),
+        ("600029.SH", "南方航空"),
+        ("600115.SH", "中国东航"),
+        ("601006.SH", "大秦铁路"),
+        ("601111.SH", "中国国航"),
+        ("601816.SH", "京沪高铁"),
+        ("601872.SH", "招商轮船"),
+        ("601919.SH", "中远海控"),
+    ],
+    "航天装备": [
+        ("000768.SZ", "中航西飞"),
+        ("002025.SZ", "航天电器"),
+        ("002179.SZ", "中航光电"),
+        ("300775.SZ", "三角防务"),
+        ("600118.SH", "中国卫星"),
+        ("600316.SH", "洪都航空"),
+        ("600760.SH", "中航沈飞"),
+        ("600893.SH", "航发动力"),
+        ("688586.SH", "江航装备"),
+        ("688682.SH", "霍莱沃"),
+    ],
+    "其他电子": [
+        ("000725.SZ", "京东方A"),
+        ("002138.SZ", "顺络电子"),
+        ("002241.SZ", "歌尔股份"),
+        ("002371.SZ", "北方华创"),
+        ("002415.SZ", "海康威视"),
+        ("002475.SZ", "立讯精密"),
+        ("300408.SZ", "三环集团"),
+        ("300433.SZ", "蓝思科技"),
+        ("600584.SH", "长电科技"),
+        ("603986.SH", "兆易创新"),
+    ],
+    "专业工程": [
+        ("002051.SZ", "中工国际"),
+        ("002140.SZ", "东华科技"),
+        ("002469.SZ", "三维化学"),
+        ("002542.SZ", "中化岩土"),
+        ("300284.SZ", "苏交科"),
+        ("600170.SH", "上海建工"),
+        ("600248.SH", "陕建股份"),
+        ("600491.SH", "龙元建设"),
+        ("601186.SH", "中国铁建"),
+        ("601390.SH", "中国中铁"),
+    ],
+    "综合": [
+        ("000009.SZ", "中国宝安"),
+        ("000839.SZ", "中信国安"),
+        ("000987.SZ", "越秀资本"),
+        ("600051.SH", "宁波联合"),
+        ("600082.SH", "海泰发展"),
+        ("600620.SH", "天宸股份"),
+        ("600624.SH", "复旦复华"),
+        ("600647.SH", "同达创业"),
+        ("600730.SH", "中国高科"),
+        ("600811.SH", "东方集团"),
+    ],
 }
 
 
@@ -788,6 +1039,7 @@ def _execute_shortpick_round(
         round_record.completed_at = utcnow()
         round_record.artifact_id = f"shortpick-round:{round_record.id}"
         _write_round_artifact(session, run, round_record, prompt=prompt)
+        _delete_parse_failed_candidates_for_round(session, round_record.id)
         _candidate_from_round(session, run, round_record, parsed, parse_status="parsed")
     except Exception as exc:
         session.rollback()
@@ -886,6 +1138,40 @@ def _round_retryable(round_record: ShortpickModelRound) -> bool:
         round_record.status == "failed"
         and _shortpick_failure_category(round_record.error_message) in RETRYABLE_FAILURE_CATEGORIES
     )
+
+
+def _delete_parse_failed_candidates_for_round(session: Session, round_id: int) -> int:
+    candidates = session.scalars(
+        select(ShortpickCandidate).where(
+            ShortpickCandidate.round_id == round_id,
+            (ShortpickCandidate.parse_status == "parse_failed") | (ShortpickCandidate.symbol == "PARSE_FAILED"),
+        )
+    ).all()
+    if not candidates:
+        return 0
+    candidate_ids = [candidate.id for candidate in candidates]
+    snapshots = session.scalars(
+        select(ShortpickValidationSnapshot).where(ShortpickValidationSnapshot.candidate_id.in_(candidate_ids))
+    ).all()
+    for snapshot in snapshots:
+        session.delete(snapshot)
+    for candidate in candidates:
+        session.delete(candidate)
+    session.flush()
+    return len(candidates)
+
+
+def _cleanup_superseded_parse_failed_candidates(session: Session, *, run_id: int) -> int:
+    completed_rounds = session.scalars(
+        select(ShortpickModelRound.id).where(
+            ShortpickModelRound.run_id == run_id,
+            ShortpickModelRound.status == "completed",
+        )
+    ).all()
+    removed = 0
+    for round_id in completed_rounds:
+        removed += _delete_parse_failed_candidates_for_round(session, int(round_id))
+    return removed
 
 
 def _candidate_from_round(
@@ -1353,6 +1639,7 @@ def validate_shortpick_run(
     if run is None:
         raise LookupError(f"Shortpick run {run_id} not found.")
     target_horizons = horizons or SHORTPICK_DEFAULT_HORIZONS
+    removed_superseded_parse_failures = _cleanup_superseded_parse_failed_candidates(session, run_id=run_id)
     candidates = session.scalars(
         select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id).order_by(ShortpickCandidate.id.asc())
     ).all()
@@ -1380,6 +1667,7 @@ def validate_shortpick_run(
     summary = {
         **_shortpick_validation_summary(session, run_id=run_id),
         "candidate_display_gate": display_gate,
+        "removed_superseded_parse_failed_count": removed_superseded_parse_failures,
     }
     run.summary_payload = {
         **dict(run.summary_payload or {}),
@@ -1585,6 +1873,7 @@ def _retry_existing_shortpick_round(
         round_record.completed_at = utcnow()
         round_record.error_message = None
         _write_round_artifact(session, run, round_record, prompt=prompt)
+        _delete_parse_failed_candidates_for_round(session, round_record.id)
         _candidate_from_round(session, run, round_record, parsed, parse_status="parsed")
     except Exception as exc:
         session.rollback()
@@ -2138,7 +2427,36 @@ def _stock_sector_identity(session: Session, symbol: str) -> dict[str, Any] | No
     }
 
 
-def _sector_peer_symbols(session: Session, candidate: ShortpickCandidate, sector_identity: dict[str, Any]) -> list[str]:
+def _sector_identity_match_text(sector_identity: dict[str, Any]) -> str:
+    parts = [
+        sector_identity.get("sector_code"),
+        sector_identity.get("label"),
+        sector_identity.get("template_key"),
+        sector_identity.get("industry"),
+    ]
+    text = " ".join(str(part) for part in parts if part)
+    return text.replace("profile:", "").replace("Ⅱ", "").lower()
+
+
+def _representative_sector_peers(sector_identity: dict[str, Any], *, exclude_symbol: str) -> list[tuple[str, str]]:
+    match_text = _sector_identity_match_text(sector_identity)
+    peers: list[tuple[str, str]] = []
+    for key, symbols in SHORTPICK_SECTOR_PEER_UNIVERSE.items():
+        normalized_key = key.replace("Ⅱ", "").lower()
+        if normalized_key not in match_text and match_text not in normalized_key:
+            continue
+        for symbol, name in symbols:
+            normalized_symbol = _normalize_symbol(symbol)
+            if normalized_symbol == exclude_symbol:
+                continue
+            if normalized_symbol not in [item[0] for item in peers]:
+                peers.append((normalized_symbol, name))
+        if len(peers) >= SHORTPICK_TARGET_SECTOR_PEER_SYMBOLS:
+            break
+    return peers[:SHORTPICK_TARGET_SECTOR_PEER_SYMBOLS]
+
+
+def _sector_peer_symbols_from_db(session: Session, candidate: ShortpickCandidate, sector_identity: dict[str, Any]) -> list[str]:
     if sector_identity["source"] == "sector_membership":
         memberships = session.scalars(
             select(SectorMembership).where(
@@ -2161,6 +2479,57 @@ def _sector_peer_symbols(session: Session, candidate: ShortpickCandidate, sector
         if target_industry and profile_payload.get("industry") == target_industry:
             symbols.append(stock.symbol)
     return sorted(set(symbols))
+
+
+def _sector_peer_symbols(session: Session, candidate: ShortpickCandidate, sector_identity: dict[str, Any]) -> list[str]:
+    symbols = set(_sector_peer_symbols_from_db(session, candidate, sector_identity))
+    for symbol, _name in _representative_sector_peers(sector_identity, exclude_symbol=candidate.symbol):
+        symbols.add(symbol)
+    return sorted(symbols)
+
+
+def _ensure_shortpick_sector_peer_universe(
+    session: Session,
+    *,
+    candidate: ShortpickCandidate,
+    sector_identity: dict[str, Any],
+    entry_day: date,
+    exit_day: date,
+) -> dict[str, Any]:
+    representatives = _representative_sector_peers(sector_identity, exclude_symbol=candidate.symbol)
+    if not representatives:
+        return {"status": "skipped", "reason": "no_representative_sector_universe"}
+    attempted = 0
+    refreshed = 0
+    errors: list[dict[str, str]] = []
+    for symbol, name in representatives:
+        close_map = _close_map_for_symbol(session, symbol)
+        if _return_between_close_map(close_map, entry_day=entry_day, exit_day=exit_day) is not None:
+            continue
+        attempted += 1
+        try:
+            peer_stock = _ensure_shortpick_stock(session, _ShortpickPeerCandidate(symbol=symbol, name=name))  # type: ignore[arg-type]
+            profile_payload = dict(peer_stock.profile_payload or {})
+            profile_payload.update(
+                {
+                    "shortpick_sector_peer_universe": True,
+                    "shortpick_sector_peer_scope": sector_identity["sector_code"],
+                    "industry": profile_payload.get("industry") or sector_identity.get("industry") or sector_identity.get("label"),
+                    "template_key": profile_payload.get("template_key") or sector_identity.get("template_key"),
+                }
+            )
+            peer_stock.profile_payload = profile_payload
+            fetch = _fetch_shortpick_daily_market_data(session, symbol)
+            refreshed += _upsert_shortpick_market_bars(session, stock=peer_stock, bars=fetch.bars)
+        except Exception as exc:
+            errors.append({"symbol": symbol, "reason": str(exc)})
+    return {
+        "status": "ok" if not errors else "partial",
+        "target_peer_symbol_count": len(representatives),
+        "attempted_refresh_count": attempted,
+        "upserted_bar_count": refreshed,
+        "errors": errors[:5],
+    }
 
 
 def _close_map_for_symbol(session: Session, symbol: str) -> dict[date, float]:
@@ -2215,6 +2584,27 @@ def _shortpick_sector_benchmark_dimension(
             "peer_symbol_count": 0,
             "contributing_peer_symbol_count": 0,
         }
+    initial_peer_symbols = _sector_peer_symbols_from_db(session, candidate, sector_identity)
+    _initial_return, initial_contributing_symbols = _sector_equal_weight_return(
+        session,
+        peer_symbols=initial_peer_symbols,
+        entry_day=entry_day,
+        exit_day=exit_day,
+    )
+    if len(initial_contributing_symbols) < SHORTPICK_MIN_SECTOR_PEER_SYMBOLS:
+        peer_universe_sync = _ensure_shortpick_sector_peer_universe(
+            session,
+            candidate=candidate,
+            sector_identity=sector_identity,
+            entry_day=entry_day,
+            exit_day=exit_day,
+        )
+    else:
+        peer_universe_sync = {
+            "status": "skipped",
+            "reason": "existing_sector_peers_available",
+            "contributing_peer_symbol_count": len(initial_contributing_symbols),
+        }
     peer_symbols = _sector_peer_symbols(session, candidate, sector_identity)
     if len(peer_symbols) < SHORTPICK_MIN_SECTOR_PEER_SYMBOLS:
         return {
@@ -2231,6 +2621,8 @@ def _shortpick_sector_benchmark_dimension(
             "peer_symbol_count": len(peer_symbols),
             "contributing_peer_symbol_count": 0,
             "peer_symbols": peer_symbols,
+            "peer_universe_target_count": SHORTPICK_TARGET_SECTOR_PEER_SYMBOLS,
+            "peer_universe_sync": peer_universe_sync,
         }
     benchmark_return, contributing_symbols = _sector_equal_weight_return(
         session,
@@ -2254,6 +2646,8 @@ def _shortpick_sector_benchmark_dimension(
         "contributing_peer_symbol_count": len(contributing_symbols),
         "peer_symbols": peer_symbols,
         "contributing_peer_symbols": contributing_symbols,
+        "peer_universe_target_count": SHORTPICK_TARGET_SECTOR_PEER_SYMBOLS,
+        "peer_universe_sync": peer_universe_sync,
     }
 
 

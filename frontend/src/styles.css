@@ -310,6 +310,25 @@ body[data-theme="dark"] {
   width: 150px;
 }
 
+.shortpick-benchmark-switcher {
+  min-width: 178px;
+}
+
+.shortpick-benchmark-select {
+  min-width: 96px;
+}
+
+.shortpick-validation-card {
+  position: relative;
+  z-index: 4;
+  margin-bottom: 22px;
+}
+
+.shortpick-validation-table .ant-table-pagination {
+  margin-bottom: 8px;
+  padding-bottom: 12px;
+}
+
 .shortpick-metrics {
   margin: 0;
 }

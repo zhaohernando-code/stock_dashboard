@@ -679,8 +679,8 @@ class ShortpickLabTests(unittest.TestCase):
         with session_scope(self.database_url) as session:
             stock = session.scalar(select(Stock).where(Stock.symbol == "688981.SH"))
             if stock is not None:
-                stock.profile_payload = {"industry": "半导体", "template_key": "semiconductor"}
-        executors = [StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("688981.SH", "中芯国际", "半导体国产替代", "https://a.example/news"))]
+                stock.profile_payload = {"industry": "冷门测试行业", "template_key": "rare_test"}
+        executors = [StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("688981.SH", "中芯国际", "冷门测试题材", "https://a.example/news"))]
 
         with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
             with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
@@ -696,6 +696,44 @@ class ShortpickLabTests(unittest.TestCase):
         sector_dimension = payload["candidates"][0]["validations"][0]["benchmark_dimensions"]["sector_equal_weight"]
         self.assertEqual(sector_dimension["status"], "pending_sector_peer_baseline")
         self.assertIn("可用同行样本", sector_dimension["reason"])
+
+    def test_validation_bootstraps_representative_sector_peer_universe(self) -> None:
+        self._seed_stock_bars("002384.SZ", "东山精密", [100 + index * 2 for index in range(8)], profile_payload={"industry": "C 制造业"})
+        self._seed_stock_bars("000300.SH", "沪深300", [200 + index for index in range(8)])
+        self._seed_stock_bars("000852.SH", "中证1000", [300 + index * 1.5 for index in range(8)])
+        executors = [StaticShortpickExecutor("deepseek", "deepseek-test", "fake", _answer("002384.SZ", "东山精密", "算力硬件", "https://a.example/news"))]
+
+        def fake_profile(_session, *, symbol: str, preferred_name: str | None = None):
+            return SimpleNamespace(
+                name=preferred_name or symbol,
+                industry="C 制造业",
+                listed_date=date(2020, 1, 1),
+                template_key=None,
+                source="test",
+            )
+
+        def fake_fetch(_session, symbol: str):
+            offset = int(symbol[:2]) % 7
+            return self._fake_daily_fetch(symbol, [20 + offset + index for index in range(8)])
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
+            with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
+                with patch("ashare_evidence.shortpick_lab.resolve_stock_profile", side_effect=fake_profile):
+                    with patch("ashare_evidence.shortpick_lab._fetch_shortpick_daily_market_data", side_effect=fake_fetch):
+                        with session_scope(self.database_url) as session:
+                            payload = run_shortpick_experiment(
+                                session,
+                                run_date=date(2026, 5, 5),
+                                rounds_per_model=1,
+                                triggered_by="root",
+                                executors=executors,
+                            )
+
+        dimension = payload["candidates"][0]["validations"][0]["benchmark_dimensions"]["sector_equal_weight"]
+        self.assertEqual(dimension["status"], "available")
+        self.assertGreaterEqual(dimension["peer_symbol_count"], 10)
+        self.assertGreaterEqual(dimension["contributing_peer_symbol_count"], 10)
+        self.assertEqual(dimension["peer_universe_target_count"], 10)
 
     def test_candidate_market_sync_creates_only_stock_and_market_bars(self) -> None:
         self._seed_stock_bars("000300.SH", "沪深300", [200 + index for index in range(8)])
@@ -1042,7 +1080,8 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(payload["run"]["status"], "completed")
         self.assertEqual(payload["run"]["summary"]["failed_round_count"], 0)
         self.assertEqual(payload["run"]["summary"]["normal_candidate_count"], 1)
-        self.assertEqual(payload["run"]["summary"]["failed_candidate_count"], 1)
+        self.assertEqual(payload["run"]["summary"]["failed_candidate_count"], 0)
+        self.assertFalse(any(item["parse_status"] == "parse_failed" for item in payload["run"]["candidates"]))
         self.assertEqual(payload["retried"][0]["failure_category"], "retryable_parse_failure")
         retry_history = payload["run"]["rounds"][0]["retry_history"]
         self.assertEqual(retry_history[0]["failure_category"], "retryable_parse_failure")

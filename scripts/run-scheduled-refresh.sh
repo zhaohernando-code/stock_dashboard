@@ -57,6 +57,13 @@ run_shortpick_lab() {
     --rounds-per-model "${ASHARE_SHORTPICK_ROUNDS_PER_MODEL:-5}"
 }
 
+run_shortpick_retry_failed_rounds() {
+  local run_id="$1"
+  "$PYTHON_BIN" -m ashare_evidence.cli shortpick-lab-retry-failed \
+    --database-url "$ASHARE_DATABASE_URL" \
+    --run-id "$run_id"
+}
+
 run_shortpick_validation_refresh() {
   "$PYTHON_BIN" -m ashare_evidence.cli shortpick-lab-validate-recent \
     --database-url "$ASHARE_DATABASE_URL" \
@@ -66,7 +73,26 @@ run_shortpick_validation_refresh() {
 
 run_shortpick_daily_cycle() {
   run_shortpick_validation_refresh
-  run_shortpick_lab
+  local run_payload_file
+  run_payload_file="$(mktemp)"
+  run_shortpick_lab | tee "$run_payload_file"
+  local run_id
+  run_id="$("$PYTHON_BIN" - "$run_payload_file" <<'PY'
+import json
+import sys
+
+try:
+    payload = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception:
+    print("")
+else:
+    print(payload.get("id") or "")
+PY
+)"
+  rm -f "$run_payload_file"
+  if [[ -n "$run_id" ]]; then
+    run_shortpick_retry_failed_rounds "$run_id"
+  fi
 }
 
 time_ge() {
