@@ -26,6 +26,7 @@ from ashare_evidence.models import (
     MarketBar,
     ModelApiKey,
     Recommendation,
+    SectorMembership,
     ShortpickCandidate,
     ShortpickConsensusSnapshot,
     ShortpickExperimentRun,
@@ -58,6 +59,15 @@ SHORTPICK_DIAGNOSTIC_VALIDATION_STATUSES = {
 }
 SHORTPICK_PRIMARY_BENCHMARK_ID = "CSI300"
 SHORTPICK_RESEARCH_BENCHMARK_IDS = ["CSI1000"]
+SHORTPICK_BENCHMARK_DIMENSION_HS300 = "hs300"
+SHORTPICK_BENCHMARK_DIMENSION_CSI1000 = "csi1000"
+SHORTPICK_BENCHMARK_DIMENSION_SECTOR = "sector_equal_weight"
+SHORTPICK_BENCHMARK_DIMENSIONS = [
+    SHORTPICK_BENCHMARK_DIMENSION_HS300,
+    SHORTPICK_BENCHMARK_DIMENSION_CSI1000,
+    SHORTPICK_BENCHMARK_DIMENSION_SECTOR,
+]
+SHORTPICK_MIN_SECTOR_PEER_SYMBOLS = 2
 SHORTPICK_CODEX_TIMEOUT_SECONDS = 240
 SHORTPICK_SOURCE_CHECK_TIMEOUT_SECONDS = 3
 SHORTPICK_SOURCE_CHECK_RETRY_ATTEMPTS = 2
@@ -1742,6 +1752,14 @@ def _upsert_validation_snapshot(
     )
     primary = _shortpick_primary_benchmark()
     primary_return = benchmark_returns.get(primary["symbol"], {}).get("return")
+    benchmark_dimensions = _shortpick_benchmark_dimensions(
+        session,
+        candidate=candidate,
+        stock_return=stock_return,
+        benchmark_returns=benchmark_returns,
+        entry_day=entry.observed_at.date(),
+        exit_day=exit_bar.observed_at.date(),
+    )
     if primary_return is None:
         existing.status = "pending_benchmark_data"
     else:
@@ -1758,6 +1776,10 @@ def _upsert_validation_snapshot(
     existing.validation_payload = {
         "benchmark": primary,
         "benchmark_returns": benchmark_returns,
+        "benchmark_dimensions": benchmark_dimensions,
+        "available_benchmark_dimensions": [
+            key for key, value in benchmark_dimensions.items() if value.get("status") == "available"
+        ],
         "validation_mode": SHORTPICK_OFFICIAL_VALIDATION_MODE,
         "official_validation": primary_return is not None,
         "tradeability_status": SHORTPICK_OFFICIAL_TRADEABILITY_STATUS,
@@ -2059,6 +2081,272 @@ def _shortpick_benchmark_returns(
     return returns
 
 
+def _benchmark_dimension_from_index(
+    *,
+    dimension_key: str,
+    definition: dict[str, str],
+    stock_return: float | None,
+    benchmark_return: float | None,
+) -> dict[str, Any]:
+    status = "available" if benchmark_return is not None else "pending_benchmark_data"
+    reason = None if benchmark_return is not None else f"{definition['label']} missing entry or exit benchmark close."
+    return {
+        "dimension_key": dimension_key,
+        "benchmark_id": definition["benchmark_id"],
+        "label": definition["label"],
+        "benchmark_label": definition["label"],
+        "symbol": definition["symbol"],
+        "symbol_or_scope": definition["symbol"],
+        "benchmark_return": benchmark_return,
+        "excess_return": (
+            None if stock_return is None or benchmark_return is None else stock_return - benchmark_return
+        ),
+        "status": status,
+        "reason": reason,
+    }
+
+
+def _stock_sector_identity(session: Session, symbol: str) -> dict[str, Any] | None:
+    stock = session.scalar(select(Stock).where(Stock.symbol == symbol))
+    if stock is None:
+        return None
+    membership = session.scalar(
+        select(SectorMembership)
+        .where(SectorMembership.stock_id == stock.id, SectorMembership.is_primary.is_(True))
+        .order_by(SectorMembership.effective_from.desc(), SectorMembership.id.desc())
+    )
+    if membership is not None:
+        return {
+            "source": "sector_membership",
+            "stock_id": stock.id,
+            "sector_code": membership.sector.sector_code,
+            "label": membership.sector.name,
+        }
+    profile_payload = stock.profile_payload if isinstance(stock.profile_payload, dict) else {}
+    template_key = profile_payload.get("template_key")
+    industry = profile_payload.get("industry")
+    if not template_key and not industry:
+        return None
+    sector_code = f"profile:{template_key or industry}"
+    return {
+        "source": "profile_payload",
+        "stock_id": stock.id,
+        "sector_code": sector_code,
+        "template_key": template_key,
+        "industry": industry,
+        "label": str(industry or template_key),
+    }
+
+
+def _sector_peer_symbols(session: Session, candidate: ShortpickCandidate, sector_identity: dict[str, Any]) -> list[str]:
+    if sector_identity["source"] == "sector_membership":
+        memberships = session.scalars(
+            select(SectorMembership).where(
+                SectorMembership.sector.has(sector_code=sector_identity["sector_code"]),
+                SectorMembership.is_primary.is_(True),
+            )
+        ).all()
+        symbols = [membership.stock.symbol for membership in memberships if membership.stock.symbol != candidate.symbol]
+        return sorted(set(symbols))
+
+    stocks = session.scalars(select(Stock).where(Stock.symbol != candidate.symbol)).all()
+    symbols: list[str] = []
+    target_template = sector_identity.get("template_key")
+    target_industry = sector_identity.get("industry")
+    for stock in stocks:
+        profile_payload = stock.profile_payload if isinstance(stock.profile_payload, dict) else {}
+        if target_template and profile_payload.get("template_key") == target_template:
+            symbols.append(stock.symbol)
+            continue
+        if target_industry and profile_payload.get("industry") == target_industry:
+            symbols.append(stock.symbol)
+    return sorted(set(symbols))
+
+
+def _close_map_for_symbol(session: Session, symbol: str) -> dict[date, float]:
+    rows = session.execute(
+        select(MarketBar.observed_at, MarketBar.close_price)
+        .join(Stock, MarketBar.stock_id == Stock.id)
+        .where(Stock.symbol == symbol, MarketBar.timeframe == "1d")
+        .order_by(MarketBar.observed_at.asc())
+    ).all()
+    return {observed_at.date(): float(close_price) for observed_at, close_price in rows}
+
+
+def _sector_equal_weight_return(
+    session: Session,
+    *,
+    peer_symbols: list[str],
+    entry_day: date,
+    exit_day: date,
+) -> tuple[float | None, list[str]]:
+    returns: list[float] = []
+    contributing_symbols: list[str] = []
+    for symbol in peer_symbols:
+        peer_return = _return_between_close_map(_close_map_for_symbol(session, symbol), entry_day=entry_day, exit_day=exit_day)
+        if peer_return is None:
+            continue
+        returns.append(peer_return)
+        contributing_symbols.append(symbol)
+    return (_mean_or_none(returns), contributing_symbols)
+
+
+def _shortpick_sector_benchmark_dimension(
+    session: Session,
+    *,
+    candidate: ShortpickCandidate,
+    stock_return: float | None,
+    entry_day: date,
+    exit_day: date,
+) -> dict[str, Any]:
+    sector_identity = _stock_sector_identity(session, candidate.symbol)
+    if sector_identity is None:
+        return {
+            "dimension_key": SHORTPICK_BENCHMARK_DIMENSION_SECTOR,
+            "benchmark_id": SHORTPICK_BENCHMARK_DIMENSION_SECTOR,
+            "label": "同板块",
+            "benchmark_label": "同板块",
+            "symbol": None,
+            "symbol_or_scope": None,
+            "benchmark_return": None,
+            "excess_return": None,
+            "status": "pending_sector_mapping",
+            "reason": "缺板块映射，暂不能构造同板块等权基准。",
+            "peer_symbol_count": 0,
+            "contributing_peer_symbol_count": 0,
+        }
+    peer_symbols = _sector_peer_symbols(session, candidate, sector_identity)
+    if len(peer_symbols) < SHORTPICK_MIN_SECTOR_PEER_SYMBOLS:
+        return {
+            "dimension_key": SHORTPICK_BENCHMARK_DIMENSION_SECTOR,
+            "benchmark_id": SHORTPICK_BENCHMARK_DIMENSION_SECTOR,
+            "label": f"同板块：{sector_identity['label']}",
+            "benchmark_label": f"同板块：{sector_identity['label']}",
+            "symbol": None,
+            "symbol_or_scope": sector_identity["sector_code"],
+            "benchmark_return": None,
+            "excess_return": None,
+            "status": "pending_sector_peer_baseline",
+            "reason": f"同板块可用同行样本 {len(peer_symbols)}/{SHORTPICK_MIN_SECTOR_PEER_SYMBOLS}，暂不能构造等权基准。",
+            "peer_symbol_count": len(peer_symbols),
+            "contributing_peer_symbol_count": 0,
+            "peer_symbols": peer_symbols,
+        }
+    benchmark_return, contributing_symbols = _sector_equal_weight_return(
+        session,
+        peer_symbols=peer_symbols,
+        entry_day=entry_day,
+        exit_day=exit_day,
+    )
+    status = "available" if benchmark_return is not None else "pending_sector_peer_baseline"
+    return {
+        "dimension_key": SHORTPICK_BENCHMARK_DIMENSION_SECTOR,
+        "benchmark_id": SHORTPICK_BENCHMARK_DIMENSION_SECTOR,
+        "label": f"同板块：{sector_identity['label']}",
+        "benchmark_label": f"同板块：{sector_identity['label']}",
+        "symbol": None,
+        "symbol_or_scope": sector_identity["sector_code"],
+        "benchmark_return": benchmark_return,
+        "excess_return": None if stock_return is None or benchmark_return is None else stock_return - benchmark_return,
+        "status": status,
+        "reason": None if status == "available" else "同板块同行缺少入场或退出日附近的日线收盘。",
+        "peer_symbol_count": len(peer_symbols),
+        "contributing_peer_symbol_count": len(contributing_symbols),
+        "peer_symbols": peer_symbols,
+        "contributing_peer_symbols": contributing_symbols,
+    }
+
+
+def _shortpick_benchmark_dimensions(
+    session: Session,
+    *,
+    candidate: ShortpickCandidate,
+    stock_return: float | None,
+    benchmark_returns: dict[str, dict[str, Any]],
+    entry_day: date,
+    exit_day: date,
+) -> dict[str, dict[str, Any]]:
+    hs300 = _shortpick_primary_benchmark()
+    csi1000_definition = {
+        "benchmark_id": "CSI1000",
+        "symbol": CSI_BENCHMARKS["CSI1000"]["symbol"],
+        "label": CSI_BENCHMARKS["CSI1000"]["label"],
+    }
+    return {
+        SHORTPICK_BENCHMARK_DIMENSION_HS300: _benchmark_dimension_from_index(
+            dimension_key=SHORTPICK_BENCHMARK_DIMENSION_HS300,
+            definition=hs300,
+            stock_return=stock_return,
+            benchmark_return=benchmark_returns.get(hs300["symbol"], {}).get("return"),
+        ),
+        SHORTPICK_BENCHMARK_DIMENSION_CSI1000: _benchmark_dimension_from_index(
+            dimension_key=SHORTPICK_BENCHMARK_DIMENSION_CSI1000,
+            definition=csi1000_definition,
+            stock_return=stock_return,
+            benchmark_return=benchmark_returns.get(csi1000_definition["symbol"], {}).get("return"),
+        ),
+        SHORTPICK_BENCHMARK_DIMENSION_SECTOR: _shortpick_sector_benchmark_dimension(
+            session,
+            candidate=candidate,
+            stock_return=stock_return,
+            entry_day=entry_day,
+            exit_day=exit_day,
+        ),
+    }
+
+
+def _benchmark_dimensions_payload(snapshot: ShortpickValidationSnapshot) -> dict[str, dict[str, Any]]:
+    payload = _validation_payload(snapshot)
+    dimensions = payload.get("benchmark_dimensions")
+    if isinstance(dimensions, dict):
+        return {
+            str(key): dict(value)
+            for key, value in dimensions.items()
+            if isinstance(value, dict)
+        }
+    legacy_returns = payload.get("benchmark_returns") if isinstance(payload.get("benchmark_returns"), dict) else {}
+    primary = payload.get("benchmark") if isinstance(payload.get("benchmark"), dict) else _shortpick_primary_benchmark()
+    primary_symbol = str(primary.get("symbol") or CSI_BENCHMARKS[SHORTPICK_PRIMARY_BENCHMARK_ID]["symbol"])
+    primary_label = str(primary.get("label") or CSI_BENCHMARKS[SHORTPICK_PRIMARY_BENCHMARK_ID]["label"])
+    primary_return = snapshot.benchmark_return
+    csi1000_symbol = CSI_BENCHMARKS["CSI1000"]["symbol"]
+    raw_csi1000 = legacy_returns.get(csi1000_symbol) if isinstance(legacy_returns.get(csi1000_symbol), dict) else {}
+    csi1000_return = raw_csi1000.get("return") if isinstance(raw_csi1000, dict) else None
+    return {
+        SHORTPICK_BENCHMARK_DIMENSION_HS300: {
+            "dimension_key": SHORTPICK_BENCHMARK_DIMENSION_HS300,
+            "benchmark_id": str(primary.get("benchmark_id") or SHORTPICK_PRIMARY_BENCHMARK_ID),
+            "label": primary_label,
+            "benchmark_label": primary_label,
+            "symbol": primary_symbol,
+            "symbol_or_scope": primary_symbol,
+            "benchmark_return": primary_return,
+            "excess_return": snapshot.excess_return,
+            "status": "available" if primary_return is not None else "pending_benchmark_data",
+            "reason": None if primary_return is not None else "沪深300缺少入场或退出窗口行情。",
+        },
+        SHORTPICK_BENCHMARK_DIMENSION_CSI1000: {
+            "dimension_key": SHORTPICK_BENCHMARK_DIMENSION_CSI1000,
+            "benchmark_id": "CSI1000",
+            "label": CSI_BENCHMARKS["CSI1000"]["label"],
+            "benchmark_label": CSI_BENCHMARKS["CSI1000"]["label"],
+            "symbol": csi1000_symbol,
+            "symbol_or_scope": csi1000_symbol,
+            "benchmark_return": csi1000_return,
+            "excess_return": None if snapshot.stock_return is None or csi1000_return is None else snapshot.stock_return - csi1000_return,
+            "status": "available" if csi1000_return is not None else "pending_benchmark_data",
+            "reason": None if csi1000_return is not None else "中证1000缺少入场或退出窗口行情。",
+        },
+    }
+
+
+def _benchmark_dimension_payload(
+    snapshot: ShortpickValidationSnapshot,
+    dimension_key: str = SHORTPICK_BENCHMARK_DIMENSION_HS300,
+) -> dict[str, Any] | None:
+    return _benchmark_dimensions_payload(snapshot).get(dimension_key)
+
+
 def _return_between_close_map(close_map: dict[Any, float], *, entry_day: date, exit_day: date) -> float | None:
     if not close_map:
         return None
@@ -2118,12 +2406,17 @@ def _shortpick_validation_summary(session: Session, *, run_id: int) -> dict[str,
         completed_items = [item for item in official_items if item.status == "completed"]
         stock_returns = [float(item.stock_return) for item in completed_items if item.stock_return is not None]
         excess_returns = [float(item.excess_return) for item in completed_items if item.excess_return is not None]
+        benchmark_metrics = {
+            dimension_key: _validation_benchmark_metric_summary(completed_items, dimension_key=dimension_key)
+            for dimension_key in SHORTPICK_BENCHMARK_DIMENSIONS
+        }
         horizon_summary[str(horizon)] = {
             "validation_count": len(items),
             "official_sample_count": len(official_items),
             "completed_count": len(completed_items),
             "mean_stock_return": _mean_or_none(stock_returns),
             "mean_excess_return": _mean_or_none(excess_returns),
+            "benchmark_metrics": benchmark_metrics,
             "positive_excess_rate": (
                 round(sum(1 for item in excess_returns if item > 0) / len(excess_returns), 6)
                 if excess_returns
@@ -2140,12 +2433,55 @@ def _shortpick_validation_summary(session: Session, *, run_id: int) -> dict[str,
         "measured_official_candidate_count": len({item.candidate_id for item in official_completed}),
         "validation_by_horizon": horizon_summary,
         "primary_benchmark": _shortpick_primary_benchmark(),
+        "benchmark_dimensions": _shortpick_benchmark_dimension_options(),
         "official_validation_mode": SHORTPICK_OFFICIAL_VALIDATION_MODE,
     }
 
 
 def _mean_or_none(values: list[float]) -> float | None:
     return round(sum(values) / len(values), 6) if values else None
+
+
+def _shortpick_benchmark_dimension_options() -> list[dict[str, str]]:
+    return [
+        {"dimension_key": SHORTPICK_BENCHMARK_DIMENSION_HS300, "label": "沪深300"},
+        {"dimension_key": SHORTPICK_BENCHMARK_DIMENSION_CSI1000, "label": "中证1000"},
+        {"dimension_key": SHORTPICK_BENCHMARK_DIMENSION_SECTOR, "label": "同板块"},
+    ]
+
+
+def _validation_benchmark_metric_summary(
+    validations: list[ShortpickValidationSnapshot],
+    *,
+    dimension_key: str,
+) -> dict[str, Any]:
+    excess_returns: list[float] = []
+    benchmark_returns: list[float] = []
+    pending_reasons: dict[str, int] = {}
+    available_count = 0
+    for validation in validations:
+        dimension = _benchmark_dimension_payload(validation, dimension_key)
+        if dimension is None:
+            pending_reasons["missing_dimension"] = pending_reasons.get("missing_dimension", 0) + 1
+            continue
+        if dimension.get("status") != "available":
+            reason = str(dimension.get("reason") or dimension.get("status") or "pending_benchmark_data")
+            pending_reasons[reason] = pending_reasons.get(reason, 0) + 1
+            continue
+        available_count += 1
+        if dimension.get("excess_return") is not None:
+            excess_returns.append(float(dimension["excess_return"]))
+        if dimension.get("benchmark_return") is not None:
+            benchmark_returns.append(float(dimension["benchmark_return"]))
+    return {
+        "dimension_key": dimension_key,
+        "available_count": available_count,
+        "mean_benchmark_return": _mean_or_none(benchmark_returns),
+        "mean_excess_return": _mean_or_none(excess_returns),
+        "trimmed_mean_excess_return": _trimmed_mean_or_none(excess_returns),
+        "positive_excess_rate": _positive_rate(excess_returns),
+        "pending_reasons": pending_reasons,
+    }
 
 
 def _validation_payload(snapshot: ShortpickValidationSnapshot) -> dict[str, Any]:
@@ -2680,6 +3016,7 @@ def build_shortpick_model_feedback(session: Session) -> dict[str, Any]:
             "validation_count": session.scalar(select(func.count(ShortpickValidationSnapshot.id))) or 0,
             "unique_symbol_run_count": len({(candidate.run_id, candidate.symbol) for candidate in candidates}),
             "official_validation_mode": SHORTPICK_OFFICIAL_VALIDATION_MODE,
+            "benchmark_dimensions": _shortpick_benchmark_dimension_options(),
             "evaluation_checkpoints": _shortpick_evaluation_checkpoints(completed_official_rows),
             "baseline_status": _shortpick_baseline_status(completed_official_rows),
             "boundary": "independent_research_lab_no_main_pool_write",
@@ -2701,6 +3038,7 @@ def _serialize_validation_queue_item(
     round_record: ShortpickModelRound | None,
 ) -> dict[str, Any]:
     validation_payload = _serialize_validation(validation)
+    benchmark_dimensions = dict(validation_payload.get("benchmark_dimensions") or {})
     required_forward_bars = validation_payload.get("required_forward_bars")
     if validation.status == "pending_forward_window" and required_forward_bars is None:
         required_forward_bars = validation.horizon_days
@@ -2732,6 +3070,7 @@ def _serialize_validation_queue_item(
         "max_drawdown": validation.max_drawdown,
         "benchmark_symbol": validation_payload.get("benchmark_symbol"),
         "benchmark_label": validation_payload.get("benchmark_label"),
+        "benchmark_dimensions": benchmark_dimensions,
         "validation_mode": validation_payload.get("validation_mode") or _validation_mode(validation),
         "official_validation": _validation_is_official(validation),
         "tradeability_status": validation_payload.get("tradeability_status") or _validation_tradeability_status(validation),
@@ -2789,6 +3128,10 @@ def _feedback_groups(
         completed = [validation for validation in official_validations if validation.status == "completed"]
         stock_returns = [float(validation.stock_return) for validation in completed if validation.stock_return is not None]
         excess_returns = [float(validation.excess_return) for validation in completed if validation.excess_return is not None]
+        benchmark_metrics = {
+            dimension_key: _validation_benchmark_metric_summary(completed, dimension_key=dimension_key)
+            for dimension_key in SHORTPICK_BENCHMARK_DIMENSIONS
+        }
         favorable_returns = [
             float(validation.max_favorable_return)
             for validation in completed
@@ -2810,6 +3153,7 @@ def _feedback_groups(
                 "mean_stock_return": _mean_or_none(stock_returns),
                 "mean_excess_return": _mean_or_none(excess_returns),
                 "trimmed_mean_excess_return": _trimmed_mean_or_none(excess_returns),
+                "benchmark_metrics": benchmark_metrics,
                 "positive_excess_rate": (
                     round(sum(1 for item in excess_returns if item > 0) / len(excess_returns), 6)
                     if excess_returns
@@ -2931,6 +3275,7 @@ def _serialize_validation(snapshot: ShortpickValidationSnapshot) -> dict[str, An
     payload = dict(snapshot.validation_payload or {})
     benchmark = payload.get("benchmark") if isinstance(payload.get("benchmark"), dict) else _shortpick_primary_benchmark()
     benchmark_returns = payload.get("benchmark_returns") if isinstance(payload.get("benchmark_returns"), dict) else {}
+    benchmark_dimensions = _benchmark_dimensions_payload(snapshot)
     required_forward_bars = payload.get("required_forward_bars")
     if snapshot.status == "pending_forward_window" and required_forward_bars is None:
         required_forward_bars = snapshot.horizon_days
@@ -2959,6 +3304,10 @@ def _serialize_validation(snapshot: ShortpickValidationSnapshot) -> dict[str, An
         "benchmark_symbol": benchmark.get("symbol"),
         "benchmark_label": benchmark.get("label"),
         "benchmark_returns": benchmark_returns,
+        "benchmark_dimensions": benchmark_dimensions,
+        "available_benchmark_dimensions": [
+            key for key, value in benchmark_dimensions.items() if value.get("status") == "available"
+        ],
         "validation_mode": payload.get("validation_mode") or SHORTPICK_LEGACY_VALIDATION_MODE,
         "official_validation": _validation_is_official(snapshot),
         "tradeability_status": payload.get("tradeability_status") or "unknown",

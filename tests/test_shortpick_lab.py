@@ -115,7 +115,15 @@ class ShortpickLabTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
-    def _seed_stock_bars(self, symbol: str, name: str, prices: list[float], *, dates: list[date] | None = None) -> None:
+    def _seed_stock_bars(
+        self,
+        symbol: str,
+        name: str,
+        prices: list[float],
+        *,
+        dates: list[date] | None = None,
+        profile_payload: dict[str, object] | None = None,
+    ) -> None:
         if dates is not None and len(dates) != len(prices):
             raise ValueError("dates must match prices length")
         with session_scope(self.database_url) as session:
@@ -128,7 +136,7 @@ class ShortpickLabTests(unittest.TestCase):
                 provider_symbol=symbol,
                 listed_date=date(2020, 7, 16),
                 status="active",
-                profile_payload={},
+                profile_payload=profile_payload or {},
                 license_tag="test",
                 usage_scope="internal-test",
                 redistribution_scope="none",
@@ -164,6 +172,15 @@ class ShortpickLabTests(unittest.TestCase):
         self._seed_stock_bars("688981.SH", "中芯国际", [100 + index * 2 for index in range(8)])
         self._seed_stock_bars("000300.SH", "沪深300", [200 + index for index in range(8)])
         self._seed_stock_bars("000852.SH", "中证1000", [300 + index * 1.5 for index in range(8)])
+
+    def _seed_semiconductor_peers(self) -> None:
+        profile = {"industry": "半导体", "template_key": "semiconductor"}
+        with session_scope(self.database_url) as session:
+            stock = session.scalar(select(Stock).where(Stock.symbol == "688981.SH"))
+            if stock is not None:
+                stock.profile_payload = profile
+        self._seed_stock_bars("688012.SH", "中微公司", [50, 51, 52, 53, 54, 55, 56, 57], profile_payload=profile)
+        self._seed_stock_bars("688008.SH", "澜起科技", [80, 82, 86, 87, 88, 89, 90, 91], profile_payload=profile)
 
     def _fake_daily_fetch(self, symbol: str, prices: list[float]) -> SimpleNamespace:
         start = datetime(2026, 5, 5, 7, 0, tzinfo=timezone.utc)
@@ -615,6 +632,70 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(payload["summary"]["measured_candidate_count"], 1)
         self.assertEqual(payload["summary"]["official_validation_mode"], "after_close_t_plus_1_close_entry_v1")
         self.assertIn("1", payload["summary"]["validation_by_horizon"])
+
+    def test_validation_persists_multi_benchmark_dimensions(self) -> None:
+        self._seed_daily_bars()
+        self._seed_semiconductor_peers()
+        executors = [StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("688981.SH", "中芯国际", "半导体国产替代", "https://a.example/news"))]
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
+            with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
+                with session_scope(self.database_url) as session:
+                    payload = run_shortpick_experiment(
+                        session,
+                        run_date=date(2026, 5, 5),
+                        rounds_per_model=1,
+                        triggered_by="root",
+                        executors=executors,
+                    )
+                    queue = list_shortpick_validation_queue(session, horizon=1, status="completed")
+                    feedback = build_shortpick_model_feedback(session)
+
+        first_validation = payload["candidates"][0]["validations"][0]
+        dimensions = first_validation["benchmark_dimensions"]
+        self.assertEqual(dimensions["hs300"]["status"], "available")
+        self.assertEqual(dimensions["csi1000"]["status"], "available")
+        self.assertEqual(dimensions["sector_equal_weight"]["status"], "available")
+        self.assertAlmostEqual(dimensions["csi1000"]["benchmark_return"], 303 / 301.5 - 1)
+        peer_return = ((52 / 51 - 1) + (86 / 82 - 1)) / 2
+        self.assertAlmostEqual(dimensions["sector_equal_weight"]["benchmark_return"], peer_return, places=6)
+        self.assertAlmostEqual(
+            dimensions["sector_equal_weight"]["excess_return"],
+            (104 / 102 - 1) - peer_return,
+            places=6,
+        )
+        self.assertIn("benchmark_dimensions", queue["items"][0])
+        model = next(item for item in feedback["models"] if item["provider_name"] == "openai")
+        horizon_group = next(group for group in model["validation_by_horizon"] if group["group_key"] == "1")
+        self.assertIn("sector_equal_weight", horizon_group["benchmark_metrics"])
+        self.assertAlmostEqual(
+            horizon_group["benchmark_metrics"]["sector_equal_weight"]["mean_excess_return"],
+            (104 / 102 - 1) - peer_return,
+            places=6,
+        )
+
+    def test_validation_marks_sector_benchmark_pending_when_peers_missing(self) -> None:
+        self._seed_daily_bars()
+        with session_scope(self.database_url) as session:
+            stock = session.scalar(select(Stock).where(Stock.symbol == "688981.SH"))
+            if stock is not None:
+                stock.profile_payload = {"industry": "半导体", "template_key": "semiconductor"}
+        executors = [StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("688981.SH", "中芯国际", "半导体国产替代", "https://a.example/news"))]
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
+            with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
+                with session_scope(self.database_url) as session:
+                    payload = run_shortpick_experiment(
+                        session,
+                        run_date=date(2026, 5, 5),
+                        rounds_per_model=1,
+                        triggered_by="root",
+                        executors=executors,
+                    )
+
+        sector_dimension = payload["candidates"][0]["validations"][0]["benchmark_dimensions"]["sector_equal_weight"]
+        self.assertEqual(sector_dimension["status"], "pending_sector_peer_baseline")
+        self.assertIn("可用同行样本", sector_dimension["reason"])
 
     def test_candidate_market_sync_creates_only_stock_and_market_bars(self) -> None:
         self._seed_stock_bars("000300.SH", "沪深300", [200 + index for index in range(8)])

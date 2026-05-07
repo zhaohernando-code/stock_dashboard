@@ -10,6 +10,7 @@ import {
   Progress,
   Row,
   Col,
+  Segmented,
   Select,
   Space,
   Statistic,
@@ -37,6 +38,11 @@ import { formatDate, formatPercent, valueTone } from "../utils/format";
 
 const { Paragraph, Text, Title } = Typography;
 const DEFAULT_VALIDATION_PAGE_SIZE = 50;
+const BENCHMARK_OPTIONS = [
+  { label: "沪深300", value: "hs300" },
+  { label: "中证1000", value: "csi1000" },
+  { label: "同板块", value: "sector_equal_weight" },
+];
 
 function priorityLabel(value: string): string {
   if (value === "cross_model_same_symbol") return "跨模型同票";
@@ -82,6 +88,8 @@ function statusLabel(value: string): string {
     pending_forward_window: "待窗口",
     pending_entry_bar: "待入场价",
     pending_benchmark_data: "待基准",
+    pending_sector_mapping: "缺板块映射",
+    pending_sector_peer_baseline: "待板块样本",
     suspended_or_no_current_bar: "停牌/缺行情",
     entry_unfillable_limit_up: "入场涨停不可成交",
     tradeability_uncertain: "可交易性待确认",
@@ -101,14 +109,54 @@ function roundModelLabel(round: ShortpickRoundView): string {
   return `${round.provider_name}:${round.model_name} #${round.round_index}`;
 }
 
-function validationSummary(candidate: ShortpickCandidateView): string {
+function benchmarkLabel(value: string): string {
+  return BENCHMARK_OPTIONS.find((item) => item.value === value)?.label ?? "沪深300";
+}
+
+function benchmarkMetric(
+  item: ShortpickValidationView | ShortpickValidationQueueItem,
+  selectedBenchmark: string,
+) {
+  const dimension = item.benchmark_dimensions?.[selectedBenchmark];
+  if (dimension) return dimension;
+  if (selectedBenchmark === "hs300") {
+    return {
+      benchmark_label: item.benchmark_label || "沪深300",
+      benchmark_return: item.benchmark_return,
+      excess_return: item.excess_return,
+      status: item.benchmark_return == null ? "pending_benchmark_data" : "available",
+      reason: item.pending_reason,
+    };
+  }
+  return {
+    benchmark_label: benchmarkLabel(selectedBenchmark),
+    benchmark_return: null,
+    excess_return: null,
+    status: selectedBenchmark === "sector_equal_weight" ? "pending_sector_peer_baseline" : "pending_benchmark_data",
+    reason: selectedBenchmark === "sector_equal_weight" ? "待板块样本" : "待基准数据",
+  };
+}
+
+function benchmarkPendingText(status?: string | null, reason?: string | null): string {
+  if (reason) return reason;
+  if (status === "pending_sector_mapping") return "缺板块映射";
+  if (status === "pending_sector_peer_baseline") return "待板块样本";
+  if (status === "pending_benchmark_data") return "待基准数据";
+  return status || "待基准数据";
+}
+
+function validationSummary(candidate: ShortpickCandidateView, selectedBenchmark: string): string {
   const completed = candidate.validations.filter((item) => item.status === "completed");
   if (!completed.length) {
     const pending = candidate.validations[0];
     return pending ? statusLabel(pending.status) : "待验证";
   }
   const shortest = completed[0];
-  return `${shortest.horizon_days}日 个股 ${formatPercent(shortest.stock_return)} / 沪深300超额 ${formatPercent(shortest.excess_return)}`;
+  const metric = benchmarkMetric(shortest, selectedBenchmark);
+  if (metric.status !== "available") {
+    return `${shortest.horizon_days}日 个股 ${formatPercent(shortest.stock_return)} / ${benchmarkPendingText(metric.status, metric.reason)}`;
+  }
+  return `${shortest.horizon_days}日 个股 ${formatPercent(shortest.stock_return)} / ${metric.benchmark_label || benchmarkLabel(selectedBenchmark)}超额 ${formatPercent(metric.excess_return)}`;
 }
 
 function validationWindowNote(item: ShortpickValidationView | ShortpickValidationQueueItem): string | null {
@@ -196,6 +244,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [validationFilters, setValidationFilters] = useState({ status: "", horizon: "", model: "", symbol: "" });
   const [validationPage, setValidationPage] = useState({ current: 1, pageSize: DEFAULT_VALIDATION_PAGE_SIZE });
+  const [selectedBenchmark, setSelectedBenchmark] = useState("hs300");
 
   const latestRun = selectedRun ?? runs[0] ?? null;
   const normalCandidates = useMemo(
@@ -323,6 +372,18 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
     void loadFeedback();
   }, []);
 
+  const benchmarkSwitcher = (
+    <Space size={8} wrap>
+      <span>收益反馈</span>
+      <Segmented
+        size="small"
+        options={BENCHMARK_OPTIONS}
+        value={selectedBenchmark}
+        onChange={(value) => setSelectedBenchmark(String(value))}
+      />
+    </Space>
+  );
+
   const candidateColumns: ColumnsType<ShortpickCandidateView> = [
     {
       title: "研究标的",
@@ -357,7 +418,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
       key: "validation",
       render: (_, item) => (
         <Space direction="vertical" size={0}>
-          <Text>{validationSummary(item)}</Text>
+          <Text>{validationSummary(item, selectedBenchmark)}</Text>
           <Text type="secondary">完成前不得显示为 verified</Text>
         </Space>
       ),
@@ -388,14 +449,26 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
       render: (value: string) => <Tag color={statusColor(value)}>{statusLabel(value)}</Tag>,
     },
     {
-      title: "收益反馈",
+      title: benchmarkSwitcher,
       key: "returns",
-      render: (_, item) => (
-        <Space direction="vertical" size={0}>
-          <Text className={`value-${valueTone(item.excess_return)}`}>超额收益 {formatPercent(item.excess_return)}</Text>
-          <Text type="secondary">个股 {formatPercent(item.stock_return)} / {item.benchmark_label || "沪深300"} {formatPercent(item.benchmark_return)}</Text>
-        </Space>
-      ),
+      render: (_, item) => {
+        const metric = benchmarkMetric(item, selectedBenchmark);
+        return (
+          <Space direction="vertical" size={0}>
+            {metric.status === "available" ? (
+              <>
+                <Text className={`value-${valueTone(metric.excess_return)}`}>超额收益 {formatPercent(metric.excess_return)}</Text>
+                <Text type="secondary">个股 {formatPercent(item.stock_return)} / {metric.benchmark_label || benchmarkLabel(selectedBenchmark)} {formatPercent(metric.benchmark_return)}</Text>
+              </>
+            ) : (
+              <>
+                <Text type="secondary">{benchmarkPendingText(metric.status, metric.reason)}</Text>
+                <Text type="secondary">个股 {formatPercent(item.stock_return)} / {metric.benchmark_label || benchmarkLabel(selectedBenchmark)} 待补</Text>
+              </>
+            )}
+          </Space>
+        );
+      },
     },
     {
       title: "窗口",
@@ -537,6 +610,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
                   failedRounds={failedRounds}
                   loading={loading}
                   candidateColumns={candidateColumns}
+                  selectedBenchmark={selectedBenchmark}
                 />
               ),
             },
@@ -561,7 +635,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
             {
               key: "feedback",
               label: "模型反馈",
-              children: <ModelFeedbackTab feedback={feedback} loading={feedbackLoading} columns={feedbackColumns} />,
+              children: <ModelFeedbackTab feedback={feedback} loading={feedbackLoading} columns={feedbackColumns} selectedBenchmark={selectedBenchmark} />,
             },
           ]}
         />
@@ -585,6 +659,7 @@ function TodayRunTab({
   failedRounds,
   loading,
   candidateColumns,
+  selectedBenchmark,
 }: {
   run: ShortpickRunView;
   normalCandidates: ShortpickCandidateView[];
@@ -592,6 +667,7 @@ function TodayRunTab({
   failedRounds: ShortpickRoundView[];
   loading: boolean;
   candidateColumns: ColumnsType<ShortpickCandidateView>;
+  selectedBenchmark: string;
 }) {
   return (
     <>
@@ -627,7 +703,7 @@ function TodayRunTab({
       </Row>
 
       {failedRounds.length || failedCandidates.length ? (
-        <FailureDiagnostics failedRounds={failedRounds} failedCandidates={failedCandidates} />
+        <FailureDiagnostics failedRounds={failedRounds} failedCandidates={failedCandidates} selectedBenchmark={selectedBenchmark} />
       ) : null}
 
       <Card
@@ -691,7 +767,7 @@ function TodayRunTab({
                 </div>
                 <div>
                   <Title level={5}>后验复盘</Title>
-                  <ValidationList items={item.validations} />
+                  <ValidationList items={item.validations} selectedBenchmark={selectedBenchmark} />
                 </div>
                 <div>
                   <Title level={5}>来源与留痕</Title>
@@ -720,9 +796,11 @@ function TodayRunTab({
 function FailureDiagnostics({
   failedRounds,
   failedCandidates,
+  selectedBenchmark,
 }: {
   failedRounds: ShortpickRoundView[];
   failedCandidates: ShortpickCandidateView[];
+  selectedBenchmark: string;
 }) {
   return (
     <Card className="panel-card" title="失败/异常诊断">
@@ -773,7 +851,7 @@ function FailureDiagnostics({
             {
               title: "状态",
               key: "status",
-              render: (_, item: ShortpickCandidateView) => <Tag color={item.display_bucket === "diagnostic" ? "gold" : "red"}>{validationSummary(item)}</Tag>,
+              render: (_, item: ShortpickCandidateView) => <Tag color={item.display_bucket === "diagnostic" ? "gold" : "red"}>{validationSummary(item, selectedBenchmark)}</Tag>,
             },
             {
               title: "原因",
@@ -869,10 +947,12 @@ function ModelFeedbackTab({
   feedback,
   loading,
   columns,
+  selectedBenchmark,
 }: {
   feedback: ShortpickModelFeedbackResponse | null;
   loading: boolean;
   columns: ColumnsType<ShortpickModelFeedbackItem>;
+  selectedBenchmark: string;
 }) {
   const overall = feedback?.overall ?? {};
   const checkpoints = recordValue<Record<string, unknown>>(overall, "evaluation_checkpoints");
@@ -909,7 +989,7 @@ function ModelFeedbackTab({
           columns={columns}
           dataSource={feedback?.models ?? []}
           expandable={{
-            expandedRowRender: (item) => <FeedbackDetails item={item} />,
+            expandedRowRender: (item) => <FeedbackDetails item={item} selectedBenchmark={selectedBenchmark} />,
           }}
           pagination={false}
         />
@@ -918,36 +998,49 @@ function ModelFeedbackTab({
   );
 }
 
-function FeedbackDetails({ item }: { item: ShortpickModelFeedbackItem }) {
+function FeedbackDetails({ item, selectedBenchmark }: { item: ShortpickModelFeedbackItem; selectedBenchmark: string }) {
   return (
     <div className="shortpick-feedback-detail">
-      <FeedbackGroupList title="周期表现" groups={item.validation_by_horizon} />
-      <FeedbackGroupList title="优先级表现" groups={item.validation_by_priority} />
-      <FeedbackGroupList title="题材表现" groups={item.validation_by_theme} />
+      <FeedbackGroupList title="周期表现" groups={item.validation_by_horizon} selectedBenchmark={selectedBenchmark} />
+      <FeedbackGroupList title="优先级表现" groups={item.validation_by_priority} selectedBenchmark={selectedBenchmark} />
+      <FeedbackGroupList title="题材表现" groups={item.validation_by_theme} selectedBenchmark={selectedBenchmark} />
     </div>
   );
 }
 
-function FeedbackGroupList({ title, groups }: { title: string; groups: ShortpickFeedbackGroup[] }) {
+function FeedbackGroupList({ title, groups, selectedBenchmark }: { title: string; groups: ShortpickFeedbackGroup[]; selectedBenchmark: string }) {
   return (
     <div>
-      <Title level={5}>{title}</Title>
+      <Title level={5}>{title} · {benchmarkLabel(selectedBenchmark)}</Title>
       <List
         size="small"
         dataSource={groups}
-        renderItem={(group) => (
-          <List.Item>
-            <Space wrap>
-              <Text strong>{group.label}</Text>
-              <Text>官方样本 {group.completed_official_sample_count ?? group.completed_validation_count}/{group.official_sample_count ?? group.sample_count}</Text>
-              <Text type="secondary">原始 {group.sample_count}</Text>
-              <Text className={`value-${valueTone(group.mean_excess_return)}`}>平均超额 {formatPercent(group.mean_excess_return)}</Text>
-              <Text className={`value-${valueTone(group.trimmed_mean_excess_return)}`}>去极值 {formatPercent(group.trimmed_mean_excess_return)}</Text>
-              <Text>正超额 {formatPercent(group.positive_excess_rate)}</Text>
-              <Text type="secondary">最大回撤 {formatPercent(group.max_drawdown)}</Text>
-            </Space>
-          </List.Item>
-        )}
+        renderItem={(group) => {
+          const metric = group.benchmark_metrics?.[selectedBenchmark];
+          const meanExcess = metric?.mean_excess_return ?? (selectedBenchmark === "hs300" ? group.mean_excess_return : null);
+          const trimmedMean = metric?.trimmed_mean_excess_return ?? (selectedBenchmark === "hs300" ? group.trimmed_mean_excess_return : null);
+          const positiveRate = metric?.positive_excess_rate ?? (selectedBenchmark === "hs300" ? group.positive_excess_rate : null);
+          const pendingReasons = metric?.pending_reasons ? Object.keys(metric.pending_reasons) : [];
+          return (
+            <List.Item>
+              <Space wrap>
+                <Text strong>{group.label}</Text>
+                <Text>官方样本 {group.completed_official_sample_count ?? group.completed_validation_count}/{group.official_sample_count ?? group.sample_count}</Text>
+                <Text type="secondary">原始 {group.sample_count}</Text>
+                {metric && Number(metric.available_count ?? 0) === 0 && selectedBenchmark !== "hs300" ? (
+                  <Text type="secondary">{pendingReasons[0] || "待基准数据"}</Text>
+                ) : (
+                  <>
+                    <Text className={`value-${valueTone(meanExcess)}`}>平均超额 {formatPercent(meanExcess)}</Text>
+                    <Text className={`value-${valueTone(trimmedMean)}`}>去极值 {formatPercent(trimmedMean)}</Text>
+                    <Text>正超额 {formatPercent(positiveRate)}</Text>
+                  </>
+                )}
+                <Text type="secondary">最大回撤 {formatPercent(group.max_drawdown)}</Text>
+              </Space>
+            </List.Item>
+          );
+        }}
       />
     </div>
   );
@@ -1025,7 +1118,7 @@ function SourceList({ candidate }: { candidate: ShortpickCandidateView }) {
   );
 }
 
-function ValidationList({ items }: { items: ShortpickValidationView[] }) {
+function ValidationList({ items, selectedBenchmark }: { items: ShortpickValidationView[]; selectedBenchmark: string }) {
   if (!items.length) {
     return <Text type="secondary">暂无验证窗口。</Text>;
   }
@@ -1033,21 +1126,30 @@ function ValidationList({ items }: { items: ShortpickValidationView[] }) {
     <List
       size="small"
       dataSource={items}
-      renderItem={(item) => (
-        <List.Item>
-          <Space direction="vertical" size={0}>
-            <Space wrap>
-              <Tag color={statusColor(item.status)}>{item.horizon_days}日 · {statusLabel(item.status)}</Tag>
-              <Text className={`value-${valueTone(item.stock_return)}`}>个股收益 {formatPercent(item.stock_return)}</Text>
-              <Text className={`value-${valueTone(item.excess_return)}`}>超额收益 {formatPercent(item.excess_return)}</Text>
-              <Text type="secondary">{item.benchmark_label || "沪深300"} {formatPercent(item.benchmark_return)}</Text>
-              <Text type="secondary">{item.exit_at ? formatDate(item.exit_at) : "等待窗口"}</Text>
-              <Text type="secondary">浮盈 {formatPercent(item.max_favorable_return)} / 回撤 {formatPercent(item.max_drawdown)}</Text>
+      renderItem={(item) => {
+        const metric = benchmarkMetric(item, selectedBenchmark);
+        return (
+          <List.Item>
+            <Space direction="vertical" size={0}>
+              <Space wrap>
+                <Tag color={statusColor(item.status)}>{item.horizon_days}日 · {statusLabel(item.status)}</Tag>
+                <Text className={`value-${valueTone(item.stock_return)}`}>个股收益 {formatPercent(item.stock_return)}</Text>
+                {metric.status === "available" ? (
+                  <>
+                    <Text className={`value-${valueTone(metric.excess_return)}`}>超额收益 {formatPercent(metric.excess_return)}</Text>
+                    <Text type="secondary">{metric.benchmark_label || benchmarkLabel(selectedBenchmark)} {formatPercent(metric.benchmark_return)}</Text>
+                  </>
+                ) : (
+                  <Text type="secondary">{metric.benchmark_label || benchmarkLabel(selectedBenchmark)} · {benchmarkPendingText(metric.status, metric.reason)}</Text>
+                )}
+                <Text type="secondary">{item.exit_at ? formatDate(item.exit_at) : "等待窗口"}</Text>
+                <Text type="secondary">浮盈 {formatPercent(item.max_favorable_return)} / 回撤 {formatPercent(item.max_drawdown)}</Text>
+              </Space>
+              {validationWindowNote(item) ? <Text type="secondary">{validationWindowNote(item)}</Text> : null}
             </Space>
-            {validationWindowNote(item) ? <Text type="secondary">{validationWindowNote(item)}</Text> : null}
-          </Space>
-        </List.Item>
-      )}
+          </List.Item>
+        );
+      }}
     />
   );
 }

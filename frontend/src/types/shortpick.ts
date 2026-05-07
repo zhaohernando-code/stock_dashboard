@@ -62,6 +62,8 @@ export interface ShortpickValidationView {
   benchmark_symbol?: string | null;
   benchmark_label?: string | null;
   benchmark_returns?: Record<string, unknown>;
+  benchmark_dimensions?: Record<string, ShortpickBenchmarkDimension>;
+  available_benchmark_dimensions?: string[];
   validation_mode?: string | null;
   official_validation?: boolean;
   tradeability_status?: string | null;
@@ -70,6 +72,21 @@ export interface ShortpickValidationView {
   required_forward_bars?: number | null;
   pending_reason?: string | null;
   market_data_sync?: Record<string, unknown>;
+}
+
+export interface ShortpickBenchmarkDimension {
+  dimension_key?: string | null;
+  benchmark_id?: string | null;
+  label?: string | null;
+  benchmark_label?: string | null;
+  symbol?: string | null;
+  symbol_or_scope?: string | null;
+  benchmark_return?: number | null;
+  excess_return?: number | null;
+  status?: string | null;
+  reason?: string | null;
+  peer_symbol_count?: number | null;
+  contributing_peer_symbol_count?: number | null;
 }
 
 export interface ShortpickCandidateView {
@@ -175,6 +192,7 @@ export interface ShortpickValidationQueueItem {
   max_drawdown?: number | null;
   benchmark_symbol?: string | null;
   benchmark_label?: string | null;
+  benchmark_dimensions?: Record<string, ShortpickBenchmarkDimension>;
   validation_mode?: string | null;
   official_validation?: boolean;
   tradeability_status?: string | null;
@@ -204,10 +222,21 @@ export interface ShortpickFeedbackGroup {
   mean_stock_return?: number | null;
   mean_excess_return?: number | null;
   trimmed_mean_excess_return?: number | null;
+  benchmark_metrics?: Record<string, ShortpickBenchmarkMetric>;
   positive_excess_rate?: number | null;
   max_drawdown?: number | null;
   max_favorable_return?: number | null;
   status_counts: Record<string, number>;
+}
+
+export interface ShortpickBenchmarkMetric {
+  dimension_key?: string | null;
+  available_count?: number | null;
+  mean_benchmark_return?: number | null;
+  mean_excess_return?: number | null;
+  trimmed_mean_excess_return?: number | null;
+  positive_excess_rate?: number | null;
+  pending_reasons?: Record<string, number>;
 }
 
 export interface ShortpickModelFeedbackItem {

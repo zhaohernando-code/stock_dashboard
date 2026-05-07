@@ -74,6 +74,8 @@ class ShortpickValidationView(BaseModel):
     benchmark_symbol: str | None = None
     benchmark_label: str | None = None
     benchmark_returns: dict[str, Any] = Field(default_factory=dict)
+    benchmark_dimensions: dict[str, Any] = Field(default_factory=dict)
+    available_benchmark_dimensions: list[str] = Field(default_factory=list)
     validation_mode: str | None = None
     official_validation: bool = False
     tradeability_status: str | None = None
@@ -189,6 +191,7 @@ class ShortpickValidationQueueItem(BaseModel):
     max_drawdown: float | None = None
     benchmark_symbol: str | None = None
     benchmark_label: str | None = None
+    benchmark_dimensions: dict[str, Any] = Field(default_factory=dict)
     validation_mode: str | None = None
     official_validation: bool = False
     tradeability_status: str | None = None
@@ -218,6 +221,7 @@ class ShortpickFeedbackGroup(BaseModel):
     mean_stock_return: float | None = None
     mean_excess_return: float | None = None
     trimmed_mean_excess_return: float | None = None
+    benchmark_metrics: dict[str, Any] = Field(default_factory=dict)
     positive_excess_rate: float | None = None
     max_drawdown: float | None = None
     max_favorable_return: float | None = None
