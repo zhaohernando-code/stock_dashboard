@@ -923,7 +923,7 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
                         className="sub-alert"
                         type="info"
                         showIcon
-                        message="状态说明"
+                        message="研究进度"
                         description={sanitizeDisplayText(operations.manual_research_queue.focus_request.status_note)}
                       />
                     ) : null}
@@ -942,7 +942,7 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
                         className="sub-alert"
                         type="warning"
                         showIcon
-                        message="结果过期"
+                        message="研究需更新"
                         description={sanitizeDisplayText(operations.manual_research_queue.focus_request.stale_reason)}
                       />
                     ) : null}

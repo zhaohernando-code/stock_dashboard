@@ -1441,7 +1441,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                               className="sub-alert"
                               type="info"
                               showIcon
-                              message="状态说明"
+                              message="研究进度"
                               description={sanitizeDisplayText(dashboard.recommendation.manual_llm_review.status_note)}
                             />
                           ) : null}
@@ -1450,7 +1450,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                               className="sub-alert"
                               type="warning"
                               showIcon
-                              message="结果过期"
+                              message="研究需更新"
                               description={sanitizeDisplayText(dashboard.recommendation.manual_llm_review.stale_reason)}
                             />
                           ) : null}
@@ -1790,7 +1790,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                           className="sub-alert"
                           type="info"
                           showIcon
-                          message="状态说明"
+                          message="研究进度"
                           description={sanitizeDisplayText(analysisAnswer.status_note)}
                         />
                       ) : null}
@@ -1808,7 +1808,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                           className="sub-alert"
                           type="warning"
                           showIcon
-                          message="结果过期"
+                          message="研究需更新"
                           description={sanitizeDisplayText(analysisAnswer.stale_reason)}
                         />
                       ) : null}
@@ -1860,22 +1860,22 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                     ) : null}
                     {dashboard.follow_up.research_packet.manual_review_status_note ? (
                       <Alert
-                        className="section-alert"
-                        type="info"
-                        showIcon
-                        message="研究状态说明"
-                        description={sanitizeDisplayText(dashboard.follow_up.research_packet.manual_review_status_note)}
-                      />
-                    ) : null}
+                          className="section-alert"
+                          type="info"
+                          showIcon
+                          message="研究进度"
+                          description={sanitizeDisplayText(dashboard.follow_up.research_packet.manual_review_status_note)}
+                        />
+                      ) : null}
                     {dashboard.follow_up.research_packet.manual_review_stale_reason ? (
                       <Alert
-                        className="section-alert"
-                        type="warning"
-                        showIcon
-                        message="研究结果过期"
-                        description={sanitizeDisplayText(dashboard.follow_up.research_packet.manual_review_stale_reason)}
-                      />
-                    ) : null}
+                          className="section-alert"
+                          type="warning"
+                          showIcon
+                          message="研究需更新"
+                          description={sanitizeDisplayText(dashboard.follow_up.research_packet.manual_review_stale_reason)}
+                        />
+                      ) : null}
                     {dashboard.follow_up.research_packet.validation_note ? (
                       <Alert
                         className="section-alert"

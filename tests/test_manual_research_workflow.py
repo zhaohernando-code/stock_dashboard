@@ -85,7 +85,7 @@ class ManualResearchWorkflowTests(unittest.TestCase):
         self.assertIsNone(manual_review["artifact_id"])
         self.assertEqual(
             manual_review["status_note"],
-            "builtin_gpt request is queued for local Codex execution.",
+            "已排队等待本机研究助手生成结论。",
         )
         self.assertNotEqual(manual_review["summary"], "payload shell should not override request truth.")
         research_packet = dashboard["follow_up"]["research_packet"]
@@ -94,7 +94,7 @@ class ManualResearchWorkflowTests(unittest.TestCase):
         self.assertEqual(research_packet["manual_review_executor_kind"], EXECUTOR_KIND_BUILTIN_GPT)
         self.assertEqual(
             research_packet["manual_review_status_note"],
-            "builtin_gpt request is queued for local Codex execution.",
+            "已排队等待本机研究助手生成结论。",
         )
 
     def test_manual_completion_writes_artifact_and_updates_dashboard_projection(self) -> None:
@@ -137,6 +137,7 @@ class ManualResearchWorkflowTests(unittest.TestCase):
         self.assertEqual(manual_review["status"], "completed")
         self.assertEqual(manual_review["request_id"], request["id"])
         self.assertEqual(manual_review["artifact_id"], completed["artifact_id"])
+        self.assertEqual(manual_review["status_note"], "人工研究已完成，并已生成可回查的研究记录。")
         self.assertEqual(manual_review["review_verdict"], "mixed")
         self.assertEqual(
             manual_review["summary"],
@@ -179,6 +180,46 @@ class ManualResearchWorkflowTests(unittest.TestCase):
         self.assertIsNone(current["stale_reason"])
         self.assertEqual(current["validation_artifact_id"], request["validation_artifact_id"])
         self.assertEqual(current["validation_manifest_id"], request["validation_manifest_id"])
+
+    def test_completed_request_with_changed_recommendation_context_uses_user_facing_stale_reason(self) -> None:
+        with patch(
+            "ashare_evidence.manual_research_workflow.get_builtin_llm_executor_config",
+            return_value=BUILTIN_EXECUTOR_CONFIG,
+        ):
+            with session_scope(self.database_url) as session:
+                seed_recommendation_fixture(session, "600519.SH")
+                request = create_manual_research_request(
+                    session,
+                    symbol="600519.SH",
+                    question="请解释当前建议是否仍然有效。",
+                    trigger_source="unit_test",
+                    requested_by="test-operator",
+                    executor_kind=EXECUTOR_KIND_BUILTIN_GPT,
+                )
+                complete_manual_research_request(
+                    session,
+                    request_id=int(request["id"]),
+                    summary="人工核查完成。",
+                    review_verdict="supports_current_recommendation",
+                )
+                recommendation = session.scalar(
+                    select(Recommendation).where(Recommendation.recommendation_key == request["recommendation_key"])
+                )
+                self.assertIsNotNone(recommendation)
+                recommendation.recommendation_key = "reco-600519.SH-20990101-phase2"
+
+        with session_scope(self.database_url) as session:
+            dashboard = get_stock_dashboard(session, "600519.SH")
+            requests = list_manual_research_requests(session, symbol="600519.SH")
+
+        manual_review = dashboard["recommendation"]["manual_llm_review"]
+        expected_reason = "这份人工研究对应的是上一版建议；当前标的已经重新分析，请重新发起人工研究后再引用。"
+        self.assertEqual(manual_review["status"], "stale")
+        self.assertEqual(manual_review["stale_reason"], expected_reason)
+        self.assertEqual(manual_review["status_note"], "人工研究已完成，并已生成可回查的研究记录。")
+        self.assertNotIn("recommendation context changed", manual_review["stale_reason"])
+        self.assertEqual(requests["items"][0]["stale_reason"], expected_reason)
+        self.assertEqual(requests["items"][0]["status_note"], "人工研究已完成，并已生成可回查的研究记录。")
 
     def test_queued_request_view_does_not_borrow_completed_review_from_newer_request(self) -> None:
         with patch(

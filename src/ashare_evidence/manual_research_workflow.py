@@ -28,6 +28,7 @@ from ashare_evidence.manual_research_contract import (
     build_manual_llm_review_projection,
     compute_source_packet_hash,
     manual_research_stale_reason,
+    sanitize_manual_review_text,
 )
 from ashare_evidence.models import ManualResearchRequest, ModelApiKey, Recommendation, Stock
 from ashare_evidence.recommendation_selection import (
@@ -48,7 +49,7 @@ from ashare_evidence.services import _build_historical_validation
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 BUILTIN_CODEX_TIMEOUT_SECONDS = 180
-BUILTIN_CODEX_QUEUED_STATUS_NOTE = "builtin_gpt request is queued for local Codex execution."
+BUILTIN_CODEX_QUEUED_STATUS_NOTE = "已排队等待本机研究助手生成结论。"
 
 
 def _artifact_root(session: Session) -> Any:
@@ -205,13 +206,13 @@ def _serialize_request(
         "executor_kind": request.executor_kind,
         "model_api_key_id": request.model_api_key_id,
         "status": status,
-        "status_note": request.status_note,
+        "status_note": sanitize_manual_review_text(request.status_note),
         "requested_at": request.requested_at,
         "started_at": request.started_at,
         "completed_at": request.completed_at,
         "failed_at": request.failed_at,
         "artifact_id": request.artifact_id,
-        "failure_reason": request.failure_reason,
+        "failure_reason": sanitize_manual_review_text(request.failure_reason),
         "requested_by": request.requested_by,
         "superseded_by_request_id": request.superseded_by_request_id,
         "stale_reason": stale_reason,
@@ -384,7 +385,7 @@ def complete_manual_research_request(
     )
     write_manual_research_artifact(artifact, root=_artifact_root(session))
     request.status = MANUAL_REVIEW_COMPLETED
-    request.status_note = "Manual review artifact generated."
+    request.status_note = "人工研究已完成，并已生成可回查的研究记录。"
     request.started_at = request.started_at or completed_at
     request.completed_at = completed_at
     request.failed_at = None
@@ -460,7 +461,7 @@ def execute_manual_research_request(
         ]
 
     request.status = MANUAL_REVIEW_IN_PROGRESS
-    request.status_note = "Manual research execution is running."
+    request.status_note = "人工研究正在生成结论，请稍后刷新查看。"
     request.started_at = request.started_at or utcnow()
     session.flush()
 
@@ -603,7 +604,7 @@ def retry_manual_research_request(
         model_api_key_id=original.model_api_key_id,
     )
     original.superseded_by_request_id = int(created["id"])
-    original.status_note = f"Superseded by request {created['request_key']}."
+    original.status_note = "这条人工研究请求已由新的请求接替，请查看最新一条研究记录。"
     session.flush()
     return created
 

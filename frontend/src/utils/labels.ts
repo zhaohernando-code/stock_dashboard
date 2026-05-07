@@ -152,6 +152,16 @@ export function sanitizeDisplayText(value?: string | null): string {
     .replace(/历史验证仍处于迁移重建阶段。?/g, "历史样本仍在持续补齐，当前先结合最新证据观察。")
     .replace(/运营复盘口径仍在迁移/g, "复盘结论仍在持续更新")
     .replace(/No manual research request has been created for the current recommendation context\./g, "当前建议尚未发起人工研究请求。")
+    .replace(/Manual review artifact generated\./g, "人工研究已完成，并已生成可回查的研究记录。")
+    .replace(/recommendation context changed: reco-[A-Za-z0-9._-]+ -> reco-[A-Za-z0-9._-]+/g, "这份人工研究对应的是上一版建议；当前标的已经重新分析，请重新发起人工研究后再引用。")
+    .replace(/builtin_gpt request is queued for local Codex execution\./g, "已排队等待本机研究助手生成结论。")
+    .replace(/Manual research execution is running\./g, "人工研究正在生成结论，请稍后刷新查看。")
+    .replace(/supports_current_recommendation/g, "支持当前建议")
+    .replace(/contradicts_current_recommendation/g, "不支持当前建议")
+    .replace(/insufficient_evidence/g, "证据不足")
+    .replace(/validation_artifact_id changed after the manual review completed\./g, "滚动验证数据已更新，这份人工研究使用的验证材料不是最新版，请重新发起人工研究。")
+    .replace(/validation_manifest_id changed after the manual review completed\./g, "滚动验证清单已更新，这份人工研究使用的材料不是最新版，请重新发起人工研究。")
+    .replace(/follow-up research packet hash changed after the manual review completed\./g, "研究追问包已更新，这份人工研究不再完全匹配当前页面，请重新发起人工研究。")
     .replace(/Manual Codex\/GPT 研究助手仍是解释层附属信息，未参与任何训练、评分或晋级。/g, "人工研究当前仅作为补充解释，不参与量化评分或自动晋级。")
     .replace(/Manual research workflow/g, "人工研究流程")
     .replace(/replay artifact/g, "复盘记录")
@@ -336,17 +346,17 @@ export function manualReviewStatusLabel(status?: string | null): string {
   if (status === "in_progress") return "分析中";
   if (status === "completed") return "已完成";
   if (status === "failed") return "执行失败";
-  if (status === "stale") return "结果过期";
+  if (status === "stale") return "研究需更新";
   return status || "未提供";
 }
 
 
 export function manualResearchActionStatusMessage(request: ManualResearchRequestView): string {
   if (request.status === "completed") {
-    return "人工研究已完成并生成 artifact。";
+    return "人工研究已完成，并已生成可回查的研究记录。";
   }
   if (request.status === "stale") {
-    return "人工研究结果已过期，建议发起 retry。";
+    return "当前标的已经重新分析，建议重新发起人工研究。";
   }
   if (request.status === "failed") {
     return request.failure_reason || "人工研究执行失败。";

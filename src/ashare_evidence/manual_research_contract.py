@@ -27,6 +27,14 @@ _SANITIZE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"rolling-validation:[A-Za-z0-9:_-]+"), "滚动验证记录"),
     (re.compile(r"replay-alignment:[A-Za-z0-9:_-]+"), "复盘记录"),
     (re.compile(r"portfolio-backtest:[A-Za-z0-9:_-]+"), "组合回测记录"),
+    (
+        re.compile(r"recommendation context changed: reco-[A-Za-z0-9._-]+ -> reco-[A-Za-z0-9._-]+"),
+        "这份人工研究对应的是上一版建议；当前标的已经重新分析，请重新发起人工研究后再引用。",
+    ),
+    (
+        re.compile(r"Superseded by request [A-Za-z0-9:_-]+\.?"),
+        "这条人工研究请求已由新的请求接替，请查看最新一条研究记录。",
+    ),
 )
 _SANITIZE_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     ("pending_rebuild", "口径校准中"),
@@ -37,6 +45,25 @@ _SANITIZE_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     ("14-56 trade days", "the window under rolling validation"),
     ("Phase 5 baseline", "等权组合研究策略"),
     ("research contract", "研究口径"),
+    ("Manual review artifact generated.", "人工研究已完成，并已生成可回查的研究记录。"),
+    (
+        "Manual review request was marked completed, but the artifact is missing.",
+        "人工研究状态显示已完成，但对应记录暂时不可读取，请重新发起研究。",
+    ),
+    ("builtin_gpt request is queued for local Codex execution.", "已排队等待本机研究助手生成结论。"),
+    ("Manual research execution is running.", "人工研究正在生成结论，请稍后刷新查看。"),
+    (
+        "validation_artifact_id changed after the manual review completed.",
+        "滚动验证数据已更新，这份人工研究使用的验证材料不是最新版，请重新发起人工研究。",
+    ),
+    (
+        "validation_manifest_id changed after the manual review completed.",
+        "滚动验证清单已更新，这份人工研究使用的材料不是最新版，请重新发起人工研究。",
+    ),
+    (
+        "follow-up research packet hash changed after the manual review completed.",
+        "研究追问包已更新，这份人工研究不再完全匹配当前页面，请重新发起人工研究。",
+    ),
 )
 
 
@@ -98,16 +125,13 @@ def manual_research_stale_reason(
     source_packet_hash: str,
 ) -> str | None:
     if request.recommendation_key != recommendation_key:
-        return (
-            "recommendation context changed: "
-            f"{request.recommendation_key} -> {recommendation_key}"
-        )
+        return "这份人工研究对应的是上一版建议；当前标的已经重新分析，请重新发起人工研究后再引用。"
     if request.validation_artifact_id != validation_artifact_id:
-        return "validation_artifact_id changed after the manual review completed."
+        return "滚动验证数据已更新，这份人工研究使用的验证材料不是最新版，请重新发起人工研究。"
     if request.validation_manifest_id != validation_manifest_id:
-        return "validation_manifest_id changed after the manual review completed."
+        return "滚动验证清单已更新，这份人工研究使用的材料不是最新版，请重新发起人工研究。"
     if request.source_packet_hash != source_packet_hash:
-        return "follow-up research packet hash changed after the manual review completed."
+        return "研究追问包已更新，这份人工研究不再完全匹配当前页面，请重新发起人工研究。"
     return None
 
 
@@ -128,7 +152,7 @@ def _placeholder(source_packet: list[str]) -> dict[str, Any]:
         "request_id": None,
         "request_key": None,
         "executor_kind": None,
-        "status_note": "No manual research request has been created for the current recommendation context.",
+        "status_note": "当前建议尚未发起人工研究请求。",
         "review_verdict": None,
         "decision_note": None,
         "stale_reason": None,
@@ -160,7 +184,7 @@ def _build_request_projection(
     artifact = read_manual_research_artifact_if_exists(request.artifact_id, root=artifact_root)
     if status == MANUAL_REVIEW_COMPLETED and artifact is None:
         status = MANUAL_REVIEW_FAILED
-        status_note = "Manual review request was marked completed, but the artifact is missing."
+        status_note = "人工研究状态显示已完成，但对应记录暂时不可读取，请重新发起研究。"
 
     summary = None
     risks: list[str] = []
