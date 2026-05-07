@@ -26,6 +26,9 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   fi
 done
 
+echo "pre-push: checking agent and hook constraints"
+bash scripts/check-agent-constraints.sh
+
 echo "pre-push: running stock_dashboard fast regression"
 python3 -m pytest -q
 

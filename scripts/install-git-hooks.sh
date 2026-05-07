@@ -19,6 +19,9 @@ fi
 HOOK
 
 chmod +x "$shared_hooks/pre-push"
-chmod +x "$repo_root/scripts/test-runtime-integration.sh" "$repo_root/scripts/hooks/pre-push-stock-dashboard.sh"
+chmod +x \
+  "$repo_root/scripts/check-agent-constraints.sh" \
+  "$repo_root/scripts/test-runtime-integration.sh" \
+  "$repo_root/scripts/hooks/pre-push-stock-dashboard.sh"
 
 echo "Installed stock_dashboard pre-push hook at $shared_hooks/pre-push"

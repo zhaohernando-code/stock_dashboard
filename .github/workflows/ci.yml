@@ -16,7 +16,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e ".[dev]" 2>/dev/null || pip install pytest fastapi sqlalchemy pydantic uvicorn akshare
-      - run: PYTHONPATH=src python3 -m pytest tests/ -v --timeout=60
+      - run: bash scripts/check-agent-constraints.sh
+      - run: PYTHONPATH=src python3 -m ashare_evidence.cli policy-audit --fail-on-new-unclassified --fail-on-direct-config-read --fail-on-formula-side-effects --fail-on-missing-config-lineage
+      - run: python3 -m pytest -q
 
   typecheck-frontend:
     runs-on: ubuntu-latest
