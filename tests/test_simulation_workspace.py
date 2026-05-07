@@ -5,6 +5,7 @@ import unittest
 from datetime import timedelta
 from pathlib import Path
 
+import pytest
 from sqlalchemy import delete, select
 
 from ashare_evidence.db import init_database, session_scope
@@ -24,6 +25,8 @@ from ashare_evidence.simulation import (
 )
 from ashare_evidence.watchlist import add_watchlist_symbol
 from tests.fixtures import inject_market_data_stale_backfill, seed_recommendation_fixture, seed_watchlist_fixture
+
+pytestmark = pytest.mark.runtime_integration
 
 
 class SimulationWorkspaceTests(unittest.TestCase):

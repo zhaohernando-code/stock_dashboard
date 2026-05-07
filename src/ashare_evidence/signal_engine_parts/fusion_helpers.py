@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ashare_evidence.signal_engine_parts.base import FUSION_WEIGHTS
+from ashare_evidence.formulae import dynamic_factor_weights
+from ashare_evidence.signal_engine_parts.base import FUSION_CONFIG, FUSION_WEIGHTS
 
 
 def resolve_factor_conflict(
@@ -67,47 +68,23 @@ def dynamic_weights(
     base = dict(FUSION_WEIGHTS)
     fund_weight = fundamental_factor.get("weight", 0.20)
     size_weight = size_factor.get("weight", 0.10)
-    if fund_weight == 0 and size_weight == 0:
-        base["price_baseline"] = 0.47
-        base["news_event"] = 0.27
-        base["fundamental"] = 0.0
-        base["size_factor"] = 0.0
-        base["reversal"] = 0.13
-        base["liquidity"] = 0.13
-        return base
-    price_c = float(price_factor.get("confidence_score", 0.44))
-    news_c = float(news_factor.get("confidence_score", 0.36))
-    fund_c = float(fundamental_factor.get("confidence_score", 0.3))
-    size_c = float(size_factor.get("confidence_score", 0.35))
-    rev_c = float(reversal_factor.get("confidence_score", 0.3))
-    liq_c = float(liquidity_factor.get("confidence_score", 0.3))
-    total_conf = price_c + news_c + fund_c + size_c + rev_c + liq_c
-    n_factors = 6
-    if total_conf <= 0:
-        return base
-    effective = {}
-    effective["price_baseline"] = round(
-        base["price_baseline"] * (price_c / (total_conf / n_factors)) * (1 + (price_c - 0.5) * 0.3), 4
+    confidence_defaults = FUSION_CONFIG["confidence_defaults"]
+    confidences = {
+        "price_baseline": float(price_factor.get("confidence_score", confidence_defaults["price_baseline"])),
+        "news_event": float(news_factor.get("confidence_score", confidence_defaults["news_event"])),
+        "fundamental": float(fundamental_factor.get("confidence_score", confidence_defaults["fundamental"])),
+        "size_factor": float(size_factor.get("confidence_score", confidence_defaults["size_factor"])),
+        "reversal": float(reversal_factor.get("confidence_score", confidence_defaults["reversal"])),
+        "liquidity": float(liquidity_factor.get("confidence_score", confidence_defaults["liquidity"])),
+    }
+    return dynamic_factor_weights(
+        base_weights=base,
+        no_fundamental_size_weights=FUSION_CONFIG["no_fundamental_size_weights"],
+        confidences=confidences,
+        fundamental_weight=float(fund_weight),
+        size_weight=float(size_weight),
+        confidence_tilts=FUSION_CONFIG["confidence_tilts"],
     )
-    effective["news_event"] = round(
-        base["news_event"] * (news_c / (total_conf / n_factors)) * (1 + (news_c - 0.5) * 0.3), 4
-    )
-    effective["fundamental"] = round(
-        base["fundamental"] * (fund_c / (total_conf / n_factors)) * (1 + (fund_c - 0.3) * 0.3), 4
-    )
-    effective["size_factor"] = round(
-        base.get("size_factor", 0.10) * (size_c / (total_conf / n_factors)) * (1 + (size_c - 0.35) * 0.3), 4
-    )
-    effective["reversal"] = round(
-        base.get("reversal", 0.10) * (rev_c / (total_conf / n_factors)) * (1 + (rev_c - 0.3) * 0.3), 4
-    )
-    effective["liquidity"] = round(
-        base.get("liquidity", 0.10) * (liq_c / (total_conf / n_factors)) * (1 + (liq_c - 0.3) * 0.3), 4
-    )
-    total_w = sum(effective.values())
-    if total_w > 0:
-        effective = {k: round(v / total_w, 4) for k, v in effective.items()}
-    return effective
 
 
 PLACEHOLDER_FUSION_HEADLINE = "用于汇总价格、事件与降级状态的融合层。"

@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
+import pytest
 from sqlalchemy import select
 
 from ashare_evidence.analysis_pipeline import (
@@ -36,6 +37,8 @@ from ashare_evidence.research_artifact_store import (
 from ashare_evidence.services import get_latest_recommendation_summary
 from ashare_evidence.stock_master import StockProfileResolution
 from tests.fixtures import inject_market_data_stale_backfill
+
+pytestmark = pytest.mark.runtime_integration
 
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 

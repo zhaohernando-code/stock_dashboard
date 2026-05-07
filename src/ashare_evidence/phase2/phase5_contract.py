@@ -4,7 +4,13 @@ from math import ceil
 from typing import Any
 
 from ashare_evidence.contract_status import STATUS_RESEARCH_CANDIDATE
+from ashare_evidence.default_policy_configs import (
+    PHASE5_SIMULATION_CONFIG_KEY,
+    POLICY_SCOPE_PHASE5,
+    default_policy_config_payload,
+)
 from ashare_evidence.phase2.constants import PHASE2_HORIZONS
+from ashare_evidence.policy_config_loader import compute_policy_config_checksum
 
 PHASE5_CONTRACT_VERSION = "phase5-validation-policy-contract-v1"
 PHASE5_RESEARCH_UNIVERSE_DEFINITION = "active_watchlist_full_history_research_universe"
@@ -48,6 +54,9 @@ PHASE5_POLICY_NOTE = (
 PHASE5_AUTO_EXECUTION_NOTE = (
     "自动执行仅作用于 Web 模拟盘，不会触发真实下单。"
 )
+PHASE5_SIMULATION_CONFIG = default_policy_config_payload(POLICY_SCOPE_PHASE5, PHASE5_SIMULATION_CONFIG_KEY)
+PHASE5_SIMULATION_CONFIG_VERSION = "code-default"
+PHASE5_SIMULATION_CONFIG_CHECKSUM = compute_policy_config_checksum(PHASE5_SIMULATION_CONFIG)
 PHASE5_HOLDING_POLICY_PROMOTION_GATE_VERSION = "phase5-holding-policy-promotion-gate-draft-v1"
 PHASE5_HOLDING_POLICY_PROMOTION_GUARDRAILS = {
     "min_rebalance_date_count": 8,
@@ -235,6 +244,14 @@ def phase5_research_contract_context() -> dict[str, Any]:
             "board_lot": PHASE5_BOARD_LOT,
             "cash_allowed": True,
         },
+        "policy_config_versions": {
+            PHASE5_SIMULATION_CONFIG_KEY: {
+                "scope": POLICY_SCOPE_PHASE5,
+                "version": PHASE5_SIMULATION_CONFIG_VERSION,
+                "source": "code_default",
+                "checksum": PHASE5_SIMULATION_CONFIG_CHECKSUM,
+            }
+        },
     }
 
 
@@ -252,6 +269,14 @@ def phase5_simulation_policy_context(*, policy_note: str | None = None) -> dict[
             "max_single_weight": PHASE5_MAX_SINGLE_WEIGHT,
             "board_lot": PHASE5_BOARD_LOT,
             "cash_allowed": True,
+        },
+        "policy_config_versions": {
+            PHASE5_SIMULATION_CONFIG_KEY: {
+                "scope": POLICY_SCOPE_PHASE5,
+                "version": PHASE5_SIMULATION_CONFIG_VERSION,
+                "source": "code_default",
+                "checksum": PHASE5_SIMULATION_CONFIG_CHECKSUM,
+            }
         },
     }
 

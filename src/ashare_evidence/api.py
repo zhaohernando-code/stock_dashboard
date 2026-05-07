@@ -38,6 +38,8 @@ from ashare_evidence.manual_research_workflow import (
     retry_manual_research_request,
 )
 from ashare_evidence.operations import build_operations_dashboard, build_operations_detail, build_operations_summary
+from ashare_evidence.policy_audit import build_policy_audit_report
+from ashare_evidence.policy_config_loader import build_policy_governance_summary, list_policy_config_versions
 from ashare_evidence.runtime_config import (
     create_model_api_key,
     delete_model_api_key,
@@ -238,6 +240,30 @@ def create_app(
     ) -> dict[str, object]:
         require_stock_root(access)
         return get_runtime_settings(session)
+
+    @app.get("/policy-governance/active")
+    def policy_governance_active(
+        _access: StockAccessContext = Depends(require_stock_access),
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        return build_policy_governance_summary(session)
+
+    @app.get("/policy-governance/history")
+    def policy_governance_history(
+        scope: str | None = Query(default=None),
+        config_key: str | None = Query(default=None),
+        _access: StockAccessContext = Depends(require_stock_access),
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        return {
+            "items": list_policy_config_versions(session, scope=scope, config_key=config_key),
+        }
+
+    @app.get("/policy-governance/audit")
+    def policy_governance_audit(
+        _access: StockAccessContext = Depends(require_stock_access),
+    ) -> dict[str, object]:
+        return build_policy_audit_report()
 
     @app.put("/settings/provider-credentials/{provider_name}")
     def provider_credential_upsert(

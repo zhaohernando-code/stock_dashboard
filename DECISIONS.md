@@ -969,3 +969,12 @@ P-1/P0 专业化改造的收尾状态以“测试 + 发布 + deploy verifier + s
 - 前端 `改进建议审计台` 的 `进入计划池` 按钮现在会弹出模型选择器，首批模型为 `gpt-5.5`、`gpt-5.4`、`gpt-5.3-codex-spark`、`deepseek-v4-pro[1m]`、`deepseek-v4-flash`；`gpt-5.5` 用于高级审计/仲裁场景，但默认执行模型仍保持 `gpt-5.4`。已入池建议会展示中台任务 ID、模型和 Plan 模式标签。
 - 该链路保持原边界：多模型审计和中台任务可以自动生成计划，但不能自动改代码、自动发布、直接修改因子权重、horizon、claim gate 或买卖方向。
 - 本轮实测已把 `suggestion:ed36ed8c8753600d` 送入中台，创建任务 `task-momlkmg7-4mrd59`，状态为 `blocked / plan_feedback`，模型为 `gpt-5.4`，等待用户确认计划。
+
+[2026-05-07T20:40:00+08:00] Constants, formulas, and tunable policy governance becomes a hard development contract:
+股票看板从本轮开始把常量、公式和可调参数治理纳入运行合同。稳定规则继续留在代码 contract；数学计算必须通过可测试纯函数表达；权重、阈值、窗口、TopK、惩罚系数等可变策略进入版本化配置和审计视图；后续开发必须通过 policy audit 收尾，不能再把裸权重或业务阈值散落到数据质量、信号融合、Phase 5、短投试验田或前端展示层。
+
+补充说明
+- 新增 `policy_config_versions` 作为专用版本表，默认配置来自代码，active 数据库版本可覆盖默认；draft 不生效，active 版本需要原因、证据引用、批准人、checksum 和 supersedes 链。
+- `data_quality` 已改为读取治理配置并在 summary/item payload 中投影 config version/checksum；`signal_engine` 的融合权重、惩罚项、confidence RMS 和 model-result 参数已转入默认配置与纯公式函数，并在 recommendation/model result payload 中投影 `policy_config_versions`。
+- 新增 `policy-audit` CLI 和 `/policy-governance/*` 只读 API；运营复盘的治理页展示 active 配置、公式/常量分类与硬约束状态。
+- 后续修改 Phase contract、权重、窗口、promotion gate 或用户可见业务阈值，必须同步更新 `PROJECT_RULES.md`、本决策日志、默认配置/审计分类和回归测试。

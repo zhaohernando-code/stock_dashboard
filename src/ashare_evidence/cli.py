@@ -14,6 +14,13 @@ from ashare_evidence.db import init_database, preflight_database_writable, sessi
 from ashare_evidence.improvement_suggestions import run_improvement_suggestion_review
 from ashare_evidence.intraday_market import sync_intraday_market
 from ashare_evidence.operations import build_operations_dashboard
+from ashare_evidence.policy_audit import assert_policy_audit, write_policy_audit_report
+from ashare_evidence.policy_config_loader import (
+    activate_policy_config_version,
+    build_policy_governance_summary,
+    create_policy_config_version,
+    list_policy_config_versions,
+)
 from ashare_evidence.phase2 import rebuild_phase2_research_state
 from ashare_evidence.phase2.holding_policy_experiments import (
     build_phase5_holding_policy_experiment,
@@ -312,6 +319,36 @@ def build_parser() -> argparse.ArgumentParser:
 
     glossary = subparsers.add_parser("glossary", help="Show the dashboard glossary entries.")
     glossary.add_argument("--database-url", default=None)
+
+    policy_audit = subparsers.add_parser("policy-audit", help="Run constants, formula, and tunable-policy governance checks.")
+    policy_audit.add_argument("--write-report", action="store_true")
+    policy_audit.add_argument("--report-path", default=None)
+    policy_audit.add_argument("--fail-on-new-unclassified", action="store_true")
+    policy_audit.add_argument("--fail-on-direct-config-read", action="store_true")
+    policy_audit.add_argument("--fail-on-formula-side-effects", action="store_true")
+    policy_audit.add_argument("--fail-on-missing-config-lineage", action="store_true")
+
+    policy_config = subparsers.add_parser("policy-configs", help="List active and historical governed policy configs.")
+    policy_config.add_argument("--database-url", default=None)
+    policy_config.add_argument("--scope", default=None)
+    policy_config.add_argument("--config-key", default=None)
+
+    policy_config_create = subparsers.add_parser("policy-config-create", help="Create a draft governed policy config version.")
+    policy_config_create.add_argument("--database-url", default=None)
+    policy_config_create.add_argument("--scope", required=True)
+    policy_config_create.add_argument("--config-key", required=True)
+    policy_config_create.add_argument("--version", required=True)
+    policy_config_create.add_argument("--payload-json", required=True)
+    policy_config_create.add_argument("--reason", required=True)
+    policy_config_create.add_argument("--evidence-ref", action="append", default=None)
+    policy_config_create.add_argument("--created-by", default="root")
+
+    policy_config_activate = subparsers.add_parser("policy-config-activate", help="Activate an existing draft policy config version.")
+    policy_config_activate.add_argument("--database-url", default=None)
+    policy_config_activate.add_argument("--scope", required=True)
+    policy_config_activate.add_argument("--config-key", required=True)
+    policy_config_activate.add_argument("--version", required=True)
+    policy_config_activate.add_argument("--approved-by", required=True)
     add_event_check_parser(subparsers)
     add_research_parsers(subparsers)
 
@@ -381,6 +418,29 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "init-db":
         init_database(args.database_url)
         print("database initialized")
+        return 0
+    if args.command == "policy-audit":
+        try:
+            payload = assert_policy_audit(
+                fail_on_new_unclassified=args.fail_on_new_unclassified,
+                fail_on_direct_config_read=args.fail_on_direct_config_read,
+                fail_on_formula_side_effects=args.fail_on_formula_side_effects,
+                fail_on_missing_config_lineage=args.fail_on_missing_config_lineage,
+            )
+        except RuntimeError as exc:
+            payload = assert_policy_audit(
+                fail_on_new_unclassified=False,
+                fail_on_direct_config_read=False,
+                fail_on_formula_side_effects=False,
+                fail_on_missing_config_lineage=False,
+            )
+            _print_json(payload)
+            print(str(exc))
+            return 1
+        if args.write_report:
+            path = write_policy_audit_report(None if args.report_path is None else Path(args.report_path))
+            payload = {**payload, "report_path": str(path)}
+        _print_json(payload)
         return 0
     if _should_initialize_database(args.database_url):
         init_database(args.database_url)
@@ -457,6 +517,46 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "glossary":
         _print_json(get_glossary_entries())
+        return 0
+
+    if args.command == "policy-configs":
+        with session_scope(args.database_url) as session:
+            payload = {
+                "active": build_policy_governance_summary(session),
+                "history": list_policy_config_versions(session, scope=args.scope, config_key=args.config_key),
+            }
+        _print_json(payload)
+        return 0
+
+    if args.command == "policy-config-create":
+        with session_scope(args.database_url) as session:
+            record = create_policy_config_version(
+                session,
+                scope=args.scope,
+                config_key=args.config_key,
+                version=args.version,
+                payload=json.loads(args.payload_json),
+                reason=args.reason,
+                evidence_refs=args.evidence_ref,
+                created_by=args.created_by,
+            )
+            session.flush()
+            payload = {"id": record.id, "scope": record.scope, "config_key": record.config_key, "version": record.version}
+        _print_json(payload)
+        return 0
+
+    if args.command == "policy-config-activate":
+        with session_scope(args.database_url) as session:
+            record = activate_policy_config_version(
+                session,
+                scope=args.scope,
+                config_key=args.config_key,
+                version=args.version,
+                approved_by=args.approved_by,
+            )
+            session.flush()
+            payload = {"id": record.id, "scope": record.scope, "config_key": record.config_key, "version": record.version, "status": record.status}
+        _print_json(payload)
         return 0
 
     if args.command == "event-check":

@@ -7,10 +7,14 @@ from pathlib import Path
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.runtime_ops import run_operations_tick
 from ashare_evidence.simulation import start_simulation_session
 from tests.fixtures import seed_watchlist_fixture
+
+pytestmark = pytest.mark.runtime_integration
 
 
 class RuntimeOpsTests(unittest.TestCase):

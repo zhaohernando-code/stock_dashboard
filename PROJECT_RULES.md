@@ -19,3 +19,5 @@
 - 用户访问入口当前是 `https://hernando-zhao.cn/stocks`；底层规范挂载路径仍是 `https://hernando-zhao.cn/projects/ashare-dashboard/`。文档和 UI 文案需要区分这两层，不要把业务别名和运行时挂载写成同一个概念。
 - 本项目 UI 风格参考 `VoltAgent/awesome-design-md` 中接近 `Coinbase` 的金融产品规约：强调可信、克制、数据密度与清晰层级；在实现上使用浅色底、蓝绿信号色、强对比标题和证据卡片，而不是通用后台模板。
 - 任何数据源、配置入口、状态标签或“待配置/已接入”提示，只有在对应后端适配器、验证链路和真实发布路径都已落地后才能出现在前端；禁止前端先行占位制造“只差用户配置”的假象。
+- 参数与公式治理是运行合同的一部分：新增或修改评分权重、阈值、窗口、TopK、惩罚系数、promotion gate、数据质量规则、融合公式或用户可见业务阈值时，必须先分类到 `stable_rule / research_assumption / tunable_policy / formula / allowed_literal / test_fixture`，再更新默认配置、公式纯函数、测试和决策日志。业务代码不得直接读写 `policy_config_versions`，只能通过 `policy_config_loader`；公式模块不得读取数据库、环境变量、当前时间或网络。任务收尾必须运行 `python -m ashare_evidence.cli policy-audit --fail-on-new-unclassified --fail-on-direct-config-read --fail-on-formula-side-effects --fail-on-missing-config-lineage`，失败时不得标记完成；确需豁免的字面量必须有原因、所属模块和复查条件。
+- 默认 `pytest` 只允许承担开发快回归职责，不放入 Phase 5 日刷、发布刷新、真实数据长链路或类似量级的集成任务。这类任务必须拆成更小的单元/契约测试；确需真实运行时验收时，走发布或专项验收流程，并明确记录为慢验收而不是普通开发测试。

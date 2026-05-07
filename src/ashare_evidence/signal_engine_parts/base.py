@@ -7,6 +7,11 @@ from statistics import pstdev
 from typing import Any
 
 from ashare_evidence.contract_status import manual_review_placeholder, pending_rebuild_payload
+from ashare_evidence.default_policy_configs import (
+    POLICY_SCOPE_SIGNAL_ENGINE,
+    SIGNAL_FUSION_CONFIG_KEY,
+    default_policy_config_payload,
+)
 from ashare_evidence.lineage import build_lineage
 from ashare_evidence.phase2 import (
     PHASE2_COST_DEFINITION,
@@ -17,20 +22,17 @@ from ashare_evidence.phase2 import (
     PHASE2_PRIMARY_HORIZON,
     PHASE2_RULE_BASELINE,
 )
+from ashare_evidence.policy_config_loader import compute_policy_config_checksum
 
 HORIZONS = PHASE2_HORIZONS
 PRIMARY_HORIZON = PHASE2_PRIMARY_HORIZON
 TRANSACTION_COST_BPS = float(PHASE2_COST_MODEL["round_trip_cost_bps"])
 VALIDATION_PENDING = pending_rebuild_payload()
 MANUAL_REVIEW_PLACEHOLDER = manual_review_placeholder(PHASE2_MANUAL_REVIEW_NOTE)
-FUSION_WEIGHTS = {
-    "price_baseline": 0.35,
-    "news_event": 0.20,
-    "fundamental": 0.15,
-    "size_factor": 0.10,
-    "reversal": 0.10,
-    "liquidity": 0.10,
-}
+FUSION_CONFIG = default_policy_config_payload(POLICY_SCOPE_SIGNAL_ENGINE, SIGNAL_FUSION_CONFIG_KEY)
+FUSION_WEIGHTS = FUSION_CONFIG["base_weights"]
+FUSION_CONFIG_VERSION = "code-default"
+FUSION_CONFIG_CHECKSUM = compute_policy_config_checksum(FUSION_CONFIG)
 
 
 @dataclass(frozen=True)
@@ -156,6 +158,9 @@ def confidence_expression(
 
 __all__ = [
     "FUSION_WEIGHTS",
+    "FUSION_CONFIG",
+    "FUSION_CONFIG_CHECKSUM",
+    "FUSION_CONFIG_VERSION",
     "HORIZONS",
     "MANUAL_REVIEW_PLACEHOLDER",
     "PHASE2_COST_DEFINITION",

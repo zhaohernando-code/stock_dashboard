@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from sqlalchemy import select
 
 from ashare_evidence.dashboard import (
@@ -35,6 +36,8 @@ from ashare_evidence.watchlist import (
     remove_watchlist_symbol,
 )
 from tests.fixtures import inject_market_data_stale_backfill, seed_recommendation_fixture, seed_watchlist_fixture
+
+pytestmark = pytest.mark.runtime_integration
 
 
 class DashboardViewTests(unittest.TestCase):

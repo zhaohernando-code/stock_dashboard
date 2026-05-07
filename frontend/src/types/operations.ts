@@ -225,6 +225,7 @@ export interface OperationsDashboardResponse {
   factor_observation_summary?: Record<string, any>;
   sector_exposure?: Record<string, any>;
   benchmark_context?: Record<string, any>;
+  policy_governance?: Record<string, any>;
   today_at_a_glance?: OperationsTodayAtAGlanceView;
   improvement_suggestions?: ImprovementSuggestionsPayload;
 }

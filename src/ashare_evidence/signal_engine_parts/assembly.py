@@ -9,6 +9,8 @@ from ashare_evidence.phase2 import (
     PHASE2_RULE_BASELINE,
 )
 from ashare_evidence.signal_engine_parts.base import (
+    FUSION_CONFIG_CHECKSUM,
+    FUSION_CONFIG_VERSION,
     HORIZONS,
     PRIMARY_HORIZON,
     TRANSACTION_COST_BPS,
@@ -229,8 +231,15 @@ def build_signal_artifacts(
                 "horizon_days": list(HORIZONS),
                 "universe": "watchlist",
                 "rule_baseline": PHASE2_RULE_BASELINE,
-                "weights": {"price_baseline": 0.35, "news_event": 0.20, "fundamental": 0.15,
-                           "size_factor": 0.10, "reversal": 0.10, "liquidity": 0.10},
+                "weights": fusion_state.get("effective_weights", {}),
+                "policy_config_versions": {
+                    "signal_engine.fusion_v1": {
+                        "scope": "signal_engine",
+                        "version": FUSION_CONFIG_VERSION,
+                        "source": "code_default",
+                        "checksum": FUSION_CONFIG_CHECKSUM,
+                    }
+                },
                 "manual_review_layer": "artifact_backed_only_not_scored",
                 "degrade_policy": PHASE2_POLICY_VERSION,
             },

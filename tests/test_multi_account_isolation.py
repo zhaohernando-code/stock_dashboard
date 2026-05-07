@@ -4,7 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
+
 from ashare_evidence.api import create_app
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.simulation import get_simulation_workspace, start_simulation_session
@@ -14,6 +16,8 @@ from ashare_evidence.watchlist import (
     list_watchlist_entries,
     remove_watchlist_symbol,
 )
+
+pytestmark = pytest.mark.runtime_integration
 
 
 class MultiAccountIsolationTests(unittest.TestCase):

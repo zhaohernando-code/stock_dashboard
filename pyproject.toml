@@ -34,3 +34,12 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+addopts = [
+  "--strict-markers",
+  "-m",
+  "not slow_integration and not runtime_integration",
+]
+markers = [
+  "runtime_integration: runtime refresh, real analysis pipeline, or long seeded workspace flows excluded from the default fast regression boundary",
+  "slow_integration: runtime-refresh or publish-level flows that are intentionally excluded from the default fast regression boundary",
+]

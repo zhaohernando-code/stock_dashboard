@@ -52,14 +52,15 @@ class StockMasterResolutionTests(unittest.TestCase):
             },
         }
         with session_scope(self.database_url) as session:
-            with patch("ashare_evidence.stock_master._post_tushare", return_value=mocked_response):
-                resolved = resolve_stock_profile(session, symbol="300750.SZ")
+            with patch("ashare_evidence.stock_master._query_akshare_stock_basic", return_value=None):
+                with patch("ashare_evidence.stock_master._post_tushare", return_value=mocked_response):
+                    resolved = resolve_stock_profile(session, symbol="300750.SZ")
 
         self.assertEqual(resolved.name, "宁德时代")
         self.assertEqual(resolved.industry, "电气设备")
         self.assertEqual(resolved.template_key, "power_equipment")
         self.assertEqual(str(resolved.listed_date), "2018-06-11")
-        self.assertEqual(resolved.source, "akshare_stock_master+tushare_stock_basic")
+        self.assertEqual(resolved.source, "tushare_stock_basic")
 
     def test_akshare_stock_basic_can_supply_name_and_industry_without_token(self) -> None:
         mocked_response = {

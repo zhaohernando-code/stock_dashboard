@@ -402,6 +402,29 @@ def recommend_phase5_holding_policy_redesign_experiments(
             primary_ids.append(experiment_id)
             seen_primary_focus_areas.add(experiment_focus)
 
+    paired_construction_id = "construction_max_position_count_sweep_v1"
+    if "after_cost_profitability" in focus_areas and paired_construction_id not in {
+        str(item["experiment_id"]) for item in candidates
+    }:
+        experiment = PHASE5_HOLDING_POLICY_REDESIGN_EXPERIMENT_MENU[paired_construction_id]
+        candidates.append(
+            {
+                "experiment_id": paired_construction_id,
+                "focus_area": str(experiment["focus_area"]),
+                "priority": int(experiment["priority"]),
+                "trigger_signal_ids": list(experiment.get("trigger_signal_ids") or []),
+                "matched_trigger_signal_ids": [],
+                "hypothesis": experiment["hypothesis"],
+                "proposed_policy_changes": list(experiment.get("proposed_policy_changes") or []),
+                "target_metrics": list(experiment.get("target_metrics") or []),
+                "selection_reason": (
+                    "selected as a paired construction stress test because after-cost profitability is already "
+                    "an active redesign focus."
+                ),
+            }
+        )
+        primary_ids.append(paired_construction_id)
+
     candidates.sort(key=lambda item: (int(item["priority"]), str(item["experiment_id"])))
     return {
         "candidate_count": len(candidates),

@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -40,6 +41,8 @@ from ashare_evidence.shortpick_lab import (
     run_shortpick_experiment,
     validate_recent_shortpick_runs,
 )
+
+pytestmark = pytest.mark.runtime_integration
 
 
 def _answer(

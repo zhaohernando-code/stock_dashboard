@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
 from sqlalchemy import select
 
 from ashare_evidence.cli import main
@@ -22,6 +23,8 @@ from ashare_evidence.research_artifact_store import (
     read_phase5_horizon_study_artifact,
 )
 from tests.fixtures import seed_watchlist_fixture
+
+pytestmark = pytest.mark.runtime_integration
 
 
 def _comparison_payload(

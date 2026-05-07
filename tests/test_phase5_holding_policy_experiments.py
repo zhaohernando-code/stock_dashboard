@@ -8,6 +8,8 @@ from pathlib import Path
 
 from datetime import date, datetime
 
+import pytest
+
 from ashare_evidence.cli import main
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.phase2.holding_policy_experiments import (
@@ -23,6 +25,8 @@ from ashare_evidence.research_artifact_store import (
     read_phase5_holding_policy_experiment_artifact,
 )
 from tests.fixtures import DEFAULT_WATCHLIST_SYMBOLS, seed_watchlist_fixture
+
+pytestmark = pytest.mark.runtime_integration
 
 
 class Phase5HoldingPolicyExperimentTests(unittest.TestCase):

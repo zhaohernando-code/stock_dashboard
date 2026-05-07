@@ -31,6 +31,8 @@ from ashare_evidence.phase2.phase5_contract import (
     phase5_benchmark_definition,
     phase5_simulation_policy_context,
 )
+from ashare_evidence.policy_audit import build_policy_audit_report
+from ashare_evidence.policy_config_loader import build_policy_governance_summary
 from ashare_evidence.recommendation_selection import (
     collapse_recommendation_history,
     recommendation_recency_ordering,
@@ -1394,6 +1396,7 @@ def build_operations_detail(
         "sector_exposure": {"sector_exposure": payload.get("sector_exposure", {})},
         "manual_queue": {"manual_research_queue": payload.get("manual_research_queue", {})},
         "simulation_workspace": {"simulation_workspace": payload.get("simulation_workspace")},
+        "policy_governance": {"policy_governance": payload.get("policy_governance", {})},
     }
     if section not in section_map:
         raise ValueError(f"Unsupported operations detail section: {section}")
@@ -1537,6 +1540,10 @@ def build_operations_dashboard(
                 "horizons": {},
             },
             "benchmark_context": benchmark_context_summary(session),
+            "policy_governance": {
+                **build_policy_governance_summary(session),
+                "audit": build_policy_audit_report(),
+            },
             "today_at_a_glance": {
                 "latest_refresh_at": None,
                 "refresh_status": "warn",
@@ -1958,6 +1965,10 @@ def build_operations_dashboard(
         "data_quality_summary": data_quality_summary,
         "factor_observation_summary": factor_observation_summary,
         "benchmark_context": benchmark_context,
+        "policy_governance": {
+            **build_policy_governance_summary(session),
+            "audit": build_policy_audit_report(),
+        },
         "today_at_a_glance": today_at_a_glance,
     }
     operations_ms = round((perf_counter() - started_at) * 1000, 1)
@@ -2005,6 +2016,7 @@ def build_operations_dashboard(
         "data_quality_summary": data_quality_summary,
         "factor_observation_summary": factor_observation_summary,
         "benchmark_context": benchmark_context,
+        "policy_governance": payload_for_measurement["policy_governance"],
         "today_at_a_glance": today_at_a_glance,
     }
 

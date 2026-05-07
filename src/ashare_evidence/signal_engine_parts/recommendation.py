@@ -4,6 +4,8 @@ from datetime import timedelta
 from math import sqrt
 from typing import Any
 
+from ashare_evidence.default_policy_configs import POLICY_SCOPE_SIGNAL_ENGINE, SIGNAL_FUSION_CONFIG_KEY
+from ashare_evidence.formulae import weighted_rms_confidence
 from ashare_evidence.phase2 import (
     PHASE2_COST_DEFINITION,
     PHASE2_LABEL_DEFINITION,
@@ -16,6 +18,9 @@ from ashare_evidence.phase2 import (
 )
 from ashare_evidence.phase2.phase5_contract import phase5_benchmark_definition
 from ashare_evidence.signal_engine_parts.base import (
+    FUSION_CONFIG,
+    FUSION_CONFIG_CHECKSUM,
+    FUSION_CONFIG_VERSION,
     FUSION_WEIGHTS,
     HORIZONS,
     PRIMARY_HORIZON,
@@ -112,6 +117,8 @@ def _fusion_state(
         }
 
     weights = dynamic_weights(price_factor, news_factor, fundamental_factor, size_factor, reversal_factor, liquidity_factor)
+    penalties = FUSION_CONFIG["penalties"]
+    confidence_config = FUSION_CONFIG["confidence"]
 
     fusion_score = clip(
         price_factor["score"] * weights["price_baseline"]
@@ -123,16 +130,20 @@ def _fusion_state(
     )
 
     stale_hours = (generated_at - as_of_data_time).total_seconds() / 3600
-    stale_penalty = 0.10 if stale_hours > 36 else 0.0
-    evidence_gap_penalty = 0.12 if news_factor["evidence_count"] == 0 and fundamental_factor["evidence_count"] == 0 else 0.0
+    stale_penalty = float(penalties["stale_score_penalty"]) if stale_hours > float(penalties["stale_hours_threshold"]) else 0.0
+    evidence_gap_penalty = (
+        float(penalties["evidence_gap_score_penalty"])
+        if news_factor["evidence_count"] == 0 and fundamental_factor["evidence_count"] == 0
+        else 0.0
+    )
     fusion_score = clip(fusion_score - stale_penalty - evidence_gap_penalty)
 
     active_degrade_flags: list[str] = []
     if news_factor["evidence_count"] == 0 and fundamental_factor["evidence_count"] == 0:
         active_degrade_flags.append("missing_news_evidence")
-    if news_factor.get("conflict_ratio", 0) >= 0.45:
+    if news_factor.get("conflict_ratio", 0) >= float(penalties["event_conflict_high_threshold"]):
         active_degrade_flags.append("event_conflict_high")
-    if stale_hours > 36:
+    if stale_hours > float(penalties["stale_hours_threshold"]):
         active_degrade_flags.append("market_data_stale")
 
     resolved_dir, conflict_notes = resolve_factor_conflict(
@@ -143,23 +154,24 @@ def _fusion_state(
         liquidity_factor["direction"], liquidity_factor["confidence_score"],
     )
 
-    # Weighted RMS confidence: measures trust in inputs, orthogonal to fusion_score.
-    w_p = weights.get("price_baseline", 0.35)
-    w_n = weights.get("news_event", 0.20)
-    w_f = weights.get("fundamental", 0.15)
-    w_s = weights.get("size_factor", 0.10)
-    w_r = weights.get("reversal", 0.10)
-    w_l = weights.get("liquidity", 0.10)
-    pc = float(price_factor.get("confidence_score", 0.40))
-    nc = float(news_factor.get("confidence_score", 0.30))
-    fc = float(fundamental_factor.get("confidence_score", 0.25))
-    sc = float(size_factor.get("confidence_score", 0.35))
-    rc = float(reversal_factor.get("confidence_score", 0.30))
-    lc = float(liquidity_factor.get("confidence_score", 0.30))
-    rms_num = w_p**2 * pc**2 + w_n**2 * nc**2 + w_f**2 * fc**2 + w_s**2 * sc**2 + w_r**2 * rc**2 + w_l**2 * lc**2
-    rms_den = w_p**2 + w_n**2 + w_f**2 + w_s**2 + w_r**2 + w_l**2
-    weighted_rms = sqrt(rms_num / rms_den) if rms_den > 0 else 0.35
-    confidence_score = clip(weighted_rms - stale_penalty * 0.15, 0.10, 0.85)
+    factor_confidences = {
+        "price_baseline": float(price_factor.get("confidence_score", 0.40)),
+        "news_event": float(news_factor.get("confidence_score", 0.30)),
+        "fundamental": float(fundamental_factor.get("confidence_score", 0.25)),
+        "size_factor": float(size_factor.get("confidence_score", 0.35)),
+        "reversal": float(reversal_factor.get("confidence_score", 0.30)),
+        "liquidity": float(liquidity_factor.get("confidence_score", 0.30)),
+    }
+    weighted_rms = weighted_rms_confidence(
+        weights=weights,
+        confidences=factor_confidences,
+        fallback=float(confidence_config["fallback"]),
+    )
+    confidence_score = clip(
+        weighted_rms - stale_penalty * float(penalties["confidence_stale_penalty_scale"]),
+        float(confidence_config["minimum"]),
+        float(confidence_config["maximum"]),
+    )
 
     degraded = bool(active_degrade_flags)
     if resolved_dir == "positive":
@@ -181,6 +193,14 @@ def _fusion_state(
         "degraded": degraded,
         "effective_weights": weights,
         "conflict_notes": conflict_notes,
+        "policy_config_versions": {
+            SIGNAL_FUSION_CONFIG_KEY: {
+                "scope": POLICY_SCOPE_SIGNAL_ENGINE,
+                "version": FUSION_CONFIG_VERSION,
+                "source": "code_default",
+                "checksum": FUSION_CONFIG_CHECKSUM,
+            }
+        },
     }
 
 
@@ -200,19 +220,30 @@ def compute_model_results(
         40: float(price_factor["feature_values"]["ret_40d"]),
     }
 
+    model_config = FUSION_CONFIG["model_result"]
     for horizon_days in HORIZONS:
         horizon_scale = sqrt(horizon_days / PHASE2_PRIMARY_HORIZON)
         horizon_score = clip(
-            fusion_state["fusion_score"] * (1.0 if horizon_days == PRIMARY_HORIZON else 0.94)
-            + ret_feature_by_horizon[horizon_days] * 0.18
-            + float(price_factor["feature_values"]["trend_component"]) * 0.08
-            - float(price_factor["feature_values"]["risk_pressure"]) * 0.06
-            - news_factor["conflict_ratio"] * 0.06,
+            fusion_state["fusion_score"]
+            * (1.0 if horizon_days == PRIMARY_HORIZON else float(model_config["non_primary_horizon_multiplier"]))
+            + ret_feature_by_horizon[horizon_days] * float(model_config["return_feature_weight"])
+            + float(price_factor["feature_values"]["trend_component"]) * float(model_config["trend_component_weight"])
+            - float(price_factor["feature_values"]["risk_pressure"]) * float(model_config["risk_pressure_weight"])
+            - news_factor["conflict_ratio"] * float(model_config["news_conflict_weight"]),
         )
-        expected_return = clip(horizon_score * (0.05 * horizon_scale), -0.15, 0.18)
+        expected_return = clip(
+            horizon_score * (float(model_config["expected_return_scale"]) * horizon_scale),
+            float(model_config["expected_return_min"]),
+            float(model_config["expected_return_max"]),
+        )
         # Horizon confidence: fusion confidence * model-specific weight
         f_conf = float(fusion_state.get("confidence_score", 0.40))
-        confidence_score = clip(f_conf * 0.70 + abs(horizon_score) * 0.20, 0.0, 0.85)
+        confidence_score = clip(
+            f_conf * float(model_config["confidence_fusion_weight"])
+            + abs(horizon_score) * float(model_config["confidence_score_weight"]),
+            0.0,
+            float(FUSION_CONFIG["confidence"]["maximum"]),
+        )
         direction = recommendation_direction(horizon_score, False)
         results.append(
             with_internal_lineage(
@@ -240,6 +271,7 @@ def compute_model_results(
                             "validation_scheme": PHASE2_LABEL_DEFINITION,
                             "window_definition": PHASE2_WINDOW_DEFINITION,
                         },
+                        "policy_config_versions": fusion_state.get("policy_config_versions", {}),
                     },
                 },
                 source_uri=f"pipeline://signal-engine/model-result/{symbol}/{as_of_data_time:%Y%m%d}/{horizon_days}d",
@@ -432,6 +464,7 @@ def build_recommendation(
             "degrade_reason": "; ".join(active_degrade_flags) if active_degrade_flags else None,
             "recommendation_payload": {
                 "policy": PHASE2_POLICY_VERSION,
+                "policy_config_versions": fusion_state.get("policy_config_versions", {}),
                 "confidence_expression": confidence_expression(
                     direction,
                     confidence_score,
@@ -532,6 +565,7 @@ def build_recommendation(
                 "confidence_score": round(confidence_score, 4),
                 "active_degrade_flags": active_degrade_flags,
                 "weights": FUSION_WEIGHTS,
+                "policy_config_versions": fusion_state.get("policy_config_versions", {}),
             },
             "upstream_refs": [
                 {"type": "feature_snapshot", "key": f"feature-{symbol}-{as_of_data_time:%Y%m%d}-price-baseline-v1"},

@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from sqlalchemy import select
 
 from ashare_evidence.dashboard import get_stock_dashboard
@@ -19,6 +20,8 @@ from ashare_evidence.manual_research_workflow import (
 )
 from ashare_evidence.models import Recommendation
 from tests.fixtures import inject_market_data_stale_backfill, seed_recommendation_fixture
+
+pytestmark = pytest.mark.runtime_integration
 
 
 BUILTIN_EXECUTOR_CONFIG = {

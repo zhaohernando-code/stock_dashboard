@@ -154,6 +154,73 @@ function filterImprovementSuggestions(items: ImprovementSuggestionView[], filter
   return items;
 }
 
+function policyClassificationLabel(value?: string | null): string {
+  if (value === "stable_rule") return "稳定规则";
+  if (value === "research_assumption") return "研究假设";
+  if (value === "tunable_policy") return "可调参数";
+  if (value === "formula") return "公式";
+  if (value === "allowed_literal") return "允许字面量";
+  if (value === "test_fixture") return "测试样例";
+  return value || "未分类";
+}
+
+function renderPolicyGovernance(operations: OperationsDashboardResponse) {
+  const governance = operations.policy_governance ?? {};
+  const audit = governance.audit ?? {};
+  const activeConfigs = Array.isArray(governance.active_configs) ? governance.active_configs : [];
+  const classifiedItems = Array.isArray(audit.classified_items) ? audit.classified_items : [];
+  const failures = (audit.hard_constraint_failures ?? {}) as Record<string, unknown>;
+  const failureCount = Object.values(failures).reduce<number>(
+    (total, value) => total + (Array.isArray(value) ? value.length : 0),
+    0,
+  );
+  return (
+    <Card className="panel-card" title="参数与公式治理">
+      <Descriptions size="small" column={1}>
+        <Descriptions.Item label="当前状态">
+          <Tag color={statusColor(governance.status ?? audit.status ?? "pending")}>
+            {governance.status ?? audit.status ?? "pending"}
+          </Tag>
+        </Descriptions.Item>
+        <Descriptions.Item label="默认配置">{governance.default_config_count ?? activeConfigs.length}</Descriptions.Item>
+        <Descriptions.Item label="数据库版本">{governance.database_config_count ?? 0}</Descriptions.Item>
+        <Descriptions.Item label="硬约束失败">{failureCount}</Descriptions.Item>
+      </Descriptions>
+      <Table
+        size="small"
+        pagination={false}
+        rowKey={(item) => `${item.scope}:${item.config_key}`}
+        dataSource={activeConfigs.slice(0, 5)}
+        columns={[
+          { title: "范围", dataIndex: "scope" },
+          { title: "配置", dataIndex: "config_key" },
+          { title: "版本", dataIndex: "version" },
+          {
+            title: "来源",
+            dataIndex: "source",
+            render: (value) => <Tag>{String(value)}</Tag>,
+          },
+        ]}
+      />
+      <List
+        size="small"
+        dataSource={classifiedItems.slice(0, 6)}
+        renderItem={(item: any) => (
+          <List.Item>
+            <div className="watchlist-entry">
+              <div className="list-item-row">
+                <strong>{item.id}</strong>
+                <Tag>{policyClassificationLabel(item.classification)}</Tag>
+              </div>
+              <Text type="secondary">{sanitizeDisplayText(item.reason)}</Text>
+            </div>
+          </List.Item>
+        )}
+      />
+    </Card>
+  );
+}
+
 function openImprovementPlanModelPicker(
   item: ImprovementSuggestionView,
   handleAcceptImprovementSuggestionForPlan: (suggestionId: string, model: string) => Promise<void>,
@@ -809,6 +876,7 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
                   )}
                 />
               </Card>
+              {renderPolicyGovernance(operations)}
             </Col>
           </Row>
           <Row gutter={[16, 16]}>

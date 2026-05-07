@@ -1,0 +1,69 @@
+{
+  "allowlist_policy": {
+    "note": "New governed literals or formulas must be added to the classified registry, default config, or a documented allowlist before closeout.",
+    "status": "explicit_classification_required"
+  },
+  "audit_version": "policy-governance-audit-v1",
+  "classification_counts": {
+    "allowed_literal": 1,
+    "formula": 1,
+    "research_assumption": 1,
+    "stable_rule": 1,
+    "tunable_policy": 1
+  },
+  "classified_items": [
+    {
+      "classification": "tunable_policy",
+      "config_key": "data_quality.scoring_v1",
+      "id": "data_quality_scoring",
+      "owner": "data_quality",
+      "reason": "Data quality weights and thresholds are now governed by a versioned default config.",
+      "scope": "stock_dashboard",
+      "source": "default_policy_configs.py"
+    },
+    {
+      "classification": "formula",
+      "config_key": "signal_engine.fusion_v1",
+      "id": "signal_fusion_formula",
+      "owner": "signal_engine",
+      "reason": "Fusion weight, penalty, confidence, and model-result math is pure-function based and parameterized.",
+      "scope": "signal_engine",
+      "source": "formulae.py + default_policy_configs.py"
+    },
+    {
+      "classification": "stable_rule",
+      "config_key": "phase5.simulation_policy_v1",
+      "id": "phase5_simulation_constraints",
+      "owner": "phase5",
+      "reason": "Simulation constraints remain code-contract governed and are mirrored for visibility.",
+      "scope": "phase5",
+      "source": "phase2/phase5_contract.py + default_policy_configs.py"
+    },
+    {
+      "classification": "research_assumption",
+      "config_key": "shortpick_lab.validation_v1",
+      "id": "shortpick_validation_boundary",
+      "owner": "shortpick_lab",
+      "reason": "Validation horizons, benchmarks, and blocked display buckets are explicitly classified.",
+      "scope": "shortpick_lab",
+      "source": "shortpick_lab.py + default_policy_configs.py"
+    },
+    {
+      "classification": "allowed_literal",
+      "config_key": "frontend.display_v1",
+      "id": "frontend_display_threshold_boundary",
+      "owner": "frontend",
+      "reason": "Frontend must consume backend status projections instead of hardcoding business thresholds.",
+      "scope": "frontend",
+      "source": "frontend/src + backend status projection"
+    }
+  ],
+  "generated_at": "2026-05-07T14:46:23.935071+00:00",
+  "hard_constraint_failures": {
+    "direct_config_read": [],
+    "formula_side_effects": [],
+    "missing_config_lineage": [],
+    "new_unclassified": []
+  },
+  "status": "pass"
+}

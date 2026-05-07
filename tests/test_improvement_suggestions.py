@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 
@@ -29,6 +30,8 @@ from ashare_evidence.llm_service import AnthropicCompatibleTransport, OpenAIComp
 from ashare_evidence.models import FeatureSnapshot, ModelApiKey, Stock
 from ashare_evidence.research_artifact_store import artifact_root_from_database_url
 from tests.fixtures import seed_watchlist_fixture
+
+pytestmark = pytest.mark.runtime_integration
 
 
 class _FakeResponse:

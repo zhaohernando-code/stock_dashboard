@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
 from sqlalchemy import select
 
 from ashare_evidence.cli import main
@@ -22,6 +23,8 @@ from ashare_evidence.research_artifact_store import (
 )
 from ashare_evidence.signal_engine_parts.base import confidence_expression, recommendation_direction_with_degrade_flags
 from tests.fixtures import seed_watchlist_fixture
+
+pytestmark = pytest.mark.runtime_integration
 
 TEST_SYMBOLS = ["600519.SH", "300750.SZ", "601318.SH"]
 

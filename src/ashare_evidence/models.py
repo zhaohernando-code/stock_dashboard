@@ -489,6 +489,28 @@ class AppSetting(TimestampedMixin, Base):
     setting_value: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
 
 
+class PolicyConfigVersion(TimestampedMixin, Base):
+    __tablename__ = "policy_config_versions"
+    __table_args__ = (
+        UniqueConstraint("scope", "config_key", "version", name="uq_policy_config_version"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scope: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    config_key: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    version: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft", index=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    payload_schema: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_refs: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    approved_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    effective_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    supersedes_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+
+
 class ProviderCredential(TimestampedMixin, Base):
     __tablename__ = "provider_credentials"
     __table_args__ = (UniqueConstraint("provider_name", name="uq_provider_credential_name"),)

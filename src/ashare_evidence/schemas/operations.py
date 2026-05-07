@@ -265,4 +265,5 @@ class OperationsDashboardResponse(BaseModel):
     factor_observation_summary: dict[str, Any] = Field(default_factory=dict)
     sector_exposure: dict[str, Any] = Field(default_factory=dict)
     benchmark_context: dict[str, Any] = Field(default_factory=dict)
+    policy_governance: dict[str, Any] = Field(default_factory=dict)
     today_at_a_glance: dict[str, Any] = Field(default_factory=dict)
