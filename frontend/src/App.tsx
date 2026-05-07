@@ -2234,18 +2234,6 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                     <Space wrap className="inline-tags">
                       {activeCandidate ? <Tag color={directionColor(activeCandidate.display_direction)}>{activeCandidate.display_direction_label}</Tag> : null}
                       {activeCandidate ? <Tag>{`${activeCandidate.confidence_label}置信`}</Tag> : null}
-                      {activeCandidate ? <Tag>{displayWindowLabel(activeCandidate.window_definition)}</Tag> : null}
-                      {activeCandidate ? <Tag>{horizonLabel(activeCandidate.target_horizon_label)}</Tag> : null}
-                      {activeCandidate ? (
-                        <Tag color={claimGateAlertType(activeCandidate.claim_gate.status)}>
-                          {claimGateStatusLabel(activeCandidate.claim_gate.status)}
-                        </Tag>
-                      ) : null}
-                      {activeCandidate ? (
-                        <Tag color={activeCandidate.validation_status === "verified" ? "green" : "gold"}>
-                          {validationStatusLabel(activeCandidate.validation_status)}
-                        </Tag>
-                      ) : null}
                       <Tag>{activeRow.symbol}</Tag>
                       <Tag>
                         {activeRow.source_kind === "default_seed"

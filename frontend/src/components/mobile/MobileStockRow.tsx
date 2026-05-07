@@ -2,7 +2,7 @@ import { Tag, Typography } from "antd";
 import { useRef, useState, type PointerEvent } from "react";
 import type { CandidateWorkspaceRow } from "../../types";
 import { directionColor, formatDate, formatNumber, formatPercent, valueTone } from "../../utils/format";
-import { claimGateStatusLabel, sanitizeDisplayText } from "../../utils/labels";
+import { sanitizeDisplayText } from "../../utils/labels";
 import { MobileMiniTrendChart } from "./MobileMiniTrendChart";
 
 const { Text } = Typography;
@@ -69,7 +69,6 @@ export function MobileStockRow({
   const rowTags = (
     <div className="mobile-stock-row-tags">
       <Tag color={candidate ? directionColor(candidate.display_direction) : "default"}>{directionLabel}</Tag>
-      {candidate ? <Tag>{claimGateStatusLabel(candidate.claim_gate.status)}</Tag> : null}
       {holding ? <Tag color="blue">持仓</Tag> : null}
     </div>
   );
