@@ -369,6 +369,13 @@ def build_parser() -> argparse.ArgumentParser:
     refresh_runtime.add_argument("--ops-only", action="store_true")
     refresh_runtime.add_argument("--skip-simulation", action="store_true")
 
+    sync_benchmarks = subparsers.add_parser(
+        "sync-benchmark-index-bars",
+        help="Sync CSI benchmark index daily bars for validation and replay studies.",
+    )
+    sync_benchmarks.add_argument("--database-url", default=None)
+    sync_benchmarks.add_argument("--lookback-days", type=int, default=400)
+
     suggestion_review = subparsers.add_parser(
         "review-improvement-suggestions",
         help="Collect improvement suggestions and run the multi-model audit.",
@@ -667,6 +674,12 @@ def main(argv: list[str] | None = None) -> int:
                 ops_only=args.ops_only,
                 skip_simulation=args.skip_simulation,
             )
+        _print_json(payload)
+        return 0
+
+    if args.command == "sync-benchmark-index-bars":
+        with session_scope(args.database_url) as session:
+            payload = sync_benchmark_index_bars(session, lookback_days=args.lookback_days)
         _print_json(payload)
         return 0
 

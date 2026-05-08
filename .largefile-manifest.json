@@ -27,7 +27,7 @@
       "reviewed_at": "2026-05-08"
     },
     "src/ashare_evidence/cli.py": {
-      "lines": 872,
+      "lines": 885,
       "reason": "CLI command group: data refresh, cache management, admin operations, event/improvement audit triggers, database write preflight (db.py), benchmark index bar sync, and shortpick replay/distillation/rejector/hard-veto/factor-rank/market-factor-study experiment commands.",
       "status": "accepted",
       "reviewed_at": "2026-05-08"
