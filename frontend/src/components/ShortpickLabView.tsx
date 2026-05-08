@@ -271,10 +271,13 @@ function topicLabel(candidate: ShortpickCandidateView): string {
 
 function baselineFamilyLabel(value?: string | null): string {
   if (value === "llm") return "LLM";
+  if (value === "llm_self_distilled") return "LLM自选蒸馏";
+  if (value === "llm_momentum_distilled") return "LLM动量池蒸馏";
   if (value === "diagnostic_proxy_llm") return "诊断代理";
   if (value === "random_same_tradeable_universe") return "随机";
   if (value === "random_same_market_cap_bucket") return "同市值随机";
   if (value === "momentum_volume_baseline") return "动量成交量";
+  if (value === "momentum_volume_expanded_pool") return "扩大动量池";
   return value || "未分组";
 }
 

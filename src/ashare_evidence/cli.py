@@ -53,7 +53,7 @@ from ashare_evidence.shortpick_lab import (
     validate_recent_shortpick_runs,
     validate_shortpick_run,
 )
-from ashare_evidence.shortpick_replay import run_shortpick_historical_replay
+from ashare_evidence.shortpick_replay import run_shortpick_historical_replay, run_shortpick_replay_distillation
 from ashare_evidence.simulation import restart_simulation_session, step_simulation_session
 from ashare_evidence.watchlist import active_watchlist_symbols, refresh_watchlist_symbol
 
@@ -412,6 +412,18 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_replay.add_argument("--rounds", type=int, default=5)
     shortpick_replay.add_argument("--candidate-limit", type=int, default=3)
 
+    shortpick_replay_distill = subparsers.add_parser(
+        "shortpick-replay-distill",
+        help="Expand historical replay with momentum pools and sealed-packet LLM distillation tracks.",
+    )
+    shortpick_replay_distill.add_argument("--database-url", default=None)
+    shortpick_replay_distill.add_argument("--run-id", type=int, default=None)
+    shortpick_replay_distill.add_argument("--start-date", default=None)
+    shortpick_replay_distill.add_argument("--end-date", default=None)
+    shortpick_replay_distill.add_argument("--momentum-pool-limit", type=int, default=20)
+    shortpick_replay_distill.add_argument("--self-distill-limit", type=int, default=3)
+    shortpick_replay_distill.add_argument("--momentum-distill-limit", type=int, default=5)
+
     phase5_daily = subparsers.add_parser(
         "phase5-daily-refresh",
         help="Run the daily Phase 5 refresh workflow: refresh runtime data, then write latest/history horizon-study snapshots.",
@@ -651,6 +663,20 @@ def main(argv: list[str] | None = None) -> int:
                 rounds=args.rounds,
                 candidate_limit=args.candidate_limit,
                 triggered_by="scheduled_cli",
+            )
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-replay-distill":
+        with session_scope(args.database_url) as session:
+            payload = run_shortpick_replay_distillation(
+                session,
+                run_id=args.run_id,
+                start_date=None if args.start_date is None else date.fromisoformat(args.start_date),
+                end_date=None if args.end_date is None else date.fromisoformat(args.end_date),
+                momentum_pool_limit=args.momentum_pool_limit,
+                self_distill_limit=args.self_distill_limit,
+                momentum_distill_limit=args.momentum_distill_limit,
             )
         _print_json(payload)
         return 0
