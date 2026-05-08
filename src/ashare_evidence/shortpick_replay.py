@@ -54,6 +54,9 @@ SHORTPICK_REPLAY_BASELINE_FAMILIES = (
     "random_same_market_cap_bucket",
     "momentum_volume_baseline",
     "momentum_volume_expanded_pool",
+    "llm_reject_only",
+    "llm_reject_then_momentum_rank",
+    "random_reject_then_momentum_rank",
 )
 SHORTPICK_REPLAY_HORIZON_ORDER = (1, 3, 5, 10, 20)
 SHORTPICK_REPLAY_DISTILL_FAMILIES = (
@@ -64,6 +67,14 @@ SHORTPICK_REPLAY_DISTILL_FAMILIES = (
 SHORTPICK_REPLAY_DISTILL_EXECUTORS = (
     "historical_replay_llm_self_distiller",
     "historical_replay_momentum_pool_distiller",
+)
+SHORTPICK_REPLAY_REJECTION_FAMILIES = (
+    "llm_reject_only",
+    "llm_reject_then_momentum_rank",
+    "random_reject_then_momentum_rank",
+)
+SHORTPICK_REPLAY_REJECTION_EXECUTORS = (
+    "historical_replay_momentum_pool_rejector",
 )
 
 
@@ -314,6 +325,60 @@ def run_shortpick_replay_distillation(
             "self_distill_limit": self_distill_limit,
             "momentum_distill_limit": momentum_distill_limit,
             "families": list(SHORTPICK_REPLAY_DISTILL_FAMILIES),
+        },
+    }
+
+
+def run_shortpick_replay_rejection(
+    session: Session,
+    *,
+    run_id: int | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    momentum_pool_limit: int = 40,
+    rank_limit: int = 5,
+    reject_max_ratio: float = 0.4,
+) -> dict[str, Any]:
+    query = (
+        select(ShortpickExperimentRun)
+        .where(
+            ShortpickExperimentRun.information_mode == SHORTPICK_HISTORICAL_REPLAY_MODE,
+            ShortpickExperimentRun.status == "completed",
+        )
+        .order_by(ShortpickExperimentRun.run_date.asc(), ShortpickExperimentRun.id.asc())
+    )
+    if run_id is not None:
+        query = query.where(ShortpickExperimentRun.id == run_id)
+    if start_date is not None:
+        query = query.where(ShortpickExperimentRun.run_date >= start_date)
+    if end_date is not None:
+        query = query.where(ShortpickExperimentRun.run_date <= end_date)
+    runs = [run for run in session.scalars(query).all() if not _is_diagnostic_replay_run(run)]
+    outputs: list[dict[str, Any]] = []
+    normalized_pool_limit = max(1, min(int(momentum_pool_limit), 80))
+    normalized_rank_limit = max(1, min(int(rank_limit), 20))
+    normalized_reject_max_ratio = max(0.0, min(float(reject_max_ratio), 0.8))
+    for run in runs:
+        outputs.append(
+            _reject_one_replay_run(
+                session,
+                run=run,
+                momentum_pool_limit=normalized_pool_limit,
+                rank_limit=normalized_rank_limit,
+                reject_max_ratio=normalized_reject_max_ratio,
+            )
+        )
+        session.commit()
+    return {
+        "experiment_mode": SHORTPICK_REPLAY_EXPERIMENT_MODE,
+        "rejection_mode": "llm_reject_then_mechanical_momentum_rank",
+        "run_count": len(outputs),
+        "runs": outputs,
+        "config": {
+            "momentum_pool_limit": normalized_pool_limit,
+            "rank_limit": normalized_rank_limit,
+            "reject_max_ratio": normalized_reject_max_ratio,
+            "families": ["momentum_volume_expanded_pool", *SHORTPICK_REPLAY_REJECTION_FAMILIES],
         },
     }
 
@@ -715,6 +780,144 @@ def _distill_one_replay_run(
     }
 
 
+def _reject_one_replay_run(
+    session: Session,
+    *,
+    run: ShortpickExperimentRun,
+    momentum_pool_limit: int,
+    rank_limit: int,
+    reject_max_ratio: float,
+) -> dict[str, Any]:
+    packet = _load_replay_packet(session, run)
+    universe = _build_universe(session, as_of_date=run.run_date)
+    momentum_symbols = _momentum_symbols(universe, limit=momentum_pool_limit)
+
+    _delete_rejection_outputs(session, run.id, refresh_expanded_pool=True)
+    session.commit()
+
+    reject_round, decisions = _insert_replay_rejection_round(
+        session,
+        run=run,
+        packet=packet,
+        universe=universe,
+        executor_kind="historical_replay_momentum_pool_rejector",
+        round_index=4,
+        pool_symbols=momentum_symbols,
+        reject_max_ratio=reject_max_ratio,
+    )
+    session.commit()
+
+    decision_by_symbol = {str(item["symbol"]): item for item in decisions}
+    rejected_symbols = [symbol for symbol in momentum_symbols if decision_by_symbol.get(symbol, {}).get("decision") == "reject"]
+    kept_symbols = [symbol for symbol in momentum_symbols if symbol not in set(rejected_symbols)]
+    top_kept_symbols = kept_symbols[:rank_limit]
+    random_rejected_symbols = _deterministic_random_rejections(
+        run=run,
+        symbols=momentum_symbols,
+        reject_count=len(rejected_symbols),
+    )
+    random_kept_symbols = [symbol for symbol in momentum_symbols if symbol not in set(random_rejected_symbols)]
+    random_top_symbols = random_kept_symbols[:rank_limit]
+
+    for index, symbol in enumerate(momentum_symbols, start=1):
+        _insert_candidate(
+            session,
+            run=run,
+            round_record=None,
+            symbol=symbol,
+            baseline_family="momentum_volume_expanded_pool",
+            rank=index,
+            packet=packet,
+            universe=universe,
+        )
+    for index, symbol in enumerate(kept_symbols, start=1):
+        _insert_candidate(
+            session,
+            run=run,
+            round_record=reject_round,
+            symbol=symbol,
+            baseline_family="llm_reject_only",
+            rank=index,
+            packet=packet,
+            universe=universe,
+            llm_pick=_rejection_pick_payload(
+                universe=universe,
+                symbol=symbol,
+                family="llm_reject_only",
+                decision=decision_by_symbol.get(symbol),
+                original_rank=momentum_symbols.index(symbol) + 1,
+                derived_rank=index,
+            ),
+        )
+    for index, symbol in enumerate(top_kept_symbols, start=1):
+        _insert_candidate(
+            session,
+            run=run,
+            round_record=reject_round,
+            symbol=symbol,
+            baseline_family="llm_reject_then_momentum_rank",
+            rank=index,
+            packet=packet,
+            universe=universe,
+            llm_pick=_rejection_pick_payload(
+                universe=universe,
+                symbol=symbol,
+                family="llm_reject_then_momentum_rank",
+                decision=decision_by_symbol.get(symbol),
+                original_rank=momentum_symbols.index(symbol) + 1,
+                derived_rank=index,
+            ),
+        )
+    for index, symbol in enumerate(random_top_symbols, start=1):
+        _insert_candidate(
+            session,
+            run=run,
+            round_record=None,
+            symbol=symbol,
+            baseline_family="random_reject_then_momentum_rank",
+            rank=index,
+            packet=packet,
+            universe=universe,
+            llm_pick=_random_rejection_pick_payload(
+                universe=universe,
+                symbol=symbol,
+                original_rank=momentum_symbols.index(symbol) + 1,
+                derived_rank=index,
+                random_rejected_symbols=random_rejected_symbols,
+            ),
+        )
+
+    session.flush()
+    validation_result = validate_historical_replay_run(session, run.id, horizons=SHORTPICK_DEFAULT_HORIZONS)
+    candidate_counts = _rejection_candidate_counts(session, run.id)
+    run.summary_payload = {
+        **dict(run.summary_payload or {}),
+        "rejection_distillation": {
+            "status": "completed",
+            "momentum_pool_limit": momentum_pool_limit,
+            "rank_limit": rank_limit,
+            "reject_max_ratio": reject_max_ratio,
+            "rejected_count": len(rejected_symbols),
+            "random_rejected_count": len(random_rejected_symbols),
+            "families": ["momentum_volume_expanded_pool", *SHORTPICK_REPLAY_REJECTION_FAMILIES],
+            "candidate_counts": candidate_counts,
+            "completed_at": utcnow().isoformat(),
+        },
+    }
+    session.flush()
+    return {
+        "run_id": run.id,
+        "run_date": run.run_date.isoformat(),
+        "expanded_momentum_count": len(momentum_symbols),
+        "llm_rejected_count": len(rejected_symbols),
+        "llm_reject_only_count": len(kept_symbols),
+        "llm_reject_then_momentum_rank_count": len(top_kept_symbols),
+        "random_reject_then_momentum_rank_count": len(random_top_symbols),
+        "candidate_counts": candidate_counts,
+        "validation": validation_result,
+    }
+
+
 def _load_replay_packet(session: Session, run: ShortpickExperimentRun) -> dict[str, Any]:
     packet_id = str((run.summary_payload or {}).get("source_packet_id") or "")
     artifact = read_shortpick_lab_artifact_if_exists(packet_id, root=_artifact_root(session)) if packet_id else None
@@ -771,8 +974,38 @@ def _delete_distillation_outputs(session: Session, run_id: int, *, preserve_roun
     session.flush()
 
 
+def _delete_rejection_outputs(session: Session, run_id: int, *, refresh_expanded_pool: bool) -> None:
+    families = set(SHORTPICK_REPLAY_REJECTION_FAMILIES)
+    if refresh_expanded_pool:
+        families.add("momentum_volume_expanded_pool")
+    candidate_ids = [
+        candidate.id
+        for candidate in session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all()
+        if _candidate_baseline_family(candidate) in families
+    ]
+    if candidate_ids:
+        session.execute(delete(ShortpickValidationSnapshot).where(ShortpickValidationSnapshot.candidate_id.in_(candidate_ids)))
+        session.execute(delete(ShortpickCandidate).where(ShortpickCandidate.id.in_(candidate_ids)))
+    session.execute(
+        delete(ShortpickModelRound).where(
+            ShortpickModelRound.run_id == run_id,
+            ShortpickModelRound.executor_kind.in_(SHORTPICK_REPLAY_REJECTION_EXECUTORS),
+        )
+    )
+    session.flush()
+
+
 def _distillation_candidate_counts(session: Session, run_id: int) -> dict[str, int]:
     counts = dict.fromkeys(SHORTPICK_REPLAY_DISTILL_FAMILIES, 0)
+    for candidate in session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all():
+        family = _candidate_baseline_family(candidate)
+        if family in counts:
+            counts[family] += 1
+    return counts
+
+
+def _rejection_candidate_counts(session: Session, run_id: int) -> dict[str, int]:
+    counts = dict.fromkeys(("momentum_volume_expanded_pool", *SHORTPICK_REPLAY_REJECTION_FAMILIES), 0)
     for candidate in session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all():
         family = _candidate_baseline_family(candidate)
         if family in counts:
@@ -816,7 +1049,7 @@ def _insert_replay_llm_round(
             system=system,
             enable_search=False,
         )
-        parsed_json, final_raw_answer, repair_used = _extract_replay_llm_json_with_repair(
+        parsed_json, final_raw_answer, repair_used = _extract_replay_rejection_json_with_partial_repair(
             transport=transport,
             base_url=base_url,
             api_key=api_key,
@@ -955,6 +1188,101 @@ def _insert_replay_distillation_round(
             prompt=prompt,
             round_index=round_index,
             output_family=output_family,
+        )
+
+
+def _insert_replay_rejection_round(
+    session: Session,
+    *,
+    run: ShortpickExperimentRun,
+    packet: dict[str, Any],
+    universe: dict[str, Any],
+    executor_kind: str,
+    round_index: int,
+    pool_symbols: list[str],
+    reject_max_ratio: float,
+) -> tuple[ShortpickModelRound, list[dict[str, Any]]]:
+    if not pool_symbols:
+        return _insert_failed_replay_distillation_round(
+            session,
+            run=run,
+            packet=packet,
+            raw_answer="",
+            provider_name="system",
+            model_name="empty_candidate_pool",
+            executor_kind=executor_kind,
+            error_message="momentum candidate pool is empty",
+            prompt=None,
+            round_index=round_index,
+            output_family="llm_reject_only",
+        )
+    prompt = _build_replay_rejection_prompt(
+        session,
+        run=run,
+        packet=packet,
+        universe=universe,
+        pool_symbols=pool_symbols,
+        reject_max_ratio=reject_max_ratio,
+    )
+    system = (
+        "你是历史隔离回放剔除器。只能使用用户消息中的 sealed rejection packet。"
+        "禁止联网，禁止使用训练记忆补充事实，禁止输出 candidate_pool 外股票。只输出 JSON。"
+    )
+    base_url = ""
+    model_name = "unavailable"
+    raw_answer = ""
+    try:
+        transport, base_url, api_key, model_name = route_model("shortpick_historical_replay")
+        raw_answer = transport.complete(
+            base_url=base_url,
+            api_key=api_key,
+            model_name=model_name,
+            prompt=prompt,
+            system=system,
+            enable_search=False,
+        )
+        parsed_json, final_raw_answer, repair_used = _extract_replay_llm_json_with_repair(
+            transport=transport,
+            base_url=base_url,
+            api_key=api_key,
+            model_name=model_name,
+            raw_answer=raw_answer,
+        )
+        parsed_payload = _normalize_replay_rejection_payload(
+            parsed_json,
+            packet=packet,
+            universe=universe,
+            pool_symbols=pool_symbols,
+            reject_max_ratio=reject_max_ratio,
+        )
+        parsed_payload["_json_repair_used"] = repair_used
+        round_record = _insert_replay_round_record(
+            session,
+            run=run,
+            packet=packet,
+            parsed_payload=parsed_payload,
+            raw_answer=final_raw_answer,
+            provider_name=_provider_name_from_base_url(base_url),
+            model_name=model_name,
+            executor_kind=executor_kind,
+            error_message=None,
+            prompt=prompt,
+            round_index=round_index,
+        )
+        return round_record, list(parsed_payload.get("decisions") or [])
+    except Exception as exc:
+        return _insert_failed_replay_distillation_round(
+            session,
+            run=run,
+            packet=packet,
+            raw_answer=raw_answer,
+            provider_name=_provider_name_from_base_url(base_url),
+            model_name=model_name,
+            executor_kind=executor_kind,
+            error_message=f"sealed packet rejection executor failed: {exc}",
+            prompt=prompt,
+            round_index=round_index,
+            output_family="llm_reject_only",
         )
 
 
@@ -1229,6 +1557,9 @@ def _insert_candidate(
             "turnover_rate": member.turnover_rate,
         },
     }
+    extra_candidate_payload = (llm_pick or {}).get("candidate_payload")
+    if isinstance(extra_candidate_payload, dict):
+        candidate_payload.update(extra_candidate_payload)
     session.add(
         ShortpickCandidate(
             run_id=run.id,
@@ -1463,6 +1794,80 @@ sealed distillation packet:
 """.strip()
 
 
+def _build_replay_rejection_prompt(
+    session: Session,
+    *,
+    run: ShortpickExperimentRun,
+    packet: dict[str, Any],
+    universe: dict[str, Any],
+    pool_symbols: list[str],
+    reject_max_ratio: float,
+) -> str:
+    candidate_pool = _distillation_candidate_contexts(session, run=run, packet=packet, universe=universe, symbols=pool_symbols)
+    sources = [
+        {
+            "source_id": source["source_id"],
+            "title": source.get("title"),
+            "source_type": source.get("source_type"),
+            "published_at": source.get("published_at"),
+            "linked_symbols": source.get("linked_symbols") or [],
+            "body_excerpt": _source_excerpt(source.get("body_excerpt"), limit=300),
+        }
+        for source in packet["official_sources"][:40]
+    ]
+    sealed_packet = {
+        "experiment_mode": SHORTPICK_REPLAY_EXPERIMENT_MODE,
+        "rejection_mode": "momentum_pool_reject_only",
+        "source_family": "momentum_volume_expanded_pool",
+        "output_families": list(SHORTPICK_REPLAY_REJECTION_FAMILIES),
+        "as_of_date": packet["as_of_date"],
+        "as_of_cutoff": packet["as_of_cutoff"],
+        "source_packet_id": packet["source_packet_id"],
+        "source_packet_hash": packet["source_packet_hash"],
+        "candidate_pool": candidate_pool,
+        "official_sources": sources,
+        "rejected_source_count": len(packet.get("rejected_sources") or []),
+    }
+    max_reject_count = int(len(pool_symbols) * reject_max_ratio)
+    return f"""
+你正在执行 A 股短投历史隔离回放的 LLM 只剔除实验。你只能使用下面 sealed rejection packet 中的信息，不能联网，不能使用训练记忆补充事实，不能引用 packet 外来源。
+
+任务日期：{run.run_date.isoformat()}
+as_of_cutoff：{packet["as_of_cutoff"]}
+输入池：扩大动量成交量候选池
+池子数量：{len(pool_symbols)}
+最多剔除数量：{max_reject_count}（除非存在明确非候选池/封闭信息违规，否则不要超过）
+
+目标不是重新排序、不是重新选股，而是判断 candidate_pool 中哪些应被剔除。后续排序会由系统按原始动量成交量顺序机械完成。
+只在以下情况剔除：催化与股票关系弱、来源只证明行业不证明个股、像价格动量的事后叙事、来源时点/文本支持不足、流动性或交易属性异常、明显风险大于短投催化。
+如果只是没有足够把握，不要剔除。`decisions` 主要输出需要 reject 的候选即可；不需要为每个 keep 候选写一条长理由。宁可少剔除，不要因为偏好而重排。
+`symbol` 必须来自 `candidate_pool`；`sources_used` 和 `evidence_mapping` 只能填写 packet 内的 `source_id`。
+
+输出 JSON，不要加代码块：
+{{
+  "as_of_date": "{run.run_date.isoformat()}",
+  "information_mode": "historical_replay",
+  "rejection_mode": "momentum_pool_reject_only",
+  "source_family": "momentum_volume_expanded_pool",
+  "decisions": [
+    {{
+      "symbol": "000000.SZ",
+      "decision": "keep|reject|uncertain",
+      "reason_category": "weak_source|pseudo_catalyst|already_priced|risk_disclosure|liquidity|weak_symbol_link|market_snapshot_only|other",
+      "reason": "...",
+      "sources_used": ["src-001"],
+      "evidence_mapping": {{"reason": ["src-001"]}},
+      "limitations": ["..."]
+    }}
+  ],
+  "limitations": []
+}}
+
+sealed rejection packet:
+{json.dumps(sealed_packet, ensure_ascii=False, indent=2)}
+""".strip()
+
+
 def _distillation_candidate_contexts(
     session: Session,
     *,
@@ -1628,6 +2033,144 @@ def _normalize_replay_distillation_payload(
         "candidates": filtered,
         "llm_executor": "sealed_packet_distillation",
     }
+
+
+def _normalize_replay_rejection_payload(
+    parsed: dict[str, Any],
+    *,
+    packet: dict[str, Any],
+    universe: dict[str, Any],
+    pool_symbols: list[str],
+    reject_max_ratio: float,
+) -> dict[str, Any]:
+    allowed_symbols = set(pool_symbols)
+    raw_decisions = parsed.get("decisions")
+    if not isinstance(raw_decisions, list):
+        raw_decisions = parsed.get("candidates") if isinstance(parsed.get("candidates"), list) else []
+    max_reject_count = int(len(pool_symbols) * reject_max_ratio)
+    reject_count = 0
+    by_symbol: dict[str, dict[str, Any]] = {}
+    for raw in raw_decisions:
+        if not isinstance(raw, dict):
+            continue
+        symbol = _resolve_replay_symbol(str(raw.get("symbol") or ""), universe)
+        if not symbol or symbol not in allowed_symbols or symbol in by_symbol:
+            continue
+        decision = _normalize_rejection_decision(raw.get("decision"))
+        limitations = _string_list(raw.get("limitations"))
+        if decision == "reject":
+            if reject_count >= max_reject_count:
+                decision = "uncertain"
+                limitations.append("reject cap applied by parser")
+            else:
+                reject_count += 1
+        member = universe["by_symbol"][symbol]
+        support_sources = _source_refs_for_llm_pick(packet=packet, pick=raw, symbol=symbol)
+        evidence_mapping = _normalize_evidence_mapping(
+            raw.get("evidence_mapping"),
+            support_sources,
+            allow_fallback=not _source_ids_declared_by_pick(raw),
+        )
+        by_symbol[symbol] = {
+            "symbol": symbol,
+            "name": str(raw.get("name") or member.name),
+            "decision": decision,
+            "reason_category": str(raw.get("reason_category") or "other"),
+            "reason": str(raw.get("reason") or raw.get("thesis") or ""),
+            "sources_used": [source["source_id"] for source in support_sources],
+            "evidence_mapping": evidence_mapping,
+            "limitations": limitations,
+        }
+    decisions: list[dict[str, Any]] = []
+    for symbol in pool_symbols:
+        if symbol in by_symbol:
+            decisions.append(by_symbol[symbol])
+            continue
+        member = universe["by_symbol"].get(symbol)
+        if member is None:
+            continue
+        decisions.append(
+            {
+                "symbol": symbol,
+                "name": member.name,
+                "decision": "uncertain",
+                "reason_category": "not_returned_by_model",
+                "reason": "model omitted this candidate; parser kept it as uncertain instead of rejection",
+                "sources_used": [source["source_id"] for source in _sources_for_symbol(packet, symbol)[:2]],
+                "evidence_mapping": {},
+                "limitations": ["model did not return a decision for this candidate"],
+            }
+        )
+    return {
+        "as_of_date": str(parsed.get("as_of_date") or packet["as_of_date"]),
+        "information_mode": SHORTPICK_HISTORICAL_REPLAY_MODE,
+        "source_packet_id": packet["source_packet_id"],
+        "source_packet_hash": packet["source_packet_hash"],
+        "rejection_mode": "momentum_pool_reject_only",
+        "source_family": "momentum_volume_expanded_pool",
+        "decisions": decisions,
+        "rejected_count": len([item for item in decisions if item["decision"] == "reject"]),
+        "limitations": _string_list(parsed.get("limitations")),
+        "llm_executor": "sealed_packet_rejection",
+    }
+
+
+def _normalize_rejection_decision(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"reject", "rejected", "drop", "exclude", "剔除", "删除", "排除"}:
+        return "reject"
+    if normalized in {"keep", "kept", "pass", "retain", "保留", "通过"}:
+        return "keep"
+    return "uncertain"
+
+
+def _extract_replay_rejection_json_with_partial_repair(
+    *,
+    transport: Any,
+    base_url: str,
+    api_key: str,
+    model_name: str,
+    raw_answer: str,
+) -> tuple[dict[str, Any], str, bool]:
+    try:
+        return extract_shortpick_json(raw_answer), raw_answer, False
+    except ValueError as parse_exc:
+        try:
+            repaired = transport.complete(
+                base_url=base_url,
+                api_key=api_key,
+                model_name=model_name,
+                prompt=_build_replay_json_repair_prompt(raw_answer),
+                system="只修复 JSON 格式，不要新增事实、股票、来源或解释。只输出 JSON。",
+                enable_search=False,
+            )
+            return extract_shortpick_json(repaired), repaired, True
+        except Exception:
+            partial = _extract_partial_rejection_decisions(raw_answer)
+            if partial:
+                return {"decisions": partial, "limitations": ["partial rejection JSON recovered from raw answer"]}, raw_answer, True
+            raise parse_exc
+
+
+def _extract_partial_rejection_decisions(raw_answer: str) -> list[dict[str, Any]]:
+    decoder = json.JSONDecoder()
+    decisions: list[dict[str, Any]] = []
+    seen_symbols: set[str] = set()
+    for match in re.finditer(r"\{", raw_answer):
+        try:
+            value, _ = decoder.raw_decode(raw_answer[match.start():])
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(value, dict):
+            continue
+        if not value.get("symbol") or not value.get("decision"):
+            continue
+        symbol = str(value.get("symbol"))
+        if symbol in seen_symbols:
+            continue
+        seen_symbols.add(symbol)
+        decisions.append(value)
+    return decisions
 
 
 def _extract_replay_llm_json_with_repair(
@@ -1797,6 +2340,9 @@ def _round_sources_from_payload(packet: dict[str, Any], payload: dict[str, Any])
     for candidate in payload.get("candidates") or []:
         if isinstance(candidate, dict):
             source_ids.extend(_source_ids_from_value(candidate.get("sources_used")))
+    for decision in payload.get("decisions") or []:
+        if isinstance(decision, dict):
+            source_ids.extend(_source_ids_from_value(decision.get("sources_used")))
     sources = _sources_by_ids(packet, source_ids)
     return sources[:10] if sources else packet["official_sources"][:5]
 
@@ -1843,6 +2389,88 @@ def _momentum_symbols(universe: dict[str, Any], *, limit: int) -> list[str]:
         reverse=True,
     )
     return [member.symbol for member in ranked[:limit]]
+
+
+def _deterministic_random_rejections(
+    *,
+    run: ShortpickExperimentRun,
+    symbols: list[str],
+    reject_count: int,
+) -> list[str]:
+    if reject_count <= 0 or not symbols:
+        return []
+    count = min(reject_count, len(symbols))
+    seed_text = f"{run.id}:{run.run_date.isoformat()}:random_reject_then_momentum_rank:{','.join(symbols)}"
+    seed = int(hashlib.sha256(seed_text.encode("utf-8")).hexdigest()[:12], 16)
+    rng = random.Random(seed)
+    return rng.sample(list(symbols), count)
+
+
+def _rejection_pick_payload(
+    *,
+    universe: dict[str, Any],
+    symbol: str,
+    family: str,
+    decision: dict[str, Any] | None,
+    original_rank: int,
+    derived_rank: int,
+) -> dict[str, Any]:
+    member = universe["by_symbol"][symbol]
+    decision_payload = dict(decision or {})
+    decision_label = str(decision_payload.get("decision") or "uncertain")
+    reason = str(decision_payload.get("reason") or "LLM 未识别出必须剔除的封闭信息问题。")
+    family_label = _baseline_label(family)
+    return {
+        "symbol": symbol,
+        "name": member.name,
+        "theme": member.industry or family,
+        "thesis": f"{member.name} 经 LLM 只剔除流程保留，原动量排序第 {original_rank}，{family_label} 排序第 {derived_rank}；判断为 {decision_label}：{reason}",
+        "catalysts": ["扩大动量池候选通过 LLM 伪催化/弱来源剔除检查"],
+        "risks": ["LLM 只负责剔除，不负责收益排序；剩余排序由原动量成交量规则机械决定。"],
+        "invalidation": ["若剔除理由被证明与封闭来源不一致，该候选应从 LLM 剔除样本中排除。"],
+        "sources_used": [],
+        "evidence_mapping": {},
+        "limitations": _string_list(decision_payload.get("limitations")),
+        "candidate_payload": {
+            "rejector_decision": decision_label,
+            "rejector_reason_category": str(decision_payload.get("reason_category") or "other"),
+            "rejector_reason": reason,
+            "rejector_sources_used": _string_list(decision_payload.get("sources_used")),
+            "rejector_evidence_mapping": dict(decision_payload.get("evidence_mapping") or {}),
+            "original_momentum_rank": original_rank,
+            "derived_rank_after_rejection": derived_rank,
+            "rejection_design": "llm_reject_only_then_mechanical_momentum_rank",
+        },
+    }
+
+
+def _random_rejection_pick_payload(
+    *,
+    universe: dict[str, Any],
+    symbol: str,
+    original_rank: int,
+    derived_rank: int,
+    random_rejected_symbols: list[str],
+) -> dict[str, Any]:
+    member = universe["by_symbol"][symbol]
+    return {
+        "symbol": symbol,
+        "name": member.name,
+        "theme": member.industry or "random_reject_control",
+        "thesis": f"{member.name} 在随机剔除同等数量候选后，按原动量排序进入第 {derived_rank} 名；原动量排序第 {original_rank}。",
+        "catalysts": ["随机剔除对照组，用于隔离 LLM 剔除是否超过随机删样本。"],
+        "risks": ["该组不使用 LLM 判断，只作为统计对照。"],
+        "invalidation": ["历史隔离回放只验证信号，不进入主推荐或模拟盘。"],
+        "sources_used": [],
+        "evidence_mapping": {},
+        "limitations": ["random rejection control"],
+        "candidate_payload": {
+            "random_rejected_symbols": random_rejected_symbols,
+            "original_momentum_rank": original_rank,
+            "derived_rank_after_rejection": derived_rank,
+            "rejection_design": "random_reject_then_mechanical_momentum_rank",
+        },
+    }
 
 
 def _replay_validation_rows(session: Session, *, run_id: int | None) -> list[dict[str, Any]]:
@@ -2145,6 +2773,12 @@ def _candidate_thesis(member: _UniverseMember, baseline_family: str) -> str:
         return f"{member.name} 由动量成交量基准选中：截至当日日收益 {ret:.2%}，成交额 {member.latest_bar.amount:.0f}。"
     if baseline_family == "momentum_volume_expanded_pool":
         return f"{member.name} 进入扩大动量成交量候选池：截至当日日收益 {ret:.2%}，成交额 {member.latest_bar.amount:.0f}。"
+    if baseline_family == "llm_reject_only":
+        return f"{member.name} 在扩大动量池中未被 LLM 剔除；截至当日日收益 {ret:.2%}，成交额 {member.latest_bar.amount:.0f}。"
+    if baseline_family == "llm_reject_then_momentum_rank":
+        return f"{member.name} 先通过 LLM 只剔除检查，再按原动量成交量排序入选；截至当日日收益 {ret:.2%}。"
+    if baseline_family == "random_reject_then_momentum_rank":
+        return f"{member.name} 由随机剔除同等数量候选后按原动量排序入选；截至当日日收益 {ret:.2%}。"
     if baseline_family == "random_same_market_cap_bucket":
         return f"{member.name} 由同市值分桶随机基准选中，市值桶 {member.market_cap_bucket}。"
     return f"{member.name} 由当日可交易 universe 随机基准选中。"
@@ -2290,6 +2924,9 @@ def _baseline_label(value: str) -> str:
         "random_same_market_cap_bucket": "同市值随机",
         "momentum_volume_baseline": "动量成交量",
         "momentum_volume_expanded_pool": "扩大动量池",
+        "llm_reject_only": "LLM只剔除保留池",
+        "llm_reject_then_momentum_rank": "LLM剔除后动量排序",
+        "random_reject_then_momentum_rank": "随机剔除后动量排序",
     }
     return labels.get(value, value)
 

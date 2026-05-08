@@ -26,6 +26,7 @@ from ashare_evidence.shortpick_replay import (
     list_shortpick_replay_runs,
     run_shortpick_historical_replay,
     run_shortpick_replay_distillation,
+    run_shortpick_replay_rejection,
 )
 
 
@@ -441,6 +442,123 @@ def test_replay_distillation_adds_self_and_momentum_filter_families(monkeypatch)
                 select(ShortpickModelRound).where(ShortpickModelRound.run_id == run_id).order_by(ShortpickModelRound.round_index.asc())
             ).all()
             assert [round_row.round_index for round_row in rounds] == [1, 2, 3]
+
+
+def test_replay_rejection_adds_rejector_and_random_control_families(monkeypatch) -> None:
+    class FakeTransport:
+        def complete(self, *, base_url, api_key, model_name, prompt, system=None, enable_search=False):
+            assert enable_search is False
+            if "sealed rejection packet:" in prompt:
+                packet = json.loads(prompt.split("sealed rejection packet:", 1)[1].strip())
+                assert packet["candidate_pool"]
+                decisions = []
+                for index, item in enumerate(packet["candidate_pool"]):
+                    source_ids = list(item.get("source_ids") or [])[:1]
+                    decisions.append(
+                        {
+                            "symbol": item["symbol"],
+                            "decision": "reject" if index == 1 else "keep",
+                            "reason_category": "weak_source" if index == 1 else "other",
+                            "reason": "fixture reject decision" if index == 1 else "fixture keep decision",
+                            "sources_used": source_ids,
+                            "evidence_mapping": {"reason": source_ids},
+                            "limitations": ["fixture rejection response"],
+                        }
+                    )
+                return json.dumps(
+                    {
+                        "as_of_date": "2026-05-05",
+                        "information_mode": "historical_replay",
+                        "rejection_mode": "momentum_pool_reject_only",
+                        "source_family": "momentum_volume_expanded_pool",
+                        "decisions": decisions,
+                        "limitations": [],
+                    },
+                    ensure_ascii=False,
+                )
+            assert "sealed source packet" in prompt
+            picks = [
+                {
+                    "symbol": "600003.SH",
+                    "name": "测试半导体",
+                    "theme": "半导体订单",
+                    "thesis": "测试半导体在 sealed packet 中有订单进展来源支持。",
+                    "catalysts": ["订单进展"],
+                    "risks": ["样本 fixture 有限"],
+                    "invalidation": ["来源失效"],
+                    "sources_used": ["src-001"],
+                    "evidence_mapping": {"thesis": ["src-001"]},
+                    "limitations": ["fixture response"],
+                }
+            ]
+            return json.dumps(
+                {
+                    "as_of_date": "2026-05-05",
+                    "information_mode": "historical_replay",
+                    "primary_pick": picks[0],
+                    "candidates": [],
+                    "limitations": [],
+                },
+                ensure_ascii=False,
+            )
+
+    monkeypatch.setenv("ASHARE_SHORTPICK_REPLAY_LLM_MODE", "real")
+    monkeypatch.setattr(
+        "ashare_evidence.shortpick_replay.route_model",
+        lambda task: (FakeTransport(), "https://api.deepseek.test/anthropic", "test-key", "deepseek-fixture"),
+    )
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_url = f"sqlite:///{Path(temp_dir) / 'replay.db'}"
+        init_database(database_url)
+        _seed_replay_fixture(database_url)
+
+        with session_scope(database_url) as session:
+            payload = run_shortpick_historical_replay(
+                session,
+                start_date=date(2026, 5, 5),
+                end_date=date(2026, 5, 5),
+                rounds=1,
+                candidate_limit=1,
+            )
+            run_id = payload["runs"][0]["id"]
+            reject_payload = run_shortpick_replay_rejection(
+                session,
+                run_id=run_id,
+                momentum_pool_limit=4,
+                rank_limit=2,
+                reject_max_ratio=0.5,
+            )
+            assert reject_payload["run_count"] == 1
+            assert reject_payload["runs"][0]["candidate_counts"] == {
+                "momentum_volume_expanded_pool": 4,
+                "llm_reject_only": 3,
+                "llm_reject_then_momentum_rank": 2,
+                "random_reject_then_momentum_rank": 2,
+            }
+
+            candidates = session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all()
+            by_family = {}
+            for candidate in candidates:
+                by_family.setdefault(candidate.candidate_payload["baseline_family"], []).append(candidate)
+            assert len(by_family["momentum_volume_expanded_pool"]) == 4
+            assert len(by_family["llm_reject_only"]) == 3
+            assert len(by_family["llm_reject_then_momentum_rank"]) == 2
+            assert len(by_family["random_reject_then_momentum_rank"]) == 2
+            assert all(candidate.round_id is not None for candidate in by_family["llm_reject_only"])
+            assert all(candidate.round_id is not None for candidate in by_family["llm_reject_then_momentum_rank"])
+            assert all(candidate.round_id is None for candidate in by_family["random_reject_then_momentum_rank"])
+            assert by_family["llm_reject_only"][0].candidate_payload["rejection_design"] == "llm_reject_only_then_mechanical_momentum_rank"
+
+            feedback = build_shortpick_replay_feedback(session, run_id=run_id)
+            families = {family["baseline_family"]: family for family in feedback["families"]}
+            assert families["llm_reject_only"]["label"] == "LLM只剔除保留池"
+            assert families["llm_reject_then_momentum_rank"]["label"] == "LLM剔除后动量排序"
+            assert families["random_reject_then_momentum_rank"]["label"] == "随机剔除后动量排序"
+
+            rounds = session.scalars(
+                select(ShortpickModelRound).where(ShortpickModelRound.run_id == run_id).order_by(ShortpickModelRound.round_index.asc())
+            ).all()
+            assert [round_row.round_index for round_row in rounds] == [1, 4]
 
 
 def test_real_replay_llm_failure_does_not_fallback_to_diagnostic_proxy(monkeypatch) -> None:

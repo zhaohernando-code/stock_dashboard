@@ -278,6 +278,9 @@ function baselineFamilyLabel(value?: string | null): string {
   if (value === "random_same_market_cap_bucket") return "同市值随机";
   if (value === "momentum_volume_baseline") return "动量成交量";
   if (value === "momentum_volume_expanded_pool") return "扩大动量池";
+  if (value === "llm_reject_only") return "LLM只剔除保留池";
+  if (value === "llm_reject_then_momentum_rank") return "LLM剔除后动量排序";
+  if (value === "random_reject_then_momentum_rank") return "随机剔除后动量排序";
   return value || "未分组";
 }
 

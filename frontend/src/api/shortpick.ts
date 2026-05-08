@@ -220,7 +220,7 @@ export function getShortpickReplayFeedback(runId?: number) {
     data: await request<ShortpickReplayFeedbackResponse>(
       path,
       undefined,
-      operationsDashboardRequestBehavior,
+      longRunningRequestBehavior,
     ),
     source: buildSourceInfo(),
   }))();
