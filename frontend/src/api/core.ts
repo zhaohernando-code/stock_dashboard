@@ -213,7 +213,6 @@ function buildRequestUrls(path: string, explicitBase = hasExplicitApiBase()): st
       } else {
         if (prefersPlainApiPath(base)) {
           urls.push(`${base}${normalizedPath}`);
-          urls.push(`${base}/api${normalizedPath}`);
         } else {
           urls.push(`${base}/api${normalizedPath}`);
           urls.push(`${base}${normalizedPath}`);
