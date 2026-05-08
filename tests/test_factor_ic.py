@@ -76,8 +76,8 @@ def test_ic_based_weights():
     from ashare_evidence.phase2.factor_ic import FactorICResult, ic_based_weights
 
     results = {
-        "price": FactorICResult("price", 20, 0.04, 0.02, 8.94, 0.8, 100, ""),
-        "news": FactorICResult("news", 20, 0.02, 0.02, 4.47, 0.7, 100, ""),
+        "price": FactorICResult("price", 20, 0.04, 0.02, 8.94, 0.8, 600, "", period_count=20, weighting_status="eligible"),
+        "news": FactorICResult("news", 20, 0.02, 0.02, 4.47, 0.7, 600, "", period_count=20, weighting_status="eligible"),
         "bad_factor": FactorICResult("bad", 20, -0.01, 0.02, -2.24, 0.3, 100, ""),
     }
     weights = ic_based_weights(results, default_weights={"price": 0.50, "news": 0.30, "bad_factor": 0.20})
@@ -85,6 +85,19 @@ def test_ic_based_weights():
     assert weights.get("bad_factor", 0.0) == 0.0, f"Bad factor should have zero weight: {weights}"
     assert abs(sum(weights.values()) - 1.0) < 0.01
     print("PASS: IC-based weights")
+
+
+def test_ic_based_weights_block_small_sample_gate():
+    """Small-sample IC remains diagnostic and cannot dominate production weights."""
+    from ashare_evidence.phase2.factor_ic import FactorICResult, ic_based_weights
+
+    results = {
+        "price": FactorICResult("price", 20, 0.04, 0.02, 8.94, 0.8, 100, ""),
+        "news": FactorICResult("news", 20, 0.02, 0.02, 4.47, 0.7, 100, ""),
+    }
+    weights = ic_based_weights(results, default_weights={"price": 0.50, "news": 0.30})
+    assert weights == {"price": 0.625, "news": 0.375}
+    print("PASS: IC gate blocks small-sample weights")
 
 
 def test_rolling_ic_decay_detection():
@@ -107,5 +120,6 @@ if __name__ == "__main__":
     test_minimum_symbols()
     test_aggregate_ic()
     test_ic_based_weights()
+    test_ic_based_weights_block_small_sample_gate()
     test_rolling_ic_decay_detection()
     print("\nAll factor IC tests passed!")

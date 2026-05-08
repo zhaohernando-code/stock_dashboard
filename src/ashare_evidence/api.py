@@ -106,6 +106,13 @@ from ashare_evidence.shortpick_lab import (
     run_shortpick_experiment,
     validate_shortpick_run,
 )
+from ashare_evidence.shortpick_replay import (
+    build_shortpick_replay_feedback,
+    get_shortpick_replay_run,
+    get_shortpick_replay_sources,
+    list_shortpick_replay_candidates,
+    list_shortpick_replay_runs,
+)
 from ashare_evidence.simulation import (
     end_simulation_session,
     get_simulation_workspace,
@@ -628,6 +635,71 @@ def create_app(
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
         return build_shortpick_model_feedback(session)
+
+    @app.get("/shortpick-lab/replay-runs", response_model=ShortpickRunListResponse)
+    def shortpick_replay_run_list(
+        limit: int = Query(default=20, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
+        status: str | None = Query(default=None),
+        date_from: date | None = Query(default=None),
+        date_to: date | None = Query(default=None),
+        access: StockAccessContext = Depends(require_stock_access),
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        return list_shortpick_replay_runs(
+            session,
+            status=status,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+            offset=offset,
+            include_raw=access.actor_role == "root",
+        )
+
+    @app.get("/shortpick-lab/replay-runs/{run_id}", response_model=ShortpickRunView)
+    def shortpick_replay_run_detail(
+        run_id: int,
+        access: StockAccessContext = Depends(require_stock_access),
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        try:
+            return get_shortpick_replay_run(session, run_id, include_raw=access.actor_role == "root")
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/shortpick-lab/replay-runs/{run_id}/candidates", response_model=ShortpickCandidateListResponse)
+    def shortpick_replay_candidate_list(
+        run_id: int,
+        access: StockAccessContext = Depends(require_stock_access),
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        try:
+            return list_shortpick_replay_candidates(session, run_id=run_id, include_raw=access.actor_role == "root")
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/shortpick-lab/replay-runs/{run_id}/sources")
+    def shortpick_replay_sources(
+        run_id: int,
+        access: StockAccessContext = Depends(require_stock_access),
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        try:
+            return get_shortpick_replay_sources(session, run_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/shortpick-lab/replay-runs/{run_id}/feedback")
+    def shortpick_replay_feedback(
+        run_id: int,
+        access: StockAccessContext = Depends(require_stock_access),
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        try:
+            get_shortpick_replay_run(session, run_id, include_raw=False)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return build_shortpick_replay_feedback(session, run_id=run_id)
 
     @app.post("/shortpick-lab/runs", response_model=ShortpickRunView)
     def shortpick_run_create(

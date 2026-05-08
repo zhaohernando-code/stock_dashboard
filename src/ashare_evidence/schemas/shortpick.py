@@ -20,6 +20,7 @@ class ShortpickRetryFailedRoundsRequest(BaseModel):
 
 
 class ShortpickSourceView(BaseModel):
+    source_id: str | None = None
     title: str | None = None
     url: str | None = None
     published_at: str | None = None
@@ -32,6 +33,12 @@ class ShortpickSourceView(BaseModel):
     http_status: int | None = None
     attempt_count: int | None = None
     checked_at: str | None = None
+    status: str | None = None
+    reject_reason: str | None = None
+    source_type: str | None = None
+    fetched_at: str | None = None
+    body_excerpt: str | None = None
+    linked_symbols: list[str] = Field(default_factory=list)
 
 
 class ShortpickRoundView(BaseModel):
@@ -84,6 +91,13 @@ class ShortpickValidationView(BaseModel):
     required_forward_bars: int | None = None
     pending_reason: str | None = None
     market_data_sync: dict[str, Any] = Field(default_factory=dict)
+    experiment_mode: str | None = None
+    source_packet_id: str | None = None
+    source_packet_hash: str | None = None
+    leakage_audit_status: str | None = None
+    leakage_audit_reasons: list[str] = Field(default_factory=list)
+    baseline_family: str | None = None
+    official_sample_eligible: bool | None = None
 
 
 class ShortpickCandidateView(BaseModel):
@@ -112,6 +126,16 @@ class ShortpickCandidateView(BaseModel):
     diagnostic_reason: str | None = None
     validations: list[ShortpickValidationView] = Field(default_factory=list)
     raw_round: ShortpickRoundView | None = None
+    experiment_mode: str | None = None
+    baseline_family: str | None = None
+    source_packet_id: str | None = None
+    source_packet_hash: str | None = None
+    leakage_audit_status: str | None = None
+    leakage_audit_reasons: list[str] = Field(default_factory=list)
+    official_sample_eligible: bool | None = None
+    exclusion_reason: str | None = None
+    universe_membership: dict[str, Any] = Field(default_factory=dict)
+    evidence_mapping: dict[str, Any] = Field(default_factory=dict)
 
 
 class ShortpickConsensusView(BaseModel):
@@ -200,6 +224,13 @@ class ShortpickValidationQueueItem(BaseModel):
     required_forward_bars: int | None = None
     pending_reason: str | None = None
     market_data_sync: dict[str, Any] = Field(default_factory=dict)
+    experiment_mode: str | None = None
+    source_packet_id: str | None = None
+    source_packet_hash: str | None = None
+    leakage_audit_status: str | None = None
+    leakage_audit_reasons: list[str] = Field(default_factory=list)
+    baseline_family: str | None = None
+    official_sample_eligible: bool | None = None
 
 
 class ShortpickValidationQueueResponse(BaseModel):

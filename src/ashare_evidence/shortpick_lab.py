@@ -1648,10 +1648,21 @@ def validate_shortpick_run(
         for candidate in candidates
         if candidate.parse_status == "parsed" and candidate.symbol != "PARSE_FAILED"
     ]
-    benchmark_sync = _sync_shortpick_benchmarks(session) if parsed_candidates else {"status": "skipped", "reason": "no_parsed_candidates"}
+    historical_replay = run.information_mode == "historical_replay"
+    benchmark_sync = (
+        {"status": "historical_replay_existing_only", "reason": "Historical replay never fetches current benchmark data."}
+        if historical_replay
+        else _sync_shortpick_benchmarks(session)
+        if parsed_candidates
+        else {"status": "skipped", "reason": "no_parsed_candidates"}
+    )
     updated = 0
     for candidate in parsed_candidates:
-        market_sync = _sync_shortpick_candidate_market_data(session, candidate)
+        market_sync = (
+            {"status": "historical_replay_existing_only", "reason": "Historical replay never fetches current market data."}
+            if historical_replay
+            else _sync_shortpick_candidate_market_data(session, candidate)
+        )
         benchmark_maps = benchmark_close_maps(session)
         for horizon in target_horizons:
             _upsert_validation_snapshot(
@@ -1907,6 +1918,7 @@ def _upsert_validation_snapshot(
     *,
     benchmark_maps: dict[str, dict[Any, float]] | None = None,
     market_sync: dict[str, Any] | None = None,
+    include_sector_benchmark: bool = True,
 ) -> ShortpickValidationSnapshot:
     existing = session.scalar(
         select(ShortpickValidationSnapshot).where(
@@ -2048,6 +2060,7 @@ def _upsert_validation_snapshot(
         benchmark_returns=benchmark_returns,
         entry_day=entry.observed_at.date(),
         exit_day=exit_bar.observed_at.date(),
+        include_sector_benchmark=include_sector_benchmark,
     )
     if primary_return is None:
         existing.status = "pending_benchmark_data"
@@ -2659,6 +2672,7 @@ def _shortpick_benchmark_dimensions(
     benchmark_returns: dict[str, dict[str, Any]],
     entry_day: date,
     exit_day: date,
+    include_sector_benchmark: bool = True,
 ) -> dict[str, dict[str, Any]]:
     hs300 = _shortpick_primary_benchmark()
     csi1000_definition = {
@@ -2666,7 +2680,7 @@ def _shortpick_benchmark_dimensions(
         "symbol": CSI_BENCHMARKS["CSI1000"]["symbol"],
         "label": CSI_BENCHMARKS["CSI1000"]["label"],
     }
-    return {
+    dimensions = {
         SHORTPICK_BENCHMARK_DIMENSION_HS300: _benchmark_dimension_from_index(
             dimension_key=SHORTPICK_BENCHMARK_DIMENSION_HS300,
             definition=hs300,
@@ -2679,14 +2693,32 @@ def _shortpick_benchmark_dimensions(
             stock_return=stock_return,
             benchmark_return=benchmark_returns.get(csi1000_definition["symbol"], {}).get("return"),
         ),
-        SHORTPICK_BENCHMARK_DIMENSION_SECTOR: _shortpick_sector_benchmark_dimension(
+    }
+    dimensions[SHORTPICK_BENCHMARK_DIMENSION_SECTOR] = (
+        _shortpick_sector_benchmark_dimension(
             session,
             candidate=candidate,
             stock_return=stock_return,
             entry_day=entry_day,
             exit_day=exit_day,
-        ),
-    }
+        )
+        if include_sector_benchmark
+        else {
+            "dimension_key": SHORTPICK_BENCHMARK_DIMENSION_SECTOR,
+            "benchmark_id": SHORTPICK_BENCHMARK_DIMENSION_SECTOR,
+            "label": "同板块",
+            "benchmark_label": "同板块",
+            "symbol": None,
+            "symbol_or_scope": None,
+            "benchmark_return": None,
+            "excess_return": None,
+            "status": "historical_replay_existing_only",
+            "reason": "Historical replay does not fetch or expand sector peer universe.",
+            "peer_symbol_count": 0,
+            "contributing_peer_symbol_count": 0,
+        }
+    )
+    return dimensions
 
 
 def _benchmark_dimensions_payload(snapshot: ShortpickValidationSnapshot) -> dict[str, dict[str, Any]]:
@@ -3180,6 +3212,16 @@ def serialize_shortpick_candidate(session: Session, candidate: ShortpickCandidat
             for item in validations
         ],
         "raw_round": serialize_shortpick_round(round_record, include_raw=include_raw) if round_record is not None else None,
+        "experiment_mode": payload.get("experiment_mode"),
+        "baseline_family": payload.get("baseline_family"),
+        "source_packet_id": payload.get("source_packet_id"),
+        "source_packet_hash": payload.get("source_packet_hash"),
+        "leakage_audit_status": payload.get("leakage_audit_status"),
+        "leakage_audit_reasons": list(payload.get("leakage_audit_reasons") or []),
+        "official_sample_eligible": payload.get("official_sample_eligible"),
+        "exclusion_reason": payload.get("exclusion_reason"),
+        "universe_membership": dict(payload.get("universe_membership") or {}),
+        "evidence_mapping": dict(payload.get("evidence_mapping") or {}),
     }
 
 
@@ -3473,6 +3515,13 @@ def _serialize_validation_queue_item(
         "required_forward_bars": required_forward_bars,
         "pending_reason": validation_payload.get("pending_reason") or validation_payload.get("reason"),
         "market_data_sync": validation_payload.get("market_data_sync") or {},
+        "experiment_mode": validation_payload.get("experiment_mode"),
+        "source_packet_id": validation_payload.get("source_packet_id"),
+        "source_packet_hash": validation_payload.get("source_packet_hash"),
+        "leakage_audit_status": validation_payload.get("leakage_audit_status"),
+        "leakage_audit_reasons": list(validation_payload.get("leakage_audit_reasons") or []),
+        "baseline_family": validation_payload.get("baseline_family"),
+        "official_sample_eligible": validation_payload.get("official_sample_eligible"),
     }
 
 
@@ -3710,6 +3759,13 @@ def _serialize_validation(snapshot: ShortpickValidationSnapshot) -> dict[str, An
         "required_forward_bars": required_forward_bars,
         "pending_reason": pending_reason,
         "market_data_sync": payload.get("market_data_sync") or {},
+        "experiment_mode": payload.get("experiment_mode"),
+        "source_packet_id": payload.get("source_packet_id"),
+        "source_packet_hash": payload.get("source_packet_hash"),
+        "leakage_audit_status": payload.get("leakage_audit_status"),
+        "leakage_audit_reasons": list(payload.get("leakage_audit_reasons") or []),
+        "baseline_family": payload.get("baseline_family"),
+        "official_sample_eligible": payload.get("official_sample_eligible"),
     }
 
 

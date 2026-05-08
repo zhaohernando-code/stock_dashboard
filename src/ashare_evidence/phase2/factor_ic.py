@@ -31,6 +31,10 @@ class FactorICResult:
     ic_positive_rate: float  # fraction of periods where IC > 0
     sample_count: int
     computed_at: str
+    period_count: int = 1
+    standard_error: float | None = None
+    weighting_status: str = "diagnostic_only"
+    weighting_reason: str | None = None
 
 
 @dataclass
@@ -89,6 +93,10 @@ def compute_rank_ic(
             ic_positive_rate=1.0 if ic > 0 else 0.0,
             sample_count=n_symbols,
             computed_at=datetime.now().isoformat(),
+            period_count=1,
+            standard_error=None,
+            weighting_status="blocked",
+            weighting_reason="single_snapshot_ic_is_diagnostic_only",
         ))
     return results
 
@@ -130,6 +138,18 @@ def aggregate_ic_results(
             ic_positive_rate=round(pos_rate, 4),
             sample_count=sum(r.sample_count for r in items),
             computed_at=datetime.now().isoformat(),
+            period_count=n,
+            standard_error=round(ic_std / sqrt(n), 6) if n > 0 else None,
+            weighting_status=(
+                "eligible"
+                if n >= 20 and sum(r.sample_count for r in items) >= 600 and ic_ir > 0
+                else "blocked"
+            ),
+            weighting_reason=(
+                None
+                if n >= 20 and sum(r.sample_count for r in items) >= 600 and ic_ir > 0
+                else "requires_at_least_20_windows_and_30_symbol_cross_sections_with_positive_ic_ir"
+            ),
         )
     return aggregated
 
@@ -154,10 +174,16 @@ def ic_based_weights(
     defaults = default_weights or {}
     raw: dict[str, float] = {}
     for name, result in ic_results.items():
+        if getattr(result, "weighting_status", "blocked") != "eligible":
+            continue
         raw[name] = max(result.ic_ir, 0.0)
-    # Fill missing factors with defaults
+    if not raw:
+        default_total = sum(defaults.values())
+        return {name: round(weight / default_total, 4) for name, weight in defaults.items()} if default_total > 0 else {}
+
+    # Fill only factors with no IC observation. Observed-but-blocked factors remain diagnostic-only.
     for name, dw in defaults.items():
-        if name not in raw:
+        if name not in raw and name not in ic_results:
             raw[name] = dw * 0.15  # low default weight for uncalibrated factors
     total = sum(raw.values())
     if total <= 0:

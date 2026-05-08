@@ -91,6 +91,12 @@
 - **来源可信度当前只代表可达性与占位符拦截，不等于权威性**：新 run 的 sources integrity 结果为 `verified=41 / unreachable=4`，没有无来源 round；但是这还不是媒体/公告权威度评分。后续若提高研究质量，应在 URL 可达之后增加 domain/source authority 分层、公告/交易所/主流财经媒体优先级、以及低质量聚合站降权。
 - **试验田验收必须跑完整 live flow**：本轮已发布、删除脏数据、真实触发新 run、检查 API schema、检查 DeepSeek 搜索 trace、检查 shortpick symbols 未进入 recommendations/watchlist，然后用 Safari 验证 `http://127.0.0.1:5173/` 和 `https://hernando-zhao.cn/projects/ashare-dashboard/` 均可进入 `试验田`，显示 2026-05-05 批次 10/0 完成，且页面保留“独立研究课题 / 不进入主推荐评分 / 不代表交易建议 / 未验证不得显示 verified”的边界文案。
 
+## 2026-05-08
+
+- **历史回放不能只落 artifact，必须前端可感知**：本轮在隔离 worktree `20260508-historical-replay-workbench` 实现 `shortpick_historical_replay_v1` 首版闭环。新增 CLI `shortpick-replay`、只读 API `/shortpick-lab/replay-runs*`、sealed source packet、可交易 universe 快照、leakage audit 字段、三类 baseline、robustness metrics、IC gate 和新闻校准 readout；前端 `试验田` 新增 `历史回放` tab，显示 replay run、packet hash、official/diagnostic/rejected source、候选审计、source ids、LLM vs baseline、稳健性、IC 与新闻校准状态。
+- **历史 replay 验证不得触发现时网络补数**：复用 `_upsert_validation_snapshot` 时发现同板块 benchmark 会扩展 sector peer universe 并触发 AKShare/资料查询，造成历史隔离测试卡住且有 current-data leakage 风险。修正为 replay 调用 `include_sector_benchmark=False`，sector 维度标记 `historical_replay_existing_only`；market data 与 benchmark sync 也保持 existing-only。
+- **本地验证状态**：`python3 -m py_compile` 覆盖 changed backend modules；`pytest -q tests/test_shortpick_replay.py tests/test_factor_ic.py tests/test_frontend_shortpick_static.py` 为 `12 passed`；`pytest -q -m runtime_integration tests/test_shortpick_lab.py tests/test_shortpick_replay.py` 为 `28 passed, 2 deselected`；`npm run build` 通过。下一步仍必须发布到 runtime，并在真实 served 页面验证 `试验田 / 历史回放`，否则 live-facing 任务不能标记完成。
+
 ## 2026-04-30
 
 - **专业化改造先落证据链，再落视觉专业感**：P-1/P0 已按“可审计、可解释、受控内测 beta”方向落到代码。新增 `data_quality_snapshot`、`factor_ic_study`、`weight_sweep_study`、CSI benchmark context 和 operations summary/details，前端只消费真实后端字段；P1/P2/P3 中需要样本积累或人工批准的 horizon/权重/毕业 gate 不做运行时动态切换，也不把当前样本不足的 study 包装成结论。

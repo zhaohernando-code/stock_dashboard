@@ -978,3 +978,13 @@ P-1/P0 专业化改造的收尾状态以“测试 + 发布 + deploy verifier + s
 - `data_quality` 已改为读取治理配置并在 summary/item payload 中投影 config version/checksum；`signal_engine` 的融合权重、惩罚项、confidence RMS 和 model-result 参数已转入默认配置与纯公式函数，并在 recommendation/model result payload 中投影 `policy_config_versions`。
 - 新增 `policy-audit` CLI 和 `/policy-governance/*` 只读 API；运营复盘的治理页展示 active 配置、公式/常量分类与硬约束状态。
 - 后续修改 Phase contract、权重、窗口、promotion gate 或用户可见业务阈值，必须同步更新 `PROJECT_RULES.md`、本决策日志、默认配置/审计分类和回归测试。
+
+[2026-05-08T10:10:00+08:00] Historical replay is a sealed-packet experiment, not a second live shortpick pool:
+短投历史回放必须作为隔离实验域存在。Replay run 只写 `shortpick_lab` run/round/candidate/validation 表和 packet artifact，不写主推荐、主候选池、自选池、模拟盘或生产权重；模型/代理输出只能引用 packet source id，不能引用自由 URL。
+
+补充说明
+- 首版允许使用 deterministic sealed-packet proxy 代替真实外部 LLM 调用，但数据契约必须先按真实 replay executor 设计：`experiment_mode=historical_replay`、`source_packet_id/hash`、`sources_used`、`evidence_mapping`、`leakage_audit_status/reasons`、`baseline_family`、`official_sample_eligible`、`robustness_metrics`。
+- `published_at > as_of_cutoff` 的来源必须硬拒绝，并在前端可见为 rejected source；无法验证发布时间的来源只能 diagnostic，不进入 official packet。
+- Replay validation 不允许为了同板块 benchmark、行情或资料完整性触发现时网络补数；缺失维度应显示 existing-only / pending，而不是补未来可得信息。
+- 小样本 RankIC 只能作为诊断，不得驱动调权：单次截面和少于 20 个有效窗口的 IC 结果标记 blocked/diagnostic，observed-but-blocked 因子不通过 default fallback 偷偷回到生产权重。
+- 用户要求前端展示不后置，因此每个 replay 后端能力都必须在 `试验田 / 历史回放` 有最小可见 UI；后续补真实 LLM replay executor 或更完整新闻 alpha 校准时也必须同步前端读数。

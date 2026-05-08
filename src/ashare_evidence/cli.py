@@ -53,6 +53,7 @@ from ashare_evidence.shortpick_lab import (
     validate_recent_shortpick_runs,
     validate_shortpick_run,
 )
+from ashare_evidence.shortpick_replay import run_shortpick_historical_replay
 from ashare_evidence.simulation import restart_simulation_session, step_simulation_session
 from ashare_evidence.watchlist import active_watchlist_symbols, refresh_watchlist_symbol
 
@@ -401,6 +402,16 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_retry_failed.add_argument("--run-id", type=int, required=True)
     shortpick_retry_failed.add_argument("--max-rounds", type=int, default=None)
 
+    shortpick_replay = subparsers.add_parser(
+        "shortpick-replay",
+        help="Build historical sealed-packet replay runs with LLM proxy and baseline controls.",
+    )
+    shortpick_replay.add_argument("--database-url", default=None)
+    shortpick_replay.add_argument("--start-date", required=True)
+    shortpick_replay.add_argument("--end-date", required=True)
+    shortpick_replay.add_argument("--rounds", type=int, default=5)
+    shortpick_replay.add_argument("--candidate-limit", type=int, default=3)
+
     phase5_daily = subparsers.add_parser(
         "phase5-daily-refresh",
         help="Run the daily Phase 5 refresh workflow: refresh runtime data, then write latest/history horizon-study snapshots.",
@@ -628,6 +639,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "shortpick-lab-retry-failed":
         with session_scope(args.database_url) as session:
             payload = retry_failed_shortpick_rounds(session, args.run_id, max_rounds=args.max_rounds)
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-replay":
+        with session_scope(args.database_url) as session:
+            payload = run_shortpick_historical_replay(
+                session,
+                start_date=date.fromisoformat(args.start_date),
+                end_date=date.fromisoformat(args.end_date),
+                rounds=args.rounds,
+                candidate_limit=args.candidate_limit,
+                triggered_by="scheduled_cli",
+            )
         _print_json(payload)
         return 0
 

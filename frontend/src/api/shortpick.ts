@@ -7,6 +7,8 @@ import type {
   ShortpickRunListResponse,
   ShortpickRunValidateRequest,
   ShortpickRunView,
+  ShortpickReplayFeedbackResponse,
+  ShortpickReplaySourceResponse,
   ShortpickValidationQueueResponse,
 } from "../types";
 
@@ -147,6 +149,73 @@ export function getShortpickModelFeedback() {
   return (async () => ({
     data: await request<ShortpickModelFeedbackResponse>(
       "/shortpick-lab/model-feedback",
+      undefined,
+      operationsDashboardRequestBehavior,
+    ),
+    source: buildSourceInfo(),
+  }))();
+}
+
+export function getShortpickReplayRuns(params?: {
+  limit?: number;
+  offset?: number;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}) {
+  const query = new URLSearchParams();
+  query.set("limit", String(params?.limit ?? 20));
+  if (params?.offset) query.set("offset", String(params.offset));
+  if (params?.status) query.set("status", params.status);
+  if (params?.dateFrom) query.set("date_from", params.dateFrom);
+  if (params?.dateTo) query.set("date_to", params.dateTo);
+  return (async () => ({
+    data: await request<ShortpickRunListResponse>(
+      `/shortpick-lab/replay-runs?${query.toString()}`,
+      undefined,
+      operationsDashboardRequestBehavior,
+    ),
+    source: buildSourceInfo(),
+  }))();
+}
+
+export function getShortpickReplayRun(runId: number) {
+  return (async () => ({
+    data: await request<ShortpickRunView>(
+      `/shortpick-lab/replay-runs/${encodeURIComponent(String(runId))}`,
+      undefined,
+      operationsDashboardRequestBehavior,
+    ),
+    source: buildSourceInfo(),
+  }))();
+}
+
+export function getShortpickReplayCandidates(runId: number) {
+  return (async () => ({
+    data: await request<ShortpickCandidateListResponse>(
+      `/shortpick-lab/replay-runs/${encodeURIComponent(String(runId))}/candidates`,
+      undefined,
+      operationsDashboardRequestBehavior,
+    ),
+    source: buildSourceInfo(),
+  }))();
+}
+
+export function getShortpickReplaySources(runId: number) {
+  return (async () => ({
+    data: await request<ShortpickReplaySourceResponse>(
+      `/shortpick-lab/replay-runs/${encodeURIComponent(String(runId))}/sources`,
+      undefined,
+      operationsDashboardRequestBehavior,
+    ),
+    source: buildSourceInfo(),
+  }))();
+}
+
+export function getShortpickReplayFeedback(runId: number) {
+  return (async () => ({
+    data: await request<ShortpickReplayFeedbackResponse>(
+      `/shortpick-lab/replay-runs/${encodeURIComponent(String(runId))}/feedback`,
       undefined,
       operationsDashboardRequestBehavior,
     ),

@@ -8,6 +8,7 @@ export interface ShortpickRunValidateRequest {
 }
 
 export interface ShortpickSourceView {
+  source_id?: string | null;
   title?: string | null;
   url?: string | null;
   published_at?: string | null;
@@ -20,6 +21,12 @@ export interface ShortpickSourceView {
   http_status?: number | null;
   attempt_count?: number | null;
   checked_at?: string | null;
+  status?: string | null;
+  reject_reason?: string | null;
+  source_type?: string | null;
+  fetched_at?: string | null;
+  body_excerpt?: string | null;
+  linked_symbols?: string[];
 }
 
 export interface ShortpickRoundView {
@@ -72,6 +79,13 @@ export interface ShortpickValidationView {
   required_forward_bars?: number | null;
   pending_reason?: string | null;
   market_data_sync?: Record<string, unknown>;
+  experiment_mode?: string | null;
+  source_packet_id?: string | null;
+  source_packet_hash?: string | null;
+  leakage_audit_status?: string | null;
+  leakage_audit_reasons?: string[];
+  baseline_family?: string | null;
+  official_sample_eligible?: boolean | null;
 }
 
 export interface ShortpickBenchmarkDimension {
@@ -115,6 +129,16 @@ export interface ShortpickCandidateView {
   diagnostic_reason?: string | null;
   validations: ShortpickValidationView[];
   raw_round?: ShortpickRoundView | null;
+  experiment_mode?: string | null;
+  baseline_family?: string | null;
+  source_packet_id?: string | null;
+  source_packet_hash?: string | null;
+  leakage_audit_status?: string | null;
+  leakage_audit_reasons?: string[];
+  official_sample_eligible?: boolean | null;
+  exclusion_reason?: string | null;
+  universe_membership?: Record<string, unknown>;
+  evidence_mapping?: Record<string, unknown>;
 }
 
 export interface ShortpickConsensusView {
@@ -201,6 +225,13 @@ export interface ShortpickValidationQueueItem {
   required_forward_bars?: number | null;
   pending_reason?: string | null;
   market_data_sync?: Record<string, unknown>;
+  experiment_mode?: string | null;
+  source_packet_id?: string | null;
+  source_packet_hash?: string | null;
+  leakage_audit_status?: string | null;
+  leakage_audit_reasons?: string[];
+  baseline_family?: string | null;
+  official_sample_eligible?: boolean | null;
 }
 
 export interface ShortpickValidationQueueResponse {
@@ -263,5 +294,36 @@ export interface ShortpickModelFeedbackItem {
 export interface ShortpickModelFeedbackResponse {
   generated_at: string;
   models: ShortpickModelFeedbackItem[];
+  overall: Record<string, unknown>;
+}
+
+export interface ShortpickReplaySourceResponse {
+  generated_at: string;
+  run_id: number;
+  source_packet_id?: string | null;
+  source_packet_hash?: string | null;
+  as_of_cutoff?: string | null;
+  source_packet: Record<string, unknown>;
+  official_sources: ShortpickSourceView[];
+  diagnostic_sources: ShortpickSourceView[];
+  rejected_sources: ShortpickSourceView[];
+  tradable_universe: Record<string, unknown>;
+}
+
+export interface ShortpickReplayFeedbackFamily {
+  baseline_family: string;
+  label: string;
+  candidate_count: number;
+  official_sample_count: number;
+  completed_official_sample_count: number;
+  validation_by_horizon: ShortpickFeedbackGroup[];
+  robustness_metrics: Record<string, unknown>;
+}
+
+export interface ShortpickReplayFeedbackResponse {
+  generated_at: string;
+  experiment_mode: string;
+  run_id?: number | null;
+  families: ShortpickReplayFeedbackFamily[];
   overall: Record<string, unknown>;
 }
