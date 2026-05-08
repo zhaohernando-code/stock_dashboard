@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
 import hashlib
 import json
 import random
 import re
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -29,10 +29,6 @@ from ashare_evidence.shortpick_lab import (
     SHORTPICK_OFFICIAL_VALIDATION_MODE,
     _apply_shortpick_candidate_display_gates,
     _artifact_root,
-    _benchmark_dimensions_payload,
-    _coerce_string_list,
-    _daily_bars_for_symbol,
-    _normalize_symbol,
     _shortpick_validation_summary,
     _upsert_validation_snapshot,
     get_shortpick_run,
@@ -413,7 +409,7 @@ def _build_source_packet(
             "url": str((item.raw_payload or {}).get("url") or item.source_uri or f"news://{item.news_key}"),
             "published_at": item.published_at.isoformat(),
             "fetched_at": item.created_at.isoformat(),
-            "body_excerpt": item.content_excerpt or item.summary,
+            "body_excerpt": _source_excerpt(item.content_excerpt or item.summary),
             "source_type": item.provider_name,
             "linked_symbols": linked_symbols,
         }
@@ -798,7 +794,7 @@ def _audit_candidate(
     used_source_ids = {source.get("source_id") for source in sources if source.get("source_id")}
     if symbol not in {member for source in packet["official_sources"] for member in source.get("linked_symbols", [])} and not used_source_ids:
         reasons.append("unsupported_claim")
-    if unexpected := sorted(str(source_id) for source_id in used_source_ids if source_id not in allowed_source_ids):
+    if any(source_id not in allowed_source_ids for source_id in used_source_ids):
         reasons.append("source_not_in_packet")
     for source in sources:
         published_at = _parse_datetime(source.get("published_at"))
@@ -898,6 +894,13 @@ def _bar_return(member: _UniverseMember) -> float:
 def _stock_industry(stock: Stock) -> str | None:
     payload = stock.profile_payload if isinstance(stock.profile_payload, dict) else {}
     return payload.get("industry") or payload.get("sector") or payload.get("board")
+
+
+def _source_excerpt(value: str | None, *, limit: int = 600) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit].rstrip()}..."
 
 
 def _candidate_payload(candidate: ShortpickCandidate) -> dict[str, Any]:
