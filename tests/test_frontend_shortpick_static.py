@@ -30,6 +30,8 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("shortpick-benchmark-select", component_source)
         self.assertIn("shortpick-validation-card", component_source)
         self.assertIn('label: "历史回放"', component_source)
+        self.assertIn('defaultActiveKey={latestRun ? "today" : "replay"}', component_source)
+        self.assertIn("暂无 live shortpick 批次；可先查看历史回放。", component_source)
         self.assertIn("Sealed Source Packet", component_source)
         self.assertIn("泄漏审计", component_source)
         self.assertIn("random_same_market_cap_bucket", component_source)

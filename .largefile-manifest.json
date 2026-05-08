@@ -140,6 +140,12 @@
       "status": "accepted",
       "reviewed_at": "2026-05-03"
     },
+    "frontend/src/components/ShortpickLabView.tsx": {
+      "lines": 1617,
+      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, and historical replay workbench state in one Ant Design surface. It should be split into tab components after replay contracts stabilize, but keeping it together avoids cross-file churn during the initial visible replay rollout.",
+      "status": "planned_refactor",
+      "reviewed_at": "2026-05-08"
+    },
     "src/ashare_evidence/event_analyzer.py": {
       "lines": 526,
       "reason": "Event-driven analysis pipeline: external data fetching (5 AKShare sources), internal data gathering, prompt construction, LLM execution, and JSON artifact persistence. Single cohesive workflow.",

@@ -669,20 +669,21 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
         {error ? <Alert type="error" showIcon message={error} /> : null}
       </Card>
 
-      {!latestRun && !loading ? (
+      {!latestRun && !loading && !replayRuns.length ? (
         <Card className="panel-card">
           <Empty description="暂无短投推荐实验批次" />
         </Card>
       ) : null}
 
-      {latestRun ? (
+      {latestRun || replayRuns.length ? (
         <Tabs
           className="shortpick-workspace-tabs"
+          defaultActiveKey={latestRun ? "today" : "replay"}
           items={[
             {
               key: "today",
               label: "今日批次",
-              children: (
+              children: latestRun ? (
                 <TodayRunTab
                   run={latestRun}
                   normalCandidates={normalCandidates}
@@ -692,6 +693,10 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
                   candidateColumns={candidateColumns}
                   selectedBenchmark={selectedBenchmark}
                 />
+              ) : (
+                <Card className="panel-card">
+                  <Empty description="暂无 live shortpick 批次；可先查看历史回放。" />
+                </Card>
               ),
             },
             {
