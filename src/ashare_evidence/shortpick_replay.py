@@ -63,6 +63,7 @@ SHORTPICK_REPLAY_BASELINE_FAMILIES = (
     "random_strict_veto_then_momentum_rank",
     "momentum_turnover_rank",
     "momentum_10d_rank",
+    "momentum_10d_turnover_rank",
     "momentum_continuity_turnover_rank",
 )
 SHORTPICK_REPLAY_HORIZON_ORDER = (1, 3, 5, 10, 20)
@@ -95,6 +96,7 @@ SHORTPICK_REPLAY_HARD_VETO_EXECUTORS = (
 SHORTPICK_REPLAY_FACTOR_RANK_FAMILIES = (
     "momentum_turnover_rank",
     "momentum_10d_rank",
+    "momentum_10d_turnover_rank",
     "momentum_continuity_turnover_rank",
 )
 SHORTPICK_REPLAY_STRICT_VETO_CATEGORIES = {
@@ -2953,6 +2955,8 @@ def _factor_ranked_symbols(
             primary = percentiles["turnover_rate"].get(symbol, 0.0)
         elif family == "momentum_10d_rank":
             primary = percentiles["return_10d"].get(symbol, 0.0)
+        elif family == "momentum_10d_turnover_rank":
+            primary = percentiles["return_10d"].get(symbol, 0.0) + percentiles["turnover_rate"].get(symbol, 0.0)
         else:
             primary = (
                 percentiles["return_1d"].get(symbol, 0.0)
@@ -3052,6 +3056,8 @@ def _factor_rank_formula(family: str) -> str:
         return "rank_percentile(turnover_rate) within top40 momentum-volume pool"
     if family == "momentum_10d_rank":
         return "rank_percentile(return_10d) within top40 momentum-volume pool"
+    if family == "momentum_10d_turnover_rank":
+        return "rank_percentile(return_10d) + rank_percentile(turnover_rate) within top40 momentum-volume pool"
     return "rank_percentile(return_1d) + 0.5*rank_percentile(return_5d) + 0.5*rank_percentile(turnover_rate)"
 
 
@@ -3468,6 +3474,8 @@ def _candidate_thesis(member: _UniverseMember, baseline_family: str) -> str:
         return f"{member.name} 在扩大动量池中按换手率再排序入选；截至当日日收益 {ret:.2%}，换手率 {member.turnover_rate or 0:.2%}。"
     if baseline_family == "momentum_10d_rank":
         return f"{member.name} 在扩大动量池中按 10 日持续动量再排序入选；截至当日日收益 {ret:.2%}。"
+    if baseline_family == "momentum_10d_turnover_rank":
+        return f"{member.name} 在扩大动量池中按 10 日持续动量与换手率复合排序入选；截至当日日收益 {ret:.2%}。"
     if baseline_family == "momentum_continuity_turnover_rank":
         return f"{member.name} 在扩大动量池中按短动量、5日持续性与换手率复合排序入选；截至当日日收益 {ret:.2%}。"
     if baseline_family == "random_same_market_cap_bucket":
@@ -3624,6 +3632,7 @@ def _baseline_label(value: str) -> str:
         "random_strict_veto_then_momentum_rank": "随机严格否决后动量排序",
         "momentum_turnover_rank": "换手优先动量排序",
         "momentum_10d_rank": "10日持续动量排序",
+        "momentum_10d_turnover_rank": "10日动量换手复合排序",
         "momentum_continuity_turnover_rank": "持续动量换手复合排序",
     }
     return labels.get(value, value)

@@ -486,6 +486,11 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_market_factor_study.add_argument("--rank-limit", type=int, default=6)
     shortpick_market_factor_study.add_argument("--cost-bps", type=float, default=20.0)
     shortpick_market_factor_study.add_argument("--apply-limit-up-filter", action="store_true")
+    shortpick_market_factor_study.add_argument(
+        "--benchmark-mode",
+        choices=["csi300", "universe_equal_weight"],
+        default="universe_equal_weight",
+    )
     shortpick_market_factor_study.add_argument("--walk-forward-lookback-days", type=int, default=120)
 
     phase5_daily = subparsers.add_parser(
@@ -804,6 +809,7 @@ def main(argv: list[str] | None = None) -> int:
                 rank_limit=args.rank_limit,
                 cost_bps=args.cost_bps,
                 apply_limit_up_filter=args.apply_limit_up_filter,
+                benchmark_mode=args.benchmark_mode,
                 walk_forward_lookback_days=args.walk_forward_lookback_days,
             )
         _print_json(payload)

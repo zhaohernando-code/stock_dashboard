@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 from ashare_evidence.models import MarketBar, Stock
 
 INDEX_SYMBOLS = {"000300.SH", "000905.SH", "000852.SH"}
-DEFAULT_STRATEGIES = ("base", "turnover", "ret10", "combo")
+DEFAULT_STRATEGIES = ("base", "turnover", "ret10", "ret10_turnover", "combo")
 DEFAULT_HORIZONS = (1, 3, 5, 10, 20)
+BENCHMARK_MODES = {"csi300", "universe_equal_weight"}
 LIMIT_UP_BANDS = {
     "default": 0.10,
     "st": 0.05,
@@ -51,12 +52,15 @@ def build_shortpick_market_factor_study(
     rank_limit: int = 6,
     cost_bps: float = 20.0,
     apply_limit_up_filter: bool = False,
+    benchmark_mode: str = "universe_equal_weight",
     horizons: tuple[int, ...] = DEFAULT_HORIZONS,
     walk_forward_lookback_days: int = 120,
 ) -> dict[str, Any]:
     series_by_symbol = _load_daily_series(session)
+    if benchmark_mode not in BENCHMARK_MODES:
+        raise ValueError(f"benchmark_mode must be one of {sorted(BENCHMARK_MODES)}")
     benchmark = series_by_symbol.get("000300.SH")
-    if benchmark is None:
+    if benchmark_mode == "csi300" and benchmark is None:
         raise LookupError("CSI300 benchmark series 000300.SH is required.")
     signal_days = _eligible_signal_days(series_by_symbol, start_date=start_date, end_date=end_date)
     selections = {
@@ -73,6 +77,7 @@ def build_shortpick_market_factor_study(
         strategy: _evaluation_rows(
             series_by_symbol,
             benchmark=benchmark,
+            benchmark_mode=benchmark_mode,
             selections=selection,
             horizons=horizons,
             cost_bps=cost_bps,
@@ -131,6 +136,7 @@ def build_shortpick_market_factor_study(
             "rank_limit": rank_limit,
             "cost_bps": cost_bps,
             "apply_limit_up_filter": apply_limit_up_filter,
+            "benchmark_mode": benchmark_mode,
             "horizons": list(horizons),
             "walk_forward_lookback_days": walk_forward_lookback_days,
             "strategies": list(rows_by_strategy),
@@ -140,6 +146,7 @@ def build_shortpick_market_factor_study(
             "signal_date_from": signal_days[0].isoformat() if signal_days else None,
             "signal_date_to": signal_days[-1].isoformat() if signal_days else None,
             "stock_like_series_count": len([symbol for symbol in series_by_symbol if symbol not in INDEX_SYMBOLS]),
+            "benchmark_note": _benchmark_note(series_by_symbol, benchmark_mode),
         },
         "period_summary": period_summary,
         "paired_vs_base": paired_vs_base,
@@ -184,6 +191,16 @@ def _load_daily_series(session: Session) -> dict[str, _Series]:
             by_day={bar.day: index for index, bar in enumerate(ordered)},
         )
     return output
+
+
+def _benchmark_note(series_by_symbol: dict[str, _Series], benchmark_mode: str) -> str:
+    if benchmark_mode == "csi300":
+        benchmark = series_by_symbol.get("000300.SH")
+        if benchmark is None or not benchmark.bars:
+            return "CSI300 benchmark series is missing."
+        return f"CSI300 close-to-close excess return, available from {benchmark.bars[0].day.isoformat()}."
+    count = len([symbol for symbol in series_by_symbol if symbol not in INDEX_SYMBOLS])
+    return f"Equal-weight close-to-close return across {count} stock-like series with valid entry/exit bars."
 
 
 def _eligible_signal_days(series_by_symbol: dict[str, _Series], *, start_date: date, end_date: date) -> list[date]:
@@ -262,6 +279,8 @@ def _strategy_score(pool: list[dict[str, Any]], item: dict[str, Any], strategy: 
         return _percentile(pool, "turnover_rate", item["symbol"])
     if strategy == "ret10":
         return _percentile(pool, "return_10d", item["symbol"])
+    if strategy == "ret10_turnover":
+        return _percentile(pool, "return_10d", item["symbol"]) + _percentile(pool, "turnover_rate", item["symbol"])
     if strategy == "combo":
         return (
             _percentile(pool, "return_1d", item["symbol"])
@@ -284,7 +303,8 @@ def _percentile(pool: list[dict[str, Any]], key: str, symbol: str) -> float:
 def _evaluation_rows(
     series_by_symbol: dict[str, _Series],
     *,
-    benchmark: _Series,
+    benchmark: _Series | None,
+    benchmark_mode: str,
     selections: dict[date, list[str]],
     horizons: tuple[int, ...],
     cost_bps: float,
@@ -300,7 +320,9 @@ def _evaluation_rows(
             for horizon in horizons:
                 row = _evaluate_one(
                     series=series,
+                    series_by_symbol=series_by_symbol,
                     benchmark=benchmark,
+                    benchmark_mode=benchmark_mode,
                     signal_day=signal_day,
                     horizon=horizon,
                     roundtrip_cost=roundtrip_cost,
@@ -314,7 +336,9 @@ def _evaluation_rows(
 def _evaluate_one(
     *,
     series: _Series,
-    benchmark: _Series,
+    series_by_symbol: dict[str, _Series],
+    benchmark: _Series | None,
+    benchmark_mode: str,
     signal_day: date,
     horizon: int,
     roundtrip_cost: float,
@@ -337,9 +361,14 @@ def _evaluate_one(
             "status": "entry_unfillable_limit_up",
         }
     exit_bar = series.bars[exit_index]
-    benchmark_entry_index = benchmark.by_day.get(entry.day)
-    benchmark_exit_index = benchmark.by_day.get(exit_bar.day)
-    if benchmark_entry_index is None or benchmark_exit_index is None:
+    benchmark_return, benchmark_count = _benchmark_return(
+        series_by_symbol=series_by_symbol,
+        benchmark=benchmark,
+        benchmark_mode=benchmark_mode,
+        entry_day=entry.day,
+        exit_day=exit_bar.day,
+    )
+    if benchmark_return is None:
         return {
             "signal_day": signal_day,
             "symbol": series.symbol,
@@ -347,10 +376,7 @@ def _evaluate_one(
             "status": "pending_benchmark_data",
         }
     stock_return = exit_bar.close / entry.close - 1 if entry.close else None
-    benchmark_entry = benchmark.bars[benchmark_entry_index]
-    benchmark_exit = benchmark.bars[benchmark_exit_index]
-    benchmark_return = benchmark_exit.close / benchmark_entry.close - 1 if benchmark_entry.close else None
-    if stock_return is None or benchmark_return is None:
+    if stock_return is None:
         return None
     return {
         "signal_day": signal_day,
@@ -362,9 +388,48 @@ def _evaluate_one(
         "entry_day_return": entry.close / previous.close - 1 if previous.close else None,
         "stock_return": stock_return,
         "benchmark_return": benchmark_return,
+        "benchmark_mode": benchmark_mode,
+        "benchmark_member_count": benchmark_count,
         "excess_return": stock_return - benchmark_return,
         "net_excess_return": stock_return - benchmark_return - roundtrip_cost,
     }
+
+
+def _benchmark_return(
+    *,
+    series_by_symbol: dict[str, _Series],
+    benchmark: _Series | None,
+    benchmark_mode: str,
+    entry_day: date,
+    exit_day: date,
+) -> tuple[float | None, int]:
+    if benchmark_mode == "csi300":
+        if benchmark is None:
+            return None, 0
+        entry_index = benchmark.by_day.get(entry_day)
+        exit_index = benchmark.by_day.get(exit_day)
+        if entry_index is None or exit_index is None:
+            return None, 0
+        entry = benchmark.bars[entry_index]
+        exit_bar = benchmark.bars[exit_index]
+        if not entry.close:
+            return None, 0
+        return exit_bar.close / entry.close - 1, 1
+    returns: list[float] = []
+    for symbol, series in series_by_symbol.items():
+        if symbol in INDEX_SYMBOLS:
+            continue
+        entry_index = series.by_day.get(entry_day)
+        exit_index = series.by_day.get(exit_day)
+        if entry_index is None or exit_index is None:
+            continue
+        entry = series.bars[entry_index]
+        exit_bar = series.bars[exit_index]
+        if entry.close:
+            returns.append(exit_bar.close / entry.close - 1)
+    if len(returns) < 30:
+        return None, len(returns)
+    return sum(returns) / len(returns), len(returns)
 
 
 def _entry_is_unfillable_limit_up(series: _Series, entry_index: int) -> bool:
