@@ -238,6 +238,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   const [watchlistMutationSymbol, setWatchlistMutationSymbol] = useState<string | null>(null);
   const [savingConfig, setSavingConfig] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const viewRef = useRef<ViewMode>(view);
   const canMutateWatchlist = true;
   const isRootUser = authContext?.actor_role === "root";
   const canUseOperations = isRootUser;
@@ -332,6 +333,11 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     if (item.key === "settings") return canUseSettings;
     return true;
   });
+
+  function handleViewChange(nextView: ViewMode): void {
+    setView(nextView);
+    setError(null);
+  }
 
   async function loadAuthContext(retryWithoutActAs = true): Promise<AuthContextResponse> {
     try {
@@ -470,7 +476,9 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       setAnalysisAnswer(null);
       setSourceInfo(stockResult.source);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "加载单票分析失败。");
+      if (viewRef.current !== "shortpick") {
+        setError(loadError instanceof Error ? loadError.message : "加载单票分析失败。");
+      }
     } finally {
       setLoadingDetail(false);
     }
@@ -655,6 +663,10 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       messageApi.error(statusError instanceof Error ? statusError.message : "建议状态更新失败。");
     }
   }
+
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
 
   useEffect(() => {
     void (async () => {
@@ -2177,7 +2189,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                 key={item.key}
                 type="button"
                 className={`workspace-nav-card${view === item.key ? " workspace-nav-card-active" : ""}`}
-                onClick={() => setView(item.key)}
+                onClick={() => handleViewChange(item.key)}
               >
                 <div className="workspace-nav-icon">{item.icon}</div>
                 <div className="workspace-nav-copy">

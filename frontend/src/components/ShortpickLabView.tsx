@@ -378,6 +378,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
 
   async function loadValidationQueue(page = validationPage.current, pageSize = validationPage.pageSize): Promise<void> {
     setValidationLoading(true);
+    setError(null);
     try {
       const result = await api.getShortpickValidationQueue({
         limit: pageSize,
@@ -398,6 +399,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
 
   async function loadFeedback(): Promise<void> {
     setFeedbackLoading(true);
+    setError(null);
     try {
       const result = await api.getShortpickModelFeedback();
       setFeedback(result.data);
