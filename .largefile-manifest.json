@@ -159,8 +159,8 @@
       "status": "accepted"
     },
     "src/ashare_evidence/shortpick_replay.py": {
-      "lines": 1560,
-      "reason": "Shortpick historical replay v1 keeps sealed packet construction, sealed-packet-only LLM execution with diagnostic fallback, market-cap fallback bucketing, baseline controls, leakage audit, validation aggregation, replay API helpers, and post-audit contract normalization in one first-version workflow. Split into packet/audit/baseline modules after the contract stabilizes.",
+      "lines": 1634,
+      "reason": "Shortpick historical replay v1 keeps sealed packet construction, sealed-packet-only LLM execution with diagnostic fallback, rejected-source/source-id leakage preservation, market-cap fallback bucketing, baseline controls, leakage audit, validation aggregation, replay API helpers, and post-audit contract normalization in one first-version workflow. Split into packet/audit/baseline modules after the contract stabilizes.",
       "reviewed_at": "2026-05-08",
       "status": "planned_refactor"
     }

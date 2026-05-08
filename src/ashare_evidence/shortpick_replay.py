@@ -691,13 +691,21 @@ def _insert_candidate(
     if baseline_family != "llm" and not support_sources:
         support_sources = packet["official_sources"][:1]
     thesis = str((llm_pick or {}).get("thesis") or _candidate_thesis(member, baseline_family))
+    audit_text = " ".join(
+        [
+            thesis,
+            *(_string_list((llm_pick or {}).get("catalysts"))),
+            *(_string_list((llm_pick or {}).get("risks"))),
+            *(_string_list((llm_pick or {}).get("invalidation"))),
+        ]
+    )
     evidence_mapping = _evidence_mapping_for_pick(llm_pick, support_sources)
     audit = _audit_candidate(
         as_of_date=run.run_date,
         packet=packet,
         symbol=symbol,
         sources=support_sources,
-        thesis=thesis,
+        thesis=audit_text,
         evidence_mapping=evidence_mapping,
     )
     limitations = list((llm_pick or {}).get("limitations") or [])
@@ -758,15 +766,7 @@ def _insert_candidate(
             catalysts=_string_list((llm_pick or {}).get("catalysts")) or [_baseline_label(baseline_family), f"截至 {run.run_date.isoformat()} 的 sealed packet / 行情快照。"],
             invalidation=_string_list((llm_pick or {}).get("invalidation")) or ["历史隔离回放只验证信号，不进入主推荐或模拟盘。"],
             risks=_string_list((llm_pick or {}).get("risks")) or ["若 source packet 含未来信息或样本不足，该候选会从 official sample 排除。"],
-            sources_payload=[
-                {
-                    **source,
-                    "credibility_status": "verified",
-                    "credibility_reason": "source timestamp is inside sealed replay packet",
-                    "support_status": "supported_by_source_text",
-                }
-                for source in support_sources
-            ],
+            sources_payload=[_candidate_source_payload(source) for source in support_sources],
             novelty_note="historical replay baseline candidate" if baseline_family != "llm" else "sealed packet LLM candidate",
             limitations=limitations,
             convergence_group=baseline_family,
@@ -916,9 +916,12 @@ def _normalize_replay_llm_payload(
             continue
         seen.add(symbol)
         member = universe["by_symbol"][symbol]
-        source_ids = _source_ids_from_value(raw.get("sources_used"))
-        support_sources = _sources_by_ids(packet, source_ids) or _sources_for_symbol(packet, symbol)
-        evidence_mapping = _normalize_evidence_mapping(raw.get("evidence_mapping"), support_sources)
+        support_sources = _source_refs_for_llm_pick(packet=packet, pick=raw, symbol=symbol)
+        evidence_mapping = _normalize_evidence_mapping(
+            raw.get("evidence_mapping"),
+            support_sources,
+            allow_fallback=not _source_ids_declared_by_pick(raw),
+        )
         candidates.append(
             {
                 "symbol": symbol,
@@ -1009,27 +1012,98 @@ def _sources_by_ids(packet: dict[str, Any], source_ids: list[str]) -> list[dict[
     return [source for source in packet["official_sources"] if source["source_id"] in wanted]
 
 
-def _normalize_evidence_mapping(value: Any, support_sources: list[dict[str, Any]]) -> dict[str, list[str]]:
+def _normalize_evidence_mapping(
+    value: Any,
+    support_sources: list[dict[str, Any]],
+    *,
+    allow_fallback: bool = True,
+) -> dict[str, list[str]]:
     fallback_ids = [source["source_id"] for source in support_sources[:2]]
     if not isinstance(value, dict):
-        return {"thesis": fallback_ids}
+        return {"thesis": fallback_ids} if allow_fallback and fallback_ids else {}
     allowed = {source["source_id"] for source in support_sources}
     output: dict[str, list[str]] = {}
     for key, raw_ids in value.items():
         ids = [source_id for source_id in _source_ids_from_value(raw_ids) if source_id in allowed]
         if ids:
             output[str(key)] = ids
-    return output or {"thesis": fallback_ids}
+    return output or ({"thesis": fallback_ids} if allow_fallback and fallback_ids else {})
 
 
 def _sources_for_pick(packet: dict[str, Any], pick: dict[str, Any] | None) -> list[dict[str, Any]]:
     if not pick:
         return []
-    return _sources_by_ids(packet, _source_ids_from_value(pick.get("sources_used")))
+    return _source_refs_for_llm_pick(packet=packet, pick=pick, symbol=str(pick.get("symbol") or ""))
 
 
 def _evidence_mapping_for_pick(pick: dict[str, Any] | None, support_sources: list[dict[str, Any]]) -> dict[str, list[str]]:
-    return _normalize_evidence_mapping((pick or {}).get("evidence_mapping"), support_sources)
+    return _normalize_evidence_mapping(
+        (pick or {}).get("evidence_mapping"),
+        support_sources,
+        allow_fallback=not _source_ids_declared_by_pick(pick),
+    )
+
+
+def _source_refs_for_llm_pick(*, packet: dict[str, Any], pick: dict[str, Any] | None, symbol: str) -> list[dict[str, Any]]:
+    source_ids = _source_ids_declared_by_pick(pick)
+    if source_ids:
+        return _sources_or_rejections_by_ids(packet, source_ids)
+    return _sources_for_symbol(packet, symbol) if symbol else []
+
+
+def _source_ids_declared_by_pick(pick: dict[str, Any] | None) -> list[str]:
+    if not pick:
+        return []
+    source_ids = _source_ids_from_value(pick.get("sources_used"))
+    mapping = pick.get("evidence_mapping")
+    if isinstance(mapping, dict):
+        for raw_ids in mapping.values():
+            source_ids.extend(_source_ids_from_value(raw_ids))
+    return list(dict.fromkeys(source_ids))
+
+
+def _sources_or_rejections_by_ids(packet: dict[str, Any], source_ids: list[str]) -> list[dict[str, Any]]:
+    official = {source["source_id"]: source for source in packet["official_sources"]}
+    rejected = {source["source_id"]: source for source in packet.get("rejected_sources") or []}
+    output: list[dict[str, Any]] = []
+    for source_id in dict.fromkeys(source_ids):
+        if source_id in official:
+            output.append(official[source_id])
+        elif source_id in rejected:
+            output.append(rejected[source_id])
+        else:
+            output.append(
+                {
+                    "source_id": source_id,
+                    "status": "invalid",
+                    "reject_reason": "source_not_in_packet",
+                    "title": "packet 外来源引用",
+                    "url": None,
+                    "published_at": None,
+                    "fetched_at": None,
+                    "body_excerpt": "",
+                    "source_type": "invalid",
+                    "linked_symbols": [],
+                }
+            )
+    return output
+
+
+def _candidate_source_payload(source: dict[str, Any]) -> dict[str, Any]:
+    status = str(source.get("status") or "official")
+    if status == "official":
+        return {
+            **source,
+            "credibility_status": "verified",
+            "credibility_reason": "source timestamp is inside sealed replay packet",
+            "support_status": "supported_by_source_text",
+        }
+    return {
+        **source,
+        "credibility_status": "rejected",
+        "credibility_reason": str(source.get("reject_reason") or status),
+        "support_status": "not_eligible_for_official_replay",
+    }
 
 
 def _string_list(value: Any) -> list[str]:

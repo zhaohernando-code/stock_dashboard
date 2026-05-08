@@ -286,3 +286,106 @@ def test_historical_replay_uses_real_sealed_packet_llm_executor(monkeypatch) -> 
             assert [candidate.symbol for candidate in llm_candidates] == ["600003.SH"]
             assert llm_candidates[0].thesis == "测试半导体在 sealed packet 中有订单进展来源支持。"
             assert llm_candidates[0].candidate_payload["sources_used"] == ["src-001"]
+
+
+def test_replay_llm_prompt_excludes_rejected_future_sources(monkeypatch) -> None:
+    class FakeTransport:
+        def complete(self, *, base_url, api_key, model_name, prompt, system=None, enable_search=False):
+            assert enable_search is False
+            assert "测试半导体获得订单" in prompt
+            assert "测试软件次日涨停" not in prompt
+            assert "https://example.test/after" not in prompt
+            assert "rej-001" not in prompt
+            assert '"rejected_source_count": 1' in prompt
+            return json.dumps(
+                {
+                    "as_of_date": "2026-05-05",
+                    "information_mode": "historical_replay",
+                    "primary_pick": {
+                        "symbol": "600003.SH",
+                        "name": "测试半导体",
+                        "theme": "半导体订单",
+                        "thesis": "测试半导体在 sealed packet 中有订单进展来源支持。",
+                        "sources_used": ["src-001"],
+                        "evidence_mapping": {"thesis": ["src-001"]},
+                    },
+                    "candidates": [],
+                },
+                ensure_ascii=False,
+            )
+
+    monkeypatch.setenv("ASHARE_SHORTPICK_REPLAY_LLM_MODE", "real")
+    monkeypatch.setattr(
+        "ashare_evidence.shortpick_replay.route_model",
+        lambda task: (FakeTransport(), "https://api.deepseek.test/anthropic", "test-key", "deepseek-fixture"),
+    )
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_url = f"sqlite:///{Path(temp_dir) / 'replay.db'}"
+        init_database(database_url)
+        _seed_replay_fixture(database_url)
+
+        with session_scope(database_url) as session:
+            run_shortpick_historical_replay(
+                session,
+                start_date=date(2026, 5, 5),
+                end_date=date(2026, 5, 5),
+                rounds=1,
+                candidate_limit=1,
+            )
+
+
+def test_replay_llm_rejected_or_packet_external_source_fails_audit(monkeypatch) -> None:
+    class FakeTransport:
+        def complete(self, *, base_url, api_key, model_name, prompt, system=None, enable_search=False):
+            assert enable_search is False
+            return json.dumps(
+                {
+                    "as_of_date": "2026-05-05",
+                    "information_mode": "historical_replay",
+                    "primary_pick": {
+                        "symbol": "600004.SH",
+                        "name": "测试软件",
+                        "theme": "未来结果污染",
+                        "thesis": "测试软件在 2026-05-06 出现涨停。",
+                        "sources_used": ["rej-001", "src-999"],
+                        "evidence_mapping": {"thesis": ["rej-001", "src-999"]},
+                    },
+                    "candidates": [],
+                },
+                ensure_ascii=False,
+            )
+
+    monkeypatch.setenv("ASHARE_SHORTPICK_REPLAY_LLM_MODE", "real")
+    monkeypatch.setattr(
+        "ashare_evidence.shortpick_replay.route_model",
+        lambda task: (FakeTransport(), "https://api.deepseek.test/anthropic", "test-key", "deepseek-fixture"),
+    )
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_url = f"sqlite:///{Path(temp_dir) / 'replay.db'}"
+        init_database(database_url)
+        _seed_replay_fixture(database_url)
+
+        with session_scope(database_url) as session:
+            payload = run_shortpick_historical_replay(
+                session,
+                start_date=date(2026, 5, 5),
+                end_date=date(2026, 5, 5),
+                rounds=1,
+                candidate_limit=1,
+            )
+            run_id = payload["runs"][0]["id"]
+            llm_candidate = session.scalars(
+                select(ShortpickCandidate).where(
+                    ShortpickCandidate.run_id == run_id,
+                    ShortpickCandidate.convergence_group == "llm",
+                )
+            ).one()
+            reasons = set(llm_candidate.candidate_payload["leakage_audit_reasons"])
+            assert llm_candidate.candidate_payload["leakage_audit_status"] == "fail"
+            assert llm_candidate.candidate_payload["official_sample_eligible"] is False
+            assert "source_after_cutoff" in reasons
+            assert "source_not_in_packet" in reasons
+            assert "unverified_source_time" in reasons
+            assert "future_leakage_suspected" in reasons
+            assert llm_candidate.candidate_payload["sources_used"] == ["rej-001", "src-999"]
+            assert llm_candidate.sources_payload[0]["credibility_status"] == "rejected"
