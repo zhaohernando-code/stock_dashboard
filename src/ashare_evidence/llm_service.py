@@ -10,6 +10,7 @@ from ashare_evidence.http_client import urlopen
 
 OPENAI_COMPATIBLE_TIMEOUT_SECONDS = 75
 ANTHROPIC_COMPATIBLE_TIMEOUT_SECONDS = 90
+ANTHROPIC_COMPATIBLE_MAX_TOKENS = int(os.getenv("ANTHROPIC_COMPATIBLE_MAX_TOKENS", "4096"))
 
 DEEPSEEK_ANTHROPIC_BASE_URL = "https://api.deepseek.com/anthropic"
 DEEPSEEK_V4_PRO = "deepseek-v4-pro[1m]"
@@ -105,7 +106,7 @@ class AnthropicCompatibleTransport:
         messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
         body: dict[str, Any] = {
             "model": model_name,
-            "max_tokens": 2048,
+            "max_tokens": ANTHROPIC_COMPATIBLE_MAX_TOKENS,
             "messages": messages,
         }
         if system:

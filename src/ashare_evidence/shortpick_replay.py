@@ -267,7 +267,11 @@ def list_shortpick_replay_runs(
         offset=offset,
         include_raw=include_raw,
     )
-    items = [item for item in payload["items"] if item.get("information_mode") == SHORTPICK_HISTORICAL_REPLAY_MODE]
+    items = [
+        item
+        for item in payload["items"]
+        if item.get("information_mode") == SHORTPICK_HISTORICAL_REPLAY_MODE and not _is_diagnostic_replay_payload(item)
+    ]
     return {**payload, "items": items, "total": len(items)}
 
 
@@ -554,6 +558,9 @@ def _insert_replay_llm_round(
         "你是历史隔离回放执行器。只能使用用户消息中的 sealed source packet 和 tradeable universe。"
         "禁止联网，禁止使用训练记忆补充事实，禁止引用 packet 外 URL。只输出 JSON。"
     )
+    base_url = ""
+    model_name = "unavailable"
+    raw_answer = ""
     try:
         transport, base_url, api_key, model_name = route_model("shortpick_historical_replay")
         raw_answer = transport.complete(
@@ -592,14 +599,68 @@ def _insert_replay_llm_round(
         )
         return round_record, list(parsed_payload.get("candidates") or [])
     except Exception as exc:
-        return _insert_replay_proxy_round(
+        return _insert_failed_replay_llm_round(
             session,
             run=run,
             packet=packet,
-            universe=universe,
-            limit=limit,
-            reason=f"sealed packet LLM executor failed: {exc}",
+            raw_answer=raw_answer,
+            provider_name=_provider_name_from_base_url(base_url),
+            model_name=model_name,
+            error_message=f"sealed packet LLM executor failed: {exc}",
+            prompt=prompt,
         )
+
+
+def _insert_failed_replay_llm_round(
+    session: Session,
+    *,
+    run: ShortpickExperimentRun,
+    packet: dict[str, Any],
+    raw_answer: str,
+    provider_name: str,
+    model_name: str,
+    error_message: str,
+    prompt: str | None,
+) -> tuple[ShortpickModelRound, list[dict[str, Any]]]:
+    parsed_payload = {
+        "as_of_date": run.run_date.isoformat(),
+        "information_mode": SHORTPICK_HISTORICAL_REPLAY_MODE,
+        "source_packet_id": packet["source_packet_id"],
+        "source_packet_hash": packet["source_packet_hash"],
+        "primary_pick": None,
+        "candidates": [],
+        "sources_used": [],
+        "limitations": [error_message],
+        "llm_executor": "sealed_packet_only",
+        "executor_failure": True,
+    }
+    round_record = _insert_replay_round_record(
+        session,
+        run=run,
+        packet=packet,
+        parsed_payload=parsed_payload,
+        raw_answer=raw_answer or json.dumps(parsed_payload, ensure_ascii=False),
+        provider_name=provider_name or "llm",
+        model_name=model_name or "unavailable",
+        executor_kind="historical_replay_sealed_packet_llm",
+        error_message=error_message,
+        prompt=prompt,
+        status="failed",
+    )
+    return round_record, []
+
+
+def _is_diagnostic_replay_payload(payload: dict[str, Any]) -> bool:
+    summary = dict(payload.get("summary") or payload.get("summary_payload") or {})
+    return (
+        summary.get("llm_executor_kind") == "historical_replay_diagnostic_proxy"
+        or summary.get("model_family") == "diagnostic-sealed-packet-proxy"
+        or str(payload.get("model_family") or "").startswith("diagnostic-sealed-packet-proxy")
+    )
+
+
+def _is_diagnostic_replay_run(run: ShortpickExperimentRun) -> bool:
+    return _is_diagnostic_replay_payload({"summary": dict(run.summary_payload or {})})
 
 
 def _insert_replay_proxy_round(
@@ -653,6 +714,7 @@ def _insert_replay_round_record(
     executor_kind: str,
     error_message: str | None,
     prompt: str | None,
+    status: str = "completed",
 ) -> ShortpickModelRound:
     now = utcnow()
     round_record = ShortpickModelRound(
@@ -662,7 +724,7 @@ def _insert_replay_round_record(
         model_name=model_name,
         executor_kind=executor_kind,
         round_index=1,
-        status="completed",
+        status=status,
         raw_answer=raw_answer,
         parsed_payload=parsed_payload,
         sources_payload=_round_sources_from_payload(packet, parsed_payload),
@@ -866,6 +928,8 @@ as_of_cutoff：{packet["as_of_cutoff"]}
 
 输出 JSON，不要加代码块。`sources_used` 和 `evidence_mapping` 只能填写 packet 内的 `source_id`，不能填写 URL。
 候选 symbol 必须来自 `tradeable_universe`。
+`candidates` 是验收样本主体，必须尽量输出 {limit} 个不重复候选；`primary_pick` 必须等于 `candidates[0]`。
+每个候选的 thesis / catalysts / risks / invalidation 保持短句，优先引用与 symbol 相关的 official source id；没有对应 source 时必须在 limitations 里说明仅基于行情快照。
 
 输出格式：
 {{
@@ -885,7 +949,20 @@ as_of_cutoff：{packet["as_of_cutoff"]}
     "evidence_mapping": {{"thesis": ["src-001"], "catalyst_1": ["src-002"]}},
     "limitations": ["..."]
   }},
-  "candidates": [],
+  "candidates": [
+    {{
+      "symbol": "000000.SZ",
+      "name": "...",
+      "theme": "...",
+      "thesis": "...",
+      "catalysts": ["..."],
+      "risks": ["..."],
+      "invalidation": ["..."],
+      "sources_used": ["src-001"],
+      "evidence_mapping": {{"thesis": ["src-001"]}},
+      "limitations": ["..."]
+    }}
+  ],
   "limitations": []
 }}
 
@@ -1184,6 +1261,8 @@ def _replay_validation_rows(session: Session, *, run_id: int | None) -> list[dic
     rows = []
     query = query.add_columns(ShortpickExperimentRun)
     for validation, candidate, run in session.execute(query).all():
+        if run_id is None and _is_diagnostic_replay_run(run):
+            continue
         payload = _candidate_payload(candidate)
         family = str(payload.get("baseline_family") or "unknown")
         if family == "llm" and (run.summary_payload or {}).get("llm_executor_kind") == "historical_replay_diagnostic_proxy":

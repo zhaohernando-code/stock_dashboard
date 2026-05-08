@@ -15,6 +15,7 @@ from ashare_evidence.models import (
     NewsItem,
     ShortpickCandidate,
     ShortpickExperimentRun,
+    ShortpickModelRound,
     ShortpickValidationSnapshot,
     Stock,
 )
@@ -231,8 +232,8 @@ def test_replay_feedback_compares_llm_and_baselines_without_live_pollution(monke
 
             aggregate_feedback = build_shortpick_replay_feedback(session, run_id=None)
             assert aggregate_feedback["run_id"] is None
-            assert aggregate_feedback["overall"]["run_count"] >= 1
-            assert aggregate_feedback["overall"]["validation_by_horizon"]
+            assert aggregate_feedback["overall"]["run_count"] == 0
+            assert aggregate_feedback["overall"]["validation_by_horizon"] == []
 
 
 def test_historical_replay_uses_real_sealed_packet_llm_executor(monkeypatch) -> None:
@@ -295,6 +296,45 @@ def test_historical_replay_uses_real_sealed_packet_llm_executor(monkeypatch) -> 
             assert [candidate.symbol for candidate in llm_candidates] == ["600003.SH"]
             assert llm_candidates[0].thesis == "测试半导体在 sealed packet 中有订单进展来源支持。"
             assert llm_candidates[0].candidate_payload["sources_used"] == ["src-001"]
+
+
+def test_real_replay_llm_failure_does_not_fallback_to_diagnostic_proxy(monkeypatch) -> None:
+    class FailingTransport:
+        def complete(self, *, base_url, api_key, model_name, prompt, system=None, enable_search=False):
+            raise RuntimeError("fixture LLM unavailable")
+
+    monkeypatch.setenv("ASHARE_SHORTPICK_REPLAY_LLM_MODE", "real")
+    monkeypatch.setattr(
+        "ashare_evidence.shortpick_replay.route_model",
+        lambda task: (FailingTransport(), "https://api.deepseek.test/anthropic", "test-key", "deepseek-fixture"),
+    )
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_url = f"sqlite:///{Path(temp_dir) / 'replay.db'}"
+        init_database(database_url)
+        _seed_replay_fixture(database_url)
+
+        with session_scope(database_url) as session:
+            payload = run_shortpick_historical_replay(
+                session,
+                start_date=date(2026, 5, 5),
+                end_date=date(2026, 5, 5),
+                rounds=2,
+                candidate_limit=2,
+            )
+            run_id = payload["runs"][0]["id"]
+            run = session.get(ShortpickExperimentRun, run_id)
+            assert run is not None
+            assert run.summary_payload["llm_executor_kind"] == "historical_replay_sealed_packet_llm"
+            assert run.summary_payload["model_family"] == "deepseek:deepseek-fixture"
+            rounds = session.scalars(select(ShortpickModelRound).where(ShortpickModelRound.run_id == run_id)).all()
+            assert len(rounds) == 1
+            assert rounds[0].status == "failed"
+            assert rounds[0].executor_kind == "historical_replay_sealed_packet_llm"
+            candidates = session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all()
+            assert candidates
+            assert all(candidate.candidate_payload["baseline_family"] != "llm" for candidate in candidates)
+            feedback = build_shortpick_replay_feedback(session, run_id=None)
+            assert "diagnostic_proxy_llm" not in {family["baseline_family"] for family in feedback["families"]}
 
 
 def test_replay_llm_prompt_excludes_rejected_future_sources(monkeypatch) -> None:
