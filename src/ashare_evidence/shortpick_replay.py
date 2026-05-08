@@ -61,6 +61,9 @@ SHORTPICK_REPLAY_BASELINE_FAMILIES = (
     "random_hard_veto_then_momentum_rank",
     "llm_strict_veto_then_momentum_rank",
     "random_strict_veto_then_momentum_rank",
+    "momentum_turnover_rank",
+    "momentum_10d_rank",
+    "momentum_continuity_turnover_rank",
 )
 SHORTPICK_REPLAY_HORIZON_ORDER = (1, 3, 5, 10, 20)
 SHORTPICK_REPLAY_DISTILL_FAMILIES = (
@@ -88,6 +91,11 @@ SHORTPICK_REPLAY_HARD_VETO_FAMILIES = (
 )
 SHORTPICK_REPLAY_HARD_VETO_EXECUTORS = (
     "historical_replay_momentum_pool_hard_veto",
+)
+SHORTPICK_REPLAY_FACTOR_RANK_FAMILIES = (
+    "momentum_turnover_rank",
+    "momentum_10d_rank",
+    "momentum_continuity_turnover_rank",
 )
 SHORTPICK_REPLAY_STRICT_VETO_CATEGORIES = {
     "source_mismatch",
@@ -455,6 +463,56 @@ def run_shortpick_replay_hard_veto_experiment(
             "veto_max_ratio": normalized_veto_max_ratio,
             "families": list(SHORTPICK_REPLAY_HARD_VETO_FAMILIES),
             "strict_veto_categories": sorted(SHORTPICK_REPLAY_STRICT_VETO_CATEGORIES),
+        },
+    }
+
+
+def run_shortpick_replay_factor_rank_experiment(
+    session: Session,
+    *,
+    run_id: int | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    momentum_pool_limit: int = 40,
+    rank_limit: int = 6,
+) -> dict[str, Any]:
+    query = (
+        select(ShortpickExperimentRun)
+        .where(
+            ShortpickExperimentRun.information_mode == SHORTPICK_HISTORICAL_REPLAY_MODE,
+            ShortpickExperimentRun.status == "completed",
+        )
+        .order_by(ShortpickExperimentRun.run_date.asc(), ShortpickExperimentRun.id.asc())
+    )
+    if run_id is not None:
+        query = query.where(ShortpickExperimentRun.id == run_id)
+    if start_date is not None:
+        query = query.where(ShortpickExperimentRun.run_date >= start_date)
+    if end_date is not None:
+        query = query.where(ShortpickExperimentRun.run_date <= end_date)
+    runs = [run for run in session.scalars(query).all() if not _is_diagnostic_replay_run(run)]
+    outputs: list[dict[str, Any]] = []
+    normalized_pool_limit = max(6, min(int(momentum_pool_limit), 80))
+    normalized_rank_limit = max(1, min(int(rank_limit), 20))
+    for run in runs:
+        outputs.append(
+            _factor_rank_one_replay_run(
+                session,
+                run=run,
+                momentum_pool_limit=normalized_pool_limit,
+                rank_limit=normalized_rank_limit,
+            )
+        )
+        session.commit()
+    return {
+        "experiment_mode": SHORTPICK_REPLAY_EXPERIMENT_MODE,
+        "ranking_mode": "sealed_market_feature_rank",
+        "run_count": len(outputs),
+        "runs": outputs,
+        "config": {
+            "momentum_pool_limit": normalized_pool_limit,
+            "rank_limit": normalized_rank_limit,
+            "families": list(SHORTPICK_REPLAY_FACTOR_RANK_FAMILIES),
         },
     }
 
@@ -1108,6 +1166,71 @@ def _hard_veto_one_replay_run(
     }
 
 
+def _factor_rank_one_replay_run(
+    session: Session,
+    *,
+    run: ShortpickExperimentRun,
+    momentum_pool_limit: int,
+    rank_limit: int,
+) -> dict[str, Any]:
+    packet = _load_replay_packet(session, run)
+    universe = _build_universe(session, as_of_date=run.run_date)
+    momentum_symbols = _momentum_symbols(universe, limit=momentum_pool_limit)
+
+    _delete_factor_rank_outputs(session, run.id)
+    ranked = _factor_ranked_symbols(
+        session,
+        run=run,
+        universe=universe,
+        pool_symbols=momentum_symbols,
+    )
+    for family, symbols in ranked.items():
+        for index, symbol in enumerate(symbols[:rank_limit], start=1):
+            original_rank = momentum_symbols.index(symbol) + 1 if symbol in momentum_symbols else index
+            pick = _factor_rank_pick_payload(
+                session,
+                run=run,
+                universe=universe,
+                symbol=symbol,
+                family=family,
+                original_rank=original_rank,
+                derived_rank=index,
+            )
+            _insert_candidate(
+                session,
+                run=run,
+                round_record=None,
+                symbol=symbol,
+                baseline_family=family,
+                rank=index,
+                packet=packet,
+                universe=universe,
+                llm_pick=pick,
+            )
+
+    session.flush()
+    validation_result = validate_historical_replay_run(session, run.id, horizons=SHORTPICK_DEFAULT_HORIZONS)
+    candidate_counts = _factor_rank_candidate_counts(session, run.id)
+    run.summary_payload = {
+        **dict(run.summary_payload or {}),
+        "factor_rank_experiment": {
+            "status": "completed",
+            "momentum_pool_limit": momentum_pool_limit,
+            "rank_limit": rank_limit,
+            "families": list(SHORTPICK_REPLAY_FACTOR_RANK_FAMILIES),
+            "candidate_counts": candidate_counts,
+            "completed_at": utcnow().isoformat(),
+        },
+    }
+    session.flush()
+    return {
+        "run_id": run.id,
+        "run_date": run.run_date.isoformat(),
+        "candidate_counts": candidate_counts,
+        "validation": validation_result,
+    }
+
+
 def _load_replay_packet(session: Session, run: ShortpickExperimentRun) -> dict[str, Any]:
     packet_id = str((run.summary_payload or {}).get("source_packet_id") or "")
     artifact = read_shortpick_lab_artifact_if_exists(packet_id, root=_artifact_root(session)) if packet_id else None
@@ -1203,6 +1326,18 @@ def _delete_hard_veto_outputs(session: Session, run_id: int) -> None:
     session.flush()
 
 
+def _delete_factor_rank_outputs(session: Session, run_id: int) -> None:
+    candidate_ids = [
+        candidate.id
+        for candidate in session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all()
+        if _candidate_baseline_family(candidate) in SHORTPICK_REPLAY_FACTOR_RANK_FAMILIES
+    ]
+    if candidate_ids:
+        session.execute(delete(ShortpickValidationSnapshot).where(ShortpickValidationSnapshot.candidate_id.in_(candidate_ids)))
+        session.execute(delete(ShortpickCandidate).where(ShortpickCandidate.id.in_(candidate_ids)))
+    session.flush()
+
+
 def _distillation_candidate_counts(session: Session, run_id: int) -> dict[str, int]:
     counts = dict.fromkeys(SHORTPICK_REPLAY_DISTILL_FAMILIES, 0)
     for candidate in session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all():
@@ -1223,6 +1358,15 @@ def _rejection_candidate_counts(session: Session, run_id: int) -> dict[str, int]
 
 def _hard_veto_candidate_counts(session: Session, run_id: int) -> dict[str, int]:
     counts = dict.fromkeys(SHORTPICK_REPLAY_HARD_VETO_FAMILIES, 0)
+    for candidate in session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all():
+        family = _candidate_baseline_family(candidate)
+        if family in counts:
+            counts[family] += 1
+    return counts
+
+
+def _factor_rank_candidate_counts(session: Session, run_id: int) -> dict[str, int]:
+    counts = dict.fromkeys(SHORTPICK_REPLAY_FACTOR_RANK_FAMILIES, 0)
     for candidate in session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all():
         family = _candidate_baseline_family(candidate)
         if family in counts:
@@ -2782,6 +2926,135 @@ def _momentum_symbols(universe: dict[str, Any], *, limit: int) -> list[str]:
     return [member.symbol for member in ranked[:limit]]
 
 
+def _factor_ranked_symbols(
+    session: Session,
+    *,
+    run: ShortpickExperimentRun,
+    universe: dict[str, Any],
+    pool_symbols: list[str],
+) -> dict[str, list[str]]:
+    contexts = [
+        _factor_rank_context(session, run=run, universe=universe, symbol=symbol)
+        for symbol in pool_symbols
+        if symbol in universe["by_symbol"]
+    ]
+    contexts = [context for context in contexts if context is not None]
+    percentiles = {
+        "return_1d": _factor_percentiles(contexts, "return_1d"),
+        "return_5d": _factor_percentiles(contexts, "return_5d"),
+        "return_10d": _factor_percentiles(contexts, "return_10d"),
+        "turnover_rate": _factor_percentiles(contexts, "turnover_rate"),
+    }
+    by_symbol = {context["symbol"]: context for context in contexts}
+
+    def score(symbol: str, family: str) -> tuple[float, float, float, float]:
+        context = by_symbol[symbol]
+        if family == "momentum_turnover_rank":
+            primary = percentiles["turnover_rate"].get(symbol, 0.0)
+        elif family == "momentum_10d_rank":
+            primary = percentiles["return_10d"].get(symbol, 0.0)
+        else:
+            primary = (
+                percentiles["return_1d"].get(symbol, 0.0)
+                + 0.5 * percentiles["return_5d"].get(symbol, 0.0)
+                + 0.5 * percentiles["turnover_rate"].get(symbol, 0.0)
+            )
+        return (
+            primary,
+            float(context.get("return_1d") or 0.0),
+            float(context.get("amount") or 0.0),
+            float(context.get("turnover_rate") or 0.0),
+        )
+
+    symbols = [context["symbol"] for context in contexts]
+    return {
+        family: sorted(symbols, key=lambda symbol, family=family: score(symbol, family), reverse=True)
+        for family in SHORTPICK_REPLAY_FACTOR_RANK_FAMILIES
+    }
+
+
+def _factor_rank_context(
+    session: Session,
+    *,
+    run: ShortpickExperimentRun,
+    universe: dict[str, Any],
+    symbol: str,
+) -> dict[str, Any] | None:
+    member = universe["by_symbol"].get(symbol)
+    if member is None:
+        return None
+    bars = _recent_daily_bars(session, symbol=symbol, as_of_date=run.run_date, limit=25)
+    return {
+        "symbol": symbol,
+        "return_1d": _bar_return(member),
+        "return_5d": _bars_return(bars, 5),
+        "return_10d": _bars_return(bars, 10),
+        "turnover_rate": member.turnover_rate,
+        "amount": member.latest_bar.amount,
+        "amount_ratio_5d": _amount_ratio(bars, 5),
+    }
+
+
+def _factor_percentiles(contexts: list[dict[str, Any]], key: str) -> dict[str, float]:
+    values = [
+        (str(context["symbol"]), float(context[key]))
+        for context in contexts
+        if context.get(key) is not None
+    ]
+    values.sort(key=lambda item: item[1], reverse=True)
+    if not values:
+        return {}
+    if len(values) == 1:
+        return {values[0][0]: 1.0}
+    return {symbol: 1.0 - (rank / (len(values) - 1)) for rank, (symbol, _value) in enumerate(values)}
+
+
+def _factor_rank_pick_payload(
+    session: Session,
+    *,
+    run: ShortpickExperimentRun,
+    universe: dict[str, Any],
+    symbol: str,
+    family: str,
+    original_rank: int,
+    derived_rank: int,
+) -> dict[str, Any]:
+    member = universe["by_symbol"][symbol]
+    context = _factor_rank_context(session, run=run, universe=universe, symbol=symbol) or {}
+    label = _baseline_label(family)
+    return {
+        "symbol": symbol,
+        "name": member.name,
+        "thesis": f"{member.name} 由 {label} 在扩大动量池内再排序入选；只使用 {run.run_date.isoformat()} 收盘前行情特征。",
+        "catalysts": [
+            label,
+            f"原动量池排名 {original_rank}，再排序排名 {derived_rank}",
+        ],
+        "risks": ["该组为行情特征实验，不读取 packet 外信息，也不进入主推荐或模拟盘。"],
+        "invalidation": ["若后续样本显示该特征只在单一月份有效，则降级为诊断基线。"],
+        "sources_used": [],
+        "evidence_mapping": {},
+        "candidate_payload": {
+            "factor_rank_experiment": {
+                "family": family,
+                "source_pool": "momentum_volume_expanded_pool",
+                "original_momentum_rank": original_rank,
+                "derived_rank": derived_rank,
+                "features": context,
+                "score_formula": _factor_rank_formula(family),
+            }
+        },
+    }
+
+
+def _factor_rank_formula(family: str) -> str:
+    if family == "momentum_turnover_rank":
+        return "rank_percentile(turnover_rate) within top40 momentum-volume pool"
+    if family == "momentum_10d_rank":
+        return "rank_percentile(return_10d) within top40 momentum-volume pool"
+    return "rank_percentile(return_1d) + 0.5*rank_percentile(return_5d) + 0.5*rank_percentile(turnover_rate)"
+
+
 def _deterministic_random_rejections(
     *,
     run: ShortpickExperimentRun,
@@ -3191,6 +3464,12 @@ def _candidate_thesis(member: _UniverseMember, baseline_family: str) -> str:
         return f"{member.name} 先通过 LLM 只剔除检查，再按原动量成交量排序入选；截至当日日收益 {ret:.2%}。"
     if baseline_family == "random_reject_then_momentum_rank":
         return f"{member.name} 由随机剔除同等数量候选后按原动量排序入选；截至当日日收益 {ret:.2%}。"
+    if baseline_family == "momentum_turnover_rank":
+        return f"{member.name} 在扩大动量池中按换手率再排序入选；截至当日日收益 {ret:.2%}，换手率 {member.turnover_rate or 0:.2%}。"
+    if baseline_family == "momentum_10d_rank":
+        return f"{member.name} 在扩大动量池中按 10 日持续动量再排序入选；截至当日日收益 {ret:.2%}。"
+    if baseline_family == "momentum_continuity_turnover_rank":
+        return f"{member.name} 在扩大动量池中按短动量、5日持续性与换手率复合排序入选；截至当日日收益 {ret:.2%}。"
     if baseline_family == "random_same_market_cap_bucket":
         return f"{member.name} 由同市值分桶随机基准选中，市值桶 {member.market_cap_bucket}。"
     return f"{member.name} 由当日可交易 universe 随机基准选中。"
@@ -3343,6 +3622,9 @@ def _baseline_label(value: str) -> str:
         "random_hard_veto_then_momentum_rank": "随机硬否决后动量排序",
         "llm_strict_veto_then_momentum_rank": "LLM严格否决后动量排序",
         "random_strict_veto_then_momentum_rank": "随机严格否决后动量排序",
+        "momentum_turnover_rank": "换手优先动量排序",
+        "momentum_10d_rank": "10日持续动量排序",
+        "momentum_continuity_turnover_rank": "持续动量换手复合排序",
     }
     return labels.get(value, value)
 
