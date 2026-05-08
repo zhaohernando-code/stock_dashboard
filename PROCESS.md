@@ -2,6 +2,12 @@
 
 反回归笔记和可复用经验。状态快照见 PROJECT_STATUS.json。
 
+## 2026-05-08
+
+- **历史回放周期必须按研究口径排序，而不是字符串排序**：`validation_by_horizon`、`ready_horizons`、历史回放周期卡片和表格现在都固定按 `1/3/5/10/20` 展示。根因是后端把 horizon key 当字符串排序，导致 `1/10/20/3/5`；修复同时放在后端聚合和前端防御排序层，避免旧 payload 或未来接口乱序再次污染读数。
+- **历史回放 DeepSeek 样本必须用 v4 pro，不接受 flash 作为正式能力验证样本**：确认运行态历史回放 7 个 real sealed-packet run 都是 `deepseek-v4-flash` 后，先备份 DB 到 `data/ashare_dashboard.before-v4pro-replay-rerun.20260508141936.db`，再删除 flash replay run/candidate/validation/consensus 与对应 artifact。随后发布提交 `3fe9385b274a1788589472041c891af3a1fe62ef`，将 `shortpick_historical_replay` 路由到 `deepseek-v4-pro[1m]`，并重新跑 2026-03-27、03-30、03-31、04-01、04-02、04-03、04-30 七个历史日。运行态 DB 现在只有 `deepseek-v4-pro[1m]` historical replay model rounds，共 7 run；`/shortpick-lab/replay-feedback` 返回 7 个历史日期、623 个 completed official 样本、ready horizons `[1,3,5,10,20]`，无 flash replay round。
+- **v4 pro 历史回放发布验收记录**：release manifest 为 `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260508T061821Z-3fe9385b274a/manifest.json`，deploy verifier `19 passed, 0 failed`。本地目标回归 `PYTHONPATH=src pytest -q tests/test_shortpick_replay.py tests/test_llm_service.py tests/test_frontend_shortpick_static.py` 为 `9 passed`，`ruff check` 通过，`npm run build` 通过，policy audit `status=pass`。真实 served 页面 `http://127.0.0.1:5173/?verify=shortpick-v4pro-horizon-order` 已用 Playwright+Node 24 验证：历史回放首屏显示 `1 / 3 / 5 / 10 / 20`，下钻表显示 `deepseek:deepseek-v4-pro[1m]`，截图为 `output/playwright/shortpick-v4pro-horizon-order-runtime.png`。Playwright CLI 用系统 Node 16 仍会触发 `GlobalRequest` 兼容错误，需临时把 bundled Node 放到 PATH 后再运行。
+
 ## 2026-05-07
 
 - **参数与公式治理首轮要以股票看板为边界**：常量/公式治理已经按计划收口到数据质量、信号融合、Phase 5、短投验证边界和前端状态阈值，不做全工作区一次性大迁移。稳定 contract 留代码，公式进纯函数，可调权重/阈值/窗口进入版本化 `policy_config_versions`，每次运行 payload 记录 config key/version/checksum，后续新增参数必须经过 policy audit。
