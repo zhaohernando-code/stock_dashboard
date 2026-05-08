@@ -109,6 +109,7 @@
     "shortpick_historical_replay_factor_rank": "backend_only_runtime_data_completed_cooldown",
     "shortpick_market_factor_study": "frontend_closeout_hot_path_fix_published_runtime_verified",
     "shortpick_lab_replay_nonblocking_load": "published_runtime_verified",
+    "shortpick_scheduled_catchup_target_date": "published_runtime_verified_2026_05_08_manual_catchup_completed_run_30",
     "scheduled_refresh_retry_backoff": "runtime_script_synced_attempt_backoff"
   },
   "latest_findings": [
