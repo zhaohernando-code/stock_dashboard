@@ -27,8 +27,8 @@
       "reviewed_at": "2026-05-08"
     },
     "src/ashare_evidence/cli.py": {
-      "lines": 839,
-      "reason": "CLI command group: data refresh, cache management, admin operations, event/improvement audit triggers, database write preflight (db.py), benchmark index bar sync, and shortpick replay/distillation/rejector/hard-veto/factor-rank experiment commands.",
+      "lines": 872,
+      "reason": "CLI command group: data refresh, cache management, admin operations, event/improvement audit triggers, database write preflight (db.py), benchmark index bar sync, and shortpick replay/distillation/rejector/hard-veto/factor-rank/market-factor-study experiment commands.",
       "status": "accepted",
       "reviewed_at": "2026-05-08"
     },
@@ -161,6 +161,12 @@
     "src/ashare_evidence/shortpick_replay.py": {
       "lines": 3732,
       "reason": "Shortpick historical replay v1 keeps sealed packet construction, sealed-packet-only LLM execution, failed-round handling without production proxy fallback, rejected-source/source-id leakage preservation, market-cap fallback bucketing, baseline controls, LLM self/momentum-pool distillation, LLM reject-only momentum gating, high-precision hard-veto controls, deterministic sealed-market feature rerankers, random reject controls, leakage audit, compact replay run listing, per-run and aggregate validation statistics, replay API helpers, post-audit contract normalization, and runtime-safe replay transaction boundaries in one first-version workflow. Diagnostic proxy remains explicit test mode only; split into packet/audit/baseline/distillation/rejector/ranker modules after the contract stabilizes.",
+      "reviewed_at": "2026-05-08",
+      "status": "planned_refactor"
+    },
+    "src/ashare_evidence/shortpick_market_factor_study.py": {
+      "lines": 558,
+      "reason": "Backend-only Short Pick Lab market-factor study command: loads daily bars, builds expanded momentum pools, evaluates fixed and walk-forward feature rerankers, applies cost/entry assumptions, and summarizes train/holdout/replay windows. Kept cohesive while the research contract is still exploratory; split loader/evaluator/summary helpers if it becomes a production API.",
       "reviewed_at": "2026-05-08",
       "status": "planned_refactor"
     },

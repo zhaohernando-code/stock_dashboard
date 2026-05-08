@@ -53,6 +53,7 @@ from ashare_evidence.shortpick_lab import (
     validate_recent_shortpick_runs,
     validate_shortpick_run,
 )
+from ashare_evidence.shortpick_market_factor_study import build_shortpick_market_factor_study
 from ashare_evidence.shortpick_replay import (
     run_shortpick_historical_replay,
     run_shortpick_replay_distillation,
@@ -465,6 +466,21 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_replay_factor_rank.add_argument("--momentum-pool-limit", type=int, default=40)
     shortpick_replay_factor_rank.add_argument("--rank-limit", type=int, default=6)
 
+    shortpick_market_factor_study = subparsers.add_parser(
+        "shortpick-market-factor-study",
+        help="Run a market-only shortpick factor ranking study across a broader daily-bar history.",
+    )
+    shortpick_market_factor_study.add_argument("--database-url", default=None)
+    shortpick_market_factor_study.add_argument("--start-date", default="2024-01-01")
+    shortpick_market_factor_study.add_argument("--end-date", default="2026-04-30")
+    shortpick_market_factor_study.add_argument("--train-end", default="2026-02-27")
+    shortpick_market_factor_study.add_argument("--holdout-start", default="2026-03-01")
+    shortpick_market_factor_study.add_argument("--pool-limit", type=int, default=40)
+    shortpick_market_factor_study.add_argument("--rank-limit", type=int, default=6)
+    shortpick_market_factor_study.add_argument("--cost-bps", type=float, default=20.0)
+    shortpick_market_factor_study.add_argument("--apply-limit-up-filter", action="store_true")
+    shortpick_market_factor_study.add_argument("--walk-forward-lookback-days", type=int, default=120)
+
     phase5_daily = subparsers.add_parser(
         "phase5-daily-refresh",
         help="Run the daily Phase 5 refresh workflow: refresh runtime data, then write latest/history horizon-study snapshots.",
@@ -759,6 +775,23 @@ def main(argv: list[str] | None = None) -> int:
                 end_date=None if args.end_date is None else date.fromisoformat(args.end_date),
                 momentum_pool_limit=args.momentum_pool_limit,
                 rank_limit=args.rank_limit,
+            )
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-market-factor-study":
+        with session_scope(args.database_url) as session:
+            payload = build_shortpick_market_factor_study(
+                session,
+                start_date=date.fromisoformat(args.start_date),
+                end_date=date.fromisoformat(args.end_date),
+                train_end=date.fromisoformat(args.train_end),
+                holdout_start=date.fromisoformat(args.holdout_start),
+                pool_limit=args.pool_limit,
+                rank_limit=args.rank_limit,
+                cost_bps=args.cost_bps,
+                apply_limit_up_filter=args.apply_limit_up_filter,
+                walk_forward_lookback_days=args.walk_forward_lookback_days,
             )
         _print_json(payload)
         return 0
