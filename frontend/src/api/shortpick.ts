@@ -212,10 +212,13 @@ export function getShortpickReplaySources(runId: number) {
   }))();
 }
 
-export function getShortpickReplayFeedback(runId: number) {
+export function getShortpickReplayFeedback(runId?: number) {
+  const path = runId === undefined
+    ? "/shortpick-lab/replay-feedback"
+    : `/shortpick-lab/replay-runs/${encodeURIComponent(String(runId))}/feedback`;
   return (async () => ({
     data: await request<ShortpickReplayFeedbackResponse>(
-      `/shortpick-lab/replay-runs/${encodeURIComponent(String(runId))}/feedback`,
+      path,
       undefined,
       operationsDashboardRequestBehavior,
     ),

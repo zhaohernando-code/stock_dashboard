@@ -217,13 +217,22 @@ def test_replay_feedback_compares_llm_and_baselines_without_live_pollution(monke
             run_id = payload["runs"][0]["id"]
             feedback = build_shortpick_replay_feedback(session, run_id=run_id)
             families = {family["baseline_family"] for family in feedback["families"]}
-            assert {"llm", "random_same_tradeable_universe", "random_same_market_cap_bucket", "momentum_volume_baseline"} <= families
+            assert {"diagnostic_proxy_llm", "random_same_tradeable_universe", "random_same_market_cap_bucket", "momentum_volume_baseline"} <= families
             for family in feedback["families"]:
                 assert family["candidate_count"] == 2
                 assert family["official_sample_count"] == 2
                 assert family["completed_official_sample_count"] <= 2
+            assert feedback["overall"]["run_count"] == 1
+            assert feedback["overall"]["unique_replay_date_count"] == 1
+            assert feedback["overall"]["validation_by_horizon"]
+            assert feedback["overall"]["statistical_gate"]["status"] in {"exploratory", "ready"}
             assert feedback["overall"]["factor_ic_gate"]["status"] == "blocked"
             assert feedback["overall"]["news_calibration"]["status"] == "diagnostic_only"
+
+            aggregate_feedback = build_shortpick_replay_feedback(session, run_id=None)
+            assert aggregate_feedback["run_id"] is None
+            assert aggregate_feedback["overall"]["run_count"] >= 1
+            assert aggregate_feedback["overall"]["validation_by_horizon"]
 
 
 def test_historical_replay_uses_real_sealed_packet_llm_executor(monkeypatch) -> None:

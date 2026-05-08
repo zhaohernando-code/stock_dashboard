@@ -21,10 +21,10 @@
       "reviewed_at": "2026-04-30"
     },
     "src/ashare_evidence/api.py": {
-      "lines": 901,
-      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, and improvement-suggestion routes. The latest growth is still cohesive contract wiring; router extraction remains possible but would add broad touch points across the current schema surface.",
+      "lines": 1183,
+      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, improvement-suggestion, and shortpick replay routes. The latest growth adds a small aggregate replay-feedback endpoint beside existing shortpick routes; router extraction remains possible but would add broad touch points across the current schema surface.",
       "status": "accepted",
-      "reviewed_at": "2026-05-01"
+      "reviewed_at": "2026-05-08"
     },
     "src/ashare_evidence/cli.py": {
       "lines": 535,
@@ -141,8 +141,8 @@
       "reviewed_at": "2026-05-03"
     },
     "frontend/src/components/ShortpickLabView.tsx": {
-      "lines": 1617,
-      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, and historical replay workbench state in one Ant Design surface. It should be split into tab components after replay contracts stabilize, but keeping it together avoids cross-file churn during the initial visible replay rollout.",
+      "lines": 1715,
+      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, and historical replay workbench state in one Ant Design surface. Historical replay now includes aggregate statistical readouts plus per-run drilldown. It should be split into tab components after replay contracts stabilize, but keeping it together avoids cross-file churn during the initial visible replay rollout.",
       "status": "planned_refactor",
       "reviewed_at": "2026-05-08"
     },
@@ -159,8 +159,8 @@
       "status": "accepted"
     },
     "src/ashare_evidence/shortpick_replay.py": {
-      "lines": 1634,
-      "reason": "Shortpick historical replay v1 keeps sealed packet construction, sealed-packet-only LLM execution with diagnostic fallback, rejected-source/source-id leakage preservation, market-cap fallback bucketing, baseline controls, leakage audit, validation aggregation, replay API helpers, and post-audit contract normalization in one first-version workflow. Split into packet/audit/baseline modules after the contract stabilizes.",
+      "lines": 1695,
+      "reason": "Shortpick historical replay v1 keeps sealed packet construction, sealed-packet-only LLM execution with diagnostic fallback, rejected-source/source-id leakage preservation, market-cap fallback bucketing, baseline controls, leakage audit, per-run and aggregate validation statistics, replay API helpers, and post-audit contract normalization in one first-version workflow. Split into packet/audit/baseline modules after the contract stabilizes.",
       "reviewed_at": "2026-05-08",
       "status": "planned_refactor"
     }

@@ -305,6 +305,8 @@ def get_shortpick_replay_sources(session: Session, run_id: int) -> dict[str, Any
 
 def build_shortpick_replay_feedback(session: Session, *, run_id: int | None = None) -> dict[str, Any]:
     rows = _replay_validation_rows(session, run_id=run_id)
+    scope = _replay_feedback_scope(rows)
+    horizon_groups = _replay_feedback_groups(rows, group_key="horizon")
     by_family: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         by_family.setdefault(str(row["baseline_family"]), []).append(row)
@@ -336,11 +338,14 @@ def build_shortpick_replay_feedback(session: Session, *, run_id: int | None = No
         "run_id": run_id,
         "families": families,
         "overall": {
+            **scope,
             "validation_count": len(rows),
             "completed_official_sample_count": len(
                 [row for row in rows if row["official_sample_eligible"] and row["validation"].status == "completed"]
             ),
             "baseline_families": list(SHORTPICK_REPLAY_BASELINE_FAMILIES),
+            "validation_by_horizon": horizon_groups,
+            "statistical_gate": _replay_statistical_gate(rows, horizon_groups),
             "robustness_metrics": _robustness_metrics(rows),
             "factor_ic_gate": factor_ic_gate,
             "news_calibration": news_calibration,
@@ -1177,17 +1182,73 @@ def _replay_validation_rows(session: Session, *, run_id: int | None) -> list[dic
     if run_id is not None:
         query = query.where(ShortpickCandidate.run_id == run_id)
     rows = []
-    for validation, candidate in session.execute(query).all():
+    query = query.add_columns(ShortpickExperimentRun)
+    for validation, candidate, run in session.execute(query).all():
         payload = _candidate_payload(candidate)
+        family = str(payload.get("baseline_family") or "unknown")
+        if family == "llm" and (run.summary_payload or {}).get("llm_executor_kind") == "historical_replay_diagnostic_proxy":
+            family = "diagnostic_proxy_llm"
         rows.append(
             {
                 "validation": validation,
                 "candidate": candidate,
-                "baseline_family": payload.get("baseline_family") or "unknown",
+                "baseline_family": family,
                 "official_sample_eligible": bool(payload.get("official_sample_eligible")),
+                "run_id": candidate.run_id,
+                "run_date": run.run_date,
             }
         )
     return rows
+
+
+def _replay_feedback_scope(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    run_ids = sorted({int(row["run_id"]) for row in rows if row.get("run_id") is not None})
+    dates = sorted({row["run_date"] for row in rows if row.get("run_date") is not None})
+    return {
+        "run_count": len(run_ids),
+        "unique_replay_date_count": len(dates),
+        "date_from": dates[0].isoformat() if dates else None,
+        "date_to": dates[-1].isoformat() if dates else None,
+    }
+
+
+def _replay_statistical_gate(rows: list[dict[str, Any]], horizon_groups: list[dict[str, Any]]) -> dict[str, Any]:
+    completed_official = [
+        row
+        for row in rows
+        if row["official_sample_eligible"] and row["validation"].status == "completed"
+    ]
+    completed_dates = {row["run_date"] for row in completed_official if row.get("run_date") is not None}
+    completed_symbols = {row["candidate"].symbol for row in completed_official}
+    min_completed_samples = 30
+    min_completed_dates = 5
+    horizon_readiness = []
+    for group in horizon_groups:
+        completed_count = int(group.get("completed_official_sample_count") or 0)
+        horizon_readiness.append(
+            {
+                "horizon": int(group["group_key"]),
+                "completed_official_sample_count": completed_count,
+                "ready": completed_count >= min_completed_samples,
+            }
+        )
+    ready_horizons = [item["horizon"] for item in horizon_readiness if item["ready"]]
+    status = "ready" if len(completed_official) >= min_completed_samples and len(completed_dates) >= min_completed_dates else "exploratory"
+    return {
+        "status": status,
+        "min_completed_samples": min_completed_samples,
+        "min_completed_dates": min_completed_dates,
+        "completed_official_sample_count": len(completed_official),
+        "completed_date_count": len(completed_dates),
+        "completed_symbol_count": len(completed_symbols),
+        "ready_horizons": ready_horizons,
+        "horizon_readiness": horizon_readiness,
+        "reason": (
+            "Replay sample is broad enough for aggregate readout."
+            if status == "ready"
+            else "Replay sample is still exploratory; add more historical dates before treating family-level differences as statistically meaningful."
+        ),
+    }
 
 
 def _replay_feedback_groups(rows: list[dict[str, Any]], *, group_key: str) -> list[dict[str, Any]]:

@@ -99,9 +99,9 @@ from ashare_evidence.shortpick_lab import (
     build_shortpick_model_feedback,
     get_shortpick_candidate,
     get_shortpick_run,
-    list_shortpick_validation_queue,
     list_shortpick_candidates,
     list_shortpick_runs,
+    list_shortpick_validation_queue,
     retry_failed_shortpick_rounds,
     run_shortpick_experiment,
     validate_shortpick_run,
@@ -700,6 +700,13 @@ def create_app(
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return build_shortpick_replay_feedback(session, run_id=run_id)
+
+    @app.get("/shortpick-lab/replay-feedback")
+    def shortpick_replay_aggregate_feedback(
+        access: StockAccessContext = Depends(require_stock_access),
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        return build_shortpick_replay_feedback(session, run_id=None)
 
     @app.post("/shortpick-lab/runs", response_model=ShortpickRunView)
     def shortpick_run_create(

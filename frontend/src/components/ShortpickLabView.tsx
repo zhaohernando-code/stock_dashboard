@@ -234,6 +234,7 @@ function topicLabel(candidate: ShortpickCandidateView): string {
 
 function baselineFamilyLabel(value?: string | null): string {
   if (value === "llm") return "LLM";
+  if (value === "diagnostic_proxy_llm") return "诊断代理";
   if (value === "random_same_tradeable_universe") return "随机";
   if (value === "random_same_market_cap_bucket") return "同市值随机";
   if (value === "momentum_volume_baseline") return "动量成交量";
@@ -282,6 +283,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
   const [replayCandidates, setReplayCandidates] = useState<ShortpickCandidateView[]>([]);
   const [replaySources, setReplaySources] = useState<ShortpickReplaySourceResponse | null>(null);
   const [replayFeedback, setReplayFeedback] = useState<ShortpickReplayFeedbackResponse | null>(null);
+  const [replayAggregateFeedback, setReplayAggregateFeedback] = useState<ShortpickReplayFeedbackResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [validationLoading, setValidationLoading] = useState(false);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
@@ -364,10 +366,14 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
     setReplayLoading(true);
     setError(null);
     try {
-      const runList = await api.getShortpickReplayRuns({ limit: 30 });
+      const [runList, aggregateStats] = await Promise.all([
+        api.getShortpickReplayRuns({ limit: 100 }),
+        api.getShortpickReplayFeedback(),
+      ]);
       const targetRunId = runId ?? selectedReplayRun?.id ?? runList.data.items[0]?.id;
       const target = runList.data.items.find((item) => item.id === targetRunId) ?? runList.data.items[0] ?? null;
       setReplayRuns(runList.data.items);
+      setReplayAggregateFeedback(aggregateStats.data);
       setSelectedReplayRun(target);
       if (target) {
         const [candidateList, sourcePacket, replayStats] = await Promise.all([
@@ -732,6 +738,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
                   candidates={replayCandidates}
                   sources={replaySources}
                   feedback={replayFeedback}
+                  aggregateFeedback={replayAggregateFeedback}
                   loading={replayLoading}
                   selectedBenchmark={selectedBenchmark}
                   onSelectRun={(runId) => void loadReplay(runId)}
@@ -1155,6 +1162,7 @@ function HistoricalReplayTab({
   candidates,
   sources,
   feedback,
+  aggregateFeedback,
   loading,
   selectedBenchmark,
   onSelectRun,
@@ -1165,6 +1173,7 @@ function HistoricalReplayTab({
   candidates: ShortpickCandidateView[];
   sources: ShortpickReplaySourceResponse | null;
   feedback: ShortpickReplayFeedbackResponse | null;
+  aggregateFeedback: ShortpickReplayFeedbackResponse | null;
   loading: boolean;
   selectedBenchmark: string;
   onSelectRun: (runId: number) => void;
@@ -1233,9 +1242,11 @@ function HistoricalReplayTab({
 
   return (
     <>
+      <ReplayStatisticalSummary feedback={aggregateFeedback} selectedBenchmark={selectedBenchmark} />
+
       <Card
         className="panel-card"
-        title="Replay 批次"
+        title="Replay 批次与下钻"
         extra={<Button icon={<ReloadOutlined />} onClick={onReload} loading={loading}>刷新回放</Button>}
       >
         <Space wrap className="shortpick-filter-bar">
@@ -1391,6 +1402,93 @@ function HistoricalReplayTab({
   );
 }
 
+function ReplayStatisticalSummary({
+  feedback,
+  selectedBenchmark,
+}: {
+  feedback: ShortpickReplayFeedbackResponse | null;
+  selectedBenchmark: string;
+}) {
+  const overall = feedback?.overall ?? {};
+  const gate = recordValue<Record<string, unknown>>(overall, "statistical_gate") ?? {};
+  const horizonRows = (recordValue<ShortpickFeedbackGroup[]>(overall, "validation_by_horizon") ?? []).map((group) => {
+    const metric = group.benchmark_metrics?.[selectedBenchmark];
+    return {
+      ...group,
+      mean_excess_return: metric?.mean_excess_return ?? group.mean_excess_return,
+      positive_excess_rate: metric?.positive_excess_rate ?? group.positive_excess_rate,
+    };
+  });
+  const familyRows = feedback?.families ?? [];
+  const completedSamples = Number(gate.completed_official_sample_count ?? overall.completed_official_sample_count ?? 0);
+  const completedDates = Number(gate.completed_date_count ?? 0);
+  const status = String(gate.status ?? "exploratory");
+  return (
+    <Card className="panel-card" title="历史回放统计验收">
+      <Alert
+        showIcon
+        type={status === "ready" ? "success" : "warning"}
+        message={status === "ready" ? "样本已达到基础统计观察门槛" : "样本仍偏少，当前只能作为探索性统计"}
+        description={`覆盖 ${Number(overall.unique_replay_date_count ?? 0)} 个历史日期、${Number(overall.run_count ?? 0)} 个 replay run；已完成 official 验证样本 ${completedSamples}，完成日期 ${completedDates}。${String(gate.reason ?? "")}`}
+      />
+      <Row gutter={[16, 16]} className="shortpick-metrics">
+        <Col xs={24} md={6}>
+          <Statistic title="历史日期" value={Number(overall.unique_replay_date_count ?? 0)} suffix="天" />
+          <Text type="secondary">{String(overall.date_from ?? "--")} 至 {String(overall.date_to ?? "--")}</Text>
+        </Col>
+        <Col xs={24} md={6}>
+          <Statistic title="Replay Run" value={Number(overall.run_count ?? 0)} />
+          <Text type="secondary">候选 horizon 行 {Number(overall.validation_count ?? 0)}</Text>
+        </Col>
+        <Col xs={24} md={6}>
+          <Statistic title="已完成 official 样本" value={completedSamples} />
+          <Text type="secondary">门槛 {Number(gate.min_completed_samples ?? 30)} 样本 / {Number(gate.min_completed_dates ?? 5)} 日期</Text>
+        </Col>
+        <Col xs={24} md={6}>
+          <Statistic title="可观察 horizon" value={(recordValue<number[]>(gate, "ready_horizons") ?? []).join(" / ") || "--"} />
+          <Text type="secondary">1 / 3 / 5 / 10 / 20 日逐步验收</Text>
+        </Col>
+      </Row>
+      <Table
+        className="shortpick-replay-stat-table"
+        rowKey="group_key"
+        size="small"
+        pagination={false}
+        columns={[
+          { title: "Horizon", render: (_, item: ShortpickFeedbackGroup) => `${item.group_key}日` },
+          { title: "样本", render: (_, item: ShortpickFeedbackGroup) => `${Number(item.completed_official_sample_count ?? 0)} / ${Number(item.official_sample_count ?? 0)}` },
+          { title: `平均超额 · ${benchmarkLabel(selectedBenchmark)}`, render: (_, item: ShortpickFeedbackGroup) => <Text className={`value-${valueTone(item.mean_excess_return)}`}>{formatPercent(item.mean_excess_return)}</Text> },
+          { title: "正超额占比", render: (_, item: ShortpickFeedbackGroup) => formatPercent(item.positive_excess_rate) },
+          { title: "状态", render: (_, item: ShortpickFeedbackGroup) => Object.entries(item.status_counts ?? {}).map(([key, value]) => `${key}:${value}`).join(" · ") || "--" },
+        ]}
+        dataSource={horizonRows}
+      />
+      <Table
+        className="shortpick-replay-stat-table"
+        rowKey="baseline_family"
+        size="small"
+        pagination={false}
+        columns={[
+          { title: "组别", render: (_, item) => baselineFamilyLabel(item.baseline_family) },
+          { title: "候选", render: (_, item) => `${item.completed_official_sample_count} / ${item.official_sample_count}` },
+          {
+            title: "5日平均超额",
+            render: (_, item) => {
+              const horizon5 = item.validation_by_horizon.find((group) => String(group.group_key) === "5");
+              const metric = horizon5?.benchmark_metrics?.[selectedBenchmark];
+              const value = metric?.mean_excess_return ?? horizon5?.mean_excess_return;
+              return <Text className={`value-${valueTone(value)}`}>{formatPercent(value)}</Text>;
+            },
+          },
+          { title: "去最佳单票", render: (_, item) => formatPercent(recordValue<number>(item.robustness_metrics, "drop_best_symbol_mean_excess_return")) },
+          { title: "去最佳日期", render: (_, item) => formatPercent(recordValue<number>(item.robustness_metrics, "drop_best_date_mean_excess_return")) },
+        ]}
+        dataSource={familyRows}
+      />
+    </Card>
+  );
+}
+
 function ReplayFeedbackCards({
   feedback,
   selectedBenchmark,
@@ -1404,7 +1502,7 @@ function ReplayFeedbackCards({
     <>
       <Row gutter={[16, 16]} className="shortpick-feedback-summary">
         {(feedback?.families ?? []).map((family) => {
-          const horizon5 = family.validation_by_horizon.find((group) => String(group.group_key) === "h5") ?? family.validation_by_horizon[0];
+          const horizon5 = family.validation_by_horizon.find((group) => String(group.group_key) === "5") ?? family.validation_by_horizon[0];
           const metric = horizon5?.benchmark_metrics?.[selectedBenchmark];
           const rawMean = metric?.mean_excess_return ?? horizon5?.mean_excess_return;
           const robustness = family.robustness_metrics ?? {};
