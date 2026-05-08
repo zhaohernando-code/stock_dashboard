@@ -4,6 +4,8 @@ import asyncio
 import contextlib
 import logging
 import os
+import threading
+import time
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from datetime import date
@@ -144,6 +146,9 @@ def create_app(
     resolved_database_url = get_database_url(database_url)
     init_database(resolved_database_url)
     session_factory = get_session_factory(resolved_database_url)
+    market_factor_study_cache: dict[str, tuple[float, dict[str, object]]] = {}
+    market_factor_study_lock = threading.Lock()
+    market_factor_study_ttl_seconds = 3600.0
     with session_factory() as session:
         ensure_runtime_defaults(session)
         session.commit()
@@ -647,19 +652,30 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        now = time.monotonic()
+        cached = market_factor_study_cache.get(benchmark_mode)
+        if cached and now - cached[0] < market_factor_study_ttl_seconds:
+            return cached[1]
         try:
-            return build_shortpick_market_factor_study(
-                session,
-                start_date=date(2023, 5, 25),
-                end_date=date(2026, 4, 30),
-                train_end=date(2026, 2, 27),
-                holdout_start=date(2026, 3, 1),
-                pool_limit=40,
-                rank_limit=6,
-                cost_bps=20.0,
-                benchmark_mode=benchmark_mode,
-                walk_forward_lookback_days=120,
-            )
+            with market_factor_study_lock:
+                now = time.monotonic()
+                cached = market_factor_study_cache.get(benchmark_mode)
+                if cached and now - cached[0] < market_factor_study_ttl_seconds:
+                    return cached[1]
+                result = build_shortpick_market_factor_study(
+                    session,
+                    start_date=date(2023, 5, 25),
+                    end_date=date(2026, 4, 30),
+                    train_end=date(2026, 2, 27),
+                    holdout_start=date(2026, 3, 1),
+                    pool_limit=40,
+                    rank_limit=6,
+                    cost_bps=20.0,
+                    benchmark_mode=benchmark_mode,
+                    walk_forward_lookback_days=120,
+                )
+                market_factor_study_cache[benchmark_mode] = (time.monotonic(), result)
+                return result
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

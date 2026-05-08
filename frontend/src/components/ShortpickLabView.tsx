@@ -20,7 +20,7 @@ import {
 } from "antd";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
 import { ExperimentOutlined, ReloadOutlined, SafetyCertificateOutlined, SyncOutlined } from "@ant-design/icons";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type {
   ShortpickCandidateView,
@@ -367,6 +367,8 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
   const [replayFeedback, setReplayFeedback] = useState<ShortpickReplayFeedbackResponse | null>(null);
   const [replayAggregateFeedback, setReplayAggregateFeedback] = useState<ShortpickReplayFeedbackResponse | null>(null);
   const [marketStudy, setMarketStudy] = useState<ShortpickMarketFactorStudyResponse | null>(null);
+  const [marketStudyLoading, setMarketStudyLoading] = useState(false);
+  const marketStudyLoadingRef = useRef(false);
   const [loading, setLoading] = useState(false);
   const [validationLoading, setValidationLoading] = useState(false);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
@@ -376,6 +378,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
   const [validationFilters, setValidationFilters] = useState({ status: "", horizon: "", model: "", symbol: "" });
   const [validationPage, setValidationPage] = useState({ current: 1, pageSize: DEFAULT_VALIDATION_PAGE_SIZE });
   const [selectedBenchmark, setSelectedBenchmark] = useState("hs300");
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState("today");
 
   const latestRun = selectedRun ?? runs[0] ?? null;
   const normalCandidates = useMemo(
@@ -447,21 +450,37 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
     }
   }
 
-  async function loadReplay(runId?: number): Promise<void> {
+  async function loadMarketStudy(): Promise<void> {
+    if (marketStudy || marketStudyLoadingRef.current) return;
+    marketStudyLoadingRef.current = true;
+    setMarketStudyLoading(true);
+    try {
+      const result = await api.getShortpickMarketFactorStudy();
+      setMarketStudy(result.data);
+    } catch (studyError) {
+      console.warn("加载策略收口失败", studyError);
+    } finally {
+      marketStudyLoadingRef.current = false;
+      setMarketStudyLoading(false);
+    }
+  }
+
+  async function loadReplay(runId?: number, options: { includeMarketStudy?: boolean } = {}): Promise<void> {
     setReplayLoading(true);
     setError(null);
     try {
-      const [runList, aggregateStats, marketFactorStudy] = await Promise.all([
+      const [runList, aggregateStats] = await Promise.all([
         api.getShortpickReplayRuns({ limit: 100 }),
         api.getShortpickReplayFeedback(),
-        api.getShortpickMarketFactorStudy(),
       ]);
       const targetRunId = runId ?? selectedReplayRun?.id ?? runList.data.items[0]?.id;
       const target = runList.data.items.find((item) => item.id === targetRunId) ?? runList.data.items[0] ?? null;
       setReplayRuns(runList.data.items);
       setReplayAggregateFeedback(aggregateStats.data);
-      setMarketStudy(marketFactorStudy.data);
       setSelectedReplayRun(target);
+      if (options.includeMarketStudy) {
+        void loadMarketStudy();
+      }
       if (target) {
         const [candidateList, sourcePacket, replayStats] = await Promise.all([
           api.getShortpickReplayCandidates(target.id),
@@ -725,7 +744,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
               void loadLab(latestRun?.id);
               void loadValidationQueue(validationPage.current, validationPage.pageSize);
               void loadFeedback();
-              void loadReplay(selectedReplayRun?.id);
+              void loadReplay(selectedReplayRun?.id, { includeMarketStudy: activeWorkspaceTab === "replay" });
             }} loading={loading || validationLoading || feedbackLoading || replayLoading}>
               刷新
             </Button>
@@ -771,7 +790,13 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
       {latestRun || replayRuns.length ? (
         <Tabs
           className="shortpick-workspace-tabs"
-          defaultActiveKey={latestRun ? "today" : "replay"}
+          activeKey={latestRun ? activeWorkspaceTab : "replay"}
+          onChange={(key) => {
+            setActiveWorkspaceTab(key);
+            if (key === "replay") {
+              void loadReplay(selectedReplayRun?.id, { includeMarketStudy: true });
+            }
+          }}
           items={[
             {
               key: "today",
@@ -827,10 +852,11 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
                   feedback={replayFeedback}
                   aggregateFeedback={replayAggregateFeedback}
                   marketStudy={marketStudy}
+                  marketStudyLoading={marketStudyLoading}
                   loading={replayLoading}
                   selectedBenchmark={selectedBenchmark}
-                  onSelectRun={(runId) => void loadReplay(runId)}
-                  onReload={() => void loadReplay(selectedReplayRun?.id)}
+                  onSelectRun={(runId) => void loadReplay(runId, { includeMarketStudy: true })}
+                  onReload={() => void loadReplay(selectedReplayRun?.id, { includeMarketStudy: true })}
                 />
               ),
             },
@@ -1252,6 +1278,7 @@ function HistoricalReplayTab({
   feedback,
   aggregateFeedback,
   marketStudy,
+  marketStudyLoading,
   loading,
   selectedBenchmark,
   onSelectRun,
@@ -1264,6 +1291,7 @@ function HistoricalReplayTab({
   feedback: ShortpickReplayFeedbackResponse | null;
   aggregateFeedback: ShortpickReplayFeedbackResponse | null;
   marketStudy: ShortpickMarketFactorStudyResponse | null;
+  marketStudyLoading: boolean;
   loading: boolean;
   selectedBenchmark: string;
   onSelectRun: (runId: number) => void;
@@ -1332,7 +1360,12 @@ function HistoricalReplayTab({
 
   return (
     <>
-      <ReplayStatisticalSummary feedback={aggregateFeedback} marketStudy={marketStudy} selectedBenchmark={selectedBenchmark} />
+      <ReplayStatisticalSummary
+        feedback={aggregateFeedback}
+        marketStudy={marketStudy}
+        marketStudyLoading={marketStudyLoading}
+        selectedBenchmark={selectedBenchmark}
+      />
 
       <Card
         className="panel-card"
@@ -1492,7 +1525,13 @@ function HistoricalReplayTab({
   );
 }
 
-function ReplayStrategyCloseout({ study }: { study: ShortpickMarketFactorStudyResponse | null }) {
+function ReplayStrategyCloseout({
+  study,
+  loading,
+}: {
+  study: ShortpickMarketFactorStudyResponse | null;
+  loading: boolean;
+}) {
   const defaultMetric = marketPortfolioMetric(study, "holdout", "ret10_turnover_cooldown");
   const attackMetric = marketPortfolioMetric(study, "holdout", "ret10_turnover");
   const gateMetric = marketPortfolioMetric(study, "holdout", "ret10_turnover_cooldown_regime_gate");
@@ -1510,7 +1549,9 @@ function ReplayStrategyCloseout({ study }: { study: ShortpickMarketFactorStudyRe
       <Space direction="vertical" size={2}>
         <Title level={5}>策略收口</Title>
         <Text type="secondary">
-          先用市场行情因子做可重复验证：从每日候选池扩大到 {poolLimit} 只，再选 {rankLimit} 只；收益已扣除单次 {costBps}bp 成本，样本范围 {scopeStart} 至 {scopeEnd}。
+          {loading && !study
+            ? "策略收口数据正在后台加载；历史回放主体不依赖这项重计算。"
+            : `先用市场行情因子做可重复验证：从每日候选池扩大到 ${poolLimit} 只，再选 ${rankLimit} 只；收益已扣除单次 ${costBps}bp 成本，样本范围 ${scopeStart} 至 ${scopeEnd}。`}
         </Text>
       </Space>
       <Row gutter={[12, 12]}>
@@ -1558,10 +1599,12 @@ function ReplayStrategyCloseout({ study }: { study: ShortpickMarketFactorStudyRe
 function ReplayStatisticalSummary({
   feedback,
   marketStudy,
+  marketStudyLoading,
   selectedBenchmark,
 }: {
   feedback: ShortpickReplayFeedbackResponse | null;
   marketStudy: ShortpickMarketFactorStudyResponse | null;
+  marketStudyLoading: boolean;
   selectedBenchmark: string;
 }) {
   const overall = feedback?.overall ?? {};
@@ -1589,7 +1632,7 @@ function ReplayStatisticalSummary({
         message={`当前结论：${replayGateLabel(status)}`}
         description={`要验证的是：大模型在没有页面上下文的情况下，只靠当时能查到的公开数据，能否给出短期投机式选股；事后按 1 / 3 / 5 / 10 / 20 个交易日验证。当前覆盖 ${Number(overall.unique_replay_date_count ?? 0)} 个历史日期、${Number(overall.run_count ?? 0)} 个回放批次，已完成正式样本 ${completedSamples}，完成日期 ${completedDates}。${String(gate.reason ?? "")}`}
       />
-      <ReplayStrategyCloseout study={marketStudy} />
+      <ReplayStrategyCloseout study={marketStudy} loading={marketStudyLoading} />
       <div className="shortpick-replay-question-grid">
         <div>
           <span>验证问题</span>

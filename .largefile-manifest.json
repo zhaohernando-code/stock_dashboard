@@ -21,8 +21,8 @@
       "reviewed_at": "2026-04-30"
     },
     "src/ashare_evidence/api.py": {
-      "lines": 1210,
-      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, improvement-suggestion, shortpick lab, shortpick replay, and market-factor study routes. The latest change exposes the Short Pick Lab strategy closeout study through the same shortpick route group; router extraction remains possible but would add broad touch points across the current schema surface.",
+      "lines": 1226,
+      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, improvement-suggestion, shortpick lab, shortpick replay, and market-factor study routes. The latest change exposes the Short Pick Lab strategy closeout study through the same shortpick route group and caches that heavy read-only study to avoid repeated market-wide recomputation on frontend navigation; router extraction remains possible but would add broad touch points across the current schema surface.",
       "status": "accepted",
       "reviewed_at": "2026-05-09"
     },
@@ -141,8 +141,8 @@
       "reviewed_at": "2026-05-03"
     },
     "frontend/src/components/ShortpickLabView.tsx": {
-      "lines": 1921,
-      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, historical replay workbench state, and the strategy closeout readout in one Ant Design surface. Historical replay now includes aggregate statistical readouts, per-run drilldown, readable replay family labels, and the market-factor closeout summary for cooldown/default, ret10-turnover/offensive, breadth/continuity gate, and diversification diagnostics. It should be split into tab components after replay contracts stabilize, but keeping it together avoids cross-file churn during this visible replay closeout.",
+      "lines": 1964,
+      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, historical replay workbench state, and the strategy closeout readout in one Ant Design surface. Historical replay now includes aggregate statistical readouts, per-run drilldown, readable replay family labels, and the market-factor closeout summary for cooldown/default, ret10-turnover/offensive, breadth/continuity gate, and diversification diagnostics. The strategy closeout now lazy-loads in the replay tab instead of blocking initial lab navigation. It should be split into tab components after replay contracts stabilize, but keeping it together avoids cross-file churn during this visible replay closeout.",
       "status": "planned_refactor",
       "reviewed_at": "2026-05-09"
     },
