@@ -358,6 +358,16 @@ body[data-theme="dark"] {
   margin-bottom: 16px;
 }
 
+.shortpick-strategy-closeout {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.shortpick-strategy-closeout h5.ant-typography {
+  margin: 0;
+}
+
 .shortpick-replay-question-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -9,10 +9,10 @@
       "reviewed_at": "2026-05-08"
     },
     "frontend/src/styles.css": {
-      "lines": 1165,
-      "reason": "Global CSS: variables, layout, component styles, Ant Design overrides, responsive breakpoints, dark-mode Select dropdown/selection-item fixes. Cascade-dependent.",
+      "lines": 1415,
+      "reason": "Global CSS: variables, layout, component styles, Ant Design overrides, responsive breakpoints, dark-mode Select dropdown/selection-item fixes, and Short Pick Lab replay/strategy readout styling. Cascade-dependent.",
       "status": "accepted",
-      "reviewed_at": "2026-05-01"
+      "reviewed_at": "2026-05-09"
     },
     "src/ashare_evidence/analysis_pipeline.py": {
       "lines": 927,
@@ -21,10 +21,10 @@
       "reviewed_at": "2026-04-30"
     },
     "src/ashare_evidence/api.py": {
-      "lines": 1187,
-      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, improvement-suggestion, shortpick lab, and shortpick replay routes. The latest change keeps shortpick run-list endpoints on compact summaries to avoid large payload timeouts; router extraction remains possible but would add broad touch points across the current schema surface.",
+      "lines": 1210,
+      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, improvement-suggestion, shortpick lab, shortpick replay, and market-factor study routes. The latest change exposes the Short Pick Lab strategy closeout study through the same shortpick route group; router extraction remains possible but would add broad touch points across the current schema surface.",
       "status": "accepted",
-      "reviewed_at": "2026-05-08"
+      "reviewed_at": "2026-05-09"
     },
     "src/ashare_evidence/cli.py": {
       "lines": 891,
@@ -141,10 +141,10 @@
       "reviewed_at": "2026-05-03"
     },
     "frontend/src/components/ShortpickLabView.tsx": {
-      "lines": 1816,
-      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, and historical replay workbench state in one Ant Design surface. Historical replay now includes aggregate statistical readouts, per-run drilldown, and expanded replay family labels for distillation and rejector comparisons; live validation/model-feedback loaders now clear stale tab errors before retry. It should be split into tab components after replay contracts stabilize, but keeping it together avoids cross-file churn during the visible replay rollout.",
+      "lines": 1921,
+      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, historical replay workbench state, and the strategy closeout readout in one Ant Design surface. Historical replay now includes aggregate statistical readouts, per-run drilldown, readable replay family labels, and the market-factor closeout summary for cooldown/default, ret10-turnover/offensive, breadth/continuity gate, and diversification diagnostics. It should be split into tab components after replay contracts stabilize, but keeping it together avoids cross-file churn during this visible replay closeout.",
       "status": "planned_refactor",
-      "reviewed_at": "2026-05-08"
+      "reviewed_at": "2026-05-09"
     },
     "src/ashare_evidence/event_analyzer.py": {
       "lines": 526,

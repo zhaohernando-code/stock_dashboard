@@ -107,6 +107,7 @@ from ashare_evidence.shortpick_lab import (
     run_shortpick_experiment,
     validate_shortpick_run,
 )
+from ashare_evidence.shortpick_market_factor_study import build_shortpick_market_factor_study
 from ashare_evidence.shortpick_replay import (
     build_shortpick_replay_feedback,
     get_shortpick_replay_run,
@@ -639,6 +640,28 @@ def create_app(
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
         return build_shortpick_model_feedback(session)
+
+    @app.get("/shortpick-lab/market-factor-study")
+    def shortpick_market_factor_study(
+        benchmark_mode: str = Query(default="universe_equal_weight"),
+        access: StockAccessContext = Depends(require_stock_access),
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        try:
+            return build_shortpick_market_factor_study(
+                session,
+                start_date=date(2023, 5, 25),
+                end_date=date(2026, 4, 30),
+                train_end=date(2026, 2, 27),
+                holdout_start=date(2026, 3, 1),
+                pool_limit=40,
+                rank_limit=6,
+                cost_bps=20.0,
+                benchmark_mode=benchmark_mode,
+                walk_forward_lookback_days=120,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/shortpick-lab/replay-runs", response_model=ShortpickRunListResponse)
     def shortpick_replay_run_list(

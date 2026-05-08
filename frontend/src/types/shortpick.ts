@@ -327,3 +327,33 @@ export interface ShortpickReplayFeedbackResponse {
   families: ShortpickReplayFeedbackFamily[];
   overall: Record<string, unknown>;
 }
+
+export interface ShortpickMarketPortfolioMetric {
+  portfolio_count?: number | null;
+  signal_day_count?: number | null;
+  completed_member_count?: number | null;
+  average_member_count?: number | null;
+  mean_net_excess_return?: number | null;
+  trimmed_mean_net_excess_return?: number | null;
+  positive_net_excess_rate?: number | null;
+  volatility?: number | null;
+  worst_portfolio_return?: number | null;
+  best_portfolio_return?: number | null;
+  max_additive_drawdown?: number | null;
+  by_horizon?: Record<string, Record<string, unknown>>;
+  concentration?: Record<string, unknown>;
+}
+
+export interface ShortpickMarketFactorStudyResponse {
+  experiment: string;
+  validation_mode: string;
+  config: Record<string, unknown>;
+  data_scope: Record<string, unknown>;
+  period_summary: Record<string, Record<string, Record<string, unknown>>>;
+  paired_vs_base: Record<string, Record<string, Record<string, unknown>>>;
+  walk_forward_selection: Record<string, unknown>;
+  regime_gate: Record<string, unknown>;
+  monthly_summary: Record<string, Record<string, unknown>>;
+  portfolio_summary: Record<string, Record<string, ShortpickMarketPortfolioMetric>>;
+  regime_summary: Record<string, unknown>;
+}

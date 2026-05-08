@@ -3,6 +3,7 @@ import type {
   ShortpickCandidateListResponse,
   ShortpickCandidateView,
   ShortpickModelFeedbackResponse,
+  ShortpickMarketFactorStudyResponse,
   ShortpickRunCreateRequest,
   ShortpickRunListResponse,
   ShortpickRunValidateRequest,
@@ -219,6 +220,17 @@ export function getShortpickReplayFeedback(runId?: number) {
   return (async () => ({
     data: await request<ShortpickReplayFeedbackResponse>(
       path,
+      undefined,
+      longRunningRequestBehavior,
+    ),
+    source: buildSourceInfo(),
+  }))();
+}
+
+export function getShortpickMarketFactorStudy() {
+  return (async () => ({
+    data: await request<ShortpickMarketFactorStudyResponse>(
+      "/shortpick-lab/market-factor-study",
       undefined,
       longRunningRequestBehavior,
     ),
