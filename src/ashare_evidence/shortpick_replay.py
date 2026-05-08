@@ -184,6 +184,7 @@ def validate_historical_replay_run(
     benchmark_maps = benchmark_close_maps(session)
     updated = 0
     for candidate in candidates:
+        candidate_payload = _ensure_replay_candidate_contract(candidate)
         market_sync = {
             "status": "historical_replay_existing_only",
             "reason": "Historical replay validation never fetches current market data.",
@@ -202,14 +203,20 @@ def validate_historical_replay_run(
                 **dict(snapshot.validation_payload or {}),
                 "experiment_mode": SHORTPICK_REPLAY_EXPERIMENT_MODE,
                 "baseline_family": _candidate_baseline_family(candidate),
-                "source_packet_id": _candidate_payload(candidate).get("source_packet_id"),
-                "source_packet_hash": _candidate_payload(candidate).get("source_packet_hash"),
-                "leakage_audit_status": _candidate_payload(candidate).get("leakage_audit_status"),
-                "leakage_audit_reasons": _candidate_payload(candidate).get("leakage_audit_reasons") or [],
-                "official_sample_eligible": bool(_candidate_payload(candidate).get("official_sample_eligible")),
+                "source_packet_id": candidate_payload.get("source_packet_id"),
+                "source_packet_hash": candidate_payload.get("source_packet_hash"),
+                "leakage_audit_status": candidate_payload.get("leakage_audit_status"),
+                "leakage_audit_reasons": candidate_payload.get("leakage_audit_reasons") or [],
+                "official_sample_eligible": bool(candidate_payload.get("official_sample_eligible")),
                 "validation_mode": SHORTPICK_OFFICIAL_VALIDATION_MODE,
+                "market_sync_status": market_sync["status"],
+                "benchmark_sync_status": "historical_replay_existing_only",
             }
-            if not _candidate_payload(candidate).get("official_sample_eligible"):
+            if "benchmark_dimensions" not in snapshot.validation_payload:
+                reason = snapshot.validation_payload.get("pending_reason") or "Historical replay validation is not completed for this horizon."
+                snapshot.validation_payload["benchmark_dimensions"] = _pending_replay_benchmark_dimensions(reason=reason)
+                snapshot.validation_payload["available_benchmark_dimensions"] = []
+            if not candidate_payload.get("official_sample_eligible"):
                 snapshot.validation_payload["official_validation"] = False
             updated += 1
     display_gate = _apply_shortpick_candidate_display_gates(session, run_id=run_id)
@@ -289,15 +296,20 @@ def build_shortpick_replay_feedback(session: Session, *, run_id: int | None = No
         by_family.setdefault(str(row["baseline_family"]), []).append(row)
     families = []
     for family, family_rows in sorted(by_family.items()):
+        candidate_ids = {row["candidate"].id for row in family_rows}
+        official_candidate_ids = {row["candidate"].id for row in family_rows if row["official_sample_eligible"]}
+        completed_official_candidate_ids = {
+            row["candidate"].id
+            for row in family_rows
+            if row["official_sample_eligible"] and row["validation"].status == "completed"
+        }
         families.append(
             {
                 "baseline_family": family,
                 "label": _baseline_label(family),
-                "candidate_count": len({row["candidate"].id for row in family_rows}),
-                "official_sample_count": len([row for row in family_rows if row["official_sample_eligible"]]),
-                "completed_official_sample_count": len(
-                    [row for row in family_rows if row["official_sample_eligible"] and row["validation"].status == "completed"]
-                ),
+                "candidate_count": len(candidate_ids),
+                "official_sample_count": len(official_candidate_ids),
+                "completed_official_sample_count": len(completed_official_candidate_ids),
                 "validation_by_horizon": _replay_feedback_groups(family_rows, group_key="horizon"),
                 "robustness_metrics": _robustness_metrics(family_rows),
             }
@@ -554,6 +566,20 @@ def _insert_candidate(
         thesis=thesis,
         evidence_mapping={"thesis": [source["source_id"] for source in support_sources[:2]]},
     )
+    limitations = [] if audit["status"] == "pass" else list(audit["reasons"])
+    tradeability = {
+        "in_universe": True,
+        "is_tradeable": True,
+        "excluded_reason": None,
+        "as_of_date": run.run_date.isoformat(),
+        "latest_bar_at": member.latest_bar.observed_at.isoformat(),
+        "close_price": member.latest_bar.close_price,
+        "amount": member.latest_bar.amount,
+        "turnover_rate": member.turnover_rate,
+        "market_cap": member.market_cap,
+        "market_cap_bucket": member.market_cap_bucket,
+        "industry": member.industry,
+    }
     candidate_payload = {
         "experiment_mode": SHORTPICK_REPLAY_EXPERIMENT_MODE,
         "information_mode": SHORTPICK_HISTORICAL_REPLAY_MODE,
@@ -568,6 +594,10 @@ def _insert_candidate(
         "leakage_audit_reasons": audit["reasons"],
         "official_sample_eligible": audit["status"] == "pass",
         "exclusion_reason": None if audit["status"] == "pass" else "; ".join(audit["reasons"]),
+        "tradeability": tradeability,
+        "market_cap_bucket": member.market_cap_bucket,
+        "industry": member.industry or "unknown",
+        "limitations": limitations,
         "universe_membership": {
             "in_universe": True,
             "is_tradeable": True,
@@ -600,7 +630,7 @@ def _insert_candidate(
                 for source in support_sources
             ],
             novelty_note="historical replay baseline candidate" if baseline_family != "llm" else "sealed packet proxy LLM candidate",
-            limitations=[] if audit["status"] == "pass" else audit["reasons"],
+            limitations=limitations,
             convergence_group=baseline_family,
             research_priority="single_model_high_conviction" if baseline_family == "llm" else "baseline_control",
             parse_status="parsed",
@@ -907,6 +937,27 @@ def _candidate_payload(candidate: ShortpickCandidate) -> dict[str, Any]:
     return candidate.candidate_payload if isinstance(candidate.candidate_payload, dict) else {}
 
 
+def _ensure_replay_candidate_contract(candidate: ShortpickCandidate) -> dict[str, Any]:
+    payload = dict(_candidate_payload(candidate))
+    membership = dict(payload.get("universe_membership") or {})
+    tradeability = dict(payload.get("tradeability") or {})
+    if not tradeability:
+        tradeability = {
+            "in_universe": bool(membership.get("in_universe", True)),
+            "is_tradeable": bool(membership.get("is_tradeable", True)),
+            "excluded_reason": payload.get("exclusion_reason"),
+            "market_cap_bucket": membership.get("market_cap_bucket") or payload.get("market_cap_bucket") or "unknown",
+            "industry": membership.get("industry") or payload.get("industry") or candidate.normalized_theme or "unknown",
+            "turnover_rate": membership.get("turnover_rate"),
+        }
+    payload["tradeability"] = tradeability
+    payload["market_cap_bucket"] = payload.get("market_cap_bucket") or tradeability.get("market_cap_bucket") or "unknown"
+    payload["industry"] = payload.get("industry") or tradeability.get("industry") or candidate.normalized_theme or "unknown"
+    payload["limitations"] = list(payload.get("limitations") or candidate.limitations or [])
+    candidate.candidate_payload = payload
+    return payload
+
+
 def _candidate_baseline_family(candidate: ShortpickCandidate) -> str:
     return str(_candidate_payload(candidate).get("baseline_family") or "unknown")
 
@@ -919,6 +970,49 @@ def _baseline_label(value: str) -> str:
         "momentum_volume_baseline": "动量成交量",
     }
     return labels.get(value, value)
+
+
+def _pending_replay_benchmark_dimensions(*, reason: str) -> dict[str, dict[str, Any]]:
+    return {
+        "hs300": {
+            "dimension_key": "hs300",
+            "benchmark_id": "CSI300",
+            "label": "沪深300",
+            "benchmark_label": "沪深300",
+            "symbol": "000300.SH",
+            "symbol_or_scope": "000300.SH",
+            "benchmark_return": None,
+            "excess_return": None,
+            "status": "pending_forward_window",
+            "reason": reason,
+        },
+        "csi1000": {
+            "dimension_key": "csi1000",
+            "benchmark_id": "CSI1000",
+            "label": "中证1000",
+            "benchmark_label": "中证1000",
+            "symbol": "000852.SH",
+            "symbol_or_scope": "000852.SH",
+            "benchmark_return": None,
+            "excess_return": None,
+            "status": "pending_forward_window",
+            "reason": reason,
+        },
+        "sector_equal_weight": {
+            "dimension_key": "sector_equal_weight",
+            "benchmark_id": "sector_equal_weight",
+            "label": "同板块",
+            "benchmark_label": "同板块",
+            "symbol": None,
+            "symbol_or_scope": None,
+            "benchmark_return": None,
+            "excess_return": None,
+            "status": "historical_replay_existing_only",
+            "reason": "Historical replay does not fetch or expand sector peer universe.",
+            "peer_symbol_count": 0,
+            "contributing_peer_symbol_count": 0,
+        },
+    }
 
 
 def _as_of_cutoff(value: date) -> datetime:

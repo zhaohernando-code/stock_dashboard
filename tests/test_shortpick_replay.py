@@ -1,14 +1,22 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
 import tempfile
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 from sqlalchemy import select
 
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.lineage import compute_lineage_hash
-from ashare_evidence.models import MarketBar, NewsEntityLink, NewsItem, ShortpickCandidate, ShortpickExperimentRun, Stock
+from ashare_evidence.models import (
+    MarketBar,
+    NewsEntityLink,
+    NewsItem,
+    ShortpickCandidate,
+    ShortpickExperimentRun,
+    ShortpickValidationSnapshot,
+    Stock,
+)
 from ashare_evidence.shortpick_replay import (
     build_shortpick_replay_feedback,
     get_shortpick_replay_sources,
@@ -64,7 +72,7 @@ def _seed_replay_fixture(database_url: str) -> None:
                         bar_key=f"replay-bar-{symbol}-{index}",
                         stock_id=stock.id,
                         timeframe="1d",
-                        observed_at=datetime(observed_day.year, observed_day.month, observed_day.day, 7, 0, tzinfo=timezone.utc),
+                        observed_at=datetime(observed_day.year, observed_day.month, observed_day.day, 7, 0, tzinfo=UTC),
                         open_price=close_price - 0.5,
                         high_price=close_price + 1.0,
                         low_price=close_price - 1.0,
@@ -86,7 +94,7 @@ def _seed_replay_fixture(database_url: str) -> None:
             headline="测试半导体获得订单",
             summary="测试半导体在回放日收盘前披露订单进展。",
             content_excerpt="测试半导体订单进展，发布时间早于 sealed packet cutoff。",
-            published_at=datetime(2026, 5, 5, 8, 30, tzinfo=timezone.utc),
+            published_at=datetime(2026, 5, 5, 8, 30, tzinfo=UTC),
             event_scope="stock",
             dedupe_key="before-cutoff",
             raw_payload={"url": "https://example.test/before"},
@@ -99,7 +107,7 @@ def _seed_replay_fixture(database_url: str) -> None:
             headline="测试软件次日涨停",
             summary="这条新闻晚于 as_of_cutoff，必须进入 rejected source。",
             content_excerpt="未来涨停结果不能进入 official packet。",
-            published_at=datetime(2026, 5, 6, 8, 30, tzinfo=timezone.utc),
+            published_at=datetime(2026, 5, 6, 8, 30, tzinfo=UTC),
             event_scope="stock",
             dedupe_key="after-cutoff",
             raw_payload={"url": "https://example.test/after"},
@@ -165,6 +173,22 @@ def test_historical_replay_creates_isolated_candidates_and_rejected_sources() ->
             assert {"llm", "random_same_tradeable_universe", "random_same_market_cap_bucket", "momentum_volume_baseline"} <= families
             assert all(candidate.candidate_payload["source_packet_hash"] for candidate in candidates)
             assert all(candidate.candidate_payload["leakage_audit_status"] == "pass" for candidate in candidates)
+            assert all(candidate.candidate_payload["tradeability"]["is_tradeable"] for candidate in candidates)
+            assert all(candidate.candidate_payload["market_cap_bucket"] for candidate in candidates)
+            assert all(candidate.candidate_payload["industry"] for candidate in candidates)
+            assert all("limitations" in candidate.candidate_payload for candidate in candidates)
+
+            snapshots = [
+                snapshot
+                for candidate in candidates
+                for snapshot in session.scalars(
+                    select(ShortpickValidationSnapshot).where(ShortpickValidationSnapshot.candidate_id == candidate.id)
+                ).all()
+            ]
+            assert snapshots
+            assert all(snapshot.validation_payload["market_sync_status"] == "historical_replay_existing_only" for snapshot in snapshots)
+            assert all(snapshot.validation_payload["benchmark_sync_status"] == "historical_replay_existing_only" for snapshot in snapshots)
+            assert all(snapshot.validation_payload["benchmark_dimensions"]["sector_equal_weight"]["status"] == "historical_replay_existing_only" for snapshot in snapshots)
 
             sources = get_shortpick_replay_sources(session, run_id)
             assert sources["official_sources"]
@@ -191,5 +215,9 @@ def test_replay_feedback_compares_llm_and_baselines_without_live_pollution() -> 
             feedback = build_shortpick_replay_feedback(session, run_id=run_id)
             families = {family["baseline_family"] for family in feedback["families"]}
             assert {"llm", "random_same_tradeable_universe", "random_same_market_cap_bucket", "momentum_volume_baseline"} <= families
+            for family in feedback["families"]:
+                assert family["candidate_count"] == 2
+                assert family["official_sample_count"] == 2
+                assert family["completed_official_sample_count"] <= 2
             assert feedback["overall"]["factor_ic_gate"]["status"] == "blocked"
             assert feedback["overall"]["news_calibration"]["status"] == "diagnostic_only"
