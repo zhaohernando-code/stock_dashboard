@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -147,7 +148,8 @@ def _seed_replay_fixture(database_url: str) -> None:
         )
 
 
-def test_historical_replay_creates_isolated_candidates_and_rejected_sources() -> None:
+def test_historical_replay_creates_isolated_candidates_and_rejected_sources(monkeypatch) -> None:
+    monkeypatch.setenv("ASHARE_SHORTPICK_REPLAY_LLM_MODE", "proxy")
     with tempfile.TemporaryDirectory() as temp_dir:
         database_url = f"sqlite:///{Path(temp_dir) / 'replay.db'}"
         init_database(database_url)
@@ -197,7 +199,8 @@ def test_historical_replay_creates_isolated_candidates_and_rejected_sources() ->
             assert sources["tradable_universe"]["tradeable_count"] >= 6
 
 
-def test_replay_feedback_compares_llm_and_baselines_without_live_pollution() -> None:
+def test_replay_feedback_compares_llm_and_baselines_without_live_pollution(monkeypatch) -> None:
+    monkeypatch.setenv("ASHARE_SHORTPICK_REPLAY_LLM_MODE", "proxy")
     with tempfile.TemporaryDirectory() as temp_dir:
         database_url = f"sqlite:///{Path(temp_dir) / 'replay.db'}"
         init_database(database_url)
@@ -221,3 +224,65 @@ def test_replay_feedback_compares_llm_and_baselines_without_live_pollution() -> 
                 assert family["completed_official_sample_count"] <= 2
             assert feedback["overall"]["factor_ic_gate"]["status"] == "blocked"
             assert feedback["overall"]["news_calibration"]["status"] == "diagnostic_only"
+
+
+def test_historical_replay_uses_real_sealed_packet_llm_executor(monkeypatch) -> None:
+    class FakeTransport:
+        def complete(self, *, base_url, api_key, model_name, prompt, system=None, enable_search=False):
+            assert enable_search is False
+            assert "sealed source packet" in prompt
+            assert "src-001" in prompt
+            assert "禁止联网" in (system or "")
+            return json.dumps(
+                {
+                    "as_of_date": "2026-05-05",
+                    "information_mode": "historical_replay",
+                    "primary_pick": {
+                        "symbol": "600003.SH",
+                        "name": "测试半导体",
+                        "theme": "半导体订单",
+                        "thesis": "测试半导体在 sealed packet 中有订单进展来源支持。",
+                        "catalysts": ["订单进展"],
+                        "risks": ["样本 fixture 有限"],
+                        "invalidation": ["来源失效"],
+                        "sources_used": ["src-001"],
+                        "evidence_mapping": {"thesis": ["src-001"]},
+                        "limitations": ["fixture response"],
+                    },
+                    "candidates": [],
+                    "limitations": [],
+                },
+                ensure_ascii=False,
+            )
+
+    monkeypatch.setenv("ASHARE_SHORTPICK_REPLAY_LLM_MODE", "real")
+    monkeypatch.setattr(
+        "ashare_evidence.shortpick_replay.route_model",
+        lambda task: (FakeTransport(), "https://api.deepseek.test/anthropic", "test-key", "deepseek-fixture"),
+    )
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_url = f"sqlite:///{Path(temp_dir) / 'replay.db'}"
+        init_database(database_url)
+        _seed_replay_fixture(database_url)
+
+        with session_scope(database_url) as session:
+            payload = run_shortpick_historical_replay(
+                session,
+                start_date=date(2026, 5, 5),
+                end_date=date(2026, 5, 5),
+                rounds=2,
+                candidate_limit=2,
+            )
+            run_id = payload["runs"][0]["id"]
+            run = session.get(ShortpickExperimentRun, run_id)
+            assert run is not None
+            assert run.summary_payload["llm_executor_kind"] == "historical_replay_sealed_packet_llm"
+            assert run.summary_payload["model_family"] == "deepseek:deepseek-fixture"
+            llm_candidates = [
+                candidate
+                for candidate in session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all()
+                if candidate.candidate_payload["baseline_family"] == "llm"
+            ]
+            assert [candidate.symbol for candidate in llm_candidates] == ["600003.SH"]
+            assert llm_candidates[0].thesis == "测试半导体在 sealed packet 中有订单进展来源支持。"
+            assert llm_candidates[0].candidate_payload["sources_used"] == ["src-001"]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import random
 import re
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from ashare_evidence.benchmark import benchmark_close_maps
 from ashare_evidence.db import utcnow
+from ashare_evidence.llm_service import route_model
 from ashare_evidence.models import (
     MarketBar,
     NewsEntityLink,
@@ -31,6 +33,7 @@ from ashare_evidence.shortpick_lab import (
     _artifact_root,
     _shortpick_validation_summary,
     _upsert_validation_snapshot,
+    extract_shortpick_json,
     get_shortpick_run,
     list_shortpick_candidates,
     list_shortpick_runs,
@@ -40,6 +43,7 @@ SHORTPICK_HISTORICAL_REPLAY_MODE = "historical_replay"
 SHORTPICK_HISTORICAL_REPLAY_PROMPT_VERSION = "shortpick_historical_replay_v1"
 SHORTPICK_REPLAY_EXPERIMENT_MODE = "historical_replay"
 SHORTPICK_REPLAY_SOURCE_LOOKBACK_DAYS = 21
+SHORTPICK_REPLAY_LLM_MODE_ENV = "ASHARE_SHORTPICK_REPLAY_LLM_MODE"
 SHORTPICK_REPLAY_BASELINE_FAMILIES = (
     "llm",
     "random_same_tradeable_universe",
@@ -55,6 +59,7 @@ class _UniverseMember:
     latest_bar: MarketBar
     previous_bar: MarketBar | None
     market_cap: float | None
+    market_cap_source: str
     turnover_rate: float | None
     industry: str | None
     market_cap_bucket: str
@@ -153,6 +158,10 @@ def _run_one_replay_date(
     run.completed_at = utcnow()
     candidate_rows = session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run.id)).all()
     candidate_payloads = [_candidate_payload(candidate) for candidate in candidate_rows]
+    round_rows = session.scalars(
+        select(ShortpickModelRound).where(ShortpickModelRound.run_id == run.id).order_by(ShortpickModelRound.id.asc())
+    ).all()
+    llm_round = round_rows[0] if round_rows else None
     run.summary_payload = {
         **dict(run.summary_payload or {}),
         **dict(validation_result.get("summary") or {}),
@@ -160,6 +169,11 @@ def _run_one_replay_date(
         "official_sample_count": len([payload for payload in candidate_payloads if payload.get("official_sample_eligible")]),
         "leakage_failed_count": len([payload for payload in candidate_payloads if payload.get("leakage_audit_status") == "fail"]),
         "baseline_candidate_count": len([payload for payload in candidate_payloads if payload.get("baseline_family") != "llm"]),
+        "model_family": (
+            f"{llm_round.provider_name}:{llm_round.model_name}" if llm_round and llm_round.provider_name != "system"
+            else "diagnostic-sealed-packet-proxy"
+        ),
+        "llm_executor_kind": llm_round.executor_kind if llm_round else None,
         "boundary": "historical_replay_no_main_pool_write",
     }
     session.flush()
@@ -358,7 +372,7 @@ def _build_universe(session: Session, *, as_of_date: date) -> dict[str, Any]:
         if name.upper().startswith("ST") or "ST" in name.upper():
             excluded["st_status"] = excluded.get("st_status", 0) + 1
             continue
-        market_cap = latest.total_mv or latest.circ_mv
+        market_cap, market_cap_source = _market_cap_for_universe_member(stock, latest)
         industry = _stock_industry(stock)
         members.append(
             _UniverseMember(
@@ -367,6 +381,7 @@ def _build_universe(session: Session, *, as_of_date: date) -> dict[str, Any]:
                 latest_bar=latest,
                 previous_bar=bars[-2] if len(bars) >= 2 else None,
                 market_cap=float(market_cap) if market_cap is not None else None,
+                market_cap_source=market_cap_source,
                 turnover_rate=latest.turnover_rate,
                 industry=industry,
                 market_cap_bucket="unknown",
@@ -388,6 +403,8 @@ def _build_universe(session: Session, *, as_of_date: date) -> dict[str, Any]:
             "excluded_limit_status": excluded.get("limit_status", 0),
             "excluded_missing_bar": excluded.get("missing_daily_bar", 0) + excluded.get("no_bar_on_as_of_date", 0),
             "market_cap_bucket_counts": _count_by([member.market_cap_bucket for member in members]),
+            "market_cap_available_count": len([member for member in members if member.market_cap is not None]),
+            "market_cap_source_counts": _count_by([member.market_cap_source for member in members]),
             "industry_counts": _count_by([member.industry or "unknown" for member in members]),
         },
     }
@@ -474,18 +491,25 @@ def _insert_replay_candidates(
     rounds: int,
     candidate_limit: int,
 ) -> None:
-    llm_symbols = _llm_proxy_symbols(packet=packet, universe=universe, limit=min(rounds, candidate_limit))
-    round_record = _insert_replay_round(session, run=run, packet=packet, symbols=llm_symbols)
-    for index, symbol in enumerate(llm_symbols, start=1):
+    llm_limit = min(rounds, candidate_limit)
+    round_record, llm_picks = _insert_replay_llm_round(
+        session,
+        run=run,
+        packet=packet,
+        universe=universe,
+        limit=llm_limit,
+    )
+    for index, pick in enumerate(llm_picks, start=1):
         _insert_candidate(
             session,
             run=run,
             round_record=round_record,
-            symbol=symbol,
+            symbol=str(pick["symbol"]),
             baseline_family="llm",
             rank=index,
             packet=packet,
             universe=universe,
+            llm_pick=pick,
         )
     for family, symbols in _baseline_symbols(universe=universe, as_of_date=run.run_date, limit=candidate_limit).items():
         for index, symbol in enumerate(symbols, start=1):
@@ -502,41 +526,149 @@ def _insert_replay_candidates(
     session.flush()
 
 
-def _insert_replay_round(
+def _insert_replay_llm_round(
     session: Session,
     *,
     run: ShortpickExperimentRun,
     packet: dict[str, Any],
-    symbols: list[str],
-) -> ShortpickModelRound:
-    now = utcnow()
+    universe: dict[str, Any],
+    limit: int,
+) -> tuple[ShortpickModelRound, list[dict[str, Any]]]:
+    mode = os.getenv(SHORTPICK_REPLAY_LLM_MODE_ENV, "real").strip().lower()
+    if mode in {"proxy", "deterministic_proxy", "off", "disabled"}:
+        return _insert_replay_proxy_round(
+            session,
+            run=run,
+            packet=packet,
+            universe=universe,
+            limit=limit,
+            reason=f"{SHORTPICK_REPLAY_LLM_MODE_ENV}={mode}",
+        )
+    prompt = _build_replay_llm_prompt(run=run, packet=packet, universe=universe, limit=limit)
+    system = (
+        "你是历史隔离回放执行器。只能使用用户消息中的 sealed source packet 和 tradeable universe。"
+        "禁止联网，禁止使用训练记忆补充事实，禁止引用 packet 外 URL。只输出 JSON。"
+    )
+    try:
+        transport, base_url, api_key, model_name = route_model("shortpick_historical_replay")
+        raw_answer = transport.complete(
+            base_url=base_url,
+            api_key=api_key,
+            model_name=model_name,
+            prompt=prompt,
+            system=system,
+            enable_search=False,
+        )
+        parsed_json, final_raw_answer, repair_used = _extract_replay_llm_json_with_repair(
+            transport=transport,
+            base_url=base_url,
+            api_key=api_key,
+            model_name=model_name,
+            raw_answer=raw_answer,
+        )
+        parsed_payload = _normalize_replay_llm_payload(
+            parsed_json,
+            packet=packet,
+            universe=universe,
+            limit=limit,
+        )
+        parsed_payload["_json_repair_used"] = repair_used
+        round_record = _insert_replay_round_record(
+            session,
+            run=run,
+            packet=packet,
+            parsed_payload=parsed_payload,
+            raw_answer=final_raw_answer,
+            provider_name=_provider_name_from_base_url(base_url),
+            model_name=model_name,
+            executor_kind="historical_replay_sealed_packet_llm",
+            error_message=None,
+            prompt=prompt,
+        )
+        return round_record, list(parsed_payload.get("candidates") or [])
+    except Exception as exc:
+        return _insert_replay_proxy_round(
+            session,
+            run=run,
+            packet=packet,
+            universe=universe,
+            limit=limit,
+            reason=f"sealed packet LLM executor failed: {exc}",
+        )
+
+
+def _insert_replay_proxy_round(
+    session: Session,
+    *,
+    run: ShortpickExperimentRun,
+    packet: dict[str, Any],
+    universe: dict[str, Any],
+    limit: int,
+    reason: str,
+) -> tuple[ShortpickModelRound, list[dict[str, Any]]]:
+    symbols = _llm_proxy_symbols(packet=packet, universe=universe, limit=limit)
+    picks = [_proxy_pick_payload(symbol=symbol, packet=packet, universe=universe, limitation=reason) for symbol in symbols]
     parsed_payload = {
         "as_of_date": run.run_date.isoformat(),
         "information_mode": SHORTPICK_HISTORICAL_REPLAY_MODE,
         "source_packet_id": packet["source_packet_id"],
         "source_packet_hash": packet["source_packet_hash"],
-        "primary_pick": {"symbol": symbols[0] if symbols else "PARSE_FAILED", "name": symbols[0] if symbols else "解析失败"},
+        "primary_pick": picks[0] if picks else {"symbol": "PARSE_FAILED", "name": "解析失败"},
+        "candidates": picks,
         "sources_used": [{"source_id": source["source_id"]} for source in packet["official_sources"][:3]],
-        "limitations": ["deterministic sealed-packet proxy until external LLM replay executor is enabled"],
+        "limitations": [
+            "diagnostic deterministic proxy; not a real LLM replay recommendation",
+            reason,
+        ],
     }
+    round_record = _insert_replay_round_record(
+        session,
+        run=run,
+        packet=packet,
+        parsed_payload=parsed_payload,
+        raw_answer=json.dumps(parsed_payload, ensure_ascii=False),
+        provider_name="system",
+        model_name="diagnostic_sealed_packet_proxy",
+        executor_kind="historical_replay_diagnostic_proxy",
+        error_message=reason,
+        prompt=None,
+    )
+    return round_record, picks
+
+
+def _insert_replay_round_record(
+    session: Session,
+    *,
+    run: ShortpickExperimentRun,
+    packet: dict[str, Any],
+    parsed_payload: dict[str, Any],
+    raw_answer: str,
+    provider_name: str,
+    model_name: str,
+    executor_kind: str,
+    error_message: str | None,
+    prompt: str | None,
+) -> ShortpickModelRound:
+    now = utcnow()
     round_record = ShortpickModelRound(
         run_id=run.id,
-        round_key=f"{run.run_key}:sealed-packet-proxy:1",
-        provider_name="system",
-        model_name="sealed_packet_proxy",
-        executor_kind="historical_replay_sealed_packet_proxy",
+        round_key=f"{run.run_key}:{executor_kind}:1",
+        provider_name=provider_name,
+        model_name=model_name,
+        executor_kind=executor_kind,
         round_index=1,
         status="completed",
-        raw_answer=json.dumps(parsed_payload, ensure_ascii=False),
+        raw_answer=raw_answer,
         parsed_payload=parsed_payload,
-        sources_payload=packet["official_sources"][:5],
+        sources_payload=_round_sources_from_payload(packet, parsed_payload),
         artifact_id=f"shortpick-replay-round:{run.id}:1",
-        error_message=None,
+        error_message=error_message,
         started_at=now,
         completed_at=now,
     )
     session.add(round_record)
     session.flush()
+    _write_replay_round_artifact(session, run, round_record, prompt=prompt)
     return round_record
 
 
@@ -550,23 +682,27 @@ def _insert_candidate(
     rank: int,
     packet: dict[str, Any],
     universe: dict[str, Any],
+    llm_pick: dict[str, Any] | None = None,
 ) -> None:
     member = universe["by_symbol"].get(symbol)
     if member is None:
         return
-    support_sources = _sources_for_symbol(packet, symbol)
+    support_sources = _sources_for_pick(packet, llm_pick) if llm_pick else _sources_for_symbol(packet, symbol)
     if baseline_family != "llm" and not support_sources:
         support_sources = packet["official_sources"][:1]
-    thesis = _candidate_thesis(member, baseline_family)
+    thesis = str((llm_pick or {}).get("thesis") or _candidate_thesis(member, baseline_family))
+    evidence_mapping = _evidence_mapping_for_pick(llm_pick, support_sources)
     audit = _audit_candidate(
         as_of_date=run.run_date,
         packet=packet,
         symbol=symbol,
         sources=support_sources,
         thesis=thesis,
-        evidence_mapping={"thesis": [source["source_id"] for source in support_sources[:2]]},
+        evidence_mapping=evidence_mapping,
     )
-    limitations = [] if audit["status"] == "pass" else list(audit["reasons"])
+    limitations = list((llm_pick or {}).get("limitations") or [])
+    if audit["status"] != "pass":
+        limitations.extend(list(audit["reasons"]))
     tradeability = {
         "in_universe": True,
         "is_tradeable": True,
@@ -577,6 +713,7 @@ def _insert_candidate(
         "amount": member.latest_bar.amount,
         "turnover_rate": member.turnover_rate,
         "market_cap": member.market_cap,
+        "market_cap_source": member.market_cap_source,
         "market_cap_bucket": member.market_cap_bucket,
         "industry": member.industry,
     }
@@ -589,7 +726,7 @@ def _insert_candidate(
         "source_packet_id": packet["source_packet_id"],
         "source_packet_hash": packet["source_packet_hash"],
         "sources_used": [source["source_id"] for source in support_sources],
-        "evidence_mapping": {"thesis": [source["source_id"] for source in support_sources[:2]]},
+        "evidence_mapping": evidence_mapping,
         "leakage_audit_status": audit["status"],
         "leakage_audit_reasons": audit["reasons"],
         "official_sample_eligible": audit["status"] == "pass",
@@ -602,6 +739,7 @@ def _insert_candidate(
             "in_universe": True,
             "is_tradeable": True,
             "market_cap_bucket": member.market_cap_bucket,
+            "market_cap_source": member.market_cap_source,
             "industry": member.industry,
             "turnover_rate": member.turnover_rate,
         },
@@ -617,9 +755,9 @@ def _insert_candidate(
             horizon_trading_days=5,
             confidence=0.55 if baseline_family != "llm" else 0.62,
             thesis=thesis,
-            catalysts=[_baseline_label(baseline_family), f"截至 {run.run_date.isoformat()} 的 sealed packet / 行情快照。"],
-            invalidation=["历史隔离回放只验证信号，不进入主推荐或模拟盘。"],
-            risks=["若 source packet 含未来信息或样本不足，该候选会从 official sample 排除。"],
+            catalysts=_string_list((llm_pick or {}).get("catalysts")) or [_baseline_label(baseline_family), f"截至 {run.run_date.isoformat()} 的 sealed packet / 行情快照。"],
+            invalidation=_string_list((llm_pick or {}).get("invalidation")) or ["历史隔离回放只验证信号，不进入主推荐或模拟盘。"],
+            risks=_string_list((llm_pick or {}).get("risks")) or ["若 source packet 含未来信息或样本不足，该候选会从 official sample 排除。"],
             sources_payload=[
                 {
                     **source,
@@ -629,7 +767,7 @@ def _insert_candidate(
                 }
                 for source in support_sources
             ],
-            novelty_note="historical replay baseline candidate" if baseline_family != "llm" else "sealed packet proxy LLM candidate",
+            novelty_note="historical replay baseline candidate" if baseline_family != "llm" else "sealed packet LLM candidate",
             limitations=limitations,
             convergence_group=baseline_family,
             research_priority="single_model_high_conviction" if baseline_family == "llm" else "baseline_control",
@@ -654,6 +792,270 @@ def _llm_proxy_symbols(*, packet: dict[str, Any], universe: dict[str, Any], limi
         if len(seen) >= limit:
             break
     return seen
+
+
+def _proxy_pick_payload(*, symbol: str, packet: dict[str, Any], universe: dict[str, Any], limitation: str) -> dict[str, Any]:
+    member = universe["by_symbol"][symbol]
+    source_ids = [source["source_id"] for source in _sources_for_symbol(packet, symbol)[:2]]
+    return {
+        "symbol": symbol,
+        "name": member.name,
+        "theme": member.industry or "historical_replay",
+        "thesis": _candidate_thesis(member, "llm"),
+        "catalysts": ["sealed packet diagnostic proxy"],
+        "risks": ["真实 sealed-packet LLM executor 未产出可用 JSON，本候选仅用于诊断流水线。"],
+        "invalidation": ["历史隔离回放只验证信号，不进入主推荐或模拟盘。"],
+        "sources_used": source_ids,
+        "evidence_mapping": {"thesis": source_ids[:2]},
+        "limitations": [limitation, "diagnostic deterministic proxy; not a real LLM replay recommendation"],
+    }
+
+
+def _build_replay_llm_prompt(
+    *,
+    run: ShortpickExperimentRun,
+    packet: dict[str, Any],
+    universe: dict[str, Any],
+    limit: int,
+) -> str:
+    members = [
+        {
+            "symbol": member.symbol,
+            "name": member.name,
+            "industry": member.industry,
+            "market_cap_bucket": member.market_cap_bucket,
+            "market_cap_source": member.market_cap_source,
+            "day_return": round(_bar_return(member), 6),
+            "amount": member.latest_bar.amount,
+            "turnover_rate": member.turnover_rate,
+        }
+        for member in universe["members"][:120]
+    ]
+    sources = [
+        {
+            "source_id": source["source_id"],
+            "title": source.get("title"),
+            "source_type": source.get("source_type"),
+            "published_at": source.get("published_at"),
+            "linked_symbols": source.get("linked_symbols") or [],
+            "body_excerpt": _source_excerpt(source.get("body_excerpt"), limit=360),
+        }
+        for source in packet["official_sources"][:60]
+    ]
+    sealed_packet = {
+        "experiment_mode": SHORTPICK_REPLAY_EXPERIMENT_MODE,
+        "as_of_date": packet["as_of_date"],
+        "as_of_cutoff": packet["as_of_cutoff"],
+        "source_packet_id": packet["source_packet_id"],
+        "source_packet_hash": packet["source_packet_hash"],
+        "tradeable_universe": members,
+        "official_sources": sources,
+        "rejected_source_count": len(packet.get("rejected_sources") or []),
+    }
+    return f"""
+你正在执行 A 股短投历史隔离回放。你只能使用下面 sealed source packet 中的信息，不能联网，不能使用训练记忆补充事实，不能引用 packet 外来源。
+
+任务日期：{run.run_date.isoformat()}
+as_of_cutoff：{packet["as_of_cutoff"]}
+候选数量上限：{limit}
+
+输出 JSON，不要加代码块。`sources_used` 和 `evidence_mapping` 只能填写 packet 内的 `source_id`，不能填写 URL。
+候选 symbol 必须来自 `tradeable_universe`。
+
+输出格式：
+{{
+  "as_of_date": "{run.run_date.isoformat()}",
+  "information_mode": "historical_replay",
+  "source_packet_id": "{packet["source_packet_id"]}",
+  "source_packet_hash": "{packet["source_packet_hash"]}",
+  "primary_pick": {{
+    "symbol": "000000.SZ",
+    "name": "...",
+    "theme": "...",
+    "thesis": "...",
+    "catalysts": ["..."],
+    "risks": ["..."],
+    "invalidation": ["..."],
+    "sources_used": ["src-001"],
+    "evidence_mapping": {{"thesis": ["src-001"], "catalyst_1": ["src-002"]}},
+    "limitations": ["..."]
+  }},
+  "candidates": [],
+  "limitations": []
+}}
+
+sealed source packet:
+{json.dumps(sealed_packet, ensure_ascii=False, indent=2)}
+""".strip()
+
+
+def _normalize_replay_llm_payload(
+    parsed: dict[str, Any],
+    *,
+    packet: dict[str, Any],
+    universe: dict[str, Any],
+    limit: int,
+) -> dict[str, Any]:
+    raw_candidates: list[Any] = []
+    if isinstance(parsed.get("candidates"), list):
+        raw_candidates.extend(parsed["candidates"])
+    primary = parsed.get("primary_pick")
+    if isinstance(primary, dict):
+        raw_candidates.insert(0, primary)
+    alternatives = parsed.get("alternative_picks")
+    if isinstance(alternatives, list):
+        raw_candidates.extend(alternatives)
+
+    seen: set[str] = set()
+    candidates: list[dict[str, Any]] = []
+    for raw in raw_candidates:
+        if not isinstance(raw, dict):
+            continue
+        symbol = _resolve_replay_symbol(str(raw.get("symbol") or ""), universe)
+        if not symbol or symbol in seen:
+            continue
+        seen.add(symbol)
+        member = universe["by_symbol"][symbol]
+        source_ids = _source_ids_from_value(raw.get("sources_used"))
+        support_sources = _sources_by_ids(packet, source_ids) or _sources_for_symbol(packet, symbol)
+        evidence_mapping = _normalize_evidence_mapping(raw.get("evidence_mapping"), support_sources)
+        candidates.append(
+            {
+                "symbol": symbol,
+                "name": str(raw.get("name") or member.name),
+                "theme": str(raw.get("theme") or member.industry or "historical_replay"),
+                "thesis": str(raw.get("thesis") or _candidate_thesis(member, "llm")),
+                "catalysts": _string_list(raw.get("catalysts")),
+                "risks": _string_list(raw.get("risks")),
+                "invalidation": _string_list(raw.get("invalidation")),
+                "sources_used": [source["source_id"] for source in support_sources],
+                "evidence_mapping": evidence_mapping,
+                "limitations": _string_list(raw.get("limitations")),
+            }
+        )
+        if len(candidates) >= limit:
+            break
+    if not candidates:
+        raise ValueError("sealed-packet LLM response did not contain any valid universe candidates")
+    return {
+        "as_of_date": str(parsed.get("as_of_date") or packet["as_of_date"]),
+        "information_mode": SHORTPICK_HISTORICAL_REPLAY_MODE,
+        "source_packet_id": packet["source_packet_id"],
+        "source_packet_hash": packet["source_packet_hash"],
+        "primary_pick": candidates[0],
+        "candidates": candidates,
+        "limitations": _string_list(parsed.get("limitations")),
+        "llm_executor": "sealed_packet_only",
+    }
+
+
+def _extract_replay_llm_json_with_repair(
+    *,
+    transport: Any,
+    base_url: str,
+    api_key: str,
+    model_name: str,
+    raw_answer: str,
+) -> tuple[dict[str, Any], str, bool]:
+    try:
+        return extract_shortpick_json(raw_answer), raw_answer, False
+    except ValueError:
+        repaired = transport.complete(
+            base_url=base_url,
+            api_key=api_key,
+            model_name=model_name,
+            prompt=_build_replay_json_repair_prompt(raw_answer),
+            system="只修复 JSON 格式，不要新增事实、股票、来源或解释。只输出 JSON。",
+            enable_search=False,
+        )
+        return extract_shortpick_json(repaired), repaired, True
+
+
+def _build_replay_json_repair_prompt(raw_answer: str) -> str:
+    return f"""
+下面是 sealed-packet historical replay LLM executor 的原始回答。它没有被系统解析为 JSON。
+
+请只做格式修复：输出一个 JSON object，不要新增任何事实、股票、来源、URL 或解释。保留原始回答中的候选、source id、thesis、catalysts、risks、limitations。不要使用 markdown 代码块。
+
+原始回答：
+{raw_answer[:12000]}
+""".strip()
+
+
+def _resolve_replay_symbol(value: str, universe: dict[str, Any]) -> str | None:
+    normalized = value.strip().upper()
+    if normalized in universe["by_symbol"]:
+        return normalized
+    ticker = normalized.split(".")[0]
+    matches = [symbol for symbol in universe["by_symbol"] if symbol.split(".")[0] == ticker]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _source_ids_from_value(value: Any) -> list[str]:
+    values = value if isinstance(value, list) else [value]
+    output: list[str] = []
+    for item in values:
+        if isinstance(item, dict):
+            source_id = item.get("source_id") or item.get("id")
+        else:
+            source_id = item
+        if source_id:
+            output.append(str(source_id))
+    return output
+
+
+def _sources_by_ids(packet: dict[str, Any], source_ids: list[str]) -> list[dict[str, Any]]:
+    wanted = set(source_ids)
+    return [source for source in packet["official_sources"] if source["source_id"] in wanted]
+
+
+def _normalize_evidence_mapping(value: Any, support_sources: list[dict[str, Any]]) -> dict[str, list[str]]:
+    fallback_ids = [source["source_id"] for source in support_sources[:2]]
+    if not isinstance(value, dict):
+        return {"thesis": fallback_ids}
+    allowed = {source["source_id"] for source in support_sources}
+    output: dict[str, list[str]] = {}
+    for key, raw_ids in value.items():
+        ids = [source_id for source_id in _source_ids_from_value(raw_ids) if source_id in allowed]
+        if ids:
+            output[str(key)] = ids
+    return output or {"thesis": fallback_ids}
+
+
+def _sources_for_pick(packet: dict[str, Any], pick: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not pick:
+        return []
+    return _sources_by_ids(packet, _source_ids_from_value(pick.get("sources_used")))
+
+
+def _evidence_mapping_for_pick(pick: dict[str, Any] | None, support_sources: list[dict[str, Any]]) -> dict[str, list[str]]:
+    return _normalize_evidence_mapping((pick or {}).get("evidence_mapping"), support_sources)
+
+
+def _string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    values = value if isinstance(value, list) else [value]
+    return [str(item).strip() for item in values if str(item).strip()]
+
+
+def _round_sources_from_payload(packet: dict[str, Any], payload: dict[str, Any]) -> list[dict[str, Any]]:
+    source_ids: list[str] = []
+    source_ids.extend(_source_ids_from_value(payload.get("sources_used")))
+    for candidate in payload.get("candidates") or []:
+        if isinstance(candidate, dict):
+            source_ids.extend(_source_ids_from_value(candidate.get("sources_used")))
+    sources = _sources_by_ids(packet, source_ids)
+    return sources[:10] if sources else packet["official_sources"][:5]
+
+
+def _provider_name_from_base_url(base_url: str) -> str:
+    lowered = base_url.lower()
+    if "deepseek" in lowered:
+        return "deepseek"
+    if "openai" in lowered:
+        return "openai_compatible"
+    return "llm"
 
 
 def _baseline_symbols(*, universe: dict[str, Any], as_of_date: date, limit: int) -> dict[str, list[str]]:
@@ -873,6 +1275,40 @@ def _write_replay_packet_artifact(session: Session, run: ShortpickExperimentRun,
     )
 
 
+def _write_replay_round_artifact(
+    session: Session,
+    run: ShortpickExperimentRun,
+    round_record: ShortpickModelRound,
+    *,
+    prompt: str | None,
+) -> None:
+    write_shortpick_lab_artifact(
+        artifact_id=str(round_record.artifact_id),
+        root=_artifact_root(session),
+        payload={
+            "artifact_id": round_record.artifact_id,
+            "artifact_type": "shortpick_historical_replay_round",
+            "run_key": run.run_key,
+            "round_key": round_record.round_key,
+            "prompt_version": run.prompt_version,
+            "information_mode": run.information_mode,
+            "provider_name": round_record.provider_name,
+            "model_name": round_record.model_name,
+            "executor_kind": round_record.executor_kind,
+            "status": round_record.status,
+            "source_packet_id": (run.summary_payload or {}).get("source_packet_id"),
+            "source_packet_hash": (run.summary_payload or {}).get("source_packet_hash"),
+            "prompt": prompt,
+            "raw_answer": round_record.raw_answer,
+            "parsed_payload": round_record.parsed_payload,
+            "sources": round_record.sources_payload,
+            "error_message": round_record.error_message,
+            "generated_at": utcnow().isoformat(),
+            "boundary": "historical_replay_no_main_pool_write",
+        },
+    )
+
+
 def _candidate_thesis(member: _UniverseMember, baseline_family: str) -> str:
     ret = _bar_return(member)
     if baseline_family == "llm":
@@ -907,6 +1343,7 @@ def _assign_market_cap_buckets(members: list[_UniverseMember]) -> list[_Universe
                 latest_bar=member.latest_bar,
                 previous_bar=member.previous_bar,
                 market_cap=member.market_cap,
+                market_cap_source=member.market_cap_source,
                 turnover_rate=member.turnover_rate,
                 industry=member.industry,
                 market_cap_bucket=bucket,
@@ -924,6 +1361,54 @@ def _bar_return(member: _UniverseMember) -> float:
 def _stock_industry(stock: Stock) -> str | None:
     payload = stock.profile_payload if isinstance(stock.profile_payload, dict) else {}
     return payload.get("industry") or payload.get("sector") or payload.get("board")
+
+
+def _market_cap_for_universe_member(stock: Stock, latest: MarketBar) -> tuple[float | None, str]:
+    candidates = [
+        (latest.total_mv, "market_bar.total_mv"),
+        (latest.circ_mv, "market_bar.circ_mv"),
+        (_nested_float(latest.raw_payload, ("total_mv",)), "market_bar.raw_payload.total_mv"),
+        (_nested_float(latest.raw_payload, ("circ_mv",)), "market_bar.raw_payload.circ_mv"),
+        (_nested_float(latest.raw_payload, ("market_cap",)), "market_bar.raw_payload.market_cap"),
+    ]
+    profile = stock.profile_payload if isinstance(stock.profile_payload, dict) else {}
+    candidates.extend(
+        [
+            (_nested_float(profile, ("total_mv",)), "stock.profile_payload.total_mv"),
+            (_nested_float(profile, ("circ_mv",)), "stock.profile_payload.circ_mv"),
+            (_nested_float(profile, ("market_cap",)), "stock.profile_payload.market_cap"),
+            (_nested_float(profile, ("total_market_cap",)), "stock.profile_payload.total_market_cap"),
+            (_nested_float(profile, ("analysis_pipeline", "market_cap", "total_mv")), "stock.profile_payload.analysis_pipeline.market_cap.total_mv"),
+            (_nested_float(profile, ("analysis_pipeline", "market_cap", "circ_mv")), "stock.profile_payload.analysis_pipeline.market_cap.circ_mv"),
+        ]
+    )
+    for value, source in candidates:
+        if value is not None and value > 0:
+            return float(value), source
+    try:
+        from ashare_evidence.signal_engine_parts.market_cap_seed import SEED_MARKET_CAP
+    except Exception:
+        seed_market_cap = {}
+    else:
+        seed_market_cap = SEED_MARKET_CAP
+    seed_value = seed_market_cap.get(stock.symbol)
+    if seed_value is not None and seed_value > 0:
+        return float(seed_value), "market_cap_seed"
+    return None, "missing"
+
+
+def _nested_float(payload: Any, path: tuple[str, ...]) -> float | None:
+    current = payload
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    try:
+        if current is None or current == "":
+            return None
+        return float(current)
+    except (TypeError, ValueError):
+        return None
 
 
 def _source_excerpt(value: str | None, *, limit: int = 600) -> str:

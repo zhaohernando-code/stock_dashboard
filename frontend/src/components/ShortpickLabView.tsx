@@ -1253,7 +1253,7 @@ function HistoricalReplayTab({
             {selectedRun ? statusLabel(operationalStatus(selectedRun)) : "无批次"}
           </Tag>
           <Text type="secondary">
-            {selectedRun ? `${selectedRun.run_date} · ${String(selectedRun.model_config?.rounds_per_model ?? 0)} 轮 · packet ${shortHash(sources?.source_packet_hash)}` : "CLI 生成 replay 后会出现在这里。"}
+            {selectedRun ? `${selectedRun.run_date} · ${String(selectedRun.model_config?.rounds_per_model ?? selectedRun.model_config?.rounds ?? 0)} 轮 · packet ${shortHash(sources?.source_packet_hash)}` : "CLI 生成 replay 后会出现在这里。"}
           </Text>
         </Space>
         {runs.length ? (

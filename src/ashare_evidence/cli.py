@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-from datetime import date
 import json
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -14,13 +14,6 @@ from ashare_evidence.db import init_database, preflight_database_writable, sessi
 from ashare_evidence.improvement_suggestions import run_improvement_suggestion_review
 from ashare_evidence.intraday_market import sync_intraday_market
 from ashare_evidence.operations import build_operations_dashboard
-from ashare_evidence.policy_audit import assert_policy_audit, write_policy_audit_report
-from ashare_evidence.policy_config_loader import (
-    activate_policy_config_version,
-    build_policy_governance_summary,
-    create_policy_config_version,
-    list_policy_config_versions,
-)
 from ashare_evidence.phase2 import rebuild_phase2_research_state
 from ashare_evidence.phase2.holding_policy_experiments import (
     build_phase5_holding_policy_experiment,
@@ -34,6 +27,13 @@ from ashare_evidence.phase2.horizon_study import build_phase5_horizon_study, bui
 from ashare_evidence.phase2.producer_contract_study import (
     build_phase5_producer_contract_study,
     build_phase5_producer_contract_study_artifact,
+)
+from ashare_evidence.policy_audit import assert_policy_audit, write_policy_audit_report
+from ashare_evidence.policy_config_loader import (
+    activate_policy_config_version,
+    build_policy_governance_summary,
+    create_policy_config_version,
+    list_policy_config_versions,
 )
 from ashare_evidence.research_artifact_store import (
     artifact_root_from_database_url,
@@ -404,7 +404,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     shortpick_replay = subparsers.add_parser(
         "shortpick-replay",
-        help="Build historical sealed-packet replay runs with LLM proxy and baseline controls.",
+        help="Build historical sealed-packet replay runs with sealed-packet LLM and baseline controls.",
     )
     shortpick_replay.add_argument("--database-url", default=None)
     shortpick_replay.add_argument("--start-date", required=True)
