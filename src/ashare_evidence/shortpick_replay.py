@@ -57,6 +57,10 @@ SHORTPICK_REPLAY_BASELINE_FAMILIES = (
     "llm_reject_only",
     "llm_reject_then_momentum_rank",
     "random_reject_then_momentum_rank",
+    "llm_hard_veto_then_momentum_rank",
+    "random_hard_veto_then_momentum_rank",
+    "llm_strict_veto_then_momentum_rank",
+    "random_strict_veto_then_momentum_rank",
 )
 SHORTPICK_REPLAY_HORIZON_ORDER = (1, 3, 5, 10, 20)
 SHORTPICK_REPLAY_DISTILL_FAMILIES = (
@@ -76,6 +80,23 @@ SHORTPICK_REPLAY_REJECTION_FAMILIES = (
 SHORTPICK_REPLAY_REJECTION_EXECUTORS = (
     "historical_replay_momentum_pool_rejector",
 )
+SHORTPICK_REPLAY_HARD_VETO_FAMILIES = (
+    "llm_hard_veto_then_momentum_rank",
+    "random_hard_veto_then_momentum_rank",
+    "llm_strict_veto_then_momentum_rank",
+    "random_strict_veto_then_momentum_rank",
+)
+SHORTPICK_REPLAY_HARD_VETO_EXECUTORS = (
+    "historical_replay_momentum_pool_hard_veto",
+)
+SHORTPICK_REPLAY_STRICT_VETO_CATEGORIES = {
+    "source_mismatch",
+    "future_source",
+    "untradeable",
+    "liquidity_abnormal",
+    "negative_direct_conflict",
+    "source_not_in_packet",
+}
 
 
 @dataclass(frozen=True)
@@ -379,6 +400,61 @@ def run_shortpick_replay_rejection(
             "rank_limit": normalized_rank_limit,
             "reject_max_ratio": normalized_reject_max_ratio,
             "families": ["momentum_volume_expanded_pool", *SHORTPICK_REPLAY_REJECTION_FAMILIES],
+        },
+    }
+
+
+def run_shortpick_replay_hard_veto_experiment(
+    session: Session,
+    *,
+    run_id: int | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    momentum_pool_limit: int = 40,
+    rank_limit: int = 6,
+    veto_max_ratio: float = 0.15,
+) -> dict[str, Any]:
+    query = (
+        select(ShortpickExperimentRun)
+        .where(
+            ShortpickExperimentRun.information_mode == SHORTPICK_HISTORICAL_REPLAY_MODE,
+            ShortpickExperimentRun.status == "completed",
+        )
+        .order_by(ShortpickExperimentRun.run_date.asc(), ShortpickExperimentRun.id.asc())
+    )
+    if run_id is not None:
+        query = query.where(ShortpickExperimentRun.id == run_id)
+    if start_date is not None:
+        query = query.where(ShortpickExperimentRun.run_date >= start_date)
+    if end_date is not None:
+        query = query.where(ShortpickExperimentRun.run_date <= end_date)
+    runs = [run for run in session.scalars(query).all() if not _is_diagnostic_replay_run(run)]
+    outputs: list[dict[str, Any]] = []
+    normalized_pool_limit = max(1, min(int(momentum_pool_limit), 80))
+    normalized_rank_limit = max(1, min(int(rank_limit), 20))
+    normalized_veto_max_ratio = max(0.0, min(float(veto_max_ratio), 0.4))
+    for run in runs:
+        outputs.append(
+            _hard_veto_one_replay_run(
+                session,
+                run=run,
+                momentum_pool_limit=normalized_pool_limit,
+                rank_limit=normalized_rank_limit,
+                veto_max_ratio=normalized_veto_max_ratio,
+            )
+        )
+        session.commit()
+    return {
+        "experiment_mode": SHORTPICK_REPLAY_EXPERIMENT_MODE,
+        "rejection_mode": "llm_hard_veto_then_mechanical_momentum_rank",
+        "run_count": len(outputs),
+        "runs": outputs,
+        "config": {
+            "momentum_pool_limit": normalized_pool_limit,
+            "rank_limit": normalized_rank_limit,
+            "veto_max_ratio": normalized_veto_max_ratio,
+            "families": list(SHORTPICK_REPLAY_HARD_VETO_FAMILIES),
+            "strict_veto_categories": sorted(SHORTPICK_REPLAY_STRICT_VETO_CATEGORIES),
         },
     }
 
@@ -918,6 +994,120 @@ def _reject_one_replay_run(
     }
 
 
+def _hard_veto_one_replay_run(
+    session: Session,
+    *,
+    run: ShortpickExperimentRun,
+    momentum_pool_limit: int,
+    rank_limit: int,
+    veto_max_ratio: float,
+) -> dict[str, Any]:
+    packet = _load_replay_packet(session, run)
+    universe = _build_universe(session, as_of_date=run.run_date)
+    momentum_symbols = _momentum_symbols(universe, limit=momentum_pool_limit)
+
+    _delete_hard_veto_outputs(session, run.id)
+    session.commit()
+
+    veto_round, decisions = _insert_replay_hard_veto_round(
+        session,
+        run=run,
+        packet=packet,
+        universe=universe,
+        pool_symbols=momentum_symbols,
+        veto_max_ratio=veto_max_ratio,
+    )
+    session.commit()
+
+    decision_by_symbol = {str(item["symbol"]): item for item in decisions}
+    hard_vetoed = [symbol for symbol in momentum_symbols if decision_by_symbol.get(symbol, {}).get("decision") == "reject"]
+    strict_vetoed = [
+        symbol
+        for symbol in hard_vetoed
+        if str(decision_by_symbol.get(symbol, {}).get("reason_category") or "") in SHORTPICK_REPLAY_STRICT_VETO_CATEGORIES
+    ]
+    hard_symbols = [symbol for symbol in momentum_symbols if symbol not in set(hard_vetoed)][:rank_limit]
+    strict_symbols = [symbol for symbol in momentum_symbols if symbol not in set(strict_vetoed)][:rank_limit]
+    random_hard_rejected = _deterministic_random_rejections(run=run, symbols=momentum_symbols, reject_count=len(hard_vetoed))
+    random_strict_rejected = _deterministic_random_rejections(
+        run=run,
+        symbols=momentum_symbols,
+        reject_count=len(strict_vetoed),
+        salt="random_strict_veto_then_momentum_rank",
+    )
+    random_hard_symbols = [symbol for symbol in momentum_symbols if symbol not in set(random_hard_rejected)][:rank_limit]
+    random_strict_symbols = [symbol for symbol in momentum_symbols if symbol not in set(random_strict_rejected)][:rank_limit]
+
+    for family, symbols, random_rejected in (
+        ("llm_hard_veto_then_momentum_rank", hard_symbols, None),
+        ("random_hard_veto_then_momentum_rank", random_hard_symbols, random_hard_rejected),
+        ("llm_strict_veto_then_momentum_rank", strict_symbols, None),
+        ("random_strict_veto_then_momentum_rank", random_strict_symbols, random_strict_rejected),
+    ):
+        for index, symbol in enumerate(symbols, start=1):
+            original_rank = momentum_symbols.index(symbol) + 1
+            if random_rejected is None:
+                decision = decision_by_symbol.get(symbol)
+                if family == "llm_strict_veto_then_momentum_rank":
+                    decision = _strict_veto_retained_decision(decision)
+                pick = _rejection_pick_payload(
+                    universe=universe,
+                    symbol=symbol,
+                    family=family,
+                    decision=decision,
+                    original_rank=original_rank,
+                    derived_rank=index,
+                )
+                round_record = veto_round
+            else:
+                pick = _random_rejection_pick_payload(
+                    universe=universe,
+                    symbol=symbol,
+                    original_rank=original_rank,
+                    derived_rank=index,
+                    random_rejected_symbols=random_rejected,
+                )
+                round_record = None
+            _insert_candidate(
+                session,
+                run=run,
+                round_record=round_record,
+                symbol=symbol,
+                baseline_family=family,
+                rank=index,
+                packet=packet,
+                universe=universe,
+                llm_pick=pick,
+            )
+
+    session.flush()
+    validation_result = validate_historical_replay_run(session, run.id, horizons=SHORTPICK_DEFAULT_HORIZONS)
+    candidate_counts = _hard_veto_candidate_counts(session, run.id)
+    run.summary_payload = {
+        **dict(run.summary_payload or {}),
+        "hard_veto_experiment": {
+            "status": "completed",
+            "momentum_pool_limit": momentum_pool_limit,
+            "rank_limit": rank_limit,
+            "veto_max_ratio": veto_max_ratio,
+            "hard_vetoed_count": len(hard_vetoed),
+            "strict_vetoed_count": len(strict_vetoed),
+            "families": list(SHORTPICK_REPLAY_HARD_VETO_FAMILIES),
+            "candidate_counts": candidate_counts,
+            "completed_at": utcnow().isoformat(),
+        },
+    }
+    session.flush()
+    return {
+        "run_id": run.id,
+        "run_date": run.run_date.isoformat(),
+        "hard_vetoed_count": len(hard_vetoed),
+        "strict_vetoed_count": len(strict_vetoed),
+        "candidate_counts": candidate_counts,
+        "validation": validation_result,
+    }
+
+
 def _load_replay_packet(session: Session, run: ShortpickExperimentRun) -> dict[str, Any]:
     packet_id = str((run.summary_payload or {}).get("source_packet_id") or "")
     artifact = read_shortpick_lab_artifact_if_exists(packet_id, root=_artifact_root(session)) if packet_id else None
@@ -995,6 +1185,24 @@ def _delete_rejection_outputs(session: Session, run_id: int, *, refresh_expanded
     session.flush()
 
 
+def _delete_hard_veto_outputs(session: Session, run_id: int) -> None:
+    candidate_ids = [
+        candidate.id
+        for candidate in session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all()
+        if _candidate_baseline_family(candidate) in SHORTPICK_REPLAY_HARD_VETO_FAMILIES
+    ]
+    if candidate_ids:
+        session.execute(delete(ShortpickValidationSnapshot).where(ShortpickValidationSnapshot.candidate_id.in_(candidate_ids)))
+        session.execute(delete(ShortpickCandidate).where(ShortpickCandidate.id.in_(candidate_ids)))
+    session.execute(
+        delete(ShortpickModelRound).where(
+            ShortpickModelRound.run_id == run_id,
+            ShortpickModelRound.executor_kind.in_(SHORTPICK_REPLAY_HARD_VETO_EXECUTORS),
+        )
+    )
+    session.flush()
+
+
 def _distillation_candidate_counts(session: Session, run_id: int) -> dict[str, int]:
     counts = dict.fromkeys(SHORTPICK_REPLAY_DISTILL_FAMILIES, 0)
     for candidate in session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all():
@@ -1006,6 +1214,15 @@ def _distillation_candidate_counts(session: Session, run_id: int) -> dict[str, i
 
 def _rejection_candidate_counts(session: Session, run_id: int) -> dict[str, int]:
     counts = dict.fromkeys(("momentum_volume_expanded_pool", *SHORTPICK_REPLAY_REJECTION_FAMILIES), 0)
+    for candidate in session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all():
+        family = _candidate_baseline_family(candidate)
+        if family in counts:
+            counts[family] += 1
+    return counts
+
+
+def _hard_veto_candidate_counts(session: Session, run_id: int) -> dict[str, int]:
+    counts = dict.fromkeys(SHORTPICK_REPLAY_HARD_VETO_FAMILIES, 0)
     for candidate in session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all():
         family = _candidate_baseline_family(candidate)
         if family in counts:
@@ -1283,6 +1500,100 @@ def _insert_replay_rejection_round(
             prompt=prompt,
             round_index=round_index,
             output_family="llm_reject_only",
+        )
+
+
+def _insert_replay_hard_veto_round(
+    session: Session,
+    *,
+    run: ShortpickExperimentRun,
+    packet: dict[str, Any],
+    universe: dict[str, Any],
+    pool_symbols: list[str],
+    veto_max_ratio: float,
+) -> tuple[ShortpickModelRound, list[dict[str, Any]]]:
+    if not pool_symbols:
+        return _insert_failed_replay_distillation_round(
+            session,
+            run=run,
+            packet=packet,
+            raw_answer="",
+            provider_name="system",
+            model_name="empty_candidate_pool",
+            executor_kind="historical_replay_momentum_pool_hard_veto",
+            error_message="momentum candidate pool is empty",
+            prompt=None,
+            round_index=5,
+            output_family="llm_hard_veto_then_momentum_rank",
+        )
+    prompt = _build_replay_hard_veto_prompt(
+        session,
+        run=run,
+        packet=packet,
+        universe=universe,
+        pool_symbols=pool_symbols,
+        veto_max_ratio=veto_max_ratio,
+    )
+    system = (
+        "你是历史隔离回放硬否决审计器。只能使用用户消息中的 sealed hard-veto packet。"
+        "禁止联网，禁止使用训练记忆补充事实，禁止输出 candidate_pool 外股票。只输出 JSON。"
+    )
+    base_url = ""
+    model_name = "unavailable"
+    raw_answer = ""
+    try:
+        transport, base_url, api_key, model_name = route_model("shortpick_historical_replay")
+        raw_answer = transport.complete(
+            base_url=base_url,
+            api_key=api_key,
+            model_name=model_name,
+            prompt=prompt,
+            system=system,
+            enable_search=False,
+        )
+        parsed_json, final_raw_answer, repair_used = _extract_replay_rejection_json_with_partial_repair(
+            transport=transport,
+            base_url=base_url,
+            api_key=api_key,
+            model_name=model_name,
+            raw_answer=raw_answer,
+        )
+        parsed_payload = _normalize_replay_rejection_payload(
+            parsed_json,
+            packet=packet,
+            universe=universe,
+            pool_symbols=pool_symbols,
+            reject_max_ratio=veto_max_ratio,
+        )
+        parsed_payload["rejection_mode"] = "hard_veto_only"
+        parsed_payload["_json_repair_used"] = repair_used
+        round_record = _insert_replay_round_record(
+            session,
+            run=run,
+            packet=packet,
+            parsed_payload=parsed_payload,
+            raw_answer=final_raw_answer,
+            provider_name=_provider_name_from_base_url(base_url),
+            model_name=model_name,
+            executor_kind="historical_replay_momentum_pool_hard_veto",
+            error_message=None,
+            prompt=prompt,
+            round_index=5,
+        )
+        return round_record, list(parsed_payload.get("decisions") or [])
+    except Exception as exc:
+        return _insert_failed_replay_distillation_round(
+            session,
+            run=run,
+            packet=packet,
+            raw_answer=raw_answer,
+            provider_name=_provider_name_from_base_url(base_url),
+            model_name=model_name,
+            executor_kind="historical_replay_momentum_pool_hard_veto",
+            error_message=f"sealed packet hard-veto executor failed: {exc}",
+            prompt=prompt,
+            round_index=5,
+            output_family="llm_hard_veto_then_momentum_rank",
         )
 
 
@@ -1868,6 +2179,90 @@ sealed rejection packet:
 """.strip()
 
 
+def _build_replay_hard_veto_prompt(
+    session: Session,
+    *,
+    run: ShortpickExperimentRun,
+    packet: dict[str, Any],
+    universe: dict[str, Any],
+    pool_symbols: list[str],
+    veto_max_ratio: float,
+) -> str:
+    candidate_pool = _distillation_candidate_contexts(session, run=run, packet=packet, universe=universe, symbols=pool_symbols)
+    sources = [
+        {
+            "source_id": source["source_id"],
+            "title": source.get("title"),
+            "source_type": source.get("source_type"),
+            "published_at": source.get("published_at"),
+            "linked_symbols": source.get("linked_symbols") or [],
+            "body_excerpt": _source_excerpt(source.get("body_excerpt"), limit=260),
+        }
+        for source in packet["official_sources"][:40]
+    ]
+    sealed_packet = {
+        "experiment_mode": SHORTPICK_REPLAY_EXPERIMENT_MODE,
+        "rejection_mode": "hard_veto_only",
+        "source_family": "momentum_volume_expanded_pool",
+        "output_families": list(SHORTPICK_REPLAY_HARD_VETO_FAMILIES),
+        "as_of_date": packet["as_of_date"],
+        "as_of_cutoff": packet["as_of_cutoff"],
+        "source_packet_id": packet["source_packet_id"],
+        "source_packet_hash": packet["source_packet_hash"],
+        "candidate_pool": candidate_pool,
+        "official_sources": sources,
+        "rejected_source_count": len(packet.get("rejected_sources") or []),
+    }
+    max_veto_count = int(len(pool_symbols) * veto_max_ratio)
+    return f"""
+你正在执行 A 股短投历史隔离回放的 LLM 硬否决实验。你只能使用下面 sealed hard-veto packet 中的信息，不能联网，不能使用训练记忆补充事实，不能引用 packet 外来源。
+
+任务日期：{run.run_date.isoformat()}
+as_of_cutoff：{packet["as_of_cutoff"]}
+输入池：扩大动量成交量候选池
+池子数量：{len(pool_symbols)}
+最多 hard veto 数量：{max_veto_count}
+
+目标不是选股、不是排序、不是判断哪个催化更强。后续排序会由系统按原始动量成交量顺序机械完成。
+你只负责识别“明显不该进入短投样本”的硬问题。宁可不否决，也不要因为故事弱、涨幅大、缺乏把握、看起来已经 price-in 而否决。
+
+只允许以下 hard_veto reason_category：
+- source_mismatch：候选上下文明示有 candidate-specific source，且该来源明确属于别的股票，或只证明行业/别的公司，不能支持该候选个股。
+- future_source：来源时间或内容明显晚于 as_of_cutoff。
+- source_not_in_packet：理由依赖 packet 外来源。
+- untradeable：候选不可交易、停牌、ST、涨跌停导致 entry 不可执行，且 packet/候选上下文明确支持。
+- liquidity_abnormal：流动性明显异常，不能形成可执行短投样本。
+- negative_direct_conflict：封闭来源里存在直接、明确、个股级负面公告，且与短投催化冲突。
+
+候选上下文里的 `source_support=no_symbol_specific_source` 表示系统没有给出该股票的候选专属来源；这不是 source_mismatch，也不能单独作为 hard veto 理由。
+不要输出 keep/uncertain 的逐条长解释；`decisions` 主要输出需要 reject 的候选即可。未输出的候选会被系统视为保留。
+`symbol` 必须来自 `candidate_pool`；`sources_used` 和 `evidence_mapping` 只能填写 packet 内的 `source_id`。
+
+输出 JSON，不要加代码块：
+{{
+  "as_of_date": "{run.run_date.isoformat()}",
+  "information_mode": "historical_replay",
+  "rejection_mode": "hard_veto_only",
+  "source_family": "momentum_volume_expanded_pool",
+  "decisions": [
+    {{
+      "symbol": "000000.SZ",
+      "decision": "reject",
+      "reason_category": "source_mismatch|future_source|source_not_in_packet|untradeable|liquidity_abnormal|negative_direct_conflict",
+      "reason": "...",
+      "sources_used": ["src-001"],
+      "evidence_mapping": {{"reason": ["src-001"]}},
+      "limitations": ["..."]
+    }}
+  ],
+  "limitations": []
+}}
+
+sealed hard-veto packet:
+{json.dumps(sealed_packet, ensure_ascii=False, indent=2)}
+""".strip()
+
+
 def _distillation_candidate_contexts(
     session: Session,
     *,
@@ -1882,7 +2277,7 @@ def _distillation_candidate_contexts(
         if member is None:
             continue
         bars = _recent_daily_bars(session, symbol=symbol, as_of_date=run.run_date, limit=25)
-        linked_sources = _sources_for_symbol(packet, symbol)
+        linked_sources = _linked_sources_for_symbol(packet, symbol)
         contexts.append(
             {
                 "symbol": symbol,
@@ -1899,11 +2294,7 @@ def _distillation_candidate_contexts(
                 "turnover_rate": member.turnover_rate,
                 "source_ids": [source["source_id"] for source in linked_sources[:3]],
                 "source_titles": [source.get("title") for source in linked_sources[:3]],
-                "source_support": (
-                    "symbol_linked"
-                    if any(symbol in (source.get("linked_symbols") or []) for source in linked_sources)
-                    else "market_snapshot_only"
-                ),
+                "source_support": "symbol_linked" if linked_sources else "no_symbol_specific_source",
             }
         )
     return contexts
@@ -2396,14 +2787,31 @@ def _deterministic_random_rejections(
     run: ShortpickExperimentRun,
     symbols: list[str],
     reject_count: int,
+    salt: str = "random_reject_then_momentum_rank",
 ) -> list[str]:
     if reject_count <= 0 or not symbols:
         return []
     count = min(reject_count, len(symbols))
-    seed_text = f"{run.id}:{run.run_date.isoformat()}:random_reject_then_momentum_rank:{','.join(symbols)}"
+    seed_text = f"{run.id}:{run.run_date.isoformat()}:{salt}:{','.join(symbols)}"
     seed = int(hashlib.sha256(seed_text.encode("utf-8")).hexdigest()[:12], 16)
     rng = random.Random(seed)
     return rng.sample(list(symbols), count)
+
+
+def _strict_veto_retained_decision(decision: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(decision, dict):
+        return decision
+    if decision.get("decision") != "reject":
+        return decision
+    category = str(decision.get("reason_category") or "")
+    if category in SHORTPICK_REPLAY_STRICT_VETO_CATEGORIES:
+        return decision
+    return {
+        **decision,
+        "decision": "keep",
+        "reason": f"model hard-veto category `{category}` is not in the strict bad-event veto set; retained for strict-veto experiment",
+        "limitations": [*_string_list(decision.get("limitations")), "retained by strict-veto subset"],
+    }
 
 
 def _rejection_pick_payload(
@@ -2699,6 +3107,10 @@ def _sources_for_symbol(packet: dict[str, Any], symbol: str) -> list[dict[str, A
     return matched[:3] if matched else packet["official_sources"][:1]
 
 
+def _linked_sources_for_symbol(packet: dict[str, Any], symbol: str) -> list[dict[str, Any]]:
+    return [source for source in packet["official_sources"] if symbol in (source.get("linked_symbols") or [])][:3]
+
+
 def _packet_summary(packet: dict[str, Any]) -> dict[str, Any]:
     return {
         "source_packet_id": packet["source_packet_id"],
@@ -2927,6 +3339,10 @@ def _baseline_label(value: str) -> str:
         "llm_reject_only": "LLM只剔除保留池",
         "llm_reject_then_momentum_rank": "LLM剔除后动量排序",
         "random_reject_then_momentum_rank": "随机剔除后动量排序",
+        "llm_hard_veto_then_momentum_rank": "LLM硬否决后动量排序",
+        "random_hard_veto_then_momentum_rank": "随机硬否决后动量排序",
+        "llm_strict_veto_then_momentum_rank": "LLM严格否决后动量排序",
+        "random_strict_veto_then_momentum_rank": "随机严格否决后动量排序",
     }
     return labels.get(value, value)
 

@@ -56,6 +56,7 @@ from ashare_evidence.shortpick_lab import (
 from ashare_evidence.shortpick_replay import (
     run_shortpick_historical_replay,
     run_shortpick_replay_distillation,
+    run_shortpick_replay_hard_veto_experiment,
     run_shortpick_replay_rejection,
 )
 from ashare_evidence.simulation import restart_simulation_session, step_simulation_session
@@ -440,6 +441,18 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_replay_reject.add_argument("--rank-limit", type=int, default=5)
     shortpick_replay_reject.add_argument("--reject-max-ratio", type=float, default=0.4)
 
+    shortpick_replay_hard_veto = subparsers.add_parser(
+        "shortpick-replay-hard-veto",
+        help="Run sealed-packet hard-veto-only replay experiments on expanded momentum pools.",
+    )
+    shortpick_replay_hard_veto.add_argument("--database-url", default=None)
+    shortpick_replay_hard_veto.add_argument("--run-id", type=int, default=None)
+    shortpick_replay_hard_veto.add_argument("--start-date", default=None)
+    shortpick_replay_hard_veto.add_argument("--end-date", default=None)
+    shortpick_replay_hard_veto.add_argument("--momentum-pool-limit", type=int, default=40)
+    shortpick_replay_hard_veto.add_argument("--rank-limit", type=int, default=6)
+    shortpick_replay_hard_veto.add_argument("--veto-max-ratio", type=float, default=0.15)
+
     phase5_daily = subparsers.add_parser(
         "phase5-daily-refresh",
         help="Run the daily Phase 5 refresh workflow: refresh runtime data, then write latest/history horizon-study snapshots.",
@@ -707,6 +720,20 @@ def main(argv: list[str] | None = None) -> int:
                 momentum_pool_limit=args.momentum_pool_limit,
                 rank_limit=args.rank_limit,
                 reject_max_ratio=args.reject_max_ratio,
+            )
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-replay-hard-veto":
+        with session_scope(args.database_url) as session:
+            payload = run_shortpick_replay_hard_veto_experiment(
+                session,
+                run_id=args.run_id,
+                start_date=None if args.start_date is None else date.fromisoformat(args.start_date),
+                end_date=None if args.end_date is None else date.fromisoformat(args.end_date),
+                momentum_pool_limit=args.momentum_pool_limit,
+                rank_limit=args.rank_limit,
+                veto_max_ratio=args.veto_max_ratio,
             )
         _print_json(payload)
         return 0
