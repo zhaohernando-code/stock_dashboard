@@ -146,6 +146,9 @@ def _run_one_replay_date(
     session.add(run)
     session.flush()
     _write_replay_packet_artifact(session, run, packet)
+    # Persist the run shell before the LLM call so long provider latency does not
+    # hold a SQLite write transaction against the live runtime database.
+    session.commit()
     _insert_replay_candidates(
         session,
         run=run,
@@ -178,6 +181,7 @@ def _run_one_replay_date(
         "boundary": "historical_replay_no_main_pool_write",
     }
     session.flush()
+    session.commit()
     return get_shortpick_run(session, run.id, include_raw=True)
 
 
