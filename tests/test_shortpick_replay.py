@@ -228,6 +228,7 @@ def test_replay_feedback_compares_llm_and_baselines_without_live_pollution(monke
             assert feedback["overall"]["run_count"] == 1
             assert feedback["overall"]["unique_replay_date_count"] == 1
             assert feedback["overall"]["validation_by_horizon"]
+            assert [group["group_key"] for group in feedback["overall"]["validation_by_horizon"]] == ["1", "3", "5", "10", "20"]
             assert feedback["overall"]["statistical_gate"]["status"] in {"exploratory", "ready"}
             assert feedback["overall"]["factor_ic_gate"]["status"] == "blocked"
             assert feedback["overall"]["news_calibration"]["status"] == "diagnostic_only"

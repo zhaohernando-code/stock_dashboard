@@ -50,6 +50,7 @@ SHORTPICK_REPLAY_BASELINE_FAMILIES = (
     "random_same_market_cap_bucket",
     "momentum_volume_baseline",
 )
+SHORTPICK_REPLAY_HORIZON_ORDER = (1, 3, 5, 10, 20)
 
 
 @dataclass(frozen=True)
@@ -1339,7 +1340,7 @@ def _replay_feedback_groups(rows: list[dict[str, Any]], *, group_key: str) -> li
         key = str(row["validation"].horizon_days if group_key == "horizon" else row["baseline_family"])
         grouped.setdefault(key, []).append(row)
     output = []
-    for key, values in sorted(grouped.items()):
+    for key, values in sorted(grouped.items(), key=lambda item: _replay_group_sort_key(item[0], group_key=group_key)):
         completed = [
             row for row in values
             if row["official_sample_eligible"] and row["validation"].status == "completed"
@@ -1361,6 +1362,20 @@ def _replay_feedback_groups(rows: list[dict[str, Any]], *, group_key: str) -> li
             }
         )
     return output
+
+
+def _replay_group_sort_key(key: str, *, group_key: str) -> tuple[int, int, str]:
+    if group_key == "horizon":
+        try:
+            horizon = int(key)
+        except ValueError:
+            return (1, len(SHORTPICK_REPLAY_HORIZON_ORDER), key)
+        if horizon in SHORTPICK_REPLAY_HORIZON_ORDER:
+            return (0, SHORTPICK_REPLAY_HORIZON_ORDER.index(horizon), key)
+        return (0, len(SHORTPICK_REPLAY_HORIZON_ORDER) + horizon, key)
+    if group_key == "family" and key in SHORTPICK_REPLAY_BASELINE_FAMILIES:
+        return (0, SHORTPICK_REPLAY_BASELINE_FAMILIES.index(key), key)
+    return (1, 0, key)
 
 
 def _robustness_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:

@@ -39,6 +39,7 @@ import { formatDate, formatPercent, valueTone } from "../utils/format";
 
 const { Paragraph, Text, Title } = Typography;
 const DEFAULT_VALIDATION_PAGE_SIZE = 50;
+const HORIZON_ORDER = [1, 3, 5, 10, 20];
 const BENCHMARK_OPTIONS = [
   { label: "沪深300", value: "hs300" },
   { label: "中证1000", value: "csi1000" },
@@ -170,6 +171,21 @@ function validationWindowNote(item: ShortpickValidationView | ShortpickValidatio
 
 function recordValue<T>(record: Record<string, unknown> | undefined, key: string): T | undefined {
   return record?.[key] as T | undefined;
+}
+
+function horizonSortValue(value: string | number): number {
+  const horizon = Number(value);
+  if (!Number.isFinite(horizon)) return Number.MAX_SAFE_INTEGER;
+  const index = HORIZON_ORDER.indexOf(horizon);
+  return index >= 0 ? index : HORIZON_ORDER.length + horizon;
+}
+
+function sortHorizonGroups<T extends { group_key: string | number }>(groups: T[]): T[] {
+  return [...groups].sort((left, right) => horizonSortValue(left.group_key) - horizonSortValue(right.group_key));
+}
+
+function sortHorizons(values: number[]): number[] {
+  return [...values].sort((left, right) => horizonSortValue(left) - horizonSortValue(right));
 }
 
 function validationCoverage(run: ShortpickRunView): string {
@@ -1151,7 +1167,7 @@ function FeedbackGroupList({ title, groups, selectedBenchmark }: { title: string
       <Title level={5}>{title} · {benchmarkLabel(selectedBenchmark)}</Title>
       <List
         size="small"
-        dataSource={groups}
+        dataSource={title === "周期表现" ? sortHorizonGroups(groups) : groups}
         renderItem={(group) => {
           const metric = group.benchmark_metrics?.[selectedBenchmark];
           const meanExcess = metric?.mean_excess_return ?? (selectedBenchmark === "hs300" ? group.mean_excess_return : null);
@@ -1438,19 +1454,20 @@ function ReplayStatisticalSummary({
 }) {
   const overall = feedback?.overall ?? {};
   const gate = recordValue<Record<string, unknown>>(overall, "statistical_gate") ?? {};
-  const horizonRows = (recordValue<ShortpickFeedbackGroup[]>(overall, "validation_by_horizon") ?? []).map((group) => {
-    const metric = group.benchmark_metrics?.[selectedBenchmark];
-    return {
-      ...group,
-      mean_excess_return: metric?.mean_excess_return ?? group.mean_excess_return,
-      positive_excess_rate: metric?.positive_excess_rate ?? group.positive_excess_rate,
-    };
-  });
+  const horizonRows = sortHorizonGroups(recordValue<ShortpickFeedbackGroup[]>(overall, "validation_by_horizon") ?? [])
+    .map((group) => {
+      const metric = group.benchmark_metrics?.[selectedBenchmark];
+      return {
+        ...group,
+        mean_excess_return: metric?.mean_excess_return ?? group.mean_excess_return,
+        positive_excess_rate: metric?.positive_excess_rate ?? group.positive_excess_rate,
+      };
+    });
   const familyRows = feedback?.families ?? [];
   const completedSamples = Number(gate.completed_official_sample_count ?? overall.completed_official_sample_count ?? 0);
   const completedDates = Number(gate.completed_date_count ?? 0);
   const status = String(gate.status ?? "exploratory");
-  const readyHorizons = recordValue<number[]>(gate, "ready_horizons") ?? [];
+  const readyHorizons = sortHorizons(recordValue<number[]>(gate, "ready_horizons") ?? []);
   const horizonByKey = new Map(horizonRows.map((group) => [String(group.group_key), group]));
   return (
     <Card className="panel-card shortpick-replay-readout" title="历史回放核心读数">
@@ -1501,7 +1518,7 @@ function ReplayStatisticalSummary({
         </Col>
       </Row>
       <div className="shortpick-replay-horizon-strip">
-        {[1, 3, 5, 10, 20].map((horizon) => {
+        {HORIZON_ORDER.map((horizon) => {
           const group = horizonByKey.get(String(horizon));
           const metric = group ? selectedBenchmarkGroupMetric(group, selectedBenchmark) : null;
           return (

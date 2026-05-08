@@ -153,7 +153,12 @@ def route_model(task: str) -> tuple[LLMTransport, str, str, str]:
     base_url, api_key = _resolve_deepseek_config()
     if api_key and "deepseek" in base_url.lower():
         transport: LLMTransport = AnthropicCompatibleTransport()
-        if task in ("announcement_earnings", "announcement_capital_action", "financial_analysis"):
+        if task in (
+            "announcement_earnings",
+            "announcement_capital_action",
+            "financial_analysis",
+            "shortpick_historical_replay",
+        ):
             return transport, base_url, api_key, DEEPSEEK_V4_PRO
         return transport, base_url, api_key, DEEPSEEK_V4_FLASH
     from ashare_evidence.runtime_config import get_builtin_llm_executor_config
