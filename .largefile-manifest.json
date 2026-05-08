@@ -165,8 +165,8 @@
       "status": "planned_refactor"
     },
     "src/ashare_evidence/shortpick_market_factor_study.py": {
-      "lines": 629,
-      "reason": "Backend-only Short Pick Lab market-factor study command: loads daily bars, builds expanded momentum pools, evaluates fixed and walk-forward feature rerankers including 10d momentum + turnover and single-day-chase cooldown, supports CSI300 and universe equal-weight benchmark modes, applies cost/entry assumptions, and summarizes train/holdout/replay windows. Kept cohesive while the research contract is still exploratory; split loader/evaluator/summary helpers if it becomes a production API.",
+      "lines": 957,
+      "reason": "Backend-only Short Pick Lab market-factor study command: loads daily bars, builds expanded momentum pools, evaluates fixed and walk-forward feature rerankers including 10d momentum + turnover, single-day-chase cooldown, industry-diversified diagnostics, and a train-threshold breadth/continuity regime gate, supports CSI300 and universe equal-weight benchmark modes, applies cost/entry assumptions, and summarizes train/holdout/replay windows plus portfolio-level and regime-bucket readouts. Kept cohesive while the research contract is still exploratory; split loader/evaluator/summary helpers if it becomes a production API.",
       "reviewed_at": "2026-05-08",
       "status": "planned_refactor"
     },
