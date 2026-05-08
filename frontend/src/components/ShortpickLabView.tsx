@@ -53,6 +53,8 @@ function priorityLabel(value: string): string {
   if (value === "same_model_repeat_symbol") return "同模型重复";
   if (value === "cross_model_same_topic") return "跨模型同题材";
   if (value === "single_model_high_conviction") return "单模型高置信";
+  if (value === "market_factor_default") return "策略默认";
+  if (value === "market_factor_offensive") return "进攻对照";
   if (value === "high_convergence") return "高收敛";
   if (value === "theme_convergence") return "题材收敛";
   if (value === "divergent_novel") return "发散新颖";
@@ -65,6 +67,8 @@ function priorityColor(value: string): string {
   if (value === "cross_model_same_symbol" || value === "high_convergence") return "red";
   if (value === "cross_model_same_topic" || value === "theme_convergence") return "gold";
   if (value === "same_model_repeat_symbol" || value === "single_model_high_conviction") return "orange";
+  if (value === "market_factor_default") return "green";
+  if (value === "market_factor_offensive") return "cyan";
   if (value === "divergent_novel") return "blue";
   if (value === "watch_only") return "default";
   if (value === "failed_or_unusable") return "red";
@@ -631,6 +635,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
       render: (value: string, item) => (
         <Space wrap>
           <Tag color={priorityColor(value)}>{priorityLabel(value)}</Tag>
+          {item.baseline_family ? <Tag color="cyan">{baselineFamilyLabel(item.baseline_family)}</Tag> : null}
           {item.is_system_external ? <Tag color="blue">系统外新视角</Tag> : <Tag>系统内已覆盖</Tag>}
         </Space>
       ),

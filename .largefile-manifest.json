@@ -141,8 +141,8 @@
       "reviewed_at": "2026-05-03"
     },
     "frontend/src/components/ShortpickLabView.tsx": {
-      "lines": 2018,
-      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, historical replay workbench state, and the strategy closeout readout in one Ant Design surface. Historical replay now includes aggregate statistical readouts, per-run drilldown, readable replay family labels, and the market-factor closeout summary for cooldown/default, ret10-turnover/offensive, breadth/continuity gate, and diversification diagnostics. Heavy replay aggregate/per-run feedback and strategy closeout data now load in the background instead of blocking initial lab or replay navigation. It should be split into tab components after replay contracts stabilize, but keeping it together avoids cross-file churn during this visible replay closeout.",
+      "lines": 2023,
+      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, historical replay workbench state, and the strategy closeout readout in one Ant Design surface. Historical replay now includes aggregate statistical readouts, per-run drilldown, readable replay family labels, and the market-factor closeout summary for cooldown/default, ret10-turnover/offensive, breadth/continuity gate, and diversification diagnostics. Heavy replay aggregate/per-run feedback and strategy closeout data now load in the background instead of blocking initial lab or replay navigation. Live runs now label the formal strategy-default and offensive-control candidate groups alongside the LLM control group. It should be split into tab components after replay contracts stabilize, but keeping it together avoids cross-file churn during this visible replay closeout.",
       "status": "planned_refactor",
       "reviewed_at": "2026-05-09"
     },
@@ -177,10 +177,10 @@
       "reviewed_at": "2026-05-08"
     },
     "src/ashare_evidence/shortpick_lab.py": {
-      "lines": 4129,
-      "reason": "Short Pick Lab workflow: native-web/open-discovery execution, source integrity, candidate parsing, validation, retry, serialization, and model feedback. The latest change adds compact run-list serialization so list endpoints do not embed candidate/source-packet detail; a module split remains desirable after the API contract stabilizes.",
+      "lines": 4556,
+      "reason": "Short Pick Lab workflow: native-web/open-discovery execution, source integrity, candidate parsing, validation, retry, serialization, and model feedback. Live runs now attach the selected market-factor overlay as first-class validation candidates after LLM consensus, while keeping consensus scoped to independent LLM candidates; the overlay refreshes the existing research universe only during run generation and commits per symbol to avoid long SQLite locks. A module split remains desirable after the API contract stabilizes.",
       "status": "planned_refactor",
-      "reviewed_at": "2026-05-08"
+      "reviewed_at": "2026-05-09"
     }
   }
 }

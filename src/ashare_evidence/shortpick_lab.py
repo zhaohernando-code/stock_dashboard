@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import subprocess
 import tempfile
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -78,6 +80,19 @@ SHORTPICK_DEEPSEEK_MIN_SEARCH_RESULTS = 3
 SHORTPICK_DEEPSEEK_QUERY_RETRY_ATTEMPTS = 2
 SHORTPICK_LOBECHAT_SEARXNG_URL_ENV = "SHORTPICK_LOBECHAT_SEARXNG_URL"
 SHORTPICK_LOBECHAT_SEARXNG_DEFAULT_URL = "http://127.0.0.1:18080"
+SHORTPICK_MARKET_FACTOR_POOL_LIMIT = 40
+SHORTPICK_MARKET_FACTOR_RANK_LIMIT = 6
+SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY = "momentum_10d_turnover_cooldown_rank"
+SHORTPICK_MARKET_FACTOR_OFFENSIVE_FAMILY = "momentum_10d_turnover_rank"
+SHORTPICK_MARKET_FACTOR_BREADTH10_THRESHOLD = 0.5849056603773585
+SHORTPICK_MARKET_FACTOR_POOL_RET10_THRESHOLD = 0.030113740291951276
+SHORTPICK_MARKET_FACTOR_EXCLUDED_SYMBOLS = {
+    "000300.SH",
+    "000905.SH",
+    "000852.SH",
+    "399300.SZ",
+    *(definition["symbol"] for definition in CSI_BENCHMARKS.values()),
+}
 SUSPICIOUS_SOURCE_PATTERNS = (
     re.compile(r"(?:123456|234567|345678|456789|987654|876543)"),
     re.compile(r"(.)\1{5,}"),
@@ -919,6 +934,14 @@ def run_shortpick_experiment(
             "rounds_per_model": normalized_rounds,
             "native_web_search": True,
             "controlled_search": False,
+            "market_factor_overlay": {
+                "enabled": True,
+                "default_family": SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY,
+                "offensive_family": SHORTPICK_MARKET_FACTOR_OFFENSIVE_FAMILY,
+                "pool_limit": SHORTPICK_MARKET_FACTOR_POOL_LIMIT,
+                "rank_limit": SHORTPICK_MARKET_FACTOR_RANK_LIMIT,
+                "consensus_scope": "llm_candidates_only",
+            },
         },
         summary_payload={},
     )
@@ -954,6 +977,7 @@ def run_shortpick_experiment(
     if _should_auto_topic_backfill(active_executors):
         normalize_shortpick_candidate_topics(session, run_id=run.id)
     consensus = build_shortpick_consensus(session, run)
+    market_factor_overlay = insert_shortpick_market_factor_overlay_candidates(session, run)
     validation_result = validate_shortpick_run(session, run.id, horizons=SHORTPICK_DEFAULT_HORIZONS)
     completed_count = session.scalar(
         select(func.count(ShortpickModelRound.id)).where(
@@ -982,6 +1006,7 @@ def run_shortpick_experiment(
         "parse_failed_count": parse_failed_count,
         "candidate_count": session.scalar(select(func.count(ShortpickCandidate.id)).where(ShortpickCandidate.run_id == run.id)) or 0,
         "consensus_priority": consensus.research_priority,
+        "market_factor_overlay": market_factor_overlay,
         "boundary": "independent_research_lab_no_main_pool_write",
         **dict(validation_result.get("summary") or {}),
     }
@@ -1228,6 +1253,383 @@ def _candidate_from_round(
     session.add(candidate)
     session.flush()
     return candidate
+
+
+def insert_shortpick_market_factor_overlay_candidates(session: Session, run: ShortpickExperimentRun) -> dict[str, Any]:
+    """Attach the production market-factor strategy candidates to a shortpick run.
+
+    The overlay is inserted after LLM consensus. It is intentionally stored as
+    first-class candidates so it can use the same forward validation surface,
+    while consensus metrics continue to describe only independent LLM picks.
+    """
+
+    universe_sync = _sync_shortpick_market_factor_universe(session, run.run_date)
+    removed = _delete_existing_market_factor_overlay_candidates(session, run_id=run.id)
+    contexts, diagnostics = _shortpick_market_factor_contexts(session, run.run_date)
+    pool = _shortpick_market_factor_pool(contexts)
+    if not pool:
+        result = {
+            "status": "skipped",
+            "reason": "no_market_factor_pool",
+            "removed_existing_candidate_count": removed,
+            "market_data_sync": universe_sync,
+            **diagnostics,
+        }
+        run.summary_payload = {**dict(run.summary_payload or {}), "market_factor_overlay": result}
+        session.flush()
+        return result
+
+    breadth10 = _positive_rate([float(item["return_10d"]) for item in contexts])
+    pool_ret10_mean = _mean_or_none([float(item["return_10d"]) for item in pool])
+    regime_gate_pass = bool(
+        (breadth10 is not None and breadth10 >= SHORTPICK_MARKET_FACTOR_BREADTH10_THRESHOLD)
+        or (pool_ret10_mean is not None and pool_ret10_mean >= SHORTPICK_MARKET_FACTOR_POOL_RET10_THRESHOLD)
+    )
+    regime = {
+        "breadth10": breadth10,
+        "pool_ret10_mean": pool_ret10_mean,
+        "breadth10_threshold": SHORTPICK_MARKET_FACTOR_BREADTH10_THRESHOLD,
+        "pool_ret10_threshold": SHORTPICK_MARKET_FACTOR_POOL_RET10_THRESHOLD,
+        "gate_pass": regime_gate_pass,
+        "interpretation": "仅作仓位/环境诊断，不过滤候选；避免在小样本上过拟合。",
+    }
+    inserted: list[dict[str, Any]] = []
+    for family in (SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY, SHORTPICK_MARKET_FACTOR_OFFENSIVE_FAMILY):
+        ranked = _rank_shortpick_market_factor_pool(pool, family=family)[:SHORTPICK_MARKET_FACTOR_RANK_LIMIT]
+        for rank, item in enumerate(ranked, start=1):
+            candidate = _upsert_shortpick_market_factor_candidate(
+                session,
+                run=run,
+                item=item,
+                family=family,
+                rank=rank,
+                pool=pool,
+                regime=regime,
+            )
+            inserted.append(
+                {
+                    "candidate_id": candidate.id,
+                    "symbol": candidate.symbol,
+                    "name": candidate.name,
+                    "baseline_family": family,
+                    "rank": rank,
+                    "score": item.get("_market_factor_score"),
+                }
+            )
+    result = {
+        "status": "inserted",
+        "removed_existing_candidate_count": removed,
+        "inserted_candidate_count": len(inserted),
+        "pool_limit": SHORTPICK_MARKET_FACTOR_POOL_LIMIT,
+        "rank_limit": SHORTPICK_MARKET_FACTOR_RANK_LIMIT,
+        "families": [SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY, SHORTPICK_MARKET_FACTOR_OFFENSIVE_FAMILY],
+        "regime": regime,
+        "market_data_sync": universe_sync,
+        "candidates": inserted,
+        **diagnostics,
+    }
+    run.summary_payload = {**dict(run.summary_payload or {}), "market_factor_overlay": result}
+    session.flush()
+    return result
+
+
+def _delete_existing_market_factor_overlay_candidates(session: Session, *, run_id: int) -> int:
+    candidates = session.scalars(
+        select(ShortpickCandidate).where(
+            ShortpickCandidate.run_id == run_id,
+            ShortpickCandidate.candidate_key.like(f"shortpick-market-factor:{run_id}:%"),
+        )
+    ).all()
+    if not candidates:
+        return 0
+    candidate_ids = [candidate.id for candidate in candidates]
+    snapshots = session.scalars(
+        select(ShortpickValidationSnapshot).where(ShortpickValidationSnapshot.candidate_id.in_(candidate_ids))
+    ).all()
+    for snapshot in snapshots:
+        session.delete(snapshot)
+    for candidate in candidates:
+        session.delete(candidate)
+    session.flush()
+    return len(candidates)
+
+
+def _shortpick_market_factor_contexts(session: Session, run_date: date) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    cutoff = datetime.combine(run_date, datetime.max.time()).replace(tzinfo=UTC)
+    rows = session.execute(
+        select(Stock, MarketBar)
+        .join(MarketBar, MarketBar.stock_id == Stock.id)
+        .where(MarketBar.timeframe == "1d", MarketBar.observed_at <= cutoff)
+        .order_by(Stock.symbol.asc(), MarketBar.observed_at.asc(), MarketBar.id.asc())
+    ).all()
+    stocks_by_symbol: dict[str, Stock] = {}
+    bars_by_symbol: dict[str, list[MarketBar]] = defaultdict(list)
+    for stock, bar in rows:
+        if not _stock_eligible_for_shortpick_market_factor(stock, run_date=run_date):
+            continue
+        stocks_by_symbol[stock.symbol] = stock
+        bars_by_symbol[stock.symbol].append(bar)
+
+    contexts: list[dict[str, Any]] = []
+    for symbol, bars in bars_by_symbol.items():
+        unique_bars = _dedupe_market_factor_bars(bars)
+        if len(unique_bars) < 21:
+            continue
+        latest = unique_bars[-1]
+        if latest.close_price <= 0 or latest.amount <= 0:
+            continue
+        context = _market_factor_context_from_bars(stocks_by_symbol[symbol], unique_bars)
+        if context is not None:
+            contexts.append(context)
+
+    latest_day = max((item["latest_trade_day"] for item in contexts), default=None)
+    current_contexts = [item for item in contexts if item["latest_trade_day"] == latest_day] if latest_day else []
+    return current_contexts, {
+        "run_date": run_date.isoformat(),
+        "latest_trade_day": latest_day,
+        "raw_symbol_count": len(bars_by_symbol),
+        "eligible_symbol_count": len(current_contexts),
+        "stale_symbol_count": max(len(contexts) - len(current_contexts), 0),
+    }
+
+
+def _sync_shortpick_market_factor_universe(session: Session, run_date: date) -> dict[str, Any]:
+    if os.getenv("SHORTPICK_MARKET_FACTOR_SYNC", "1").strip().lower() in {"0", "false", "no"}:
+        return {"status": "disabled"}
+    stocks = session.scalars(select(Stock).order_by(Stock.symbol.asc())).all()
+    eligible = [stock for stock in stocks if _stock_eligible_for_shortpick_market_factor(stock, run_date=run_date)]
+    refreshed: list[str] = []
+    skipped_current = 0
+    failed: list[dict[str, str]] = []
+    for stock in eligible:
+        latest_day = session.scalar(
+            select(func.max(MarketBar.observed_at)).where(MarketBar.stock_id == stock.id, MarketBar.timeframe == "1d")
+        )
+        if latest_day is not None and latest_day.date() >= run_date:
+            skipped_current += 1
+            continue
+        try:
+            fetch = _fetch_shortpick_daily_market_data(session, stock.symbol)
+            upserted = _upsert_shortpick_market_bars(session, stock=stock, bars=fetch.bars)
+            session.commit()
+            if upserted:
+                refreshed.append(stock.symbol)
+        except Exception as exc:
+            session.rollback()
+            failed.append({"symbol": stock.symbol, "reason": str(exc)[:200]})
+    return {
+        "status": "ok" if not failed else "partial",
+        "target_date": run_date.isoformat(),
+        "eligible_symbol_count": len(eligible),
+        "skipped_current_count": skipped_current,
+        "refreshed_symbol_count": len(refreshed),
+        "failed_symbol_count": len(failed),
+        "failed": failed[:20],
+    }
+
+
+def _stock_eligible_for_shortpick_market_factor(stock: Stock, *, run_date: date) -> bool:
+    symbol = str(stock.symbol or "").upper()
+    ticker = symbol.split(".", 1)[0]
+    if symbol in SHORTPICK_MARKET_FACTOR_EXCLUDED_SYMBOLS:
+        return False
+    if not symbol.endswith((".SH", ".SZ", ".BJ")) or not ticker.isdigit() or len(ticker) != 6:
+        return False
+    if stock.status and stock.status != "active":
+        return False
+    if stock.delisted_date is not None and stock.delisted_date <= run_date:
+        return False
+    name = str(stock.name or "").upper()
+    return "ST" not in name and "退" not in name
+
+
+def _dedupe_market_factor_bars(bars: list[MarketBar]) -> list[MarketBar]:
+    by_day: dict[date, MarketBar] = {}
+    for bar in bars:
+        by_day[bar.observed_at.date()] = bar
+    return [by_day[day] for day in sorted(by_day)]
+
+
+def _market_factor_context_from_bars(stock: Stock, bars: list[MarketBar]) -> dict[str, Any] | None:
+    latest = bars[-1]
+    previous = bars[-2]
+    five_back = bars[-6]
+    ten_back = bars[-11]
+    if previous.close_price <= 0 or five_back.close_price <= 0 or ten_back.close_price <= 0:
+        return None
+    profile = stock.profile_payload if isinstance(stock.profile_payload, dict) else {}
+    turnover_rate = latest.turnover_rate
+    if turnover_rate is None:
+        turnover_rate = 0.0
+    context = {
+        "symbol": stock.symbol,
+        "name": stock.name,
+        "industry": profile.get("industry") or profile.get("sector") or "",
+        "latest_trade_day": latest.observed_at.date().isoformat(),
+        "close": float(latest.close_price),
+        "amount": float(latest.amount or 0.0),
+        "turnover_rate": float(turnover_rate or 0.0),
+        "return_1d": (latest.close_price / previous.close_price) - 1,
+        "return_5d": (latest.close_price / five_back.close_price) - 1,
+        "return_10d": (latest.close_price / ten_back.close_price) - 1,
+        "bars": len(bars),
+    }
+    if any(not math.isfinite(float(context[key])) for key in ("amount", "turnover_rate", "return_1d", "return_5d", "return_10d")):
+        return None
+    return context
+
+
+def _shortpick_market_factor_pool(contexts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ranked = sorted(
+        contexts,
+        key=lambda item: (
+            float(item["return_1d"]),
+            float(item["amount"]),
+            float(item["turnover_rate"]),
+            float(item["return_10d"]),
+        ),
+        reverse=True,
+    )
+    return ranked[:SHORTPICK_MARKET_FACTOR_POOL_LIMIT]
+
+
+def _rank_shortpick_market_factor_pool(pool: list[dict[str, Any]], *, family: str) -> list[dict[str, Any]]:
+    ranked: list[dict[str, Any]] = []
+    for item in pool:
+        scored = dict(item)
+        ret10_rank = _rank_percentile(pool, "return_10d", item)
+        turnover_rank = _rank_percentile(pool, "turnover_rate", item)
+        ret1_rank = _rank_percentile(pool, "return_1d", item)
+        score = ret10_rank + turnover_rank
+        if family == SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY:
+            score -= 0.5 * ret1_rank
+        scored.update(
+            {
+                "_market_factor_score": round(score, 6),
+                "_ret10_rank_percentile": ret10_rank,
+                "_turnover_rank_percentile": turnover_rank,
+                "_ret1_rank_percentile": ret1_rank,
+            }
+        )
+        ranked.append(scored)
+    return sorted(
+        ranked,
+        key=lambda item: (
+            float(item["_market_factor_score"]),
+            float(item["return_10d"]),
+            float(item["turnover_rate"]),
+            float(item["amount"]),
+        ),
+        reverse=True,
+    )
+
+
+def _rank_percentile(pool: list[dict[str, Any]], key: str, item: dict[str, Any]) -> float:
+    values = sorted(float(row[key]) for row in pool if row.get(key) is not None and math.isfinite(float(row[key])))
+    if len(values) <= 1:
+        return 0.5
+    value = float(item[key])
+    lower = sum(1 for candidate in values if candidate < value)
+    equal = sum(1 for candidate in values if candidate == value)
+    return round((lower + (equal - 1) / 2) / (len(values) - 1), 6)
+
+
+def _upsert_shortpick_market_factor_candidate(
+    session: Session,
+    *,
+    run: ShortpickExperimentRun,
+    item: dict[str, Any],
+    family: str,
+    rank: int,
+    pool: list[dict[str, Any]],
+    regime: dict[str, Any],
+) -> ShortpickCandidate:
+    family_label = _shortpick_market_factor_family_label(family)
+    candidate_key = f"shortpick-market-factor:{run.id}:{family}:{rank}"
+    payload = {
+        "information_mode": SHORTPICK_INFORMATION_MODE,
+        "experiment_mode": "live_market_factor_overlay",
+        "candidate_origin": "market_factor_overlay",
+        "baseline_family": family,
+        "topic_normalization": {
+            "topic_cluster_id": "market_factor_shortpick",
+            "label_zh": f"策略候选：{family_label}",
+            "topic_confidence": 1.0,
+            "normalization_method": "system_factor_overlay_v1",
+            "status": "system_strategy",
+            "reason": "来自历史回放后选定的动量成交量策略，不使用新闻语义。",
+        },
+        "market_factor_overlay": {
+            "rank": rank,
+            "score": item.get("_market_factor_score"),
+            "family": family,
+            "family_label": family_label,
+            "pool_limit": SHORTPICK_MARKET_FACTOR_POOL_LIMIT,
+            "rank_limit": SHORTPICK_MARKET_FACTOR_RANK_LIMIT,
+            "pool_symbol_count": len(pool),
+            "latest_trade_day": item.get("latest_trade_day"),
+            "return_1d": item.get("return_1d"),
+            "return_5d": item.get("return_5d"),
+            "return_10d": item.get("return_10d"),
+            "amount": item.get("amount"),
+            "turnover_rate": item.get("turnover_rate"),
+            "ret10_rank_percentile": item.get("_ret10_rank_percentile"),
+            "turnover_rank_percentile": item.get("_turnover_rank_percentile"),
+            "ret1_rank_percentile": item.get("_ret1_rank_percentile"),
+            "regime": regime,
+        },
+    }
+    candidate = ShortpickCandidate(
+        run_id=run.id,
+        round_id=None,
+        candidate_key=candidate_key,
+        symbol=str(item["symbol"]),
+        name=str(item["name"])[:64],
+        normalized_theme=f"策略候选：{family_label}",
+        horizon_trading_days=5,
+        confidence=float(item.get("_market_factor_score") or 0.0),
+        thesis=(
+            f"{family_label}第 {rank} 名：先按当日动量成交量扩大到 {SHORTPICK_MARKET_FACTOR_POOL_LIMIT} 只候选，"
+            "再用10日动量与换手率排序，并保留对当日追高的诊断。"
+        ),
+        catalysts=[
+            f"10日涨幅 {float(item['return_10d']):.2%}",
+            f"当日成交额 {float(item['amount']) / 100000000:.2f} 亿元",
+            f"换手率 {float(item['turnover_rate']):.2f}",
+        ],
+        invalidation=["放量后次日承接不足", "短线趋势转弱或跌破前一交易日收盘"],
+        risks=["纯市场因子候选，不包含新闻语义核验", "高动量标的可能面临追高回撤"],
+        sources_payload=[],
+        novelty_note="作为正式策略组参与试验田验证，LLM自由选股继续保留为对照组。",
+        limitations=["不读取未来信息；不使用盘后新增新闻；只基于截至运行日期的日线行情。"],
+        convergence_group="market_factor",
+        research_priority=(
+            "market_factor_default" if family == SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY else "market_factor_offensive"
+        ),
+        parse_status="parsed",
+        is_system_external=_is_system_external(session, str(item["symbol"])),
+        candidate_payload=payload,
+    )
+    session.add(candidate)
+    session.flush()
+    return candidate
+
+
+def _shortpick_market_factor_family_label(family: str) -> str:
+    if family == SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY:
+        return "10日动量换手降追高"
+    if family == SHORTPICK_MARKET_FACTOR_OFFENSIVE_FAMILY:
+        return "10日动量换手排序"
+    return "动量成交量"
+
+
+def _is_market_factor_overlay_candidate(candidate: ShortpickCandidate) -> bool:
+    payload = candidate.candidate_payload if isinstance(candidate.candidate_payload, dict) else {}
+    return (
+        payload.get("candidate_origin") == "market_factor_overlay"
+        or str(payload.get("baseline_family") or "").startswith("momentum_10d_turnover")
+        or candidate.candidate_key.startswith("shortpick-market-factor:")
+    )
 
 
 def _normalize_shortpick_topic(parsed: dict[str, Any]) -> dict[str, Any]:
@@ -1481,7 +1883,8 @@ def build_shortpick_consensus(session: Session, run: ShortpickExperimentRun) -> 
     candidates = session.scalars(
         select(ShortpickCandidate).where(ShortpickCandidate.run_id == run.id).order_by(ShortpickCandidate.id.asc())
     ).all()
-    parsed = [item for item in candidates if item.parse_status == "parsed" and item.symbol != "PARSE_FAILED"]
+    consensus_candidates = [item for item in candidates if not _is_market_factor_overlay_candidate(item)]
+    parsed = [item for item in consensus_candidates if item.parse_status == "parsed" and item.symbol != "PARSE_FAILED"]
     total = max(len(parsed), 1)
     symbol_counts: dict[str, int] = {}
     theme_counts: dict[str, int] = {}
@@ -1590,7 +1993,8 @@ def build_shortpick_consensus(session: Session, run: ShortpickExperimentRun) -> 
         "cross_model_themes": cross_model_themes,
         "cross_model_theme_labels": {theme: topic_labels.get(theme, theme) for theme in cross_model_themes},
         "topic_registry": topic_registry,
-        "candidate_count": len(candidates),
+        "candidate_count": len(consensus_candidates),
+        "excluded_market_factor_overlay_candidate_count": len(candidates) - len(consensus_candidates),
         "parsed_candidate_count": len(parsed),
         "source_credibility_counts": source_status_counts,
         "interpretation": "模型一致性只代表研究优先级，不代表交易建议。",
@@ -1769,6 +2173,7 @@ def retry_failed_shortpick_rounds(
         if _should_auto_topic_backfill(executors):
             normalize_shortpick_candidate_topics(session, run_id=run.id)
         consensus = build_shortpick_consensus(session, run)
+        market_factor_overlay = insert_shortpick_market_factor_overlay_candidates(session, run)
         validation_result = validate_shortpick_run(session, run.id, horizons=SHORTPICK_DEFAULT_HORIZONS)
         completed_count = session.scalar(
             select(func.count(ShortpickModelRound.id)).where(
@@ -1798,6 +2203,7 @@ def retry_failed_shortpick_rounds(
             "parse_failed_count": parse_failed_count,
             "candidate_count": session.scalar(select(func.count(ShortpickCandidate.id)).where(ShortpickCandidate.run_id == run.id)) or 0,
             "consensus_priority": consensus.research_priority,
+            "market_factor_overlay": market_factor_overlay,
             "boundary": "independent_research_lab_no_main_pool_write",
             **dict(validation_result.get("summary") or {}),
         }
@@ -1934,6 +2340,7 @@ def _upsert_validation_snapshot(
         )
         session.add(existing)
         session.flush()
+    candidate_metadata = _shortpick_candidate_validation_metadata(candidate)
     bars = _daily_bars_for_symbol(session, candidate.symbol)
     if not bars:
         existing.status = "pending_market_data"
@@ -1944,6 +2351,7 @@ def _upsert_validation_snapshot(
             "official_validation": False,
             "tradeability_status": "pending_market_data",
             "market_data_sync": market_sync or {},
+            **candidate_metadata,
         }
         return existing
 
@@ -1966,6 +2374,7 @@ def _upsert_validation_snapshot(
             "signal_trade_day": signal_trade_day.isoformat(),
             "latest_trade_day": latest_bar_day.isoformat(),
             "market_data_sync": market_sync or {},
+            **candidate_metadata,
         }
         return existing
 
@@ -1981,6 +2390,7 @@ def _upsert_validation_snapshot(
             "signal_available_at": signal_available_at.isoformat(),
             "signal_trade_day": signal_trade_day.isoformat(),
             "market_data_sync": market_sync or {},
+            **candidate_metadata,
         }
         return existing
 
@@ -2006,6 +2416,7 @@ def _upsert_validation_snapshot(
             "signal_trade_day": signal_trade_day.isoformat(),
             "entry_trade_day": entry.observed_at.date().isoformat(),
             "market_data_sync": market_sync or {},
+            **candidate_metadata,
         }
         return existing
 
@@ -2037,6 +2448,7 @@ def _upsert_validation_snapshot(
             "signal_trade_day": signal_trade_day.isoformat(),
             "entry_trade_day": bars[entry_index].observed_at.date().isoformat(),
             "market_data_sync": market_sync or {},
+            **candidate_metadata,
         }
         return existing
     window = bars[entry_index : exit_index + 1]
@@ -2091,8 +2503,23 @@ def _upsert_validation_snapshot(
         "exit_trade_day": exit_bar.observed_at.date().isoformat(),
         "market_data_sync": market_sync or {},
         "note": "后验验证只读取行情，不回写主量化推荐或模拟盘。",
+        **candidate_metadata,
     }
     return existing
+
+
+def _shortpick_candidate_validation_metadata(candidate: ShortpickCandidate) -> dict[str, Any]:
+    payload = candidate.candidate_payload if isinstance(candidate.candidate_payload, dict) else {}
+    metadata: dict[str, Any] = {
+        "experiment_mode": payload.get("experiment_mode"),
+        "baseline_family": payload.get("baseline_family") or "llm",
+        "candidate_origin": payload.get("candidate_origin") or "llm_open_discovery",
+        "official_sample_eligible": payload.get("official_sample_eligible", True),
+    }
+    for key in ("source_packet_id", "source_packet_hash", "leakage_audit_status", "leakage_audit_reasons"):
+        if key in payload:
+            metadata[key] = payload.get(key)
+    return metadata
 
 
 def _shortpick_signal_available_at(

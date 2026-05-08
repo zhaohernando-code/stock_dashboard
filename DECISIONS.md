@@ -988,3 +988,13 @@ P-1/P0 专业化改造的收尾状态以“测试 + 发布 + deploy verifier + s
 - Replay validation 不允许为了同板块 benchmark、行情或资料完整性触发现时网络补数；缺失维度应显示 existing-only / pending，而不是补未来可得信息。
 - 小样本 RankIC 只能作为诊断，不得驱动调权：单次截面和少于 20 个有效窗口的 IC 结果标记 blocked/diagnostic，observed-but-blocked 因子不通过 default fallback 偷偷回到生产权重。
 - 用户要求前端展示不后置，因此每个 replay 后端能力都必须在 `试验田 / 历史回放` 有最小可见 UI；后续补真实 LLM replay executor 或更完整新闻 alpha 校准时也必须同步前端读数。
+
+[2026-05-09T03:10:00+08:00] Live Short Pick Lab strategy handoff:
+短投试验田正式把历史验证后的市场因子策略接入 live run，但不替代 LLM 开放检索选股。每个 live run 的主研究问题仍是 GPT/DeepSeek 在无本地上下文、公开搜索环境下能否短投选股；系统策略只作为并列验证组和对照组。
+
+补充说明
+- LLM 候选先完成 topic normalization 和 consensus；`market_factor_overlay` 在 consensus 之后写入，且 consensus 统计显式排除这类候选。
+- 默认策略为 `momentum_10d_turnover_cooldown_rank`：Top40 动量成交量池内按 `rank(return_10d)+rank(turnover_rate)-0.5*rank(return_1d)` 选 Top6。
+- `momentum_10d_turnover_rank` 保留为进攻对照，不作为默认稳健策略。
+- 市场因子行情补齐只允许在 run 生成链路发生，不能由前端面板加载触发；补现有研究 universe 时逐票提交，避免长 SQLite 写锁。
+- 强制行业分散、LLM broad rejector、LLM 蒸馏暂不升为 live 默认策略；它们保留在历史回放/研究 artifact 中作为负面或风险诊断证据。

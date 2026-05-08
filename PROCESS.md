@@ -2,6 +2,12 @@
 
 反回归笔记和可复用经验。状态快照见 PROJECT_STATUS.json。
 
+## 2026-05-09
+
+- **短投试验田正式接入历史验证后的 market-factor 策略，同时保留 LLM 对照组**：live `shortpick_lab` run 现在先让 GPT/DeepSeek 完成独立开放检索选股并构建 LLM 共识，再在共识之后写入两组系统策略候选：默认 `momentum_10d_turnover_cooldown_rank`，进攻对照 `momentum_10d_turnover_rank`。策略候选作为 first-class candidates 进入同一套 `1/3/5/10/20` 后验验证，但 `build_shortpick_consensus()` 明确排除 `candidate_origin=market_factor_overlay`，避免系统策略污染“LLM 是否自发收敛”的核心读数。当前 runtime run `30`（`2026-05-08`）已补入 12 条策略候选；现有研究股票池补到 2026-05-08 后有效策略池为 61 只，默认/进攻各 6 只候选均有 5 个 horizon 的 pending-forward 验证行。LLM 选股继续保留为对照，DeepSeek v4 pro 的搜索失败仍按失败轮次留痕，不伪装成有效候选。
+- **试验田页面不得触发全量市场研究或长事务补数**：策略池行情补齐只发生在 Short Pick Lab run 生成/手动补 overlay 时，不发生在面板打开、tab 切换、历史回放聚合或模型反馈加载时。补现有研究股票池时逐票 fetch/upsert 并 `commit`，避免网络等待期间持有长 SQLite 写锁。页面进入 `试验田` 仍保持轻量 run list，历史回放和 market-study 聚合后台加载，不阻塞前三个 tab。
+- **历史研究产物处理规则**：`output/shortpick-market-factor-study*.json` 与 `output/shortpick-replay-factor-rank*.json` 是形成 live 策略的有效证据，保留为研究 artifact；结论压缩写入 `docs/archive/SHORTPICK_MARKET_FACTOR_CLOSEOUT_2026-05-09.md`。无效口径继续按既有结论处理：flash replay 不作为正式样本，LLM broad rejector/distillation 不升为默认策略，强制行业分散只作风险诊断。
+
 ## 2026-05-08
 
 - **组合级与 regime 分解补齐后，强制行业分散不适合作为默认，regime gate 应进入下一阶段主线**：`shortpick-market-factor-study` 现在输出 `portfolio_summary` 和 `regime_summary`。组合级口径按每个 signal_day+horizon 的 Top6 等权组合计算，不再只看单票样本均值；同时记录 volatility、worst portfolio、additive drawdown、top symbol/industry concentration。新增 market-only 诊断策略 `ret10_turnover_cooldown_diversified`，在 cooldown 排序基础上默认单行业最多 2 只。2023-05-25..2026-04-30 等权基准结果显示：行业分散确实把 holdout top industry share 从 cooldown `70.1%` 降到 `32.9%`，但 alpha 基本被打掉，holdout 单票 trimmed `-0.083%`，组合 trimmed `+0.672%`，远弱于 cooldown 的单票 trimmed `+2.185%`、组合 trimmed `+2.752%`。因此强制行业分散只保留为风险诊断，不作为默认选股策略。regime 分桶更有用：按训练期 tertile 切分后，高 `universe_breadth10` 桶中 cooldown train portfolio trimmed `+0.23%`，holdout portfolio trimmed `+3.60%`；高 `pool_ret10_mean` 桶中 cooldown train trimmed `+0.11%`，holdout `+3.32%`；低/中宽度 regime 下仍显著更弱。已新增合成策略 `ret10_turnover_cooldown_regime_gate`：使用训练期 tertile 阈值，仅在 `universe_breadth10` 或 `pool_ret10_mean` 处于高桶时启用 cooldown。长样本训练期启用 `266/668` 个信号日，组合 mean `+0.493%`、10% trimmed `+0.028%`、positive `48.0%`；2026-03/04 holdout 启用 `16/43` 个信号日，组合 mean `+3.999%`、10% trimmed `+3.316%`、positive `75.0%`，优于 cooldown 全量组合 trimmed `+2.752%` / positive `69.1%`。当前主线：默认候选用 cooldown，仓位/启用用 regime_gate；ret10_turnover 保留为进攻型对照，行业分散保留为风险诊断。
