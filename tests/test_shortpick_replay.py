@@ -19,9 +19,11 @@ from ashare_evidence.models import (
     ShortpickValidationSnapshot,
     Stock,
 )
+from ashare_evidence.shortpick_lab import SHORTPICK_INFORMATION_MODE, list_shortpick_runs
 from ashare_evidence.shortpick_replay import (
     build_shortpick_replay_feedback,
     get_shortpick_replay_sources,
+    list_shortpick_replay_runs,
     run_shortpick_historical_replay,
 )
 
@@ -296,6 +298,16 @@ def test_historical_replay_uses_real_sealed_packet_llm_executor(monkeypatch) -> 
             assert [candidate.symbol for candidate in llm_candidates] == ["600003.SH"]
             assert llm_candidates[0].thesis == "测试半导体在 sealed packet 中有订单进展来源支持。"
             assert llm_candidates[0].candidate_payload["sources_used"] == ["src-001"]
+            run_list = list_shortpick_replay_runs(session, limit=10)
+            assert run_list["total"] == 1
+            listed = run_list["items"][0]
+            assert listed["candidates"] == []
+            assert "replay_feedback" not in listed["summary"]
+            source_packet = listed["summary"]["source_packet"]
+            assert "official_sources" not in source_packet
+            assert "rejected_sources" not in source_packet
+            live_list = list_shortpick_runs(session, information_mode=SHORTPICK_INFORMATION_MODE, limit=10)
+            assert live_list["total"] == 0
 
 
 def test_real_replay_llm_failure_does_not_fallback_to_diagnostic_proxy(monkeypatch) -> None:

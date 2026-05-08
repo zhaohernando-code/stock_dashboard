@@ -21,8 +21,8 @@
       "reviewed_at": "2026-04-30"
     },
     "src/ashare_evidence/api.py": {
-      "lines": 1183,
-      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, improvement-suggestion, and shortpick replay routes. The latest growth adds a small aggregate replay-feedback endpoint beside existing shortpick routes; router extraction remains possible but would add broad touch points across the current schema surface.",
+      "lines": 1187,
+      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, improvement-suggestion, shortpick lab, and shortpick replay routes. The latest change keeps shortpick run-list endpoints on compact summaries to avoid large payload timeouts; router extraction remains possible but would add broad touch points across the current schema surface.",
       "status": "accepted",
       "reviewed_at": "2026-05-08"
     },
@@ -159,10 +159,16 @@
       "status": "accepted"
     },
     "src/ashare_evidence/shortpick_replay.py": {
-      "lines": 1774,
-      "reason": "Shortpick historical replay v1 keeps sealed packet construction, sealed-packet-only LLM execution, failed-round handling without production proxy fallback, rejected-source/source-id leakage preservation, market-cap fallback bucketing, baseline controls, leakage audit, per-run and aggregate validation statistics, replay API helpers, and post-audit contract normalization in one first-version workflow. Diagnostic proxy remains explicit test mode only; split into packet/audit/baseline modules after the contract stabilizes.",
+      "lines": 1777,
+      "reason": "Shortpick historical replay v1 keeps sealed packet construction, sealed-packet-only LLM execution, failed-round handling without production proxy fallback, rejected-source/source-id leakage preservation, market-cap fallback bucketing, baseline controls, leakage audit, compact replay run listing, per-run and aggregate validation statistics, replay API helpers, and post-audit contract normalization in one first-version workflow. Diagnostic proxy remains explicit test mode only; split into packet/audit/baseline modules after the contract stabilizes.",
       "reviewed_at": "2026-05-08",
       "status": "planned_refactor"
+    },
+    "src/ashare_evidence/shortpick_lab.py": {
+      "lines": 4129,
+      "reason": "Short Pick Lab workflow: native-web/open-discovery execution, source integrity, candidate parsing, validation, retry, serialization, and model feedback. The latest change adds compact run-list serialization so list endpoints do not embed candidate/source-packet detail; a module split remains desirable after the API contract stabilizes.",
+      "status": "planned_refactor",
+      "reviewed_at": "2026-05-08"
     }
   }
 }

@@ -96,6 +96,7 @@ from ashare_evidence.schemas import (
 )
 from ashare_evidence.services import get_latest_recommendation_summary, get_recommendation_trace
 from ashare_evidence.shortpick_lab import (
+    SHORTPICK_INFORMATION_MODE,
     build_shortpick_model_feedback,
     get_shortpick_candidate,
     get_shortpick_run,
@@ -557,7 +558,10 @@ def create_app(
             date_to=date_to,
             limit=limit,
             offset=offset,
-            include_raw=access.actor_role == "root",
+            information_mode=SHORTPICK_INFORMATION_MODE,
+            include_raw=False,
+            include_candidates=False,
+            compact_summary=True,
         )
 
     @app.get("/shortpick-lab/runs/{run_id}", response_model=ShortpickRunView)
@@ -653,7 +657,7 @@ def create_app(
             date_to=date_to,
             limit=limit,
             offset=offset,
-            include_raw=access.actor_role == "root",
+            include_raw=False,
         )
 
     @app.get("/shortpick-lab/replay-runs/{run_id}", response_model=ShortpickRunView)

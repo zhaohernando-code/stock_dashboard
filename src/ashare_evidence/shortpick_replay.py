@@ -265,7 +265,10 @@ def list_shortpick_replay_runs(
         date_to=date_to,
         limit=limit,
         offset=offset,
+        information_mode=SHORTPICK_HISTORICAL_REPLAY_MODE,
         include_raw=include_raw,
+        include_candidates=False,
+        compact_summary=True,
     )
     items = [
         item

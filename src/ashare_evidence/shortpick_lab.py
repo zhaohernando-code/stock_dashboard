@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import tempfile
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 from typing import Any, Protocol
 from urllib import request
 from urllib.error import HTTPError, URLError
@@ -559,7 +559,6 @@ class OpenAICompatibleShortpickExecutor:
 
 
 def _isolated_codex_env() -> dict[str, str]:
-    keep_prefixes = ("PATH", "HOME", "LANG", "LC_", "SSL_", "HTTP_", "HTTPS_", "ALL_PROXY", "NO_PROXY")
     env: dict[str, str] = {}
     for key, value in os.environ.items():
         if key.startswith("ASHARE_") or key in {"PYTHONPATH", "DATABASE_URL"}:
@@ -3033,13 +3032,24 @@ def _apply_shortpick_candidate_display_gates(session: Session, *, run_id: int) -
     }
 
 
-def serialize_shortpick_run(session: Session, run: ShortpickExperimentRun, *, include_raw: bool) -> dict[str, Any]:
+def serialize_shortpick_run(
+    session: Session,
+    run: ShortpickExperimentRun,
+    *,
+    include_raw: bool,
+    include_candidates: bool = True,
+    compact_summary: bool = False,
+) -> dict[str, Any]:
     rounds = session.scalars(
         select(ShortpickModelRound).where(ShortpickModelRound.run_id == run.id).order_by(ShortpickModelRound.id.asc())
     ).all()
     candidates = session.scalars(
         select(ShortpickCandidate).where(ShortpickCandidate.run_id == run.id).order_by(ShortpickCandidate.id.asc())
     ).all()
+    summary = {
+        **dict(run.summary_payload or {}),
+        **_run_operational_summary(session, run, rounds=rounds, candidates=candidates),
+    }
     return {
         "id": run.id,
         "run_key": run.run_key,
@@ -3053,10 +3063,7 @@ def serialize_shortpick_run(session: Session, run: ShortpickExperimentRun, *, in
         "completed_at": run.completed_at,
         "failed_at": run.failed_at,
         "model_config": dict(run.model_config or {}),
-        "summary": {
-            **dict(run.summary_payload or {}),
-            **_run_operational_summary(session, run, rounds=rounds, candidates=candidates),
-        },
+        "summary": _compact_run_summary(summary) if compact_summary else summary,
         "rounds": [
             serialize_shortpick_round(item, include_raw=include_raw)
             for item in rounds
@@ -3071,8 +3078,21 @@ def serialize_shortpick_run(session: Session, run: ShortpickExperimentRun, *, in
         "candidates": [
             serialize_shortpick_candidate(session, item, include_raw=include_raw)
             for item in candidates
-        ],
+        ] if include_candidates else [],
     }
+
+
+def _compact_run_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    output = dict(summary)
+    source_packet = output.get("source_packet")
+    if isinstance(source_packet, dict):
+        packet = dict(source_packet)
+        packet.pop("official_sources", None)
+        packet.pop("diagnostic_sources", None)
+        packet.pop("rejected_sources", None)
+        output["source_packet"] = packet
+    output.pop("replay_feedback", None)
+    return output
 
 
 def _run_operational_summary(
@@ -3231,13 +3251,18 @@ def list_shortpick_runs(
     status: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    information_mode: str | None = None,
     limit: int = 20,
     offset: int = 0,
     include_raw: bool = False,
+    include_candidates: bool = True,
+    compact_summary: bool = False,
 ) -> dict[str, Any]:
     normalized_limit = max(1, min(int(limit), 100))
     normalized_offset = max(0, int(offset))
     query = select(ShortpickExperimentRun)
+    if information_mode is not None:
+        query = query.where(ShortpickExperimentRun.information_mode == information_mode)
     if status:
         query = query.where(ShortpickExperimentRun.status == status)
     if date_from is not None:
@@ -3252,7 +3277,16 @@ def list_shortpick_runs(
     ).all()
     return {
         "generated_at": utcnow(),
-        "items": [serialize_shortpick_run(session, run, include_raw=include_raw) for run in runs],
+        "items": [
+            serialize_shortpick_run(
+                session,
+                run,
+                include_raw=include_raw,
+                include_candidates=include_candidates,
+                compact_summary=compact_summary,
+            )
+            for run in runs
+        ],
         "total": total,
         "limit": normalized_limit,
         "offset": normalized_offset,
