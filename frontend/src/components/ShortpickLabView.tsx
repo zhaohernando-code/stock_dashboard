@@ -186,6 +186,27 @@ function primaryBenchmarkLabel(run: ShortpickRunView): string {
   return primary?.label || "沪深300";
 }
 
+function replayGateLabel(value?: string | null): string {
+  if (value === "ready") return "可做初步统计比较";
+  if (value === "exploratory") return "探索样本";
+  if (value === "not_ready") return "样本不足";
+  return "样本不足";
+}
+
+function replayGateAlertType(value?: string | null): "success" | "warning" {
+  return value === "ready" ? "success" : "warning";
+}
+
+function selectedBenchmarkGroupMetric(group: ShortpickFeedbackGroup, selectedBenchmark: string) {
+  const metric = group.benchmark_metrics?.[selectedBenchmark];
+  return {
+    meanExcessReturn: metric?.mean_excess_return ?? (selectedBenchmark === "hs300" ? group.mean_excess_return : null),
+    positiveExcessRate: metric?.positive_excess_rate ?? (selectedBenchmark === "hs300" ? group.positive_excess_rate : null),
+    availableCount: metric?.available_count ?? group.completed_official_sample_count ?? group.completed_validation_count,
+    pendingReasons: metric?.pending_reasons ? Object.keys(metric.pending_reasons) : [],
+  };
+}
+
 function operationalStatus(run: ShortpickRunView): string {
   return String(run.summary.operational_status ?? run.status);
 }
@@ -266,6 +287,12 @@ function auditReasonLabel(value: string): string {
     not_tradeable: "当日不可交易",
   };
   return labels[value] ?? value;
+}
+
+function sampleScopeLabel(selectedBenchmark: string): string {
+  if (selectedBenchmark === "sector_equal_weight") return "以同板块等权为超额收益口径";
+  if (selectedBenchmark === "csi1000") return "以中证1000为超额收益口径";
+  return "以沪深300为超额收益口径";
 }
 
 function shortHash(value?: string | null): string {
@@ -1246,14 +1273,14 @@ function HistoricalReplayTab({
 
       <Card
         className="panel-card"
-        title="Replay 批次与下钻"
+        title="回放批次与下钻"
         extra={<Button icon={<ReloadOutlined />} onClick={onReload} loading={loading}>刷新回放</Button>}
       >
         <Space wrap className="shortpick-filter-bar">
           <Select
             className="shortpick-run-select"
             value={selectedRun?.id}
-            placeholder="选择 replay 批次"
+            placeholder="选择回放批次"
             options={runs.map((run) => ({
               value: run.id,
               label: `${run.run_date} · ${statusLabel(operationalStatus(run))} · ${run.run_key}`,
@@ -1264,7 +1291,7 @@ function HistoricalReplayTab({
             {selectedRun ? statusLabel(operationalStatus(selectedRun)) : "无批次"}
           </Tag>
           <Text type="secondary">
-            {selectedRun ? `${selectedRun.run_date} · ${String(selectedRun.model_config?.rounds_per_model ?? selectedRun.model_config?.rounds ?? 0)} 轮 · packet ${shortHash(sources?.source_packet_hash)}` : "CLI 生成 replay 后会出现在这里。"}
+            {selectedRun ? `${selectedRun.run_date} · ${String(selectedRun.model_config?.rounds_per_model ?? selectedRun.model_config?.rounds ?? 0)} 轮 · 数据包 ${shortHash(sources?.source_packet_hash)}` : "生成历史回放后会出现在这里。"}
           </Text>
         </Space>
         {runs.length ? (
@@ -1288,7 +1315,7 @@ function HistoricalReplayTab({
                 title: "模型 / 轮次",
                 key: "rounds",
                 render: (_, run: ShortpickRunView) => (
-                  <Text>{String(run.summary.model_family ?? "sealed-packet-llm-proxy")} · {Number(run.summary.completed_round_count ?? run.rounds.length ?? 0)} 轮</Text>
+                  <Text>{String(run.summary.model_family ?? "封闭数据包模型")} · {Number(run.summary.completed_round_count ?? run.rounds.length ?? 0)} 轮</Text>
                 ),
               },
               {
@@ -1297,14 +1324,14 @@ function HistoricalReplayTab({
                 render: (_, run: ShortpickRunView) => (
                   <Space wrap>
                     <Tag>总数 {Number(run.summary.candidate_count ?? 0)}</Tag>
-                    <Tag color="green">official {Number(run.summary.official_sample_count ?? 0)}</Tag>
+                    <Tag color="green">正式样本 {Number(run.summary.official_sample_count ?? 0)}</Tag>
                     <Tag color="red">泄漏失败 {Number(run.summary.leakage_failed_count ?? 0)}</Tag>
-                    <Tag>baseline {Number(run.summary.baseline_candidate_count ?? 0)}</Tag>
+                    <Tag>对照组 {Number(run.summary.baseline_candidate_count ?? 0)}</Tag>
                   </Space>
                 ),
               },
               {
-                title: "Source Packet",
+                title: "封闭数据包",
                 key: "packet",
                 render: (_, run: ShortpickRunView) => {
                   const packet = recordValue<Record<string, unknown>>(run.summary, "source_packet") ?? {};
@@ -1317,7 +1344,7 @@ function HistoricalReplayTab({
             onRow={(run) => ({ onClick: () => onSelectRun(run.id) })}
           />
         ) : (
-          <Empty description="暂无历史回放批次。先用 CLI 生成 replay run。" />
+          <Empty description="暂无历史回放批次。" />
         )}
       </Card>
 
@@ -1326,7 +1353,7 @@ function HistoricalReplayTab({
           <Row gutter={[16, 16]} className="shortpick-metrics">
             <Col xs={24} md={6}>
               <div className="shortpick-metric">
-                <span>当日 Universe</span>
+                <span>当日股票池</span>
                 <strong>{Number(universe.total_count ?? 0)}</strong>
                 <Text type="secondary">可交易 {Number(universe.tradeable_count ?? 0)}</Text>
               </div>
@@ -1340,23 +1367,23 @@ function HistoricalReplayTab({
             </Col>
             <Col xs={24} md={6}>
               <div className="shortpick-metric">
-                <span>审计样本</span>
+                <span>正式样本</span>
                 <strong>{officialSamples}</strong>
                 <Text type="secondary">泄漏失败 {auditFailures}</Text>
               </div>
             </Col>
             <Col xs={24} md={6}>
               <div className="shortpick-metric">
-                <span>Source Packet</span>
+                <span>封闭数据包</span>
                 <strong>{shortHash(sources?.source_packet_hash)}</strong>
-                <Text type="secondary">official {officialCount} · diagnostic {diagnosticCount} · rejected {rejectedCount}</Text>
+                <Text type="secondary">正式 {officialCount} · 诊断 {diagnosticCount} · 剔除 {rejectedCount}</Text>
               </div>
             </Col>
           </Row>
 
           <ReplayFeedbackCards feedback={feedback} selectedBenchmark={selectedBenchmark} />
 
-          <Card className="panel-card" title="LLM 与 Baseline 候选对照">
+          <Card className="panel-card" title="模型与对照组候选明细">
             <Table
               rowKey="id"
               size="middle"
@@ -1368,20 +1395,20 @@ function HistoricalReplayTab({
                 expandedRowRender: (item) => (
                   <div className="shortpick-detail-grid">
                     <div>
-                      <Title level={5}>Thesis / Catalysts / Risks</Title>
+                      <Title level={5}>推荐理由 / 催化 / 风险</Title>
                       <Paragraph>{item.thesis || "--"}</Paragraph>
                       <List size="small" dataSource={[...item.catalysts, ...item.risks, ...item.limitations]} renderItem={(text) => <List.Item>{text}</List.Item>} />
                     </div>
                     <div>
                       <Title level={5}>泄漏审计</Title>
                       <Descriptions size="small" column={1}>
-                        <Descriptions.Item label="audit_pass">{item.leakage_audit_status === "pass" ? "true" : "false"}</Descriptions.Item>
-                        <Descriptions.Item label="future_leakage_suspected">{item.leakage_audit_reasons?.includes("future_leakage_suspected") ? "true" : "false"}</Descriptions.Item>
-                        <Descriptions.Item label="source_after_cutoff">{item.leakage_audit_reasons?.includes("source_after_cutoff") ? "true" : "false"}</Descriptions.Item>
-                        <Descriptions.Item label="source_not_in_packet">{item.leakage_audit_reasons?.includes("source_not_in_packet") ? "true" : "false"}</Descriptions.Item>
-                        <Descriptions.Item label="unsupported_claim">{item.leakage_audit_reasons?.includes("unsupported_claim") ? "true" : "false"}</Descriptions.Item>
-                        <Descriptions.Item label="unverified_source_time">{item.leakage_audit_reasons?.includes("unverified_source_time") ? "true" : "false"}</Descriptions.Item>
-                        <Descriptions.Item label="evidence_mapping">{JSON.stringify(item.evidence_mapping ?? {})}</Descriptions.Item>
+                        <Descriptions.Item label="审计结论">{auditStatusLabel(item.leakage_audit_status)}</Descriptions.Item>
+                        <Descriptions.Item label="疑似未来信息">{item.leakage_audit_reasons?.includes("future_leakage_suspected") ? "是" : "否"}</Descriptions.Item>
+                        <Descriptions.Item label="来源晚于截点">{item.leakage_audit_reasons?.includes("source_after_cutoff") ? "是" : "否"}</Descriptions.Item>
+                        <Descriptions.Item label="包外来源">{item.leakage_audit_reasons?.includes("source_not_in_packet") ? "是" : "否"}</Descriptions.Item>
+                        <Descriptions.Item label="事实无来源支持">{item.leakage_audit_reasons?.includes("unsupported_claim") ? "是" : "否"}</Descriptions.Item>
+                        <Descriptions.Item label="来源时间未验证">{item.leakage_audit_reasons?.includes("unverified_source_time") ? "是" : "否"}</Descriptions.Item>
+                        <Descriptions.Item label="证据映射">{JSON.stringify(item.evidence_mapping ?? {})}</Descriptions.Item>
                       </Descriptions>
                     </div>
                     <div>
@@ -1423,14 +1450,38 @@ function ReplayStatisticalSummary({
   const completedSamples = Number(gate.completed_official_sample_count ?? overall.completed_official_sample_count ?? 0);
   const completedDates = Number(gate.completed_date_count ?? 0);
   const status = String(gate.status ?? "exploratory");
+  const readyHorizons = recordValue<number[]>(gate, "ready_horizons") ?? [];
+  const horizonByKey = new Map(horizonRows.map((group) => [String(group.group_key), group]));
   return (
-    <Card className="panel-card" title="历史回放统计验收">
+    <Card className="panel-card shortpick-replay-readout" title="历史回放核心读数">
       <Alert
         showIcon
-        type={status === "ready" ? "success" : "warning"}
-        message={status === "ready" ? "样本已达到基础统计观察门槛" : "样本仍偏少，当前只能作为探索性统计"}
-        description={`覆盖 ${Number(overall.unique_replay_date_count ?? 0)} 个历史日期、${Number(overall.run_count ?? 0)} 个 replay run；已完成 official 验证样本 ${completedSamples}，完成日期 ${completedDates}。${String(gate.reason ?? "")}`}
+        type={replayGateAlertType(status)}
+        message={`当前结论：${replayGateLabel(status)}`}
+        description={`要验证的是：大模型在没有页面上下文的情况下，只靠当时能查到的公开数据，能否给出短期投机式选股；事后按 1 / 3 / 5 / 10 / 20 个交易日验证。当前覆盖 ${Number(overall.unique_replay_date_count ?? 0)} 个历史日期、${Number(overall.run_count ?? 0)} 个回放批次，已完成正式样本 ${completedSamples}，完成日期 ${completedDates}。${String(gate.reason ?? "")}`}
       />
+      <div className="shortpick-replay-question-grid">
+        <div>
+          <span>验证问题</span>
+          <strong>无上下文直接查询能否短投选股</strong>
+          <Text type="secondary">只看模型当时给出的股票，不看事后补充解释。</Text>
+        </div>
+        <div>
+          <span>隔离方式</span>
+          <strong>封闭历史数据包</strong>
+          <Text type="secondary">来源必须早于回放截点，候选必须在当日可交易股票池内。</Text>
+        </div>
+        <div>
+          <span>验收口径</span>
+          <strong>1 / 3 / 5 / 10 / 20 日</strong>
+          <Text type="secondary">{sampleScopeLabel(selectedBenchmark)}，并保留随机/动量对照组。</Text>
+        </div>
+        <div>
+          <span>可下结论范围</span>
+          <strong>{readyHorizons.length ? `${readyHorizons.join(" / ")} 日可观察` : "尚不能下能力结论"}</strong>
+          <Text type="secondary">未过样本门槛前，只能判断链路是否可运行和方向是否值得继续采样。</Text>
+        </div>
+      </div>
       <Row gutter={[16, 16]} className="shortpick-metrics">
         <Col xs={24} md={6}>
           <Statistic title="历史日期" value={Number(overall.unique_replay_date_count ?? 0)} suffix="天" />
@@ -1438,24 +1489,38 @@ function ReplayStatisticalSummary({
         </Col>
         <Col xs={24} md={6}>
           <Statistic title="Replay Run" value={Number(overall.run_count ?? 0)} />
-          <Text type="secondary">候选 horizon 行 {Number(overall.validation_count ?? 0)}</Text>
+          <Text type="secondary">候选周期行 {Number(overall.validation_count ?? 0)}</Text>
         </Col>
         <Col xs={24} md={6}>
-          <Statistic title="已完成 official 样本" value={completedSamples} />
+          <Statistic title="已完成正式样本" value={completedSamples} />
           <Text type="secondary">门槛 {Number(gate.min_completed_samples ?? 30)} 样本 / {Number(gate.min_completed_dates ?? 5)} 日期</Text>
         </Col>
         <Col xs={24} md={6}>
-          <Statistic title="可观察 horizon" value={(recordValue<number[]>(gate, "ready_horizons") ?? []).join(" / ") || "--"} />
+          <Statistic title="可观察周期" value={readyHorizons.join(" / ") || "--"} />
           <Text type="secondary">1 / 3 / 5 / 10 / 20 日逐步验收</Text>
         </Col>
       </Row>
+      <div className="shortpick-replay-horizon-strip">
+        {[1, 3, 5, 10, 20].map((horizon) => {
+          const group = horizonByKey.get(String(horizon));
+          const metric = group ? selectedBenchmarkGroupMetric(group, selectedBenchmark) : null;
+          return (
+            <div key={horizon} className="shortpick-replay-horizon-tile">
+              <span>{horizon}日</span>
+              <strong className={`value-${valueTone(metric?.meanExcessReturn)}`}>{formatPercent(metric?.meanExcessReturn)}</strong>
+              <Text type="secondary">正式样本 {Number(group?.completed_official_sample_count ?? 0)}/{Number(group?.official_sample_count ?? 0)}</Text>
+              <Text type="secondary">正超额 {formatPercent(metric?.positiveExcessRate)}</Text>
+            </div>
+          );
+        })}
+      </div>
       <Table
         className="shortpick-replay-stat-table"
         rowKey="group_key"
         size="small"
         pagination={false}
         columns={[
-          { title: "Horizon", render: (_, item: ShortpickFeedbackGroup) => `${item.group_key}日` },
+          { title: "周期", render: (_, item: ShortpickFeedbackGroup) => `${item.group_key}日` },
           { title: "样本", render: (_, item: ShortpickFeedbackGroup) => `${Number(item.completed_official_sample_count ?? 0)} / ${Number(item.official_sample_count ?? 0)}` },
           { title: `平均超额 · ${benchmarkLabel(selectedBenchmark)}`, render: (_, item: ShortpickFeedbackGroup) => <Text className={`value-${valueTone(item.mean_excess_return)}`}>{formatPercent(item.mean_excess_return)}</Text> },
           { title: "正超额占比", render: (_, item: ShortpickFeedbackGroup) => formatPercent(item.positive_excess_rate) },
@@ -1470,7 +1535,7 @@ function ReplayStatisticalSummary({
         pagination={false}
         columns={[
           { title: "组别", render: (_, item) => baselineFamilyLabel(item.baseline_family) },
-          { title: "候选", render: (_, item) => `${item.completed_official_sample_count} / ${item.official_sample_count}` },
+          { title: "正式样本", render: (_, item) => `${item.completed_official_sample_count} / ${item.official_sample_count}` },
           {
             title: "5日平均超额",
             render: (_, item) => {
@@ -1499,48 +1564,59 @@ function ReplayFeedbackCards({
   const factorGate = recordValue<Record<string, unknown>>(feedback?.overall, "factor_ic_gate") ?? {};
   const newsCalibration = recordValue<Record<string, unknown>>(feedback?.overall, "news_calibration") ?? {};
   return (
-    <>
-      <Row gutter={[16, 16]} className="shortpick-feedback-summary">
-        {(feedback?.families ?? []).map((family) => {
-          const horizon5 = family.validation_by_horizon.find((group) => String(group.group_key) === "5") ?? family.validation_by_horizon[0];
-          const metric = horizon5?.benchmark_metrics?.[selectedBenchmark];
-          const rawMean = metric?.mean_excess_return ?? horizon5?.mean_excess_return;
-          const robustness = family.robustness_metrics ?? {};
-          return (
-            <Col xs={24} md={12} xl={6} key={family.baseline_family}>
-              <Card className="panel-card shortpick-replay-family-card" size="small" title={baselineFamilyLabel(family.baseline_family)}>
-                <Space direction="vertical" size={2}>
-                  <Text>候选 {family.candidate_count} · official {family.completed_official_sample_count}/{family.official_sample_count}</Text>
-                  <Text className={`value-${valueTone(rawMean)}`}>5日平均超额 {formatPercent(rawMean)}</Text>
+    <Card className="panel-card" title={`模型与对照组比较 · ${benchmarkLabel(selectedBenchmark)}`}>
+      {(feedback?.families ?? []).length ? (
+        <Row gutter={[16, 16]} className="shortpick-feedback-summary">
+          {(feedback?.families ?? []).map((family) => {
+            const horizon5 = family.validation_by_horizon.find((group) => String(group.group_key) === "5") ?? family.validation_by_horizon[0];
+            const metric = horizon5?.benchmark_metrics?.[selectedBenchmark];
+            const rawMean = metric?.mean_excess_return ?? horizon5?.mean_excess_return;
+            const robustness = family.robustness_metrics ?? {};
+            return (
+              <Col xs={24} md={12} xl={6} key={family.baseline_family}>
+                <div className="shortpick-replay-family-summary">
+                  <span>{baselineFamilyLabel(family.baseline_family)}</span>
+                  <strong className={`value-${valueTone(rawMean)}`}>{formatPercent(rawMean)}</strong>
+                  <Text>5日平均超额</Text>
+                  <Text type="secondary">正式样本 {family.completed_official_sample_count}/{family.official_sample_count}</Text>
                   <Text type="secondary">去最佳单票 {formatPercent(recordValue<number>(robustness, "drop_best_symbol_mean_excess_return"))}</Text>
                   <Text type="secondary">去最佳日期 {formatPercent(recordValue<number>(robustness, "drop_best_date_mean_excess_return"))}</Text>
-                </Space>
-              </Card>
-            </Col>
-          );
-        })}
-      </Row>
-      <Row gutter={[16, 16]}>
-        <Col xs={24} md={12}>
-          <Alert
-            className="panel-card"
-            type={factorGate.status === "eligible" ? "success" : "warning"}
-            showIcon
-            message={`因子 IC 门禁：${String(factorGate.status ?? "not_ready")}`}
-            description={`截面股票数 ${Number(factorGate.cross_section_stock_count ?? 0)}；有效窗口 ${Number(factorGate.effective_window_count ?? 0)}；${String(factorGate.reason ?? "小样本只做诊断，不驱动权重。")}`}
-          />
-        </Col>
-        <Col xs={24} md={12}>
-          <Alert
-            className="panel-card"
-            type={newsCalibration.status === "ready" ? "success" : "warning"}
-            showIcon
-            message={`新闻因子校准：${String(newsCalibration.status ?? "not_ready")}`}
-            description={`新闻来源 ${Number(newsCalibration.news_count ?? 0)}；${String(newsCalibration.reason ?? "新闻覆盖通过不等于 alpha 显著。")}`}
-          />
-        </Col>
-      </Row>
-    </>
+                </div>
+              </Col>
+            );
+          })}
+        </Row>
+      ) : (
+        <Empty description="暂无模型与对照组回放统计" />
+      )}
+      <Collapse
+        className="shortpick-replay-diagnostics"
+        items={[{
+          key: "diagnostics",
+          label: "补充诊断门禁",
+          children: (
+            <Row gutter={[16, 16]}>
+              <Col xs={24} md={12}>
+                <Alert
+                  type={factorGate.status === "eligible" ? "success" : "warning"}
+                  showIcon
+                  message={`因子 IC 门禁：${String(factorGate.status ?? "not_ready")}`}
+                  description={`截面股票数 ${Number(factorGate.cross_section_stock_count ?? 0)}；有效窗口 ${Number(factorGate.effective_window_count ?? 0)}；${String(factorGate.reason ?? "小样本只做诊断，不驱动权重。")}`}
+                />
+              </Col>
+              <Col xs={24} md={12}>
+                <Alert
+                  type={newsCalibration.status === "ready" ? "success" : "warning"}
+                  showIcon
+                  message={`新闻因子校准：${String(newsCalibration.status ?? "not_ready")}`}
+                  description={`新闻来源 ${Number(newsCalibration.news_count ?? 0)}；${String(newsCalibration.reason ?? "新闻覆盖通过不等于 alpha 显著。")}`}
+                />
+              </Col>
+            </Row>
+          ),
+        }]}
+      />
+    </Card>
   );
 }
 
@@ -1551,11 +1627,11 @@ function ReplaySourcePacket({ sources }: { sources: ShortpickReplaySourceRespons
     ...(sources?.rejected_sources ?? []),
   ];
   return (
-    <Card className="panel-card" title="Sealed Source Packet">
+    <Card className="panel-card" title="封闭数据包与来源清单">
       <Descriptions size="small" column={{ xs: 1, md: 3 }}>
-        <Descriptions.Item label="as_of_cutoff">{sources?.as_of_cutoff || "--"}</Descriptions.Item>
-        <Descriptions.Item label="packet_hash">{sources?.source_packet_hash || "--"}</Descriptions.Item>
-        <Descriptions.Item label="source_packet_id">{sources?.source_packet_id || "--"}</Descriptions.Item>
+        <Descriptions.Item label="回放截点">{sources?.as_of_cutoff || "--"}</Descriptions.Item>
+        <Descriptions.Item label="数据包 Hash">{sources?.source_packet_hash || "--"}</Descriptions.Item>
+        <Descriptions.Item label="数据包 ID">{sources?.source_packet_id || "--"}</Descriptions.Item>
       </Descriptions>
       <Table
         rowKey={(item, index) => item.source_id || item.url || item.title || `source-${index ?? 0}`}
@@ -1567,7 +1643,7 @@ function ReplaySourcePacket({ sources }: { sources: ShortpickReplaySourceRespons
             render: (_, item) => (
               <Space direction="vertical" size={0}>
                 <Tag color={item.status === "official" ? "green" : item.status === "diagnostic" ? "gold" : "red"}>
-                  {item.status || "official"}
+                  {item.status === "diagnostic" ? "诊断" : item.status === "rejected" ? "剔除" : "正式"}
                 </Tag>
                 {item.reject_reason ? <Text type="secondary">{item.reject_reason}</Text> : null}
               </Space>
