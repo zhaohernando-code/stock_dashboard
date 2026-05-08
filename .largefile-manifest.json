@@ -141,8 +141,8 @@
       "reviewed_at": "2026-05-03"
     },
     "frontend/src/components/ShortpickLabView.tsx": {
-      "lines": 1964,
-      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, historical replay workbench state, and the strategy closeout readout in one Ant Design surface. Historical replay now includes aggregate statistical readouts, per-run drilldown, readable replay family labels, and the market-factor closeout summary for cooldown/default, ret10-turnover/offensive, breadth/continuity gate, and diversification diagnostics. The strategy closeout now lazy-loads in the replay tab instead of blocking initial lab navigation. It should be split into tab components after replay contracts stabilize, but keeping it together avoids cross-file churn during this visible replay closeout.",
+      "lines": 2018,
+      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, historical replay workbench state, and the strategy closeout readout in one Ant Design surface. Historical replay now includes aggregate statistical readouts, per-run drilldown, readable replay family labels, and the market-factor closeout summary for cooldown/default, ret10-turnover/offensive, breadth/continuity gate, and diversification diagnostics. Heavy replay aggregate/per-run feedback and strategy closeout data now load in the background instead of blocking initial lab or replay navigation. It should be split into tab components after replay contracts stabilize, but keeping it together avoids cross-file churn during this visible replay closeout.",
       "status": "planned_refactor",
       "reviewed_at": "2026-05-09"
     },

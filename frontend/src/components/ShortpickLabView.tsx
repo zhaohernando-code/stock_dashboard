@@ -366,8 +366,12 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
   const [replaySources, setReplaySources] = useState<ShortpickReplaySourceResponse | null>(null);
   const [replayFeedback, setReplayFeedback] = useState<ShortpickReplayFeedbackResponse | null>(null);
   const [replayAggregateFeedback, setReplayAggregateFeedback] = useState<ShortpickReplayFeedbackResponse | null>(null);
+  const [replayFeedbackLoading, setReplayFeedbackLoading] = useState(false);
+  const [replayAggregateLoading, setReplayAggregateLoading] = useState(false);
   const [marketStudy, setMarketStudy] = useState<ShortpickMarketFactorStudyResponse | null>(null);
   const [marketStudyLoading, setMarketStudyLoading] = useState(false);
+  const replayFeedbackRunIdRef = useRef<number | null>(null);
+  const replayAggregateLoadingRef = useRef(false);
   const marketStudyLoadingRef = useRef(false);
   const [loading, setLoading] = useState(false);
   const [validationLoading, setValidationLoading] = useState(false);
@@ -465,35 +469,69 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
     }
   }
 
+  async function loadReplayAggregateFeedback(): Promise<void> {
+    if (replayAggregateLoadingRef.current) return;
+    replayAggregateLoadingRef.current = true;
+    setReplayAggregateLoading(true);
+    try {
+      const result = await api.getShortpickReplayFeedback();
+      setReplayAggregateFeedback(result.data);
+    } catch (aggregateError) {
+      console.warn("加载历史回放全局统计失败", aggregateError);
+    } finally {
+      replayAggregateLoadingRef.current = false;
+      setReplayAggregateLoading(false);
+    }
+  }
+
+  async function loadReplayRunFeedback(runId: number): Promise<void> {
+    replayFeedbackRunIdRef.current = runId;
+    setReplayFeedbackLoading(true);
+    try {
+      const result = await api.getShortpickReplayFeedback(runId);
+      if (replayFeedbackRunIdRef.current === runId) {
+        setReplayFeedback(result.data);
+      }
+    } catch (statsError) {
+      if (replayFeedbackRunIdRef.current === runId) {
+        setReplayFeedback(null);
+      }
+      console.warn("加载历史回放批次统计失败", statsError);
+    } finally {
+      if (replayFeedbackRunIdRef.current === runId) {
+        setReplayFeedbackLoading(false);
+      }
+    }
+  }
+
   async function loadReplay(runId?: number, options: { includeMarketStudy?: boolean } = {}): Promise<void> {
     setReplayLoading(true);
     setError(null);
     try {
-      const [runList, aggregateStats] = await Promise.all([
-        api.getShortpickReplayRuns({ limit: 100 }),
-        api.getShortpickReplayFeedback(),
-      ]);
+      const runList = await api.getShortpickReplayRuns({ limit: 100 });
       const targetRunId = runId ?? selectedReplayRun?.id ?? runList.data.items[0]?.id;
       const target = runList.data.items.find((item) => item.id === targetRunId) ?? runList.data.items[0] ?? null;
       setReplayRuns(runList.data.items);
-      setReplayAggregateFeedback(aggregateStats.data);
       setSelectedReplayRun(target);
+      void loadReplayAggregateFeedback();
       if (options.includeMarketStudy) {
         void loadMarketStudy();
       }
       if (target) {
-        const [candidateList, sourcePacket, replayStats] = await Promise.all([
+        setReplayFeedback(null);
+        const [candidateList, sourcePacket] = await Promise.all([
           api.getShortpickReplayCandidates(target.id),
           api.getShortpickReplaySources(target.id),
-          api.getShortpickReplayFeedback(target.id),
         ]);
         setReplayCandidates(candidateList.data.items);
         setReplaySources(sourcePacket.data);
-        setReplayFeedback(replayStats.data);
+        void loadReplayRunFeedback(target.id);
       } else {
         setReplayCandidates([]);
         setReplaySources(null);
         setReplayFeedback(null);
+        replayFeedbackRunIdRef.current = null;
+        setReplayFeedbackLoading(false);
       }
     } catch (replayError) {
       setError(replayError instanceof Error ? replayError.message : "加载历史回放失败。");
@@ -558,7 +596,6 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
     void loadLab();
     void loadValidationQueue(1, DEFAULT_VALIDATION_PAGE_SIZE);
     void loadFeedback();
-    void loadReplay();
   }, []);
 
   const benchmarkSwitcher = (
@@ -744,7 +781,9 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
               void loadLab(latestRun?.id);
               void loadValidationQueue(validationPage.current, validationPage.pageSize);
               void loadFeedback();
-              void loadReplay(selectedReplayRun?.id, { includeMarketStudy: activeWorkspaceTab === "replay" });
+              if (activeWorkspaceTab === "replay") {
+                void loadReplay(selectedReplayRun?.id, { includeMarketStudy: true });
+              }
             }} loading={loading || validationLoading || feedbackLoading || replayLoading}>
               刷新
             </Button>
@@ -851,6 +890,8 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
                   sources={replaySources}
                   feedback={replayFeedback}
                   aggregateFeedback={replayAggregateFeedback}
+                  feedbackLoading={replayFeedbackLoading}
+                  aggregateFeedbackLoading={replayAggregateLoading}
                   marketStudy={marketStudy}
                   marketStudyLoading={marketStudyLoading}
                   loading={replayLoading}
@@ -1277,6 +1318,8 @@ function HistoricalReplayTab({
   sources,
   feedback,
   aggregateFeedback,
+  feedbackLoading,
+  aggregateFeedbackLoading,
   marketStudy,
   marketStudyLoading,
   loading,
@@ -1290,6 +1333,8 @@ function HistoricalReplayTab({
   sources: ShortpickReplaySourceResponse | null;
   feedback: ShortpickReplayFeedbackResponse | null;
   aggregateFeedback: ShortpickReplayFeedbackResponse | null;
+  feedbackLoading: boolean;
+  aggregateFeedbackLoading: boolean;
   marketStudy: ShortpickMarketFactorStudyResponse | null;
   marketStudyLoading: boolean;
   loading: boolean;
@@ -1362,6 +1407,7 @@ function HistoricalReplayTab({
     <>
       <ReplayStatisticalSummary
         feedback={aggregateFeedback}
+        loading={aggregateFeedbackLoading}
         marketStudy={marketStudy}
         marketStudyLoading={marketStudyLoading}
         selectedBenchmark={selectedBenchmark}
@@ -1477,7 +1523,7 @@ function HistoricalReplayTab({
             </Col>
           </Row>
 
-          <ReplayFeedbackCards feedback={feedback} selectedBenchmark={selectedBenchmark} />
+          <ReplayFeedbackCards feedback={feedback} loading={feedbackLoading} selectedBenchmark={selectedBenchmark} />
 
           <Card className="panel-card" title="模型与对照组候选明细">
             <Table
@@ -1598,11 +1644,13 @@ function ReplayStrategyCloseout({
 
 function ReplayStatisticalSummary({
   feedback,
+  loading,
   marketStudy,
   marketStudyLoading,
   selectedBenchmark,
 }: {
   feedback: ShortpickReplayFeedbackResponse | null;
+  loading: boolean;
   marketStudy: ShortpickMarketFactorStudyResponse | null;
   marketStudyLoading: boolean;
   selectedBenchmark: string;
@@ -1630,7 +1678,11 @@ function ReplayStatisticalSummary({
         showIcon
         type={replayGateAlertType(status)}
         message={`当前结论：${replayGateLabel(status)}`}
-        description={`要验证的是：大模型在没有页面上下文的情况下，只靠当时能查到的公开数据，能否给出短期投机式选股；事后按 1 / 3 / 5 / 10 / 20 个交易日验证。当前覆盖 ${Number(overall.unique_replay_date_count ?? 0)} 个历史日期、${Number(overall.run_count ?? 0)} 个回放批次，已完成正式样本 ${completedSamples}，完成日期 ${completedDates}。${String(gate.reason ?? "")}`}
+        description={
+          loading && !feedback
+            ? "历史回放主体已先加载；全局统计正在后台聚合，完成后会自动补齐这里的读数。"
+            : `要验证的是：大模型在没有页面上下文的情况下，只靠当时能查到的公开数据，能否给出短期投机式选股；事后按 1 / 3 / 5 / 10 / 20 个交易日验证。当前覆盖 ${Number(overall.unique_replay_date_count ?? 0)} 个历史日期、${Number(overall.run_count ?? 0)} 个回放批次，已完成正式样本 ${completedSamples}，完成日期 ${completedDates}。${String(gate.reason ?? "")}`
+        }
       />
       <ReplayStrategyCloseout study={marketStudy} loading={marketStudyLoading} />
       <div className="shortpick-replay-question-grid">
@@ -1729,9 +1781,11 @@ function ReplayStatisticalSummary({
 
 function ReplayFeedbackCards({
   feedback,
+  loading,
   selectedBenchmark,
 }: {
   feedback: ShortpickReplayFeedbackResponse | null;
+  loading: boolean;
   selectedBenchmark: string;
 }) {
   const factorGate = recordValue<Record<string, unknown>>(feedback?.overall, "factor_ic_gate") ?? {};
@@ -1760,7 +1814,7 @@ function ReplayFeedbackCards({
           })}
         </Row>
       ) : (
-        <Empty description="暂无模型与对照组回放统计" />
+        <Empty description={loading ? "批次统计正在后台加载" : "暂无模型与对照组回放统计"} />
       )}
       <Collapse
         className="shortpick-replay-diagnostics"
