@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from ashare_evidence.models import MarketBar, Stock
 
 INDEX_SYMBOLS = {"000300.SH", "000905.SH", "000852.SH"}
-DEFAULT_STRATEGIES = ("base", "turnover", "ret10", "ret10_turnover", "combo")
+DEFAULT_STRATEGIES = ("base", "turnover", "ret10", "ret10_turnover", "ret10_turnover_cooldown", "combo")
 DEFAULT_HORIZONS = (1, 3, 5, 10, 20)
 BENCHMARK_MODES = {"csi300", "universe_equal_weight"}
 LIMIT_UP_BANDS = {
@@ -281,6 +281,12 @@ def _strategy_score(pool: list[dict[str, Any]], item: dict[str, Any], strategy: 
         return _percentile(pool, "return_10d", item["symbol"])
     if strategy == "ret10_turnover":
         return _percentile(pool, "return_10d", item["symbol"]) + _percentile(pool, "turnover_rate", item["symbol"])
+    if strategy == "ret10_turnover_cooldown":
+        return (
+            _percentile(pool, "return_10d", item["symbol"])
+            + _percentile(pool, "turnover_rate", item["symbol"])
+            - 0.5 * _percentile(pool, "return_1d", item["symbol"])
+        )
     if strategy == "combo":
         return (
             _percentile(pool, "return_1d", item["symbol"])

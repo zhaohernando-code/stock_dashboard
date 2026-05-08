@@ -36,6 +36,7 @@ SHORTPICK_VALIDATE_RECENT_DAYS="${ASHARE_SHORTPICK_VALIDATE_RECENT_DAYS:-30}"
 SHORTPICK_VALIDATE_RECENT_LIMIT="${ASHARE_SHORTPICK_VALIDATE_RECENT_LIMIT:-20}"
 NETWORK_CHECK_ENABLED="${ASHARE_REFRESH_NETWORK_CHECK:-1}"
 NETWORK_PROBES="${ASHARE_REFRESH_NETWORK_PROBES:-https://www.baidu.com/ https://push2.eastmoney.com/}"
+SLOT_RETRY_INTERVAL_SECONDS="${ASHARE_SLOT_RETRY_INTERVAL_SECONDS:-1800}"
 
 run_runtime_refresh() {
   "$PYTHON_BIN" -m ashare_evidence.cli refresh-runtime-data \
@@ -199,10 +200,79 @@ slot_state_file() {
   printf '%s/daily-%s-%s.ok\n' "$REFRESH_STATE_DIR" "$target_date" "$slot_name"
 }
 
+slot_failed_file() {
+  local target_date="$1"
+  local slot_name="$2"
+  slot_state_file "$target_date" "$slot_name" | sed 's/\.ok$/.failed/'
+}
+
+slot_attempt_file() {
+  local target_date="$1"
+  local slot_name="$2"
+  slot_state_file "$target_date" "$slot_name" | sed 's/\.ok$/.attempted/'
+}
+
 slot_completed() {
   local target_date="$1"
   local slot_name="$2"
   [[ -f "$(slot_state_file "$target_date" "$slot_name")" ]]
+}
+
+slot_recently_failed() {
+  local target_date="$1"
+  local slot_name="$2"
+  local failed_file
+  failed_file="$(slot_failed_file "$target_date" "$slot_name")"
+  if [[ ! -f "$failed_file" ]]; then
+    return 1
+  fi
+  "$PYTHON_BIN" - "$failed_file" "$SLOT_RETRY_INTERVAL_SECONDS" <<'PY'
+import os
+import sys
+import time
+
+path = sys.argv[1]
+retry_seconds = int(float(sys.argv[2]))
+try:
+    age = time.time() - os.path.getmtime(path)
+except OSError:
+    sys.exit(1)
+sys.exit(0 if age < retry_seconds else 1)
+PY
+}
+
+slot_recently_attempted() {
+  local target_date="$1"
+  local slot_name="$2"
+  local attempt_file
+  attempt_file="$(slot_attempt_file "$target_date" "$slot_name")"
+  if [[ ! -f "$attempt_file" ]]; then
+    return 1
+  fi
+  "$PYTHON_BIN" - "$attempt_file" "$SLOT_RETRY_INTERVAL_SECONDS" <<'PY'
+import os
+import sys
+import time
+
+path = sys.argv[1]
+retry_seconds = int(float(sys.argv[2]))
+try:
+    age = time.time() - os.path.getmtime(path)
+except OSError:
+    sys.exit(1)
+sys.exit(0 if age < retry_seconds else 1)
+PY
+}
+
+mark_slot_attempted() {
+  local target_date="$1"
+  local slot_name="$2"
+  mkdir -p "$REFRESH_STATE_DIR"
+  {
+    printf 'target_date=%s\n' "$target_date"
+    printf 'slot=%s\n' "$slot_name"
+    printf 'attempted_at=%s\n' "$(TZ="$TIMEZONE" date '+%Y-%m-%dT%H:%M:%S%z')"
+  } > "$(slot_attempt_file "$target_date" "$slot_name")"
 }
 
 mark_slot_completed() {
@@ -215,7 +285,8 @@ mark_slot_completed() {
     printf 'completed_at=%s\n' "$(TZ="$TIMEZONE" date '+%Y-%m-%dT%H:%M:%S%z')"
   } > "$(slot_state_file "$target_date" "$slot_name")"
   rm -f "$(slot_state_file "$target_date" "$slot_name" | sed 's/\.ok$/.failed/')" \
-    "$(slot_state_file "$target_date" "$slot_name" | sed 's/\.ok$/.deferred/')"
+    "$(slot_state_file "$target_date" "$slot_name" | sed 's/\.ok$/.deferred/')" \
+    "$(slot_attempt_file "$target_date" "$slot_name")"
 }
 
 mark_slot_deferred() {
@@ -253,6 +324,14 @@ run_daily_refresh_slot() {
   if slot_completed "$target_date" "$slot_name"; then
     return 0
   fi
+  if slot_recently_attempted "$target_date" "$slot_name"; then
+    echo "Recent ${slot_name} attempt for ${target_date}; waiting before retry." >&2
+    return 0
+  fi
+  if slot_recently_failed "$target_date" "$slot_name"; then
+    echo "Recent ${slot_name} failure for ${target_date}; waiting before retry." >&2
+    return 0
+  fi
   if ! network_available; then
     mark_slot_deferred "$target_date" "$slot_name" "当前未联网，daily refresh 等待联网后补跑。"
     return 0
@@ -262,6 +341,7 @@ run_daily_refresh_slot() {
   fi
   local started_at
   started_at="$(TZ="$TIMEZONE" date '+%Y-%m-%dT%H:%M:%S%z')"
+  mark_slot_attempted "$target_date" "$slot_name"
   write_run_context "$target_date" "$slot_name"
   trap release_run_lock EXIT
   echo "Running ${slot_name} daily refresh for ${target_date} at ${NOW_HHMM}."
@@ -288,6 +368,14 @@ run_shortpick_lab_slot() {
   if slot_completed "$target_date" "$slot_name"; then
     return 0
   fi
+  if slot_recently_attempted "$target_date" "$slot_name"; then
+    echo "Recent ${slot_name} attempt for ${target_date}; waiting before retry." >&2
+    return 0
+  fi
+  if slot_recently_failed "$target_date" "$slot_name"; then
+    echo "Recent ${slot_name} failure for ${target_date}; waiting before retry." >&2
+    return 0
+  fi
   if ! network_available; then
     mark_slot_deferred "$target_date" "$slot_name" "当前未联网，短投试验田等待联网后补跑。"
     return 0
@@ -297,6 +385,7 @@ run_shortpick_lab_slot() {
   fi
   local started_at
   started_at="$(TZ="$TIMEZONE" date '+%Y-%m-%dT%H:%M:%S%z')"
+  mark_slot_attempted "$target_date" "$slot_name"
   write_run_context "$target_date" "$slot_name"
   trap release_run_lock EXIT
   echo "Running shortpick lab for ${target_date} at ${NOW_HHMM}."

@@ -159,14 +159,14 @@
       "status": "accepted"
     },
     "src/ashare_evidence/shortpick_replay.py": {
-      "lines": 3741,
-      "reason": "Shortpick historical replay v1 keeps sealed packet construction, sealed-packet-only LLM execution, failed-round handling without production proxy fallback, rejected-source/source-id leakage preservation, market-cap fallback bucketing, baseline controls, LLM self/momentum-pool distillation, LLM reject-only momentum gating, high-precision hard-veto controls, deterministic sealed-market feature rerankers including 10d momentum + turnover, random reject controls, leakage audit, compact replay run listing, per-run and aggregate validation statistics, replay API helpers, post-audit contract normalization, and runtime-safe replay transaction boundaries in one first-version workflow. Diagnostic proxy remains explicit test mode only; split into packet/audit/baseline/distillation/rejector/ranker modules after the contract stabilizes.",
+      "lines": 3754,
+      "reason": "Shortpick historical replay v1 keeps sealed packet construction, sealed-packet-only LLM execution, failed-round handling without production proxy fallback, rejected-source/source-id leakage preservation, market-cap fallback bucketing, baseline controls, LLM self/momentum-pool distillation, LLM reject-only momentum gating, high-precision hard-veto controls, deterministic sealed-market feature rerankers including 10d momentum + turnover and single-day-chase cooldown, random reject controls, leakage audit, compact replay run listing, per-run and aggregate validation statistics, replay API helpers, post-audit contract normalization, and runtime-safe replay transaction boundaries in one first-version workflow. Diagnostic proxy remains explicit test mode only; split into packet/audit/baseline/distillation/rejector/ranker modules after the contract stabilizes.",
       "reviewed_at": "2026-05-08",
       "status": "planned_refactor"
     },
     "src/ashare_evidence/shortpick_market_factor_study.py": {
-      "lines": 623,
-      "reason": "Backend-only Short Pick Lab market-factor study command: loads daily bars, builds expanded momentum pools, evaluates fixed and walk-forward feature rerankers including 10d momentum + turnover, supports CSI300 and universe equal-weight benchmark modes, applies cost/entry assumptions, and summarizes train/holdout/replay windows. Kept cohesive while the research contract is still exploratory; split loader/evaluator/summary helpers if it becomes a production API.",
+      "lines": 629,
+      "reason": "Backend-only Short Pick Lab market-factor study command: loads daily bars, builds expanded momentum pools, evaluates fixed and walk-forward feature rerankers including 10d momentum + turnover and single-day-chase cooldown, supports CSI300 and universe equal-weight benchmark modes, applies cost/entry assumptions, and summarizes train/holdout/replay windows. Kept cohesive while the research contract is still exploratory; split loader/evaluator/summary helpers if it becomes a production API.",
       "reviewed_at": "2026-05-08",
       "status": "planned_refactor"
     },
