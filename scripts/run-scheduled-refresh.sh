@@ -53,8 +53,10 @@ run_phase5_daily_refresh() {
 }
 
 run_shortpick_lab() {
+  local target_date="$1"
   "$PYTHON_BIN" -m ashare_evidence.cli shortpick-lab-run \
     --database-url "$ASHARE_DATABASE_URL" \
+    --run-date "$target_date" \
     --rounds-per-model "${ASHARE_SHORTPICK_ROUNDS_PER_MODEL:-5}"
 }
 
@@ -73,10 +75,11 @@ run_shortpick_validation_refresh() {
 }
 
 run_shortpick_daily_cycle() {
+  local target_date="$1"
   run_shortpick_validation_refresh
   local run_payload_file
   run_payload_file="$(mktemp)"
-  run_shortpick_lab | tee "$run_payload_file"
+  run_shortpick_lab "$target_date" | tee "$run_payload_file"
   local run_id
   run_id="$("$PYTHON_BIN" - "$run_payload_file" <<'PY'
 import json
@@ -389,7 +392,7 @@ run_shortpick_lab_slot() {
   write_run_context "$target_date" "$slot_name"
   trap release_run_lock EXIT
   echo "Running shortpick lab for ${target_date} at ${NOW_HHMM}."
-  run_with_timeout "$SHORTPICK_TIMEOUT_SECONDS" run_shortpick_daily_cycle
+  run_with_timeout "$SHORTPICK_TIMEOUT_SECONDS" run_shortpick_daily_cycle "$target_date"
   local exit_code=$?
   if [[ "$exit_code" == "0" ]]; then
     mark_slot_completed "$target_date" "$slot_name"
