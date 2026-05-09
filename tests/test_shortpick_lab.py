@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
 import json
 import tempfile
-from types import SimpleNamespace
 import unittest
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -31,8 +31,8 @@ from ashare_evidence.shortpick_lab import (
     OpenAICompatibleShortpickExecutor,
     StaticShortpickExecutor,
     _normalize_shortpick_topic,
-    build_shortpick_model_feedback,
     build_shortpick_consensus,
+    build_shortpick_model_feedback,
     default_shortpick_executors,
     list_shortpick_runs,
     list_shortpick_validation_queue,
@@ -155,7 +155,7 @@ class ShortpickLabTests(unittest.TestCase):
                         bar_key=f"bar-{symbol.lower().replace('.', '-')}-{index}",
                         stock_id=stock.id,
                         timeframe="1d",
-                        observed_at=datetime(observed_day.year, observed_day.month, observed_day.day, 7, 0, tzinfo=timezone.utc),
+                        observed_at=datetime(observed_day.year, observed_day.month, observed_day.day, 7, 0, tzinfo=UTC),
                         open_price=price - 1,
                         high_price=price + 1,
                         low_price=price - 2,
@@ -186,7 +186,7 @@ class ShortpickLabTests(unittest.TestCase):
         self._seed_stock_bars("688008.SH", "澜起科技", [80, 82, 86, 87, 88, 89, 90, 91], profile_payload=profile)
 
     def _fake_daily_fetch(self, symbol: str, prices: list[float]) -> SimpleNamespace:
-        start = datetime(2026, 5, 5, 7, 0, tzinfo=timezone.utc)
+        start = datetime(2026, 5, 5, 7, 0, tzinfo=UTC)
         bars = []
         for index, price in enumerate(prices):
             bars.append(
@@ -527,6 +527,52 @@ class ShortpickLabTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "fail_closed_no_pure_reasoning_fallback"):
                 executor.complete("prompt")
 
+    def test_search_fallback_chain_uses_public_fallback_when_searxng_is_empty(self) -> None:
+        from ashare_evidence.shortpick_lab import ShortpickSearchFallbackChain
+
+        class EmptyPrimary:
+            def search(self, query: str):
+                return []
+
+        class Fallback:
+            def search(self, query: str):
+                return [
+                    {
+                        "title": "5月8日A股热点",
+                        "url": "https://www.sogou.com/link?url=real",
+                        "published_at": "2026-05-08",
+                        "why_it_matters": query,
+                        "search_engine": "sogou_web_fallback",
+                    }
+                ]
+
+        chain = ShortpickSearchFallbackChain(primary=EmptyPrimary(), fallbacks=(Fallback(),))
+
+        results = chain.search("2026年5月8日 A股 热点板块 资金流入 短线")
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["search_engine"], "sogou_web_fallback")
+
+    def test_sogou_search_result_parser_extracts_real_results(self) -> None:
+        from ashare_evidence.shortpick_lab import _parse_sogou_search_results
+
+        html = """
+        <div class="vrwrap">
+          <h3><a href="/link?url=abc">5月8日A股热点板块_东方财富网</a></h3>
+          <p>5月8日 A股 收红盘，通信设备板块资金流入。 东方财富网 2026-05-08</p>
+        </div></div>
+        <div class="vrwrap">
+          <h3><a href="/sogou?query=A股">A股 短线 热点_相关资讯</a></h3>
+        </div></div>
+        """
+
+        results = _parse_sogou_search_results(html, query="A股 热点", limit=5)
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["url"], "https://www.sogou.com/link?url=abc")
+        self.assertEqual(results[0]["published_at"], "2026-05-08")
+        self.assertEqual(results[0]["search_engine"], "sogou_web_fallback")
+
     def test_deepseek_executor_rejects_final_sources_outside_search_results(self) -> None:
         def fake_complete(_self, **kwargs):
             prompt = str(kwargs["prompt"])
@@ -849,7 +895,7 @@ class ShortpickLabTests(unittest.TestCase):
             entry_bar = session.scalar(
                 select(MarketBar).where(
                     MarketBar.stock_id == stock.id,
-                    MarketBar.observed_at == datetime(2026, 5, 6, 7, 0, tzinfo=timezone.utc),
+                    MarketBar.observed_at == datetime(2026, 5, 6, 7, 0, tzinfo=UTC),
                 )
             )
             assert entry_bar is not None

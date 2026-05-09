@@ -176,9 +176,15 @@
       "status": "accepted",
       "reviewed_at": "2026-05-08"
     },
+    "tests/test_shortpick_lab.py": {
+      "lines": 1141,
+      "reason": "Short Pick Lab contract tests cover isolated executor behavior, DeepSeek search planning and fallback search, source integrity, candidate parsing, validation status handling, and live strategy overlay invariants. Kept together while the shortpick executor contract is still changing rapidly.",
+      "status": "accepted",
+      "reviewed_at": "2026-05-09"
+    },
     "src/ashare_evidence/shortpick_lab.py": {
-      "lines": 4556,
-      "reason": "Short Pick Lab workflow: native-web/open-discovery execution, source integrity, candidate parsing, validation, retry, serialization, and model feedback. Live runs now attach the selected market-factor overlay as first-class validation candidates after LLM consensus, while keeping consensus scoped to independent LLM candidates; the overlay refreshes the existing research universe only during run generation and commits per symbol to avoid long SQLite locks. A module split remains desirable after the API contract stabilizes.",
+      "lines": 4671,
+      "reason": "Short Pick Lab workflow: native-web/open-discovery execution, source integrity, candidate parsing, validation, retry, serialization, and model feedback. Live runs now attach the selected market-factor overlay as first-class validation candidates after LLM consensus, while keeping consensus scoped to independent LLM candidates; the overlay refreshes the existing research universe only during run generation and commits per symbol to avoid long SQLite locks. DeepSeek search uses local SearXNG first and a public Sogou fallback when local engines return no usable results, while retaining fail-closed source enforcement. A module split remains desirable after the API contract stabilizes.",
       "status": "planned_refactor",
       "reviewed_at": "2026-05-09"
     }

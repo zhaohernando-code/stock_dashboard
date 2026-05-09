@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html as html_lib
 import json
 import math
 import os
@@ -460,6 +461,99 @@ class SearxngSearchClient:
 
 
 @dataclass(frozen=True)
+class SogouSearchFallbackClient:
+    timeout_seconds: int = SHORTPICK_SEARXNG_TIMEOUT_SECONDS
+    result_limit: int = 5
+
+    def search(self, query: str) -> list[dict[str, Any]]:
+        trimmed = query.strip()
+        if not trimmed:
+            return []
+        params = urlencode({"query": trimmed})
+        http_request = request.Request(
+            f"https://www.sogou.com/web?{params}",
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+                ),
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.5",
+            },
+        )
+        with urlopen(http_request, timeout=self.timeout_seconds) as response:
+            payload = response.read().decode("utf-8", errors="ignore")
+        return _parse_sogou_search_results(payload, query=trimmed, limit=self.result_limit)
+
+
+@dataclass(frozen=True)
+class ShortpickSearchFallbackChain:
+    primary: SearxngSearchClient
+    fallbacks: tuple[Any, ...] = ()
+
+    def search(self, query: str) -> list[dict[str, Any]]:
+        errors: list[str] = []
+        for client in (self.primary, *self.fallbacks):
+            try:
+                results = client.search(query)
+            except Exception as exc:
+                errors.append(f"{client.__class__.__name__}: {str(exc)[:160]}")
+                continue
+            if results:
+                return results
+        if errors:
+            raise RuntimeError("; ".join(errors))
+        return []
+
+
+def _parse_sogou_search_results(payload: str, *, query: str, limit: int) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    for match in re.finditer(r'<div class="vrwrap"[^>]*>.*?</div>\s*</div>', payload, re.S):
+        block = match.group(0)
+        anchor = re.search(r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', block, re.S)
+        if anchor is None:
+            continue
+        raw_url = html_lib.unescape(anchor.group(1)).strip()
+        if not raw_url or raw_url.startswith("javascript:"):
+            continue
+        if raw_url.startswith("/sogou?"):
+            continue
+        url = f"https://www.sogou.com{raw_url}" if raw_url.startswith("/") else raw_url
+        title = _strip_search_html(anchor.group(2)) or url
+        snippet = _strip_search_html(block)
+        if not title and not snippet:
+            continue
+        results.append(
+            {
+                "title": title,
+                "url": url,
+                "published_at": _extract_search_date(snippet),
+                "why_it_matters": snippet[:600],
+                "search_query": query,
+                "search_engine": "sogou_web_fallback",
+                "search_score": None,
+            }
+        )
+        if len(results) >= limit:
+            break
+    return results
+
+
+def _strip_search_html(value: str) -> str:
+    text = re.sub(r"<script.*?</script>", " ", value, flags=re.S | re.I)
+    text = re.sub(r"<style.*?</style>", " ", text, flags=re.S | re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = html_lib.unescape(text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _extract_search_date(value: str) -> str | None:
+    match = re.search(r"(20\d{2}[-年./]\d{1,2}[-月./]\d{1,2}日?)", value)
+    if match:
+        return match.group(1)
+    return None
+
+
+@dataclass(frozen=True)
 class DeepseekLobeChatSearchShortpickExecutor:
     key_id: int | None
     provider_name: str
@@ -477,6 +571,11 @@ class DeepseekLobeChatSearchShortpickExecutor:
             or os.environ.get(SHORTPICK_LOBECHAT_SEARXNG_URL_ENV)
             or SHORTPICK_LOBECHAT_SEARXNG_DEFAULT_URL
         )
+        if self.search_client is None:
+            search_client = ShortpickSearchFallbackChain(
+                primary=search_client,
+                fallbacks=(SogouSearchFallbackClient(),),
+            )
         plan_raw = transport.complete(
             base_url=self.base_url,
             api_key=self.api_key,
@@ -674,9 +773,10 @@ def _build_deepseek_search_plan_prompt(prompt: str) -> str:
 
 
 def _build_deepseek_final_prompt(*, prompt: str, plan: dict[str, Any], search_results: list[dict[str, Any]]) -> str:
+    search_backend = _deepseek_search_backend_label(search_results)
     evidence = {
         "search_plan": plan,
-        "search_backend": "lobechat_searxng",
+        "search_backend": search_backend,
         "source_policy": "sources_used must be selected only from search_results urls; do not invent urls",
         "search_results": search_results[:20],
     }
@@ -833,6 +933,7 @@ def _attach_deepseek_search_trace(
     executor_kind: str,
 ) -> str:
     parsed = extract_shortpick_json(raw_answer)
+    search_backend = _deepseek_search_backend_label(search_results)
     allowed_urls = {str(item.get("url") or "").strip() for item in search_results if item.get("url")}
     used_urls = {
         str(source.get("url") or "").strip()
@@ -852,14 +953,28 @@ def _attach_deepseek_search_trace(
         )
     parsed["_executor_trace"] = {
         "executor_kind": executor_kind,
-        "search_backend": "lobechat_searxng",
+        "search_backend": search_backend,
         "search_queries": _coerce_search_queries(plan.get("search_queries") or plan.get("queries")),
         "search_result_count": len(search_results),
         "search_result_urls": [str(item.get("url") or "") for item in search_results[:20] if item.get("url")],
+        "search_engines": sorted(
+            {
+                str(item.get("search_engine") or "unknown")
+                for item in search_results
+                if item.get("search_engine")
+            }
+        ),
         "search_attempts": search_attempts,
         "repair_policy": "bounded_repair_fail_closed",
     }
     return json.dumps(parsed, ensure_ascii=False, indent=2)
+
+
+def _deepseek_search_backend_label(search_results: list[dict[str, Any]]) -> str:
+    engines = {str(item.get("search_engine") or "") for item in search_results}
+    if "sogou_web_fallback" in engines:
+        return "lobechat_searxng_with_sogou_fallback"
+    return "lobechat_searxng"
 
 
 def default_shortpick_executors(session: Session) -> list[ShortpickExecutor]:
