@@ -97,7 +97,7 @@
     "improvement_suggestion_completion_truth_gate": "published_runtime_verified",
     "rankic_validation_conflict_priority": "published_runtime_verified",
     "shortpick_lab_research_surface": "published_runtime_verified",
-    "shortpick_lab_deepseek_search_provenance": "fallback_search_probe_passed_pending_publish",
+    "shortpick_lab_deepseek_search_provenance": "published_runtime_verified_run_30_deepseek_5_of_5_sogou_fallback",
     "shortpick_lab_history_validation_workspace": "published_runtime_verified",
     "shortpick_lab_validation_optimization_plan": "p0_p3_published_runtime_verified_p4_gate_scaffold_pending_peer_baselines",
     "shortpick_lab_multi_benchmark_feedback": "published_runtime_verified",
