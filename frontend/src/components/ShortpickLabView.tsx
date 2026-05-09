@@ -276,7 +276,8 @@ function topicLabel(candidate: ShortpickCandidateView): string {
 }
 
 function baselineFamilyLabel(value?: string | null): string {
-  if (value === "llm") return "LLM";
+  if (!value) return "LLM自由选股";
+  if (value === "llm") return "LLM原选";
   if (value === "llm_self_distilled") return "LLM自选蒸馏";
   if (value === "llm_momentum_distilled") return "LLM动量池蒸馏";
   if (value === "diagnostic_proxy_llm") return "诊断代理";
@@ -287,10 +288,17 @@ function baselineFamilyLabel(value?: string | null): string {
   if (value === "llm_reject_only") return "LLM只剔除保留池";
   if (value === "llm_reject_then_momentum_rank") return "LLM剔除后动量排序";
   if (value === "random_reject_then_momentum_rank") return "随机剔除后动量排序";
-  if (value === "momentum_10d_turnover_rank") return "10日动量换手排序";
-  if (value === "momentum_10d_turnover_cooldown_rank") return "10日动量换手降追高";
+  if (value === "llm_hard_veto_then_momentum_rank") return "LLM硬否决后动量排序";
+  if (value === "random_hard_veto_then_momentum_rank") return "随机硬否决后动量排序";
+  if (value === "llm_strict_veto_then_momentum_rank") return "LLM严格否决后动量排序";
+  if (value === "random_strict_veto_then_momentum_rank") return "随机严格否决后动量排序";
+  if (value === "momentum_turnover_rank") return "换手优先动量排序";
+  if (value === "momentum_10d_rank") return "10日持续动量排序";
+  if (value === "momentum_10d_turnover_rank") return "10日动量换手复合排序";
+  if (value === "momentum_10d_turnover_cooldown_rank") return "10日动量换手降追高排序";
   if (value === "momentum_10d_turnover_cooldown_diversified_rank") return "分散后的动量换手";
-  return "未分组";
+  if (value === "momentum_continuity_turnover_rank") return "持续动量换手复合排序";
+  return "其他策略";
 }
 
 function factorDiagnosticStatusLabel(value?: string | null): string {
