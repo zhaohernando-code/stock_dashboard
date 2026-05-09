@@ -1436,6 +1436,19 @@ function HistoricalReplayTab({
         selectedBenchmark={selectedBenchmark}
       />
 
+      <Collapse
+        className="shortpick-replay-diagnostics"
+        items={[
+          {
+            key: "comparison",
+            label: "模型与策略对比",
+            children: <ReplayFeedbackCards feedback={feedback} loading={feedbackLoading} selectedBenchmark={selectedBenchmark} />,
+          },
+          {
+            key: "drilldown",
+            label: "批次、候选和来源审计",
+            children: (
+              <>
       <Card
         className="panel-card"
         title="回放批次与下钻"
@@ -1546,8 +1559,6 @@ function HistoricalReplayTab({
             </Col>
           </Row>
 
-          <ReplayFeedbackCards feedback={feedback} loading={feedbackLoading} selectedBenchmark={selectedBenchmark} />
-
           <Card className="panel-card" title="模型与对照组候选明细">
             <Table
               rowKey="id"
@@ -1590,6 +1601,11 @@ function HistoricalReplayTab({
           <ReplaySourcePacket sources={sources} />
         </>
       ) : null}
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   );
 }
@@ -1695,6 +1711,24 @@ function ReplayStatisticalSummary({
   const status = String(gate.status ?? "exploratory");
   const readyHorizons = sortHorizons(recordValue<number[]>(gate, "ready_horizons") ?? []);
   const horizonByKey = new Map(horizonRows.map((group) => [String(group.group_key), group]));
+  const familyFiveDayRows = familyRows
+    .map((family) => {
+      const horizon5 = family.validation_by_horizon.find((group) => String(group.group_key) === "5");
+      const metric = horizon5?.benchmark_metrics?.[selectedBenchmark];
+      return {
+        family,
+        value: metric?.mean_excess_return ?? horizon5?.mean_excess_return,
+        sampleCount: Number(horizon5?.completed_official_sample_count ?? 0),
+      };
+    })
+    .filter((item) => item.value !== null && item.value !== undefined);
+  const topFamily = [...familyFiveDayRows]
+    .filter((item) => item.sampleCount >= 10)
+    .sort((left, right) => Number(right.value ?? -999) - Number(left.value ?? -999))[0];
+  const llmFiveDay = familyFiveDayRows.find((item) => item.family.baseline_family === "llm");
+  const defaultFiveDay = familyFiveDayRows.find((item) => item.family.baseline_family === "momentum_10d_turnover_cooldown_rank");
+  const fiveDayGroup = horizonByKey.get("5");
+  const fiveDayMetric = fiveDayGroup ? selectedBenchmarkGroupMetric(fiveDayGroup, selectedBenchmark) : null;
   return (
     <Card className="panel-card shortpick-replay-readout" title="历史回放核心读数">
       <Alert
@@ -1704,50 +1738,31 @@ function ReplayStatisticalSummary({
         description={
           loading && !feedback
             ? "历史回放主体已先加载；全局统计正在后台聚合，完成后会自动补齐这里的读数。"
-            : `要验证的是：大模型在没有页面上下文的情况下，只靠当时能查到的公开数据，能否给出短期投机式选股；事后按 1 / 3 / 5 / 10 / 20 个交易日验证。当前覆盖 ${Number(overall.unique_replay_date_count ?? 0)} 个历史日期、${Number(overall.run_count ?? 0)} 个回放批次，已完成正式样本 ${completedSamples}，完成日期 ${completedDates}。${String(gate.reason ?? "")}`
+            : `无上下文直接查询能否短投选股：只看模型当时给出的股票，事后按 1 / 3 / 5 / 10 / 20 日验证。当前覆盖 ${Number(overall.unique_replay_date_count ?? 0)} 个历史日期、${Number(overall.run_count ?? 0)} 个回放批次，已完成正式样本 ${completedSamples}，完成日期 ${completedDates}。${String(gate.reason ?? "")}`
         }
       />
-      <ReplayStrategyCloseout study={marketStudy} loading={marketStudyLoading} />
       <div className="shortpick-replay-question-grid">
         <div>
-          <span>验证问题</span>
-          <strong>无上下文直接查询能否短投选股</strong>
-          <Text type="secondary">只看模型当时给出的股票，不看事后补充解释。</Text>
+          <span>当前能否下结论</span>
+          <strong>{status === "ready" ? "可以做初步比较" : "继续补样本"}</strong>
+          <Text type="secondary">{completedSamples} 个正式样本，覆盖 {completedDates} 个历史日期。</Text>
         </div>
         <div>
-          <span>隔离方式</span>
-          <strong>封闭历史数据包</strong>
-          <Text type="secondary">来源必须早于回放截点，候选必须在当日可交易股票池内。</Text>
+          <span>当前领先组</span>
+          <strong>{topFamily ? baselineFamilyLabel(topFamily.family.baseline_family) : "暂无稳定领先组"}</strong>
+          <Text type="secondary">5日平均超额 {formatPercent(topFamily?.value)}，样本 {Number(topFamily?.sampleCount ?? 0)}。</Text>
         </div>
         <div>
-          <span>验收口径</span>
-          <strong>1 / 3 / 5 / 10 / 20 日</strong>
-          <Text type="secondary">{sampleScopeLabel(selectedBenchmark)}，并保留随机/动量对照组。</Text>
+          <span>LLM 原选位置</span>
+          <strong>{formatPercent(llmFiveDay?.value)}</strong>
+          <Text type="secondary">默认策略 {formatPercent(defaultFiveDay?.value)}；LLM 先作为对照组看待。</Text>
         </div>
         <div>
-          <span>可下结论范围</span>
-          <strong>{readyHorizons.length ? `${readyHorizons.join(" / ")} 日可观察` : "尚不能下能力结论"}</strong>
-          <Text type="secondary">未过样本门槛前，只能判断链路是否可运行和方向是否值得继续采样。</Text>
+          <span>核心观察周期</span>
+          <strong>{formatPercent(fiveDayMetric?.meanExcessReturn)}</strong>
+          <Text type="secondary">5日整体均值；可观察周期 {readyHorizons.join(" / ") || "--"}。</Text>
         </div>
       </div>
-      <Row gutter={[16, 16]} className="shortpick-metrics">
-        <Col xs={24} md={6}>
-          <Statistic title="历史日期" value={Number(overall.unique_replay_date_count ?? 0)} suffix="天" />
-          <Text type="secondary">{String(overall.date_from ?? "--")} 至 {String(overall.date_to ?? "--")}</Text>
-        </Col>
-        <Col xs={24} md={6}>
-          <Statistic title="回放批次" value={Number(overall.run_count ?? 0)} />
-          <Text type="secondary">候选周期行 {Number(overall.validation_count ?? 0)}</Text>
-        </Col>
-        <Col xs={24} md={6}>
-          <Statistic title="已完成正式样本" value={completedSamples} />
-          <Text type="secondary">门槛 {Number(gate.min_completed_samples ?? 30)} 样本 / {Number(gate.min_completed_dates ?? 5)} 日期</Text>
-        </Col>
-        <Col xs={24} md={6}>
-          <Statistic title="可观察周期" value={readyHorizons.join(" / ") || "--"} />
-          <Text type="secondary">1 / 3 / 5 / 10 / 20 日逐步验收</Text>
-        </Col>
-      </Row>
       <div className="shortpick-replay-horizon-strip">
         {HORIZON_ORDER.map((horizon) => {
           const group = horizonByKey.get(String(horizon));
@@ -1762,43 +1777,57 @@ function ReplayStatisticalSummary({
           );
         })}
       </div>
-      <Table
-        className="shortpick-replay-stat-table"
-        rowKey="group_key"
-        size="small"
-        loading={loading && !feedback}
-        pagination={false}
-        columns={[
-          { title: "周期", render: (_, item: ShortpickFeedbackGroup) => `${item.group_key}日` },
-          { title: "样本", render: (_, item: ShortpickFeedbackGroup) => `${Number(item.completed_official_sample_count ?? 0)} / ${Number(item.official_sample_count ?? 0)}` },
-          { title: `平均超额 · ${benchmarkLabel(selectedBenchmark)}`, render: (_, item: ShortpickFeedbackGroup) => <Text className={`value-${valueTone(item.mean_excess_return)}`}>{formatPercent(item.mean_excess_return)}</Text> },
-          { title: "正超额占比", render: (_, item: ShortpickFeedbackGroup) => formatPercent(item.positive_excess_rate) },
-          { title: "状态", render: (_, item: ShortpickFeedbackGroup) => statusCountText(item.status_counts) },
-        ]}
-        dataSource={horizonRows}
-      />
-      <Table
-        className="shortpick-replay-stat-table"
-        rowKey="baseline_family"
-        size="small"
-        loading={loading && !feedback}
-        pagination={false}
-        columns={[
-          { title: "组别", render: (_, item) => baselineFamilyLabel(item.baseline_family) },
-          { title: "正式样本", render: (_, item) => `${item.completed_official_sample_count} / ${item.official_sample_count}` },
+      <Collapse
+        className="shortpick-replay-diagnostics"
+        items={[
           {
-            title: "5日平均超额",
-            render: (_, item) => {
-              const horizon5 = item.validation_by_horizon.find((group) => String(group.group_key) === "5");
-              const metric = horizon5?.benchmark_metrics?.[selectedBenchmark];
-              const value = metric?.mean_excess_return ?? horizon5?.mean_excess_return;
-              return <Text className={`value-${valueTone(value)}`}>{formatPercent(value)}</Text>;
-            },
+            key: "strategy",
+            label: "策略收口和完整统计表",
+            children: (
+              <>
+                <ReplayStrategyCloseout study={marketStudy} loading={marketStudyLoading} />
+                <Table
+                  className="shortpick-replay-stat-table"
+                  rowKey="group_key"
+                  size="small"
+                  loading={loading && !feedback}
+                  pagination={false}
+                  columns={[
+                    { title: "周期", render: (_, item: ShortpickFeedbackGroup) => `${item.group_key}日` },
+                    { title: "样本", render: (_, item: ShortpickFeedbackGroup) => `${Number(item.completed_official_sample_count ?? 0)} / ${Number(item.official_sample_count ?? 0)}` },
+                    { title: `平均超额 · ${benchmarkLabel(selectedBenchmark)}`, render: (_, item: ShortpickFeedbackGroup) => <Text className={`value-${valueTone(item.mean_excess_return)}`}>{formatPercent(item.mean_excess_return)}</Text> },
+                    { title: "正超额占比", render: (_, item: ShortpickFeedbackGroup) => formatPercent(item.positive_excess_rate) },
+                    { title: "状态", render: (_, item: ShortpickFeedbackGroup) => statusCountText(item.status_counts) },
+                  ]}
+                  dataSource={horizonRows}
+                />
+                <Table
+                  className="shortpick-replay-stat-table"
+                  rowKey="baseline_family"
+                  size="small"
+                  loading={loading && !feedback}
+                  pagination={false}
+                  columns={[
+                    { title: "组别", render: (_, item) => baselineFamilyLabel(item.baseline_family) },
+                    { title: "正式样本", render: (_, item) => `${item.completed_official_sample_count} / ${item.official_sample_count}` },
+                    {
+                      title: "5日平均超额",
+                      render: (_, item) => {
+                        const horizon5 = item.validation_by_horizon.find((group) => String(group.group_key) === "5");
+                        const metric = horizon5?.benchmark_metrics?.[selectedBenchmark];
+                        const value = metric?.mean_excess_return ?? horizon5?.mean_excess_return;
+                        return <Text className={`value-${valueTone(value)}`}>{formatPercent(value)}</Text>;
+                      },
+                    },
+                    { title: "去最佳单票", render: (_, item) => formatPercent(recordValue<number>(item.robustness_metrics, "drop_best_symbol_mean_excess_return")) },
+                    { title: "去最佳日期", render: (_, item) => formatPercent(recordValue<number>(item.robustness_metrics, "drop_best_date_mean_excess_return")) },
+                  ]}
+                  dataSource={familyRows}
+                />
+              </>
+            ),
           },
-          { title: "去最佳单票", render: (_, item) => formatPercent(recordValue<number>(item.robustness_metrics, "drop_best_symbol_mean_excess_return")) },
-          { title: "去最佳日期", render: (_, item) => formatPercent(recordValue<number>(item.robustness_metrics, "drop_best_date_mean_excess_return")) },
         ]}
-        dataSource={familyRows}
       />
     </Card>
   );
