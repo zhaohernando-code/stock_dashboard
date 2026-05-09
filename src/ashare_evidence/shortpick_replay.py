@@ -592,12 +592,12 @@ def build_shortpick_replay_feedback(session: Session, *, run_id: int | None = No
         by_family.setdefault(str(row["baseline_family"]), []).append(row)
     families = []
     for family, family_rows in sorted(by_family.items()):
-        candidate_ids = {row["candidate"].id for row in family_rows}
-        official_candidate_ids = {row["candidate"].id for row in family_rows if row["official_sample_eligible"]}
+        candidate_ids = {row["candidate_id"] for row in family_rows}
+        official_candidate_ids = {row["candidate_id"] for row in family_rows if row["official_sample_eligible"]}
         completed_official_candidate_ids = {
-            row["candidate"].id
+            row["candidate_id"]
             for row in family_rows
-            if row["official_sample_eligible"] and row["validation"].status == "completed"
+            if row["official_sample_eligible"] and row["status"] == "completed"
         }
         families.append(
             {
@@ -621,7 +621,7 @@ def build_shortpick_replay_feedback(session: Session, *, run_id: int | None = No
             **scope,
             "validation_count": len(rows),
             "completed_official_sample_count": len(
-                [row for row in rows if row["official_sample_eligible"] and row["validation"].status == "completed"]
+                [row for row in rows if row["official_sample_eligible"] and row["status"] == "completed"]
             ),
             "baseline_families": list(SHORTPICK_REPLAY_BASELINE_FAMILIES),
             "validation_by_horizon": horizon_groups,
@@ -3172,7 +3172,19 @@ def _random_rejection_pick_payload(
 
 def _replay_validation_rows(session: Session, *, run_id: int | None) -> list[dict[str, Any]]:
     query = (
-        select(ShortpickValidationSnapshot, ShortpickCandidate)
+        select(
+            ShortpickValidationSnapshot.candidate_id,
+            ShortpickValidationSnapshot.horizon_days,
+            ShortpickValidationSnapshot.status,
+            ShortpickValidationSnapshot.excess_return,
+            ShortpickCandidate.symbol,
+            ShortpickCandidate.run_id,
+            func.coalesce(func.json_extract(ShortpickCandidate.candidate_payload, "$.baseline_family"), "unknown").label("baseline_family"),
+            func.coalesce(func.json_extract(ShortpickCandidate.candidate_payload, "$.official_sample_eligible"), 0).label("official_sample_eligible"),
+            ShortpickExperimentRun.run_date,
+            func.json_extract(ShortpickExperimentRun.summary_payload, "$.llm_executor_kind").label("llm_executor_kind"),
+            func.json_extract(ShortpickExperimentRun.summary_payload, "$.model_family").label("model_family"),
+        )
         .join(ShortpickCandidate, ShortpickValidationSnapshot.candidate_id == ShortpickCandidate.id)
         .join(ShortpickExperimentRun, ShortpickCandidate.run_id == ShortpickExperimentRun.id)
         .where(ShortpickExperimentRun.information_mode == SHORTPICK_HISTORICAL_REPLAY_MODE)
@@ -3180,22 +3192,29 @@ def _replay_validation_rows(session: Session, *, run_id: int | None) -> list[dic
     if run_id is not None:
         query = query.where(ShortpickCandidate.run_id == run_id)
     rows = []
-    query = query.add_columns(ShortpickExperimentRun)
-    for validation, candidate, run in session.execute(query).all():
-        if run_id is None and _is_diagnostic_replay_run(run):
+    for row in session.execute(query).mappings().all():
+        llm_executor_kind = str(row.get("llm_executor_kind") or "")
+        model_family = str(row.get("model_family") or "")
+        if run_id is None and (
+            llm_executor_kind == "historical_replay_diagnostic_proxy"
+            or model_family == "diagnostic-sealed-packet-proxy"
+            or model_family.startswith("diagnostic-sealed-packet-proxy")
+        ):
             continue
-        payload = _candidate_payload(candidate)
-        family = str(payload.get("baseline_family") or "unknown")
-        if family == "llm" and (run.summary_payload or {}).get("llm_executor_kind") == "historical_replay_diagnostic_proxy":
+        family = str(row.get("baseline_family") or "unknown")
+        if family == "llm" and llm_executor_kind == "historical_replay_diagnostic_proxy":
             family = "diagnostic_proxy_llm"
         rows.append(
             {
-                "validation": validation,
-                "candidate": candidate,
+                "candidate_id": int(row["candidate_id"]),
+                "symbol": str(row["symbol"]),
+                "horizon_days": int(row["horizon_days"]),
+                "status": str(row["status"]),
+                "excess_return": row["excess_return"],
                 "baseline_family": family,
-                "official_sample_eligible": bool(payload.get("official_sample_eligible")),
-                "run_id": candidate.run_id,
-                "run_date": run.run_date,
+                "official_sample_eligible": bool(row["official_sample_eligible"]),
+                "run_id": int(row["run_id"]),
+                "run_date": row["run_date"],
             }
         )
     return rows
@@ -3216,10 +3235,10 @@ def _replay_statistical_gate(rows: list[dict[str, Any]], horizon_groups: list[di
     completed_official = [
         row
         for row in rows
-        if row["official_sample_eligible"] and row["validation"].status == "completed"
+        if row["official_sample_eligible"] and row["status"] == "completed"
     ]
     completed_dates = {row["run_date"] for row in completed_official if row.get("run_date") is not None}
-    completed_symbols = {row["candidate"].symbol for row in completed_official}
+    completed_symbols = {row["symbol"] for row in completed_official}
     min_completed_samples = 30
     min_completed_dates = 5
     horizon_readiness = []
@@ -3254,15 +3273,15 @@ def _replay_statistical_gate(rows: list[dict[str, Any]], horizon_groups: list[di
 def _replay_feedback_groups(rows: list[dict[str, Any]], *, group_key: str) -> list[dict[str, Any]]:
     grouped: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
-        key = str(row["validation"].horizon_days if group_key == "horizon" else row["baseline_family"])
+        key = str(row["horizon_days"] if group_key == "horizon" else row["baseline_family"])
         grouped.setdefault(key, []).append(row)
     output = []
     for key, values in sorted(grouped.items(), key=lambda item: _replay_group_sort_key(item[0], group_key=group_key)):
         completed = [
             row for row in values
-            if row["official_sample_eligible"] and row["validation"].status == "completed"
+            if row["official_sample_eligible"] and row["status"] == "completed"
         ]
-        excess = [float(row["validation"].excess_return) for row in completed if row["validation"].excess_return is not None]
+        excess = [float(row["excess_return"]) for row in completed if row["excess_return"] is not None]
         output.append(
             {
                 "group_key": key,
@@ -3270,12 +3289,12 @@ def _replay_feedback_groups(rows: list[dict[str, Any]], *, group_key: str) -> li
                 "sample_count": len(values),
                 "official_sample_count": len([row for row in values if row["official_sample_eligible"]]),
                 "completed_official_sample_count": len(completed),
-                "completed_validation_count": len([row for row in values if row["validation"].status == "completed"]),
+                "completed_validation_count": len([row for row in values if row["status"] == "completed"]),
                 "mean_excess_return": _mean_or_none(excess),
                 "trimmed_mean_excess_return": _trimmed_mean_or_none(excess),
                 "positive_excess_rate": _positive_rate(excess),
                 "benchmark_metrics": {},
-                "status_counts": _count_by([row["validation"].status for row in values]),
+                "status_counts": _count_by([row["status"] for row in values]),
             }
         )
     return output
@@ -3298,15 +3317,15 @@ def _replay_group_sort_key(key: str, *, group_key: str) -> tuple[int, int, str]:
 def _robustness_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     completed = [
         row for row in rows
-        if row["official_sample_eligible"] and row["validation"].status == "completed" and row["validation"].excess_return is not None
+        if row["official_sample_eligible"] and row["status"] == "completed" and row["excess_return"] is not None
     ]
-    values = [float(row["validation"].excess_return) for row in completed]
+    values = [float(row["excess_return"]) for row in completed]
     by_symbol: dict[str, list[float]] = {}
     by_date: dict[str, list[float]] = {}
     for row in completed:
-        value = float(row["validation"].excess_return)
-        by_symbol.setdefault(row["candidate"].symbol, []).append(value)
-        run = row["candidate"].run_id
+        value = float(row["excess_return"])
+        by_symbol.setdefault(row["symbol"], []).append(value)
+        run = row["run_id"]
         date_key = str(run)
         by_date.setdefault(date_key, []).append(value)
     best_symbol = max(by_symbol, key=lambda key: _mean_or_none(by_symbol[key]) or -999.0) if by_symbol else None
@@ -3316,14 +3335,14 @@ def _robustness_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "trimmed_mean_excess_return": _trimmed_mean_or_none(values),
         "positive_excess_rate": _positive_rate(values),
         "drop_best_symbol_mean_excess_return": _mean_or_none([
-            float(row["validation"].excess_return)
+            float(row["excess_return"])
             for row in completed
-            if best_symbol is None or row["candidate"].symbol != best_symbol
+            if best_symbol is None or row["symbol"] != best_symbol
         ]),
         "drop_best_date_mean_excess_return": _mean_or_none([
-            float(row["validation"].excess_return)
+            float(row["excess_return"])
             for row in completed
-            if best_date is None or str(row["candidate"].run_id) != best_date
+            if best_date is None or str(row["run_id"]) != best_date
         ]),
         "best_symbol": best_symbol,
         "sample_count": len(values),

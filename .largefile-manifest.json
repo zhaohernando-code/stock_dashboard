@@ -141,8 +141,8 @@
       "reviewed_at": "2026-05-03"
     },
     "frontend/src/components/ShortpickLabView.tsx": {
-      "lines": 2031,
-      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, historical replay workbench state, and the strategy closeout readout in one Ant Design surface. Historical replay now includes aggregate statistical readouts, per-run drilldown, readable replay family labels, and the market-factor closeout summary for cooldown/default, ret10-turnover/offensive, breadth/continuity gate, diversification diagnostics, and hard/strict veto strategy labels. Heavy replay aggregate/per-run feedback and strategy closeout data now load in the background instead of blocking initial lab or replay navigation. Live runs now label the formal strategy-default and offensive-control candidate groups alongside the LLM control group. It should be split into tab components after replay contracts stabilize, but keeping it together avoids cross-file churn during this visible replay closeout.",
+      "lines": 2043,
+      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, historical replay workbench state, and the strategy closeout readout in one Ant Design surface. Historical replay now includes aggregate statistical readouts, per-run drilldown, readable replay family labels, explicit loading states for slow replay feedback tables, and the market-factor closeout summary for cooldown/default, ret10-turnover/offensive, breadth/continuity gate, diversification diagnostics, and hard/strict veto strategy labels. Heavy replay aggregate/per-run feedback and strategy closeout data now load in the background instead of blocking initial lab or replay navigation. Live runs now label the formal strategy-default and offensive-control candidate groups alongside the LLM control group. It should be split into tab components after replay contracts stabilize, but keeping it together avoids cross-file churn during this visible replay closeout.",
       "status": "planned_refactor",
       "reviewed_at": "2026-05-09"
     },
@@ -159,9 +159,9 @@
       "status": "accepted"
     },
     "src/ashare_evidence/shortpick_replay.py": {
-      "lines": 3754,
-      "reason": "Shortpick historical replay v1 keeps sealed packet construction, sealed-packet-only LLM execution, failed-round handling without production proxy fallback, rejected-source/source-id leakage preservation, market-cap fallback bucketing, baseline controls, LLM self/momentum-pool distillation, LLM reject-only momentum gating, high-precision hard-veto controls, deterministic sealed-market feature rerankers including 10d momentum + turnover and single-day-chase cooldown, random reject controls, leakage audit, compact replay run listing, per-run and aggregate validation statistics, replay API helpers, post-audit contract normalization, and runtime-safe replay transaction boundaries in one first-version workflow. Diagnostic proxy remains explicit test mode only; split into packet/audit/baseline/distillation/rejector/ranker modules after the contract stabilizes.",
-      "reviewed_at": "2026-05-08",
+      "lines": 3773,
+      "reason": "Shortpick historical replay v1 keeps sealed packet construction, sealed-packet-only LLM execution, failed-round handling without production proxy fallback, rejected-source/source-id leakage preservation, market-cap fallback bucketing, baseline controls, LLM self/momentum-pool distillation, LLM reject-only momentum gating, high-precision hard-veto controls, deterministic sealed-market feature rerankers including 10d momentum + turnover and single-day-chase cooldown, random reject controls, leakage audit, compact replay run listing, per-run and aggregate validation statistics, scalar replay feedback aggregation that avoids deserializing large JSON payloads on page load, replay API helpers, post-audit contract normalization, and runtime-safe replay transaction boundaries in one first-version workflow. Diagnostic proxy remains explicit test mode only; split into packet/audit/baseline/distillation/rejector/ranker modules after the contract stabilizes.",
+      "reviewed_at": "2026-05-09",
       "status": "planned_refactor"
     },
     "src/ashare_evidence/shortpick_market_factor_study.py": {

@@ -1363,6 +1363,7 @@ function HistoricalReplayTab({
   const auditFailures = candidates.filter((item) => item.leakage_audit_status === "fail").length;
   const officialSamples = candidates.filter((item) => item.official_sample_eligible).length;
   const baselineFamilies = Array.from(new Set(candidates.map((item) => item.baseline_family || "llm")));
+  const anyReplayLoading = loading || aggregateFeedbackLoading || feedbackLoading || marketStudyLoading;
 
   const replayColumns: ColumnsType<ShortpickCandidateView> = [
     {
@@ -1418,6 +1419,15 @@ function HistoricalReplayTab({
 
   return (
     <>
+      {anyReplayLoading ? (
+        <Alert
+          className="panel-card"
+          type="info"
+          showIcon
+          message="历史回放数据加载中"
+          description="批次、候选明细、全局统计和策略收口会分段返回；表格会在对应数据到达后自动更新。"
+        />
+      ) : null}
       <ReplayStatisticalSummary
         feedback={aggregateFeedback}
         loading={aggregateFeedbackLoading}
@@ -1756,6 +1766,7 @@ function ReplayStatisticalSummary({
         className="shortpick-replay-stat-table"
         rowKey="group_key"
         size="small"
+        loading={loading && !feedback}
         pagination={false}
         columns={[
           { title: "周期", render: (_, item: ShortpickFeedbackGroup) => `${item.group_key}日` },
@@ -1770,6 +1781,7 @@ function ReplayStatisticalSummary({
         className="shortpick-replay-stat-table"
         rowKey="baseline_family"
         size="small"
+        loading={loading && !feedback}
         pagination={false}
         columns={[
           { title: "组别", render: (_, item) => baselineFamilyLabel(item.baseline_family) },
@@ -1804,7 +1816,7 @@ function ReplayFeedbackCards({
   const factorGate = recordValue<Record<string, unknown>>(feedback?.overall, "factor_ic_gate") ?? {};
   const newsCalibration = recordValue<Record<string, unknown>>(feedback?.overall, "news_calibration") ?? {};
   return (
-    <Card className="panel-card" title={`模型与对照组比较 · ${benchmarkLabel(selectedBenchmark)}`}>
+    <Card className="panel-card" title={`模型与对照组比较 · ${benchmarkLabel(selectedBenchmark)}`} loading={loading && !feedback}>
       {(feedback?.families ?? []).length ? (
         <Row gutter={[16, 16]} className="shortpick-feedback-summary">
           {(feedback?.families ?? []).map((family) => {
