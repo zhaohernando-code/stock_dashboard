@@ -375,6 +375,10 @@ body[data-theme="dark"] {
   padding: 10px 0;
 }
 
+.shortpick-choice-timing {
+  margin-bottom: 4px;
+}
+
 .shortpick-choice-item {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
