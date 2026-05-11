@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import importlib
-import multiprocessing
 import os
+import pickle
+import subprocess
 import sys
+import tempfile
 import traceback
-from multiprocessing.connection import wait
 from pathlib import Path
 from typing import Any
 
@@ -30,8 +31,7 @@ def _requests_request_with_default_timeout(timeout_seconds: int):
     return requests, original_request
 
 
-def _akshare_worker(
-    connection: Any,
+def _run_module_function(
     *,
     module_name: str,
     function_name: str,
@@ -39,7 +39,7 @@ def _akshare_worker(
     kwargs: dict[str, Any],
     timeout_seconds: int,
     disable_proxies: bool,
-) -> None:
+) -> tuple[str, Any]:
     if disable_proxies:
         for key in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
             os.environ.pop(key, None)
@@ -48,35 +48,36 @@ def _akshare_worker(
     try:
         module = importlib.import_module(module_name)
         function = getattr(module, function_name)
-        connection.send(("ok", function(*args, **kwargs)))
+        return "ok", function(*args, **kwargs)
     except Exception as exc:
-        connection.send(
-            (
-                "error",
-                {
-                    "type": type(exc).__name__,
-                    "message": str(exc),
-                    "traceback": traceback.format_exc(limit=8),
-                },
-            )
+        return (
+            "error",
+            {
+                "type": type(exc).__name__,
+                "message": str(exc),
+                "traceback": traceback.format_exc(limit=8),
+            },
         )
     finally:
         if patched_requests is not None:
             requests, original_request = patched_requests
             requests.sessions.Session.request = original_request
-        connection.close()
 
 
-def _multiprocessing_context() -> multiprocessing.context.BaseContext:
-    try:
-        ctx = multiprocessing.get_context("spawn")
-    except ValueError:
-        ctx = multiprocessing.get_context()
+def _worker_entry(input_path: str, output_path: str) -> int:
+    with open(input_path, "rb") as handle:
+        payload = pickle.load(handle)
+    status, result = _run_module_function(**payload)
+    with open(output_path, "wb") as handle:
+        pickle.dump((status, result), handle, protocol=pickle.HIGHEST_PROTOCOL)
+    return 0
 
+
+def _python_executable() -> str:
     executable = Path(sys.base_exec_prefix) / "bin" / f"python{sys.version_info.major}.{sys.version_info.minor}"
     if executable.exists():
-        ctx.set_executable(str(executable))
-    return ctx
+        return str(executable)
+    return sys.executable
 
 
 def call_module_function_with_timeout(
@@ -88,34 +89,51 @@ def call_module_function_with_timeout(
     timeout_seconds: int,
     disable_proxies: bool = False,
 ) -> Any:
-    ctx = _multiprocessing_context()
-    parent_connection, child_connection = ctx.Pipe(duplex=False)
-    process = ctx.Process(
-        target=_akshare_worker,
-        kwargs={
-            "connection": child_connection,
-            "module_name": module_name,
-            "function_name": function_name,
-            "args": args,
-            "kwargs": kwargs or {},
-            "timeout_seconds": timeout_seconds,
-            "disable_proxies": disable_proxies,
-        },
-    )
-    process.start()
-    child_connection.close()
-    try:
-        ready = wait([parent_connection, process.sentinel], timeout_seconds)
-        if parent_connection not in ready:
+    with tempfile.TemporaryDirectory(prefix="akshare-call-") as temp_dir:
+        temp_root = Path(temp_dir)
+        input_path = temp_root / "input.pkl"
+        output_path = temp_root / "output.pkl"
+        with open(input_path, "wb") as handle:
+            pickle.dump(
+                {
+                    "module_name": module_name,
+                    "function_name": function_name,
+                    "args": args,
+                    "kwargs": kwargs or {},
+                    "timeout_seconds": timeout_seconds,
+                    "disable_proxies": disable_proxies,
+                },
+                handle,
+                protocol=pickle.HIGHEST_PROTOCOL,
+            )
+        process = subprocess.Popen(
+            [
+                _python_executable(),
+                "-m",
+                "ashare_evidence.akshare_timeout",
+                str(input_path),
+                str(output_path),
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+        )
+        try:
+            process.wait(timeout=timeout_seconds)
+        except subprocess.TimeoutExpired as exc:
             process.terminate()
-            process.join(timeout=1)
-            if process.is_alive():
+            try:
+                process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
                 process.kill()
-                process.join(timeout=1)
-            raise AkshareCallTimeoutError(f"{module_name}.{function_name} timed out after {timeout_seconds}s")
+                process.wait(timeout=1)
+            raise AkshareCallTimeoutError(f"{module_name}.{function_name} timed out after {timeout_seconds}s") from exc
 
-        status, payload = parent_connection.recv()
-        process.join(timeout=1)
+        if process.returncode != 0 or not output_path.exists():
+            raise RuntimeError(f"{module_name}.{function_name} worker failed with exit code {process.returncode}")
+
+        with open(output_path, "rb") as handle:
+            status, payload = pickle.load(handle)
         if status == "ok":
             return payload
 
@@ -124,11 +142,16 @@ def call_module_function_with_timeout(
         if payload.get("type") == "TypeError":
             raise TypeError(error_message)
         raise RuntimeError(error_message)
-    finally:
-        parent_connection.close()
-        if process.is_alive():
-            process.terminate()
-            process.join(timeout=1)
+
+
+def main() -> int:
+    if len(sys.argv) != 3:
+        raise SystemExit("usage: python -m ashare_evidence.akshare_timeout INPUT.pkl OUTPUT.pkl")
+    return _worker_entry(sys.argv[1], sys.argv[2])
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
 
 
 def call_akshare_function(
