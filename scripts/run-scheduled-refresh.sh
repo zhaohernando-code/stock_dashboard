@@ -203,6 +203,15 @@ write_run_context() {
   } > "$RUN_LOCK_DIR/context"
 }
 
+process_tree_pids() {
+  local root_pid="$1"
+  local child_pid
+  pgrep -P "$root_pid" 2>/dev/null | while read -r child_pid; do
+    process_tree_pids "$child_pid"
+    printf '%s\n' "$child_pid"
+  done
+}
+
 run_with_timeout() {
   local timeout_seconds="$1"
   shift
@@ -212,8 +221,17 @@ run_with_timeout() {
   while kill -0 "$child_pid" 2>/dev/null; do
     if (( SECONDS >= deadline )); then
       echo "Command timed out after ${timeout_seconds}s: $*" >&2
+      local descendant_pids
+      descendant_pids="$(process_tree_pids "$child_pid" | tr '\n' ' ')"
+      if [[ -n "$descendant_pids" ]]; then
+        kill $descendant_pids 2>/dev/null || true
+      fi
       kill "$child_pid" 2>/dev/null || true
       sleep 5
+      descendant_pids="$(process_tree_pids "$child_pid" | tr '\n' ' ')"
+      if [[ -n "$descendant_pids" ]]; then
+        kill -9 $descendant_pids 2>/dev/null || true
+      fi
       kill -9 "$child_pid" 2>/dev/null || true
       wait "$child_pid" 2>/dev/null || true
       return 124

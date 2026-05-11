@@ -30,6 +30,9 @@ def test_daily_refresh_has_catchup_guards() -> None:
     assert "network_available" in script
     assert "acquire_run_lock" in script
     assert "run_with_timeout" in script
+    assert "process_tree_pids" in script
+    assert 'pgrep -P "$root_pid"' in script
+    assert 'kill $descendant_pids' in script
     assert "run_with_timeout \"$DAILY_REFRESH_TIMEOUT_SECONDS\" run_phase5_daily_refresh --analysis-only\n  local exit_code=$?" in script
 
 
