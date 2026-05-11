@@ -142,6 +142,11 @@ _SHORTPICK_NO_LIMIT_CHASE_LOW_TURNOVER_CONFIG = _SHORTPICK_CONTROL_CONFIG["no_li
 SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE = str(_SHORTPICK_NO_LIMIT_CHASE_LOW_TURNOVER_CONFIG["role"])
 SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_FAMILY = str(_SHORTPICK_NO_LIMIT_CHASE_LOW_TURNOVER_CONFIG["family"])
 SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_RETURN1_MAX = float(_SHORTPICK_NO_LIMIT_CHASE_LOW_TURNOVER_CONFIG["return_1d_max"])
+_SHORTPICK_OPEN_ENTRY_LOW_TURNOVER_CONFIG = _SHORTPICK_CONTROL_CONFIG["open_entry_low_turnover_uptrend"]
+SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE = str(_SHORTPICK_OPEN_ENTRY_LOW_TURNOVER_CONFIG["role"])
+SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_FAMILY = str(_SHORTPICK_OPEN_ENTRY_LOW_TURNOVER_CONFIG["family"])
+SHORTPICK_ENTRY_PRICE_SOURCE_CLOSE = "next_close"
+SHORTPICK_ENTRY_PRICE_SOURCE_OPEN = str(_SHORTPICK_OPEN_ENTRY_LOW_TURNOVER_CONFIG["entry_price_source"])
 _SHORTPICK_QUIET_BREAKOUT_CONFIG = _SHORTPICK_CONTROL_CONFIG["quiet_breakout_rank2"]
 SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_CONTROL_ROLE = str(_SHORTPICK_QUIET_BREAKOUT_CONFIG["role"])
 SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_FAMILY = str(_SHORTPICK_QUIET_BREAKOUT_CONFIG["family"])
@@ -163,6 +168,7 @@ SHORTPICK_MARKET_FACTOR_PAPER_CONTROL_ROLES = {
     SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
 }
 SHORTPICK_MARKET_FACTOR_BREADTH10_THRESHOLD = float(_SHORTPICK_MARKET_FACTOR_CONFIG["breadth10_threshold"])
 SHORTPICK_MARKET_FACTOR_POOL_RET10_THRESHOLD = float(_SHORTPICK_MARKET_FACTOR_CONFIG["pool_ret10_threshold"])
@@ -303,6 +309,12 @@ def shortpick_market_factor_paper_control_contracts() -> dict[str, Any]:
                 "role": SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
                 "label": "可执行风控版",
                 "selection_rule": "沿用冻结低换手上升趋势排序，但排除信号日涨幅达到9.5%及以上的候选，再取第1名；用于并行观察非涨停追高过滤后的可执行表现。",
+            },
+            {
+                "role": SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
+                "label": "次日开盘买入版",
+                "selection_rule": "沿用冻结低换手上升趋势第1名，只把入场价格从次一交易日收盘改为次一交易日开盘；若次日开盘价接近涨停，则不假设开盘可成交。",
+                "entry_rule": "次一交易日开盘买入；开盘直接接近涨停时标记为不可假设成交。",
             },
         ],
         "scope_note": "单票分析当前覆盖不足，且历史LLM过滤/硬否决没有证明增益；暂不升入冻结真实跟踪，只保留为后续研究方向。",
@@ -1730,6 +1742,30 @@ def insert_shortpick_market_factor_overlay_candidates(session: Session, run: Sho
                 "score": frozen_item.get("_market_factor_score"),
             }
         )
+        open_entry_candidate = _upsert_shortpick_market_factor_candidate(
+            session,
+            run=run,
+            item=frozen_item,
+            family=SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_FAMILY,
+            rank=1,
+            pool=low_turnover_pool,
+            regime=regime,
+            source_rank=1,
+            tracking_role=SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
+        )
+        inserted.append(
+            {
+                "candidate_id": open_entry_candidate.id,
+                "symbol": open_entry_candidate.symbol,
+                "name": open_entry_candidate.name,
+                "baseline_family": SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_FAMILY,
+                "rank": 1,
+                "source_rank": 1,
+                "tracking_role": SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
+                "entry_price_source": SHORTPICK_ENTRY_PRICE_SOURCE_OPEN,
+                "score": frozen_item.get("_market_factor_score"),
+            }
+        )
         no_limit_chase_ranked = [
             (index, item)
             for index, item in enumerate(low_turnover_ranked, start=1)
@@ -1945,6 +1981,7 @@ def insert_shortpick_market_factor_overlay_candidates(session: Session, run: Sho
             "momentum_10d_turnover_legacy_second_candidate",
             SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_FAMILY,
             SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_FAMILY,
+            SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_FAMILY,
         ],
         "frozen_paper_strategy": {
             **shortpick_frozen_paper_strategy_contract(),
@@ -2324,6 +2361,11 @@ def _upsert_shortpick_market_factor_candidate(
             f"{SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_RETURN1_MAX:.1%} 及以上的候选，"
             f"取过滤后的第 {source_rank or rank} 名作为可执行风控对照。"
         )
+    elif tracking_role == SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE:
+        thesis = (
+            f"{family_label}：沿用冻结低换手上升趋势第 {source_rank or rank} 名，"
+            "只把入场价格从次一交易日收盘改为次一交易日开盘；若开盘价接近涨停，则不假设开盘可成交。"
+        )
     elif tracking_role == SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_CONTROL_ROLE:
         thesis = (
             f"{family_label}：从当日波动较小且流动性靠前的池子里，选择10日不弱、当日不过热的第 {source_rank or rank} 名，"
@@ -2389,9 +2431,16 @@ def _upsert_shortpick_market_factor_candidate(
                 if tracking_role == SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE
                 else None
             ),
+            "entry_price_source": (
+                SHORTPICK_ENTRY_PRICE_SOURCE_OPEN
+                if tracking_role == SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE
+                else SHORTPICK_ENTRY_PRICE_SOURCE_CLOSE
+            ),
             "regime": regime,
         },
     }
+    if tracking_role == SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE:
+        payload["paper_tracking_entry_price_source"] = SHORTPICK_ENTRY_PRICE_SOURCE_OPEN
     candidate = ShortpickCandidate(
         run_id=run.id,
         round_id=None,
@@ -2441,6 +2490,8 @@ def _upsert_shortpick_market_factor_candidate(
             if tracking_role == SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_CONTROL_ROLE
             else "market_factor_no_limit_chase_low_turnover_uptrend"
             if tracking_role == SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE
+            else "market_factor_open_entry_low_turnover_uptrend"
+            if tracking_role == SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE
             else "market_factor_quiet_breakout"
             if tracking_role == SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_CONTROL_ROLE
             else "market_factor_offensive"
@@ -2475,6 +2526,8 @@ def _shortpick_market_factor_family_label(family: str) -> str:
         return "低换手上升趋势"
     if family == SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_FAMILY:
         return "可执行风控版"
+    if family == SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_FAMILY:
+        return "次日开盘买入版"
     if family == SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_FAMILY:
         return "安静突破二候选"
     return "动量成交量"
@@ -3420,11 +3473,13 @@ def _upsert_validation_snapshot(
         return existing
 
     tradeability = _shortpick_entry_tradeability(candidate=candidate, bars=bars, entry_index=entry_index)
+    entry_price = _shortpick_entry_execution_price(candidate=candidate, entry=bars[entry_index])
+    entry_price_source = _shortpick_entry_price_source(candidate)
     if tradeability["tradeability_status"] != SHORTPICK_OFFICIAL_TRADEABILITY_STATUS:
         entry = bars[entry_index]
         existing.status = str(tradeability["tradeability_status"])
         existing.entry_at = entry.observed_at
-        existing.entry_close = entry.close_price
+        existing.entry_close = entry_price
         existing.exit_at = None
         existing.exit_close = None
         existing.stock_return = None
@@ -3440,6 +3495,8 @@ def _upsert_validation_snapshot(
             "signal_available_at": signal_available_at.isoformat(),
             "signal_trade_day": signal_trade_day.isoformat(),
             "entry_trade_day": entry.observed_at.date().isoformat(),
+            "entry_price": entry_price,
+            "entry_price_source": entry_price_source,
             "market_data_sync": market_sync or {},
             **candidate_metadata,
         }
@@ -3450,7 +3507,7 @@ def _upsert_validation_snapshot(
         available_forward_bars = max(len(bars) - entry_index - 1, 0)
         existing.status = "pending_forward_window"
         existing.entry_at = bars[entry_index].observed_at
-        existing.entry_close = bars[entry_index].close_price
+        existing.entry_close = entry_price
         existing.exit_at = None
         existing.exit_close = None
         existing.stock_return = None
@@ -3472,6 +3529,8 @@ def _upsert_validation_snapshot(
             "signal_available_at": signal_available_at.isoformat(),
             "signal_trade_day": signal_trade_day.isoformat(),
             "entry_trade_day": bars[entry_index].observed_at.date().isoformat(),
+            "entry_price": entry_price,
+            "entry_price_source": entry_price_source,
             "market_data_sync": market_sync or {},
             **candidate_metadata,
         }
@@ -3479,8 +3538,8 @@ def _upsert_validation_snapshot(
     window = bars[entry_index : exit_index + 1]
     entry = window[0]
     exit_bar = window[-1]
-    returns = [(bar.close_price / entry.close_price) - 1 for bar in window if entry.close_price]
-    stock_return = (exit_bar.close_price / entry.close_price) - 1 if entry.close_price else None
+    returns = [(bar.close_price / entry_price) - 1 for bar in window if entry_price]
+    stock_return = (exit_bar.close_price / entry_price) - 1 if entry_price else None
     benchmark_maps = benchmark_maps or benchmark_close_maps(session)
     benchmark_returns = _shortpick_benchmark_returns(
         benchmark_maps=benchmark_maps,
@@ -3509,7 +3568,7 @@ def _upsert_validation_snapshot(
         existing.status = "completed"
     existing.entry_at = entry.observed_at
     existing.exit_at = exit_bar.observed_at
-    existing.entry_close = entry.close_price
+    existing.entry_close = entry_price
     existing.exit_close = exit_bar.close_price
     existing.stock_return = stock_return
     existing.benchmark_return = primary_return
@@ -3531,6 +3590,8 @@ def _upsert_validation_snapshot(
         "signal_trade_day": signal_trade_day.isoformat(),
         "entry_trade_day": entry.observed_at.date().isoformat(),
         "exit_trade_day": exit_bar.observed_at.date().isoformat(),
+        "entry_price": entry_price,
+        "entry_price_source": entry_price_source,
         "paper_tracking_exit_tracks": frozen_exit_tracks,
         "paper_tracking_exit_track_note": (
             "All holding windows are counted in trading days; 10% take-profit uses daily high touch as a paper-tracking approximation."
@@ -3586,8 +3647,12 @@ def _shortpick_entry_tradeability(
     entry = bars[entry_index]
     previous = bars[entry_index - 1] if entry_index > 0 else None
     limit_band = _infer_shortpick_limit_band(candidate)
+    entry_price_source = _shortpick_entry_price_source(candidate)
+    entry_price = _shortpick_entry_execution_price(candidate=candidate, entry=entry)
     evidence: dict[str, Any] = {
         "tradeability_status": SHORTPICK_OFFICIAL_TRADEABILITY_STATUS,
+        "entry_price_source": entry_price_source,
+        "entry_price": entry_price,
         "entry_open": entry.open_price,
         "entry_high": entry.high_price,
         "entry_low": entry.low_price,
@@ -3597,11 +3662,13 @@ def _shortpick_entry_tradeability(
     }
     if previous is not None:
         day_return = (entry.close_price / previous.close_price) - 1 if previous.close_price else None
+        open_return = (entry.open_price / previous.close_price) - 1 if previous.close_price else None
         evidence.update(
             {
                 "previous_close": previous.close_price,
                 "previous_trade_day": previous.observed_at.date().isoformat(),
                 "entry_day_return": day_return,
+                "entry_open_return": open_return,
             }
         )
         one_price = (
@@ -3609,13 +3676,37 @@ def _shortpick_entry_tradeability(
             and _float_near(entry.high_price, entry.low_price)
             and _float_near(entry.low_price, entry.close_price)
         )
-        if day_return is not None and one_price and day_return >= limit_band * 0.95:
+        if (
+            entry_price_source == SHORTPICK_ENTRY_PRICE_SOURCE_OPEN
+            and open_return is not None
+            and open_return >= limit_band * 0.95
+        ):
+            evidence["tradeability_status"] = "entry_unfillable_limit_up"
+            evidence["reason"] = "Entry open appears to be near limit-up, so open-entry research cannot assume a fill."
+        elif day_return is not None and one_price and day_return >= limit_band * 0.95:
             evidence["tradeability_status"] = "entry_unfillable_limit_up"
             evidence["reason"] = "Entry day appears to be one-price limit-up, so official validation cannot assume a fill."
     else:
         evidence["tradeability_status"] = "tradeability_uncertain"
         evidence["reason"] = "No previous close exists to infer limit-up fillability."
     return evidence
+
+
+def _shortpick_entry_price_source(candidate: ShortpickCandidate) -> str:
+    payload = candidate.candidate_payload if isinstance(candidate.candidate_payload, dict) else {}
+    source = str(payload.get("paper_tracking_entry_price_source") or "")
+    if source == SHORTPICK_ENTRY_PRICE_SOURCE_OPEN:
+        return SHORTPICK_ENTRY_PRICE_SOURCE_OPEN
+    overlay = payload.get("market_factor_overlay") if isinstance(payload.get("market_factor_overlay"), dict) else {}
+    if str(overlay.get("entry_price_source") or "") == SHORTPICK_ENTRY_PRICE_SOURCE_OPEN:
+        return SHORTPICK_ENTRY_PRICE_SOURCE_OPEN
+    return SHORTPICK_ENTRY_PRICE_SOURCE_CLOSE
+
+
+def _shortpick_entry_execution_price(*, candidate: ShortpickCandidate, entry: MarketBar) -> float | None:
+    if _shortpick_entry_price_source(candidate) == SHORTPICK_ENTRY_PRICE_SOURCE_OPEN:
+        return entry.open_price
+    return entry.close_price
 
 
 def _infer_shortpick_limit_band(candidate: ShortpickCandidate) -> float:
@@ -3675,6 +3766,8 @@ def _shortpick_exit_track_payload(
     key: str,
     label: str,
     entry: MarketBar,
+    entry_price: float | None,
+    entry_price_source: str,
     window: list[MarketBar],
     exit_index: int,
     exit_price: float | None,
@@ -3683,11 +3776,11 @@ def _shortpick_exit_track_payload(
     execution_assumption: str = "close_price",
 ) -> dict[str, Any]:
     exit_bar = window[exit_index]
-    stock_return = _close_return(entry.close_price, exit_price)
+    stock_return = _close_return(entry_price, exit_price)
     close_returns = [
-        _close_return(entry.close_price, bar.close_price)
+        _close_return(entry_price, bar.close_price)
         for bar in window[: exit_index + 1]
-        if entry.close_price and bar.close_price is not None
+        if entry_price and bar.close_price is not None
     ]
     benchmark_returns = _shortpick_benchmark_returns(
         benchmark_maps=benchmark_maps,
@@ -3702,6 +3795,9 @@ def _shortpick_exit_track_payload(
         "entry_trade_day": entry.observed_at.date().isoformat(),
         "exit_trade_day": exit_bar.observed_at.date().isoformat(),
         "holding_trading_days": exit_index,
+        "entry_price": entry_price,
+        "entry_price_source": entry_price_source,
+        "entry_open": entry.open_price,
         "entry_close": entry.close_price,
         "exit_price": exit_price,
         "exit_close": exit_bar.close_price,
@@ -3716,15 +3812,14 @@ def _shortpick_exit_track_payload(
     }
 
 
-def _shortpick_conditional_exit_index(window: list[MarketBar]) -> tuple[int, str]:
+def _shortpick_conditional_exit_index(window: list[MarketBar], *, entry_price: float | None = None) -> tuple[int, str]:
     max_index = min(SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS, len(window) - 1)
     start_index = min(SHORTPICK_FROZEN_PAPER_CHECK_START_DAY, max_index)
-    entry = window[0]
     for index in range(start_index, max_index + 1):
         current = window[index]
-        if not entry.close_price or current.close_price is None:
+        if not entry_price or current.close_price is None:
             continue
-        stock_return = (current.close_price / entry.close_price) - 1
+        stock_return = (current.close_price / entry_price) - 1
         if stock_return <= -SHORTPICK_FROZEN_PAPER_STOP_LOSS_PCT:
             return index, "close_stop_loss_8pct"
         recent = [bar.close_price for bar in window[max(0, index - 2) : index + 1] if bar.close_price is not None]
@@ -3753,12 +3848,16 @@ def _shortpick_frozen_exit_track_results(
     if len(window) <= SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS:
         return []
     entry = window[0]
+    entry_price = _shortpick_entry_execution_price(candidate=candidate, entry=entry)
+    entry_price_source = _shortpick_entry_price_source(candidate)
     max_index = SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS
     tracks = [
         _shortpick_exit_track_payload(
             key="mechanical_5d",
             label="机械5日",
             entry=entry,
+            entry_price=entry_price,
+            entry_price_source=entry_price_source,
             window=window,
             exit_index=SHORTPICK_FROZEN_PAPER_CHECK_START_DAY,
             exit_price=window[SHORTPICK_FROZEN_PAPER_CHECK_START_DAY].close_price,
@@ -3769,6 +3868,8 @@ def _shortpick_frozen_exit_track_results(
             key="mechanical_10d",
             label="机械10日",
             entry=entry,
+            entry_price=entry_price,
+            entry_price_source=entry_price_source,
             window=window,
             exit_index=max_index,
             exit_price=window[max_index].close_price,
@@ -3776,12 +3877,17 @@ def _shortpick_frozen_exit_track_results(
             benchmark_maps=benchmark_maps,
         ),
     ]
-    conditional_index, conditional_reason = _shortpick_conditional_exit_index(window[: max_index + 1])
+    conditional_index, conditional_reason = _shortpick_conditional_exit_index(
+        window[: max_index + 1],
+        entry_price=entry_price,
+    )
     tracks.append(
         _shortpick_exit_track_payload(
             key="conditional_5_to_10d",
             label="5日后条件检查",
             entry=entry,
+            entry_price=entry_price,
+            entry_price_source=entry_price_source,
             window=window,
             exit_index=conditional_index,
             exit_price=window[conditional_index].close_price,
@@ -3789,7 +3895,7 @@ def _shortpick_frozen_exit_track_results(
             benchmark_maps=benchmark_maps,
         )
     )
-    take_profit_price = entry.close_price * (1 + SHORTPICK_FROZEN_PAPER_TAKE_PROFIT_PCT) if entry.close_price else None
+    take_profit_price = entry_price * (1 + SHORTPICK_FROZEN_PAPER_TAKE_PROFIT_PCT) if entry_price else None
     take_profit_index = max_index
     take_profit_reason = "max_10d_reached"
     take_profit_exit_price = window[max_index].close_price
@@ -3805,6 +3911,8 @@ def _shortpick_frozen_exit_track_results(
             key="take_profit_10pct",
             label="10%触达止盈",
             entry=entry,
+            entry_price=entry_price,
+            entry_price_source=entry_price_source,
             window=window,
             exit_index=take_profit_index,
             exit_price=take_profit_exit_price,

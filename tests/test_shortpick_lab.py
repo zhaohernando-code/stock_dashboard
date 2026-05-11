@@ -36,6 +36,7 @@ from ashare_evidence.shortpick_lab import (
     SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_TOP3_EQUAL_WEIGHT_CONTROL_ROLE,
@@ -44,6 +45,7 @@ from ashare_evidence.shortpick_lab import (
     StaticShortpickExecutor,
     _is_shortpick_no_limit_chase_risk,
     _normalize_shortpick_topic,
+    _shortpick_entry_tradeability,
     _shortpick_frozen_exit_track_results,
     _upsert_shortpick_market_factor_candidate,
     build_shortpick_consensus,
@@ -1174,6 +1176,7 @@ class ShortpickLabTests(unittest.TestCase):
                 SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
                 SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
                 SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
+                SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
             ],
         )
         for role in (
@@ -1185,6 +1188,7 @@ class ShortpickLabTests(unittest.TestCase):
             SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
             SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
             SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
+            SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
         ):
             candidate = ShortpickCandidate(
                 run_id=1,
@@ -1233,6 +1237,109 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertTrue(_is_shortpick_no_limit_chase_risk({"return_1d": 0.1002838}))
         self.assertFalse(_is_shortpick_no_limit_chase_risk({"return_1d": 0.0949}))
         self.assertFalse(_is_shortpick_no_limit_chase_risk({"return_1d": None}))
+
+    def test_open_entry_paper_control_uses_open_price_for_exit_tracks(self) -> None:
+        candidate = ShortpickCandidate(
+            run_id=1,
+            candidate_key="shortpick-market-factor:1:open-entry:1",
+            symbol="000001.SZ",
+            name="测试银行",
+            research_priority="market_factor_default",
+            candidate_payload={
+                "tracking_role": SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
+                "paper_tracking_entry_price_source": "next_open",
+            },
+        )
+        start = datetime(2026, 5, 6, 7, 0, tzinfo=UTC)
+        bars = [
+            MarketBar(
+                bar_key=f"open-entry-{index}",
+                stock_id=1,
+                timeframe="1d",
+                observed_at=start + timedelta(days=index),
+                open_price=100 + index,
+                high_price=112 + index,
+                low_price=99 + index,
+                close_price=110 + index,
+                volume=1000,
+                amount=(110 + index) * 1000,
+                raw_payload={},
+                license_tag="test",
+                usage_scope="internal-test",
+                redistribution_scope="none",
+                source_uri=f"test://open-entry/{index}",
+                lineage_hash=compute_lineage_hash({"open_entry_index": index}),
+            )
+            for index in range(11)
+        ]
+
+        tracks = _shortpick_frozen_exit_track_results(
+            candidate=candidate,
+            window=bars,
+            benchmark_maps={},
+        )
+
+        mechanical_5d = next(item for item in tracks if item["key"] == "mechanical_5d")
+        self.assertEqual(mechanical_5d["entry_price_source"], "next_open")
+        self.assertEqual(mechanical_5d["entry_price"], 100)
+        self.assertEqual(mechanical_5d["entry_close"], 110)
+        self.assertAlmostEqual(mechanical_5d["stock_return"], 115 / 100 - 1)
+
+    def test_open_entry_tradeability_blocks_limit_up_open(self) -> None:
+        candidate = ShortpickCandidate(
+            run_id=1,
+            candidate_key="shortpick-market-factor:1:open-entry-limit-up:1",
+            symbol="001234.SZ",
+            name="测试股份",
+            research_priority="market_factor_default",
+            candidate_payload={
+                "tracking_role": SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
+                "paper_tracking_entry_price_source": "next_open",
+            },
+        )
+        previous = MarketBar(
+            bar_key="previous",
+            stock_id=1,
+            timeframe="1d",
+            observed_at=datetime(2026, 5, 5, 7, 0, tzinfo=UTC),
+            open_price=9.8,
+            high_price=10.2,
+            low_price=9.7,
+            close_price=10,
+            volume=1000,
+            amount=10000,
+            raw_payload={},
+            license_tag="test",
+            usage_scope="internal-test",
+            redistribution_scope="none",
+            source_uri="test://previous",
+            lineage_hash=compute_lineage_hash({"bar": "previous"}),
+        )
+        entry = MarketBar(
+            bar_key="entry",
+            stock_id=1,
+            timeframe="1d",
+            observed_at=datetime(2026, 5, 6, 7, 0, tzinfo=UTC),
+            open_price=11,
+            high_price=11,
+            low_price=10.5,
+            close_price=10.8,
+            volume=1000,
+            amount=10800,
+            raw_payload={},
+            license_tag="test",
+            usage_scope="internal-test",
+            redistribution_scope="none",
+            source_uri="test://entry",
+            lineage_hash=compute_lineage_hash({"bar": "entry"}),
+        )
+
+        evidence = _shortpick_entry_tradeability(candidate=candidate, bars=[previous, entry], entry_index=1)
+
+        self.assertEqual(evidence["tradeability_status"], "entry_unfillable_limit_up")
+        self.assertEqual(evidence["entry_price_source"], "next_open")
+        self.assertEqual(evidence["entry_price"], 11)
+        self.assertAlmostEqual(evidence["entry_open_return"], 0.1)
 
     def test_market_factor_paper_controls_use_ten_day_display_horizon(self) -> None:
         self._seed_stock_bars("000001.SZ", "测试银行", [10 + index for index in range(22)])

@@ -295,6 +295,7 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
             continue
         overlay = dict(candidate_payload.get("market_factor_overlay") or {})
         llm_control = dict(candidate_payload.get("llm_paper_control") or {})
+        entry_price_source = str(candidate_payload.get("paper_tracking_entry_price_source") or overlay.get("entry_price_source") or "next_close")
         summary_overlay = dict((run.summary_payload or {}).get("market_factor_overlay") or {})
         frozen = dict(summary_overlay.get("frozen_paper_strategy") or {})
         regime = dict(summary_overlay.get("regime") or overlay.get("regime") or {})
@@ -326,7 +327,11 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
                 "tracking_role": tracking_role or ("frozen_paper_primary" if is_frozen_item else ""),
                 "selection_label": str(item_contract.get("label") or "纸面对照"),
                 "source_rank": int(overlay.get("source_rank") or llm_control.get("selection_rank") or 2),
-                "entry_rule": "次一交易日收盘买入",
+                "entry_rule": (
+                    "次一交易日开盘买入；开盘直接接近涨停时标记为不可假设成交"
+                    if entry_price_source == "next_open"
+                    else "次一交易日收盘买入"
+                ),
                 "exit_rule": str(
                     item_contract.get("risk_rule")
                     or item_contract.get("monitoring_rule")
