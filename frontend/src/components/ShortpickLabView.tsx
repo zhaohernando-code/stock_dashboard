@@ -1706,10 +1706,16 @@ function FrozenRunStatus({
       : gatePass
         ? "启用条件满足，但候选不足"
         : paperTracking?.current_label || "本批次未触发冻结策略";
+  const frozenSelectionRule = String(
+    frozen.selection_rule ?? "当全市场10日上涨占比不低于45%时，选择20日趋势向上、成交额较高且换手率相对不拥挤的第1名",
+  );
+  const frozenRiskRule = String(
+    frozen.risk_rule ?? "同一入场信号并行记录机械5日、机械10日、条件检查和10%止盈四条退出轨道。",
+  );
   const alertDescription = isWaitingFirstFrozenRun
     ? "当前最新 LLM 对照批次生成于规则冻结前；下一次盘后批次会按冻结规则写入正式纸面跟踪或记录未触发原因。"
     : inserted && frozenCandidate
-      ? `本批次纸面跟踪标的：${frozenCandidate.symbol} ${frozenCandidate.name}。规则已冻结：取10日动量换手第2名，同一入场信号并行记录机械5日、机械10日、条件检查和10%止盈四条退出轨道。`
+      ? `本批次纸面跟踪标的：${frozenCandidate.symbol} ${frozenCandidate.name}。规则已冻结：${frozenSelectionRule}。${frozenRiskRule}`
       : paperTracking?.current_message || "冻结策略只在市场转正且候选池不过热时启动；未启动批次也会记录为真实纸面跟踪的一部分。";
   return (
     <Card className="panel-card shortpick-frozen-status" title="正式纸面跟踪（冻结策略）" loading={loading && !paperTracking}>
@@ -1858,10 +1864,10 @@ function PaperTrackingTab({
 
       <Card className="panel-card" title="冻结规则">
         <Descriptions size="small" column={{ xs: 1, md: 2 }}>
-          <Descriptions.Item label="策略名称" span={2}>{String(contract.label ?? "冻结纸面策略：第二候选四轨退出监测")}</Descriptions.Item>
+          <Descriptions.Item label="策略名称" span={2}>{String(contract.label ?? "冻结纸面策略：低换手上升趋势四轨监测")}</Descriptions.Item>
           <Descriptions.Item label="运行方式">{String(contract.mode ?? "每日滚动 5x1万；持有天数按交易日计算")}</Descriptions.Item>
           <Descriptions.Item label="候选池">{String(contract.pool_rule ?? "先扩大动量成交量候选池")}</Descriptions.Item>
-          <Descriptions.Item label="选择规则">{String(contract.selection_rule ?? "取10日动量与换手排序第2名")}</Descriptions.Item>
+          <Descriptions.Item label="选择规则">{String(contract.selection_rule ?? "当全市场10日上涨占比不低于45%时，选择20日趋势向上、成交额较高且换手率相对不拥挤的第1名")}</Descriptions.Item>
           <Descriptions.Item label="监测规则">{String(contract.risk_rule ?? "机械5日、机械10日、条件检查、10%触达止盈四轨监测")}</Descriptions.Item>
           <Descriptions.Item label="边界说明" span={2}>{String(summary.scope_note ?? contract.scope_note ?? "LLM自由选股保留为对照组。")}</Descriptions.Item>
         </Descriptions>
