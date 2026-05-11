@@ -44,3 +44,12 @@ def test_publish_build_uses_same_frontend_env_as_runtime() -> None:
     assert 'FRONTEND_ENV_FILE="${ASHARE_LOCAL_FRONTEND_ENV_FILE:-$HOME/.config/codex/ashare-dashboard.frontend.env}"' in script
     assert 'source "$FRONTEND_ENV_FILE"' in script
     assert script.index('source "$FRONTEND_ENV_FILE"') < script.index('command -v npm')
+
+
+def test_publish_bootstraps_scheduled_refresh_when_launchagent_is_unloaded() -> None:
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert 'SCHEDULED_PLIST="$HOME/Library/LaunchAgents/${SCHEDULED_LABEL}.plist"' in script
+    assert 'launchctl print "gui/$(id -u)/$SCHEDULED_LABEL"' in script
+    assert 'launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"' in script
+    assert 'launchctl kickstart -k "gui/$(id -u)/$SCHEDULED_LABEL"' in script

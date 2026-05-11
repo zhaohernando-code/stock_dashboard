@@ -97,6 +97,7 @@ fi
 
 # Pause scheduled refresh during publish to avoid concurrent DB writes
 SCHEDULED_LABEL="com.codex.ashare-dashboard.scheduled-refresh"
+SCHEDULED_PLIST="$HOME/Library/LaunchAgents/${SCHEDULED_LABEL}.plist"
 echo "[publish] Pausing scheduled-refresh"
 launchctl stop "$SCHEDULED_LABEL" 2>/dev/null || true
 
@@ -212,7 +213,14 @@ cp "$MANIFEST_PATH" "$RUNTIME_ROOT/output/releases/latest-successful.json"
 printf '%s\n' "$COMMIT_SHA" > "$RUNTIME_ROOT/output/releases/latest-successful.commit"
 
 echo "[publish] Resuming scheduled-refresh"
-launchctl start "$SCHEDULED_LABEL" 2>/dev/null || true
+if ! launchctl print "gui/$(id -u)/$SCHEDULED_LABEL" >/dev/null 2>&1; then
+  if [[ ! -f "$SCHEDULED_PLIST" ]]; then
+    echo "Scheduled refresh plist missing: $SCHEDULED_PLIST" >&2
+    exit 1
+  fi
+  launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"
+fi
+launchctl kickstart -k "gui/$(id -u)/$SCHEDULED_LABEL"
 
 echo "[publish] Triggering post-deploy data refresh"
 if [[ -f "$BACKEND_ENV_FILE" ]]; then
