@@ -67,7 +67,7 @@ def _akshare_worker(
 
 def _multiprocessing_context() -> multiprocessing.context.BaseContext:
     try:
-        return multiprocessing.get_context("fork")
+        return multiprocessing.get_context("spawn")
     except ValueError:
         return multiprocessing.get_context()
 
