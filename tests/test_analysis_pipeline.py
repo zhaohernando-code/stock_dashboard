@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from ashare_evidence.analysis_pipeline import (
     DailyMarketFetch,
+    _akshare_call_timeout,
     build_real_evidence_bundle,
     repair_stock_profile_snapshot,
     refresh_real_analysis,
@@ -370,6 +371,17 @@ class AnalysisPipelineTests(unittest.TestCase):
         self.assertEqual(metadata, [])
         self.assertEqual(observed["symbol"], self.symbol.partition(".")[0])
         self.assertEqual(observed["timeout"], 5)
+
+    def test_akshare_call_timeout_raises_and_restores_signal_handler(self) -> None:
+        import signal
+
+        previous_handler = signal.getsignal(signal.SIGALRM)
+
+        with self.assertRaisesRegex(TimeoutError, "AKShare call timed out"):
+            with _akshare_call_timeout(5):
+                signal.raise_signal(signal.SIGALRM)
+
+        self.assertIs(signal.getsignal(signal.SIGALRM), previous_handler)
 
     def test_repair_stock_profile_snapshot_backfills_board_and_financial_payload(self) -> None:
         with session_scope(self.database_url) as session:
