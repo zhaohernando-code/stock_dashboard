@@ -2,6 +2,10 @@
 
 反回归笔记和可复用经验。状态快照见 PROJECT_STATUS.json。
 
+## 2026-05-12
+
+- **手机端底部导航激活态垂直居中修复**：用户反馈手机端底部 tab 选中后内容顶到顶部。根因是 `.mobile-bottom-nav button` 使用固定两行 grid，移动端字体/安全区组合下激活背景里的图标与文字视觉上偏上。修复为固定高度纵向 flex 居中，并给文字和 Ant Design 图标设置稳定 line-height/ellipsis/svg block，确保激活态内容整体居中且不会撑高按钮。
+
 ## 2026-05-11
 
 - **新增“次日开盘买入版”并行研究**：用户确认希望观察盘后信号在次日开盘买入是否比当前次日收盘买入更贴近真实执行，但不直接替换冻结主线。实现为 `market-factor-controls-v5-2026-05-11`：新增 `次日开盘买入版` 对照，选股完全沿用冻结低换手上升趋势第1名，只把入场价从 `next_close` 改为 `next_open`；验证和四轨退出计算会用开盘成交价作为 `entry_price`，同时保留 `entry_open/entry_close` 以便审计。对涨停可执行性采取更严格处理：开盘价接近涨停时标记 `entry_unfillable_limit_up`，不假设开盘可成交；现有收盘入场口径仍仅在一字涨停日标记不可假设成交，普通收盘涨停因日线无法证明完全无成交，暂按既有口径保留。运行态已对 2026-05-11 的 run 121 重新投影，新增 `600236.SH 桂冠电力 / 次日开盘买入版 / next_open`；served 页面已验证标签、入场规则、桂冠电力和可执行风控版东山精密均可见，console error 为 0，截图 `output/playwright/next-open-entry-control-runtime-final.png`。
