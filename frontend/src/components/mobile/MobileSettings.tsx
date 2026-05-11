@@ -15,7 +15,7 @@ export function MobileSettings(props: MobileAppShellProps) {
   const [savingModel, setSavingModel] = useState(false);
   const themeLabel = props.themeMode === "dark" ? "夜间模式" : "浅色模式";
   const activeModelKey = props.analysisKeyId ? props.modelApiKeys.find((item) => item.id === props.analysisKeyId) : null;
-  const activeModelDetail = activeModelKey ? `${activeModelKey.name} · ${activeModelKey.model_name}` : "本机默认模型";
+  const activeModelDetail = activeModelKey ? `${activeModelKey.name} · ${activeModelKey.model_name}` : "本机 Codex GPT";
 
   async function selectAnalysisModel(keyId: number | undefined) {
     setSavingModel(true);
@@ -40,7 +40,7 @@ export function MobileSettings(props: MobileAppShellProps) {
           <Title level={4}>人工研究模型</Title>
           <SettingsOption
             icon={<ApiOutlined />}
-            title="本机默认模型"
+            title="本机 Codex GPT"
             detail="使用本机默认研究模型"
             value="默认"
             active={!props.analysisKeyId}
