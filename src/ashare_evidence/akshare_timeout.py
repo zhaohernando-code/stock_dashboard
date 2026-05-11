@@ -3,8 +3,10 @@ from __future__ import annotations
 import importlib
 import multiprocessing
 import os
+import sys
 import traceback
 from multiprocessing.connection import wait
+from pathlib import Path
 from typing import Any
 
 
@@ -67,9 +69,14 @@ def _akshare_worker(
 
 def _multiprocessing_context() -> multiprocessing.context.BaseContext:
     try:
-        return multiprocessing.get_context("spawn")
+        ctx = multiprocessing.get_context("spawn")
     except ValueError:
-        return multiprocessing.get_context()
+        ctx = multiprocessing.get_context()
+
+    executable = Path(sys.base_exec_prefix) / "bin" / f"python{sys.version_info.major}.{sys.version_info.minor}"
+    if executable.exists():
+        ctx.set_executable(str(executable))
+    return ctx
 
 
 def call_module_function_with_timeout(
