@@ -366,6 +366,64 @@ body[data-theme="dark"] {
   margin-top: 0;
 }
 
+.shortpick-choice-card .ant-card-extra,
+.shortpick-paper-ledger-card .ant-card-extra {
+  white-space: normal;
+}
+
+.shortpick-choice-list .ant-list-item {
+  padding: 10px 0;
+}
+
+.shortpick-choice-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  width: 100%;
+  align-items: start;
+}
+
+.shortpick-choice-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-weight: 700;
+}
+
+.shortpick-choice-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.shortpick-paper-mobile-list {
+  display: none;
+}
+
+.shortpick-paper-mobile-item {
+  display: grid;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+}
+
+.shortpick-paper-mobile-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.shortpick-paper-mobile-thesis {
+  margin-bottom: 0;
+}
+
 .shortpick-replay-readout .ant-alert {
   margin-bottom: 16px;
 }

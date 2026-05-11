@@ -2,6 +2,7 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   Collapse,
   Descriptions,
   Empty,
@@ -46,6 +47,8 @@ import { formatDate, formatNumber, formatPercent, valueTone } from "../utils/for
 const { Paragraph, Text, Title } = Typography;
 const DEFAULT_VALIDATION_PAGE_SIZE = 50;
 const HORIZON_ORDER = [1, 3, 5, 10, 20];
+type ShortpickWorkspaceTab = "today" | "paper-tracking" | "validation" | "feedback" | "replay";
+const SHORTPICK_WORKSPACE_TABS = new Set<ShortpickWorkspaceTab>(["today", "paper-tracking", "validation", "feedback", "replay"]);
 const BENCHMARK_OPTIONS = [
   { label: "沪深300", value: "hs300" },
   { label: "中证1000", value: "csi1000" },
@@ -898,6 +901,51 @@ function paperTrackingGroupColor(value?: string | null): string {
   return "default";
 }
 
+function initialShortpickWorkspaceTab(): ShortpickWorkspaceTab {
+  const rawTab = new URLSearchParams(window.location.search).get("shortpickTab");
+  return rawTab && SHORTPICK_WORKSPACE_TABS.has(rawTab as ShortpickWorkspaceTab)
+    ? rawTab as ShortpickWorkspaceTab
+    : "today";
+}
+
+function paperTrackingDisplayRank(item: ShortpickPaperTrackingItem): number {
+  if (item.tracking_group === "frozen_strategy") return 0;
+  if (item.tracking_group === "llm_paper_control") return 1;
+  if (item.tracking_group === "market_factor_control") return 2;
+  if (item.tracking_group === "market_random_control") return 3;
+  return 4;
+}
+
+function paperTrackingChoiceLabel(latestRun?: Record<string, unknown> | null): "当前" | "下轮" {
+  const now = new Date();
+  const day = now.getDay();
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const isTradingDaytime = day >= 1 && day <= 5 && minutes >= 9 * 60 + 30 && minutes <= 15 * 60;
+  if (isTradingDaytime) return "当前";
+  const runDate = typeof latestRun?.run_date === "string" ? latestRun.run_date : "";
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const isAfterClose = day >= 1 && day <= 5 && minutes > 15 * 60;
+  if (isAfterClose && runDate !== today) return "当前";
+  return "下轮";
+}
+
+function latestPaperTrackingChoices(rows: ShortpickPaperTrackingItem[], latestRun?: Record<string, unknown> | null): ShortpickPaperTrackingItem[] {
+  const latestRunId = Number(latestRun?.id ?? 0);
+  const latestRunDate = typeof latestRun?.run_date === "string" ? latestRun.run_date : "";
+  const scoped = rows.filter((item) => (
+    latestRunId ? Number(item.run_id) === latestRunId : latestRunDate ? item.run_date === latestRunDate : false
+  ));
+  const source = scoped.length ? scoped : rows;
+  const latestDate = source.reduce((value, item) => (item.run_date > value ? item.run_date : value), "");
+  return source
+    .filter((item) => item.run_date === latestDate)
+    .sort((left, right) => (
+      paperTrackingDisplayRank(left) - paperTrackingDisplayRank(right)
+      || Number(left.source_rank ?? 99) - Number(right.source_rank ?? 99)
+      || left.name.localeCompare(right.name, "zh-Hans-CN")
+    ));
+}
+
 export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
   const [runs, setRuns] = useState<ShortpickRunView[]>([]);
   const [selectedRun, setSelectedRun] = useState<ShortpickRunView | null>(null);
@@ -928,7 +976,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
   const [validationFilters, setValidationFilters] = useState({ status: "", horizon: "", model: "", symbol: "" });
   const [validationPage, setValidationPage] = useState({ current: 1, pageSize: DEFAULT_VALIDATION_PAGE_SIZE });
   const [selectedBenchmark, setSelectedBenchmark] = useState("hs300");
-  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState("today");
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<ShortpickWorkspaceTab>(() => initialShortpickWorkspaceTab());
 
   const latestRun = selectedRun ?? runs[0] ?? null;
   const normalCandidates = useMemo(
@@ -1424,7 +1472,9 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
           className="shortpick-workspace-tabs"
           activeKey={visibleWorkspaceTab}
           onChange={(key) => {
-            setActiveWorkspaceTab(key);
+            if (SHORTPICK_WORKSPACE_TABS.has(key as ShortpickWorkspaceTab)) {
+              setActiveWorkspaceTab(key as ShortpickWorkspaceTab);
+            }
             if (key === "replay") {
               void loadReplay(selectedReplayRun?.id, { includeMarketStudy: true });
             }
@@ -1775,6 +1825,10 @@ function PaperTrackingTab({
   const summary = tracking?.summary ?? {};
   const latestRun = tracking?.latest_run ?? null;
   const rows = tracking?.items ?? [];
+  const [showFrozenOnly, setShowFrozenOnly] = useState(false);
+  const displayRows = showFrozenOnly ? rows.filter((item) => item.tracking_group === "frozen_strategy") : rows;
+  const choiceLabel = paperTrackingChoiceLabel(latestRun);
+  const choiceRows = latestPaperTrackingChoices(rows, latestRun);
   const monitoringTracks = (Array.isArray(contract.monitoring_tracks) ? contract.monitoring_tracks : []) as Record<string, unknown>[];
   const marketControls = (Array.isArray(marketControlContract.controls) ? marketControlContract.controls : []) as Record<string, unknown>[];
   const columns: ColumnsType<ShortpickPaperTrackingItem> = [
@@ -1872,6 +1926,41 @@ function PaperTrackingTab({
         </Row>
       </Card>
 
+      <Card
+        className="panel-card shortpick-choice-card"
+        title={`${choiceLabel}股票选择`}
+        extra={<Tag color={choiceLabel === "下轮" ? "purple" : "blue"}>{choiceLabel}</Tag>}
+      >
+        <Paragraph className="panel-description">
+          {choiceLabel === "下轮"
+            ? "最新盘后批次已经生成，以下为下一交易日纸面买入观察清单；冻结规则固定排在第一。"
+            : "交易时段或下一轮结果未生成前，以下为当前正在跟踪的纸面选择；冻结规则固定排在第一。"}
+        </Paragraph>
+        {choiceRows.length ? (
+          <List
+            className="shortpick-choice-list"
+            dataSource={choiceRows}
+            renderItem={(item, index) => (
+              <List.Item>
+                <div className="shortpick-choice-item">
+                  <div className="shortpick-choice-rank">{index + 1}</div>
+                  <div className="shortpick-choice-copy">
+                    <Space wrap size={6}>
+                      <Text strong>{item.name} · {item.symbol}</Text>
+                      <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
+                      {index === 0 && item.tracking_group === "frozen_strategy" ? <Tag color="purple">冻结规则优先</Tag> : null}
+                    </Space>
+                    <Text type="secondary">{item.selection_label || "纸面对照"} · {item.entry_rule || "次一交易日收盘买入"}</Text>
+                  </div>
+                </div>
+              </List.Item>
+            )}
+          />
+        ) : (
+          <Empty description={loading ? "股票选择加载中" : "暂无可展示的纸面选择。"} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        )}
+      </Card>
+
       <Card className="panel-card" title="冻结规则">
         <Descriptions size="small" column={{ xs: 1, md: 2 }}>
           <Descriptions.Item label="策略名称" span={2}>{String(contract.label ?? "冻结纸面策略：低换手上升趋势四轨监测")}</Descriptions.Item>
@@ -1934,16 +2023,46 @@ function PaperTrackingTab({
         ) : null}
       </Card>
 
-      <Card className="panel-card" title="纸面跟踪记录（正式策略与对照组）">
-        {rows.length ? (
-          <Table
-            rowKey="candidate_id"
-            size="middle"
-            loading={loading}
-            columns={columns}
-            dataSource={rows}
-            pagination={{ pageSize: 8 }}
-          />
+      <Card
+        className="panel-card shortpick-paper-ledger-card"
+        title="纸面跟踪记录（正式策略与对照组）"
+        extra={(
+          <Checkbox checked={showFrozenOnly} onChange={(event) => setShowFrozenOnly(event.target.checked)}>
+            仅看冻结规则
+          </Checkbox>
+        )}
+      >
+        {displayRows.length ? (
+          <>
+            <Table
+              className="shortpick-paper-ledger-table"
+              rowKey="candidate_id"
+              size="middle"
+              loading={loading}
+              columns={columns}
+              dataSource={displayRows}
+              pagination={{ pageSize: 8 }}
+              scroll={{ x: 920 }}
+            />
+            <List
+              className="shortpick-paper-mobile-list"
+              dataSource={displayRows}
+              renderItem={(item) => (
+                <List.Item>
+                  <div className="shortpick-paper-mobile-item">
+                    <div className="shortpick-paper-mobile-head">
+                      <Text strong>{item.name} · {item.symbol}</Text>
+                      <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
+                    </div>
+                    <Text type="secondary">{item.run_date} · {item.selection_label || "纸面对照"}</Text>
+                    <Text>{item.entry_rule || "次一交易日收盘买入"}</Text>
+                    <Text type="secondary">{item.exit_rule || "机械5日、机械10日、条件检查、10%触达止盈四轨监测"}</Text>
+                    {item.thesis ? <Paragraph className="shortpick-paper-mobile-thesis">{item.thesis}</Paragraph> : null}
+                  </div>
+                </List.Item>
+              )}
+            />
+          </>
         ) : (
           <Empty description={loading ? "纸面跟踪状态加载中" : "尚无正式纸面标的；等待首个冻结后盘后批次。"} />
         )}

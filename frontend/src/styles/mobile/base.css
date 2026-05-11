@@ -40,6 +40,27 @@
   font-family: "SF Pro Display", "SF Pro Text", "Avenir Next", "PingFang SC", sans-serif;
 }
 
+.mobile-theme-shell,
+.mobile-theme-shell * {
+  box-sizing: border-box;
+}
+
+.mobile-settings-row {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.mobile-settings-copy,
+.mobile-settings-trailing {
+  min-width: 0;
+}
+
+.mobile-settings-trailing {
+  flex: 1 1 128px;
+  min-width: 0 !important;
+  max-width: 168px;
+}
+
 .mobile-page {
   width: 100%;
   max-width: 480px;
@@ -54,7 +75,9 @@
 }
 
 .mobile-page-shortpick {
-  max-width: 620px;
+  max-width: 100%;
+  width: 100%;
+  overflow-x: hidden;
   padding-right: 12px;
   padding-left: 12px;
 }
@@ -62,6 +85,13 @@
 .mobile-page-shortpick .shortpick-lab,
 .mobile-page-shortpick .shortpick-lab .ant-card-body {
   gap: 12px;
+  min-width: 0;
+}
+
+.mobile-page-shortpick .shortpick-lab {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .mobile-page-shortpick .shortpick-lab-header .ant-card-body,
@@ -69,9 +99,48 @@
   padding: 14px;
 }
 
+.mobile-page-shortpick .panel-card,
+.mobile-page-shortpick .ant-card,
+.mobile-page-shortpick .ant-card-body,
+.mobile-page-shortpick .ant-alert,
+.mobile-page-shortpick .ant-list,
+.mobile-page-shortpick .ant-tabs,
+.mobile-page-shortpick .ant-space,
+.mobile-page-shortpick .ant-descriptions,
+.mobile-page-shortpick .ant-table-wrapper {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.mobile-page-shortpick .panel-card,
+.mobile-page-shortpick .ant-card {
+  width: 100%;
+  overflow: hidden;
+}
+
+.mobile-page-shortpick .ant-typography,
+.mobile-page-shortpick .ant-alert-message,
+.mobile-page-shortpick .ant-alert-description,
+.mobile-page-shortpick .ant-descriptions-item-content,
+.mobile-page-shortpick .ant-list-item,
+.mobile-page-shortpick .ant-table-cell {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .mobile-page-shortpick .shortpick-lab-title {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.mobile-page-shortpick .shortpick-lab-title > div,
+.mobile-page-shortpick .panel-description {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
 }
 
 .mobile-page-shortpick .shortpick-run-select,
@@ -85,17 +154,118 @@
   width: 100%;
 }
 
+.mobile-page-shortpick .shortpick-lab-title .ant-space {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
 .mobile-page-shortpick .shortpick-lab-title .ant-space .ant-space-item,
 .mobile-page-shortpick .shortpick-filter-bar .ant-space-item {
   min-width: 0;
 }
 
+.mobile-page-shortpick .shortpick-lab-title .ant-btn,
+.mobile-page-shortpick .shortpick-filter-bar .ant-btn {
+  width: 100%;
+}
+
+.mobile-page-shortpick .ant-btn {
+  min-width: 0;
+}
+
+.mobile-page-shortpick .ant-btn > span:not(.ant-btn-icon) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .mobile-page-shortpick .shortpick-workspace-tabs .ant-tabs-nav {
   margin-bottom: 10px;
+  max-width: 100%;
 }
 
 .mobile-page-shortpick .shortpick-workspace-tabs .ant-tabs-tab {
   padding: 8px 0;
+}
+
+.mobile-page-shortpick .shortpick-workspace-tabs .ant-tabs-nav-list {
+  min-width: max-content;
+}
+
+.mobile-page-shortpick .shortpick-metric {
+  min-height: auto;
+  padding: 12px;
+  border-radius: 10px;
+}
+
+.mobile-page-shortpick .shortpick-metric strong {
+  font-size: 20px;
+}
+
+.mobile-page-shortpick .shortpick-choice-item {
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.mobile-page-shortpick .shortpick-choice-rank {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.mobile-page-shortpick .shortpick-choice-list .ant-list-item,
+.mobile-page-shortpick .shortpick-track-list .ant-list-item,
+.mobile-page-shortpick .shortpick-paper-mobile-list .ant-list-item {
+  padding: 10px 0;
+}
+
+.mobile-page-shortpick .shortpick-paper-ledger-card .ant-card-head {
+  align-items: flex-start;
+  gap: 8px;
+  padding: 0 14px;
+}
+
+.mobile-page-shortpick .shortpick-paper-ledger-card .ant-card-head-wrapper {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+
+.mobile-page-shortpick .shortpick-paper-ledger-card .ant-card-extra {
+  justify-self: start;
+  margin-left: 0;
+}
+
+.mobile-page-shortpick .shortpick-paper-ledger-table {
+  display: none;
+}
+
+.mobile-page-shortpick .shortpick-paper-mobile-list {
+  display: block;
+}
+
+.mobile-page-shortpick .ant-descriptions-view {
+  overflow: hidden;
+}
+
+.mobile-page-shortpick .ant-descriptions table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.mobile-page-shortpick .ant-descriptions-row,
+.mobile-page-shortpick .ant-descriptions-item {
+  display: block;
+  width: 100%;
+}
+
+.mobile-page-shortpick .ant-descriptions-item-container {
+  display: grid;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.mobile-page-shortpick .ant-table-wrapper {
+  overflow-x: auto;
 }
 
 .mobile-page-shortpick .shortpick-metrics {

@@ -15,8 +15,18 @@ import { MobileOperations } from "./MobileOperations";
 import { MobileSettings } from "./MobileSettings";
 import { ShortpickLabView } from "../ShortpickLabView";
 
+function tabForView(view: MobileAppShellProps["activeView"], canUseOperations: boolean, canUseSettings: boolean): MobileTabKey {
+  if (view === "stock") return "stock";
+  if (view === "operations") return canUseOperations ? "operations" : "home";
+  if (view === "shortpick") return "shortpick";
+  if (view === "settings") return canUseSettings ? "settings" : "home";
+  return "home";
+}
+
 export function MobileAppShell(props: MobileAppShellProps) {
-  const [activeTab, setActiveTab] = useState<MobileTabKey>("home");
+  const [activeTab, setActiveTab] = useState<MobileTabKey>(() => (
+    tabForView(props.activeView, props.canUseOperations, props.canUseSettings)
+  ));
   const [stockPanel, setStockPanel] = useState<MobileStockPanelKey>("advice");
   const navItems = useMemo(
     () => ([
@@ -35,6 +45,11 @@ export function MobileAppShell(props: MobileAppShellProps) {
       props.onTabChange("home");
     }
   }, [activeTab, props.canUseOperations, props.canUseSettings, props.onTabChange]);
+
+  useEffect(() => {
+    const nextTab = tabForView(props.activeView, props.canUseOperations, props.canUseSettings);
+    setActiveTab((current) => (current === nextTab ? current : nextTab));
+  }, [props.activeView, props.canUseOperations, props.canUseSettings]);
 
   function activate(tab: MobileTabKey) {
     if (tab === "operations" && !props.canUseOperations) {

@@ -14,8 +14,10 @@ import type {
 
 export type MobileTabKey = "home" | "stock" | "operations" | "shortpick" | "settings";
 export type MobileStockPanelKey = "advice" | "evidence" | "risk" | "question";
+export type MobileViewMode = "candidates" | "stock" | "operations" | "shortpick" | "settings";
 
 export interface MobileAppShellProps {
+  activeView: MobileViewMode;
   themeMode: "light" | "dark";
   authContext: AuthContextResponse | null;
   isRootUser: boolean;

@@ -2025,6 +2025,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     return (
       <>
         <MobileAppShell
+          activeView={view}
           themeMode={themeMode}
           loadingShell={loadingShell}
           loadingDetail={loadingDetail}
