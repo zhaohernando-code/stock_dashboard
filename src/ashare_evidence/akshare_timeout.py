@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import os
 import pickle
+import socket
 import subprocess
 import sys
 import tempfile
@@ -44,6 +45,8 @@ def _run_module_function(
         for key in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
             os.environ.pop(key, None)
 
+    previous_socket_timeout = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(timeout_seconds)
     patched_requests = _requests_request_with_default_timeout(timeout_seconds)
     try:
         module = importlib.import_module(module_name)
@@ -62,6 +65,7 @@ def _run_module_function(
         if patched_requests is not None:
             requests, original_request = patched_requests
             requests.sessions.Session.request = original_request
+        socket.setdefaulttimeout(previous_socket_timeout)
 
 
 def _worker_entry(input_path: str, output_path: str) -> int:
@@ -119,7 +123,7 @@ def call_module_function_with_timeout(
             close_fds=True,
         )
         try:
-            process.wait(timeout=timeout_seconds)
+            process.wait(timeout=timeout_seconds + 2)
         except subprocess.TimeoutExpired as exc:
             process.terminate()
             try:

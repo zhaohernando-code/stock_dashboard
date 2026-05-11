@@ -366,7 +366,7 @@ class AnalysisPipelineTests(unittest.TestCase):
             call_module_function_with_timeout(
                 "time",
                 "sleep",
-                args=(2,),
+                args=(4,),
                 timeout_seconds=1,
             )
 
