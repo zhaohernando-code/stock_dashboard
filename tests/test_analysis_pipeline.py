@@ -12,12 +12,12 @@ from sqlalchemy import select
 
 from ashare_evidence.analysis_pipeline import (
     DailyMarketFetch,
-    _akshare_call_timeout,
     build_real_evidence_bundle,
     repair_stock_profile_snapshot,
     refresh_real_analysis,
     _fetch_research_metadata,
 )
+from ashare_evidence.akshare_timeout import AkshareCallTimeoutError, call_module_function_with_timeout
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.lineage import build_lineage
 from ashare_evidence.models import PaperFill, PaperOrder, PaperPortfolio, Recommendation, Stock, WatchlistEntry
@@ -341,47 +341,40 @@ class AnalysisPipelineTests(unittest.TestCase):
         self.assertGreaterEqual(len(bundle.news_items), 2)
         self.assertGreaterEqual(len(bundle.feature_snapshots), 4)
 
-    def test_fetch_research_metadata_injects_default_requests_timeout(self) -> None:
+    def test_fetch_research_metadata_uses_subprocess_timeout_helper(self) -> None:
         observed: dict[str, object] = {}
 
         class _EmptyFrame:
             empty = True
 
-        class _FakeAkshare:
-            def stock_research_report_em(self, symbol: str):
-                import requests
+        def _fake_call(function_name: str, *, kwargs: dict[str, object], timeout_seconds: int):
+            observed["function_name"] = function_name
+            observed["symbol"] = kwargs["symbol"]
+            observed["timeout_seconds"] = timeout_seconds
+            return _EmptyFrame()
 
-                observed["symbol"] = symbol
-                try:
-                    requests.Session().request("GET", "https://example.com/research")
-                except RuntimeError:
-                    return _EmptyFrame()
-                raise AssertionError("expected patched Session.request to be called")
-
-        def _fake_request(self, method, url, **kwargs):
-            observed["method"] = method
-            observed["url"] = url
-            observed["timeout"] = kwargs.get("timeout")
-            raise RuntimeError("stop after timeout capture")
-
-        with patch("ashare_evidence.analysis_pipeline._akshare_module", return_value=_FakeAkshare()):
-            with patch("requests.sessions.Session.request", new=_fake_request):
-                metadata = _fetch_research_metadata(self.symbol)
+        with patch("ashare_evidence.analysis_pipeline.call_akshare_function", side_effect=_fake_call):
+            metadata = _fetch_research_metadata(self.symbol)
 
         self.assertEqual(metadata, [])
+        self.assertEqual(observed["function_name"], "stock_research_report_em")
         self.assertEqual(observed["symbol"], self.symbol.partition(".")[0])
-        self.assertEqual(observed["timeout"], 5)
+        self.assertEqual(observed["timeout_seconds"], 5)
 
-    def test_akshare_call_timeout_raises_and_restores_signal_handler(self) -> None:
-        import signal
+    def test_subprocess_call_timeout_terminates_blocking_call(self) -> None:
+        with self.assertRaisesRegex(AkshareCallTimeoutError, "time.sleep timed out"):
+            call_module_function_with_timeout(
+                "time",
+                "sleep",
+                args=(2,),
+                timeout_seconds=1,
+            )
 
-        previous_handler = signal.getsignal(signal.SIGALRM)
-
-        with self.assertRaisesRegex(TimeoutError, "AKShare call timed out"):
-            with _akshare_call_timeout(5):
-                signal.raise_signal(signal.SIGALRM)
-
-        self.assertIs(signal.getsignal(signal.SIGALRM), previous_handler)
+    def test_subprocess_call_returns_successful_result(self) -> None:
+        self.assertEqual(
+            call_module_function_with_timeout("operator", "add", args=(2, 3), timeout_seconds=1),
+            5,
+        )
 
     def test_repair_stock_profile_snapshot_backfills_board_and_financial_payload(self) -> None:
         with session_scope(self.database_url) as session:

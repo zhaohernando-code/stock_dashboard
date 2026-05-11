@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import json
-import signal
-import threading
 from collections.abc import Iterable
-from contextlib import contextmanager
 from datetime import UTC, datetime, time, timedelta
 from typing import Any
 from urllib import error, request
@@ -13,6 +10,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ashare_evidence.akshare_timeout import call_akshare_function
 from ashare_evidence.db import utcnow
 from ashare_evidence.http_client import urlopen
 from ashare_evidence.lineage import build_lineage
@@ -218,41 +216,15 @@ def _tushare_rows(session: Session, symbol: str) -> list[dict[str, Any]]:
     return rows
 
 
-def _load_akshare_module() -> Any:
-    import akshare as akshare  # type: ignore[import-not-found]
-
-    return akshare
-
-
-@contextmanager
-def _akshare_call_timeout(timeout_seconds: int = DEFAULT_AKSHARE_TIMEOUT_SECONDS):
-    if threading.current_thread() is not threading.main_thread():
-        yield
-        return
-
-    def _raise_timeout(signum, frame):  # noqa: ARG001
-        raise TimeoutError(f"AKShare call timed out after {timeout_seconds}s")
-
-    previous_handler = signal.getsignal(signal.SIGALRM)
-    previous_timer = signal.setitimer(signal.ITIMER_REAL, 0)
-    signal.signal(signal.SIGALRM, _raise_timeout)
-    signal.setitimer(signal.ITIMER_REAL, timeout_seconds)
-    try:
-        yield
-    finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        signal.signal(signal.SIGALRM, previous_handler)
-        if previous_timer[0] > 0 or previous_timer[1] > 0:
-            signal.setitimer(signal.ITIMER_REAL, previous_timer[0], previous_timer[1])
-
-
 def _akshare_rows(symbol: str) -> list[dict[str, Any]]:
     if not akshare_runtime_ready():
         return []
     try:
-        akshare = _load_akshare_module()
-        with _akshare_call_timeout():
-            frame = akshare.stock_zh_a_hist_min_em(symbol=symbol.split(".")[0], period="5", adjust="")
+        frame = call_akshare_function(
+            "stock_zh_a_hist_min_em",
+            kwargs={"symbol": symbol.split(".")[0], "period": "5", "adjust": ""},
+            timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS,
+        )
     except Exception:
         return []
     if frame is None or getattr(frame, "empty", False):
@@ -302,7 +274,6 @@ def _akshare_rows_for_window(symbol: str, *, current_time: datetime, latest_cach
     if not akshare_runtime_ready():
         return []
     try:
-        akshare = _load_akshare_module()
         window = _akshare_window(current_time=current_time, latest_cached_market_data_at=latest_cached_market_data_at)
         kwargs: dict[str, Any] = {
             "symbol": symbol.split(".")[0],
@@ -312,13 +283,19 @@ def _akshare_rows_for_window(symbol: str, *, current_time: datetime, latest_cach
         if window is not None:
             kwargs["start_date"], kwargs["end_date"] = window
         try:
-            with _akshare_call_timeout():
-                frame = akshare.stock_zh_a_hist_min_em(**kwargs)
+            frame = call_akshare_function(
+                "stock_zh_a_hist_min_em",
+                kwargs=kwargs,
+                timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS,
+            )
         except TypeError:
             kwargs.pop("start_date", None)
             kwargs.pop("end_date", None)
-            with _akshare_call_timeout():
-                frame = akshare.stock_zh_a_hist_min_em(**kwargs)
+            frame = call_akshare_function(
+                "stock_zh_a_hist_min_em",
+                kwargs=kwargs,
+                timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS,
+            )
     except Exception:
         return []
     if frame is None or getattr(frame, "empty", False):

@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import json
-import signal
-import threading
-from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 from typing import Any
@@ -24,6 +21,7 @@ from ashare_evidence.analysis_enrichment import (
     enrich_with_llm_analysis,
     fetch_announcement_body,
 )
+from ashare_evidence.akshare_timeout import call_akshare_function
 from ashare_evidence.http_client import urlopen
 from ashare_evidence.lineage import build_lineage
 from ashare_evidence.market_rules import board_rule
@@ -214,11 +212,6 @@ def _tushare_rows(
             rows.append(dict(zip(field_names, item, strict=False)))
     return rows
 
-def _akshare_module() -> Any:
-    import akshare as akshare  # type: ignore[import-not-found]
-
-    return akshare
-
 def _fetch_daily_bars_tushare(session: Session, symbol: str) -> DailyMarketFetch | None:
     end_day = datetime.now(SHANGHAI_TZ).date()
     start_day = end_day - timedelta(days=DAILY_LOOKBACK_DAYS)
@@ -306,16 +299,18 @@ def _fetch_daily_bars_tushare(session: Session, symbol: str) -> DailyMarketFetch
     return DailyMarketFetch(provider_name="tushare_daily", bars=bars)
 
 def _fetch_daily_bars_akshare(symbol: str) -> DailyMarketFetch | None:
-    akshare = _akshare_module()
     end_day = datetime.now(SHANGHAI_TZ).date()
     start_day = end_day - timedelta(days=DAILY_LOOKBACK_DAYS)
-    with _akshare_call_timeout(DEFAULT_AKSHARE_TIMEOUT_SECONDS):
-        frame = akshare.stock_zh_a_daily(
-            symbol=_akshare_prefixed_symbol(symbol),
-            start_date=start_day.strftime("%Y%m%d"),
-            end_date=end_day.strftime("%Y%m%d"),
-            adjust="",
-        )
+    frame = call_akshare_function(
+        "stock_zh_a_daily",
+        kwargs={
+            "symbol": _akshare_prefixed_symbol(symbol),
+            "start_date": start_day.strftime("%Y%m%d"),
+            "end_date": end_day.strftime("%Y%m%d"),
+            "adjust": "",
+        },
+        timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS,
+    )
     if frame is None or getattr(frame, "empty", False):
         return None
     ticker, _ = _normalize_symbol_parts(symbol)
@@ -399,17 +394,19 @@ def _fetch_official_announcements(
     *,
     sector_code: str | None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    akshare = _akshare_module()
     ticker, _ = _normalize_symbol_parts(symbol)
     end_day = datetime.now(SHANGHAI_TZ).date()
     start_day = end_day - timedelta(days=ANNOUNCEMENT_LOOKBACK_DAYS)
-    with _akshare_call_timeout(DEFAULT_AKSHARE_TIMEOUT_SECONDS):
-        frame = akshare.stock_zh_a_disclosure_report_cninfo(
-            symbol=ticker,
-            market="沪深京",
-            start_date=start_day.strftime("%Y%m%d"),
-            end_date=end_day.strftime("%Y%m%d"),
-        )
+    frame = call_akshare_function(
+        "stock_zh_a_disclosure_report_cninfo",
+        kwargs={
+            "symbol": ticker,
+            "market": "沪深京",
+            "start_date": start_day.strftime("%Y%m%d"),
+            "end_date": end_day.strftime("%Y%m%d"),
+        },
+        timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS,
+    )
     if frame is None or getattr(frame, "empty", False):
         return [], []
     rows = frame.to_dict(orient="records")
@@ -559,12 +556,21 @@ def _fetch_financial_snapshot_tushare(session: Session, symbol: str) -> dict[str
     }
 
 def _fetch_financial_snapshot_akshare(symbol: str) -> dict[str, Any] | None:
-    akshare = _akshare_module()
     prefixed = _akshare_prefixed_symbol(symbol).upper()
-    with _akshare_call_timeout(DEFAULT_AKSHARE_TIMEOUT_SECONDS):
-        profit_row = _first_non_empty_row(akshare.stock_profit_sheet_by_report_em(symbol=prefixed))
-    with _akshare_call_timeout(DEFAULT_AKSHARE_TIMEOUT_SECONDS):
-        cashflow_row = _first_non_empty_row(akshare.stock_cash_flow_sheet_by_report_em(symbol=prefixed))
+    profit_row = _first_non_empty_row(
+        call_akshare_function(
+            "stock_profit_sheet_by_report_em",
+            kwargs={"symbol": prefixed},
+            timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS,
+        )
+    )
+    cashflow_row = _first_non_empty_row(
+        call_akshare_function(
+            "stock_cash_flow_sheet_by_report_em",
+            kwargs={"symbol": prefixed},
+            timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS,
+        )
+    )
     if profit_row is None and cashflow_row is None:
         return None
     return {
@@ -586,10 +592,13 @@ def _fetch_market_cap_akshare(symbol: str) -> dict[str, float | None] | None:
     try:
         # Bypass proxy for akshare calls (same issue as LLM API)
         saved = {k: os.environ.pop(k, None) for k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")}
-        akshare = _akshare_module()
         ticker, _ = _normalize_symbol_parts(symbol)
-        with _akshare_call_timeout(DEFAULT_AKSHARE_TIMEOUT_SECONDS):
-            df = akshare.stock_individual_info_em(symbol=ticker)
+        df = call_akshare_function(
+            "stock_individual_info_em",
+            kwargs={"symbol": ticker},
+            timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS,
+            disable_proxies=True,
+        )
         record = {}
         for _, row in df.iterrows():
             key = str(row.iloc[0])
@@ -621,10 +630,12 @@ def _fetch_financial_snapshot(session: Session, symbol: str) -> dict[str, Any] |
     return None
 
 def _fetch_research_metadata(symbol: str) -> list[dict[str, Any]]:
-    akshare = _akshare_module()
     ticker, _ = _normalize_symbol_parts(symbol)
-    with _akshare_call_timeout(DEFAULT_AKSHARE_TIMEOUT_SECONDS), _requests_default_timeout(DEFAULT_AKSHARE_TIMEOUT_SECONDS):
-        frame = akshare.stock_research_report_em(symbol=ticker)
+    frame = call_akshare_function(
+        "stock_research_report_em",
+        kwargs={"symbol": ticker},
+        timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS,
+    )
     if frame is None or getattr(frame, "empty", False):
         return []
     metadata: list[dict[str, Any]] = []
@@ -640,48 +651,6 @@ def _fetch_research_metadata(symbol: str) -> list[dict[str, Any]]:
             }
         )
     return [item for item in metadata if item["title"]]
-
-@contextmanager
-def _requests_default_timeout(timeout_seconds: int):
-    try:
-        import requests
-    except Exception:
-        yield
-        return
-
-    original_request = requests.sessions.Session.request
-
-    def _request_with_timeout(self, method, url, **kwargs):
-        kwargs.setdefault("timeout", timeout_seconds)
-        return original_request(self, method, url, **kwargs)
-
-    requests.sessions.Session.request = _request_with_timeout
-    try:
-        yield
-    finally:
-        requests.sessions.Session.request = original_request
-
-
-@contextmanager
-def _akshare_call_timeout(timeout_seconds: int):
-    if threading.current_thread() is not threading.main_thread():
-        yield
-        return
-
-    def _raise_timeout(signum, frame):  # noqa: ARG001
-        raise TimeoutError(f"AKShare call timed out after {timeout_seconds}s")
-
-    previous_handler = signal.getsignal(signal.SIGALRM)
-    previous_timer = signal.setitimer(signal.ITIMER_REAL, 0)
-    signal.signal(signal.SIGALRM, _raise_timeout)
-    signal.setitimer(signal.ITIMER_REAL, timeout_seconds)
-    try:
-        yield
-    finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        signal.signal(signal.SIGALRM, previous_handler)
-        if previous_timer[0] > 0 or previous_timer[1] > 0:
-            signal.setitimer(signal.ITIMER_REAL, previous_timer[0], previous_timer[1])
 
 def _sector_payload(symbol: str, profile: StockProfileResolution) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str | None]:
     if not profile.industry:
