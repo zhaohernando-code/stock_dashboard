@@ -120,7 +120,7 @@ def call_module_function_with_timeout(
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            close_fds=True,
+            close_fds=False,
         )
         try:
             process.wait(timeout=timeout_seconds + 2)
