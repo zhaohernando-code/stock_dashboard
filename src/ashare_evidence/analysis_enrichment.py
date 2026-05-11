@@ -11,7 +11,7 @@ from ashare_evidence.http_client import urlopen
 ANNOUNCEMENT_BODY_TIMEOUT = 8
 ANNOUNCEMENT_PDF_TIMEOUT = 15
 ANNOUNCEMENT_BODY_MAX_CHARS = 8000
-ANNOUNCEMENT_LLM_TIMEOUT = 30
+ANNOUNCEMENT_LLM_TIMEOUT = 8
 
 _HTML_TAG = re.compile(r"<[^>]+>")
 _HTML_ENTITY = re.compile(r"&[a-zA-Z]+;|&#\d+;")
