@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ashare_evidence.analysis_enrichment import (
+    ANNOUNCEMENT_PDF_TIMEOUT,
     _CNINFO_CONTENT_RE as _ANALYSIS_ENRICHMENT_CNINFO_CONTENT_RE,
 )
 from ashare_evidence.analysis_enrichment import (
@@ -19,9 +20,8 @@ from ashare_evidence.analysis_enrichment import (
 from ashare_evidence.analysis_enrichment import (
     compute_financial_trends,
     enrich_with_llm_analysis,
-    fetch_announcement_body,
 )
-from ashare_evidence.akshare_timeout import call_akshare_function
+from ashare_evidence.akshare_timeout import call_akshare_function, call_module_function_with_timeout
 from ashare_evidence.http_client import urlopen
 from ashare_evidence.lineage import build_lineage
 from ashare_evidence.market_rules import board_rule
@@ -423,7 +423,7 @@ def _fetch_official_announcements(
             continue
         external_id = _parse_query_id(source_uri) or f"{ticker}-{published_at:%Y%m%d}-{index}"
         news_key = f"cninfo-{ticker}-{external_id}"
-        content_excerpt = fetch_announcement_body(source_uri)
+        content_excerpt = _fetch_announcement_body_isolated(source_uri)
         item = {
             "news_key": news_key,
             "provider_name": "cninfo",
@@ -494,6 +494,17 @@ def _fetch_official_announcements(
                 )
             )
     return news_items, news_links
+
+def _fetch_announcement_body_isolated(source_uri: str) -> str | None:
+    try:
+        return call_module_function_with_timeout(
+            "ashare_evidence.analysis_enrichment",
+            "fetch_announcement_body",
+            args=(source_uri,),
+            timeout_seconds=ANNOUNCEMENT_PDF_TIMEOUT,
+        )
+    except Exception:
+        return None
 
 def build_mapped_news_link(record: dict[str, Any], *, source_uri: str) -> dict[str, Any]:
     return {
