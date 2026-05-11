@@ -32,6 +32,7 @@ REFRESH_STATE_DIR="${ASHARE_SCHEDULED_REFRESH_STATE_DIR:-$HOME/.cache/codex/asha
 RUN_LOCK_DIR="$REFRESH_STATE_DIR/run.lock"
 DAILY_REFRESH_TIMEOUT_SECONDS="${ASHARE_DAILY_REFRESH_TIMEOUT_SECONDS:-7200}"
 SHORTPICK_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_TIMEOUT_SECONDS:-7200}"
+SHORTPICK_VALIDATION_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_VALIDATION_TIMEOUT_SECONDS:-600}"
 SHORTPICK_VALIDATE_RECENT_DAYS="${ASHARE_SHORTPICK_VALIDATE_RECENT_DAYS:-30}"
 SHORTPICK_VALIDATE_RECENT_LIMIT="${ASHARE_SHORTPICK_VALIDATE_RECENT_LIMIT:-20}"
 NETWORK_CHECK_ENABLED="${ASHARE_REFRESH_NETWORK_CHECK:-1}"
@@ -76,7 +77,9 @@ run_shortpick_validation_refresh() {
 
 run_shortpick_daily_cycle() {
   local target_date="$1"
-  run_shortpick_validation_refresh
+  if ! run_with_timeout "$SHORTPICK_VALIDATION_TIMEOUT_SECONDS" run_shortpick_validation_refresh; then
+    echo "Shortpick recent validation did not finish within ${SHORTPICK_VALIDATION_TIMEOUT_SECONDS}s; continuing with ${target_date} run." >&2
+  fi
   local run_payload_file
   run_payload_file="$(mktemp)"
   run_shortpick_lab "$target_date" | tee "$run_payload_file"

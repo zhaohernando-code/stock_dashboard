@@ -38,6 +38,9 @@ def test_shortpick_lab_is_part_of_postmarket_daily_cycle() -> None:
 
     assert 'ASHARE_ENABLE_SHORTPICK_LAB:-1' in script
     assert "shortpick-lab-validate-recent" in script
+    assert 'SHORTPICK_VALIDATION_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_VALIDATION_TIMEOUT_SECONDS:-600}"' in script
+    assert 'run_with_timeout "$SHORTPICK_VALIDATION_TIMEOUT_SECONDS" run_shortpick_validation_refresh' in script
+    assert "continuing with ${target_date} run" in script
     assert '--run-date "$target_date"' in script
     assert "run_shortpick_daily_cycle" in script
     assert "run_shortpick_lab_slot \"$TODAY_STR\"" in script
