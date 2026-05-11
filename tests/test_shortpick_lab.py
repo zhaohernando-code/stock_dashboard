@@ -34,6 +34,7 @@ from ashare_evidence.shortpick_lab import (
     SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY,
     SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
@@ -41,6 +42,7 @@ from ashare_evidence.shortpick_lab import (
     DeepseekLobeChatSearchShortpickExecutor,
     OpenAICompatibleShortpickExecutor,
     StaticShortpickExecutor,
+    _is_shortpick_no_limit_chase_risk,
     _normalize_shortpick_topic,
     _shortpick_frozen_exit_track_results,
     _upsert_shortpick_market_factor_candidate,
@@ -1171,6 +1173,7 @@ class ShortpickLabTests(unittest.TestCase):
                 SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE,
                 SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
                 SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
+                SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
             ],
         )
         for role in (
@@ -1181,6 +1184,7 @@ class ShortpickLabTests(unittest.TestCase):
             SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE,
             SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
             SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
+            SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
         ):
             candidate = ShortpickCandidate(
                 run_id=1,
@@ -1223,6 +1227,12 @@ class ShortpickLabTests(unittest.TestCase):
                 [item["key"] for item in tracks],
                 ["mechanical_5d", "mechanical_10d", "conditional_5_to_10d", "take_profit_10pct"],
             )
+
+    def test_no_limit_chase_control_filters_limit_up_chase_risk(self) -> None:
+        self.assertTrue(_is_shortpick_no_limit_chase_risk({"return_1d": 0.095}))
+        self.assertTrue(_is_shortpick_no_limit_chase_risk({"return_1d": 0.1002838}))
+        self.assertFalse(_is_shortpick_no_limit_chase_risk({"return_1d": 0.0949}))
+        self.assertFalse(_is_shortpick_no_limit_chase_risk({"return_1d": None}))
 
     def test_market_factor_paper_controls_use_ten_day_display_horizon(self) -> None:
         self._seed_stock_bars("000001.SZ", "测试银行", [10 + index for index in range(22)])

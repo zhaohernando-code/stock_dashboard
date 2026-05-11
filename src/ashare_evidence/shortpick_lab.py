@@ -138,6 +138,10 @@ _SHORTPICK_LOW_TURNOVER_UPTREND_WEIGHTS = _SHORTPICK_LOW_TURNOVER_UPTREND_CONFIG
 SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_RET20_WEIGHT = float(_SHORTPICK_LOW_TURNOVER_UPTREND_WEIGHTS["return_20d"])
 SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_AMOUNT_WEIGHT = float(_SHORTPICK_LOW_TURNOVER_UPTREND_WEIGHTS["amount"])
 SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_TURNOVER_PENALTY = float(_SHORTPICK_LOW_TURNOVER_UPTREND_WEIGHTS["turnover_rate_penalty"])
+_SHORTPICK_NO_LIMIT_CHASE_LOW_TURNOVER_CONFIG = _SHORTPICK_CONTROL_CONFIG["no_limit_chase_low_turnover_uptrend"]
+SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE = str(_SHORTPICK_NO_LIMIT_CHASE_LOW_TURNOVER_CONFIG["role"])
+SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_FAMILY = str(_SHORTPICK_NO_LIMIT_CHASE_LOW_TURNOVER_CONFIG["family"])
+SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_RETURN1_MAX = float(_SHORTPICK_NO_LIMIT_CHASE_LOW_TURNOVER_CONFIG["return_1d_max"])
 _SHORTPICK_QUIET_BREAKOUT_CONFIG = _SHORTPICK_CONTROL_CONFIG["quiet_breakout_rank2"]
 SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_CONTROL_ROLE = str(_SHORTPICK_QUIET_BREAKOUT_CONFIG["role"])
 SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_FAMILY = str(_SHORTPICK_QUIET_BREAKOUT_CONFIG["family"])
@@ -158,6 +162,7 @@ SHORTPICK_MARKET_FACTOR_PAPER_CONTROL_ROLES = {
     SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
 }
 SHORTPICK_MARKET_FACTOR_BREADTH10_THRESHOLD = float(_SHORTPICK_MARKET_FACTOR_CONFIG["breadth10_threshold"])
 SHORTPICK_MARKET_FACTOR_POOL_RET10_THRESHOLD = float(_SHORTPICK_MARKET_FACTOR_CONFIG["pool_ret10_threshold"])
@@ -293,6 +298,11 @@ def shortpick_market_factor_paper_control_contracts() -> dict[str, Any]:
                 "role": SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
                 "label": "强广度低追高二候选",
                 "selection_rule": "动量成交量Top40池内，仅在全市场10日上涨占比不低于55%、Top40池10日平均涨幅不低于6%、Top40池1日平均涨幅不高于6%时，按10日涨幅、成交额、换手率综合排序并扣减当日涨幅，取第2名。",
+            },
+            {
+                "role": SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
+                "label": "可执行风控版",
+                "selection_rule": "沿用冻结低换手上升趋势排序，但排除信号日涨幅达到9.5%及以上的候选，再取第1名；用于并行观察非涨停追高过滤后的可执行表现。",
             },
         ],
         "scope_note": "单票分析当前覆盖不足，且历史LLM过滤/硬否决没有证明增益；暂不升入冻结真实跟踪，只保留为后续研究方向。",
@@ -1720,6 +1730,41 @@ def insert_shortpick_market_factor_overlay_candidates(session: Session, run: Sho
                 "score": frozen_item.get("_market_factor_score"),
             }
         )
+        no_limit_chase_ranked = [
+            (index, item)
+            for index, item in enumerate(low_turnover_ranked, start=1)
+            if not _is_shortpick_no_limit_chase_risk(item)
+        ]
+        if no_limit_chase_ranked:
+            source_rank, no_limit_chase_raw_item = no_limit_chase_ranked[0]
+            no_limit_chase_item = {
+                **no_limit_chase_raw_item,
+                "_pool_limit_override": SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_POOL_LIMIT,
+            }
+            candidate = _upsert_shortpick_market_factor_candidate(
+                session,
+                run=run,
+                item=no_limit_chase_item,
+                family=SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_FAMILY,
+                rank=1,
+                pool=low_turnover_pool,
+                regime=regime,
+                source_rank=source_rank,
+                tracking_role=SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
+            )
+            inserted.append(
+                {
+                    "candidate_id": candidate.id,
+                    "symbol": candidate.symbol,
+                    "name": candidate.name,
+                    "baseline_family": SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_FAMILY,
+                    "rank": 1,
+                    "source_rank": source_rank,
+                    "tracking_role": SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
+                    "excluded_return_1d_gte": SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_RETURN1_MAX,
+                    "score": no_limit_chase_item.get("_market_factor_score"),
+                }
+            )
     if legacy_second_gate_pass and len(frozen_ranked) >= 2:
         legacy_item = frozen_ranked[1]
         candidate = _upsert_shortpick_market_factor_candidate(
@@ -1899,6 +1944,7 @@ def insert_shortpick_market_factor_overlay_candidates(session: Session, run: Sho
             "momentum_volume_golden_cross_10_200",
             "momentum_10d_turnover_legacy_second_candidate",
             SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_FAMILY,
+            SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_FAMILY,
         ],
         "frozen_paper_strategy": {
             **shortpick_frozen_paper_strategy_contract(),
@@ -1914,6 +1960,10 @@ def insert_shortpick_market_factor_overlay_candidates(session: Session, run: Sho
     run.summary_payload = {**dict(run.summary_payload or {}), "market_factor_overlay": result}
     session.flush()
     return result
+
+
+def _is_shortpick_no_limit_chase_risk(item: dict[str, Any]) -> bool:
+    return float(item.get("return_1d") or 0.0) >= SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_RETURN1_MAX
 
 
 def _delete_existing_market_factor_overlay_candidates(session: Session, *, run_id: int) -> int:
@@ -2268,6 +2318,12 @@ def _upsert_shortpick_market_factor_candidate(
             f"{family_label}：市场广度不弱时，从流动性靠前标的中选择20日趋势向上、换手率相对不拥挤的第1名，"
             "用于验证非拥挤趋势是否优于短线追涨。"
         )
+    elif tracking_role == SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE:
+        thesis = (
+            f"{family_label}：沿用冻结低换手上升趋势排序，但排除信号日涨幅达到 "
+            f"{SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_RETURN1_MAX:.1%} 及以上的候选，"
+            f"取过滤后的第 {source_rank or rank} 名作为可执行风控对照。"
+        )
     elif tracking_role == SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_CONTROL_ROLE:
         thesis = (
             f"{family_label}：从当日波动较小且流动性靠前的池子里，选择10日不弱、当日不过热的第 {source_rank or rank} 名，"
@@ -2328,6 +2384,11 @@ def _upsert_shortpick_market_factor_candidate(
             "ma200": item.get("ma200"),
             "previous_ma10": item.get("previous_ma10"),
             "previous_ma200": item.get("previous_ma200"),
+            "no_limit_chase_return_1d_max": (
+                SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_RETURN1_MAX
+                if tracking_role == SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE
+                else None
+            ),
             "regime": regime,
         },
     }
@@ -2378,6 +2439,8 @@ def _upsert_shortpick_market_factor_candidate(
             if tracking_role == SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE
             else "market_factor_low_turnover_uptrend"
             if tracking_role == SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_CONTROL_ROLE
+            else "market_factor_no_limit_chase_low_turnover_uptrend"
+            if tracking_role == SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE
             else "market_factor_quiet_breakout"
             if tracking_role == SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_CONTROL_ROLE
             else "market_factor_offensive"
@@ -2410,6 +2473,8 @@ def _shortpick_market_factor_family_label(family: str) -> str:
         return "强广度低追高二候选"
     if family == SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_FAMILY:
         return "低换手上升趋势"
+    if family == SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_FAMILY:
+        return "可执行风控版"
     if family == SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_FAMILY:
         return "安静突破二候选"
     return "动量成交量"

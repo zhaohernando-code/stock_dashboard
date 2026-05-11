@@ -145,7 +145,7 @@ DEFAULT_POLICY_CONFIGS: dict[tuple[str, str], dict[str, Any]] = {
         },
         "controls": {
             "llm_paper_control_version": "llm-paper-control-v1-2026-05-09",
-            "market_factor_control_version": "market-factor-controls-v3-2026-05-10",
+            "market_factor_control_version": "market-factor-controls-v4-2026-05-11",
             "strong_breadth_rank2": {
                 "family": "momentum_10d_amount_turnover_strong_breadth_rank2",
                 "role": "market_factor_control_strong_breadth_rank2",
@@ -175,6 +175,12 @@ DEFAULT_POLICY_CONFIGS: dict[tuple[str, str], dict[str, Any]] = {
                     "amount": 0.5,
                     "turnover_rate_penalty": 1.0,
                 },
+            },
+            "no_limit_chase_low_turnover_uptrend": {
+                "family": "liquid_low_turnover_20d_uptrend_no_limit_chase",
+                "role": "market_factor_control_no_limit_chase_low_turnover_uptrend",
+                "strategy": "low_turnover_20d_uptrend_liquid_top120_no_limit_chase",
+                "return_1d_max": 0.095,
             },
             "quiet_breakout_rank2": {
                 "family": "quiet_20d_5d_breakout_rank2",
