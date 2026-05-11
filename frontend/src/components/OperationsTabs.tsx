@@ -880,24 +880,28 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
             </Col>
           </Row>
           <Row gutter={[16, 16]}>
-            <Col xs={24} xl={14}>
-              <Card
-                className="panel-card"
-                title="人工研究队列"
-                extra={loadingSections.has("manual_queue") && !operations.manual_research_queue?.generated_at ? null : <Text type="secondary">{`快照时间 ${formatDate(operations.manual_research_queue.generated_at)}`}</Text>}
-              >
-                {loadingSections.has("manual_queue") && !operations.manual_research_queue?.generated_at ? <Skeleton active paragraph={{ rows: 4 }}/> : <Space wrap className="inline-tags">
-                  <Tag>{`排队 ${operations.manual_research_queue.counts.queued ?? 0}`}</Tag>
-                  <Tag>{`执行中 ${operations.manual_research_queue.counts.in_progress ?? 0}`}</Tag>
-                  <Tag>{`失败 ${operations.manual_research_queue.counts.failed ?? 0}`}</Tag>
-                  <Tag>{`当前完成 ${operations.manual_research_queue.counts.completed_current ?? 0}`}</Tag>
-                  <Tag>{`过期 ${operations.manual_research_queue.counts.completed_stale ?? 0}`}</Tag>
-                </Space>}
-                <List
-                  dataSource={operations.manual_research_queue.recent_items}
-                  locale={{ emptyText: "当前关注池还没有人工研究请求" }}
-                  renderItem={(item) => (
-                    <List.Item
+	            <Col xs={24} xl={14}>
+	              <Card
+	                className="panel-card"
+	                title="人工研究队列"
+	                extra={loadingSections.has("manual_queue") && !operations.manual_research_queue?.generated_at ? null : <Text type="secondary">{`快照时间 ${formatDate(operations.manual_research_queue.generated_at)}`}</Text>}
+	              >
+	                {loadingSections.has("manual_queue") && !operations.manual_research_queue?.generated_at ? (
+	                  <Skeleton active paragraph={{ rows: 5 }}/>
+	                ) : (
+	                  <>
+	                    <Space wrap className="inline-tags">
+	                      <Tag>{`排队 ${operations.manual_research_queue.counts.queued ?? 0}`}</Tag>
+	                      <Tag>{`执行中 ${operations.manual_research_queue.counts.in_progress ?? 0}`}</Tag>
+	                      <Tag>{`失败 ${operations.manual_research_queue.counts.failed ?? 0}`}</Tag>
+	                      <Tag>{`当前完成 ${operations.manual_research_queue.counts.completed_current ?? 0}`}</Tag>
+	                      <Tag>{`过期 ${operations.manual_research_queue.counts.completed_stale ?? 0}`}</Tag>
+	                    </Space>
+	                    <List
+	                      dataSource={operations.manual_research_queue.recent_items}
+	                      locale={{ emptyText: "当前关注池还没有人工研究请求" }}
+	                      renderItem={(item) => (
+	                        <List.Item
                       actions={[
                         <Button key="open" type="link" onClick={() => handleCandidateSelect(item.symbol, "stock")}>
                           打开
@@ -960,18 +964,22 @@ export function buildOperationsTabs(input: BuildOperationsTabsInput) {
                                 : "等待处理。"}
                         </Text>
                       </div>
-                    </List.Item>
-                  )}
-                />
-              </Card>
+	                        </List.Item>
+	                      )}
+	                    />
+	                  </>
+	                )}
+	              </Card>
             </Col>
             <Col xs={24} xl={10}>
               <Card
                 className="panel-card"
-                title="焦点标的研究工作区"
-                extra={operations.manual_research_queue.focus_symbol ? <Tag>{operations.manual_research_queue.focus_symbol}</Tag> : null}
-              >
-                {operations.manual_research_queue.focus_request ? (
+	                title="焦点标的研究工作区"
+	                extra={operations.manual_research_queue.focus_symbol ? <Tag>{operations.manual_research_queue.focus_symbol}</Tag> : null}
+	              >
+	                {loadingSections.has("manual_queue") && !operations.manual_research_queue?.generated_at ? (
+	                  <Skeleton active paragraph={{ rows: 4 }}/>
+	                ) : operations.manual_research_queue.focus_request ? (
                   <>
                     <Descriptions size="small" column={1}>
                       <Descriptions.Item label="状态">

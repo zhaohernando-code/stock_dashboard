@@ -13,6 +13,7 @@ DATA_QUALITY_CONFIG_KEY = "data_quality.scoring_v1"
 SIGNAL_FUSION_CONFIG_KEY = "signal_engine.fusion_v1"
 PHASE5_SIMULATION_CONFIG_KEY = "phase5.simulation_policy_v1"
 SHORTPICK_VALIDATION_CONFIG_KEY = "shortpick_lab.validation_v1"
+SHORTPICK_FROZEN_STRATEGY_CONFIG_KEY = "shortpick_lab.frozen_paper_strategy_v1"
 FRONTEND_DISPLAY_CONFIG_KEY = "frontend.display_v1"
 
 DEFAULT_POLICY_CONFIGS: dict[tuple[str, str], dict[str, Any]] = {
@@ -117,6 +118,82 @@ DEFAULT_POLICY_CONFIGS: dict[tuple[str, str], dict[str, Any]] = {
             "tradeability_uncertain",
         ],
     },
+    (POLICY_SCOPE_SHORTPICK_LAB, SHORTPICK_FROZEN_STRATEGY_CONFIG_KEY): {
+        "version": "shortpick-v4-low-turnover-uptrend-2026-05-11",
+        "family": "frozen_paper_low_turnover_uptrend_v4",
+        "market_factor": {
+            "pool_limit": 40,
+            "rank_limit": 6,
+            "default_family": "momentum_10d_turnover_cooldown_rank",
+            "offensive_family": "momentum_10d_turnover_rank",
+            "random_control_family": "momentum_pool_deterministic_random_control",
+            "cooldown_ret1_penalty": 0.5,
+            "breadth10_threshold": 0.5849056603773585,
+            "pool_ret10_threshold": 0.030113740291951276,
+        },
+        "paper_tracking": {
+            "stop_loss_pct": 0.08,
+            "take_profit_pct": 0.10,
+            "peak_giveback_pct": 0.05,
+            "weak_rebound_return_pct": 0.03,
+            "check_start_trading_day": 5,
+            "max_holding_trading_days": 10,
+            "required_forward_trading_days": 40,
+            "source_rank": 1,
+            "pool_ret1_max": 0.08,
+            "universe_ret10_min": 0.0,
+        },
+        "controls": {
+            "llm_paper_control_version": "llm-paper-control-v1-2026-05-09",
+            "market_factor_control_version": "market-factor-controls-v3-2026-05-10",
+            "strong_breadth_rank2": {
+                "family": "momentum_10d_amount_turnover_strong_breadth_rank2",
+                "role": "market_factor_control_strong_breadth_rank2",
+                "strategy": "ret10_amount_turnover_strong_breadth_rank2_stop12",
+                "source_rank": 2,
+                "stop_loss_pct": 0.12,
+                "breadth10_min": 0.55,
+                "pool_ret1_max": 0.06,
+                "pool_ret10_min": 0.06,
+                "weights": {
+                    "return_10d": 1.0,
+                    "amount": 0.5,
+                    "turnover_rate": 0.5,
+                    "return_1d_penalty": 0.5,
+                },
+            },
+            "low_turnover_uptrend": {
+                "family": "liquid_low_turnover_20d_uptrend",
+                "role": "market_factor_control_low_turnover_uptrend",
+                "strategy": "low_turnover_20d_uptrend_liquid_top120",
+                "pool_limit": 120,
+                "source_rank": 1,
+                "breadth10_min": 0.45,
+                "return_20d_min": 0.0,
+                "weights": {
+                    "return_20d": 1.0,
+                    "amount": 0.5,
+                    "turnover_rate_penalty": 1.0,
+                },
+            },
+            "quiet_breakout_rank2": {
+                "family": "quiet_20d_5d_breakout_rank2",
+                "role": "market_factor_control_quiet_breakout_rank2",
+                "strategy": "quiet_20d_5d_breakout_rank2_stop8",
+                "pool_limit": 80,
+                "source_rank": 2,
+                "stop_loss_pct": 0.08,
+                "return_10d_min": 0.0,
+                "return_1d_max": 0.04,
+                "weights": {
+                    "return_20d": 1.0,
+                    "return_5d": 1.0,
+                    "low_abs_return_1d": 1.0,
+                    "amount": 0.4,
+                },
+            },
+        },
+    },
     (POLICY_SCOPE_FRONTEND, FRONTEND_DISPLAY_CONFIG_KEY): {
         "status_projection": "backend_status_first",
         "frontend_business_thresholds": "forbidden_except_api_projection",
@@ -138,6 +215,7 @@ DEFAULT_POLICY_CONFIG_REASONS: dict[tuple[str, str], str] = {
     (POLICY_SCOPE_SIGNAL_ENGINE, SIGNAL_FUSION_CONFIG_KEY): "Initial code-default snapshot of signal-fusion formula parameters.",
     (POLICY_SCOPE_PHASE5, PHASE5_SIMULATION_CONFIG_KEY): "Initial Phase 5 simulation policy constraints remain code-governed defaults.",
     (POLICY_SCOPE_SHORTPICK_LAB, SHORTPICK_VALIDATION_CONFIG_KEY): "Initial Short Pick Lab validation and display boundary parameters.",
+    (POLICY_SCOPE_SHORTPICK_LAB, SHORTPICK_FROZEN_STRATEGY_CONFIG_KEY): "Frozen Short Pick Lab paper-tracking strategy parameters and formula coefficients.",
     (POLICY_SCOPE_FRONTEND, FRONTEND_DISPLAY_CONFIG_KEY): "Initial frontend governance contract: display reads backend projections instead of hardcoding business thresholds.",
 }
 

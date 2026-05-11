@@ -24,6 +24,20 @@ function refreshTagColor(status?: string): string {
   return "gold";
 }
 
+function refreshComponentLabel(slot: string, fallback: string): string {
+  return slot === "shortpick_lab" ? "LLM对照批次" : fallback;
+}
+
+function paperTrackingTag(payload?: Record<string, unknown> | null, loading = false): string | null {
+  if (loading) return "冻结纸面跟踪：加载中";
+  const status = String(payload?.current_status ?? "");
+  if (status === "tracking_active") return "冻结纸面跟踪：有标的";
+  if (status === "waiting_first_frozen_run") return "冻结纸面跟踪：等待首批";
+  if (status === "no_signal") return "冻结纸面跟踪：未触发";
+  if (status === "waiting_signal") return "冻结纸面跟踪：等待信号";
+  return null;
+}
+
 export function MobileHome(props: MobileAppShellProps) {
   const holdingSymbols = useMemo(
     () => new Set(props.simulation?.manual_track.portfolio.holdings.filter((item) => item.quantity > 0).map((item) => item.symbol) ?? []),
@@ -33,6 +47,7 @@ export function MobileHome(props: MobileAppShellProps) {
   const watchlistRows = rows.filter((row) => row.source_kind !== "candidate_only");
   const candidateOnlyCount = rows.length - watchlistRows.length;
   const activeCandidate = props.activeRow?.candidate ?? null;
+  const trackingTag = paperTrackingTag(props.shortpickPaperTracking, props.shortpickPaperTrackingLoading);
   const openActive = () => {
     if (props.activeRow) {
       props.onSelectSymbol(props.activeRow.symbol, "stock");
@@ -110,9 +125,10 @@ export function MobileHome(props: MobileAppShellProps) {
                   <Space wrap>
                     {props.scheduledRefreshStatus.components.map((component) => (
                       <Tag key={component.slot} color={refreshTagColor(component.status)}>
-                        {`${component.slot === "shortpick_lab" ? "试验田" : component.label}：${component.status_label}`}
+                        {`${refreshComponentLabel(component.slot, component.label)}：${component.status_label}`}
                       </Tag>
                     ))}
+                    {trackingTag ? <Tag color="purple">{trackingTag}</Tag> : null}
                   </Space>
                 ) : null}
               </Space>

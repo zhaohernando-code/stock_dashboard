@@ -102,6 +102,13 @@ import { directionLabels, factorLabels, manualResearchVerdictOptions } from "./u
 const { Paragraph, Text, Title } = Typography;
 const { TextArea } = Input;
 type ViewMode = "candidates" | "stock" | "operations" | "shortpick" | "settings";
+
+const VIEW_MODES = new Set<ViewMode>(["candidates", "stock", "operations", "shortpick", "settings"]);
+
+function initialViewFromUrl(): ViewMode {
+  const rawView = new URLSearchParams(window.location.search).get("view");
+  return rawView && VIEW_MODES.has(rawView as ViewMode) ? (rawView as ViewMode) : "candidates";
+}
 type ThemeMode = "light" | "dark";
 type ImprovementSuggestionReviewNotice = {
   status: "idle" | "running" | "success" | "error";
@@ -143,6 +150,20 @@ function scheduledRefreshFallbackLabel(status?: string): string {
   return "待补跑";
 }
 
+function scheduledRefreshComponentLabel(slot: string, fallback: string): string {
+  return slot === "shortpick_lab" ? "LLM对照批次" : fallback;
+}
+
+function shortpickPaperTrackingTag(payload: Record<string, unknown> | null, loading = false): string | null {
+  if (loading) return "冻结纸面跟踪：加载中";
+  const status = String(payload?.current_status ?? "");
+  if (status === "tracking_active") return "冻结纸面跟踪：有标的";
+  if (status === "waiting_first_frozen_run") return "冻结纸面跟踪：等待首批";
+  if (status === "no_signal") return "冻结纸面跟踪：未触发";
+  if (status === "waiting_signal") return "冻结纸面跟踪：等待信号";
+  return null;
+}
+
 function scheduledRefreshDismissKey(status: ScheduledRefreshStatusView | null): string {
   if (!status) return "";
   return [
@@ -163,7 +184,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
   const { message: messageApi, modal } = AntdApp.useApp();
-  const [view, setView] = useState<ViewMode>("candidates");
+  const [view, setView] = useState<ViewMode>(() => initialViewFromUrl());
   const [runtimeConfig, setRuntimeConfig] = useState<DashboardRuntimeConfig>(initialRuntimeConfig);
   const [sourceInfo, setSourceInfo] = useState<DataSourceInfo>(() => buildInitialSourceInfo());
   const [authContext, setAuthContext] = useState<AuthContextResponse | null>(null);
@@ -173,6 +194,8 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   const [candidates, setCandidates] = useState<CandidateItemView[]>([]);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [scheduledRefreshStatus, setScheduledRefreshStatus] = useState<ScheduledRefreshStatusView | null>(null);
+  const [shortpickPaperTracking, setShortpickPaperTracking] = useState<Record<string, unknown> | null>(null);
+  const [shortpickPaperTrackingLoading, setShortpickPaperTrackingLoading] = useState(false);
   const [dismissedScheduledRefreshKey, setDismissedScheduledRefreshKey] = useState(
     () => window.localStorage.getItem("ashare-dismissed-scheduled-refresh") ?? "",
   );
@@ -270,6 +293,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   const visibleScheduledRefreshStatus = scheduledRefreshStatus && scheduledRefreshKey !== dismissedScheduledRefreshKey
     ? scheduledRefreshStatus
     : null;
+  const paperTrackingTag = shortpickPaperTrackingTag(shortpickPaperTracking, shortpickPaperTrackingLoading);
   const analysisReportRow = useMemo(
     () => candidateRows.find((item) => item.symbol === analysisReportSymbol) ?? null,
     [analysisReportSymbol, candidateRows],
@@ -318,7 +342,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     {
       key: "shortpick",
       label: "试验田",
-      description: "查看大模型原生联网短投推荐和后验复盘。",
+      description: "查看冻结纸面策略、纸面跟踪和LLM对照组。",
       icon: <ExperimentOutlined />,
     },
     {
@@ -440,6 +464,11 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       setCandidates(data.candidates.items);
       setGeneratedAt(data.candidates.generated_at);
       setScheduledRefreshStatus(data.scheduled_refresh_status ?? null);
+      setShortpickPaperTrackingLoading(true);
+      void api.getShortpickPaperTracking()
+        .then((result) => setShortpickPaperTracking(result.data as unknown as Record<string, unknown>))
+        .catch(() => setShortpickPaperTracking(null))
+        .finally(() => setShortpickPaperTrackingLoading(false));
       setGlossary(data.glossary);
       setSourceInfo(source);
       const nextSymbol = data.watchlist.items.find((item) => item.symbol === preferredSymbol)?.symbol
@@ -1481,7 +1510,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                                   复制追问包
                                 </Button>
                                 <Text type="secondary">
-                                  入口在下方"追问与模拟"标签。留空不选模型 Key 时会直接调用本机 Codex，用 `gpt-5.5` 执行 builtin 研究；选择已配置 Key 时则走对应的外部模型 Key。
+                                  入口在下方"追问与模拟"标签。未选择模型 Key 时使用本机默认模型执行；选择已配置 Key 时使用对应外部模型。
                                 </Text>
                               </>
                             ) : (
@@ -1678,7 +1707,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                   <Descriptions size="small" column={1}>
                     <Descriptions.Item label="模型">{`${dashboard.model.name} ${dashboard.model.version}`}</Descriptions.Item>
                     <Descriptions.Item label="验证">{dashboard.model.validation_scheme}</Descriptions.Item>
-                    <Descriptions.Item label="Prompt">{`${dashboard.prompt.name} ${dashboard.prompt.version}`}</Descriptions.Item>
+                    <Descriptions.Item label="提示包版本">{`${dashboard.prompt.name} ${dashboard.prompt.version}`}</Descriptions.Item>
                     <Descriptions.Item label="数据时间">{formatDate(dashboard.recommendation.as_of_data_time)}</Descriptions.Item>
                     <Descriptions.Item label="更新时间">{formatDate(dashboard.recommendation.generated_at)}</Descriptions.Item>
                   </Descriptions>
@@ -1705,7 +1734,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                     className="full-width"
                     value={analysisKeyId}
                     allowClear
-                    placeholder="可选：选择要执行的模型 Key；留空则使用本机 Codex builtin GPT"
+                    placeholder="可选：选择要执行的模型 Key；留空使用本机默认模型"
                     options={modelApiKeys.map((item) => ({
                       value: item.id,
                       label: `${item.name} · ${item.model_name}${item.is_default ? " · 默认" : ""}`,
@@ -1721,13 +1750,13 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                   />
                   <div className="prompt-actions">
                     <Button type="primary" loading={analysisLoading} onClick={() => void handleSubmitManualResearch()}>
-                      {analysisKeyId ? "提交并执行" : "使用 builtin GPT 执行"}
+                      {analysisKeyId ? "提交并执行" : "使用默认模型执行"}
                     </Button>
                     <Button onClick={handleCopyPrompt}>
                       复制追问包
                     </Button>
                     <Text type="secondary">
-                      这里的默认动作已经改成 durable manual research request。选择模型 Key 时会立即执行；不选时会直接调用本机 Codex 的 builtin `gpt-5.5` 执行。只有本机 Codex 不可用时，才会保留请求并提示当前环境尚未配置 builtin executor。
+                      选择模型 Key 后会立即执行外部模型研究；不选择时使用本机默认模型。若模型暂不可用，请求会保留在人工研究记录中。
                     </Text>
                   </div>
                   {analysisAnswer ? (
@@ -2017,6 +2046,8 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
           runtimeSettings={runtimeSettings}
           runtimeOverview={runtimeOverview}
           scheduledRefreshStatus={visibleScheduledRefreshStatus}
+          shortpickPaperTracking={shortpickPaperTracking}
+          shortpickPaperTrackingLoading={shortpickPaperTrackingLoading}
           onDismissScheduledRefreshStatus={dismissScheduledRefreshStatus}
           modelApiKeys={modelApiKeys}
           generatedAt={generatedAt}
@@ -2167,9 +2198,10 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                           <Space wrap>
                             {visibleScheduledRefreshStatus.components.map((component) => (
                               <Tag key={component.slot} color={scheduledRefreshTagColor(component.status)}>
-                                {`${component.slot === "shortpick_lab" ? "试验田" : component.label}：${component.status_label}`}
+                                {`${scheduledRefreshComponentLabel(component.slot, component.label)}：${component.status_label}`}
                               </Tag>
                             ))}
+                            {paperTrackingTag ? <Tag color="purple">{paperTrackingTag}</Tag> : null}
                           </Space>
                         ) : null}
                         <Text type="secondary">

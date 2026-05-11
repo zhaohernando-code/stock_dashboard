@@ -98,6 +98,7 @@ class ShortpickValidationView(BaseModel):
     leakage_audit_reasons: list[str] = Field(default_factory=list)
     baseline_family: str | None = None
     official_sample_eligible: bool | None = None
+    tradable_sample_eligible: bool | None = None
 
 
 class ShortpickCandidateView(BaseModel):
@@ -133,6 +134,7 @@ class ShortpickCandidateView(BaseModel):
     leakage_audit_status: str | None = None
     leakage_audit_reasons: list[str] = Field(default_factory=list)
     official_sample_eligible: bool | None = None
+    tradable_sample_eligible: bool | None = None
     exclusion_reason: str | None = None
     universe_membership: dict[str, Any] = Field(default_factory=dict)
     evidence_mapping: dict[str, Any] = Field(default_factory=dict)
@@ -231,6 +233,7 @@ class ShortpickValidationQueueItem(BaseModel):
     leakage_audit_reasons: list[str] = Field(default_factory=list)
     baseline_family: str | None = None
     official_sample_eligible: bool | None = None
+    tradable_sample_eligible: bool | None = None
 
 
 class ShortpickValidationQueueResponse(BaseModel):
@@ -246,12 +249,18 @@ class ShortpickFeedbackGroup(BaseModel):
     label: str
     sample_count: int = 0
     official_sample_count: int = 0
+    tradable_sample_count: int = 0
     unique_symbol_run_count: int = 0
     completed_validation_count: int = 0
     completed_official_sample_count: int = 0
+    completed_tradable_sample_count: int = 0
     mean_stock_return: float | None = None
     mean_excess_return: float | None = None
     trimmed_mean_excess_return: float | None = None
+    tradable_mean_stock_return: float | None = None
+    tradable_mean_excess_return: float | None = None
+    tradable_trimmed_mean_excess_return: float | None = None
+    tradable_positive_excess_rate: float | None = None
     benchmark_metrics: dict[str, Any] = Field(default_factory=dict)
     positive_excess_rate: float | None = None
     max_drawdown: float | None = None

@@ -43,7 +43,7 @@ def test_scheduled_refresh_status_reports_shortpick_pending_when_main_done(tmp_p
     assert payload["slot"] == "shortpick_lab"
     assert payload["components"][0]["status"] == "success"
     assert payload["components"][1]["status"] == "pending_catchup"
-    assert payload["components"][1]["label"] == "试验田"
+    assert payload["components"][1]["label"] == "LLM对照批次"
 
 
 def test_scheduled_refresh_status_prefers_running_lock(tmp_path, monkeypatch) -> None:

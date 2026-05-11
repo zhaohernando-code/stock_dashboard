@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import delete, select
 
 from ashare_evidence.db import init_database, session_scope
-from ashare_evidence.models import MarketBar, PaperPortfolio, Recommendation, SimulationSession
+from ashare_evidence.models import MarketBar, PaperFill, PaperPortfolio, Recommendation, SimulationSession
 from ashare_evidence.release_verifier import collect_user_visible_text_fragments, find_banned_terms_in_text
 from ashare_evidence.simulation import (
     advance_running_simulation_session,
@@ -137,6 +137,54 @@ class SimulationWorkspaceTests(unittest.TestCase):
             ended = end_simulation_session(session, confirm=True)
             self.assertEqual(ended["session"]["status"], "ended")
             self.assertFalse(ended["controls"]["can_end"])
+
+    def test_manual_order_enforces_new_account_permission_t_plus_one_and_current_stamp_tax(self) -> None:
+        with session_scope(self.database_url) as session:
+            seed_watchlist_fixture(session)
+            start_simulation_session(session)
+            main_symbol = "600519.SH"
+            bought = place_manual_order(
+                session,
+                symbol=main_symbol,
+                side="buy",
+                quantity=100,
+                reason="测试买入。",
+            )
+            self.assertEqual(bought["manual_track"]["portfolio"]["order_count"], 1)
+
+            with self.assertRaisesRegex(ValueError, "T\\+1"):
+                place_manual_order(
+                    session,
+                    symbol=main_symbol,
+                    side="sell",
+                    quantity=100,
+                    reason="同日卖出应被拦截。",
+                )
+
+            simulation_session = session.scalar(select(SimulationSession))
+            assert simulation_session is not None
+            latest_bar = session.scalar(select(MarketBar).order_by(MarketBar.observed_at.desc()).limit(1))
+            assert latest_bar is not None
+            simulation_session.last_data_time = latest_bar.observed_at + timedelta(days=1)
+            sold = place_manual_order(
+                session,
+                symbol=main_symbol,
+                side="sell",
+                quantity=100,
+                reason="下一交易日卖出。",
+            )
+            self.assertEqual(sold["manual_track"]["portfolio"]["order_count"], 2)
+            sell_fill = session.scalars(select(PaperFill).order_by(PaperFill.id.desc()).limit(1)).one()
+            self.assertAlmostEqual(sell_fill.tax, round(sell_fill.price * sell_fill.quantity * 0.0005, 2))
+
+            with self.assertRaisesRegex(ValueError, "账户权限"):
+                place_manual_order(
+                    session,
+                    symbol="300750.SZ",
+                    side="buy",
+                    quantity=100,
+                    reason="新账户不应买入创业板。",
+                )
 
     def test_auto_execute_can_drive_model_track_fills_in_simulation_only(self) -> None:
         with session_scope(self.database_url) as session:

@@ -5,6 +5,7 @@ import json
 import os
 import random
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from time import sleep
@@ -17,6 +18,11 @@ from sqlalchemy.orm import Session
 from ashare_evidence.benchmark import benchmark_close_maps
 from ashare_evidence.db import utcnow
 from ashare_evidence.llm_service import route_model
+from ashare_evidence.market_rules import (
+    ACCOUNT_PROFILE_LABELS,
+    ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+    account_trade_eligibility,
+)
 from ashare_evidence.models import (
     MarketBar,
     NewsEntityLink,
@@ -68,6 +74,12 @@ SHORTPICK_REPLAY_BASELINE_FAMILIES = (
     "momentum_continuity_turnover_rank",
 )
 SHORTPICK_REPLAY_HORIZON_ORDER = (1, 3, 5, 10, 20)
+SHORTPICK_REPLAY_HARD_LEAKAGE_REASONS = {
+    "source_not_in_packet",
+    "source_after_cutoff",
+    "unverified_source_time",
+    "future_leakage_suspected",
+}
 SHORTPICK_REPLAY_DISTILL_FAMILIES = (
     "llm_self_distilled",
     "llm_momentum_distilled",
@@ -124,6 +136,54 @@ class _UniverseMember:
     market_cap_bucket: str
 
 
+@dataclass(frozen=True)
+class _ReplayLlmTask:
+    run_id: int
+    run_date: date
+    packet: dict[str, Any]
+    prompt: str
+    system: str
+    limit: int
+
+
+@dataclass(frozen=True)
+class _ReplayLlmResult:
+    task: _ReplayLlmTask
+    parsed_json: dict[str, Any] | None
+    raw_answer: str
+    final_raw_answer: str
+    provider_name: str
+    model_name: str
+    repair_used: bool
+    error_message: str | None
+
+
+@dataclass(frozen=True)
+class _ReplayDistillationTask:
+    run_id: int
+    run_date: date
+    packet: dict[str, Any]
+    prompt: str | None
+    source_family: str
+    output_family: str
+    executor_kind: str
+    pool_symbols: list[str]
+    limit: int
+    round_index: int
+
+
+@dataclass(frozen=True)
+class _ReplayDistillationResult:
+    task: _ReplayDistillationTask
+    parsed_json: dict[str, Any] | None
+    raw_answer: str
+    final_raw_answer: str
+    provider_name: str
+    model_name: str
+    repair_used: bool
+    error_message: str | None
+
+
 def run_shortpick_historical_replay(
     session: Session,
     *,
@@ -131,6 +191,7 @@ def run_shortpick_historical_replay(
     end_date: date,
     rounds: int = 5,
     candidate_limit: int = 3,
+    account_profile: str = ACCOUNT_PROFILE_NEW_RETAIL_CASH,
     triggered_by: str | None = None,
 ) -> dict[str, Any]:
     if start_date > end_date:
@@ -146,6 +207,7 @@ def run_shortpick_historical_replay(
                 as_of_date=cursor,
                 rounds=normalized_rounds,
                 candidate_limit=normalized_limit,
+                account_profile=account_profile,
                 triggered_by=triggered_by,
             )
             replay_runs.append(run)
@@ -156,7 +218,92 @@ def run_shortpick_historical_replay(
         "end_date": end_date.isoformat(),
         "rounds": normalized_rounds,
         "candidate_limit": normalized_limit,
+        "account_profile": account_profile,
+        "account_profile_label": ACCOUNT_PROFILE_LABELS.get(account_profile, account_profile),
         "run_count": len(replay_runs),
+        "runs": replay_runs,
+    }
+
+
+def run_shortpick_historical_replay_concurrent(
+    session: Session,
+    *,
+    start_date: date,
+    end_date: date,
+    rounds: int = 5,
+    candidate_limit: int = 3,
+    account_profile: str = ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+    max_workers: int = 4,
+    triggered_by: str | None = None,
+) -> dict[str, Any]:
+    if start_date > end_date:
+        raise ValueError("start_date must be <= end_date")
+    normalized_rounds = max(1, min(int(rounds), 10))
+    normalized_limit = max(1, min(int(candidate_limit), 10))
+    worker_count = max(1, min(int(max_workers), 6))
+    if worker_count <= 1 or os.getenv(SHORTPICK_REPLAY_LLM_MODE_ENV, "real").strip().lower() in {
+        "proxy",
+        "deterministic_proxy",
+        "off",
+        "disabled",
+    }:
+        return run_shortpick_historical_replay(
+            session,
+            start_date=start_date,
+            end_date=end_date,
+            rounds=normalized_rounds,
+            candidate_limit=normalized_limit,
+            account_profile=account_profile,
+            triggered_by=triggered_by,
+        )
+
+    tasks: list[_ReplayLlmTask] = []
+    cursor = start_date
+    while cursor <= end_date:
+        if cursor.weekday() < 5:
+            tasks.append(
+                _prepare_replay_llm_task(
+                    session,
+                    as_of_date=cursor,
+                    rounds=normalized_rounds,
+                    candidate_limit=normalized_limit,
+                    account_profile=account_profile,
+                    triggered_by=triggered_by,
+                )
+            )
+        cursor += timedelta(days=1)
+    session.commit()
+
+    results: list[_ReplayLlmResult] = []
+    with ThreadPoolExecutor(max_workers=min(worker_count, len(tasks) or 1)) as executor:
+        futures = [executor.submit(_execute_replay_llm_task, task) for task in tasks]
+        for future in as_completed(futures):
+            result = future.result()
+            results.append(result)
+            _persist_replay_llm_result(
+                session,
+                result=result,
+                rounds=normalized_rounds,
+                candidate_limit=normalized_limit,
+                account_profile=account_profile,
+            )
+            session.commit()
+
+    run_ids = [result.task.run_id for result in sorted(results, key=lambda item: item.task.run_date)]
+    replay_runs = [get_shortpick_run(session, run_id, include_raw=True) for run_id in run_ids]
+    failed_count = len([result for result in results if result.error_message])
+    return {
+        "experiment_mode": SHORTPICK_REPLAY_EXPERIMENT_MODE,
+        "execution_mode": "concurrent_llm_serial_db_writer",
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "rounds": normalized_rounds,
+        "candidate_limit": normalized_limit,
+        "account_profile": account_profile,
+        "account_profile_label": ACCOUNT_PROFILE_LABELS.get(account_profile, account_profile),
+        "llm_max_workers": worker_count,
+        "run_count": len(replay_runs),
+        "failed_llm_count": failed_count,
         "runs": replay_runs,
     }
 
@@ -167,11 +314,12 @@ def _run_one_replay_date(
     as_of_date: date,
     rounds: int,
     candidate_limit: int,
+    account_profile: str,
     triggered_by: str | None,
 ) -> dict[str, Any]:
     started_at = utcnow()
     as_of_cutoff = _as_of_cutoff(as_of_date)
-    universe = _build_universe(session, as_of_date=as_of_date)
+    universe = _build_universe(session, as_of_date=as_of_date, account_profile=account_profile)
     packet = _build_source_packet(session, as_of_date=as_of_date, as_of_cutoff=as_of_cutoff, universe=universe)
     run = ShortpickExperimentRun(
         run_key=f"shortpick-replay:{as_of_date.isoformat()}:{started_at:%Y%m%d%H%M%S%f}",
@@ -188,6 +336,8 @@ def _run_one_replay_date(
             "experiment_mode": SHORTPICK_REPLAY_EXPERIMENT_MODE,
             "rounds": rounds,
             "candidate_limit": candidate_limit,
+            "account_profile": account_profile,
+            "account_profile_label": ACCOUNT_PROFILE_LABELS.get(account_profile, account_profile),
             "sealed_packet_only": True,
             "native_web_search": False,
             "baseline_families": list(SHORTPICK_REPLAY_BASELINE_FAMILIES),
@@ -199,6 +349,8 @@ def _run_one_replay_date(
             "source_packet_hash": packet["source_packet_hash"],
             "source_packet": _packet_summary(packet),
             "tradable_universe": universe["summary"],
+            "account_profile": account_profile,
+            "account_profile_label": ACCOUNT_PROFILE_LABELS.get(account_profile, account_profile),
         },
     )
     session.add(run)
@@ -215,6 +367,191 @@ def _run_one_replay_date(
         rounds=rounds,
         candidate_limit=candidate_limit,
     )
+    return _finalize_replay_run(session, run)
+
+
+def _prepare_replay_llm_task(
+    session: Session,
+    *,
+    as_of_date: date,
+    rounds: int,
+    candidate_limit: int,
+    account_profile: str,
+    triggered_by: str | None,
+) -> _ReplayLlmTask:
+    started_at = utcnow()
+    as_of_cutoff = _as_of_cutoff(as_of_date)
+    universe = _build_universe(session, as_of_date=as_of_date, account_profile=account_profile)
+    packet = _build_source_packet(session, as_of_date=as_of_date, as_of_cutoff=as_of_cutoff, universe=universe)
+    run = ShortpickExperimentRun(
+        run_key=f"shortpick-replay:{as_of_date.isoformat()}:{started_at:%Y%m%d%H%M%S%f}",
+        run_date=as_of_date,
+        prompt_version=SHORTPICK_HISTORICAL_REPLAY_PROMPT_VERSION,
+        information_mode=SHORTPICK_HISTORICAL_REPLAY_MODE,
+        status="running",
+        trigger_source="historical_replay_cli",
+        triggered_by=triggered_by,
+        started_at=started_at,
+        completed_at=None,
+        failed_at=None,
+        model_config={
+            "experiment_mode": SHORTPICK_REPLAY_EXPERIMENT_MODE,
+            "rounds": rounds,
+            "candidate_limit": candidate_limit,
+            "account_profile": account_profile,
+            "account_profile_label": ACCOUNT_PROFILE_LABELS.get(account_profile, account_profile),
+            "sealed_packet_only": True,
+            "native_web_search": False,
+            "baseline_families": list(SHORTPICK_REPLAY_BASELINE_FAMILIES),
+            "execution_mode": "concurrent_llm_serial_db_writer",
+        },
+        summary_payload={
+            "experiment_mode": SHORTPICK_REPLAY_EXPERIMENT_MODE,
+            "as_of_cutoff": as_of_cutoff.isoformat(),
+            "source_packet_id": packet["source_packet_id"],
+            "source_packet_hash": packet["source_packet_hash"],
+            "source_packet": _packet_summary(packet),
+            "tradable_universe": universe["summary"],
+            "account_profile": account_profile,
+            "account_profile_label": ACCOUNT_PROFILE_LABELS.get(account_profile, account_profile),
+        },
+    )
+    session.add(run)
+    session.flush()
+    _write_replay_packet_artifact(session, run, packet)
+    limit = min(rounds, candidate_limit)
+    prompt = _build_replay_llm_prompt(run=run, packet=packet, universe=universe, limit=limit)
+    system = (
+        "你是历史隔离回放执行器。只能使用用户消息中的 sealed source packet 和 tradeable universe。"
+        "禁止联网，禁止使用训练记忆补充事实，禁止引用 packet 外 URL。只输出 JSON。"
+    )
+    return _ReplayLlmTask(
+        run_id=int(run.id),
+        run_date=as_of_date,
+        packet=packet,
+        prompt=prompt,
+        system=system,
+        limit=limit,
+    )
+
+
+def _execute_replay_llm_task(task: _ReplayLlmTask) -> _ReplayLlmResult:
+    base_url = ""
+    model_name = "unavailable"
+    raw_answer = ""
+    try:
+        transport, base_url, api_key, model_name = route_model("shortpick_historical_replay")
+        raw_answer = transport.complete(
+            base_url=base_url,
+            api_key=api_key,
+            model_name=model_name,
+            prompt=task.prompt,
+            system=task.system,
+            enable_search=False,
+        )
+        parsed_json, final_raw_answer, repair_used = _extract_replay_rejection_json_with_partial_repair(
+            transport=transport,
+            base_url=base_url,
+            api_key=api_key,
+            model_name=model_name,
+            raw_answer=raw_answer,
+        )
+        return _ReplayLlmResult(
+            task=task,
+            parsed_json=parsed_json,
+            raw_answer=raw_answer,
+            final_raw_answer=final_raw_answer,
+            provider_name=_provider_name_from_base_url(base_url),
+            model_name=model_name,
+            repair_used=repair_used,
+            error_message=None,
+        )
+    except Exception as exc:
+        return _ReplayLlmResult(
+            task=task,
+            parsed_json=None,
+            raw_answer=raw_answer,
+            final_raw_answer=raw_answer,
+            provider_name=_provider_name_from_base_url(base_url),
+            model_name=model_name,
+            repair_used=False,
+            error_message=f"sealed packet LLM executor failed: {exc}",
+        )
+
+
+def _persist_replay_llm_result(
+    session: Session,
+    *,
+    result: _ReplayLlmResult,
+    rounds: int,
+    candidate_limit: int,
+    account_profile: str,
+) -> None:
+    run = session.get(ShortpickExperimentRun, result.task.run_id)
+    if run is None:
+        raise LookupError(f"Shortpick replay run {result.task.run_id} not found.")
+    universe = _build_universe(session, as_of_date=run.run_date, account_profile=account_profile)
+    if result.error_message or result.parsed_json is None:
+        round_record, llm_picks = _insert_failed_replay_llm_round(
+            session,
+            run=run,
+            packet=result.task.packet,
+            raw_answer=result.raw_answer,
+            provider_name=result.provider_name,
+            model_name=result.model_name,
+            error_message=result.error_message or "sealed packet LLM executor failed",
+            prompt=result.task.prompt,
+        )
+    else:
+        parsed_payload = _normalize_replay_llm_payload(
+            result.parsed_json,
+            packet=result.task.packet,
+            universe=universe,
+            limit=result.task.limit,
+        )
+        parsed_payload["_json_repair_used"] = result.repair_used
+        round_record = _insert_replay_round_record(
+            session,
+            run=run,
+            packet=result.task.packet,
+            parsed_payload=parsed_payload,
+            raw_answer=result.final_raw_answer,
+            provider_name=result.provider_name,
+            model_name=result.model_name,
+            executor_kind="historical_replay_sealed_packet_llm",
+            error_message=None,
+            prompt=result.task.prompt,
+        )
+        llm_picks = list(parsed_payload.get("candidates") or [])
+    for index, pick in enumerate(llm_picks, start=1):
+        _insert_candidate(
+            session,
+            run=run,
+            round_record=round_record,
+            symbol=str(pick["symbol"]),
+            baseline_family="llm",
+            rank=index,
+            packet=result.task.packet,
+            universe=universe,
+            llm_pick=pick,
+        )
+    for family, symbols in _baseline_symbols(universe=universe, as_of_date=run.run_date, limit=candidate_limit).items():
+        for index, symbol in enumerate(symbols, start=1):
+            _insert_candidate(
+                session,
+                run=run,
+                round_record=None,
+                symbol=symbol,
+                baseline_family=family,
+                rank=index,
+                packet=result.task.packet,
+                universe=universe,
+            )
+    session.flush()
+    _finalize_replay_run(session, run)
+
+
+def _finalize_replay_run(session: Session, run: ShortpickExperimentRun) -> dict[str, Any]:
     validation_result = validate_historical_replay_run(session, run.id, horizons=SHORTPICK_DEFAULT_HORIZONS)
     run.status = "completed"
     run.completed_at = utcnow()
@@ -229,6 +566,7 @@ def _run_one_replay_date(
         **dict(validation_result.get("summary") or {}),
         "candidate_count": len(candidate_rows),
         "official_sample_count": len([payload for payload in candidate_payloads if payload.get("official_sample_eligible")]),
+        "tradable_sample_count": len([payload for payload in candidate_payloads if _replay_tradable_sample_eligible(payload)]),
         "leakage_failed_count": len([payload for payload in candidate_payloads if payload.get("leakage_audit_status") == "fail"]),
         "baseline_candidate_count": len([payload for payload in candidate_payloads if payload.get("baseline_family") != "llm"]),
         "model_family": (
@@ -285,6 +623,7 @@ def validate_historical_replay_run(
                 "leakage_audit_status": candidate_payload.get("leakage_audit_status"),
                 "leakage_audit_reasons": candidate_payload.get("leakage_audit_reasons") or [],
                 "official_sample_eligible": bool(candidate_payload.get("official_sample_eligible")),
+                "tradable_sample_eligible": _replay_tradable_sample_eligible(candidate_payload),
                 "validation_mode": SHORTPICK_OFFICIAL_VALIDATION_MODE,
                 "market_sync_status": market_sync["status"],
                 "benchmark_sync_status": "historical_replay_existing_only",
@@ -352,6 +691,92 @@ def run_shortpick_replay_distillation(
         "experiment_mode": SHORTPICK_REPLAY_EXPERIMENT_MODE,
         "distillation_mode": "llm_filtering",
         "run_count": len(outputs),
+        "runs": outputs,
+        "config": {
+            "momentum_pool_limit": momentum_pool_limit,
+            "self_distill_limit": self_distill_limit,
+            "momentum_distill_limit": momentum_distill_limit,
+            "families": list(SHORTPICK_REPLAY_DISTILL_FAMILIES),
+        },
+    }
+
+
+def run_shortpick_replay_distillation_concurrent(
+    session: Session,
+    *,
+    run_id: int | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    momentum_pool_limit: int = 20,
+    self_distill_limit: int = 3,
+    momentum_distill_limit: int = 5,
+    max_workers: int = 4,
+) -> dict[str, Any]:
+    worker_count = max(1, min(int(max_workers), 6))
+    if worker_count <= 1 or os.getenv(SHORTPICK_REPLAY_LLM_MODE_ENV, "real").strip().lower() in {
+        "proxy",
+        "deterministic_proxy",
+        "off",
+        "disabled",
+    }:
+        return run_shortpick_replay_distillation(
+            session,
+            run_id=run_id,
+            start_date=start_date,
+            end_date=end_date,
+            momentum_pool_limit=momentum_pool_limit,
+            self_distill_limit=self_distill_limit,
+            momentum_distill_limit=momentum_distill_limit,
+        )
+
+    runs = _completed_real_replay_runs(session, run_id=run_id, start_date=start_date, end_date=end_date)
+    tasks: list[_ReplayDistillationTask] = []
+    for run in runs:
+        tasks.extend(
+            _prepare_distillation_tasks_for_run(
+                session,
+                run=run,
+                momentum_pool_limit=max(1, min(int(momentum_pool_limit), 40)),
+                self_distill_limit=max(1, min(int(self_distill_limit), 10)),
+                momentum_distill_limit=max(1, min(int(momentum_distill_limit), 10)),
+            )
+        )
+
+    runs_by_id = {int(run.id): run for run in runs}
+    expected_by_run: dict[int, int] = {}
+    for task in tasks:
+        expected_by_run[task.run_id] = expected_by_run.get(task.run_id, 0) + 1
+    pending_by_run: dict[int, list[_ReplayDistillationResult]] = {}
+    outputs: list[dict[str, Any]] = []
+    failed_llm_count = 0
+    with ThreadPoolExecutor(max_workers=min(worker_count, len(tasks) or 1)) as executor:
+        futures = [executor.submit(_execute_replay_distillation_task, task) for task in tasks]
+        for future in as_completed(futures):
+            result = future.result()
+            if result.error_message:
+                failed_llm_count += 1
+            run_results = pending_by_run.setdefault(result.task.run_id, [])
+            run_results.append(result)
+            if len(run_results) >= expected_by_run.get(result.task.run_id, 2):
+                run = runs_by_id[result.task.run_id]
+                outputs.append(
+                    _persist_distillation_results_for_run(
+                        session,
+                        run=run,
+                        results=run_results,
+                        momentum_pool_limit=max(1, min(int(momentum_pool_limit), 40)),
+                        self_distill_limit=max(1, min(int(self_distill_limit), 10)),
+                        momentum_distill_limit=max(1, min(int(momentum_distill_limit), 10)),
+                    )
+                )
+                session.commit()
+    return {
+        "experiment_mode": SHORTPICK_REPLAY_EXPERIMENT_MODE,
+        "execution_mode": "concurrent_llm_serial_db_writer",
+        "distillation_mode": "llm_filtering",
+        "llm_max_workers": worker_count,
+        "run_count": len(outputs),
+        "failed_llm_count": failed_llm_count,
         "runs": outputs,
         "config": {
             "momentum_pool_limit": momentum_pool_limit,
@@ -594,10 +1019,16 @@ def build_shortpick_replay_feedback(session: Session, *, run_id: int | None = No
     for family, family_rows in sorted(by_family.items()):
         candidate_ids = {row["candidate_id"] for row in family_rows}
         official_candidate_ids = {row["candidate_id"] for row in family_rows if row["official_sample_eligible"]}
+        tradable_candidate_ids = {row["candidate_id"] for row in family_rows if row["tradable_sample_eligible"]}
         completed_official_candidate_ids = {
             row["candidate_id"]
             for row in family_rows
             if row["official_sample_eligible"] and row["status"] == "completed"
+        }
+        completed_tradable_candidate_ids = {
+            row["candidate_id"]
+            for row in family_rows
+            if row["tradable_sample_eligible"] and row["status"] == "completed"
         }
         families.append(
             {
@@ -605,9 +1036,15 @@ def build_shortpick_replay_feedback(session: Session, *, run_id: int | None = No
                 "label": _baseline_label(family),
                 "candidate_count": len(candidate_ids),
                 "official_sample_count": len(official_candidate_ids),
+                "tradable_sample_count": len(tradable_candidate_ids),
                 "completed_official_sample_count": len(completed_official_candidate_ids),
+                "completed_tradable_sample_count": len(completed_tradable_candidate_ids),
                 "validation_by_horizon": _replay_feedback_groups(family_rows, group_key="horizon"),
                 "robustness_metrics": _robustness_metrics(family_rows),
+                "tradable_robustness_metrics": _robustness_metrics(
+                    family_rows,
+                    eligibility_key="tradable_sample_eligible",
+                ),
             }
         )
     factor_ic_gate = _factor_ic_gate_readout(session)
@@ -623,23 +1060,54 @@ def build_shortpick_replay_feedback(session: Session, *, run_id: int | None = No
             "completed_official_sample_count": len(
                 [row for row in rows if row["official_sample_eligible"] and row["status"] == "completed"]
             ),
+            "completed_tradable_sample_count": len(
+                [row for row in rows if row["tradable_sample_eligible"] and row["status"] == "completed"]
+            ),
             "baseline_families": list(SHORTPICK_REPLAY_BASELINE_FAMILIES),
             "validation_by_horizon": horizon_groups,
             "statistical_gate": _replay_statistical_gate(rows, horizon_groups),
             "robustness_metrics": _robustness_metrics(rows),
+            "tradable_robustness_metrics": _robustness_metrics(rows, eligibility_key="tradable_sample_eligible"),
             "factor_ic_gate": factor_ic_gate,
             "news_calibration": news_calibration,
         },
     }
 
 
-def _build_universe(session: Session, *, as_of_date: date) -> dict[str, Any]:
+def _account_profile_for_run(run: ShortpickExperimentRun) -> str:
+    model_config = dict(run.model_config or {})
+    summary = dict(run.summary_payload or {})
+    profile = str(model_config.get("account_profile") or summary.get("account_profile") or ACCOUNT_PROFILE_NEW_RETAIL_CASH)
+    return profile if profile in ACCOUNT_PROFILE_LABELS else ACCOUNT_PROFILE_NEW_RETAIL_CASH
+
+
+def _build_universe(
+    session: Session,
+    *,
+    as_of_date: date,
+    account_profile: str = ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+) -> dict[str, Any]:
     members: list[_UniverseMember] = []
     excluded: dict[str, int] = {}
+    excluded_account_examples: list[dict[str, Any]] = []
     stocks = session.scalars(select(Stock).order_by(Stock.symbol.asc())).all()
     for stock in stocks:
         if stock.listed_date and stock.listed_date > as_of_date:
             excluded["listed_after_as_of"] = excluded.get("listed_after_as_of", 0) + 1
+            continue
+        eligibility = account_trade_eligibility(stock.symbol, stock_profile=stock, account_profile=account_profile, as_of=as_of_date)
+        if not eligibility["tradable"]:
+            key = f"account_excluded_{eligibility['board']}"
+            excluded[key] = excluded.get(key, 0) + 1
+            if len(excluded_account_examples) < 12:
+                excluded_account_examples.append(
+                    {
+                        "symbol": stock.symbol,
+                        "name": stock.name,
+                        "board_label": eligibility["board_label"],
+                        "reason": eligibility["reason"],
+                    }
+                )
             continue
         bars = session.scalars(
             select(MarketBar)
@@ -678,14 +1146,18 @@ def _build_universe(session: Session, *, as_of_date: date) -> dict[str, Any]:
         "by_symbol": {member.symbol: member for member in members},
         "summary": {
             "as_of_date": as_of_date.isoformat(),
+            "account_profile": account_profile,
+            "account_profile_label": ACCOUNT_PROFILE_LABELS.get(account_profile, account_profile),
             "universe_count": len(stocks),
             "total_count": len(stocks),
             "tradeable_count": len(members),
             "excluded_counts": excluded,
             "excluded_count": sum(excluded.values()),
+            "excluded_account_examples": excluded_account_examples,
             "excluded_st": excluded.get("st_status", 0),
             "excluded_suspended": excluded.get("suspended", 0),
             "excluded_limit_status": excluded.get("limit_status", 0),
+            "account_rule_note": "新开户普通现金账户口径仅纳入沪深主板普通A股；排除科创板、创业板、北交所、ST/退市风险类标的。",
             "excluded_missing_bar": excluded.get("missing_daily_bar", 0) + excluded.get("no_bar_on_as_of_date", 0),
             "market_cap_bucket_counts": _count_by([member.market_cap_bucket for member in members]),
             "market_cap_available_count": len([member for member in members if member.market_cap is not None]),
@@ -811,6 +1283,262 @@ def _insert_replay_candidates(
     session.flush()
 
 
+def _completed_real_replay_runs(
+    session: Session,
+    *,
+    run_id: int | None,
+    start_date: date | None,
+    end_date: date | None,
+) -> list[ShortpickExperimentRun]:
+    query = (
+        select(ShortpickExperimentRun)
+        .where(
+            ShortpickExperimentRun.information_mode == SHORTPICK_HISTORICAL_REPLAY_MODE,
+            ShortpickExperimentRun.status == "completed",
+        )
+        .order_by(ShortpickExperimentRun.run_date.asc(), ShortpickExperimentRun.id.asc())
+    )
+    if run_id is not None:
+        query = query.where(ShortpickExperimentRun.id == run_id)
+    if start_date is not None:
+        query = query.where(ShortpickExperimentRun.run_date >= start_date)
+    if end_date is not None:
+        query = query.where(ShortpickExperimentRun.run_date <= end_date)
+    return [run for run in session.scalars(query).all() if not _is_diagnostic_replay_run(run)]
+
+
+def _prepare_distillation_tasks_for_run(
+    session: Session,
+    *,
+    run: ShortpickExperimentRun,
+    momentum_pool_limit: int,
+    self_distill_limit: int,
+    momentum_distill_limit: int,
+) -> list[_ReplayDistillationTask]:
+    packet = _load_replay_packet(session, run)
+    universe = _build_universe(session, as_of_date=run.run_date, account_profile=_account_profile_for_run(run))
+    llm_symbols = _candidate_symbols(session, run.id, family="llm")
+    momentum_symbols = _momentum_symbols(universe, limit=momentum_pool_limit)
+    specs = [
+        (
+            "llm",
+            "llm_self_distilled",
+            "historical_replay_llm_self_distiller",
+            llm_symbols,
+            min(self_distill_limit, len(llm_symbols)),
+            2,
+        ),
+        (
+            "momentum_volume_expanded_pool",
+            "llm_momentum_distilled",
+            "historical_replay_momentum_pool_distiller",
+            momentum_symbols,
+            momentum_distill_limit,
+            3,
+        ),
+    ]
+    tasks: list[_ReplayDistillationTask] = []
+    for source_family, output_family, executor_kind, pool_symbols, limit, round_index in specs:
+        prompt = None
+        if limit > 0 and pool_symbols:
+            prompt = _build_replay_distillation_prompt(
+                session,
+                run=run,
+                packet=packet,
+                universe=universe,
+                source_family=source_family,
+                output_family=output_family,
+                executor_kind=executor_kind,
+                pool_symbols=pool_symbols,
+                limit=limit,
+            )
+        tasks.append(
+            _ReplayDistillationTask(
+                run_id=int(run.id),
+                run_date=run.run_date,
+                packet=packet,
+                prompt=prompt,
+                source_family=source_family,
+                output_family=output_family,
+                executor_kind=executor_kind,
+                pool_symbols=pool_symbols,
+                limit=limit,
+                round_index=round_index,
+            )
+        )
+    return tasks
+
+
+def _execute_replay_distillation_task(task: _ReplayDistillationTask) -> _ReplayDistillationResult:
+    if task.limit <= 0 or not task.pool_symbols or not task.prompt:
+        return _ReplayDistillationResult(
+            task=task,
+            parsed_json=None,
+            raw_answer="",
+            final_raw_answer="",
+            provider_name="system",
+            model_name="empty_candidate_pool",
+            repair_used=False,
+            error_message=f"{task.source_family} candidate pool is empty",
+        )
+    system = (
+        "你是历史隔离回放蒸馏器。只能使用用户消息中的 sealed distillation packet。"
+        "禁止联网，禁止使用训练记忆补充事实，禁止选择 candidate_pool 外股票。只输出 JSON。"
+    )
+    base_url = ""
+    model_name = "unavailable"
+    raw_answer = ""
+    try:
+        transport, base_url, api_key, model_name = route_model("shortpick_historical_replay")
+        raw_answer = transport.complete(
+            base_url=base_url,
+            api_key=api_key,
+            model_name=model_name,
+            prompt=task.prompt,
+            system=system,
+            enable_search=False,
+        )
+        parsed_json, final_raw_answer, repair_used = _extract_replay_llm_json_with_repair(
+            transport=transport,
+            base_url=base_url,
+            api_key=api_key,
+            model_name=model_name,
+            raw_answer=raw_answer,
+        )
+        return _ReplayDistillationResult(
+            task=task,
+            parsed_json=parsed_json,
+            raw_answer=raw_answer,
+            final_raw_answer=final_raw_answer,
+            provider_name=_provider_name_from_base_url(base_url),
+            model_name=model_name,
+            repair_used=repair_used,
+            error_message=None,
+        )
+    except Exception as exc:
+        return _ReplayDistillationResult(
+            task=task,
+            parsed_json=None,
+            raw_answer=raw_answer,
+            final_raw_answer=raw_answer,
+            provider_name=_provider_name_from_base_url(base_url),
+            model_name=model_name,
+            repair_used=False,
+            error_message=f"sealed packet distillation executor failed: {exc}",
+        )
+
+
+def _persist_distillation_results_for_run(
+    session: Session,
+    *,
+    run: ShortpickExperimentRun,
+    results: list[_ReplayDistillationResult],
+    momentum_pool_limit: int,
+    self_distill_limit: int,
+    momentum_distill_limit: int,
+) -> dict[str, Any]:
+    packet = _load_replay_packet(session, run)
+    universe = _build_universe(session, as_of_date=run.run_date, account_profile=_account_profile_for_run(run))
+    momentum_symbols = _momentum_symbols(universe, limit=momentum_pool_limit)
+    _delete_distillation_outputs(session, run.id)
+    rounds_by_family: dict[str, ShortpickModelRound] = {}
+    picks_by_family: dict[str, list[dict[str, Any]]] = {}
+    for result in sorted(results, key=lambda item: item.task.round_index):
+        if result.error_message or result.parsed_json is None:
+            round_record, picks = _insert_failed_replay_distillation_round(
+                session,
+                run=run,
+                packet=packet,
+                raw_answer=result.raw_answer,
+                provider_name=result.provider_name,
+                model_name=result.model_name,
+                executor_kind=result.task.executor_kind,
+                error_message=result.error_message or "sealed packet distillation executor failed",
+                prompt=result.task.prompt,
+                round_index=result.task.round_index,
+                output_family=result.task.output_family,
+            )
+        else:
+            parsed_payload = _normalize_replay_distillation_payload(
+                result.parsed_json,
+                packet=packet,
+                universe=universe,
+                allowed_symbols=set(result.task.pool_symbols),
+                limit=result.task.limit,
+                source_family=result.task.source_family,
+                output_family=result.task.output_family,
+            )
+            parsed_payload["_json_repair_used"] = result.repair_used
+            round_record = _insert_replay_round_record(
+                session,
+                run=run,
+                packet=packet,
+                parsed_payload=parsed_payload,
+                raw_answer=result.final_raw_answer,
+                provider_name=result.provider_name,
+                model_name=result.model_name,
+                executor_kind=result.task.executor_kind,
+                error_message=None,
+                prompt=result.task.prompt,
+                round_index=result.task.round_index,
+            )
+            picks = list(parsed_payload.get("candidates") or [])
+        rounds_by_family[result.task.output_family] = round_record
+        picks_by_family[result.task.output_family] = picks
+
+    for index, symbol in enumerate(momentum_symbols, start=1):
+        _insert_candidate(
+            session,
+            run=run,
+            round_record=None,
+            symbol=symbol,
+            baseline_family="momentum_volume_expanded_pool",
+            rank=index,
+            packet=packet,
+            universe=universe,
+        )
+    for family in ("llm_self_distilled", "llm_momentum_distilled"):
+        for index, pick in enumerate(picks_by_family.get(family, []), start=1):
+            _insert_candidate(
+                session,
+                run=run,
+                round_record=rounds_by_family.get(family),
+                symbol=str(pick["symbol"]),
+                baseline_family=family,
+                rank=index,
+                packet=packet,
+                universe=universe,
+                llm_pick=pick,
+            )
+
+    session.flush()
+    validation_result = validate_historical_replay_run(session, run.id, horizons=SHORTPICK_DEFAULT_HORIZONS)
+    candidate_counts = _distillation_candidate_counts(session, run.id)
+    run.summary_payload = {
+        **dict(run.summary_payload or {}),
+        "distillation": {
+            "status": "completed",
+            "momentum_pool_limit": momentum_pool_limit,
+            "self_distill_limit": self_distill_limit,
+            "momentum_distill_limit": momentum_distill_limit,
+            "families": list(SHORTPICK_REPLAY_DISTILL_FAMILIES),
+            "candidate_counts": candidate_counts,
+            "execution_mode": "concurrent_llm_serial_db_writer",
+            "completed_at": utcnow().isoformat(),
+        },
+    }
+    session.flush()
+    return {
+        "run_id": run.id,
+        "run_date": run.run_date.isoformat(),
+        "self_distilled_count": len(picks_by_family.get("llm_self_distilled", [])),
+        "momentum_distilled_count": len(picks_by_family.get("llm_momentum_distilled", [])),
+        "expanded_momentum_count": len(momentum_symbols),
+        "candidate_counts": candidate_counts,
+        "validation": validation_result,
+    }
+
+
 def _distill_one_replay_run(
     session: Session,
     *,
@@ -820,7 +1548,7 @@ def _distill_one_replay_run(
     momentum_distill_limit: int,
 ) -> dict[str, Any]:
     packet = _load_replay_packet(session, run)
-    universe = _build_universe(session, as_of_date=run.run_date)
+    universe = _build_universe(session, as_of_date=run.run_date, account_profile=_account_profile_for_run(run))
     llm_symbols = _candidate_symbols(session, run.id, family="llm")
     momentum_symbols = _momentum_symbols(universe, limit=momentum_pool_limit)
 
@@ -927,7 +1655,7 @@ def _reject_one_replay_run(
     reject_max_ratio: float,
 ) -> dict[str, Any]:
     packet = _load_replay_packet(session, run)
-    universe = _build_universe(session, as_of_date=run.run_date)
+    universe = _build_universe(session, as_of_date=run.run_date, account_profile=_account_profile_for_run(run))
     momentum_symbols = _momentum_symbols(universe, limit=momentum_pool_limit)
 
     _delete_rejection_outputs(session, run.id, refresh_expanded_pool=True)
@@ -1065,7 +1793,7 @@ def _hard_veto_one_replay_run(
     veto_max_ratio: float,
 ) -> dict[str, Any]:
     packet = _load_replay_packet(session, run)
-    universe = _build_universe(session, as_of_date=run.run_date)
+    universe = _build_universe(session, as_of_date=run.run_date, account_profile=_account_profile_for_run(run))
     momentum_symbols = _momentum_symbols(universe, limit=momentum_pool_limit)
 
     _delete_hard_veto_outputs(session, run.id)
@@ -1178,7 +1906,7 @@ def _factor_rank_one_replay_run(
     rank_limit: int,
 ) -> dict[str, Any]:
     packet = _load_replay_packet(session, run)
-    universe = _build_universe(session, as_of_date=run.run_date)
+    universe = _build_universe(session, as_of_date=run.run_date, account_profile=_account_profile_for_run(run))
     momentum_symbols = _momentum_symbols(universe, limit=momentum_pool_limit)
 
     _delete_factor_rank_outputs(session, run.id)
@@ -2115,6 +2843,9 @@ def _build_replay_llm_prompt(
         "as_of_cutoff": packet["as_of_cutoff"],
         "source_packet_id": packet["source_packet_id"],
         "source_packet_hash": packet["source_packet_hash"],
+        "account_profile": universe["summary"].get("account_profile"),
+        "account_profile_label": universe["summary"].get("account_profile_label"),
+        "account_rule_note": universe["summary"].get("account_rule_note"),
         "tradeable_universe": members,
         "official_sources": sources,
         "rejected_source_count": len(packet.get("rejected_sources") or []),
@@ -2125,9 +2856,10 @@ def _build_replay_llm_prompt(
 任务日期：{run.run_date.isoformat()}
 as_of_cutoff：{packet["as_of_cutoff"]}
 候选数量上限：{limit}
+账户口径：{universe["summary"].get("account_profile_label") or universe["summary"].get("account_profile")}
 
 输出 JSON，不要加代码块。`sources_used` 和 `evidence_mapping` 只能填写 packet 内的 `source_id`，不能填写 URL。
-候选 symbol 必须来自 `tradeable_universe`。
+候选 symbol 必须来自 `tradeable_universe`，也就是当前账户可执行股票池；不要选择科创板、创业板、北交所、ST 或 packet 中不存在的股票。
 `candidates` 是验收样本主体，必须尽量输出 {limit} 个不重复候选；`primary_pick` 必须等于 `candidates[0]`。
 每个候选的 thesis / catalysts / risks / invalidation 保持短句，优先引用与 symbol 相关的 official source id；没有对应 source 时必须在 limitations 里说明仅基于行情快照。
 
@@ -3171,19 +3903,23 @@ def _random_rejection_pick_payload(
 
 
 def _replay_validation_rows(session: Session, *, run_id: int | None) -> list[dict[str, Any]]:
+    default_run_ids = _latest_default_replay_run_ids(session) if run_id is None else None
     query = (
         select(
             ShortpickValidationSnapshot.candidate_id,
             ShortpickValidationSnapshot.horizon_days,
             ShortpickValidationSnapshot.status,
             ShortpickValidationSnapshot.excess_return,
+            ShortpickValidationSnapshot.stock_return,
             ShortpickCandidate.symbol,
             ShortpickCandidate.run_id,
+            ShortpickCandidate.candidate_payload.label("candidate_payload"),
             func.coalesce(func.json_extract(ShortpickCandidate.candidate_payload, "$.baseline_family"), "unknown").label("baseline_family"),
             func.coalesce(func.json_extract(ShortpickCandidate.candidate_payload, "$.official_sample_eligible"), 0).label("official_sample_eligible"),
             ShortpickExperimentRun.run_date,
             func.json_extract(ShortpickExperimentRun.summary_payload, "$.llm_executor_kind").label("llm_executor_kind"),
             func.json_extract(ShortpickExperimentRun.summary_payload, "$.model_family").label("model_family"),
+            func.json_extract(ShortpickExperimentRun.summary_payload, "$.account_profile").label("account_profile"),
         )
         .join(ShortpickCandidate, ShortpickValidationSnapshot.candidate_id == ShortpickCandidate.id)
         .join(ShortpickExperimentRun, ShortpickCandidate.run_id == ShortpickExperimentRun.id)
@@ -3193,8 +3929,15 @@ def _replay_validation_rows(session: Session, *, run_id: int | None) -> list[dic
         query = query.where(ShortpickCandidate.run_id == run_id)
     rows = []
     for row in session.execute(query).mappings().all():
+        if default_run_ids is not None and int(row["run_id"]) not in default_run_ids:
+            continue
         llm_executor_kind = str(row.get("llm_executor_kind") or "")
         model_family = str(row.get("model_family") or "")
+        account_profile = str(row.get("account_profile") or "")
+        if run_id is None and account_profile and account_profile != ACCOUNT_PROFILE_NEW_RETAIL_CASH:
+            continue
+        if run_id is None and not account_profile:
+            continue
         if run_id is None and (
             llm_executor_kind == "historical_replay_diagnostic_proxy"
             or model_family == "diagnostic-sealed-packet-proxy"
@@ -3204,6 +3947,7 @@ def _replay_validation_rows(session: Session, *, run_id: int | None) -> list[dic
         family = str(row.get("baseline_family") or "unknown")
         if family == "llm" and llm_executor_kind == "historical_replay_diagnostic_proxy":
             family = "diagnostic_proxy_llm"
+        candidate_payload = row.get("candidate_payload") if isinstance(row.get("candidate_payload"), dict) else {}
         rows.append(
             {
                 "candidate_id": int(row["candidate_id"]),
@@ -3211,13 +3955,75 @@ def _replay_validation_rows(session: Session, *, run_id: int | None) -> list[dic
                 "horizon_days": int(row["horizon_days"]),
                 "status": str(row["status"]),
                 "excess_return": row["excess_return"],
+                "stock_return": row["stock_return"],
                 "baseline_family": family,
                 "official_sample_eligible": bool(row["official_sample_eligible"]),
+                "tradable_sample_eligible": _replay_tradable_sample_eligible(candidate_payload),
                 "run_id": int(row["run_id"]),
                 "run_date": row["run_date"],
+                "account_profile": account_profile,
             }
         )
     return rows
+
+
+def _latest_default_replay_run_ids(session: Session) -> set[int]:
+    runs = (
+        session.scalars(
+            select(ShortpickExperimentRun)
+            .where(
+                ShortpickExperimentRun.information_mode == SHORTPICK_HISTORICAL_REPLAY_MODE,
+                ShortpickExperimentRun.status == "completed",
+            )
+            .order_by(ShortpickExperimentRun.run_date.asc(), ShortpickExperimentRun.id.asc())
+        )
+        .all()
+    )
+    latest_by_date: dict[date, int] = {}
+    for run in runs:
+        summary = dict(run.summary_payload or {})
+        account_profile = str(summary.get("account_profile") or "")
+        if account_profile != ACCOUNT_PROFILE_NEW_RETAIL_CASH:
+            continue
+        if _is_diagnostic_replay_run(run):
+            continue
+        if not _replay_run_has_completed_llm_sample(session, int(run.id)):
+            continue
+        latest_by_date[run.run_date] = int(run.id)
+    return set(latest_by_date.values())
+
+
+def _replay_run_has_completed_llm_sample(session: Session, run_id: int) -> bool:
+    failed_llm_rounds = session.scalar(
+        select(func.count())
+        .select_from(ShortpickModelRound)
+        .where(
+            ShortpickModelRound.run_id == run_id,
+            ShortpickModelRound.executor_kind == "historical_replay_sealed_packet_llm",
+            ShortpickModelRound.status == "failed",
+        )
+    )
+    if int(failed_llm_rounds or 0) > 0:
+        return False
+    llm_candidates = session.scalar(
+        select(func.count())
+        .select_from(ShortpickCandidate)
+        .where(
+            ShortpickCandidate.run_id == run_id,
+            func.json_extract(ShortpickCandidate.candidate_payload, "$.baseline_family") == "llm",
+        )
+    )
+    return int(llm_candidates or 0) > 0
+
+
+def _replay_tradable_sample_eligible(candidate_payload: dict[str, Any]) -> bool:
+    if not isinstance(candidate_payload, dict):
+        return False
+    tradeability = dict(candidate_payload.get("tradeability") or candidate_payload.get("universe_membership") or {})
+    if tradeability and not bool(tradeability.get("is_tradeable", True)):
+        return False
+    reasons = {str(reason) for reason in candidate_payload.get("leakage_audit_reasons") or []}
+    return not bool(reasons & SHORTPICK_REPLAY_HARD_LEAKAGE_REASONS)
 
 
 def _replay_feedback_scope(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -3237,8 +4043,15 @@ def _replay_statistical_gate(rows: list[dict[str, Any]], horizon_groups: list[di
         for row in rows
         if row["official_sample_eligible"] and row["status"] == "completed"
     ]
+    completed_tradable = [
+        row
+        for row in rows
+        if row["tradable_sample_eligible"] and row["status"] == "completed"
+    ]
     completed_dates = {row["run_date"] for row in completed_official if row.get("run_date") is not None}
+    completed_tradable_dates = {row["run_date"] for row in completed_tradable if row.get("run_date") is not None}
     completed_symbols = {row["symbol"] for row in completed_official}
+    completed_tradable_symbols = {row["symbol"] for row in completed_tradable}
     min_completed_samples = 30
     min_completed_dates = 5
     horizon_readiness = []
@@ -3248,6 +4061,7 @@ def _replay_statistical_gate(rows: list[dict[str, Any]], horizon_groups: list[di
             {
                 "horizon": int(group["group_key"]),
                 "completed_official_sample_count": completed_count,
+                "completed_tradable_sample_count": int(group.get("completed_tradable_sample_count") or 0),
                 "ready": completed_count >= min_completed_samples,
             }
         )
@@ -3258,8 +4072,11 @@ def _replay_statistical_gate(rows: list[dict[str, Any]], horizon_groups: list[di
         "min_completed_samples": min_completed_samples,
         "min_completed_dates": min_completed_dates,
         "completed_official_sample_count": len(completed_official),
+        "completed_tradable_sample_count": len(completed_tradable),
         "completed_date_count": len(completed_dates),
+        "completed_tradable_date_count": len(completed_tradable_dates),
         "completed_symbol_count": len(completed_symbols),
+        "completed_tradable_symbol_count": len(completed_tradable_symbols),
         "ready_horizons": ready_horizons,
         "horizon_readiness": horizon_readiness,
         "reason": (
@@ -3281,18 +4098,32 @@ def _replay_feedback_groups(rows: list[dict[str, Any]], *, group_key: str) -> li
             row for row in values
             if row["official_sample_eligible"] and row["status"] == "completed"
         ]
+        tradable_completed = [
+            row for row in values
+            if row["tradable_sample_eligible"] and row["status"] == "completed"
+        ]
         excess = [float(row["excess_return"]) for row in completed if row["excess_return"] is not None]
+        tradable_excess = [float(row["excess_return"]) for row in tradable_completed if row["excess_return"] is not None]
+        stock_returns = [float(row["stock_return"]) for row in completed if row["stock_return"] is not None]
+        tradable_stock_returns = [float(row["stock_return"]) for row in tradable_completed if row["stock_return"] is not None]
         output.append(
             {
                 "group_key": key,
                 "label": f"{key}日" if group_key == "horizon" else _baseline_label(key),
                 "sample_count": len(values),
                 "official_sample_count": len([row for row in values if row["official_sample_eligible"]]),
+                "tradable_sample_count": len([row for row in values if row["tradable_sample_eligible"]]),
                 "completed_official_sample_count": len(completed),
+                "completed_tradable_sample_count": len(tradable_completed),
                 "completed_validation_count": len([row for row in values if row["status"] == "completed"]),
+                "mean_stock_return": _mean_or_none(stock_returns),
                 "mean_excess_return": _mean_or_none(excess),
                 "trimmed_mean_excess_return": _trimmed_mean_or_none(excess),
                 "positive_excess_rate": _positive_rate(excess),
+                "tradable_mean_stock_return": _mean_or_none(tradable_stock_returns),
+                "tradable_mean_excess_return": _mean_or_none(tradable_excess),
+                "tradable_trimmed_mean_excess_return": _trimmed_mean_or_none(tradable_excess),
+                "tradable_positive_excess_rate": _positive_rate(tradable_excess),
                 "benchmark_metrics": {},
                 "status_counts": _count_by([row["status"] for row in values]),
             }
@@ -3314,10 +4145,10 @@ def _replay_group_sort_key(key: str, *, group_key: str) -> tuple[int, int, str]:
     return (1, 0, key)
 
 
-def _robustness_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
+def _robustness_metrics(rows: list[dict[str, Any]], *, eligibility_key: str = "official_sample_eligible") -> dict[str, Any]:
     completed = [
         row for row in rows
-        if row["official_sample_eligible"] and row["status"] == "completed" and row["excess_return"] is not None
+        if row.get(eligibility_key) and row["status"] == "completed" and row["excess_return"] is not None
     ]
     values = [float(row["excess_return"]) for row in completed]
     by_symbol: dict[str, list[float]] = {}

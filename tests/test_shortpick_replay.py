@@ -21,11 +21,14 @@ from ashare_evidence.models import (
 )
 from ashare_evidence.shortpick_lab import SHORTPICK_INFORMATION_MODE, list_shortpick_runs
 from ashare_evidence.shortpick_replay import (
+    _build_universe,
     build_shortpick_replay_feedback,
     get_shortpick_replay_sources,
     list_shortpick_replay_runs,
     run_shortpick_historical_replay,
+    run_shortpick_historical_replay_concurrent,
     run_shortpick_replay_distillation,
+    run_shortpick_replay_distillation_concurrent,
     run_shortpick_replay_rejection,
 )
 
@@ -49,6 +52,7 @@ def _seed_replay_fixture(database_url: str) -> None:
         ("600004.SH", "测试软件", "软件", 155.0),
         ("600005.SH", "测试消费", "消费", 80.0),
         ("600006.SH", "测试医药", "医药", 110.0),
+        ("688001.SH", "测试科创", "科创", 130.0),
         ("000300.SH", "沪深300", "benchmark", 200.0),
         ("000852.SH", "中证1000", "benchmark", 300.0),
     ]
@@ -313,6 +317,81 @@ def test_historical_replay_uses_real_sealed_packet_llm_executor(monkeypatch) -> 
             assert live_list["total"] == 0
 
 
+def test_historical_replay_default_universe_uses_new_retail_account_filter(monkeypatch) -> None:
+    monkeypatch.setenv("ASHARE_SHORTPICK_REPLAY_LLM_MODE", "proxy")
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_url = f"sqlite:///{Path(temp_dir) / 'replay.db'}"
+        init_database(database_url)
+        _seed_replay_fixture(database_url)
+
+        with session_scope(database_url) as session:
+            universe = _build_universe(session, as_of_date=date(2026, 5, 5))
+            symbols = set(universe["by_symbol"])
+            assert "600003.SH" in symbols
+            assert "688001.SH" not in symbols
+            assert universe["summary"]["account_profile"] == "new_retail_cash_account"
+            assert universe["summary"]["excluded_counts"]["account_excluded_star"] == 1
+
+
+def test_historical_replay_concurrent_runs_llm_in_parallel_but_writes_valid_runs(monkeypatch) -> None:
+    class FakeTransport:
+        def complete(self, *, base_url, api_key, model_name, prompt, system=None, enable_search=False):
+            assert enable_search is False
+            assert "新开户普通现金账户" in prompt
+            assert "688001.SH" not in prompt
+            return json.dumps(
+                {
+                    "as_of_date": "2026-05-05",
+                    "information_mode": "historical_replay",
+                    "primary_pick": {
+                        "symbol": "600003.SH",
+                        "name": "测试半导体",
+                        "theme": "半导体订单",
+                        "thesis": "测试半导体在 sealed packet 中有订单进展来源支持。",
+                        "catalysts": ["订单进展"],
+                        "risks": ["样本 fixture 有限"],
+                        "invalidation": ["来源失效"],
+                        "sources_used": ["src-001"],
+                        "evidence_mapping": {"thesis": ["src-001"]},
+                        "limitations": ["fixture response"],
+                    },
+                    "candidates": [],
+                    "limitations": [],
+                },
+                ensure_ascii=False,
+            )
+
+    monkeypatch.setenv("ASHARE_SHORTPICK_REPLAY_LLM_MODE", "real")
+    monkeypatch.setattr(
+        "ashare_evidence.shortpick_replay.route_model",
+        lambda task: (FakeTransport(), "https://api.deepseek.test/anthropic", "test-key", "deepseek-fixture"),
+    )
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_url = f"sqlite:///{Path(temp_dir) / 'replay.db'}"
+        init_database(database_url)
+        _seed_replay_fixture(database_url)
+
+        with session_scope(database_url) as session:
+            payload = run_shortpick_historical_replay_concurrent(
+                session,
+                start_date=date(2026, 5, 5),
+                end_date=date(2026, 5, 6),
+                rounds=1,
+                candidate_limit=1,
+                max_workers=2,
+            )
+            assert payload["execution_mode"] == "concurrent_llm_serial_db_writer"
+            assert payload["llm_max_workers"] == 2
+            assert payload["run_count"] == 2
+            assert payload["failed_llm_count"] == 0
+            runs = session.scalars(select(ShortpickExperimentRun).order_by(ShortpickExperimentRun.run_date.asc())).all()
+            assert [run.status for run in runs] == ["completed", "completed"]
+            assert all(run.model_config["account_profile"] == "new_retail_cash_account" for run in runs)
+            rounds = session.scalars(select(ShortpickModelRound).order_by(ShortpickModelRound.run_id.asc())).all()
+            assert len(rounds) == 2
+            assert all(round_row.executor_kind == "historical_replay_sealed_packet_llm" for round_row in rounds)
+
+
 def test_replay_distillation_adds_self_and_momentum_filter_families(monkeypatch) -> None:
     class FakeTransport:
         def complete(self, *, base_url, api_key, model_name, prompt, system=None, enable_search=False):
@@ -442,6 +521,99 @@ def test_replay_distillation_adds_self_and_momentum_filter_families(monkeypatch)
                 select(ShortpickModelRound).where(ShortpickModelRound.run_id == run_id).order_by(ShortpickModelRound.round_index.asc())
             ).all()
             assert [round_row.round_index for round_row in rounds] == [1, 2, 3]
+
+
+def test_replay_distillation_concurrent_writes_distilled_families(monkeypatch) -> None:
+    class FakeTransport:
+        def complete(self, *, base_url, api_key, model_name, prompt, system=None, enable_search=False):
+            assert enable_search is False
+            if "sealed distillation packet:" in prompt:
+                packet = json.loads(prompt.split("sealed distillation packet:", 1)[1].strip())
+                picks = []
+                for item in packet["candidate_pool"][:1]:
+                    picks.append(
+                        {
+                            "symbol": item["symbol"],
+                            "name": item["name"],
+                            "theme": item.get("industry") or "蒸馏",
+                            "thesis": "并发蒸馏保留候选。",
+                            "catalysts": ["封闭池支持"],
+                            "risks": ["样本 fixture 有限"],
+                            "invalidation": ["来源支持减弱"],
+                            "sources_used": list(item.get("source_ids") or [])[:1],
+                            "evidence_mapping": {},
+                            "limitations": ["fixture concurrent distillation response"],
+                        }
+                    )
+                return json.dumps(
+                    {
+                        "as_of_date": "2026-05-05",
+                        "information_mode": "historical_replay",
+                        "distillation_mode": packet["distillation_mode"],
+                        "source_family": packet["source_family"],
+                        "output_family": packet["output_family"],
+                        "primary_pick": picks[0],
+                        "candidates": [],
+                        "limitations": [],
+                    },
+                    ensure_ascii=False,
+                )
+            return json.dumps(
+                {
+                    "as_of_date": "2026-05-05",
+                    "information_mode": "historical_replay",
+                    "primary_pick": {
+                        "symbol": "600003.SH",
+                        "name": "测试半导体",
+                        "theme": "半导体订单",
+                        "thesis": "测试半导体在 sealed packet 中有订单进展来源支持。",
+                        "catalysts": ["订单进展"],
+                        "risks": ["样本 fixture 有限"],
+                        "invalidation": ["来源失效"],
+                        "sources_used": ["src-001"],
+                        "evidence_mapping": {"thesis": ["src-001"]},
+                        "limitations": ["fixture response"],
+                    },
+                    "candidates": [],
+                    "limitations": [],
+                },
+                ensure_ascii=False,
+            )
+
+    monkeypatch.setenv("ASHARE_SHORTPICK_REPLAY_LLM_MODE", "real")
+    monkeypatch.setattr(
+        "ashare_evidence.shortpick_replay.route_model",
+        lambda task: (FakeTransport(), "https://api.deepseek.test/anthropic", "test-key", "deepseek-fixture"),
+    )
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_url = f"sqlite:///{Path(temp_dir) / 'replay.db'}"
+        init_database(database_url)
+        _seed_replay_fixture(database_url)
+
+        with session_scope(database_url) as session:
+            payload = run_shortpick_historical_replay(
+                session,
+                start_date=date(2026, 5, 5),
+                end_date=date(2026, 5, 5),
+                rounds=1,
+                candidate_limit=1,
+            )
+            run_id = payload["runs"][0]["id"]
+            distill_payload = run_shortpick_replay_distillation_concurrent(
+                session,
+                run_id=run_id,
+                momentum_pool_limit=4,
+                self_distill_limit=1,
+                momentum_distill_limit=1,
+                max_workers=2,
+            )
+            assert distill_payload["execution_mode"] == "concurrent_llm_serial_db_writer"
+            assert distill_payload["llm_max_workers"] == 2
+            assert distill_payload["runs"][0]["candidate_counts"] == {
+                "llm_self_distilled": 1,
+                "llm_momentum_distilled": 1,
+                "momentum_volume_expanded_pool": 4,
+            }
 
 
 def test_replay_rejection_adds_rejector_and_random_control_families(monkeypatch) -> None:
@@ -701,3 +873,68 @@ def test_replay_llm_rejected_or_packet_external_source_fails_audit(monkeypatch) 
             assert "future_leakage_suspected" in reasons
             assert llm_candidate.candidate_payload["sources_used"] == ["rej-001", "src-999"]
             assert llm_candidate.sources_payload[0]["credibility_status"] == "rejected"
+
+
+def test_replay_feedback_separates_strict_source_and_tradable_samples(monkeypatch) -> None:
+    class FakeTransport:
+        def complete(self, *, base_url, api_key, model_name, prompt, system=None, enable_search=False):
+            assert enable_search is False
+            return json.dumps(
+                {
+                    "as_of_date": "2026-05-05",
+                    "information_mode": "historical_replay",
+                    "primary_pick": {
+                        "symbol": "600003.SH",
+                        "name": "测试半导体",
+                        "theme": "半导体订单",
+                        "thesis": "测试半导体盘口走强，先作为行情快照候选。",
+                        "sources_used": ["src-001"],
+                        "evidence_mapping": {"thesis": ["src-001"]},
+                    },
+                    "candidates": [],
+                },
+                ensure_ascii=False,
+            )
+
+    monkeypatch.setenv("ASHARE_SHORTPICK_REPLAY_LLM_MODE", "real")
+    monkeypatch.setattr(
+        "ashare_evidence.shortpick_replay.route_model",
+        lambda task: (FakeTransport(), "https://api.deepseek.test/anthropic", "test-key", "deepseek-fixture"),
+    )
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_url = f"sqlite:///{Path(temp_dir) / 'replay.db'}"
+        init_database(database_url)
+        _seed_replay_fixture(database_url)
+
+        with session_scope(database_url) as session:
+            payload = run_shortpick_historical_replay(
+                session,
+                start_date=date(2026, 5, 5),
+                end_date=date(2026, 5, 5),
+                rounds=1,
+                candidate_limit=1,
+            )
+            run_id = payload["runs"][0]["id"]
+            llm_candidate = session.scalars(
+                select(ShortpickCandidate).where(
+                    ShortpickCandidate.run_id == run_id,
+                    ShortpickCandidate.convergence_group == "llm",
+                )
+            ).one()
+            candidate_payload = dict(llm_candidate.candidate_payload)
+            candidate_payload["official_sample_eligible"] = False
+            candidate_payload["leakage_audit_status"] = "fail"
+            candidate_payload["leakage_audit_reasons"] = ["unsupported_claim"]
+            llm_candidate.candidate_payload = candidate_payload
+            session.flush()
+
+            feedback = build_shortpick_replay_feedback(session, run_id=run_id)
+            llm_family = next(family for family in feedback["families"] if family["baseline_family"] == "llm")
+            five_day = next(group for group in llm_family["validation_by_horizon"] if str(group["group_key"]) == "5")
+
+            assert llm_family["official_sample_count"] == 0
+            assert llm_family["tradable_sample_count"] == 1
+            assert five_day["completed_official_sample_count"] == 0
+            assert five_day["completed_tradable_sample_count"] == 1
+            assert five_day["mean_excess_return"] is None
+            assert five_day["tradable_mean_excess_return"] is not None

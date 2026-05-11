@@ -3,6 +3,7 @@ __pycache__/
 .venv
 .venv/
 .pytest_cache/
+.playwright-cli/
 *.tsbuildinfo
 node_modules/
 frontend/node_modules
@@ -19,5 +20,9 @@ data/artifacts/studies/
 data/artifacts/event_analysis/
 artifacts/
 output/playwright/
+output/external-reviews/
+output/shortpick-*.json
+output/shortpick-*.jsonl
+output/shortpick-*.db
 output/releases/*/
 !output/releases/latest-successful.json

@@ -264,7 +264,7 @@ export function MobileStockDetail(props: MobileAppShellProps) {
             className="mobile-full-width"
             value={props.analysisKeyId}
             allowClear
-            placeholder="可选模型 Key；留空使用 builtin GPT"
+            placeholder="可选模型 Key；留空使用本机默认模型"
             options={props.modelApiKeys.map((item) => ({
               value: item.id,
               label: `${item.name} · ${item.model_name}${item.is_default ? " · 默认" : ""}`,

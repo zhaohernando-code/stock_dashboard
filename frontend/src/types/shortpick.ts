@@ -129,6 +129,8 @@ export interface ShortpickCandidateView {
   diagnostic_reason?: string | null;
   validations: ShortpickValidationView[];
   raw_round?: ShortpickRoundView | null;
+  tracking_role?: string | null;
+  llm_paper_control?: Record<string, unknown>;
   experiment_mode?: string | null;
   baseline_family?: string | null;
   source_packet_id?: string | null;
@@ -247,12 +249,18 @@ export interface ShortpickFeedbackGroup {
   label: string;
   sample_count: number;
   official_sample_count?: number;
+  tradable_sample_count?: number;
   unique_symbol_run_count?: number;
   completed_validation_count: number;
   completed_official_sample_count?: number;
+  completed_tradable_sample_count?: number;
   mean_stock_return?: number | null;
   mean_excess_return?: number | null;
   trimmed_mean_excess_return?: number | null;
+  tradable_mean_stock_return?: number | null;
+  tradable_mean_excess_return?: number | null;
+  tradable_trimmed_mean_excess_return?: number | null;
+  tradable_positive_excess_rate?: number | null;
   benchmark_metrics?: Record<string, ShortpickBenchmarkMetric>;
   positive_excess_rate?: number | null;
   max_drawdown?: number | null;
@@ -315,9 +323,12 @@ export interface ShortpickReplayFeedbackFamily {
   label: string;
   candidate_count: number;
   official_sample_count: number;
+  tradable_sample_count?: number;
   completed_official_sample_count: number;
+  completed_tradable_sample_count?: number;
   validation_by_horizon: ShortpickFeedbackGroup[];
   robustness_metrics: Record<string, unknown>;
+  tradable_robustness_metrics?: Record<string, unknown>;
 }
 
 export interface ShortpickReplayFeedbackResponse {
@@ -356,4 +367,42 @@ export interface ShortpickMarketFactorStudyResponse {
   monthly_summary: Record<string, Record<string, unknown>>;
   portfolio_summary: Record<string, Record<string, ShortpickMarketPortfolioMetric>>;
   regime_summary: Record<string, unknown>;
+  frozen_paper_strategy?: Record<string, unknown>;
+}
+
+export interface ShortpickPaperTrackingItem {
+  run_id: number;
+  candidate_id: number;
+  run_date: string;
+  symbol: string;
+  name: string;
+  status: string;
+  tracking_group?: string | null;
+  tracking_role?: string | null;
+  selection_label?: string | null;
+  source_rank?: number | null;
+  entry_rule?: string | null;
+  exit_rule?: string | null;
+  monitoring_tracks?: Record<string, unknown>[];
+  holding_days?: number | null;
+  stop_loss_pct?: number | null;
+  thesis?: string | null;
+  gate?: Record<string, unknown>;
+  regime?: Record<string, unknown>;
+  selection_score_components?: Record<string, unknown>;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ShortpickPaperTrackingResponse {
+  generated_at: string;
+  current_status: string;
+  current_label: string;
+  current_message: string;
+  contract: Record<string, unknown>;
+  llm_control_contract?: Record<string, unknown>;
+  market_control_contract?: Record<string, unknown>;
+  latest_run?: Record<string, unknown> | null;
+  summary: Record<string, unknown>;
+  items: ShortpickPaperTrackingItem[];
 }

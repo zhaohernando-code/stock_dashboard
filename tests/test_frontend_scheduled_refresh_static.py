@@ -19,11 +19,18 @@ class FrontendScheduledRefreshStaticTests(unittest.TestCase):
         self.assertIn("失败", app_source)
         self.assertIn("待补跑", app_source)
         self.assertIn("components", app_source)
-        self.assertIn("试验田", app_source)
+        self.assertIn("LLM对照批次", app_source)
+        self.assertIn("冻结纸面跟踪", app_source)
+        self.assertIn("shortpickPaperTrackingLoading", app_source)
+        self.assertIn("冻结纸面跟踪：加载中", app_source)
         self.assertIn("mobile-refresh-status", mobile_home)
         self.assertIn("props.scheduledRefreshStatus", mobile_home)
         self.assertIn("props.onDismissScheduledRefreshStatus", mobile_home)
         self.assertIn("components", mobile_home)
+        self.assertIn("LLM对照批次", mobile_home)
+        self.assertIn("冻结纸面跟踪", mobile_home)
+        self.assertIn("shortpickPaperTrackingLoading", mobile_home)
+        self.assertIn("冻结纸面跟踪：加载中", mobile_home)
 
 
 if __name__ == "__main__":

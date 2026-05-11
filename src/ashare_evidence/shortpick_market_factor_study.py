@@ -9,16 +9,23 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ashare_evidence.market_rules import ACCOUNT_PROFILE_NEW_RETAIL_CASH, filter_account_eligible_series
 from ashare_evidence.models import MarketBar, Stock
 
 INDEX_SYMBOLS = {"000300.SH", "000905.SH", "000852.SH"}
+LOW_TURNOVER_UPTREND_STRATEGY = "low_turnover_20d_uptrend_liquid_top120"
+QUIET_BREAKOUT_BASE_STRATEGY = "quiet_20d_5d_breakout"
 DEFAULT_STRATEGIES = (
     "base",
     "turnover",
     "ret10",
     "ret10_turnover",
     "ret10_turnover_cooldown",
+    "ret10_amount_turnover_cooldown",
     "ret10_turnover_cooldown_diversified",
+    LOW_TURNOVER_UPTREND_STRATEGY,
+    QUIET_BREAKOUT_BASE_STRATEGY,
+    "momentum_volume_golden_cross_10_200",
     "combo",
 )
 DEFAULT_HORIZONS = (1, 3, 5, 10, 20)
@@ -79,8 +86,14 @@ def build_shortpick_market_factor_study(
     benchmark_mode: str = "universe_equal_weight",
     horizons: tuple[int, ...] = DEFAULT_HORIZONS,
     walk_forward_lookback_days: int = 120,
+    account_profile: str = ACCOUNT_PROFILE_NEW_RETAIL_CASH,
 ) -> dict[str, Any]:
-    series_by_symbol = _load_daily_series(session)
+    raw_series_by_symbol = _load_daily_series(session)
+    series_by_symbol, account_eligibility = filter_account_eligible_series(
+        raw_series_by_symbol,
+        account_profile=account_profile,
+        include_index_symbols=INDEX_SYMBOLS,
+    )
     if benchmark_mode not in BENCHMARK_MODES:
         raise ValueError(f"benchmark_mode must be one of {sorted(BENCHMARK_MODES)}")
     benchmark = series_by_symbol.get("000300.SH")
@@ -189,6 +202,7 @@ def build_shortpick_market_factor_study(
             "benchmark_mode": benchmark_mode,
             "horizons": list(horizons),
             "walk_forward_lookback_days": walk_forward_lookback_days,
+            "account_profile": account_eligibility["account_profile"],
             "strategies": list(rows_by_strategy),
         },
         "data_scope": {
@@ -196,6 +210,8 @@ def build_shortpick_market_factor_study(
             "signal_date_from": signal_days[0].isoformat() if signal_days else None,
             "signal_date_to": signal_days[-1].isoformat() if signal_days else None,
             "stock_like_series_count": len([symbol for symbol in series_by_symbol if symbol not in INDEX_SYMBOLS]),
+            "raw_stock_like_series_count": len([symbol for symbol in raw_series_by_symbol if symbol not in INDEX_SYMBOLS]),
+            "account_eligibility": account_eligibility,
             "benchmark_note": _benchmark_note(series_by_symbol, benchmark_mode),
         },
         "period_summary": period_summary,
@@ -291,22 +307,47 @@ def _build_strategy_selections(
             for context in [_context_for_signal_day(series, signal_day)]
             if context is not None
         ]
-        pool = sorted(
-            contexts,
-            key=lambda item: (
+        effective_pool_limit = pool_limit
+
+        def pool_sort_key(item: dict[str, Any]) -> tuple[float, float, float] | tuple[float, float]:
+            return (
                 item["return_1d"],
                 item["amount"],
                 item["turnover_rate"],
-            ),
-            reverse=True,
-        )[:pool_limit]
+            )
+
+        if strategy == LOW_TURNOVER_UPTREND_STRATEGY:
+            effective_pool_limit = max(pool_limit, 120)
+
+            def pool_sort_key(item: dict[str, Any]) -> tuple[float, float]:
+                return (item["amount"], item["turnover_rate"])
+
+        elif strategy == QUIET_BREAKOUT_BASE_STRATEGY:
+            effective_pool_limit = max(pool_limit, 80)
+
+            def pool_sort_key(item: dict[str, Any]) -> tuple[float, float]:
+                return (-abs(float(item["return_1d"])), item["amount"])
+
+        pool = sorted(contexts, key=pool_sort_key, reverse=True)[:effective_pool_limit]
         if not pool:
             selections[signal_day] = []
             continue
         if strategy == "base":
             ranked = pool
+        elif strategy == "momentum_volume_golden_cross_10_200":
+            ranked = [item for item in pool if item.get("golden_cross_10_200")]
         else:
             ranked = sorted(pool, key=lambda item, strategy=strategy: _strategy_score(pool, item, strategy), reverse=True)
+        if strategy == LOW_TURNOVER_UPTREND_STRATEGY:
+            ranked = [item for item in ranked if float(item.get("return_20d") or 0.0) > 0.0]
+        elif strategy == QUIET_BREAKOUT_BASE_STRATEGY:
+            quiet_pick = ranked[1] if len(ranked) >= 2 else None
+            if (
+                quiet_pick is None
+                or float(quiet_pick.get("return_10d") or 0.0) < 0.0
+                or float(quiet_pick.get("return_1d") or 0.0) > 0.04
+            ):
+                ranked = []
         if strategy == "ret10_turnover_cooldown_diversified":
             ranked = _industry_diversified_rank(ranked, rank_limit=rank_limit, max_per_industry=2)
         selections[signal_day] = [item["symbol"] for item in ranked[:rank_limit]]
@@ -352,8 +393,11 @@ def _context_for_signal_day(series: _Series, signal_day: date) -> dict[str, Any]
         "return_1d": _lookback_return(series, index, 1),
         "return_5d": _lookback_return(series, index, 5),
         "return_10d": _lookback_return(series, index, 10),
+        "return_20d": _lookback_return(series, index, 20),
+        "abs_return_1d": abs(_lookback_return(series, index, 1)),
         "amount": latest.amount,
         "turnover_rate": latest.turnover or 0.0,
+        **_golden_cross_features(series, index, short_window=10, long_window=200),
     }
 
 
@@ -361,6 +405,45 @@ def _lookback_return(series: _Series, index: int, days: int) -> float:
     start = series.bars[index - days]
     end = series.bars[index]
     return end.close / start.close - 1 if start.close else 0.0
+
+
+def _golden_cross_features(series: _Series, index: int, *, short_window: int, long_window: int) -> dict[str, Any]:
+    if index < long_window:
+        return {
+            "golden_cross_10_200": False,
+            "ma10": None,
+            "ma200": None,
+            "previous_ma10": None,
+            "previous_ma200": None,
+        }
+    current_short = _moving_average(series, index, short_window)
+    current_long = _moving_average(series, index, long_window)
+    previous_short = _moving_average(series, index - 1, short_window)
+    previous_long = _moving_average(series, index - 1, long_window)
+    golden_cross = (
+        current_short is not None
+        and current_long is not None
+        and previous_short is not None
+        and previous_long is not None
+        and current_short > current_long
+        and previous_short <= previous_long
+    )
+    return {
+        "golden_cross_10_200": golden_cross,
+        "ma10": current_short,
+        "ma200": current_long,
+        "previous_ma10": previous_short,
+        "previous_ma200": previous_long,
+    }
+
+
+def _moving_average(series: _Series, index: int, window: int) -> float | None:
+    if index - window + 1 < 0:
+        return None
+    closes = [float(bar.close) for bar in series.bars[index - window + 1 : index + 1] if bar.close > 0]
+    if len(closes) != window:
+        return None
+    return sum(closes) / float(window)
 
 
 def _strategy_score(pool: list[dict[str, Any]], item: dict[str, Any], strategy: str) -> float:
@@ -375,6 +458,26 @@ def _strategy_score(pool: list[dict[str, Any]], item: dict[str, Any], strategy: 
             _percentile(pool, "return_10d", item["symbol"])
             + _percentile(pool, "turnover_rate", item["symbol"])
             - 0.5 * _percentile(pool, "return_1d", item["symbol"])
+        )
+    if strategy == "ret10_amount_turnover_cooldown":
+        return (
+            _percentile(pool, "return_10d", item["symbol"])
+            + 0.5 * _percentile(pool, "amount", item["symbol"])
+            + 0.5 * _percentile(pool, "turnover_rate", item["symbol"])
+            - 0.5 * _percentile(pool, "return_1d", item["symbol"])
+        )
+    if strategy == LOW_TURNOVER_UPTREND_STRATEGY:
+        return (
+            _percentile(pool, "return_20d", item["symbol"])
+            + 0.5 * _percentile(pool, "amount", item["symbol"])
+            - _percentile(pool, "turnover_rate", item["symbol"])
+        )
+    if strategy == QUIET_BREAKOUT_BASE_STRATEGY:
+        return (
+            _percentile(pool, "return_20d", item["symbol"])
+            + _percentile(pool, "return_5d", item["symbol"])
+            + _inverse_percentile(pool, "abs_return_1d", item["symbol"])
+            + 0.4 * _percentile(pool, "amount", item["symbol"])
         )
     if strategy == "combo":
         return (
@@ -393,6 +496,10 @@ def _percentile(pool: list[dict[str, Any]], key: str, symbol: str) -> float:
         if item["symbol"] == symbol:
             return 1.0 - rank / (len(ranked) - 1)
     return 0.0
+
+
+def _inverse_percentile(pool: list[dict[str, Any]], key: str, symbol: str) -> float:
+    return 1.0 - _percentile(pool, key, symbol)
 
 
 def _evaluation_rows(

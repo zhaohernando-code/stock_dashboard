@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import html as html_lib
 import json
 import math
@@ -25,6 +26,7 @@ from ashare_evidence.db import utcnow
 from ashare_evidence.http_client import urlopen
 from ashare_evidence.lineage import build_lineage
 from ashare_evidence.llm_service import OpenAICompatibleTransport, route_model
+from ashare_evidence.market_rules import ACCOUNT_PROFILE_NEW_RETAIL_CASH, account_trade_eligibility
 from ashare_evidence.models import (
     MarketBar,
     ModelApiKey,
@@ -41,6 +43,7 @@ from ashare_evidence.models import (
 from ashare_evidence.recommendation_selection import recommendation_recency_ordering
 from ashare_evidence.research_artifact_store import artifact_root_from_database_url, write_shortpick_lab_artifact
 from ashare_evidence.runtime_config import get_builtin_llm_executor_config, resolve_llm_key_candidates
+from ashare_evidence.shortpick_policy import SHORTPICK_FROZEN_STRATEGY_CONFIG
 from ashare_evidence.stock_master import resolve_stock_profile
 
 SHORTPICK_PROMPT_VERSION = "native_web_open_discovery_v1"
@@ -81,12 +84,80 @@ SHORTPICK_DEEPSEEK_MIN_SEARCH_RESULTS = 3
 SHORTPICK_DEEPSEEK_QUERY_RETRY_ATTEMPTS = 2
 SHORTPICK_LOBECHAT_SEARXNG_URL_ENV = "SHORTPICK_LOBECHAT_SEARXNG_URL"
 SHORTPICK_LOBECHAT_SEARXNG_DEFAULT_URL = "http://127.0.0.1:18080"
-SHORTPICK_MARKET_FACTOR_POOL_LIMIT = 40
-SHORTPICK_MARKET_FACTOR_RANK_LIMIT = 6
-SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY = "momentum_10d_turnover_cooldown_rank"
-SHORTPICK_MARKET_FACTOR_OFFENSIVE_FAMILY = "momentum_10d_turnover_rank"
-SHORTPICK_MARKET_FACTOR_BREADTH10_THRESHOLD = 0.5849056603773585
-SHORTPICK_MARKET_FACTOR_POOL_RET10_THRESHOLD = 0.030113740291951276
+_SHORTPICK_MARKET_FACTOR_CONFIG = SHORTPICK_FROZEN_STRATEGY_CONFIG["market_factor"]
+_SHORTPICK_PAPER_TRACKING_CONFIG = SHORTPICK_FROZEN_STRATEGY_CONFIG["paper_tracking"]
+_SHORTPICK_CONTROL_CONFIG = SHORTPICK_FROZEN_STRATEGY_CONFIG["controls"]
+SHORTPICK_MARKET_FACTOR_POOL_LIMIT = int(_SHORTPICK_MARKET_FACTOR_CONFIG["pool_limit"])
+SHORTPICK_MARKET_FACTOR_RANK_LIMIT = int(_SHORTPICK_MARKET_FACTOR_CONFIG["rank_limit"])
+SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY = str(_SHORTPICK_MARKET_FACTOR_CONFIG["default_family"])
+SHORTPICK_MARKET_FACTOR_OFFENSIVE_FAMILY = str(_SHORTPICK_MARKET_FACTOR_CONFIG["offensive_family"])
+SHORTPICK_MARKET_FACTOR_RANDOM_CONTROL_FAMILY = str(_SHORTPICK_MARKET_FACTOR_CONFIG["random_control_family"])
+SHORTPICK_MARKET_FACTOR_COOLDOWN_RET1_PENALTY = float(_SHORTPICK_MARKET_FACTOR_CONFIG["cooldown_ret1_penalty"])
+SHORTPICK_FROZEN_PAPER_FAMILY = str(SHORTPICK_FROZEN_STRATEGY_CONFIG["family"])
+SHORTPICK_FROZEN_PAPER_VERSION = str(SHORTPICK_FROZEN_STRATEGY_CONFIG["version"])
+SHORTPICK_FROZEN_PAPER_STOP_LOSS_PCT = float(_SHORTPICK_PAPER_TRACKING_CONFIG["stop_loss_pct"])
+SHORTPICK_FROZEN_PAPER_TAKE_PROFIT_PCT = float(_SHORTPICK_PAPER_TRACKING_CONFIG["take_profit_pct"])
+SHORTPICK_FROZEN_PAPER_PEAK_GIVEBACK_PCT = float(_SHORTPICK_PAPER_TRACKING_CONFIG["peak_giveback_pct"])
+SHORTPICK_FROZEN_PAPER_WEAK_REBOUND_RETURN_PCT = float(_SHORTPICK_PAPER_TRACKING_CONFIG["weak_rebound_return_pct"])
+SHORTPICK_FROZEN_PAPER_CHECK_START_DAY = int(_SHORTPICK_PAPER_TRACKING_CONFIG["check_start_trading_day"])
+SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS = int(_SHORTPICK_PAPER_TRACKING_CONFIG["max_holding_trading_days"])
+SHORTPICK_FROZEN_PAPER_REQUIRED_FORWARD_DAYS = int(_SHORTPICK_PAPER_TRACKING_CONFIG["required_forward_trading_days"])
+SHORTPICK_FROZEN_PAPER_SOURCE_RANK = int(_SHORTPICK_PAPER_TRACKING_CONFIG["source_rank"])
+SHORTPICK_FROZEN_PAPER_POOL_RET1_MAX = float(_SHORTPICK_PAPER_TRACKING_CONFIG["pool_ret1_max"])
+SHORTPICK_FROZEN_PAPER_UNIVERSE_RET10_MIN = float(_SHORTPICK_PAPER_TRACKING_CONFIG["universe_ret10_min"])
+SHORTPICK_LLM_PAPER_CONTROL_ROLE = "llm_paper_control_primary"
+SHORTPICK_LLM_PAPER_CONTROL_VERSION = str(_SHORTPICK_CONTROL_CONFIG["llm_paper_control_version"])
+_SHORTPICK_STRONG_BREADTH_RANK2_CONFIG = _SHORTPICK_CONTROL_CONFIG["strong_breadth_rank2"]
+SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE = "market_factor_control_offensive_top1"
+SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE = "market_factor_control_cooldown_top1"
+SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE = "market_factor_control_random_pool"
+SHORTPICK_MARKET_FACTOR_TOP3_EQUAL_WEIGHT_CONTROL_ROLE = "market_factor_control_top3_equal_weight"
+SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE = "market_factor_control_golden_cross_10_200"
+SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE = "market_factor_control_legacy_second_candidate"
+SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE = str(_SHORTPICK_STRONG_BREADTH_RANK2_CONFIG["role"])
+SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_FAMILY = str(_SHORTPICK_STRONG_BREADTH_RANK2_CONFIG["family"])
+SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_SOURCE_RANK = int(_SHORTPICK_STRONG_BREADTH_RANK2_CONFIG["source_rank"])
+SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_BREADTH10_MIN = float(_SHORTPICK_STRONG_BREADTH_RANK2_CONFIG["breadth10_min"])
+SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_POOL_RET1_MAX = float(_SHORTPICK_STRONG_BREADTH_RANK2_CONFIG["pool_ret1_max"])
+SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_POOL_RET10_MIN = float(_SHORTPICK_STRONG_BREADTH_RANK2_CONFIG["pool_ret10_min"])
+_SHORTPICK_STRONG_BREADTH_RANK2_WEIGHTS = _SHORTPICK_STRONG_BREADTH_RANK2_CONFIG["weights"]
+SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_RET10_WEIGHT = float(_SHORTPICK_STRONG_BREADTH_RANK2_WEIGHTS["return_10d"])
+SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_AMOUNT_WEIGHT = float(_SHORTPICK_STRONG_BREADTH_RANK2_WEIGHTS["amount"])
+SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_TURNOVER_WEIGHT = float(_SHORTPICK_STRONG_BREADTH_RANK2_WEIGHTS["turnover_rate"])
+SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_RET1_PENALTY = float(_SHORTPICK_STRONG_BREADTH_RANK2_WEIGHTS["return_1d_penalty"])
+_SHORTPICK_LOW_TURNOVER_UPTREND_CONFIG = _SHORTPICK_CONTROL_CONFIG["low_turnover_uptrend"]
+SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_CONTROL_ROLE = str(_SHORTPICK_LOW_TURNOVER_UPTREND_CONFIG["role"])
+SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_FAMILY = str(_SHORTPICK_LOW_TURNOVER_UPTREND_CONFIG["family"])
+SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_POOL_LIMIT = int(_SHORTPICK_LOW_TURNOVER_UPTREND_CONFIG["pool_limit"])
+SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_BREADTH10_MIN = float(_SHORTPICK_LOW_TURNOVER_UPTREND_CONFIG["breadth10_min"])
+SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_RETURN20_MIN = float(_SHORTPICK_LOW_TURNOVER_UPTREND_CONFIG["return_20d_min"])
+_SHORTPICK_LOW_TURNOVER_UPTREND_WEIGHTS = _SHORTPICK_LOW_TURNOVER_UPTREND_CONFIG["weights"]
+SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_RET20_WEIGHT = float(_SHORTPICK_LOW_TURNOVER_UPTREND_WEIGHTS["return_20d"])
+SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_AMOUNT_WEIGHT = float(_SHORTPICK_LOW_TURNOVER_UPTREND_WEIGHTS["amount"])
+SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_TURNOVER_PENALTY = float(_SHORTPICK_LOW_TURNOVER_UPTREND_WEIGHTS["turnover_rate_penalty"])
+_SHORTPICK_QUIET_BREAKOUT_CONFIG = _SHORTPICK_CONTROL_CONFIG["quiet_breakout_rank2"]
+SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_CONTROL_ROLE = str(_SHORTPICK_QUIET_BREAKOUT_CONFIG["role"])
+SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_FAMILY = str(_SHORTPICK_QUIET_BREAKOUT_CONFIG["family"])
+SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_POOL_LIMIT = int(_SHORTPICK_QUIET_BREAKOUT_CONFIG["pool_limit"])
+SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_SOURCE_RANK = int(_SHORTPICK_QUIET_BREAKOUT_CONFIG["source_rank"])
+SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_RETURN10_MIN = float(_SHORTPICK_QUIET_BREAKOUT_CONFIG["return_10d_min"])
+SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_RETURN1_MAX = float(_SHORTPICK_QUIET_BREAKOUT_CONFIG["return_1d_max"])
+_SHORTPICK_QUIET_BREAKOUT_WEIGHTS = _SHORTPICK_QUIET_BREAKOUT_CONFIG["weights"]
+SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_RET20_WEIGHT = float(_SHORTPICK_QUIET_BREAKOUT_WEIGHTS["return_20d"])
+SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_RET5_WEIGHT = float(_SHORTPICK_QUIET_BREAKOUT_WEIGHTS["return_5d"])
+SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_LOW_ABS_RET1_WEIGHT = float(_SHORTPICK_QUIET_BREAKOUT_WEIGHTS["low_abs_return_1d"])
+SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_AMOUNT_WEIGHT = float(_SHORTPICK_QUIET_BREAKOUT_WEIGHTS["amount"])
+SHORTPICK_MARKET_FACTOR_PAPER_CONTROL_ROLES = {
+    SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_TOP3_EQUAL_WEIGHT_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
+}
+SHORTPICK_MARKET_FACTOR_BREADTH10_THRESHOLD = float(_SHORTPICK_MARKET_FACTOR_CONFIG["breadth10_threshold"])
+SHORTPICK_MARKET_FACTOR_POOL_RET10_THRESHOLD = float(_SHORTPICK_MARKET_FACTOR_CONFIG["pool_ret10_threshold"])
 SHORTPICK_MARKET_FACTOR_EXCLUDED_SYMBOLS = {
     "000300.SH",
     "000905.SH",
@@ -100,6 +171,127 @@ SUSPICIOUS_SOURCE_PATTERNS = (
     re.compile(r"(?:xxxx|abc123|example|placeholder|dummy)", re.IGNORECASE),
 )
 RETRYABLE_FAILURE_CATEGORIES = {"retryable_search_failure", "retryable_parse_failure"}
+
+
+def shortpick_frozen_paper_strategy_contract() -> dict[str, Any]:
+    return {
+        "status": "frozen_paper_tracking",
+        "version": SHORTPICK_FROZEN_PAPER_VERSION,
+        "family": SHORTPICK_FROZEN_PAPER_FAMILY,
+        "label": "冻结纸面策略：低换手上升趋势四轨监测",
+        "mode": "每日滚动 5x1万，次一交易日收盘买入；所有持有天数均按交易日计算",
+        "pool_rule": f"先按成交额和换手率取流动性靠前的 {SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_POOL_LIMIT} 只候选",
+        "selection_rule": "当全市场10日上涨占比不低于45%时，选择20日趋势向上、成交额较高且换手率相对不拥挤的第1名",
+        "risk_rule": "同一入场信号并行监测机械5日、机械10日、5-10日条件检查、10%触达止盈四条退出轨道",
+        "monitoring_tracks": [
+            {
+                "key": "mechanical_5d",
+                "label": "机械5日",
+                "description": "次一交易日收盘买入，持有5个交易日后按收盘退出。",
+                "holding_days": 5,
+                "uses_trading_days": True,
+            },
+            {
+                "key": "mechanical_10d",
+                "label": "机械10日",
+                "description": "次一交易日收盘买入，持有10个交易日后按收盘退出。",
+                "holding_days": SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS,
+                "uses_trading_days": True,
+            },
+            {
+                "key": "conditional_5_to_10d",
+                "label": "5日后条件检查",
+                "description": "至少持有5个交易日；第5日至第10日每日收盘检查趋势转弱、从高点回撤扩大或8%收盘止损，触发则退出，否则第10日退出。",
+                "check_start_day": SHORTPICK_FROZEN_PAPER_CHECK_START_DAY,
+                "max_holding_days": SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS,
+                "close_stop_loss_pct": SHORTPICK_FROZEN_PAPER_STOP_LOSS_PCT,
+                "peak_giveback_pct": SHORTPICK_FROZEN_PAPER_PEAK_GIVEBACK_PCT,
+                "uses_trading_days": True,
+            },
+            {
+                "key": "take_profit_10pct",
+                "label": "10%触达止盈",
+                "description": "买入后10个交易日内，若日内最高价触达买入价上方10%，按+10%止盈价退出；未触达则第10日收盘退出。",
+                "take_profit_pct": SHORTPICK_FROZEN_PAPER_TAKE_PROFIT_PCT,
+                "max_holding_days": SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS,
+                "execution_assumption": "daily_high_touch_price",
+                "uses_trading_days": True,
+            },
+        ],
+        "gate": {
+            "breadth10_min": SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_BREADTH10_MIN,
+            "return_20d_min": SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_RETURN20_MIN,
+        },
+        "required_forward_trading_days": SHORTPICK_FROZEN_PAPER_REQUIRED_FORWARD_DAYS,
+        "frozen_at": "2026-05-11",
+        "scope_note": "LLM自由选股保留为对照组；冻结策略不因纸面跟踪期间的回测表现调整参数。",
+    }
+
+
+def shortpick_llm_paper_control_contract() -> dict[str, Any]:
+    return {
+        "status": "paper_control_tracking",
+        "version": SHORTPICK_LLM_PAPER_CONTROL_VERSION,
+        "role": SHORTPICK_LLM_PAPER_CONTROL_ROLE,
+        "label": "LLM纸面对照：每日固定规则选1只",
+        "mode": "从当日LLM自由推荐池中，按冻结排序规则选出1只；所有持有天数均按交易日计算",
+        "selection_rule": "优先跨模型同票，其次同模型重复、跨模型同题材、单模型高置信、系统外新视角；再按来源质量、置信度、来源数量、股票代码和候选ID稳定排序。",
+        "monitoring_rule": "和冻结策略使用同一入场口径与四条退出轨道，避免从LLM推荐池中事后挑选。",
+        "monitoring_tracks": shortpick_frozen_paper_strategy_contract()["monitoring_tracks"],
+        "required_forward_trading_days": SHORTPICK_FROZEN_PAPER_REQUIRED_FORWARD_DAYS,
+        "frozen_at": "2026-05-09",
+        "scope_note": "全量LLM推荐池继续保留为研究样本；只有按本规则提前标记的1只股票进入严格交易对照。",
+    }
+
+
+def shortpick_market_factor_paper_control_contracts() -> dict[str, Any]:
+    return {
+        "status": "paper_control_tracking",
+        "version": str(_SHORTPICK_CONTROL_CONFIG["market_factor_control_version"]),
+        "label": "市场因子纸面对照：同池简单选法",
+        "mode": "和冻结策略使用同一个动量成交量Top40候选池，每个规则每天最多提前固定1只；所有持有天数均按交易日计算。",
+        "monitoring_rule": "和冻结策略使用同一入场口径与四条退出轨道，用于判断冻结策略是否强过同池简单选法。",
+        "monitoring_tracks": shortpick_frozen_paper_strategy_contract()["monitoring_tracks"],
+        "controls": [
+            {
+                "role": SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE,
+                "label": "动量换手第1名",
+                "selection_rule": "动量成交量Top40池内，按10日涨幅排名与换手率排名相加后取第1名。",
+            },
+            {
+                "role": SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE,
+                "label": "降追高第1名",
+                "selection_rule": "同一Top40池内，用10日涨幅和换手率排序，同时扣减当日涨幅排名，取第1名。",
+            },
+            {
+                "role": SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE,
+                "label": "同池随机基线",
+                "selection_rule": "同一Top40池内，用运行日期和股票代码做确定性哈希，提前固定1只，不看结果。",
+            },
+            {
+                "role": SHORTPICK_MARKET_FACTOR_TOP3_EQUAL_WEIGHT_CONTROL_ROLE,
+                "label": "前三名等权组合",
+                "selection_rule": "市场转正且候选池不过热时，按10日动量与换手排序取前3名；每日纸面资金在3只之间等权分配。",
+                "allocation_rule": "同一信号日等权观察；每只候选仍按同一入场口径和四条退出轨道记录。",
+            },
+            {
+                "role": SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE,
+                "label": "10/200日金叉过滤",
+                "selection_rule": "按原动量成交量Top40候选顺序，选择第一个在信号日出现10日均线上穿200日均线的标的；没有触发则不出信号。",
+            },
+            {
+                "role": SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
+                "label": "旧主线：第二候选四轨",
+                "selection_rule": "保留原冻结主线作为对照：在市场转正且候选池不过热时，取10日动量与换手排序的第2名。",
+            },
+            {
+                "role": SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
+                "label": "强广度低追高二候选",
+                "selection_rule": "动量成交量Top40池内，仅在全市场10日上涨占比不低于55%、Top40池10日平均涨幅不低于6%、Top40池1日平均涨幅不高于6%时，按10日涨幅、成交额、换手率综合排序并扣减当日涨幅，取第2名。",
+            },
+        ],
+        "scope_note": "单票分析当前覆盖不足，且历史LLM过滤/硬否决没有证明增益；暂不升入冻结真实跟踪，只保留为后续研究方向。",
+    }
 
 
 @dataclass(frozen=True)
@@ -1051,6 +1243,7 @@ def run_shortpick_experiment(
             "controlled_search": False,
             "market_factor_overlay": {
                 "enabled": True,
+                "frozen_paper_strategy": shortpick_frozen_paper_strategy_contract(),
                 "default_family": SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY,
                 "offensive_family": SHORTPICK_MARKET_FACTOR_OFFENSIVE_FAMILY,
                 "pool_limit": SHORTPICK_MARKET_FACTOR_POOL_LIMIT,
@@ -1092,6 +1285,7 @@ def run_shortpick_experiment(
     if _should_auto_topic_backfill(active_executors):
         normalize_shortpick_candidate_topics(session, run_id=run.id)
     consensus = build_shortpick_consensus(session, run)
+    llm_paper_control = select_shortpick_llm_paper_control_candidate(session, run)
     market_factor_overlay = insert_shortpick_market_factor_overlay_candidates(session, run)
     validation_result = validate_shortpick_run(session, run.id, horizons=SHORTPICK_DEFAULT_HORIZONS)
     completed_count = session.scalar(
@@ -1121,6 +1315,7 @@ def run_shortpick_experiment(
         "parse_failed_count": parse_failed_count,
         "candidate_count": session.scalar(select(func.count(ShortpickCandidate.id)).where(ShortpickCandidate.run_id == run.id)) or 0,
         "consensus_priority": consensus.research_priority,
+        "llm_paper_control": llm_paper_control,
         "market_factor_overlay": market_factor_overlay,
         "boundary": "independent_research_lab_no_main_pool_write",
         **dict(validation_result.get("summary") or {}),
@@ -1394,24 +1589,127 @@ def insert_shortpick_market_factor_overlay_candidates(session: Session, run: Sho
         session.flush()
         return result
 
+    universe_ret10_mean = _mean_or_none([float(item["return_10d"]) for item in contexts])
     breadth10 = _positive_rate([float(item["return_10d"]) for item in contexts])
+    pool_ret1_mean = _mean_or_none([float(item["return_1d"]) for item in pool])
     pool_ret10_mean = _mean_or_none([float(item["return_10d"]) for item in pool])
     regime_gate_pass = bool(
         (breadth10 is not None and breadth10 >= SHORTPICK_MARKET_FACTOR_BREADTH10_THRESHOLD)
         or (pool_ret10_mean is not None and pool_ret10_mean >= SHORTPICK_MARKET_FACTOR_POOL_RET10_THRESHOLD)
     )
+    legacy_second_gate_pass = bool(
+        universe_ret10_mean is not None
+        and universe_ret10_mean >= SHORTPICK_FROZEN_PAPER_UNIVERSE_RET10_MIN
+        and pool_ret1_mean is not None
+        and pool_ret1_mean <= SHORTPICK_FROZEN_PAPER_POOL_RET1_MAX
+    )
+    frozen_gate_pass = bool(
+        breadth10 is not None and breadth10 >= SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_BREADTH10_MIN
+    )
+    strong_breadth_rank2_gate_pass = bool(
+        breadth10 is not None
+        and breadth10 >= SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_BREADTH10_MIN
+        and pool_ret1_mean is not None
+        and pool_ret1_mean <= SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_POOL_RET1_MAX
+        and pool_ret10_mean is not None
+        and pool_ret10_mean >= SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_POOL_RET10_MIN
+    )
     regime = {
+        "universe_ret10_mean": universe_ret10_mean,
         "breadth10": breadth10,
+        "pool_ret1_mean": pool_ret1_mean,
         "pool_ret10_mean": pool_ret10_mean,
         "breadth10_threshold": SHORTPICK_MARKET_FACTOR_BREADTH10_THRESHOLD,
         "pool_ret10_threshold": SHORTPICK_MARKET_FACTOR_POOL_RET10_THRESHOLD,
         "gate_pass": regime_gate_pass,
+        "frozen_paper_gate_pass": frozen_gate_pass,
+        "legacy_second_gate_pass": legacy_second_gate_pass,
+        "strong_breadth_rank2_gate_pass": strong_breadth_rank2_gate_pass,
+        "strong_breadth_rank2_gate": {
+            "breadth10_min": SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_BREADTH10_MIN,
+            "pool_ret1_max": SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_POOL_RET1_MAX,
+            "pool_ret10_min": SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_POOL_RET10_MIN,
+            "source_rank": SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_SOURCE_RANK,
+        },
+        "frozen_paper_gate": shortpick_frozen_paper_strategy_contract()["gate"],
         "interpretation": "仅作仓位/环境诊断，不过滤候选；避免在小样本上过拟合。",
     }
     inserted: list[dict[str, Any]] = []
+    frozen_ranked = _rank_shortpick_market_factor_pool(pool, family=SHORTPICK_MARKET_FACTOR_OFFENSIVE_FAMILY)
+    low_turnover_pool = sorted(
+        contexts,
+        key=lambda item: (float(item["amount"]), float(item["turnover_rate"])),
+        reverse=True,
+    )[:SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_POOL_LIMIT]
+    low_turnover_ranked = [
+        item
+        for item in _rank_shortpick_market_factor_pool(
+            low_turnover_pool,
+            family=SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_FAMILY,
+        )
+        if float(item.get("return_20d") or 0.0) > SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_RETURN20_MIN
+    ]
+    if frozen_gate_pass and low_turnover_ranked:
+        frozen_item = {
+            **low_turnover_ranked[0],
+            "_pool_limit_override": SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_POOL_LIMIT,
+        }
+        candidate = _upsert_shortpick_market_factor_candidate(
+            session,
+            run=run,
+            item=frozen_item,
+            family=SHORTPICK_FROZEN_PAPER_FAMILY,
+            rank=1,
+            pool=low_turnover_pool,
+            regime=regime,
+            source_rank=1,
+            tracking_role="frozen_paper_primary",
+        )
+        inserted.append(
+            {
+                "candidate_id": candidate.id,
+                "symbol": candidate.symbol,
+                "name": candidate.name,
+                "baseline_family": SHORTPICK_FROZEN_PAPER_FAMILY,
+                "rank": 1,
+                "source_rank": 1,
+                "tracking_role": "frozen_paper_primary",
+                "score": frozen_item.get("_market_factor_score"),
+            }
+        )
+    if legacy_second_gate_pass and len(frozen_ranked) >= 2:
+        legacy_item = frozen_ranked[1]
+        candidate = _upsert_shortpick_market_factor_candidate(
+            session,
+            run=run,
+            item=legacy_item,
+            family="momentum_10d_turnover_legacy_second_candidate",
+            rank=1,
+            pool=pool,
+            regime=regime,
+            source_rank=2,
+            tracking_role=SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
+        )
+        inserted.append(
+            {
+                "candidate_id": candidate.id,
+                "symbol": candidate.symbol,
+                "name": candidate.name,
+                "baseline_family": "momentum_10d_turnover_legacy_second_candidate",
+                "rank": 1,
+                "source_rank": 2,
+                "tracking_role": SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
+                "score": legacy_item.get("_market_factor_score"),
+            }
+        )
     for family in (SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY, SHORTPICK_MARKET_FACTOR_OFFENSIVE_FAMILY):
         ranked = _rank_shortpick_market_factor_pool(pool, family=family)[:SHORTPICK_MARKET_FACTOR_RANK_LIMIT]
         for rank, item in enumerate(ranked, start=1):
+            tracking_role = "control"
+            if family == SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY and rank == 1:
+                tracking_role = SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE
+            if family == SHORTPICK_MARKET_FACTOR_OFFENSIVE_FAMILY and rank == 1:
+                tracking_role = SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE
             candidate = _upsert_shortpick_market_factor_candidate(
                 session,
                 run=run,
@@ -1420,6 +1718,7 @@ def insert_shortpick_market_factor_overlay_candidates(session: Session, run: Sho
                 rank=rank,
                 pool=pool,
                 regime=regime,
+                tracking_role=tracking_role,
             )
             inserted.append(
                 {
@@ -1428,16 +1727,142 @@ def insert_shortpick_market_factor_overlay_candidates(session: Session, run: Sho
                     "name": candidate.name,
                     "baseline_family": family,
                     "rank": rank,
+                    "tracking_role": tracking_role,
                     "score": item.get("_market_factor_score"),
                 }
             )
+    random_item = _deterministic_shortpick_market_factor_random_item(pool, run_date=run.run_date)
+    if random_item is not None:
+        candidate = _upsert_shortpick_market_factor_candidate(
+            session,
+            run=run,
+            item=random_item,
+            family=SHORTPICK_MARKET_FACTOR_RANDOM_CONTROL_FAMILY,
+            rank=1,
+            pool=pool,
+            regime=regime,
+            source_rank=int(random_item.get("_pool_source_rank") or 1),
+            tracking_role=SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE,
+        )
+        inserted.append(
+            {
+                "candidate_id": candidate.id,
+                "symbol": candidate.symbol,
+                "name": candidate.name,
+                "baseline_family": SHORTPICK_MARKET_FACTOR_RANDOM_CONTROL_FAMILY,
+                "rank": 1,
+                "source_rank": int(random_item.get("_pool_source_rank") or 1),
+                "tracking_role": SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE,
+                "score": random_item.get("_market_factor_score"),
+            }
+        )
+    if frozen_gate_pass:
+        top3_ranked = _rank_shortpick_market_factor_pool(pool, family=SHORTPICK_MARKET_FACTOR_OFFENSIVE_FAMILY)[:3]
+        if len(top3_ranked) >= 3:
+            for rank, item in enumerate(top3_ranked, start=1):
+                candidate = _upsert_shortpick_market_factor_candidate(
+                    session,
+                    run=run,
+                    item=item,
+                    family="momentum_10d_turnover_top3_equal_weight",
+                    rank=rank,
+                    pool=pool,
+                    regime=regime,
+                    source_rank=rank,
+                    tracking_role=SHORTPICK_MARKET_FACTOR_TOP3_EQUAL_WEIGHT_CONTROL_ROLE,
+                )
+                inserted.append(
+                    {
+                        "candidate_id": candidate.id,
+                        "symbol": candidate.symbol,
+                        "name": candidate.name,
+                        "baseline_family": "momentum_10d_turnover_top3_equal_weight",
+                        "rank": rank,
+                        "source_rank": rank,
+                        "tracking_role": SHORTPICK_MARKET_FACTOR_TOP3_EQUAL_WEIGHT_CONTROL_ROLE,
+                        "allocation_weight": round(1.0 / 3.0, 6),
+                        "score": item.get("_market_factor_score"),
+                    }
+                )
+    if strong_breadth_rank2_gate_pass:
+        strong_ranked = _rank_shortpick_market_factor_pool(pool, family=SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_FAMILY)
+        if len(strong_ranked) >= SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_SOURCE_RANK:
+            strong_item = strong_ranked[SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_SOURCE_RANK - 1]
+            candidate = _upsert_shortpick_market_factor_candidate(
+                session,
+                run=run,
+                item=strong_item,
+                family=SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_FAMILY,
+                rank=1,
+                pool=pool,
+                regime=regime,
+                source_rank=SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_SOURCE_RANK,
+                tracking_role=SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
+            )
+            inserted.append(
+                {
+                    "candidate_id": candidate.id,
+                    "symbol": candidate.symbol,
+                    "name": candidate.name,
+                    "baseline_family": SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_FAMILY,
+                    "rank": 1,
+                    "source_rank": SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_SOURCE_RANK,
+                    "tracking_role": SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
+                    "score": strong_item.get("_market_factor_score"),
+                }
+            )
+    golden_item = next((item for item in pool if item.get("golden_cross_10_200")), None)
+    if golden_item is not None:
+        source_rank = int(golden_item.get("_pool_source_rank") or (pool.index(golden_item) + 1))
+        golden_item = {
+            **golden_item,
+            "_market_factor_score": round(1.0 / max(source_rank, 1), 6),
+        }
+        candidate = _upsert_shortpick_market_factor_candidate(
+            session,
+            run=run,
+            item=golden_item,
+            family="momentum_volume_golden_cross_10_200",
+            rank=1,
+            pool=pool,
+            regime=regime,
+            source_rank=source_rank,
+            tracking_role=SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE,
+        )
+        inserted.append(
+            {
+                "candidate_id": candidate.id,
+                "symbol": candidate.symbol,
+                "name": candidate.name,
+                "baseline_family": "momentum_volume_golden_cross_10_200",
+                "rank": 1,
+                "source_rank": source_rank,
+                "tracking_role": SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE,
+                "score": golden_item.get("_market_factor_score"),
+            }
+        )
     result = {
         "status": "inserted",
         "removed_existing_candidate_count": removed,
         "inserted_candidate_count": len(inserted),
         "pool_limit": SHORTPICK_MARKET_FACTOR_POOL_LIMIT,
         "rank_limit": SHORTPICK_MARKET_FACTOR_RANK_LIMIT,
-        "families": [SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY, SHORTPICK_MARKET_FACTOR_OFFENSIVE_FAMILY],
+        "families": [
+            SHORTPICK_FROZEN_PAPER_FAMILY,
+            SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY,
+            SHORTPICK_MARKET_FACTOR_OFFENSIVE_FAMILY,
+            SHORTPICK_MARKET_FACTOR_RANDOM_CONTROL_FAMILY,
+            "momentum_10d_turnover_top3_equal_weight",
+            "momentum_volume_golden_cross_10_200",
+            "momentum_10d_turnover_legacy_second_candidate",
+            SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_FAMILY,
+        ],
+        "frozen_paper_strategy": {
+            **shortpick_frozen_paper_strategy_contract(),
+            "gate_pass": frozen_gate_pass,
+            "inserted": any(item.get("tracking_role") == "frozen_paper_primary" for item in inserted),
+        },
+        "market_factor_paper_controls": shortpick_market_factor_paper_control_contracts(),
         "regime": regime,
         "market_data_sync": universe_sync,
         "candidates": inserted,
@@ -1555,7 +1980,15 @@ def _stock_eligible_for_shortpick_market_factor(stock: Stock, *, run_date: date)
     if stock.delisted_date is not None and stock.delisted_date <= run_date:
         return False
     name = str(stock.name or "").upper()
-    return "ST" not in name and "退" not in name
+    if "ST" in name or "退" in name:
+        return False
+    eligibility = account_trade_eligibility(
+        stock.symbol,
+        stock_profile=stock,
+        account_profile=ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+        as_of=run_date,
+    )
+    return bool(eligibility["tradable"])
 
 
 def _dedupe_market_factor_bars(bars: list[MarketBar]) -> list[MarketBar]:
@@ -1570,8 +2003,10 @@ def _market_factor_context_from_bars(stock: Stock, bars: list[MarketBar]) -> dic
     previous = bars[-2]
     five_back = bars[-6]
     ten_back = bars[-11]
-    if previous.close_price <= 0 or five_back.close_price <= 0 or ten_back.close_price <= 0:
+    twenty_back = bars[-21]
+    if previous.close_price <= 0 or five_back.close_price <= 0 or ten_back.close_price <= 0 or twenty_back.close_price <= 0:
         return None
+    return_1d = (latest.close_price / previous.close_price) - 1
     profile = stock.profile_payload if isinstance(stock.profile_payload, dict) else {}
     turnover_rate = latest.turnover_rate
     if turnover_rate is None:
@@ -1584,12 +2019,18 @@ def _market_factor_context_from_bars(stock: Stock, bars: list[MarketBar]) -> dic
         "close": float(latest.close_price),
         "amount": float(latest.amount or 0.0),
         "turnover_rate": float(turnover_rate or 0.0),
-        "return_1d": (latest.close_price / previous.close_price) - 1,
+        "return_1d": return_1d,
         "return_5d": (latest.close_price / five_back.close_price) - 1,
         "return_10d": (latest.close_price / ten_back.close_price) - 1,
+        "return_20d": (latest.close_price / twenty_back.close_price) - 1,
+        "abs_return_1d": abs(return_1d),
         "bars": len(bars),
+        **_shortpick_golden_cross_features(bars, short_window=10, long_window=200),
     }
-    if any(not math.isfinite(float(context[key])) for key in ("amount", "turnover_rate", "return_1d", "return_5d", "return_10d")):
+    if any(
+        not math.isfinite(float(context[key]))
+        for key in ("amount", "turnover_rate", "return_1d", "return_5d", "return_10d", "return_20d", "abs_return_1d")
+    ):
         return None
     return context
 
@@ -1605,7 +2046,53 @@ def _shortpick_market_factor_pool(contexts: list[dict[str, Any]]) -> list[dict[s
         ),
         reverse=True,
     )
-    return ranked[:SHORTPICK_MARKET_FACTOR_POOL_LIMIT]
+    return [
+        {
+            **item,
+            "_pool_source_rank": index,
+        }
+        for index, item in enumerate(ranked[:SHORTPICK_MARKET_FACTOR_POOL_LIMIT], start=1)
+    ]
+
+
+def _shortpick_golden_cross_features(bars: list[MarketBar], *, short_window: int, long_window: int) -> dict[str, Any]:
+    current_index = len(bars) - 1
+    if current_index < long_window:
+        return {
+            "golden_cross_10_200": False,
+            "ma10": None,
+            "ma200": None,
+            "previous_ma10": None,
+            "previous_ma200": None,
+        }
+    current_short = _shortpick_bar_moving_average(bars, current_index, short_window)
+    current_long = _shortpick_bar_moving_average(bars, current_index, long_window)
+    previous_short = _shortpick_bar_moving_average(bars, current_index - 1, short_window)
+    previous_long = _shortpick_bar_moving_average(bars, current_index - 1, long_window)
+    golden_cross = (
+        current_short is not None
+        and current_long is not None
+        and previous_short is not None
+        and previous_long is not None
+        and current_short > current_long
+        and previous_short <= previous_long
+    )
+    return {
+        "golden_cross_10_200": golden_cross,
+        "ma10": current_short,
+        "ma200": current_long,
+        "previous_ma10": previous_short,
+        "previous_ma200": previous_long,
+    }
+
+
+def _shortpick_bar_moving_average(bars: list[MarketBar], index: int, window: int) -> float | None:
+    if index - window + 1 < 0:
+        return None
+    closes = [float(bar.close_price) for bar in bars[index - window + 1 : index + 1] if bar.close_price > 0]
+    if len(closes) != window:
+        return None
+    return sum(closes) / float(window)
 
 
 def _rank_shortpick_market_factor_pool(pool: list[dict[str, Any]], *, family: str) -> list[dict[str, Any]]:
@@ -1613,17 +2100,43 @@ def _rank_shortpick_market_factor_pool(pool: list[dict[str, Any]], *, family: st
     for item in pool:
         scored = dict(item)
         ret10_rank = _rank_percentile(pool, "return_10d", item)
+        ret20_rank = _rank_percentile(pool, "return_20d", item)
+        amount_rank = _rank_percentile(pool, "amount", item)
         turnover_rank = _rank_percentile(pool, "turnover_rate", item)
         ret1_rank = _rank_percentile(pool, "return_1d", item)
+        low_abs_ret1_rank = 1.0 - _rank_percentile(pool, "abs_return_1d", item)
         score = ret10_rank + turnover_rank
         if family == SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY:
-            score -= 0.5 * ret1_rank
+            score -= SHORTPICK_MARKET_FACTOR_COOLDOWN_RET1_PENALTY * ret1_rank
+        if family == SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_FAMILY:
+            score = (
+                SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_RET10_WEIGHT * ret10_rank
+                + SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_AMOUNT_WEIGHT * amount_rank
+                + SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_TURNOVER_WEIGHT * turnover_rank
+                - SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_RET1_PENALTY * ret1_rank
+            )
+        if family == SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_FAMILY:
+            score = (
+                SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_RET20_WEIGHT * ret20_rank
+                + SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_AMOUNT_WEIGHT * amount_rank
+                - SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_TURNOVER_PENALTY * turnover_rank
+            )
+        if family == SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_FAMILY:
+            score = (
+                SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_RET20_WEIGHT * ret20_rank
+                + SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_RET5_WEIGHT * _rank_percentile(pool, "return_5d", item)
+                + SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_LOW_ABS_RET1_WEIGHT * low_abs_ret1_rank
+                + SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_AMOUNT_WEIGHT * amount_rank
+            )
         scored.update(
             {
                 "_market_factor_score": round(score, 6),
                 "_ret10_rank_percentile": ret10_rank,
+                "_ret20_rank_percentile": ret20_rank,
+                "_amount_rank_percentile": amount_rank,
                 "_turnover_rank_percentile": turnover_rank,
                 "_ret1_rank_percentile": ret1_rank,
+                "_low_abs_ret1_rank_percentile": low_abs_ret1_rank,
             }
         )
         ranked.append(scored)
@@ -1632,11 +2145,29 @@ def _rank_shortpick_market_factor_pool(pool: list[dict[str, Any]], *, family: st
         key=lambda item: (
             float(item["_market_factor_score"]),
             float(item["return_10d"]),
-            float(item["turnover_rate"]),
             float(item["amount"]),
+            float(item["turnover_rate"]),
         ),
         reverse=True,
     )
+
+
+def _deterministic_shortpick_market_factor_random_item(pool: list[dict[str, Any]], *, run_date: date) -> dict[str, Any] | None:
+    if not pool:
+        return None
+    scored: list[tuple[str, int, dict[str, Any]]] = []
+    for index, item in enumerate(pool, start=1):
+        digest = hashlib.sha256(f"{run_date.isoformat()}:{item.get('symbol')}:shortpick-random-pool-v1".encode()).hexdigest()
+        enriched = dict(item)
+        enriched.update(
+            {
+                "_market_factor_score": 0.0,
+                "_pool_source_rank": index,
+                "_random_control_hash": digest[:16],
+            }
+        )
+        scored.append((digest, index, enriched))
+    return min(scored, key=lambda row: (row[0], row[1]))[2]
 
 
 def _rank_percentile(pool: list[dict[str, Any]], key: str, item: dict[str, Any]) -> float:
@@ -1658,27 +2189,79 @@ def _upsert_shortpick_market_factor_candidate(
     rank: int,
     pool: list[dict[str, Any]],
     regime: dict[str, Any],
+    source_rank: int | None = None,
+    tracking_role: str = "control",
 ) -> ShortpickCandidate:
     family_label = _shortpick_market_factor_family_label(family)
     candidate_key = f"shortpick-market-factor:{run.id}:{family}:{rank}"
+    is_frozen_paper = family == SHORTPICK_FROZEN_PAPER_FAMILY
+    is_random_control = family == SHORTPICK_MARKET_FACTOR_RANDOM_CONTROL_FAMILY
+    if is_frozen_paper:
+        thesis = (
+            f"{family_label}：先按成交额和换手率取流动性靠前的 {SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_POOL_LIMIT} 只候选，"
+            "再选择20日趋势向上、成交额较高且换手率相对不拥挤的第1名；同一入场信号并行监测机械5日、机械10日、条件检查和10%止盈四条退出轨道。"
+        )
+    elif tracking_role == SHORTPICK_MARKET_FACTOR_TOP3_EQUAL_WEIGHT_CONTROL_ROLE:
+        thesis = (
+            f"{family_label}第 {rank} 名：市场转正且候选池不过热时，"
+            "每日纸面资金在10日动量与换手排序前三名之间等权分配。"
+        )
+    elif tracking_role == SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE:
+        thesis = (
+            f"{family_label}：按动量成交量候选顺序筛选，选择第 {source_rank or rank} 个出现10日均线上穿200日均线的标的。"
+        )
+    elif tracking_role == SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE:
+        thesis = (
+            f"{family_label}：仅在市场10日上涨广度、Top40池10日动量和当日不过热同时满足时启动，"
+            f"按10日动量、成交额、换手率综合排序并扣减当日涨幅，取第 {source_rank or rank} 名。"
+        )
+    elif tracking_role == SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE:
+        thesis = (
+            f"{family_label}：保留旧冻结主线作为对照；市场转正且候选池不过热时，"
+            f"取10日动量与换手排序第 {source_rank or rank} 名。"
+        )
+    elif tracking_role == SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_CONTROL_ROLE:
+        thesis = (
+            f"{family_label}：市场广度不弱时，从流动性靠前标的中选择20日趋势向上、换手率相对不拥挤的第1名，"
+            "用于验证非拥挤趋势是否优于短线追涨。"
+        )
+    elif tracking_role == SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_CONTROL_ROLE:
+        thesis = (
+            f"{family_label}：从当日波动较小且流动性靠前的池子里，选择10日不弱、当日不过热的第 {source_rank or rank} 名，"
+            "用于验证安静突破是否能作为次级对照。"
+        )
+    elif is_random_control:
+        thesis = (
+            f"{family_label}：先按当日动量成交量扩大到 {SHORTPICK_MARKET_FACTOR_POOL_LIMIT} 只候选，"
+            f"再用日期和股票代码确定性抽取第 {source_rank or rank} 个池内标的，作为不看结果的同池基线。"
+        )
+    else:
+        thesis = (
+            f"{family_label}第 {rank} 名：先按当日动量成交量扩大到 {SHORTPICK_MARKET_FACTOR_POOL_LIMIT} 只候选，"
+            "再用10日动量与换手率排序，并保留对当日追高的诊断。"
+        )
     payload = {
         "information_mode": SHORTPICK_INFORMATION_MODE,
         "experiment_mode": "live_market_factor_overlay",
         "candidate_origin": "market_factor_overlay",
         "baseline_family": family,
+        "tracking_role": tracking_role,
+        "frozen_paper_strategy": shortpick_frozen_paper_strategy_contract() if is_frozen_paper else None,
         "topic_normalization": {
             "topic_cluster_id": "market_factor_shortpick",
             "label_zh": f"策略候选：{family_label}",
             "topic_confidence": 1.0,
             "normalization_method": "system_factor_overlay_v1",
             "status": "system_strategy",
-            "reason": "来自历史回放后选定的动量成交量策略，不使用新闻语义。",
+            "reason": "来自历史回放后冻结的纸面策略，不使用新闻语义。" if is_frozen_paper else "来自历史回放后的市场因子对照，不使用新闻语义。",
         },
         "market_factor_overlay": {
             "rank": rank,
+            "source_rank": source_rank or rank,
             "score": item.get("_market_factor_score"),
             "family": family,
             "family_label": family_label,
+            "tracking_role": tracking_role,
             "pool_limit": SHORTPICK_MARKET_FACTOR_POOL_LIMIT,
             "rank_limit": SHORTPICK_MARKET_FACTOR_RANK_LIMIT,
             "pool_symbol_count": len(pool),
@@ -1686,11 +2269,22 @@ def _upsert_shortpick_market_factor_candidate(
             "return_1d": item.get("return_1d"),
             "return_5d": item.get("return_5d"),
             "return_10d": item.get("return_10d"),
+            "return_20d": item.get("return_20d"),
+            "abs_return_1d": item.get("abs_return_1d"),
             "amount": item.get("amount"),
             "turnover_rate": item.get("turnover_rate"),
             "ret10_rank_percentile": item.get("_ret10_rank_percentile"),
+            "ret20_rank_percentile": item.get("_ret20_rank_percentile"),
+            "amount_rank_percentile": item.get("_amount_rank_percentile"),
             "turnover_rank_percentile": item.get("_turnover_rank_percentile"),
             "ret1_rank_percentile": item.get("_ret1_rank_percentile"),
+            "low_abs_ret1_rank_percentile": item.get("_low_abs_ret1_rank_percentile"),
+            "random_control_hash": item.get("_random_control_hash"),
+            "golden_cross_10_200": item.get("golden_cross_10_200"),
+            "ma10": item.get("ma10"),
+            "ma200": item.get("ma200"),
+            "previous_ma10": item.get("previous_ma10"),
+            "previous_ma200": item.get("previous_ma200"),
             "regime": regime,
         },
     }
@@ -1701,25 +2295,49 @@ def _upsert_shortpick_market_factor_candidate(
         symbol=str(item["symbol"]),
         name=str(item["name"])[:64],
         normalized_theme=f"策略候选：{family_label}",
-        horizon_trading_days=5,
-        confidence=float(item.get("_market_factor_score") or 0.0),
-        thesis=(
-            f"{family_label}第 {rank} 名：先按当日动量成交量扩大到 {SHORTPICK_MARKET_FACTOR_POOL_LIMIT} 只候选，"
-            "再用10日动量与换手率排序，并保留对当日追高的诊断。"
+        horizon_trading_days=(
+            SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS
+            if is_frozen_paper or tracking_role in SHORTPICK_MARKET_FACTOR_PAPER_CONTROL_ROLES
+            else 5
         ),
+        confidence=float(item.get("_market_factor_score") or 0.0),
+        thesis=thesis,
         catalysts=[
             f"10日涨幅 {float(item['return_10d']):.2%}",
             f"当日成交额 {float(item['amount']) / 100000000:.2f} 亿元",
             f"换手率 {float(item['turnover_rate']):.2f}",
         ],
-        invalidation=["放量后次日承接不足", "短线趋势转弱或跌破前一交易日收盘"],
-        risks=["纯市场因子候选，不包含新闻语义核验", "高动量标的可能面临追高回撤"],
+        invalidation=[
+            "条件检查轨道中收盘亏损达到8%触发纸面止损" if is_frozen_paper else "放量后次日承接不足",
+            "短线趋势转弱或跌破前一交易日收盘",
+        ],
+        risks=[
+            "冻结纸面策略候选，不代表生产级证明" if is_frozen_paper else "纯市场因子候选，不包含新闻语义核验",
+            "高动量标的可能面临追高回撤",
+            "10%触达止盈轨道使用日线最高价近似盘中触达，不等于真实逐笔成交" if is_frozen_paper else "作为对照组，不替代冻结纸面策略",
+        ],
         sources_payload=[],
-        novelty_note="作为正式策略组参与试验田验证，LLM自由选股继续保留为对照组。",
+        novelty_note=(
+            "冻结为正式纸面跟踪主策略；LLM自由选股和其他市场因子候选保留为对照组。"
+            if is_frozen_paper
+            else "作为对照组参与试验田验证，LLM自由选股继续保留为对照组。"
+        ),
         limitations=["不读取未来信息；不使用盘后新增新闻；只基于截至运行日期的日线行情。"],
         convergence_group="market_factor",
         research_priority=(
-            "market_factor_default" if family == SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY else "market_factor_offensive"
+            "market_factor_frozen_paper"
+            if is_frozen_paper
+            else "market_factor_random_pool_control"
+            if is_random_control
+            else "market_factor_default"
+            if family == SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY
+            else "market_factor_strong_breadth_rank2"
+            if tracking_role == SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE
+            else "market_factor_low_turnover_uptrend"
+            if tracking_role == SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_CONTROL_ROLE
+            else "market_factor_quiet_breakout"
+            if tracking_role == SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_CONTROL_ROLE
+            else "market_factor_offensive"
         ),
         parse_status="parsed",
         is_system_external=_is_system_external(session, str(item["symbol"])),
@@ -1731,10 +2349,26 @@ def _upsert_shortpick_market_factor_candidate(
 
 
 def _shortpick_market_factor_family_label(family: str) -> str:
+    if family == SHORTPICK_FROZEN_PAPER_FAMILY:
+        return "低换手上升趋势"
     if family == SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY:
         return "10日动量换手降追高"
     if family == SHORTPICK_MARKET_FACTOR_OFFENSIVE_FAMILY:
         return "10日动量换手排序"
+    if family == SHORTPICK_MARKET_FACTOR_RANDOM_CONTROL_FAMILY:
+        return "同池随机基线"
+    if family == "momentum_10d_turnover_top3_equal_weight":
+        return "前三名等权组合"
+    if family == "momentum_volume_golden_cross_10_200":
+        return "10/200日金叉过滤"
+    if family == "momentum_10d_turnover_legacy_second_candidate":
+        return "旧主线第二候选"
+    if family == SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_FAMILY:
+        return "强广度低追高二候选"
+    if family == SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_FAMILY:
+        return "低换手上升趋势"
+    if family == SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_FAMILY:
+        return "安静突破二候选"
     return "动量成交量"
 
 
@@ -2147,6 +2781,121 @@ def build_shortpick_consensus(session: Session, run: ShortpickExperimentRun) -> 
     return snapshot
 
 
+def select_shortpick_llm_paper_control_candidate(session: Session, run: ShortpickExperimentRun) -> dict[str, Any]:
+    candidates = session.scalars(
+        select(ShortpickCandidate).where(ShortpickCandidate.run_id == run.id).order_by(ShortpickCandidate.id.asc())
+    ).all()
+    parsed = [
+        candidate
+        for candidate in candidates
+        if candidate.parse_status == "parsed"
+        and candidate.symbol != "PARSE_FAILED"
+        and not _is_market_factor_overlay_candidate(candidate)
+    ]
+    for candidate in parsed:
+        payload = dict(candidate.candidate_payload or {})
+        if payload.get("tracking_role") == SHORTPICK_LLM_PAPER_CONTROL_ROLE:
+            payload.pop("tracking_role", None)
+        payload.pop("llm_paper_control", None)
+        candidate.candidate_payload = payload
+    if not parsed:
+        result = {
+            **shortpick_llm_paper_control_contract(),
+            "status": "no_eligible_llm_candidate",
+            "selected": False,
+            "reason": "no_parsed_llm_candidate",
+        }
+        run.summary_payload = {**dict(run.summary_payload or {}), "llm_paper_control": result}
+        session.flush()
+        return result
+
+    providers_by_symbol: dict[str, set[str]] = {}
+    provider_counts_by_symbol: dict[str, dict[str, int]] = {}
+    providers_by_theme: dict[str, set[str]] = {}
+    for candidate in parsed:
+        round_record = session.get(ShortpickModelRound, candidate.round_id) if candidate.round_id else None
+        provider_name = round_record.provider_name if round_record is not None else "unknown"
+        topic_key = _candidate_topic_key(candidate)
+        providers_by_symbol.setdefault(candidate.symbol, set()).add(provider_name)
+        provider_counts_by_symbol.setdefault(candidate.symbol, {})
+        provider_counts_by_symbol[candidate.symbol][provider_name] = provider_counts_by_symbol[candidate.symbol].get(provider_name, 0) + 1
+        if topic_key != "unclassified":
+            providers_by_theme.setdefault(topic_key, set()).add(provider_name)
+
+    priority_rank = {
+        "cross_model_same_symbol": 50,
+        "same_model_repeat_symbol": 40,
+        "cross_model_same_topic": 30,
+        "single_model_high_conviction": 20,
+        "divergent_novel": 10,
+        "watch_only": 0,
+    }
+
+    def score_components(candidate: ShortpickCandidate) -> dict[str, Any]:
+        round_record = session.get(ShortpickModelRound, candidate.round_id) if candidate.round_id else None
+        provider_name = round_record.provider_name if round_record is not None else "unknown"
+        topic_key = _candidate_topic_key(candidate)
+        provider_counts = provider_counts_by_symbol.get(candidate.symbol, {})
+        source_quality_count = sum(
+            1
+            for source in candidate.sources_payload
+            if str(source.get("credibility_status") or "") in {"verified", "reachable_restricted"}
+        )
+        return {
+            "priority_rank": priority_rank.get(candidate.research_priority, 0),
+            "symbol_provider_count": len(providers_by_symbol.get(candidate.symbol, set())),
+            "same_provider_repeat_count": provider_counts.get(provider_name, 0),
+            "theme_provider_count": len(providers_by_theme.get(topic_key, set())) if topic_key != "unclassified" else 0,
+            "source_quality_count": source_quality_count,
+            "confidence": float(candidate.confidence or 0.0),
+            "source_count": len(candidate.sources_payload or []),
+            "symbol": candidate.symbol,
+            "candidate_id": candidate.id,
+            "original_research_priority": candidate.research_priority,
+        }
+
+    def sort_key(candidate: ShortpickCandidate) -> tuple[Any, ...]:
+        score = score_components(candidate)
+        return (
+            -int(score["priority_rank"]),
+            -int(score["symbol_provider_count"]),
+            -int(score["same_provider_repeat_count"]),
+            -int(score["theme_provider_count"]),
+            -int(score["source_quality_count"]),
+            -float(score["confidence"]),
+            -int(score["source_count"]),
+            str(score["symbol"]),
+            int(score["candidate_id"]),
+        )
+
+    ranked = sorted(parsed, key=sort_key)
+    selected = ranked[0]
+    components = score_components(selected)
+    payload = dict(selected.candidate_payload or {})
+    payload["tracking_role"] = SHORTPICK_LLM_PAPER_CONTROL_ROLE
+    payload["llm_paper_control"] = {
+        **shortpick_llm_paper_control_contract(),
+        "selected": True,
+        "selection_rank": 1,
+        "selection_score_components": components,
+        "selected_at": utcnow().isoformat(),
+    }
+    selected.candidate_payload = payload
+    result = {
+        **shortpick_llm_paper_control_contract(),
+        "status": "selected",
+        "selected": True,
+        "candidate_id": selected.id,
+        "symbol": selected.symbol,
+        "name": selected.name,
+        "selection_score_components": components,
+        "eligible_candidate_count": len(parsed),
+    }
+    run.summary_payload = {**dict(run.summary_payload or {}), "llm_paper_control": result}
+    session.flush()
+    return result
+
+
 def validate_shortpick_run(
     session: Session,
     run_id: int,
@@ -2288,6 +3037,7 @@ def retry_failed_shortpick_rounds(
         if _should_auto_topic_backfill(executors):
             normalize_shortpick_candidate_topics(session, run_id=run.id)
         consensus = build_shortpick_consensus(session, run)
+        llm_paper_control = select_shortpick_llm_paper_control_candidate(session, run)
         market_factor_overlay = insert_shortpick_market_factor_overlay_candidates(session, run)
         validation_result = validate_shortpick_run(session, run.id, horizons=SHORTPICK_DEFAULT_HORIZONS)
         completed_count = session.scalar(
@@ -2318,6 +3068,7 @@ def retry_failed_shortpick_rounds(
             "parse_failed_count": parse_failed_count,
             "candidate_count": session.scalar(select(func.count(ShortpickCandidate.id)).where(ShortpickCandidate.run_id == run.id)) or 0,
             "consensus_priority": consensus.research_priority,
+            "llm_paper_control": llm_paper_control,
             "market_factor_overlay": market_factor_overlay,
             "boundary": "independent_research_lab_no_main_pool_write",
             **dict(validation_result.get("summary") or {}),
@@ -2588,6 +3339,11 @@ def _upsert_validation_snapshot(
         exit_day=exit_bar.observed_at.date(),
         include_sector_benchmark=include_sector_benchmark,
     )
+    frozen_exit_tracks = (
+        _shortpick_frozen_exit_track_results(candidate=candidate, window=window, benchmark_maps=benchmark_maps)
+        if horizon == SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS
+        else []
+    )
     if primary_return is None:
         existing.status = "pending_benchmark_data"
     else:
@@ -2616,6 +3372,12 @@ def _upsert_validation_snapshot(
         "signal_trade_day": signal_trade_day.isoformat(),
         "entry_trade_day": entry.observed_at.date().isoformat(),
         "exit_trade_day": exit_bar.observed_at.date().isoformat(),
+        "paper_tracking_exit_tracks": frozen_exit_tracks,
+        "paper_tracking_exit_track_note": (
+            "All holding windows are counted in trading days; 10% take-profit uses daily high touch as a paper-tracking approximation."
+            if frozen_exit_tracks
+            else None
+        ),
         "market_data_sync": market_sync or {},
         "note": "后验验证只读取行情，不回写主量化推荐或模拟盘。",
         **candidate_metadata,
@@ -2714,6 +3476,185 @@ def _float_near(left: float | None, right: float | None, *, tolerance: float = 1
     if left is None or right is None:
         return False
     return abs(float(left) - float(right)) <= tolerance
+
+
+def _is_frozen_paper_tracking_candidate(candidate: ShortpickCandidate) -> bool:
+    payload = candidate.candidate_payload if isinstance(candidate.candidate_payload, dict) else {}
+    return (
+        candidate.research_priority == "market_factor_frozen_paper"
+        or payload.get("tracking_role") == "frozen_paper_primary"
+        or payload.get("frozen_paper_strategy") is not None
+    )
+
+
+def _is_llm_paper_control_candidate(candidate: ShortpickCandidate) -> bool:
+    payload = candidate.candidate_payload if isinstance(candidate.candidate_payload, dict) else {}
+    return payload.get("tracking_role") == SHORTPICK_LLM_PAPER_CONTROL_ROLE or payload.get("llm_paper_control") is not None
+
+
+def _is_market_factor_paper_control_candidate(candidate: ShortpickCandidate) -> bool:
+    payload = candidate.candidate_payload if isinstance(candidate.candidate_payload, dict) else {}
+    return str(payload.get("tracking_role") or "") in SHORTPICK_MARKET_FACTOR_PAPER_CONTROL_ROLES
+
+
+def _is_paper_tracking_exit_track_candidate(candidate: ShortpickCandidate) -> bool:
+    return (
+        _is_frozen_paper_tracking_candidate(candidate)
+        or _is_llm_paper_control_candidate(candidate)
+        or _is_market_factor_paper_control_candidate(candidate)
+    )
+
+
+def _close_return(entry_price: float | None, exit_price: float | None) -> float | None:
+    if not entry_price or exit_price is None:
+        return None
+    return (exit_price / entry_price) - 1
+
+
+def _shortpick_exit_track_payload(
+    *,
+    key: str,
+    label: str,
+    entry: MarketBar,
+    window: list[MarketBar],
+    exit_index: int,
+    exit_price: float | None,
+    exit_reason: str,
+    benchmark_maps: dict[str, dict[date, float]],
+    execution_assumption: str = "close_price",
+) -> dict[str, Any]:
+    exit_bar = window[exit_index]
+    stock_return = _close_return(entry.close_price, exit_price)
+    close_returns = [
+        _close_return(entry.close_price, bar.close_price)
+        for bar in window[: exit_index + 1]
+        if entry.close_price and bar.close_price is not None
+    ]
+    benchmark_returns = _shortpick_benchmark_returns(
+        benchmark_maps=benchmark_maps,
+        entry_day=entry.observed_at.date(),
+        exit_day=exit_bar.observed_at.date(),
+    )
+    primary = _shortpick_primary_benchmark()
+    primary_return = benchmark_returns.get(primary["symbol"], {}).get("return")
+    return {
+        "key": key,
+        "label": label,
+        "entry_trade_day": entry.observed_at.date().isoformat(),
+        "exit_trade_day": exit_bar.observed_at.date().isoformat(),
+        "holding_trading_days": exit_index,
+        "entry_close": entry.close_price,
+        "exit_price": exit_price,
+        "exit_close": exit_bar.close_price,
+        "exit_reason": exit_reason,
+        "execution_assumption": execution_assumption,
+        "stock_return": stock_return,
+        "benchmark_return": primary_return,
+        "excess_return": None if stock_return is None or primary_return is None else stock_return - primary_return,
+        "max_favorable_return": max(close_returns) if close_returns else None,
+        "max_drawdown": min(close_returns) if close_returns else None,
+        "benchmark": primary,
+    }
+
+
+def _shortpick_conditional_exit_index(window: list[MarketBar]) -> tuple[int, str]:
+    max_index = min(SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS, len(window) - 1)
+    start_index = min(SHORTPICK_FROZEN_PAPER_CHECK_START_DAY, max_index)
+    entry = window[0]
+    for index in range(start_index, max_index + 1):
+        current = window[index]
+        if not entry.close_price or current.close_price is None:
+            continue
+        stock_return = (current.close_price / entry.close_price) - 1
+        if stock_return <= -SHORTPICK_FROZEN_PAPER_STOP_LOSS_PCT:
+            return index, "close_stop_loss_8pct"
+        recent = [bar.close_price for bar in window[max(0, index - 2) : index + 1] if bar.close_price is not None]
+        recent_avg = sum(recent) / len(recent) if recent else None
+        previous_close = window[index - 1].close_price if index > 0 else None
+        if recent_avg is not None and previous_close is not None and current.close_price < recent_avg and current.close_price < previous_close:
+            return index, "trend_check_failed_after_day5"
+        peak_close = max((bar.close_price for bar in window[: index + 1] if bar.close_price is not None), default=None)
+        if (
+            peak_close
+            and (current.close_price / peak_close) - 1 <= -SHORTPICK_FROZEN_PAPER_PEAK_GIVEBACK_PCT
+            and stock_return < SHORTPICK_FROZEN_PAPER_WEAK_REBOUND_RETURN_PCT
+        ):
+            return index, "peak_giveback_or_weak_rebound"
+    return max_index, "max_10d_reached"
+
+
+def _shortpick_frozen_exit_track_results(
+    *,
+    candidate: ShortpickCandidate,
+    window: list[MarketBar],
+    benchmark_maps: dict[str, dict[date, float]],
+) -> list[dict[str, Any]]:
+    if not _is_paper_tracking_exit_track_candidate(candidate):
+        return []
+    if len(window) <= SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS:
+        return []
+    entry = window[0]
+    max_index = SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS
+    tracks = [
+        _shortpick_exit_track_payload(
+            key="mechanical_5d",
+            label="机械5日",
+            entry=entry,
+            window=window,
+            exit_index=SHORTPICK_FROZEN_PAPER_CHECK_START_DAY,
+            exit_price=window[SHORTPICK_FROZEN_PAPER_CHECK_START_DAY].close_price,
+            exit_reason="mechanical_5d_close",
+            benchmark_maps=benchmark_maps,
+        ),
+        _shortpick_exit_track_payload(
+            key="mechanical_10d",
+            label="机械10日",
+            entry=entry,
+            window=window,
+            exit_index=max_index,
+            exit_price=window[max_index].close_price,
+            exit_reason="mechanical_10d_close",
+            benchmark_maps=benchmark_maps,
+        ),
+    ]
+    conditional_index, conditional_reason = _shortpick_conditional_exit_index(window[: max_index + 1])
+    tracks.append(
+        _shortpick_exit_track_payload(
+            key="conditional_5_to_10d",
+            label="5日后条件检查",
+            entry=entry,
+            window=window,
+            exit_index=conditional_index,
+            exit_price=window[conditional_index].close_price,
+            exit_reason=conditional_reason,
+            benchmark_maps=benchmark_maps,
+        )
+    )
+    take_profit_price = entry.close_price * (1 + SHORTPICK_FROZEN_PAPER_TAKE_PROFIT_PCT) if entry.close_price else None
+    take_profit_index = max_index
+    take_profit_reason = "max_10d_reached"
+    take_profit_exit_price = window[max_index].close_price
+    if take_profit_price is not None:
+        for index, bar in enumerate(window[1 : max_index + 1], start=1):
+            if bar.high_price is not None and bar.high_price >= take_profit_price:
+                take_profit_index = index
+                take_profit_reason = "take_profit_10pct_touched"
+                take_profit_exit_price = take_profit_price
+                break
+    tracks.append(
+        _shortpick_exit_track_payload(
+            key="take_profit_10pct",
+            label="10%触达止盈",
+            entry=entry,
+            window=window,
+            exit_index=take_profit_index,
+            exit_price=take_profit_exit_price,
+            exit_reason=take_profit_reason,
+            benchmark_maps=benchmark_maps,
+            execution_assumption="daily_high_touch_price" if take_profit_reason == "take_profit_10pct_touched" else "close_price",
+        )
+    )
+    return tracks
 
 
 def _daily_bars_for_symbol(session: Session, symbol: str) -> list[MarketBar]:
@@ -3774,6 +4715,8 @@ def serialize_shortpick_candidate(session: Session, candidate: ShortpickCandidat
             for item in validations
         ],
         "raw_round": serialize_shortpick_round(round_record, include_raw=include_raw) if round_record is not None else None,
+        "tracking_role": payload.get("tracking_role"),
+        "llm_paper_control": dict(payload.get("llm_paper_control") or {}),
         "experiment_mode": payload.get("experiment_mode"),
         "baseline_family": payload.get("baseline_family"),
         "source_packet_id": payload.get("source_packet_id"),

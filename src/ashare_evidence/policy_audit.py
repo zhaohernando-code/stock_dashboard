@@ -60,6 +60,15 @@ GOVERNED_CLASSIFICATIONS = [
         "reason": "Validation horizons, benchmarks, and blocked display buckets are explicitly classified.",
     },
     {
+        "id": "shortpick_frozen_paper_strategy",
+        "classification": "tunable_policy",
+        "scope": "shortpick_lab",
+        "config_key": "shortpick_lab.frozen_paper_strategy_v1",
+        "owner": "shortpick_lab",
+        "source": "shortpick_policy.py + default_policy_configs.py",
+        "reason": "Frozen paper-tracking pool size, TopK, gates, exit thresholds, and scoring penalties are governed by a versioned default config.",
+    },
+    {
         "id": "frontend_display_threshold_boundary",
         "classification": "allowed_literal",
         "scope": "frontend",
@@ -132,6 +141,7 @@ def _config_lineage_violations() -> list[dict[str, Any]]:
     required_markers = {
         SRC_ROOT / "signal_engine_parts" / "recommendation.py": "policy_config_versions",
         SRC_ROOT / "operations.py": "policy_governance",
+        SRC_ROOT / "shortpick_lab.py": "SHORTPICK_FROZEN_STRATEGY_CONFIG",
     }
     violations: list[dict[str, Any]] = []
     for path, marker in required_markers.items():
@@ -141,15 +151,42 @@ def _config_lineage_violations() -> list[dict[str, Any]]:
     return violations
 
 
+def _shortpick_strategy_config_violations() -> list[dict[str, Any]]:
+    path = SRC_ROOT / "shortpick_lab.py"
+    text = path.read_text(encoding="utf-8")
+    forbidden_snippets = {
+        "score -= 0.5 *": "cooldown ret1 penalty must come from SHORTPICK_MARKET_FACTOR_COOLDOWN_RET1_PENALTY.",
+        '"peak_giveback_pct": 0.05': "peak giveback threshold must come from SHORTPICK_FROZEN_PAPER_PEAK_GIVEBACK_PCT.",
+        "<= -0.05": "peak giveback exit threshold must come from SHORTPICK_FROZEN_PAPER_PEAK_GIVEBACK_PCT.",
+        "stock_return < 0.03": "weak rebound threshold must come from SHORTPICK_FROZEN_PAPER_WEAK_REBOUND_RETURN_PCT.",
+        '"version": "market-factor-controls-v': "paper-control versions must come from the shortpick strategy config.",
+    }
+    violations = [
+        {"file": _relative(path), "reason": reason, "snippet": snippet}
+        for snippet, reason in forbidden_snippets.items()
+        if snippet in text
+    ]
+    required_markers = (
+        "SHORTPICK_MARKET_FACTOR_COOLDOWN_RET1_PENALTY",
+        "SHORTPICK_FROZEN_PAPER_PEAK_GIVEBACK_PCT",
+        "SHORTPICK_FROZEN_PAPER_WEAK_REBOUND_RETURN_PCT",
+    )
+    for marker in required_markers:
+        if marker not in text:
+            violations.append({"file": _relative(path), "reason": "Shortpick frozen strategy marker is missing.", "missing_marker": marker})
+    return violations
+
+
 def build_policy_audit_report() -> dict[str, Any]:
     direct_config_read_violations = _direct_config_read_violations()
     formula_side_effect_violations = _formula_side_effect_violations()
     config_lineage_violations = _config_lineage_violations()
+    shortpick_strategy_config_violations = _shortpick_strategy_config_violations()
     hard_constraint_failures = {
         "direct_config_read": direct_config_read_violations,
         "formula_side_effects": formula_side_effect_violations,
         "missing_config_lineage": config_lineage_violations,
-        "new_unclassified": [],
+        "new_unclassified": shortpick_strategy_config_violations,
     }
     status = "pass" if not any(hard_constraint_failures.values()) else "fail"
     return {

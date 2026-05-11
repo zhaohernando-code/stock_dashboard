@@ -54,9 +54,15 @@ from ashare_evidence.shortpick_lab import (
     validate_shortpick_run,
 )
 from ashare_evidence.shortpick_market_factor_study import build_shortpick_market_factor_study
+from ashare_evidence.shortpick_portfolio_backtest import (
+    build_shortpick_portfolio_backtest,
+    write_shortpick_portfolio_backtest,
+)
 from ashare_evidence.shortpick_replay import (
     run_shortpick_historical_replay,
+    run_shortpick_historical_replay_concurrent,
     run_shortpick_replay_distillation,
+    run_shortpick_replay_distillation_concurrent,
     run_shortpick_replay_factor_rank_experiment,
     run_shortpick_replay_hard_veto_experiment,
     run_shortpick_replay_rejection,
@@ -425,6 +431,17 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_replay.add_argument("--end-date", required=True)
     shortpick_replay.add_argument("--rounds", type=int, default=5)
     shortpick_replay.add_argument("--candidate-limit", type=int, default=3)
+    shortpick_replay.add_argument(
+        "--account-profile",
+        choices=["new_retail_cash_account", "unrestricted"],
+        default="new_retail_cash_account",
+    )
+    shortpick_replay.add_argument(
+        "--llm-max-workers",
+        type=int,
+        default=1,
+        help="Run sealed-packet LLM requests concurrently while keeping SQLite writes serial.",
+    )
 
     shortpick_replay_distill = subparsers.add_parser(
         "shortpick-replay-distill",
@@ -437,6 +454,12 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_replay_distill.add_argument("--momentum-pool-limit", type=int, default=20)
     shortpick_replay_distill.add_argument("--self-distill-limit", type=int, default=3)
     shortpick_replay_distill.add_argument("--momentum-distill-limit", type=int, default=5)
+    shortpick_replay_distill.add_argument(
+        "--llm-max-workers",
+        type=int,
+        default=1,
+        help="Run distillation LLM requests concurrently while keeping SQLite writes serial.",
+    )
 
     shortpick_replay_reject = subparsers.add_parser(
         "shortpick-replay-reject",
@@ -487,11 +510,44 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_market_factor_study.add_argument("--cost-bps", type=float, default=20.0)
     shortpick_market_factor_study.add_argument("--apply-limit-up-filter", action="store_true")
     shortpick_market_factor_study.add_argument(
+        "--account-profile",
+        choices=["new_retail_cash_account", "unrestricted"],
+        default="new_retail_cash_account",
+    )
+    shortpick_market_factor_study.add_argument(
         "--benchmark-mode",
         choices=["csi300", "universe_equal_weight"],
         default="universe_equal_weight",
     )
     shortpick_market_factor_study.add_argument("--walk-forward-lookback-days", type=int, default=120)
+
+    shortpick_portfolio_backtest = subparsers.add_parser(
+        "shortpick-portfolio-backtest",
+        help="Backtest daily rolling and weekly concentrated shortpick capital deployment modes on a long market-only sample.",
+    )
+    shortpick_portfolio_backtest.add_argument("--database-url", default=None)
+    shortpick_portfolio_backtest.add_argument("--start-date", default="2023-04-13")
+    shortpick_portfolio_backtest.add_argument("--end-date", default="2026-05-08")
+    shortpick_portfolio_backtest.add_argument("--pool-limit", type=int, default=40)
+    shortpick_portfolio_backtest.add_argument("--rank-limit", type=int, default=6)
+    shortpick_portfolio_backtest.add_argument("--horizon-days", type=int, default=5)
+    shortpick_portfolio_backtest.add_argument("--initial-cash", type=float, default=50_000.0)
+    shortpick_portfolio_backtest.add_argument("--daily-sleeve-cash", type=float, default=10_000.0)
+    shortpick_portfolio_backtest.add_argument("--cost-bps", type=float, default=20.0)
+    shortpick_portfolio_backtest.add_argument("--min-signal-symbol-count", type=int, default=45)
+    shortpick_portfolio_backtest.add_argument("--no-limit-up-filter", action="store_true")
+    shortpick_portfolio_backtest.add_argument("--no-limit-down-exit-filter", action="store_true")
+    shortpick_portfolio_backtest.add_argument(
+        "--account-profile",
+        choices=["new_retail_cash_account", "unrestricted"],
+        default="new_retail_cash_account",
+    )
+    shortpick_portfolio_backtest.add_argument(
+        "--benchmark-mode",
+        choices=["csi300", "universe_equal_weight"],
+        default="universe_equal_weight",
+    )
+    shortpick_portfolio_backtest.add_argument("--output", default=None)
 
     phase5_daily = subparsers.add_parser(
         "phase5-daily-refresh",
@@ -731,28 +787,43 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "shortpick-replay":
         with session_scope(args.database_url) as session:
-            payload = run_shortpick_historical_replay(
-                session,
-                start_date=date.fromisoformat(args.start_date),
-                end_date=date.fromisoformat(args.end_date),
-                rounds=args.rounds,
-                candidate_limit=args.candidate_limit,
-                triggered_by="scheduled_cli",
-            )
+            replay_kwargs = {
+                "start_date": date.fromisoformat(args.start_date),
+                "end_date": date.fromisoformat(args.end_date),
+                "rounds": args.rounds,
+                "candidate_limit": args.candidate_limit,
+                "account_profile": args.account_profile,
+                "triggered_by": "scheduled_cli",
+            }
+            if args.llm_max_workers and args.llm_max_workers > 1:
+                payload = run_shortpick_historical_replay_concurrent(
+                    session,
+                    max_workers=args.llm_max_workers,
+                    **replay_kwargs,
+                )
+            else:
+                payload = run_shortpick_historical_replay(session, **replay_kwargs)
         _print_json(payload)
         return 0
 
     if args.command == "shortpick-replay-distill":
         with session_scope(args.database_url) as session:
-            payload = run_shortpick_replay_distillation(
-                session,
-                run_id=args.run_id,
-                start_date=None if args.start_date is None else date.fromisoformat(args.start_date),
-                end_date=None if args.end_date is None else date.fromisoformat(args.end_date),
-                momentum_pool_limit=args.momentum_pool_limit,
-                self_distill_limit=args.self_distill_limit,
-                momentum_distill_limit=args.momentum_distill_limit,
-            )
+            distill_kwargs = {
+                "run_id": args.run_id,
+                "start_date": None if args.start_date is None else date.fromisoformat(args.start_date),
+                "end_date": None if args.end_date is None else date.fromisoformat(args.end_date),
+                "momentum_pool_limit": args.momentum_pool_limit,
+                "self_distill_limit": args.self_distill_limit,
+                "momentum_distill_limit": args.momentum_distill_limit,
+            }
+            if args.llm_max_workers and args.llm_max_workers > 1:
+                payload = run_shortpick_replay_distillation_concurrent(
+                    session,
+                    max_workers=args.llm_max_workers,
+                    **distill_kwargs,
+                )
+            else:
+                payload = run_shortpick_replay_distillation(session, **distill_kwargs)
         _print_json(payload)
         return 0
 
@@ -811,7 +882,32 @@ def main(argv: list[str] | None = None) -> int:
                 apply_limit_up_filter=args.apply_limit_up_filter,
                 benchmark_mode=args.benchmark_mode,
                 walk_forward_lookback_days=args.walk_forward_lookback_days,
+                account_profile=args.account_profile,
             )
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-portfolio-backtest":
+        with session_scope(args.database_url) as session:
+            payload = build_shortpick_portfolio_backtest(
+                session,
+                start_date=date.fromisoformat(args.start_date),
+                end_date=date.fromisoformat(args.end_date),
+                pool_limit=args.pool_limit,
+                rank_limit=args.rank_limit,
+                horizon_days=args.horizon_days,
+                initial_cash=args.initial_cash,
+                daily_sleeve_cash=args.daily_sleeve_cash,
+                cost_bps=args.cost_bps,
+                benchmark_mode=args.benchmark_mode,
+                apply_limit_up_filter=not args.no_limit_up_filter,
+                apply_limit_down_exit_filter=not args.no_limit_down_exit_filter,
+                min_signal_symbol_count=args.min_signal_symbol_count,
+                account_profile=args.account_profile,
+            )
+        if args.output:
+            path = write_shortpick_portfolio_backtest(payload, output_path=args.output)
+            payload = {**payload, "artifact": {"path": str(path)}}
         _print_json(payload)
         return 0
 

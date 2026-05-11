@@ -998,3 +998,72 @@ P-1/P0 专业化改造的收尾状态以“测试 + 发布 + deploy verifier + s
 - `momentum_10d_turnover_rank` 保留为进攻对照，不作为默认稳健策略。
 - 市场因子行情补齐只允许在 run 生成链路发生，不能由前端面板加载触发；补现有研究 universe 时逐票提交，避免长 SQLite 写锁。
 - 强制行业分散、LLM broad rejector、LLM 蒸馏暂不升为 live 默认策略；它们保留在历史回放/研究 artifact 中作为负面或风险诊断证据。
+
+[2026-05-09T16:08:00+08:00] Short Pick Lab frozen strategy must be displayed separately from LLM control batches:
+短投试验田前端和状态接口从本轮起把“冻结纸面策略”与“LLM 对照批次”拆开展示。每日 scheduled refresh 的 `shortpick_lab` slot 只代表 LLM 对照批次完成情况，不再被用户解释为正式纸面策略已经产生当日标的。
+
+补充说明
+- 新增只读 `/shortpick-lab/paper-tracking` ledger，从已有 shortpick run/candidate 和冻结策略合同投影当前纸面跟踪状态，不触发行情同步、模型调用或数据库写入。
+- 当前 runtime 状态为 `waiting_first_frozen_run`：最新 LLM 对照批次是 `2026-05-08` run `30`，生成于冻结日期 `2026-05-09` 之前，因此没有冻结策略覆盖层；下一次盘后批次才会开始记录正式纸面跟踪标的或未触发原因。
+- 前端 `试验田` 新增 `纸面跟踪` tab，首页每日状态增加 `冻结纸面跟踪：等待首批` 标签；全局导航、移动端和 Short Pick Lab 动作按钮统一使用“LLM 对照批次 / 冻结纸面策略”的双轨文案。
+- 本轮发布使用临时干净快照 `02ae368fb66a12e4e5d1f25ca22816e7c337aa82`，`ASHARE_PUBLISH_REFRESH_MODE=skip`，没有触发 post-deploy 数据刷新。
+
+[2026-05-09T16:37:00+08:00] Frozen paper tracking should monitor four exit tracks before first sample:
+冻结纸面策略在首个冻结后样本产生前升级为“四轨退出监测”，用同一只正式纸面标的同时记录机械 5 交易日、机械 10 交易日、5 到 10 交易日条件检查、以及 10% 触达止盈四种结果。
+
+补充说明
+- 5 日和 10 日均明确为交易日，不按自然日计算。
+- 10% 触达止盈在当前日线数据下采用“日内最高价触达 +10%，纸面按 +10% 卖出”的近似；未来如果接入分钟级成交，可再替换成更真实的 intraday 执行口径。
+- 这次变更发生在 `waiting_first_frozen_run` 阶段之前，没有已冻结样本需要迁移或作废；历史 v2 回测证据继续作为选股规则证据，v3 只是在 forward tracking 中比较退出方式。
+- `/shortpick-lab/paper-tracking` 继续保持只读，不触发行情同步、模型调用或数据库写入；实际验证 snapshot 在 10 个交易日窗口完整后同时写出四轨结果。
+- 本轮发布使用临时干净快照 `27e6de42993638f5261025e390e65a8a3ee5b4eb`，`ASHARE_PUBLISH_REFRESH_MODE=skip`，没有触发 post-deploy 数据刷新；运行态页面已验证 `试验田 -> 纸面跟踪` 展示四轨规则。
+
+[2026-05-09T22:25:00+08:00] LLM control must be a strict one-stock paper comparator, not only a recommendation pool:
+LLM 今日批次不能只作为“10只推荐池”与每天1只冻结策略做宽泛对比。从本轮起，每个 live shortpick run 在 LLM 共识完成后、市场因子覆盖层和验证之前，按冻结的确定性规则从当日 LLM 自由推荐池中标记 1 只 `LLM纸面对照` 标的。
+
+补充说明
+- 选择规则固定为：跨模型同票优先，其次同模型重复、跨模型同题材、单模型高置信、系统外新视角；再按来源质量、置信度、来源数量、股票代码和候选ID稳定排序。不得事后按收益挑选。
+- LLM 纸面对照不替代全量 LLM 推荐池；全量池继续用于召回率、排序能力、来源质量和模型差异研究。
+- LLM 纸面对照使用和冻结策略相同的入场口径与四条退出轨道：机械5交易日、机械10交易日、5到10交易日条件检查、10%触达止盈。
+- `/shortpick-lab/paper-tracking` 同时展示正式冻结策略标的和 LLM 纸面对照标的；当前既有 run 30 早于本规则，只有下一次完整批次才会生成 LLM 纸面对照记录。
+- 本轮发布使用临时干净快照 `fc481614ce29a9fc719b294bb35318c36533bb0c`，`ASHARE_PUBLISH_REFRESH_MODE=skip`，没有触发 post-deploy 数据刷新；运行态页面已验证纸面跟踪页展示 LLM 一票对照规则。
+
+[2026-05-09T23:35:00+08:00] Final pre-freeze controls should test simple same-pool alternatives, not add sparse single-stock analysis to live tracking:
+最后一次冻结前修改窗口不再引入新的 LLM 单票分析筛选器。当前 `recommendations` 单票分析覆盖只落在少数股票上，无法稳定覆盖市场因子 Top40；历史回放里的 LLM rejector / hard-veto 也没有证明能提升收益。因此单票分析暂不升入真实纸面跟踪，只保留为后续研究方向。
+
+补充说明
+- 新增三条严格一股市场因子纸面对照：`动量换手第1名`、`降追高第1名`、`同池随机基线`。它们全部来自同一个动量成交量 Top40 池，不调用模型、不触发额外刷新、不看未来收益。
+- 正式策略仍保持冻结规则：市场状态满足 gate 时取进攻排序第2名；LLM 自由选股一票对照继续保留；全量 LLM 推荐池继续只作为召回/排序/来源质量研究样本。
+- 三条市场因子对照和正式策略、LLM 一票对照使用同一入场口径与四条退出轨道，方便前向样本积累后比较“第2名是否真的优于第1名/降追高/随机同池”。
+- 这组对照的价值是降低过拟合怀疑，而不是再调参。冻结后不得根据前向早期结果临时换主策略。
+- 本轮发布使用临时干净快照 `cfbbcd1d42d143230cfd936edd3e5ec0a04c8db7`，`ASHARE_PUBLISH_REFRESH_MODE=skip`，manifest `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260509T153817Z-cfbbcd1d42d1/manifest.json`，deploy verifier `19 passed, 0 failed`。运行态 `/shortpick-lab/paper-tracking` 已返回 `market-factor-controls-v1-2026-05-09`，真实页面 `试验田 -> 纸面跟踪` 已验证可见市场因子对照规则、随机同池基线和单票分析边界说明；截图 `output/playwright/shortpick-final-controls-runtime.png`。发布后无 refresh/shortpick 进程和 `run.lock`。
+
+[2026-05-10T00:50:00+08:00] Short Pick Lab frozen strategy parameters must be policy-governed before forward tracking:
+冻结纸面策略原先只在 `shortpick_lab.py` 里以命名常量和合同函数表达，虽然比裸散落数字更可读，但没有完全进入 2026-05-07 定下的 `policy_config_versions` / policy audit 治理口径。本轮把正式冻结策略的池子大小、TopK、排序家族、冷却惩罚、市场 gate、退出阈值、跟踪窗口和纸面对照版本统一纳入 `shortpick_lab.frozen_paper_strategy_v1` 默认治理配置。
+
+补充说明
+- 原因判断：不是策略实现本身缺少测试，而是强制门禁覆盖不完整。旧 policy audit 只管直接读写 `policy_config_versions`、公式模块副作用和少量 lineage marker，没有扫描短投试验田新增策略里“看似合理的模块常量/公式阈值”。
+- 新增 `shortpick_policy.py` 作为试验田冻结策略的配置入口；`shortpick_lab.py` 只从该配置投影运行常量，不再在公式体里写 `0.5`、`0.05`、`0.03` 这类关键业务阈值。
+- policy audit 现在把 `shortpick_frozen_paper_strategy` 归类为 `tunable_policy`，并在 `--fail-on-new-unclassified` 下拦截这些关键短投策略数字重新回到裸字面量。
+- 这次只改变治理归口和门禁，不改变已冻结策略语义，不触发补跑、不触发刷新、不改变 `waiting_first_frozen_run` 状态。
+- 本轮发布使用临时快照 `/tmp/ashare-shortpick-policy-governance-publish.20260510005001`，commit `438621d9706c75c3e7da91bc9eebef3410de6d48`，`ASHARE_PUBLISH_REFRESH_MODE=skip`，manifest `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260509T165028Z-438621d9706c/manifest.json`，deploy verifier `19 passed, 0 failed`。运行态 API 和真实页面 `运营复盘 -> 参数与公式治理` 已验证新增配置与 audit pass。
+
+[2026-05-10T18:06:00+08:00] Friend-suggested Top3 and golden-cross rules are diagnostic controls, not the frozen main strategy:
+金融行业朋友建议的两条短投规则有合理的对照价值，但当前历史证据不支持替换主线。`前三名等权组合` 可以检验单票选择是否过度依赖排名偶然性；`10/200日金叉过滤` 可以检验传统趋势确认是否能减少伪动量。但长样本回测显示，两者都弱于现有冻结主线。
+
+补充说明
+- 当前冻结主线仍是 `ret10_turnover_second_market_positive_cooldown_stop8`：市场转正且候选池不过热时，按动量换手候选顺序取第2名，并用四轨退出做纸面跟踪。
+- `前三名等权组合` 进入纸面跟踪和历史回放，但只作为组合化对照；历史回放长样本收益 `+92.2%`，等权市场超额 `-2.9%`，最大回撤 `-29.7%`，说明它降低了单票依赖，却把当前主线中较集中的 alpha 稀释掉。
+- `10/200日金叉过滤` 进入纸面跟踪和历史回放，但只作为趋势确认对照；历史回放长样本收益约 `0.0%`，等权市场超额 `-95.1%`，交易 `132` 次，说明该信号在当前短投框架里太滞后且太稀疏。
+- 两条规则的 live 记录都不调用模型、不触发额外刷新，并和正式策略共享同一入场与四轨退出监测。冻结后不得根据前向早期结果把它们临时提为主线；它们的用途是降低过拟合怀疑和提供真实前向对照。
+
+[2026-05-10T18:55:00+08:00] Short Pick Lab execution evidence must respect a new retail cash-account universe:
+短投试验田的纸面跟踪和后续历史重算必须默认采用“新开户普通现金账户”可执行口径：纳入沪深主板普通A股，排除科创板、创业板、北交所、ST/退市风险类标的。原 2026-05-09 长样本组合回测的可见 `trades_sample` 已确认包含创业板/科创板样本，因此它不能再被解释为用户当前账户可完全执行的证据。
+
+补充说明
+- 新增 `market_rules.account_trade_eligibility` 和 `filter_account_eligible_series`，统一输出账户权限、板块、整手、涨跌幅和新股前5日限制口径。
+- `shortpick-market-factor-study` 与 `shortpick-portfolio-backtest` 新增 `--account-profile`，默认 `new_retail_cash_account`，可显式用 `unrestricted` 做研究对照。
+- 模拟盘事前校验补齐 A 股关键执行约束：新账户权限、T+1 可卖数量、板块申报数量、限价涨跌停边界、一字涨停买入/一字跌停卖出阻断，以及 2023-08-28 后卖出单边 0.05% 印花税。
+- 当前本地 runtime 数据库只有 7 只长样本日线标的，其中 1 只是创业板；按新账户口径过滤后只剩 6 只、2 个信号日。因此 `output/shortpick-portfolio-backtest-new-retail-long-sample-20260510.json` 只能作为可执行性修正 smoke result，不足以替代原 65 只/708 信号日长样本结论。正式重证需要恢复或重建原 65 只长样本日线源后再按新账户口径全量重跑。
+- 随后已用 Tushare `stock_basic + daily + daily_basic` 重建一份隔离的主板普通A股样本：排除 ST/退市风险、2023-01-01 后上市，按股票代码稳定哈希抽样 180 只，覆盖 2023-05-16 至 2026-04-27 的 715 个信号日。artifact 为 `output/shortpick-portfolio-backtest-new-retail-mainboard-tushare-20260510.json`，原始缓存为 `output/shortpick-mainboard-new-retail-tushare-bars-20260510.jsonl`，隔离研究库为 `output/shortpick-mainboard-new-retail-tushare-20260510.db`。
+- 新账户主板样本对原冻结主线给出负面结论：`第二候选加8%收盘止损` 221 笔，收益 -44.7%，相对 180 只主板等权基准超额 -81.2%，最大回撤 -63.7%。不带 8%止损的 `市场转正不过热时取第二候选` 在同一样本中收益 +46.9%、超额 +10.5%，但最大回撤 -62.2%，仍不满足生产证明。前端从本轮起读取新账户主板 artifact，并把冻结策略标记为“账户可执行性复核未通过”，避免旧 65 只混合权限样本继续误导。

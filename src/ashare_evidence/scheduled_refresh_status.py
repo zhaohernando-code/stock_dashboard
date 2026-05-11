@@ -8,14 +8,13 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_POSTMARKET_REFRESH_AT = "16:20"
 POSTMARKET_SLOT = "postmarket"
 SHORTPICK_SLOT = "shortpick_lab"
 SLOT_LABELS = {
     POSTMARKET_SLOT: "主分析",
-    SHORTPICK_SLOT: "试验田",
+    SHORTPICK_SLOT: "LLM对照批次",
 }
 
 
@@ -154,7 +153,7 @@ def _slot_component(target_date: str, slot: str, *, missing_status: str = "pendi
     message = (
         f"{target_date} {display}尚未到触发时间。"
         if missing_status == "scheduled"
-        else f"{target_date} {display}尚未完成，等待 5 分钟轮询补跑。"
+        else f"{target_date} {display}尚未完成，等待定时轮询补跑。"
     )
     return {
         "slot": slot,
@@ -212,7 +211,7 @@ def _running_payload(now: datetime) -> dict[str, Any] | None:
         "exit_code": None,
         "pid": int(pid_value) if pid_value and pid_value.isdigit() else None,
         "state_updated_at": started_at,
-        "next_action": "等待当前任务结束；完成后会写入成功标记，失败后会等待下一次 5 分钟轮询重试。",
+        "next_action": "等待当前任务结束；完成后会写入成功标记，失败后会按退避节奏重试。",
         "components": components,
     }
 
@@ -245,7 +244,7 @@ def get_scheduled_refresh_status(now: datetime | None = None) -> dict[str, Any]:
         return {
             "status": "success",
             "label": "已完成",
-            "message": f"{target_date} 盘后 daily refresh 与试验田已完成。",
+            "message": f"{target_date} 盘后 daily refresh 与LLM对照批次已完成。",
             "target_date": target_date,
             "slot": POSTMARKET_SLOT,
             "scheduled_time": _postmarket_time(),
@@ -277,7 +276,7 @@ def get_scheduled_refresh_status(now: datetime | None = None) -> dict[str, Any]:
             "exit_code": primary["exit_code"],
             "pid": None,
             "state_updated_at": primary["state_updated_at"],
-            "next_action": "联网后会由 5 分钟轮询自动重试，也可手动触发运行脚本。",
+            "next_action": "联网后会由定时轮询自动重试，也可手动触发运行脚本。",
             "components": components,
         }
 
@@ -317,14 +316,14 @@ def get_scheduled_refresh_status(now: datetime | None = None) -> dict[str, Any]:
             "exit_code": None,
             "pid": None,
             "state_updated_at": None,
-            "next_action": "到达 16:20 后由 LaunchAgent 或 5 分钟轮询触发。",
+            "next_action": "到达 16:20 后由 LaunchAgent 或定时轮询触发。",
             "components": components,
         }
 
     return {
         "status": "pending_catchup",
         "label": "待补跑",
-        "message": f"{target_date} 盘后 daily refresh 尚未完成，等待 5 分钟轮询补跑。",
+        "message": f"{target_date} 盘后 daily refresh 尚未完成，等待定时轮询补跑。",
         "target_date": target_date,
         "slot": POSTMARKET_SLOT,
         "scheduled_time": _postmarket_time(),

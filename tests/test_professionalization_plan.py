@@ -6,14 +6,13 @@ import unittest
 from datetime import date
 from pathlib import Path
 
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from ashare_evidence.dashboard import get_stock_dashboard
 from ashare_evidence.data_quality import build_data_quality_summary
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.factor_observation import build_factor_observations, sweep_weights
-from ashare_evidence.market_rules import board_rule
+from ashare_evidence.market_rules import account_trade_eligibility, board_rule
 from ashare_evidence.models import FeatureSnapshot, NewsEntityLink, NewsItem, Stock
 from ashare_evidence.operations import build_operations_detail, build_operations_summary
 from ashare_evidence.schemas import StockDashboardResponse
@@ -50,6 +49,8 @@ class ProfessionalizationPlanTests(unittest.TestCase):
     def test_market_rules_cover_board_st_new_listing_and_unknown_status(self) -> None:
         self.assertEqual(board_rule("688981.SH")["board"], "star")
         self.assertEqual(board_rule("688981.SH")["lot"], 200)
+        self.assertEqual(board_rule("688981.SH")["min_order_quantity"], 200)
+        self.assertEqual(board_rule("688981.SH")["quantity_increment"], 1)
         self.assertEqual(board_rule("300750.SZ")["limit_pct"], 0.20)
         st_rule = board_rule("600000.SH", stock_profile={"name": "ST测试", "is_st": True})
         self.assertEqual(st_rule["board"], "st")
@@ -62,6 +63,9 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertTrue(new_rule["new_listing_no_limit"])
         self.assertIsNone(new_rule["limit_pct"])
         self.assertEqual(board_rule("123456.SH")["rule_status"], "wip_unknown")
+        self.assertTrue(account_trade_eligibility("600519.SH")["tradable"])
+        self.assertFalse(account_trade_eligibility("688981.SH")["tradable"])
+        self.assertFalse(account_trade_eligibility("300750.SZ")["tradable"])
 
     def test_data_quality_uses_profile_financial_snapshot_and_board_payload_fallbacks(self) -> None:
         with session_scope(self.database_url) as session:

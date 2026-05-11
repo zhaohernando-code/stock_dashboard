@@ -47,7 +47,7 @@ export async function selectMobileAnalysisModel({
     }
     writeAnalysisModelPreference(undefined);
     setAnalysisKeyId(undefined);
-    messageApi.success("已切换为本机 Codex GPT。");
+    messageApi.success("已切换为本机默认模型。");
   } catch (modelError) {
     const messageText = modelError instanceof Error ? modelError.message : "切换默认模型失败。";
     setError(messageText);

@@ -14,7 +14,9 @@ from ashare_evidence.data_quality import build_data_quality_summary
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.default_policy_configs import (
     DATA_QUALITY_CONFIG_KEY,
+    POLICY_SCOPE_SHORTPICK_LAB,
     POLICY_SCOPE_STOCK_DASHBOARD,
+    SHORTPICK_FROZEN_STRATEGY_CONFIG_KEY,
     default_policy_config_payload,
 )
 from ashare_evidence.models import NewsEntityLink, NewsItem, PolicyConfigVersion
@@ -175,6 +177,19 @@ class PolicyGovernanceTests(unittest.TestCase):
         )
         self.assertEqual(report["status"], "pass")
         self.assertEqual(main(["policy-audit", "--fail-on-direct-config-read"]), 0)
+
+    def test_shortpick_frozen_strategy_config_is_governed(self) -> None:
+        with session_scope(self.database_url) as session:
+            config = get_active_policy_config(
+                session,
+                scope=POLICY_SCOPE_SHORTPICK_LAB,
+                config_key=SHORTPICK_FROZEN_STRATEGY_CONFIG_KEY,
+            )
+
+        self.assertEqual(config["source"], "code_default")
+        self.assertEqual(config["payload"]["market_factor"]["pool_limit"], 40)
+        self.assertEqual(config["payload"]["paper_tracking"]["take_profit_pct"], 0.10)
+        self.assertEqual(config["checksum"], compute_policy_config_checksum(config["payload"]))
 
     def test_policy_governance_api_exposes_active_history_and_audit(self) -> None:
         with session_scope(self.database_url) as session:

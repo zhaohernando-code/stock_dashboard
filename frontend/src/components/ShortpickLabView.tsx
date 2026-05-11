@@ -12,6 +12,7 @@ import {
   Col,
   Select,
   Space,
+  Skeleton,
   Statistic,
   Table,
   Tabs,
@@ -29,7 +30,10 @@ import type {
   ShortpickMarketPortfolioMetric,
   ShortpickModelFeedbackItem,
   ShortpickModelFeedbackResponse,
+  ShortpickPaperTrackingItem,
+  ShortpickPaperTrackingResponse,
   ShortpickReplayFeedbackResponse,
+  ShortpickReplayFeedbackFamily,
   ShortpickReplaySourceResponse,
   ShortpickRoundView,
   ShortpickRunView,
@@ -55,6 +59,7 @@ function priorityLabel(value: string): string {
   if (value === "single_model_high_conviction") return "单模型高置信";
   if (value === "market_factor_default") return "策略默认";
   if (value === "market_factor_offensive") return "进攻对照";
+  if (value === "market_factor_frozen_paper") return "冻结纸面策略";
   if (value === "high_convergence") return "高收敛";
   if (value === "theme_convergence") return "题材收敛";
   if (value === "divergent_novel") return "发散新颖";
@@ -69,6 +74,7 @@ function priorityColor(value: string): string {
   if (value === "same_model_repeat_symbol" || value === "single_model_high_conviction") return "orange";
   if (value === "market_factor_default") return "green";
   if (value === "market_factor_offensive") return "cyan";
+  if (value === "market_factor_frozen_paper") return "purple";
   if (value === "divergent_novel") return "blue";
   if (value === "watch_only") return "default";
   if (value === "failed_or_unusable") return "red";
@@ -219,12 +225,36 @@ function replayGateAlertType(value?: string | null): "success" | "warning" {
   return value === "ready" ? "success" : "warning";
 }
 
+function replayGateReasonText(value?: unknown): string {
+  const reason = String(value ?? "").trim();
+  if (!reason) return "";
+  if (reason === "Replay sample is broad enough for aggregate readout.") {
+    return "样本覆盖已足够做聚合比较。";
+  }
+  return reason;
+}
+
+function loadingAwareText(loading: boolean, value: string | number | null | undefined, emptyText = "暂无数据") {
+  if (loading) return <Text type="secondary">加载中</Text>;
+  if (value === null || value === undefined || value === "") return <Text type="secondary">{emptyText}</Text>;
+  return value;
+}
+
+function loadingAwareStrong(loading: boolean, value: string | number | null | undefined, emptyText = "暂无数据") {
+  if (loading) return <strong className="shortpick-loading-value">加载中</strong>;
+  if (value === null || value === undefined || value === "") return <strong className="shortpick-empty-value">{emptyText}</strong>;
+  return <strong>{value}</strong>;
+}
+
 function selectedBenchmarkGroupMetric(group: ShortpickFeedbackGroup, selectedBenchmark: string) {
   const metric = group.benchmark_metrics?.[selectedBenchmark];
   return {
     meanExcessReturn: metric?.mean_excess_return ?? (selectedBenchmark === "hs300" ? group.mean_excess_return : null),
     positiveExcessRate: metric?.positive_excess_rate ?? (selectedBenchmark === "hs300" ? group.positive_excess_rate : null),
+    tradableMeanExcessReturn: selectedBenchmark === "hs300" ? group.tradable_mean_excess_return : null,
+    tradablePositiveExcessRate: selectedBenchmark === "hs300" ? group.tradable_positive_excess_rate : null,
     availableCount: metric?.available_count ?? group.completed_official_sample_count ?? group.completed_validation_count,
+    tradableAvailableCount: group.completed_tradable_sample_count ?? group.completed_validation_count,
     pendingReasons: metric?.pending_reasons ? Object.keys(metric.pending_reasons) : [],
   };
 }
@@ -296,6 +326,11 @@ function baselineFamilyLabel(value?: string | null): string {
   if (value === "momentum_10d_rank") return "10日持续动量排序";
   if (value === "momentum_10d_turnover_rank") return "10日动量换手排序";
   if (value === "momentum_10d_turnover_cooldown_rank") return "10日动量换手降追高排序";
+  if (value === "frozen_paper_low_turnover_uptrend_v4") return "低换手上升趋势";
+  if (value === "momentum_10d_turnover_legacy_second_candidate") return "旧主线第二候选";
+  if (value === "momentum_10d_amount_turnover_strong_breadth_rank2") return "强广度低追高二候选";
+  if (value === "momentum_10d_turnover_top3_equal_weight") return "前三名等权组合";
+  if (value === "momentum_volume_golden_cross_10_200") return "10/200日金叉过滤";
   if (value === "momentum_10d_turnover_cooldown_diversified_rank") return "分散后的动量换手";
   if (value === "momentum_continuity_turnover_rank") return "持续动量换手复合排序";
   return "其他策略";
@@ -351,6 +386,473 @@ function marketPortfolioMetric(
   return study?.portfolio_summary?.[period]?.[strategy] ?? null;
 }
 
+function frozenStrategy(study: ShortpickMarketFactorStudyResponse | null): Record<string, unknown> {
+  return recordValue<Record<string, unknown>>(study ? (study as unknown as Record<string, unknown>) : undefined, "frozen_paper_strategy") ?? {};
+}
+
+function frozenStrategyEvidence(study: ShortpickMarketFactorStudyResponse | null): Record<string, unknown> {
+  return recordValue<Record<string, unknown>>(frozenStrategy(study), "evidence") ?? {};
+}
+
+function frozenStrategySummary(study: ShortpickMarketFactorStudyResponse | null): Record<string, unknown> {
+  return recordValue<Record<string, unknown>>(frozenStrategyEvidence(study), "summary") ?? {};
+}
+
+function frozenStrategyDataScope(study: ShortpickMarketFactorStudyResponse | null): Record<string, unknown> {
+  return recordValue<Record<string, unknown>>(frozenStrategyEvidence(study), "data_scope") ?? {};
+}
+
+function frozenStrategyProductionEvidence(study: ShortpickMarketFactorStudyResponse | null): Record<string, unknown> {
+  return recordValue<Record<string, unknown>>(frozenStrategyEvidence(study), "production_evidence") ?? {};
+}
+
+function frozenStrategyPaperControls(study: ShortpickMarketFactorStudyResponse | null): Record<string, Record<string, unknown>> {
+  return recordValue<Record<string, Record<string, unknown>>>(frozenStrategyEvidence(study), "paper_control_summaries") ?? {};
+}
+
+function frozenBenchmarkReferences(study: ShortpickMarketFactorStudyResponse | null): Record<string, Record<string, unknown>> {
+  return recordValue<Record<string, Record<string, unknown>>>(frozenStrategyEvidence(study), "benchmark_references") ?? {};
+}
+
+function indexBenchmarkReferenceText(indexRefs: Record<string, Record<string, unknown>>): string {
+  const labels: Array<[string, string]> = [
+    ["000300.SH", "沪深300"],
+    ["000905.SH", "中证500"],
+    ["000852.SH", "中证1000"],
+  ];
+  const available = labels
+    .filter(([symbol]) => Boolean(indexRefs[symbol]?.available))
+    .map(([symbol, label]) => `${label} ${formatPercent(Number(indexRefs[symbol]?.total_return ?? 0))}`);
+  return available.length ? available.join(" · ") : "指数序列未纳入本次主板样本库，不展示为0。";
+}
+
+type ReplayFamilyDisplayRow = ShortpickReplayFeedbackFamily & {
+  display_source?: "candidate_replay" | "portfolio_backtest";
+  display_key?: string;
+  display_label?: string;
+  display_metric_label?: string;
+  display_value?: number | null;
+  display_note?: string;
+  display_trade_count?: number | null;
+  display_total_return?: number | null;
+  display_max_drawdown?: number | null;
+};
+
+function replayPortfolioControlFamilyRows(study: ShortpickMarketFactorStudyResponse | null): ReplayFamilyDisplayRow[] {
+  const controls = frozenStrategyPaperControls(study);
+  const controlConfigs = [
+    {
+      strategy: "low_turnover_20d_uptrend_liquid_top120",
+      family: "frozen_paper_low_turnover_uptrend_v4",
+      label: "低换手上升趋势",
+      note: "组合回测：当前冻结纸面主策略",
+    },
+    {
+      strategy: "ret10_turnover_second_market_positive_cooldown",
+      family: "momentum_10d_turnover_legacy_second_candidate",
+      label: "旧主线第二候选",
+      note: "组合回测：旧冻结主线，保留为真实纸面对照",
+    },
+    {
+      strategy: "ret10_turnover_second_market_positive_cooldown_stop8",
+      family: "momentum_10d_turnover_legacy_second_candidate_stop8",
+      label: "旧主线第二候选加止损",
+      note: "组合回测：旧冻结主线加8%收盘止损",
+    },
+    {
+      strategy: "ret10_amount_turnover_strong_breadth_rank2_stop12",
+      family: "momentum_10d_amount_turnover_strong_breadth_rank2",
+      label: "强广度低追高二候选",
+      note: "组合回测：市场强广度时取低追高二候选",
+    },
+    {
+      strategy: "ret10_turnover_top3_market_positive_cooldown_equal_weight",
+      family: "momentum_10d_turnover_top3_equal_weight",
+      label: "前三名等权组合",
+      note: "组合回测：每日1万元在前三名等权",
+    },
+    {
+      strategy: "momentum_volume_golden_cross_10_200",
+      family: "momentum_volume_golden_cross_10_200",
+      label: "10/200日金叉过滤",
+      note: "组合回测：只选当日金叉标的",
+    },
+    {
+      strategy: "ret10_turnover",
+      family: "momentum_10d_turnover_rank",
+      label: "10日动量换手首位",
+      note: "组合回测：原始进攻动量换手首位",
+    },
+    {
+      strategy: "ret10_turnover_cooldown",
+      family: "momentum_10d_turnover_cooldown_rank",
+      label: "10日动量换手降追高",
+      note: "组合回测：动量换手叠加当日追高惩罚",
+    },
+  ];
+  return controlConfigs.flatMap((config) => {
+    const summary = recordValue<Record<string, unknown>>(controls[config.strategy], "summary") ?? {};
+    if (!Object.keys(summary).length) return [];
+    const tradeCount = Number(summary.trade_count ?? 0);
+    const excessReturn = recordValue<number>(summary, "excess_total_return");
+    const totalReturn = recordValue<number>(summary, "total_return");
+    const maxDrawdown = recordValue<number>(summary, "max_drawdown");
+    return [{
+      baseline_family: config.family,
+      label: config.label,
+      candidate_count: tradeCount,
+      official_sample_count: tradeCount,
+      completed_official_sample_count: tradeCount,
+      validation_by_horizon: [{
+        group_key: "long_sample",
+        label: "长样本",
+        sample_count: tradeCount,
+        official_sample_count: tradeCount,
+        completed_validation_count: tradeCount,
+        completed_official_sample_count: tradeCount,
+        mean_stock_return: totalReturn,
+        mean_excess_return: excessReturn,
+        trimmed_mean_excess_return: null,
+        positive_excess_rate: null,
+        max_drawdown: maxDrawdown,
+        max_favorable_return: null,
+        status_counts: { completed: tradeCount },
+      }],
+      robustness_metrics: {},
+      display_source: "portfolio_backtest",
+      display_key: `portfolio:${config.strategy}`,
+      display_label: config.label,
+      display_metric_label: "长样本超额",
+      display_value: excessReturn,
+      display_note: config.note,
+      display_trade_count: tradeCount,
+      display_total_return: totalReturn,
+      display_max_drawdown: maxDrawdown,
+    }];
+  });
+}
+
+function replayFamilyDisplayRows(
+  feedback: ShortpickReplayFeedbackResponse | null,
+  study: ShortpickMarketFactorStudyResponse | null,
+): ReplayFamilyDisplayRow[] {
+  const replayRows = (feedback?.families ?? []).map((family) => ({
+    ...family,
+    display_source: "candidate_replay" as const,
+  }));
+  const portfolioRows = replayPortfolioControlFamilyRows(study);
+  return [...replayRows, ...portfolioRows];
+}
+
+function replayFamilyMetric(
+  family: ReplayFamilyDisplayRow,
+  selectedBenchmark: string,
+): {
+  value?: number | null;
+  tradableValue?: number | null;
+  label: string;
+  sampleCount: number;
+  tradableSampleCount: number;
+  note?: string;
+} {
+  if (family.display_source === "portfolio_backtest") {
+    return {
+      value: family.display_value,
+      tradableValue: family.display_value,
+      label: family.display_metric_label ?? "长样本超额",
+      sampleCount: Number(family.display_trade_count ?? family.completed_official_sample_count ?? 0),
+      tradableSampleCount: Number(family.display_trade_count ?? family.completed_tradable_sample_count ?? 0),
+      note: family.display_note,
+    };
+  }
+  const horizon5 = family.validation_by_horizon.find((group) => String(group.group_key) === "5");
+  const metric = horizon5?.benchmark_metrics?.[selectedBenchmark];
+  return {
+    value: metric?.mean_excess_return ?? horizon5?.mean_excess_return,
+    tradableValue: selectedBenchmark === "hs300" ? horizon5?.tradable_mean_excess_return : null,
+    label: "5日平均超额",
+    sampleCount: Number(horizon5?.completed_official_sample_count ?? 0),
+    tradableSampleCount: Number(horizon5?.completed_tradable_sample_count ?? 0),
+  };
+}
+
+type StrategyDualTestConfig = {
+  key: string;
+  label: string;
+  replayFamily?: string;
+  marketStrategy?: string;
+  portfolioStrategy?: string;
+  note: string;
+};
+
+const STRATEGY_DUAL_TEST_CONFIGS: StrategyDualTestConfig[] = [
+  {
+    key: "low_turnover_uptrend",
+    label: "低换手上升趋势",
+    marketStrategy: "low_turnover_20d_uptrend_liquid_top120",
+    portfolioStrategy: "low_turnover_20d_uptrend_liquid_top120",
+    note: "主策略；候选侧看同公式逐条收益，组合侧看5万滚动资金曲线。",
+  },
+  {
+    key: "momentum_volume",
+    label: "动量成交量",
+    replayFamily: "momentum_volume_baseline",
+    marketStrategy: "base",
+    note: "原始动量成交额池；候选回放有封闭来源窗口，组合侧用市场因子同日组合。",
+  },
+  {
+    key: "ret10_turnover",
+    label: "10日动量换手复合排序",
+    replayFamily: "momentum_10d_turnover_rank",
+    marketStrategy: "ret10_turnover",
+    portfolioStrategy: "ret10_turnover",
+    note: "进攻动量口径；候选平均和账户资金曲线分别回答不同问题。",
+  },
+  {
+    key: "ret10_turnover_cooldown",
+    label: "10日动量换手降追高",
+    replayFamily: "momentum_10d_turnover_cooldown_rank",
+    marketStrategy: "ret10_turnover_cooldown",
+    portfolioStrategy: "ret10_turnover_cooldown",
+    note: "在10日动量换手基础上惩罚当日过热。",
+  },
+  {
+    key: "ret10_amount_turnover_rank2",
+    label: "强广度低追高二候选",
+    marketStrategy: "ret10_amount_turnover_cooldown",
+    portfolioStrategy: "ret10_amount_turnover_strong_breadth_rank2_stop12",
+    note: "组合侧包含市场强度条件、第二候选和12%止损；候选侧只展示基础排序逐条验证。",
+  },
+  {
+    key: "top3_equal_weight",
+    label: "前三名等权组合",
+    marketStrategy: "ret10_turnover",
+    portfolioStrategy: "ret10_turnover_top3_market_positive_cooldown_equal_weight",
+    note: "组合专属分散变体；候选侧用基础10日动量换手逐条验证作参照。",
+  },
+  {
+    key: "golden_cross",
+    label: "10/200日金叉过滤",
+    marketStrategy: "momentum_volume_golden_cross_10_200",
+    portfolioStrategy: "momentum_volume_golden_cross_10_200",
+    note: "信号触发次数少，适合作为低频过滤参考。",
+  },
+  {
+    key: "legacy_second",
+    label: "旧主线第二候选",
+    marketStrategy: "ret10_turnover",
+    portfolioStrategy: "ret10_turnover_second_market_positive_cooldown_stop8",
+    note: "组合侧包含市场转正、不过热、第二候选和8%止损；候选侧用基础排序作参照。",
+  },
+];
+
+type StrategyMetricDisplay = {
+  value?: number | null;
+  secondaryValue?: number | null;
+  sampleCount?: number | null;
+  secondarySampleCount?: number | null;
+  label: string;
+  detail?: string;
+  source: string;
+  exact: boolean;
+};
+
+function marketStudyPeriodMetric(
+  study: ShortpickMarketFactorStudyResponse | null,
+  strategy: string | undefined,
+  period: string,
+  horizon = "5",
+): StrategyMetricDisplay | null {
+  if (!study || !strategy) return null;
+  const summary = study.period_summary?.[period]?.[strategy];
+  if (!summary) return null;
+  const byHorizon = recordValue<Record<string, Record<string, unknown>>>(summary, "by_horizon") ?? {};
+  const block = byHorizon[horizon] ?? {};
+  const value = recordValue<number>(block, "mean_net_excess_return") ?? recordValue<number>(summary, "mean_net_excess_return");
+  const trimmed = recordValue<number>(block, "trimmed_mean_net_excess_return") ?? recordValue<number>(summary, "trimmed_mean_net_excess_return");
+  const completed = recordValue<number>(block, "completed_count") ?? recordValue<number>(summary, "completed_count");
+  const selected = recordValue<number>(summary, "selected_symbol_day_count");
+  return {
+    value,
+    secondaryValue: trimmed,
+    sampleCount: completed,
+    secondarySampleCount: selected,
+    label: `短窗口${horizon}日逐候选平均超额`,
+    detail: `候选 ${formatNumber(Number(completed ?? 0))} · 入选股票日 ${formatNumber(Number(selected ?? 0))}`,
+    source: period === "replay_window" ? "短窗口候选统计" : "样本外候选统计",
+    exact: true,
+  };
+}
+
+function marketStudyPortfolioMetricDisplay(
+  study: ShortpickMarketFactorStudyResponse | null,
+  strategy: string | undefined,
+  period: string,
+  horizon = "5",
+): StrategyMetricDisplay | null {
+  if (!study || !strategy) return null;
+  const summary = study.portfolio_summary?.[period]?.[strategy];
+  if (!summary) return null;
+  const block = summary.by_horizon?.[horizon] ?? {};
+  const value = recordValue<number>(block, "mean_net_excess_return") ?? summary.mean_net_excess_return;
+  const trimmed = recordValue<number>(block, "trimmed_mean_net_excess_return") ?? summary.trimmed_mean_net_excess_return;
+  const portfolioCount = recordValue<number>(block, "portfolio_count") ?? summary.portfolio_count;
+  return {
+    value,
+    secondaryValue: trimmed,
+    sampleCount: portfolioCount,
+    secondarySampleCount: summary.completed_member_count,
+    label: `短窗口${horizon}日同日组合平均超额`,
+    detail: `组合 ${formatNumber(Number(portfolioCount ?? 0))} · 成员 ${formatNumber(Number(summary.completed_member_count ?? 0))}`,
+    source: period === "replay_window" ? "短窗口同日组合统计" : "样本外同日组合统计",
+    exact: true,
+  };
+}
+
+function replayCandidateMetricDisplay(
+  feedback: ShortpickReplayFeedbackResponse | null,
+  familyKey: string | undefined,
+  selectedBenchmark: string,
+): StrategyMetricDisplay | null {
+  if (!feedback || !familyKey) return null;
+  const family = feedback.families.find((item) => item.baseline_family === familyKey);
+  if (!family) return null;
+  const metric = replayFamilyMetric({ ...family, display_source: "candidate_replay" }, selectedBenchmark);
+  return {
+    value: metric.value,
+    secondaryValue: metric.tradableValue,
+    sampleCount: metric.sampleCount,
+    secondarySampleCount: metric.tradableSampleCount,
+    label: `封闭回放${metric.label}`,
+    detail: `严格来源 ${formatNumber(metric.sampleCount)} · 可交易 ${formatNumber(metric.tradableSampleCount)}`,
+    source: "短窗口逐候选统计",
+    exact: true,
+  };
+}
+
+function rollingPortfolioMetricDisplay(
+  study: ShortpickMarketFactorStudyResponse | null,
+  strategy: string | undefined,
+): StrategyMetricDisplay | null {
+  if (!study || !strategy) return null;
+  const control = frozenStrategyPaperControls(study)[strategy];
+  const summary = recordValue<Record<string, unknown>>(control, "summary") ?? {};
+  if (!Object.keys(summary).length) return null;
+  return {
+    value: recordValue<number>(summary, "excess_total_return"),
+    secondaryValue: recordValue<number>(summary, "total_return"),
+    sampleCount: recordValue<number>(summary, "trade_count"),
+    secondarySampleCount: recordValue<number>(summary, "day_count"),
+    label: "长样本5万元滚动资金曲线超额",
+    detail: `交易 ${formatNumber(Number(summary.trade_count ?? 0))} · 覆盖 ${formatNumber(Number(summary.day_count ?? 0))} 个交易日 · 最大回撤 ${formatPercent(recordValue<number>(summary, "max_drawdown"))}`,
+    source: "长样本账户路径回测",
+    exact: true,
+  };
+}
+
+function StrategyMetricCell({ metric }: { metric: StrategyMetricDisplay | null }) {
+  if (!metric) {
+    return (
+      <Space direction="vertical" size={0}>
+        <Tag>未跑</Tag>
+        <Text type="secondary">该策略尚无这个口径的数据</Text>
+      </Space>
+    );
+  }
+  return (
+    <Space direction="vertical" size={0}>
+      <Text className={`value-${valueTone(metric.value)}`}>{formatPercent(metric.value)}</Text>
+      <Text type="secondary">{metric.label}</Text>
+      {metric.secondaryValue !== undefined && metric.secondaryValue !== null ? (
+        <Text type="secondary">辅助 {formatPercent(metric.secondaryValue)}</Text>
+      ) : null}
+      <Text type="secondary">{metric.detail}</Text>
+      <Text type="secondary">{metric.source}</Text>
+    </Space>
+  );
+}
+
+function ReplayDualTestMatrix({
+  feedback,
+  marketStudy,
+  selectedBenchmark,
+  loading,
+}: {
+  feedback: ShortpickReplayFeedbackResponse | null;
+  marketStudy: ShortpickMarketFactorStudyResponse | null;
+  selectedBenchmark: string;
+  loading: boolean;
+}) {
+  const rows = STRATEGY_DUAL_TEST_CONFIGS.map((config) => {
+    const replayMetric = replayCandidateMetricDisplay(feedback, config.replayFamily, selectedBenchmark);
+    const marketCandidate = marketStudyPeriodMetric(marketStudy, config.marketStrategy, "replay_window");
+    const rollingPortfolio = rollingPortfolioMetricDisplay(marketStudy, config.portfolioStrategy);
+    const marketPortfolio = marketStudyPortfolioMetricDisplay(marketStudy, config.marketStrategy, "replay_window");
+    return {
+      ...config,
+      candidateMetric: replayMetric ?? marketCandidate,
+      portfolioMetric: rollingPortfolio ?? marketPortfolio,
+      candidateSourceIsProxy: !replayMetric && Boolean(marketCandidate),
+      portfolioSourceIsProxy: !rollingPortfolio && Boolean(marketPortfolio),
+    };
+  });
+  return (
+    <div className="shortpick-dual-test-matrix">
+      <Space direction="vertical" size={2}>
+        <Title level={5}>选股模式双口径对照</Title>
+        <Text type="secondary">每一行是同一个选股模式。左侧是短窗口内入选股票的平均表现，右侧是按5万元本金滚动买卖形成的长样本账户结果。</Text>
+        <Text type="secondary">两个数字的时间范围和统计对象不同：候选平均用于判断选股池质量，资金曲线用于观察真实执行后的账户路径。</Text>
+      </Space>
+      <Table
+        className="shortpick-replay-stat-table"
+        rowKey="key"
+        size="small"
+        loading={loading}
+        pagination={false}
+        columns={[
+          {
+            title: "选股模式",
+            render: (_, item) => (
+              <Space direction="vertical" size={0}>
+                <Text strong>{item.label}</Text>
+                <Text type="secondary">{item.note}</Text>
+              </Space>
+            ),
+          },
+          {
+            title: "候选逐条验证",
+            render: (_, item) => (
+              <Space direction="vertical" size={0}>
+                <StrategyMetricCell metric={item.candidateMetric} />
+                {item.candidateSourceIsProxy ? <Tag color="gold">近似参照</Tag> : null}
+              </Space>
+            ),
+          },
+          {
+            title: "组合回测",
+            render: (_, item) => (
+              <Space direction="vertical" size={0}>
+                <StrategyMetricCell metric={item.portfolioMetric} />
+                {item.portfolioSourceIsProxy ? <Tag color="blue">同日组合</Tag> : null}
+              </Space>
+            ),
+          },
+          {
+            title: "可比性",
+            render: (_, item) => (
+              <Space direction="vertical" size={0}>
+                <Text>{item.candidateMetric && item.portfolioMetric ? "两种口径都有数据" : "口径待补"}</Text>
+                <Text type="secondary">{item.candidateSourceIsProxy || item.portfolioSourceIsProxy ? "含近似参照，适合看方向，不适合做严格证明。" : "同策略可并排观察，排序时按各自口径分别比较。"}</Text>
+              </Space>
+            ),
+          },
+        ]}
+        dataSource={rows}
+      />
+    </div>
+  );
+}
+
 function statusCountText(counts?: Record<string, number> | null): string {
   const entries = Object.entries(counts ?? {}).filter(([, value]) => Number(value) > 0);
   return entries.length ? entries.map(([key, value]) => `${statusLabel(key)} ${value}`).join(" · ") : "--";
@@ -364,6 +866,36 @@ function concentrationText(metric?: ShortpickMarketPortfolioMetric | null): stri
 
 function shortHash(value?: string | null): string {
   return value ? value.slice(0, 12) : "--";
+}
+
+function paperTrackingStatusLabel(value?: string | null): string {
+  if (value === "tracking_active") return "已有正式标的";
+  if (value === "waiting_first_frozen_run") return "等待首批";
+  if (value === "no_signal") return "本批次未触发";
+  if (value === "waiting_signal") return "等待信号";
+  return "等待跟踪";
+}
+
+function paperTrackingAlertType(value?: string | null): "success" | "info" | "warning" {
+  if (value === "tracking_active") return "success";
+  if (value === "waiting_first_frozen_run") return "warning";
+  return "info";
+}
+
+function paperTrackingGroupLabel(value?: string | null): string {
+  if (value === "llm_paper_control") return "LLM纸面对照";
+  if (value === "market_factor_control") return "市场因子对照";
+  if (value === "market_random_control") return "同池随机基线";
+  if (value === "frozen_strategy") return "冻结策略";
+  return "纸面跟踪";
+}
+
+function paperTrackingGroupColor(value?: string | null): string {
+  if (value === "llm_paper_control") return "blue";
+  if (value === "market_factor_control") return "cyan";
+  if (value === "market_random_control") return "default";
+  if (value === "frozen_strategy") return "purple";
+  return "default";
 }
 
 export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
@@ -382,6 +914,8 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
   const [replayAggregateLoading, setReplayAggregateLoading] = useState(false);
   const [marketStudy, setMarketStudy] = useState<ShortpickMarketFactorStudyResponse | null>(null);
   const [marketStudyLoading, setMarketStudyLoading] = useState(false);
+  const [paperTracking, setPaperTracking] = useState<ShortpickPaperTrackingResponse | null>(null);
+  const [paperTrackingLoading, setPaperTrackingLoading] = useState(false);
   const replayFeedbackRunIdRef = useRef<number | null>(null);
   const replayAggregateLoadingRef = useRef(false);
   const marketStudyLoadingRef = useRef(false);
@@ -409,6 +943,11 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
     () => (latestRun?.rounds ?? []).filter((item) => item.status === "failed"),
     [latestRun],
   );
+  const visibleWorkspaceTab = latestRun || activeWorkspaceTab !== "today"
+    ? activeWorkspaceTab
+    : paperTracking
+      ? "paper-tracking"
+      : "replay";
 
   async function loadLab(runId?: number): Promise<void> {
     setLoading(true);
@@ -434,7 +973,9 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
 
   async function loadValidationQueue(page = validationPage.current, pageSize = validationPage.pageSize): Promise<void> {
     setValidationLoading(true);
-    setError(null);
+    if (activeWorkspaceTab === "validation") {
+      setError(null);
+    }
     try {
       const result = await api.getShortpickValidationQueue({
         limit: pageSize,
@@ -447,7 +988,11 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
       setValidationQueue(result.data);
       setValidationPage({ current: page, pageSize });
     } catch (queueError) {
-      setError(queueError instanceof Error ? queueError.message : "加载历史验证失败。");
+      if (activeWorkspaceTab === "validation") {
+        setError(queueError instanceof Error ? queueError.message : "加载历史验证失败。");
+      } else {
+        console.warn("加载历史验证失败", queueError);
+      }
     } finally {
       setValidationLoading(false);
     }
@@ -455,12 +1000,18 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
 
   async function loadFeedback(): Promise<void> {
     setFeedbackLoading(true);
-    setError(null);
+    if (activeWorkspaceTab === "feedback") {
+      setError(null);
+    }
     try {
       const result = await api.getShortpickModelFeedback();
       setFeedback(result.data);
     } catch (feedbackError) {
-      setError(feedbackError instanceof Error ? feedbackError.message : "加载模型反馈失败。");
+      if (activeWorkspaceTab === "feedback") {
+        setError(feedbackError instanceof Error ? feedbackError.message : "加载模型反馈失败。");
+      } else {
+        console.warn("加载模型反馈失败", feedbackError);
+      }
     } finally {
       setFeedbackLoading(false);
     }
@@ -478,6 +1029,19 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
     } finally {
       marketStudyLoadingRef.current = false;
       setMarketStudyLoading(false);
+    }
+  }
+
+  async function loadPaperTracking(): Promise<void> {
+    setPaperTrackingLoading(true);
+    try {
+      const result = await api.getShortpickPaperTracking();
+      setPaperTracking(result.data);
+    } catch (trackingError) {
+      console.warn("加载纸面跟踪失败", trackingError);
+      setPaperTracking(null);
+    } finally {
+      setPaperTrackingLoading(false);
     }
   }
 
@@ -518,7 +1082,9 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
 
   async function loadReplay(runId?: number, options: { includeMarketStudy?: boolean } = {}): Promise<void> {
     setReplayLoading(true);
-    setError(null);
+    if (activeWorkspaceTab === "replay") {
+      setError(null);
+    }
     try {
       const runList = await api.getShortpickReplayRuns({ limit: 100 });
       const targetRunId = runId ?? selectedReplayRun?.id ?? runList.data.items[0]?.id;
@@ -530,7 +1096,11 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
         void loadMarketStudy();
       }
       if (target) {
+        setReplayCandidates([]);
+        setReplaySources(null);
         setReplayFeedback(null);
+        replayFeedbackRunIdRef.current = target.id;
+        setReplayFeedbackLoading(true);
         const [candidateList, sourcePacket] = await Promise.all([
           api.getShortpickReplayCandidates(target.id),
           api.getShortpickReplaySources(target.id),
@@ -546,7 +1116,11 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
         setReplayFeedbackLoading(false);
       }
     } catch (replayError) {
-      setError(replayError instanceof Error ? replayError.message : "加载历史回放失败。");
+      if (activeWorkspaceTab === "replay") {
+        setError(replayError instanceof Error ? replayError.message : "加载历史回放失败。");
+      } else {
+        console.warn("加载历史回放失败", replayError);
+      }
     } finally {
       setReplayLoading(false);
     }
@@ -558,6 +1132,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
     try {
       const result = await api.createShortpickRun({ rounds_per_model: 5 });
       await loadLab(result.data.id);
+      await loadPaperTracking();
       await loadValidationQueue(1, validationPage.pageSize);
       await loadFeedback();
     } catch (runError) {
@@ -574,6 +1149,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
     try {
       await api.validateShortpickRun(latestRun.id, { horizons: [1, 3, 5, 10, 20] });
       await loadLab(latestRun.id);
+      await loadPaperTracking();
       await loadValidationQueue(validationPage.current, validationPage.pageSize);
       await loadFeedback();
     } catch (validateError) {
@@ -590,6 +1166,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
     try {
       await api.retryShortpickFailedRounds(latestRun.id, {});
       await loadLab(latestRun.id);
+      await loadPaperTracking();
       await loadValidationQueue(validationPage.current, validationPage.pageSize);
       await loadFeedback();
     } catch (retryError) {
@@ -606,6 +1183,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
 
   useEffect(() => {
     void loadLab();
+    void loadPaperTracking();
     void loadValidationQueue(1, DEFAULT_VALIDATION_PAGE_SIZE);
     void loadFeedback();
   }, []);
@@ -643,6 +1221,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
       render: (value: string, item) => (
         <Space wrap>
           <Tag color={priorityColor(value)}>{priorityLabel(value)}</Tag>
+          {item.tracking_role === "llm_paper_control_primary" ? <Tag color="blue">LLM纸面对照</Tag> : null}
           {item.baseline_family ? <Tag color="cyan">{baselineFamilyLabel(item.baseline_family)}</Tag> : null}
           {item.is_system_external ? <Tag color="blue">系统外新视角</Tag> : <Tag>系统内已覆盖</Tag>}
         </Space>
@@ -660,7 +1239,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
       render: (_, item) => (
         <Space direction="vertical" size={0}>
           <Text>{validationSummary(item, selectedBenchmark)}</Text>
-          <Text type="secondary">完成前不得显示为 verified</Text>
+          <Text type="secondary">验证完成前按待验证处理</Text>
         </Space>
       ),
     },
@@ -776,7 +1355,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
             <Paragraph className="topbar-kicker">Short Pick Lab</Paragraph>
             <Title level={3}>短投推荐试验田</Title>
             <Paragraph className="panel-description">
-              独立研究课题，不进入主推荐评分；模型一致性只代表研究优先级，不代表交易建议；后验验证完成前不得显示为已验证能力。
+              独立研究课题，不进入主推荐评分；冻结纸面策略进入正式跟踪，LLM 自由选股保留为对照组；后验验证完成前仅作为探索结果展示。
             </Paragraph>
           </div>
           <Space wrap>
@@ -792,6 +1371,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
             />
             <Button icon={<ReloadOutlined />} onClick={() => {
               void loadLab(latestRun?.id);
+              void loadPaperTracking();
               void loadValidationQueue(validationPage.current, validationPage.pageSize);
               void loadFeedback();
               if (activeWorkspaceTab === "replay") {
@@ -808,7 +1388,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
                   loading={action === "run"}
                   onClick={() => void handleCreateRun()}
                 >
-                  触发实验
+                  生成LLM对照批次
                 </Button>
                 <Button
                   icon={<SyncOutlined />}
@@ -816,7 +1396,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
                   loading={action === "validate"}
                   onClick={() => void handleValidateRun()}
                 >
-                  补跑复盘
+                  补跑对照复盘
                 </Button>
                 <Button
                   danger
@@ -833,16 +1413,16 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
         {error ? <Alert type="error" showIcon message={error} /> : null}
       </Card>
 
-      {!latestRun && !loading && !replayRuns.length ? (
+      {!latestRun && !loading && !replayRuns.length && !paperTracking ? (
         <Card className="panel-card">
           <Empty description="暂无短投推荐实验批次" />
         </Card>
       ) : null}
 
-      {latestRun || replayRuns.length ? (
+      {latestRun || replayRuns.length || paperTracking ? (
         <Tabs
           className="shortpick-workspace-tabs"
-          activeKey={latestRun ? activeWorkspaceTab : "replay"}
+          activeKey={visibleWorkspaceTab}
           onChange={(key) => {
             setActiveWorkspaceTab(key);
             if (key === "replay") {
@@ -856,6 +1436,8 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
               children: latestRun ? (
                 <TodayRunTab
                   run={latestRun}
+                  paperTracking={paperTracking}
+                  paperTrackingLoading={paperTrackingLoading}
                   normalCandidates={normalCandidates}
                   failedCandidates={failedCandidates}
                   failedRounds={failedRounds}
@@ -865,13 +1447,18 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
                 />
               ) : (
                 <Card className="panel-card">
-                  <Empty description="暂无 live shortpick 批次；可先查看历史回放。" />
+                  <Empty description="暂无LLM对照批次；可先查看纸面跟踪或历史回放。" />
                 </Card>
               ),
             },
             {
+              key: "paper-tracking",
+              label: "纸面跟踪",
+              children: <PaperTrackingTab tracking={paperTracking} loading={paperTrackingLoading} />,
+            },
+            {
               key: "validation",
-              label: "历史验证",
+              label: "LLM历史验证",
               children: (
                 <ValidationQueueTab
                   filters={validationFilters}
@@ -889,7 +1476,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
             },
             {
               key: "feedback",
-              label: "模型反馈",
+              label: "LLM模型反馈",
               children: <ModelFeedbackTab feedback={feedback} loading={feedbackLoading} columns={feedbackColumns} selectedBenchmark={selectedBenchmark} />,
             },
             {
@@ -923,7 +1510,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
         showIcon
         icon={<SafetyCertificateOutlined />}
         message="隔离规则"
-        description="短投推荐实验只写入 shortpick_lab 数据域和 artifact，不写入现有候选池、自选池、量化推荐、模拟盘自动调仓或生产权重。来源可达只代表 URL/访问层校验，不等于权威来源。"
+        description="短投推荐实验保存在独立数据域，不影响现有候选池、自选池、量化推荐、模拟盘自动调仓或生产权重。来源可达只代表 URL/访问层校验，不等于权威来源。"
       />
     </section>
   );
@@ -931,6 +1518,8 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
 
 function TodayRunTab({
   run,
+  paperTracking,
+  paperTrackingLoading,
   normalCandidates,
   failedCandidates,
   failedRounds,
@@ -939,6 +1528,8 @@ function TodayRunTab({
   selectedBenchmark,
 }: {
   run: ShortpickRunView;
+  paperTracking: ShortpickPaperTrackingResponse | null;
+  paperTrackingLoading: boolean;
   normalCandidates: ShortpickCandidateView[];
   failedCandidates: ShortpickCandidateView[];
   failedRounds: ShortpickRoundView[];
@@ -946,6 +1537,7 @@ function TodayRunTab({
   candidateColumns: ColumnsType<ShortpickCandidateView>;
   selectedBenchmark: string;
 }) {
+  const llmControlCandidate = normalCandidates.find((item) => item.tracking_role === "llm_paper_control_primary");
   return (
     <>
       <Row gutter={[16, 16]} className="shortpick-metrics">
@@ -965,19 +1557,36 @@ function TodayRunTab({
         </Col>
         <Col xs={24} md={6}>
           <div className="shortpick-metric">
-            <span>综合优先级</span>
+            <span>LLM 对照状态</span>
             <strong>{priorityLabel(run.consensus?.research_priority ?? "pending")}</strong>
-            <Text type="secondary">研究池排序信号</Text>
+            <Text type="secondary">只用于和冻结策略对比</Text>
           </div>
         </Col>
         <Col xs={24} md={6}>
           <div className="shortpick-metric">
-            <span>验证覆盖</span>
+            <span>LLM 验证覆盖</span>
             <strong>{validationCoverage(run)}</strong>
             <Text type="secondary">主基准：{primaryBenchmarkLabel(run)}</Text>
           </div>
         </Col>
       </Row>
+
+      <FrozenRunStatus run={run} normalCandidates={normalCandidates} paperTracking={paperTracking} loading={paperTrackingLoading} />
+
+      <Card className="panel-card" title="LLM纸面对照标的" extra={<Tag color="blue">每日固定规则选1只</Tag>}>
+        {llmControlCandidate ? (
+          <Descriptions size="small" column={{ xs: 1, md: 3 }}>
+            <Descriptions.Item label="纸面对照">{llmControlCandidate.name} · {llmControlCandidate.symbol}</Descriptions.Item>
+            <Descriptions.Item label="原始优先级">{priorityLabel(llmControlCandidate.research_priority)}</Descriptions.Item>
+            <Descriptions.Item label="验证口径">同一入场，四轨退出</Descriptions.Item>
+            <Descriptions.Item label="选择规则" span={3}>
+              跨模型同票优先，其次同模型重复、跨模型同题材、单模型高置信、系统外新视角；再按来源质量和置信度稳定排序。
+            </Descriptions.Item>
+          </Descriptions>
+        ) : (
+          <Empty description="本批次尚未形成LLM纸面对照标的；下一次完整LLM批次会按固定规则提前选出1只。" />
+        )}
+      </Card>
 
       {failedRounds.length || failedCandidates.length ? (
         <FailureDiagnostics failedRounds={failedRounds} failedCandidates={failedCandidates} selectedBenchmark={selectedBenchmark} />
@@ -985,8 +1594,8 @@ function TodayRunTab({
 
       <Card
         className="panel-card"
-        title="今日收敛结果"
-        extra={<Tag color={priorityColor(run.consensus?.research_priority ?? "pending")}>{priorityLabel(run.consensus?.research_priority ?? "pending")}</Tag>}
+        title="LLM 对照组收敛"
+        extra={<Tag color="default">不作为主策略</Tag>}
       >
         {run.consensus ? (
           <>
@@ -1027,7 +1636,7 @@ function TodayRunTab({
         )}
       </Card>
 
-      <Card className="panel-card" title="研究池">
+      <Card className="panel-card" title="对照研究池" extra={<Text type="secondary">LLM 自由选股与动量对照样本</Text>}>
         <Table
           rowKey="id"
           size="middle"
@@ -1056,7 +1665,7 @@ function TodayRunTab({
         />
       </Card>
 
-      <Card className="panel-card" title="模型原始推荐">
+      <Card className="panel-card" title="LLM 原始推荐（对照）">
         <Table
           rowKey="id"
           size="middle"
@@ -1065,6 +1674,263 @@ function TodayRunTab({
           dataSource={run.rounds}
           pagination={{ pageSize: 10 }}
         />
+      </Card>
+    </>
+  );
+}
+
+function FrozenRunStatus({
+  run,
+  normalCandidates,
+  paperTracking,
+  loading,
+}: {
+  run: ShortpickRunView;
+  normalCandidates: ShortpickCandidateView[];
+  paperTracking: ShortpickPaperTrackingResponse | null;
+  loading: boolean;
+}) {
+  const overlay = recordValue<Record<string, unknown>>(run.summary, "market_factor_overlay") ?? {};
+  const frozen = recordValue<Record<string, unknown>>(overlay, "frozen_paper_strategy") ?? {};
+  const regime = recordValue<Record<string, unknown>>(overlay, "regime") ?? {};
+  const frozenCandidate = normalCandidates.find((item) => item.research_priority === "market_factor_frozen_paper");
+  const gatePass = Boolean(frozen.gate_pass);
+  const inserted = Boolean(frozen.inserted);
+  const trackingStatus = paperTracking?.current_status;
+  const isWaitingFirstFrozenRun = trackingStatus === "waiting_first_frozen_run" && !Object.keys(frozen).length;
+  const alertType = isWaitingFirstFrozenRun ? "warning" : inserted ? "success" : gatePass ? "warning" : paperTrackingAlertType(trackingStatus);
+  const alertMessage = isWaitingFirstFrozenRun
+    ? "冻结策略已启用，等待首个正式跟踪批次"
+    : inserted
+      ? "本批次已生成冻结策略标的"
+      : gatePass
+        ? "启用条件满足，但候选不足"
+        : paperTracking?.current_label || "本批次未触发冻结策略";
+  const alertDescription = isWaitingFirstFrozenRun
+    ? "当前最新 LLM 对照批次生成于规则冻结前；下一次盘后批次会按冻结规则写入正式纸面跟踪或记录未触发原因。"
+    : inserted && frozenCandidate
+      ? `本批次纸面跟踪标的：${frozenCandidate.symbol} ${frozenCandidate.name}。规则已冻结：取10日动量换手第2名，同一入场信号并行记录机械5日、机械10日、条件检查和10%止盈四条退出轨道。`
+      : paperTracking?.current_message || "冻结策略只在市场转正且候选池不过热时启动；未启动批次也会记录为真实纸面跟踪的一部分。";
+  return (
+    <Card className="panel-card shortpick-frozen-status" title="正式纸面跟踪（冻结策略）" loading={loading && !paperTracking}>
+      <Alert
+        showIcon
+        type={alertType}
+        message={alertMessage}
+        description={alertDescription}
+      />
+      <Row gutter={[12, 12]} className="shortpick-frozen-metrics">
+        <Col xs={24} md={8}>
+          <div className="shortpick-metric">
+            <span>跟踪阶段</span>
+            <strong>规则冻结</strong>
+            <Text type="secondary">需要40个真实交易日后再评价</Text>
+          </div>
+        </Col>
+        <Col xs={24} md={8}>
+          <div className="shortpick-metric">
+            <span>市场状态</span>
+            <strong>{formatPercent(Number(regime.universe_ret10_mean ?? 0))}</strong>
+            <Text type="secondary">全市场10日平均收益</Text>
+          </div>
+        </Col>
+        <Col xs={24} md={8}>
+          <div className="shortpick-metric">
+            <span>候选池热度</span>
+            <strong>{formatPercent(Number(regime.pool_ret1_mean ?? 0))}</strong>
+            <Text type="secondary">扩大候选池1日平均涨幅</Text>
+          </div>
+        </Col>
+      </Row>
+    </Card>
+  );
+}
+
+function PaperTrackingTab({
+  tracking,
+  loading,
+}: {
+  tracking: ShortpickPaperTrackingResponse | null;
+  loading: boolean;
+}) {
+  const contract = tracking?.contract ?? {};
+  const llmControlContract = tracking?.llm_control_contract ?? {};
+  const marketControlContract = tracking?.market_control_contract ?? {};
+  const summary = tracking?.summary ?? {};
+  const latestRun = tracking?.latest_run ?? null;
+  const rows = tracking?.items ?? [];
+  const monitoringTracks = (Array.isArray(contract.monitoring_tracks) ? contract.monitoring_tracks : []) as Record<string, unknown>[];
+  const marketControls = (Array.isArray(marketControlContract.controls) ? marketControlContract.controls : []) as Record<string, unknown>[];
+  const columns: ColumnsType<ShortpickPaperTrackingItem> = [
+    {
+      title: "跟踪日",
+      dataIndex: "run_date",
+      key: "run_date",
+      render: (value: string) => <Text strong>{value}</Text>,
+    },
+    {
+      title: "纸面标的",
+      key: "symbol",
+      render: (_, item) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{item.name} · {item.symbol}</Text>
+          <Space wrap size={4}>
+            <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
+            <Text type="secondary">{item.selection_label || "纸面对照"}</Text>
+          </Space>
+        </Space>
+      ),
+    },
+    {
+      title: "买入与退出",
+      key: "rules",
+      render: (_, item) => (
+        <Space direction="vertical" size={0}>
+          <Text>{item.entry_rule || "次一交易日收盘买入"}</Text>
+          <Text type="secondary">{item.exit_rule || "机械5日、机械10日、条件检查、10%触达止盈四轨监测"}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: "触发状态",
+      key: "gate",
+      render: (_, item) => (
+        <Space wrap>
+          <Tag color={paperTrackingGroupColor(item.tracking_group)}>
+            {item.tracking_group === "llm_paper_control"
+              ? "固定规则第1只"
+              : item.tracking_group === "market_random_control"
+                ? `池内第 ${Number(item.source_rank ?? 1)} 只`
+                : `第 ${Number(item.source_rank ?? 2)} 候选`}
+          </Tag>
+          <Tag color={item.gate?.inserted === false ? "gold" : "green"}>{item.gate?.inserted === false ? "未写入" : "已写入"}</Tag>
+        </Space>
+      ),
+    },
+    {
+      title: "说明",
+      dataIndex: "thesis",
+      key: "thesis",
+      render: (value?: string | null) => <Text>{value || "--"}</Text>,
+    },
+  ];
+
+  return (
+    <>
+      <Card className="panel-card shortpick-frozen-status" title="冻结策略纸面跟踪">
+        <Alert
+          showIcon
+          type={paperTrackingAlertType(tracking?.current_status)}
+          message={tracking?.current_label || "等待纸面跟踪状态"}
+          description={tracking?.current_message || "正在读取冻结策略的纸面跟踪 ledger；该区域只读取已有记录，不触发模型或行情更新。"}
+        />
+        <Row gutter={[12, 12]} className="shortpick-frozen-metrics">
+          <Col xs={24} md={6}>
+            <div className="shortpick-metric">
+              <span>当前状态</span>
+              <strong>{paperTrackingStatusLabel(tracking?.current_status)}</strong>
+              <Text type="secondary">冻结日期 {String(summary.frozen_at ?? contract.frozen_at ?? "--")}</Text>
+            </div>
+          </Col>
+          <Col xs={24} md={6}>
+            <div className="shortpick-metric">
+              <span>正式跟踪数</span>
+              <strong>{Number(summary.tracked_signal_count ?? 0)}</strong>
+              <Text type="secondary">前向观察 {Number(summary.required_forward_trading_days ?? contract.required_forward_trading_days ?? 40)} 个交易日</Text>
+            </div>
+          </Col>
+          <Col xs={24} md={6}>
+            <div className="shortpick-metric">
+              <span>LLM纸面对照数</span>
+              <strong>{Number(summary.llm_paper_control_signal_count ?? 0)}</strong>
+              <Text type="secondary">每天从LLM池提前固定选1只</Text>
+            </div>
+          </Col>
+          <Col xs={24} md={6}>
+            <div className="shortpick-metric">
+              <span>市场对照数</span>
+              <strong>{Number(summary.market_control_signal_count ?? 0)}</strong>
+              <Text type="secondary">第1名、降追高、随机同池基线</Text>
+            </div>
+          </Col>
+        </Row>
+      </Card>
+
+      <Card className="panel-card" title="冻结规则">
+        <Descriptions size="small" column={{ xs: 1, md: 2 }}>
+          <Descriptions.Item label="策略名称" span={2}>{String(contract.label ?? "冻结纸面策略：第二候选四轨退出监测")}</Descriptions.Item>
+          <Descriptions.Item label="运行方式">{String(contract.mode ?? "每日滚动 5x1万；持有天数按交易日计算")}</Descriptions.Item>
+          <Descriptions.Item label="候选池">{String(contract.pool_rule ?? "先扩大动量成交量候选池")}</Descriptions.Item>
+          <Descriptions.Item label="选择规则">{String(contract.selection_rule ?? "取10日动量与换手排序第2名")}</Descriptions.Item>
+          <Descriptions.Item label="监测规则">{String(contract.risk_rule ?? "机械5日、机械10日、条件检查、10%触达止盈四轨监测")}</Descriptions.Item>
+          <Descriptions.Item label="边界说明" span={2}>{String(summary.scope_note ?? contract.scope_note ?? "LLM自由选股保留为对照组。")}</Descriptions.Item>
+        </Descriptions>
+        {monitoringTracks.length ? (
+          <List
+            className="shortpick-track-list"
+            size="small"
+            dataSource={monitoringTracks}
+            renderItem={(track) => (
+              <List.Item>
+                <Space direction="vertical" size={0}>
+                  <Text strong>{String(track.label ?? track.key ?? "退出轨道")}</Text>
+                  <Text type="secondary">{String(track.description ?? "")}</Text>
+                </Space>
+              </List.Item>
+            )}
+          />
+        ) : null}
+      </Card>
+
+      <Card className="panel-card" title="LLM纸面对照规则">
+        <Descriptions size="small" column={{ xs: 1, md: 2 }}>
+          <Descriptions.Item label="对照名称" span={2}>{String(llmControlContract.label ?? "LLM纸面对照：每日固定规则选1只")}</Descriptions.Item>
+          <Descriptions.Item label="运行方式">{String(llmControlContract.mode ?? "从当日LLM自由推荐池中提前选1只")}</Descriptions.Item>
+          <Descriptions.Item label="选择规则" span={2}>{String(llmControlContract.selection_rule ?? "跨模型同票优先，再按来源质量、置信度和稳定排序。")}</Descriptions.Item>
+          <Descriptions.Item label="监测规则" span={2}>{String(llmControlContract.monitoring_rule ?? "和冻结策略使用同一入场口径与四条退出轨道。")}</Descriptions.Item>
+          <Descriptions.Item label="边界说明" span={2}>{String(summary.llm_control_scope_note ?? llmControlContract.scope_note ?? "全量LLM推荐池继续保留为研究样本。")}</Descriptions.Item>
+          <Descriptions.Item label="最近批次">{String(latestRun?.run_date ?? "--")}</Descriptions.Item>
+          <Descriptions.Item label="批次状态">{latestRun?.has_frozen_overlay ? "已包含冻结覆盖层" : "等待冻结后批次"}</Descriptions.Item>
+        </Descriptions>
+      </Card>
+
+      <Card className="panel-card" title="市场因子对照规则">
+        <Descriptions size="small" column={{ xs: 1, md: 2 }}>
+          <Descriptions.Item label="对照名称" span={2}>{String(marketControlContract.label ?? "市场因子纸面对照：同池简单选法")}</Descriptions.Item>
+          <Descriptions.Item label="运行方式" span={2}>{String(marketControlContract.mode ?? "和冻结策略使用同一个动量成交量Top40候选池，每个规则每天最多提前固定1只。")}</Descriptions.Item>
+          <Descriptions.Item label="监测规则" span={2}>{String(marketControlContract.monitoring_rule ?? "和冻结策略使用同一入场口径与四条退出轨道。")}</Descriptions.Item>
+          <Descriptions.Item label="边界说明" span={2}>{String(summary.market_control_scope_note ?? marketControlContract.scope_note ?? "单票分析暂不升入冻结真实跟踪。")}</Descriptions.Item>
+        </Descriptions>
+        {marketControls.length ? (
+          <List
+            className="shortpick-track-list"
+            size="small"
+            dataSource={marketControls}
+            renderItem={(control) => (
+              <List.Item>
+                <Space direction="vertical" size={0}>
+                  <Text strong>{String(control.label ?? "市场对照")}</Text>
+                  <Text type="secondary">{String(control.selection_rule ?? "")}</Text>
+                </Space>
+              </List.Item>
+            )}
+          />
+        ) : null}
+      </Card>
+
+      <Card className="panel-card" title="纸面跟踪记录（正式策略与对照组）">
+        {rows.length ? (
+          <Table
+            rowKey="candidate_id"
+            size="middle"
+            loading={loading}
+            columns={columns}
+            dataSource={rows}
+            pagination={{ pageSize: 8 }}
+          />
+        ) : (
+          <Empty description={loading ? "纸面跟踪状态加载中" : "尚无正式纸面标的；等待首个冻结后盘后批次。"} />
+        )}
       </Card>
     </>
   );
@@ -1079,13 +1945,18 @@ function FailureDiagnostics({
   failedCandidates: ShortpickCandidateView[];
   selectedBenchmark: string;
 }) {
+  const hasOnlyCandidateDiagnostics = !failedRounds.length && failedCandidates.length > 0;
   return (
-    <Card className="panel-card" title="失败/异常诊断">
+    <Card className="panel-card" title="对照组可交易性诊断">
       <Alert
-        type="warning"
+        type={hasOnlyCandidateDiagnostics ? "info" : "warning"}
         showIcon
-        message={failedRounds.length ? "本批次存在失败轮次" : "本批次存在不可进入研究池的候选"}
-        description="失败轮次、解析失败、停牌/缺行情或入场不可成交候选不会进入正常研究池。可重跑失败轮次；可交易性异常需要等待行情或人工复核。"
+        message={failedRounds.length ? "本批次存在失败轮次" : "部分 LLM 候选等待下个交易日确认可交易性"}
+        description={
+          failedRounds.length
+            ? "失败轮次、解析失败、停牌/缺行情或入场不可成交候选不会进入正常研究池。可重跑失败轮次；可交易性异常需要等待行情或人工复核。"
+            : "这通常来自盘后批次的下一交易日入场校验：如果信号日之后还没有真实交易日 K 线，系统会先隔离这些候选，不把它们计入正常研究池。"
+        }
       />
       {failedRounds.length ? (
         <Table
@@ -1140,7 +2011,7 @@ function FailureDiagnostics({
           pagination={false}
         />
       ) : null}
-      {failedCandidates.length ? <Text type="secondary">已隔离异常候选 {failedCandidates.length} 条，不参与正常候选统计。</Text> : null}
+      {failedCandidates.length ? <Text type="secondary">已隔离对照组候选 {failedCandidates.length} 条，等待交易日数据或人工复核后再判断。</Text> : null}
     </Card>
   );
 }
@@ -1255,8 +2126,8 @@ function ModelFeedbackTab({
         className="panel-card"
         type={checkpointStatus === "pass" ? "success" : checkpointStatus === "fail" ? "error" : "warning"}
         showIcon
-        message={`能力评估门禁：${checkpointStatus === "pass" ? "通过" : checkpointStatus === "fail" ? "未通过" : "样本不足"}`}
-        description={`5日正式唯一标的样本 ${Number(checkpoints?.official_5d_unique_symbol_run_count ?? 0)}；未达到门禁前不得把试验田表现解释为模型选股能力。`}
+        message={`能力评估状态：${checkpointStatus === "pass" ? "通过" : checkpointStatus === "fail" ? "未通过" : "样本不足"}`}
+        description={`5日正式唯一标的样本 ${Number(checkpoints?.official_5d_unique_symbol_run_count ?? 0)}；样本不足时只适合看趋势，不适合作为模型选股能力结论。`}
       />
       <Card className="panel-card" title="模型反馈">
         <Table
@@ -1303,7 +2174,8 @@ function FeedbackGroupList({ title, groups, selectedBenchmark }: { title: string
             <List.Item>
               <Space wrap>
                 <Text strong>{group.label}</Text>
-                <Text>正式样本 {group.completed_official_sample_count ?? group.completed_validation_count}/{group.official_sample_count ?? group.sample_count}</Text>
+                <Text>严格来源 {group.completed_official_sample_count ?? group.completed_validation_count}/{group.official_sample_count ?? group.sample_count}</Text>
+                <Text>可交易验证 {group.completed_tradable_sample_count ?? 0}/{group.tradable_sample_count ?? 0}</Text>
                 <Text type="secondary">原始 {group.sample_count}</Text>
                 {metric && Number(metric.available_count ?? 0) === 0 && selectedBenchmark !== "hs300" ? (
                   <Text type="secondary">{benchmarkPendingText(pendingReasons[0])}</Text>
@@ -1364,6 +2236,10 @@ function HistoricalReplayTab({
   const officialSamples = candidates.filter((item) => item.official_sample_eligible).length;
   const baselineFamilies = Array.from(new Set(candidates.map((item) => item.baseline_family || "llm")));
   const anyReplayLoading = loading || aggregateFeedbackLoading || feedbackLoading || marketStudyLoading;
+  const runListLoading = loading && runs.length === 0;
+  const replayDetailLoading = loading && Boolean(selectedRun);
+  const sourcePacketLoading = replayDetailLoading && !sources;
+  const candidateDetailLoading = replayDetailLoading && candidates.length === 0;
 
   const replayColumns: ColumnsType<ShortpickCandidateView> = [
     {
@@ -1400,10 +2276,10 @@ function HistoricalReplayTab({
       ),
     },
     {
-      title: "理由",
-      dataIndex: "thesis",
-      key: "thesis",
-      render: (value?: string | null) => <Text>{value || "--"}</Text>,
+	      title: "理由",
+	      dataIndex: "thesis",
+	      key: "thesis",
+	      render: (value?: string | null) => <Text>{value || "暂无理由"}</Text>,
     },
     {
       title: `反馈 · ${benchmarkLabel(selectedBenchmark)}`,
@@ -1442,7 +2318,14 @@ function HistoricalReplayTab({
           {
             key: "comparison",
             label: "模型与策略对比",
-            children: <ReplayFeedbackCards feedback={feedback} loading={feedbackLoading} selectedBenchmark={selectedBenchmark} />,
+            children: (
+              <ReplayFeedbackCards
+                feedback={feedback}
+                loading={feedbackLoading}
+                marketStudy={marketStudy}
+                selectedBenchmark={selectedBenchmark}
+              />
+            ),
           },
           {
             key: "drilldown",
@@ -1459,6 +2342,8 @@ function HistoricalReplayTab({
             className="shortpick-run-select"
             value={selectedRun?.id}
             placeholder="选择回放批次"
+            loading={loading}
+            disabled={runListLoading}
             options={runs.map((run) => ({
               value: run.id,
               label: `${run.run_date} · ${statusLabel(operationalStatus(run))} · ${run.run_key}`,
@@ -1469,10 +2354,16 @@ function HistoricalReplayTab({
             {selectedRun ? statusLabel(operationalStatus(selectedRun)) : "无批次"}
           </Tag>
           <Text type="secondary">
-            {selectedRun ? `${selectedRun.run_date} · ${String(selectedRun.model_config?.rounds_per_model ?? selectedRun.model_config?.rounds ?? 0)} 轮 · 数据包 ${shortHash(sources?.source_packet_hash)}` : "生成历史回放后会出现在这里。"}
+            {sourcePacketLoading
+              ? "正在读取该批次的封闭数据包。"
+              : selectedRun
+                ? `${selectedRun.run_date} · ${String(selectedRun.model_config?.rounds_per_model ?? selectedRun.model_config?.rounds ?? 0)} 轮 · 数据包 ${shortHash(sources?.source_packet_hash)}`
+                : "生成历史回放后会出现在这里。"}
           </Text>
         </Space>
-        {runs.length ? (
+        {runListLoading ? (
+          <Skeleton active paragraph={{ rows: 4 }} />
+        ) : runs.length ? (
           <Table
             className="shortpick-replay-run-table"
             rowKey="id"
@@ -1530,50 +2421,57 @@ function HistoricalReplayTab({
         <>
           <Row gutter={[16, 16]} className="shortpick-metrics">
             <Col xs={24} md={6}>
-              <div className="shortpick-metric">
-                <span>当日股票池</span>
-                <strong>{Number(universe.total_count ?? 0)}</strong>
-                <Text type="secondary">可交易 {Number(universe.tradeable_count ?? 0)}</Text>
-              </div>
-            </Col>
-            <Col xs={24} md={6}>
-              <div className="shortpick-metric">
-                <span>排除原因</span>
-                <strong>{Number(universe.excluded_count ?? 0)}</strong>
-                <Text type="secondary">ST {Number(universe.excluded_st ?? 0)} · 停牌/缺行情 {Number(universe.excluded_missing_bar ?? 0)}</Text>
-              </div>
-            </Col>
-            <Col xs={24} md={6}>
-              <div className="shortpick-metric">
-                <span>正式样本</span>
-                <strong>{officialSamples}</strong>
-                <Text type="secondary">泄漏失败 {auditFailures}</Text>
-              </div>
-            </Col>
-            <Col xs={24} md={6}>
-              <div className="shortpick-metric">
-                <span>封闭数据包</span>
-                <strong>{shortHash(sources?.source_packet_hash)}</strong>
-                <Text type="secondary">正式 {officialCount} · 诊断 {diagnosticCount} · 剔除 {rejectedCount}</Text>
-              </div>
-            </Col>
-          </Row>
+	              <div className="shortpick-metric">
+	                <span>当日股票池</span>
+	                {loadingAwareStrong(sourcePacketLoading, universe.total_count === undefined ? null : Number(universe.total_count))}
+	                <Text type="secondary">可交易 {loadingAwareText(sourcePacketLoading, universe.tradeable_count === undefined ? null : Number(universe.tradeable_count))}</Text>
+	              </div>
+	            </Col>
+	            <Col xs={24} md={6}>
+	              <div className="shortpick-metric">
+	                <span>排除原因</span>
+	                {loadingAwareStrong(sourcePacketLoading, universe.excluded_count === undefined ? null : Number(universe.excluded_count))}
+	                <Text type="secondary">
+	                  {sourcePacketLoading
+	                    ? "明细加载中"
+	                    : `ST ${Number(universe.excluded_st ?? 0)} · 停牌/缺行情 ${Number(universe.excluded_missing_bar ?? 0)}`}
+	                </Text>
+	              </div>
+	            </Col>
+	            <Col xs={24} md={6}>
+	              <div className="shortpick-metric">
+	                <span>正式样本</span>
+	                {loadingAwareStrong(candidateDetailLoading, officialSamples)}
+	                <Text type="secondary">{candidateDetailLoading ? "候选验证加载中" : `泄漏失败 ${auditFailures}`}</Text>
+	              </div>
+	            </Col>
+	            <Col xs={24} md={6}>
+	              <div className="shortpick-metric">
+	                <span>封闭数据包</span>
+	                {loadingAwareStrong(sourcePacketLoading, sources?.source_packet_hash ? shortHash(sources.source_packet_hash) : null)}
+	                <Text type="secondary">
+	                  {sourcePacketLoading ? "来源清单加载中" : `正式 ${officialCount} · 诊断 ${diagnosticCount} · 剔除 ${rejectedCount}`}
+	                </Text>
+	              </div>
+	            </Col>
+	          </Row>
 
           <Card className="panel-card" title="模型与对照组候选明细">
             <Table
-              rowKey="id"
-              size="middle"
-              loading={loading}
-              columns={replayColumns}
-              dataSource={candidates}
-              pagination={{ pageSize: 12 }}
+	              rowKey="id"
+	              size="middle"
+	              loading={loading}
+	              columns={replayColumns}
+	              dataSource={candidates}
+	              pagination={{ pageSize: 12 }}
+	              locale={{ emptyText: loading ? "候选明细加载中" : "暂无候选明细" }}
               expandable={{
                 expandedRowRender: (item) => (
                   <div className="shortpick-detail-grid">
-                    <div>
-                      <Title level={5}>推荐理由 / 催化 / 风险</Title>
-                      <Paragraph>{item.thesis || "--"}</Paragraph>
-                      <List size="small" dataSource={[...item.catalysts, ...item.risks, ...item.limitations]} renderItem={(text) => <List.Item>{text}</List.Item>} />
+	                    <div>
+	                      <Title level={5}>推荐理由 / 催化 / 风险</Title>
+	                      <Paragraph>{item.thesis || "暂无推荐理由"}</Paragraph>
+	                      <List size="small" dataSource={[...item.catalysts, ...item.risks, ...item.limitations]} renderItem={(text) => <List.Item>{text}</List.Item>} />
                     </div>
                     <div>
                       <Title level={5}>泄漏审计</Title>
@@ -1598,7 +2496,7 @@ function HistoricalReplayTab({
             />
           </Card>
 
-          <ReplaySourcePacket sources={sources} />
+	          <ReplaySourcePacket sources={sources} loading={sourcePacketLoading} />
         </>
       ) : null}
               </>
@@ -1617,6 +2515,30 @@ function ReplayStrategyCloseout({
   study: ShortpickMarketFactorStudyResponse | null;
   loading: boolean;
 }) {
+  if (loading && !study) {
+    return (
+      <div className="shortpick-strategy-closeout">
+        <Space direction="vertical" size={2}>
+          <Title level={5}>冻结策略与对照</Title>
+          <Text type="secondary">策略收口数据正在后台加载；历史回放主体不依赖这项重计算。</Text>
+        </Space>
+        <Skeleton active paragraph={{ rows: 4 }} />
+      </div>
+    );
+  }
+
+  if (!study) {
+    return (
+      <div className="shortpick-strategy-closeout">
+        <Space direction="vertical" size={2}>
+          <Title level={5}>冻结策略与对照</Title>
+          <Text type="secondary">策略收口接口当前没有可展示数据。</Text>
+        </Space>
+        <Empty description="暂无策略收口数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      </div>
+    );
+  }
+
   const defaultMetric = marketPortfolioMetric(study, "holdout", "ret10_turnover_cooldown");
   const attackMetric = marketPortfolioMetric(study, "holdout", "ret10_turnover");
   const gateMetric = marketPortfolioMetric(study, "holdout", "ret10_turnover_cooldown_regime_gate");
@@ -1626,54 +2548,81 @@ function ReplayStrategyCloseout({
   const poolLimit = Number(study?.config?.pool_limit ?? 40);
   const rankLimit = Number(study?.config?.rank_limit ?? 6);
   const allowedDays = Number(study?.regime_gate?.allowed_signal_day_count ?? 0);
-  const scopeStart = String(study?.data_scope?.signal_date_from ?? "--");
-  const scopeEnd = String(study?.data_scope?.signal_date_to ?? "--");
+  const frozen = frozenStrategy(study);
+  const frozenScope = frozenStrategyDataScope(study);
+  const accountEligibility = recordValue<Record<string, unknown>>(frozenScope, "account_eligibility") ?? {};
+  const scopeStart = String(frozenScope.signal_date_from ?? study?.data_scope?.signal_date_from ?? "--");
+  const scopeEnd = String(frozenScope.signal_date_to ?? study?.data_scope?.signal_date_to ?? "--");
+  const sampleNote = String(frozenScope.sample_construction_note ?? accountEligibility.rule_note ?? "已按当前账户可执行范围复核。");
+  const frozenSummary = frozenStrategySummary(study);
+  const productionEvidence = frozenStrategyProductionEvidence(study);
+  const failedChecks = recordValue<string[]>(productionEvidence, "failed_check_ids") ?? [];
+  const costStress = recordValue<Record<string, Record<string, unknown>>>(productionEvidence, "cost_stress") ?? {};
+  const indexRefs = frozenBenchmarkReferences(study);
+  const paperControls = frozenStrategyPaperControls(study);
+  const legacySecondControl = paperControls["ret10_turnover_second_market_positive_cooldown_stop8"] ?? {};
+  const legacySecondSummary = recordValue<Record<string, unknown>>(legacySecondControl, "summary") ?? {};
+  const marketBenchmarkReturn = Number(frozenSummary.benchmark_total_return ?? 0);
+  const marketBenchmarkDrawdown = Number(frozenSummary.benchmark_max_drawdown ?? 0);
 
   return (
     <div className="shortpick-strategy-closeout">
       <Space direction="vertical" size={2}>
-        <Title level={5}>策略收口</Title>
-        <Text type="secondary">
-          {loading && !study
-            ? "策略收口数据正在后台加载；历史回放主体不依赖这项重计算。"
-            : `先用市场行情因子做可重复验证：从每日候选池扩大到 ${poolLimit} 只，再选 ${rankLimit} 只；收益已扣除单次 ${costBps}bp 成本，样本范围 ${scopeStart} 至 ${scopeEnd}。`}
-        </Text>
+        <Title level={5}>冻结策略与对照</Title>
+	        <Text type="secondary">
+	          {`当前正式进入纸面跟踪的是低换手上升趋势；旧第二候选、LLM自由选股和原动量规则作为对照。账户可执行复核样本范围 ${scopeStart} 至 ${scopeEnd}，收益已扣除单次 ${costBps}bp 成本。`}
+	        </Text>
       </Space>
+      <Alert
+        showIcon
+        type="warning"
+        message="冻结纸面策略：账户可执行性复核未通过"
+        description={`${String(frozen.mode ?? "每日滚动 5x1万；持有天数按交易日计算")}；当前新开户普通账户口径长样本超额 ${formatPercent(Number(frozenSummary.excess_total_return ?? 0))}。${sampleNote} 正式前向仍会记录机械5日、机械10日、条件检查和10%触达止盈四条退出轨道；当前仍处于真实前向观察阶段，尚未形成生产级证明。`}
+      />
       <Row gutter={[12, 12]}>
         <Col xs={24} md={12} xl={6}>
           <div className="shortpick-replay-family-summary">
-            <span>默认稳健候选</span>
-            <strong>10日动量换手降追高</strong>
+            <span>纸面主策略</span>
+            <strong>{String(frozen.label ?? "低换手上升趋势四轨监测").replace("冻结纸面策略：", "")}</strong>
+            <Text className={`value-${valueTone(Number(frozenSummary.excess_total_return ?? 0))}`}>长样本超额 {formatPercent(Number(frozenSummary.excess_total_return ?? 0))}</Text>
+            <Text type="secondary">交易 {formatNumber(Number(frozenSummary.trade_count ?? 0))} 次 · 最大回撤 {formatPercent(Number(frozenSummary.max_drawdown ?? 0))}</Text>
+            <Text type="secondary">100bp成本压力 {formatPercent(Number(costStress["100"]?.excess_total_return ?? 0))}</Text>
+          </div>
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <div className="shortpick-replay-family-summary">
+            <span>旧主线对照</span>
+            <strong>第二候选四轨退出监测</strong>
+            <Text className={`value-${valueTone(Number(legacySecondSummary.excess_total_return ?? 0))}`}>长样本超额 {formatPercent(Number(legacySecondSummary.excess_total_return ?? 0))}</Text>
+            <Text type="secondary">交易 {formatNumber(Number(legacySecondSummary.trade_count ?? 0))} 次 · 最大回撤 {formatPercent(Number(legacySecondSummary.max_drawdown ?? 0))}</Text>
+            <Text type="secondary">用于和新冻结主线做真实纸面对比。</Text>
+          </div>
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <div className="shortpick-replay-family-summary">
+            <span>对照一</span>
+            <strong>默认动量降追高</strong>
             <Text className={`value-${valueTone(defaultMetric?.mean_net_excess_return)}`}>样本外平均超额 {formatPercent(defaultMetric?.mean_net_excess_return)}</Text>
             <Text type="secondary">去极值 {formatPercent(defaultMetric?.trimmed_mean_net_excess_return)} · 胜率 {formatPercent(defaultMetric?.positive_net_excess_rate)}</Text>
-            <Text type="secondary">组合 {formatNumber(defaultMetric?.portfolio_count)} 次 · {concentrationText(defaultMetric)}</Text>
+            <Text type="secondary">从每日候选池扩大到 {poolLimit} 只，再选 {rankLimit} 只。</Text>
           </div>
         </Col>
         <Col xs={24} md={12} xl={6}>
           <div className="shortpick-replay-family-summary">
-            <span>进攻对照</span>
-            <strong>10日动量换手</strong>
+            <span>对照二</span>
+            <strong>进攻动量换手</strong>
             <Text className={`value-${valueTone(attackMetric?.mean_net_excess_return)}`}>样本外平均超额 {formatPercent(attackMetric?.mean_net_excess_return)}</Text>
-            <Text type="secondary">去极值 {formatPercent(attackMetric?.trimmed_mean_net_excess_return)} · 胜率 {formatPercent(attackMetric?.positive_net_excess_rate)}</Text>
-            <Text type="secondary">组合 {formatNumber(attackMetric?.portfolio_count)} 次 · {concentrationText(attackMetric)}</Text>
+            <Text type="secondary">启用条件允许日 {formatNumber(allowedDays)} · 样本内 {formatPercent(trainGateMetric?.mean_net_excess_return)}</Text>
+            <Text type="secondary">用于比较收益，不作为当前纸面主策略。</Text>
           </div>
         </Col>
         <Col xs={24} md={12} xl={6}>
           <div className="shortpick-replay-family-summary">
-            <span>启用条件</span>
-            <strong>市场广度或候选池延续性较强</strong>
-            <Text className={`value-${valueTone(gateMetric?.mean_net_excess_return)}`}>样本外平均超额 {formatPercent(gateMetric?.mean_net_excess_return)}</Text>
-            <Text type="secondary">允许信号日 {formatNumber(allowedDays)} · 样本内 {formatPercent(trainGateMetric?.mean_net_excess_return)}</Text>
-            <Text type="secondary">用于仓位或开关，不单独替代默认排序。</Text>
-          </div>
-        </Col>
-        <Col xs={24} md={12} xl={6}>
-          <div className="shortpick-replay-family-summary">
-            <span>风险诊断</span>
-            <strong>行业分散先不做默认</strong>
-            <Text className={`value-${valueTone(diversifiedMetric?.mean_net_excess_return)}`}>样本外平均超额 {formatPercent(diversifiedMetric?.mean_net_excess_return)}</Text>
-            <Text type="secondary">胜率 {formatPercent(diversifiedMetric?.positive_net_excess_rate)} · {concentrationText(diversifiedMetric)}</Text>
-            <Text type="secondary">分散能降集中度，但目前显著削弱收益。</Text>
+            <span>市场参照</span>
+            <strong>等权市场基准</strong>
+            <Text type="secondary">同期收益 {formatPercent(marketBenchmarkReturn)} · 最大回撤 {formatPercent(marketBenchmarkDrawdown)}</Text>
+            <Text type="secondary">{indexBenchmarkReferenceText(indexRefs)}</Text>
+            <Text type="secondary">行业分散诊断：{formatPercent(diversifiedMetric?.mean_net_excess_return)}</Text>
           </div>
         </Col>
       </Row>
@@ -1705,20 +2654,27 @@ function ReplayStatisticalSummary({
         positive_excess_rate: metric?.positive_excess_rate ?? group.positive_excess_rate,
       };
     });
-  const familyRows = feedback?.families ?? [];
+  const familyRows = replayFamilyDisplayRows(feedback, marketStudy);
   const completedSamples = Number(gate.completed_official_sample_count ?? overall.completed_official_sample_count ?? 0);
+  const completedTradableSamples = Number(gate.completed_tradable_sample_count ?? overall.completed_tradable_sample_count ?? 0);
   const completedDates = Number(gate.completed_date_count ?? 0);
+  const completedTradableDates = Number(gate.completed_tradable_date_count ?? 0);
   const status = String(gate.status ?? "exploratory");
-  const readyHorizons = sortHorizons(recordValue<number[]>(gate, "ready_horizons") ?? []);
+  const gateReason = replayGateReasonText(gate.reason);
   const horizonByKey = new Map(horizonRows.map((group) => [String(group.group_key), group]));
+  const candidateFamilyRows = (feedback?.families ?? []).map((family) => ({
+    ...family,
+    display_source: "candidate_replay" as const,
+  }));
+  const portfolioFamilyRows = replayPortfolioControlFamilyRows(marketStudy);
   const familyFiveDayRows = familyRows
+    .filter((family) => family.display_source !== "portfolio_backtest")
     .map((family) => {
-      const horizon5 = family.validation_by_horizon.find((group) => String(group.group_key) === "5");
-      const metric = horizon5?.benchmark_metrics?.[selectedBenchmark];
+      const display = replayFamilyMetric(family, selectedBenchmark);
       return {
         family,
-        value: metric?.mean_excess_return ?? horizon5?.mean_excess_return,
-        sampleCount: Number(horizon5?.completed_official_sample_count ?? 0),
+        value: display.value,
+        sampleCount: display.sampleCount,
       };
     })
     .filter((item) => item.value !== null && item.value !== undefined);
@@ -1727,56 +2683,62 @@ function ReplayStatisticalSummary({
     .sort((left, right) => Number(right.value ?? -999) - Number(left.value ?? -999))[0];
   const llmFiveDay = familyFiveDayRows.find((item) => item.family.baseline_family === "llm");
   const defaultFiveDay = familyFiveDayRows.find((item) => item.family.baseline_family === "momentum_10d_turnover_cooldown_rank");
-  const fiveDayGroup = horizonByKey.get("5");
-  const fiveDayMetric = fiveDayGroup ? selectedBenchmarkGroupMetric(fiveDayGroup, selectedBenchmark) : null;
-  return (
-    <Card className="panel-card shortpick-replay-readout" title="历史回放核心读数">
-      <Alert
-        showIcon
-        type={replayGateAlertType(status)}
-        message={`当前结论：${replayGateLabel(status)}`}
-        description={
-          loading && !feedback
-            ? "历史回放主体已先加载；全局统计正在后台聚合，完成后会自动补齐这里的读数。"
-            : `无上下文直接查询能否短投选股：只看模型当时给出的股票，事后按 1 / 3 / 5 / 10 / 20 日验证。当前覆盖 ${Number(overall.unique_replay_date_count ?? 0)} 个历史日期、${Number(overall.run_count ?? 0)} 个回放批次，已完成正式样本 ${completedSamples}，完成日期 ${completedDates}。${String(gate.reason ?? "")}`
-        }
-      />
-      <div className="shortpick-replay-question-grid">
-        <div>
-          <span>当前能否下结论</span>
-          <strong>{status === "ready" ? "可以做初步比较" : "继续补样本"}</strong>
-          <Text type="secondary">{completedSamples} 个正式样本，覆盖 {completedDates} 个历史日期。</Text>
-        </div>
-        <div>
-          <span>当前领先组</span>
-          <strong>{topFamily ? baselineFamilyLabel(topFamily.family.baseline_family) : "暂无稳定领先组"}</strong>
-          <Text type="secondary">5日平均超额 {formatPercent(topFamily?.value)}，样本 {Number(topFamily?.sampleCount ?? 0)}。</Text>
-        </div>
-        <div>
-          <span>LLM 原选位置</span>
-          <strong>{formatPercent(llmFiveDay?.value)}</strong>
-          <Text type="secondary">默认策略 {formatPercent(defaultFiveDay?.value)}；LLM 先作为对照组看待。</Text>
-        </div>
-        <div>
-          <span>核心观察周期</span>
-          <strong>{formatPercent(fiveDayMetric?.meanExcessReturn)}</strong>
-          <Text type="secondary">5日整体均值；可观察周期 {readyHorizons.join(" / ") || "--"}。</Text>
-        </div>
-      </div>
-      <div className="shortpick-replay-horizon-strip">
-        {HORIZON_ORDER.map((horizon) => {
-          const group = horizonByKey.get(String(horizon));
-          const metric = group ? selectedBenchmarkGroupMetric(group, selectedBenchmark) : null;
-          return (
-            <div key={horizon} className="shortpick-replay-horizon-tile">
-              <span>{horizon}日</span>
-              <strong className={`value-${valueTone(metric?.meanExcessReturn)}`}>{formatPercent(metric?.meanExcessReturn)}</strong>
-              <Text type="secondary">正式样本 {Number(group?.completed_official_sample_count ?? 0)}/{Number(group?.official_sample_count ?? 0)}</Text>
-              <Text type="secondary">正超额 {formatPercent(metric?.positiveExcessRate)}</Text>
-            </div>
-          );
-        })}
-      </div>
+	  const fiveDayGroup = horizonByKey.get("5");
+	  const fiveDayMetric = fiveDayGroup ? selectedBenchmarkGroupMetric(fiveDayGroup, selectedBenchmark) : null;
+	  const feedbackLoading = loading && !feedback;
+	  const feedbackMissing = !loading && !feedback;
+	  return (
+	    <Card className="panel-card shortpick-replay-readout" title="历史回放核心读数">
+	      <Alert
+	        showIcon
+	        type={feedbackMissing ? "warning" : replayGateAlertType(status)}
+	        message={feedbackLoading ? "全局统计加载中" : feedbackMissing ? "当前结论：暂无统计数据" : `当前结论：${replayGateLabel(status)}`}
+	        description={
+	          feedbackLoading
+	            ? "历史回放主体已先加载；全局统计正在后台聚合，完成后会自动补齐这里的读数。"
+	            : feedbackMissing
+	              ? "全局统计接口当前没有返回可展示数据；这和正在加载不同，刷新后仍为空才代表暂无统计产物。"
+	            : `无上下文直接查询能否短投选股：只看模型当时给出的股票，事后按 1 / 3 / 5 / 10 / 20 日验证。当前覆盖 ${Number(overall.unique_replay_date_count ?? 0)} 个历史日期、${Number(overall.run_count ?? 0)} 个回放批次；严格来源样本 ${completedSamples}，可交易验证样本 ${completedTradableSamples}。${gateReason}`
+	        }
+	      />
+	      <div className="shortpick-replay-question-grid">
+	        <div>
+	          <span>当前能否下结论</span>
+	          <strong>{feedbackLoading ? "加载中" : feedbackMissing ? "暂无统计" : status === "ready" ? "可以做初步比较" : "继续补样本"}</strong>
+	          <Text type="secondary">{feedbackLoading ? "等待全局统计接口返回。" : feedbackMissing ? "统计产物为空。" : `严格来源 ${completedSamples} 个，覆盖 ${completedDates} 日；可交易验证 ${completedTradableSamples} 个，覆盖 ${completedTradableDates} 日。`}</Text>
+	        </div>
+	        <div>
+	          <span>当前领先组</span>
+	          <strong>{feedbackLoading ? "加载中" : topFamily ? baselineFamilyLabel(topFamily.family.baseline_family) : "暂无稳定领先组"}</strong>
+	          <Text type="secondary">{feedbackLoading ? "统计完成后显示领先组。" : `严格来源 ${formatPercent(topFamily?.value)}；可交易 ${formatPercent(topFamily?.family ? replayFamilyMetric(topFamily.family, selectedBenchmark).tradableValue : null)}。`}</Text>
+	        </div>
+	        <div>
+	          <span>LLM 原选位置</span>
+	          <strong>{feedbackLoading ? "加载中" : formatPercent(llmFiveDay?.value)}</strong>
+	          <Text type="secondary">{feedbackLoading ? "等待模型对照统计。" : `严格来源 ${formatPercent(llmFiveDay?.value)}；可交易 ${formatPercent(llmFiveDay?.family ? replayFamilyMetric(llmFiveDay.family, selectedBenchmark).tradableValue : null)}。`}</Text>
+	        </div>
+	        <div>
+	          <span>核心观察周期</span>
+	          <strong>{feedbackLoading ? "加载中" : formatPercent(fiveDayMetric?.meanExcessReturn)}</strong>
+	          <Text type="secondary">{feedbackLoading ? "等待周期统计。" : `严格来源均值；可交易 ${formatPercent(fiveDayMetric?.tradableMeanExcessReturn)}。`}</Text>
+	        </div>
+	      </div>
+	      <div className="shortpick-replay-horizon-strip">
+	        {HORIZON_ORDER.map((horizon) => {
+	          const group = horizonByKey.get(String(horizon));
+	          const metric = group ? selectedBenchmarkGroupMetric(group, selectedBenchmark) : null;
+	          return (
+	            <div key={horizon} className="shortpick-replay-horizon-tile">
+	              <span>{horizon}日</span>
+	              <strong className={`value-${valueTone(metric?.meanExcessReturn)}`}>{feedbackLoading ? "加载中" : formatPercent(metric?.meanExcessReturn)}</strong>
+	              <Text type="secondary">
+	                {feedbackLoading ? "样本数加载中" : `严格来源 ${Number(group?.completed_official_sample_count ?? 0)}/${Number(group?.official_sample_count ?? 0)}`}
+	              </Text>
+	              <Text type="secondary">{feedbackLoading ? "可交易统计加载中" : `可交易 ${formatPercent(metric?.tradableMeanExcessReturn)} · ${Number(group?.completed_tradable_sample_count ?? 0)}个`}</Text>
+	            </div>
+	          );
+	        })}
+	      </div>
       <Collapse
         className="shortpick-replay-diagnostics"
         items={[
@@ -1786,6 +2748,12 @@ function ReplayStatisticalSummary({
             children: (
               <>
                 <ReplayStrategyCloseout study={marketStudy} loading={marketStudyLoading} />
+                <ReplayDualTestMatrix
+                  feedback={feedback}
+                  marketStudy={marketStudy}
+                  selectedBenchmark={selectedBenchmark}
+                  loading={(loading && !feedback) || marketStudyLoading}
+                />
                 <Table
                   className="shortpick-replay-stat-table"
                   rowKey="group_key"
@@ -1794,35 +2762,120 @@ function ReplayStatisticalSummary({
                   pagination={false}
                   columns={[
                     { title: "周期", render: (_, item: ShortpickFeedbackGroup) => `${item.group_key}日` },
-                    { title: "样本", render: (_, item: ShortpickFeedbackGroup) => `${Number(item.completed_official_sample_count ?? 0)} / ${Number(item.official_sample_count ?? 0)}` },
-                    { title: `平均超额 · ${benchmarkLabel(selectedBenchmark)}`, render: (_, item: ShortpickFeedbackGroup) => <Text className={`value-${valueTone(item.mean_excess_return)}`}>{formatPercent(item.mean_excess_return)}</Text> },
-                    { title: "正超额占比", render: (_, item: ShortpickFeedbackGroup) => formatPercent(item.positive_excess_rate) },
+                    {
+                      title: "样本",
+                      render: (_, item: ShortpickFeedbackGroup) => (
+                        <Space direction="vertical" size={0}>
+                          <Text>严格来源 {Number(item.completed_official_sample_count ?? 0)} / {Number(item.official_sample_count ?? 0)}</Text>
+                          <Text type="secondary">可交易验证 {Number(item.completed_tradable_sample_count ?? 0)} / {Number(item.tradable_sample_count ?? 0)}</Text>
+                        </Space>
+                      ),
+                    },
+                    {
+                      title: `平均超额 · ${benchmarkLabel(selectedBenchmark)}`,
+                      render: (_, item: ShortpickFeedbackGroup) => (
+                        <Space direction="vertical" size={0}>
+                          <Text className={`value-${valueTone(item.mean_excess_return)}`}>严格来源 {formatPercent(item.mean_excess_return)}</Text>
+                          <Text className={`value-${valueTone(item.tradable_mean_excess_return)}`}>可交易 {formatPercent(item.tradable_mean_excess_return)}</Text>
+                        </Space>
+                      ),
+                    },
+                    {
+                      title: "正超额占比",
+                      render: (_, item: ShortpickFeedbackGroup) => (
+                        <Space direction="vertical" size={0}>
+                          <Text>{formatPercent(item.positive_excess_rate)}</Text>
+                          <Text type="secondary">可交易 {formatPercent(item.tradable_positive_excess_rate)}</Text>
+                        </Space>
+                      ),
+                    },
                     { title: "状态", render: (_, item: ShortpickFeedbackGroup) => statusCountText(item.status_counts) },
                   ]}
                   dataSource={horizonRows}
                 />
+                <Space direction="vertical" size={2}>
+                  <Title level={5}>候选逐条验证</Title>
+                  <Text type="secondary">这里不看资金复利，只看每个入选股票在固定周期后的平均超额、样本数和稳健性。</Text>
+                </Space>
                 <Table
                   className="shortpick-replay-stat-table"
-                  rowKey="baseline_family"
+                  rowKey={(item) => `candidate:${item.baseline_family}`}
                   size="small"
                   loading={loading && !feedback}
                   pagination={false}
                   columns={[
-                    { title: "组别", render: (_, item) => baselineFamilyLabel(item.baseline_family) },
-                    { title: "正式样本", render: (_, item) => `${item.completed_official_sample_count} / ${item.official_sample_count}` },
+                    { title: "组别", render: (_, item) => item.label ?? baselineFamilyLabel(item.baseline_family) },
+                    { title: "口径", render: () => "候选逐条验证" },
                     {
-                      title: "5日平均超额",
+                      title: "样本",
+                      render: (_, item) => (
+                        <Space direction="vertical" size={0}>
+                          <Text>严格来源 {item.completed_official_sample_count} / {item.official_sample_count}</Text>
+                          <Text type="secondary">可交易验证 {Number(item.completed_tradable_sample_count ?? 0)} / {Number(item.tradable_sample_count ?? 0)}</Text>
+                        </Space>
+                      ),
+                    },
+                    {
+                      title: "核心表现",
                       render: (_, item) => {
-                        const horizon5 = item.validation_by_horizon.find((group) => String(group.group_key) === "5");
-                        const metric = horizon5?.benchmark_metrics?.[selectedBenchmark];
-                        const value = metric?.mean_excess_return ?? horizon5?.mean_excess_return;
-                        return <Text className={`value-${valueTone(value)}`}>{formatPercent(value)}</Text>;
+                        const display = replayFamilyMetric(item, selectedBenchmark);
+                        return (
+                          <Space direction="vertical" size={0}>
+                            <Text className={`value-${valueTone(display.value)}`}>{formatPercent(display.value)}</Text>
+                            <Text type="secondary">{display.label}</Text>
+                            <Text type="secondary">可交易 {formatPercent(display.tradableValue)}</Text>
+                          </Space>
+                        );
                       },
                     },
-                    { title: "去最佳单票", render: (_, item) => formatPercent(recordValue<number>(item.robustness_metrics, "drop_best_symbol_mean_excess_return")) },
-                    { title: "去最佳日期", render: (_, item) => formatPercent(recordValue<number>(item.robustness_metrics, "drop_best_date_mean_excess_return")) },
+                    {
+                      title: "补充信息",
+                      render: (_, item) => (
+                        <Space direction="vertical" size={0}>
+                          <Text>去最佳单票 {formatPercent(recordValue<number>(item.robustness_metrics, "drop_best_symbol_mean_excess_return"))}</Text>
+                          <Text type="secondary">去最佳日期 {formatPercent(recordValue<number>(item.robustness_metrics, "drop_best_date_mean_excess_return"))}</Text>
+                        </Space>
+                      ),
+                    },
+                    { title: "说明", render: () => "逐只候选统计，用来观察选股池平均质量。" },
                   ]}
-                  dataSource={familyRows}
+                  dataSource={candidateFamilyRows}
+                />
+                <Space direction="vertical" size={2}>
+                  <Title level={5}>组合资金曲线</Title>
+                  <Text type="secondary">这里看每日滚动资金部署后的总收益、超额和最大回撤；和候选平均属于不同统计口径。</Text>
+                </Space>
+                <Table
+                  className="shortpick-replay-stat-table"
+                  rowKey={(item) => item.display_key ?? `portfolio:${item.baseline_family}`}
+                  size="small"
+                  loading={marketStudyLoading && !marketStudy}
+                  pagination={false}
+                  columns={[
+                    { title: "组别", render: (_, item) => item.display_label ?? item.label ?? baselineFamilyLabel(item.baseline_family) },
+                    { title: "口径", render: () => "组合资金回测" },
+                    { title: "样本", render: (_, item) => `${formatNumber(Number(item.display_trade_count ?? 0))} 笔交易` },
+                    {
+                      title: "核心表现",
+                      render: (_, item) => (
+                        <Space direction="vertical" size={0}>
+                          <Text className={`value-${valueTone(item.display_value)}`}>{formatPercent(item.display_value)}</Text>
+                          <Text type="secondary">{item.display_metric_label ?? "长样本超额"}</Text>
+                        </Space>
+                      ),
+                    },
+                    {
+                      title: "补充信息",
+                      render: (_, item) => (
+                        <Space direction="vertical" size={0}>
+                          <Text>收益 {formatPercent(item.display_total_return)}</Text>
+                          <Text type="secondary">最大回撤 {formatPercent(item.display_max_drawdown)}</Text>
+                        </Space>
+                      ),
+                    },
+                    { title: "说明", render: (_, item) => item.display_note ?? "组合资金曲线回测" },
+                  ]}
+                  dataSource={portfolioFamilyRows}
                 />
               </>
             ),
@@ -1836,32 +2889,43 @@ function ReplayStatisticalSummary({
 function ReplayFeedbackCards({
   feedback,
   loading,
+  marketStudy,
   selectedBenchmark,
 }: {
   feedback: ShortpickReplayFeedbackResponse | null;
   loading: boolean;
+  marketStudy: ShortpickMarketFactorStudyResponse | null;
   selectedBenchmark: string;
 }) {
   const factorGate = recordValue<Record<string, unknown>>(feedback?.overall, "factor_ic_gate") ?? {};
   const newsCalibration = recordValue<Record<string, unknown>>(feedback?.overall, "news_calibration") ?? {};
+  const familyRows = replayFamilyDisplayRows(feedback, marketStudy);
   return (
     <Card className="panel-card" title={`模型与对照组比较 · ${benchmarkLabel(selectedBenchmark)}`} loading={loading && !feedback}>
-      {(feedback?.families ?? []).length ? (
+      {familyRows.length ? (
         <Row gutter={[16, 16]} className="shortpick-feedback-summary">
-          {(feedback?.families ?? []).map((family) => {
-            const horizon5 = family.validation_by_horizon.find((group) => String(group.group_key) === "5") ?? family.validation_by_horizon[0];
-            const metric = horizon5?.benchmark_metrics?.[selectedBenchmark];
-            const rawMean = metric?.mean_excess_return ?? horizon5?.mean_excess_return;
+          {familyRows.map((family) => {
+            const display = replayFamilyMetric(family, selectedBenchmark);
             const robustness = family.robustness_metrics ?? {};
             return (
               <Col xs={24} md={12} xl={6} key={family.baseline_family}>
                 <div className="shortpick-replay-family-summary">
-                  <span>{baselineFamilyLabel(family.baseline_family)}</span>
-                  <strong className={`value-${valueTone(rawMean)}`}>{formatPercent(rawMean)}</strong>
-                  <Text>5日平均超额</Text>
-                  <Text type="secondary">正式样本 {family.completed_official_sample_count}/{family.official_sample_count}</Text>
-                  <Text type="secondary">去最佳单票 {formatPercent(recordValue<number>(robustness, "drop_best_symbol_mean_excess_return"))}</Text>
-                  <Text type="secondary">去最佳日期 {formatPercent(recordValue<number>(robustness, "drop_best_date_mean_excess_return"))}</Text>
+                  <span>{family.display_source === "portfolio_backtest" ? "组合回测组" : "候选回放组"}</span>
+                  <strong>{baselineFamilyLabel(family.baseline_family)}</strong>
+                  <Text className={`value-${valueTone(display.value)}`}>{display.label} {formatPercent(display.value)}</Text>
+                  {family.display_source === "portfolio_backtest" ? (
+                    <>
+                      <Text type="secondary">收益 {formatPercent(family.display_total_return)} · 交易 {formatNumber(Number(family.display_trade_count ?? 0))} 次</Text>
+                      <Text type="secondary">最大回撤 {formatPercent(family.display_max_drawdown)}</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text type="secondary">严格来源 {family.completed_official_sample_count}/{family.official_sample_count}</Text>
+                      <Text type="secondary">可交易验证 {Number(family.completed_tradable_sample_count ?? 0)}/{Number(family.tradable_sample_count ?? 0)} · {formatPercent(display.tradableValue)}</Text>
+                      <Text type="secondary">去最佳单票 {formatPercent(recordValue<number>(robustness, "drop_best_symbol_mean_excess_return"))}</Text>
+                      <Text type="secondary">去最佳日期 {formatPercent(recordValue<number>(robustness, "drop_best_date_mean_excess_return"))}</Text>
+                    </>
+                  )}
                 </div>
               </Col>
             );
@@ -1874,14 +2938,14 @@ function ReplayFeedbackCards({
         className="shortpick-replay-diagnostics"
         items={[{
           key: "diagnostics",
-          label: "补充诊断门禁",
+          label: "补充诊断条件",
           children: (
             <Row gutter={[16, 16]}>
               <Col xs={24} md={12}>
                 <Alert
                   type={factorGate.status === "eligible" ? "success" : "warning"}
                   showIcon
-                  message={`因子稳定性门禁：${factorDiagnosticStatusLabel(String(factorGate.status ?? "not_ready"))}`}
+                  message={`因子稳定性诊断：${factorDiagnosticStatusLabel(String(factorGate.status ?? "not_ready"))}`}
                   description={`截面股票数 ${Number(factorGate.cross_section_stock_count ?? 0)}；有效窗口 ${Number(factorGate.effective_window_count ?? 0)}；${String(factorGate.reason ?? "小样本只做诊断，不驱动权重。")}`}
                 />
               </Col>
@@ -1901,7 +2965,7 @@ function ReplayFeedbackCards({
   );
 }
 
-function ReplaySourcePacket({ sources }: { sources: ShortpickReplaySourceResponse | null }) {
+function ReplaySourcePacket({ sources, loading }: { sources: ShortpickReplaySourceResponse | null; loading: boolean }) {
   const sourceRows = [
     ...(sources?.official_sources ?? []),
     ...(sources?.diagnostic_sources ?? []),
@@ -1909,14 +2973,19 @@ function ReplaySourcePacket({ sources }: { sources: ShortpickReplaySourceRespons
   ];
   return (
     <Card className="panel-card" title="封闭数据包与来源清单">
-      <Descriptions size="small" column={{ xs: 1, md: 3 }}>
-        <Descriptions.Item label="回放截点">{sources?.as_of_cutoff || "--"}</Descriptions.Item>
-        <Descriptions.Item label="数据包指纹">{sources?.source_packet_hash || "--"}</Descriptions.Item>
-        <Descriptions.Item label="数据包编号">{sources?.source_packet_id || "--"}</Descriptions.Item>
-      </Descriptions>
+      {loading && !sources ? (
+        <Skeleton active paragraph={{ rows: 3 }} />
+      ) : (
+        <Descriptions size="small" column={{ xs: 1, md: 3 }}>
+          <Descriptions.Item label="回放截点">{sources?.as_of_cutoff || "暂无数据"}</Descriptions.Item>
+          <Descriptions.Item label="数据包指纹">{sources?.source_packet_hash || "暂无数据"}</Descriptions.Item>
+          <Descriptions.Item label="数据包编号">{sources?.source_packet_id || "暂无数据"}</Descriptions.Item>
+        </Descriptions>
+      )}
       <Table
         rowKey={(item, index) => item.source_id || item.url || item.title || `source-${index ?? 0}`}
         size="small"
+        loading={loading}
         columns={[
           {
             title: "状态",
@@ -1935,8 +3004,8 @@ function ReplaySourcePacket({ sources }: { sources: ShortpickReplaySourceRespons
             key: "source",
             render: (_, item) => (
               <Space direction="vertical" size={0}>
-                <a href={item.url || undefined} target="_blank" rel="noreferrer">{item.title || item.url || item.source_id || "--"}</a>
-                <Text type="secondary">{item.source_id || "--"} · {item.source_type || "news"}</Text>
+                <a href={item.url || undefined} target="_blank" rel="noreferrer">{item.title || item.url || item.source_id || "未命名来源"}</a>
+                <Text type="secondary">{item.source_id || "无来源编号"} · {item.source_type || "news"}</Text>
               </Space>
             ),
           },
@@ -1946,18 +3015,19 @@ function ReplaySourcePacket({ sources }: { sources: ShortpickReplaySourceRespons
             render: (_, item) => (
               <Space direction="vertical" size={0}>
                 <Text>{item.published_at || "发布时间未确认"}</Text>
-                <Text type="secondary">fetched {item.fetched_at || "--"}</Text>
+                <Text type="secondary">抓取时间 {item.fetched_at || "未记录"}</Text>
               </Space>
             ),
           },
           {
             title: "关联",
             key: "linked",
-            render: (_, item) => <Text>{item.linked_symbols?.join(" / ") || "--"}</Text>,
+            render: (_, item) => <Text>{item.linked_symbols?.join(" / ") || "暂无关联标的"}</Text>,
           },
         ]}
         dataSource={sourceRows}
         pagination={{ pageSize: 8 }}
+        locale={{ emptyText: loading ? "来源清单加载中" : "暂无来源清单" }}
       />
     </Card>
   );

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import threading
@@ -9,9 +10,11 @@ import time
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from datetime import date
+from pathlib import Path
 
 from fastapi import Body, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ashare_evidence.account_space import visible_account_spaces
@@ -21,7 +24,7 @@ from ashare_evidence.dashboard import (
     get_stock_dashboard,
     list_candidate_recommendations,
 )
-from ashare_evidence.db import get_database_url, get_session_factory, init_database
+from ashare_evidence.db import get_database_url, get_session_factory, init_database, utcnow
 from ashare_evidence.improvement_suggestions import (
     accept_suggestion_for_plan,
     run_improvement_suggestion_review,
@@ -39,6 +42,7 @@ from ashare_evidence.manual_research_workflow import (
     list_manual_research_requests,
     retry_manual_research_request,
 )
+from ashare_evidence.models import ShortpickCandidate, ShortpickExperimentRun
 from ashare_evidence.operations import build_operations_dashboard, build_operations_detail, build_operations_summary
 from ashare_evidence.policy_audit import build_policy_audit_report
 from ashare_evidence.policy_config_loader import build_policy_governance_summary, list_policy_config_versions
@@ -99,6 +103,9 @@ from ashare_evidence.schemas import (
 from ashare_evidence.services import get_latest_recommendation_summary, get_recommendation_trace
 from ashare_evidence.shortpick_lab import (
     SHORTPICK_INFORMATION_MODE,
+    SHORTPICK_LLM_PAPER_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_PAPER_CONTROL_ROLES,
+    SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE,
     build_shortpick_model_feedback,
     get_shortpick_candidate,
     get_shortpick_run,
@@ -107,6 +114,9 @@ from ashare_evidence.shortpick_lab import (
     list_shortpick_validation_queue,
     retry_failed_shortpick_rounds,
     run_shortpick_experiment,
+    shortpick_frozen_paper_strategy_contract,
+    shortpick_llm_paper_control_contract,
+    shortpick_market_factor_paper_control_contracts,
     validate_shortpick_run,
 )
 from ashare_evidence.shortpick_market_factor_study import build_shortpick_market_factor_study
@@ -137,6 +147,265 @@ from ashare_evidence.watchlist import (
 )
 
 LOGGER = logging.getLogger(__name__)
+SHORTPICK_PORTFOLIO_BACKTEST_ARTIFACT = Path("output/shortpick-portfolio-backtest-new-retail-mainboard-current-20260510.json")
+
+
+def _shortpick_portfolio_artifact_path() -> Path:
+    candidates = [
+        SHORTPICK_PORTFOLIO_BACKTEST_ARTIFACT,
+        Path(__file__).resolve().parents[2] / SHORTPICK_PORTFOLIO_BACKTEST_ARTIFACT,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[-1]
+
+
+def _attach_shortpick_frozen_strategy_evidence(payload: dict[str, object]) -> dict[str, object]:
+    frozen = shortpick_frozen_paper_strategy_contract()
+    artifact_payload: dict[str, object] = {}
+    artifact_path = _shortpick_portfolio_artifact_path()
+    if artifact_path.exists():
+        try:
+            artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+            leading_mode = str(frozen.get("mode_key") or "daily_rolling_5x10k")
+            leading_strategy = "low_turnover_20d_uptrend_liquid_top120"
+            leading = (((artifact.get("results") or {}).get(leading_mode) or {}).get(leading_strategy) or {})
+            daily_results = (artifact.get("results") or {}).get(leading_mode) or {}
+            comparison_strategies = (
+                leading_strategy,
+                "ret10_turnover_second_market_positive_cooldown",
+                "ret10_turnover_second_market_positive_cooldown_stop8",
+                "ret10_amount_turnover_strong_breadth_rank2_stop12",
+                "low_turnover_20d_uptrend_liquid_top120",
+                "ret10_turnover_top3_market_positive_cooldown_equal_weight",
+                "momentum_volume_golden_cross_10_200",
+                "ret10_turnover",
+                "ret10_turnover_cooldown",
+            )
+            paper_control_summaries = {
+                strategy: {
+                    "label": (daily_results.get(strategy) or {}).get("label") or strategy,
+                    "summary": (daily_results.get(strategy) or {}).get("summary") or {},
+                    "yearly": (daily_results.get(strategy) or {}).get("yearly") or [],
+                }
+                for strategy in comparison_strategies
+                if strategy in daily_results
+            }
+            production_evidence = artifact.get("production_evidence") or {}
+            artifact_payload = {
+                "artifact_path": str(artifact_path),
+                "summary": (leading.get("summary") or {}),
+                "paper_control_summaries": paper_control_summaries,
+                "production_evidence": production_evidence,
+                "data_scope": artifact.get("data_scope") or {},
+                "config": artifact.get("config") or {},
+                "benchmark_references": artifact.get("benchmark_references") or {},
+                "comparison": artifact.get("comparison") or {},
+            }
+        except Exception as exc:  # pragma: no cover - defensive runtime projection
+            artifact_payload = {"artifact_path": str(artifact_path), "artifact_error": str(exc)}
+    else:
+        artifact_payload = {"artifact_path": str(artifact_path), "artifact_error": "artifact_not_found"}
+    return {
+        **payload,
+        "frozen_paper_strategy": {
+            **frozen,
+            "evidence": artifact_payload,
+        },
+    }
+
+
+def _iso_or_none(value: object) -> str | None:
+    if hasattr(value, "isoformat"):
+        return value.isoformat()  # type: ignore[no-any-return, attr-defined]
+    return None
+
+
+def _shortpick_market_control_contract_by_role(contract: dict[str, object], role: str) -> dict[str, object]:
+    controls = contract.get("controls")
+    if not isinstance(controls, list):
+        return {}
+    for control in controls:
+        if isinstance(control, dict) and control.get("role") == role:
+            return dict(control)
+    return {}
+
+
+def _shortpick_tracking_group_for_role(role: str, *, is_frozen_item: bool, is_llm_control_item: bool) -> str:
+    if is_frozen_item:
+        return "frozen_strategy"
+    if is_llm_control_item:
+        return "llm_paper_control"
+    if role == SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE:
+        return "market_random_control"
+    if role in SHORTPICK_MARKET_FACTOR_PAPER_CONTROL_ROLES:
+        return "market_factor_control"
+    return "paper_tracking"
+
+
+def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object]:
+    contract = shortpick_frozen_paper_strategy_contract()
+    llm_contract = shortpick_llm_paper_control_contract()
+    market_control_contract = shortpick_market_factor_paper_control_contracts()
+    family = str(contract.get("family") or "")
+    monitoring_tracks = contract.get("monitoring_tracks") if isinstance(contract.get("monitoring_tracks"), list) else []
+    max_holding_days = max(
+        [int(item.get("holding_days") or item.get("max_holding_days") or 0) for item in monitoring_tracks if isinstance(item, dict)]
+        or [10]
+    )
+    frozen_at = date.fromisoformat(str(contract.get("frozen_at") or "2026-05-09"))
+    latest_run = session.scalar(
+        select(ShortpickExperimentRun)
+        .where(ShortpickExperimentRun.information_mode == SHORTPICK_INFORMATION_MODE)
+        .order_by(ShortpickExperimentRun.run_date.desc(), ShortpickExperimentRun.id.desc())
+        .limit(1)
+    )
+    raw_rows = session.execute(
+        select(ShortpickExperimentRun, ShortpickCandidate)
+        .join(ShortpickCandidate, ShortpickCandidate.run_id == ShortpickExperimentRun.id)
+        .where(
+            ShortpickExperimentRun.information_mode == SHORTPICK_INFORMATION_MODE,
+            ShortpickExperimentRun.run_date >= frozen_at,
+            ShortpickCandidate.parse_status == "parsed",
+        )
+        .order_by(ShortpickExperimentRun.run_date.desc(), ShortpickCandidate.id.desc())
+        .limit(1000)
+    ).all()
+
+    items: list[dict[str, object]] = []
+    for run, candidate in raw_rows:
+        candidate_payload = dict(candidate.candidate_payload or {})
+        tracking_role = str(candidate_payload.get("tracking_role") or "")
+        is_frozen_item = candidate.research_priority == "market_factor_frozen_paper"
+        is_llm_control_item = tracking_role == SHORTPICK_LLM_PAPER_CONTROL_ROLE
+        is_market_control_item = tracking_role in SHORTPICK_MARKET_FACTOR_PAPER_CONTROL_ROLES
+        if not is_frozen_item and not is_llm_control_item and not is_market_control_item:
+            continue
+        overlay = dict(candidate_payload.get("market_factor_overlay") or {})
+        llm_control = dict(candidate_payload.get("llm_paper_control") or {})
+        summary_overlay = dict((run.summary_payload or {}).get("market_factor_overlay") or {})
+        frozen = dict(summary_overlay.get("frozen_paper_strategy") or {})
+        regime = dict(summary_overlay.get("regime") or overlay.get("regime") or {})
+        market_control = _shortpick_market_control_contract_by_role(market_control_contract, tracking_role)
+        if is_frozen_item:
+            item_contract = contract
+        elif is_llm_control_item:
+            item_contract = llm_contract
+        else:
+            item_contract = {**market_control_contract, **market_control}
+        tracking_group = _shortpick_tracking_group_for_role(
+            tracking_role,
+            is_frozen_item=is_frozen_item,
+            is_llm_control_item=is_llm_control_item,
+        )
+        items.append(
+            {
+                "run_id": run.id,
+                "candidate_id": candidate.id,
+                "run_date": run.run_date.isoformat(),
+                "symbol": candidate.symbol,
+                "name": candidate.name,
+                "status": "tracking_signal",
+                "tracking_group": tracking_group,
+                "tracking_role": tracking_role or ("frozen_paper_primary" if is_frozen_item else ""),
+                "selection_label": str(item_contract.get("label") or "纸面对照"),
+                "source_rank": int(overlay.get("source_rank") or llm_control.get("selection_rank") or 2),
+                "entry_rule": "次一交易日收盘买入",
+                "exit_rule": str(
+                    item_contract.get("risk_rule")
+                    or item_contract.get("monitoring_rule")
+                    or item_contract.get("selection_rule")
+                    or "四轨退出监测"
+                ),
+                "monitoring_tracks": item_contract.get("monitoring_tracks") if isinstance(item_contract.get("monitoring_tracks"), list) else monitoring_tracks,
+                "holding_days": max_holding_days,
+                "stop_loss_pct": 0.08,
+                "thesis": candidate.thesis,
+                "gate": {
+                    "passed": bool(frozen.get("gate_pass", True)) if is_frozen_item else True,
+                    "inserted": bool(frozen.get("inserted", True)) if is_frozen_item else bool(llm_control.get("selected", True)),
+                },
+                "regime": {
+                    "universe_ret10_mean": regime.get("universe_ret10_mean"),
+                    "pool_ret1_mean": regime.get("pool_ret1_mean"),
+                    "breadth10": regime.get("breadth10"),
+                    "pool_ret10_mean": regime.get("pool_ret10_mean"),
+                },
+                "selection_score_components": llm_control.get("selection_score_components") if is_llm_control_item else overlay,
+                "created_at": _iso_or_none(candidate.created_at),
+                "updated_at": _iso_or_none(candidate.updated_at),
+            }
+        )
+        if len(items) >= 160:
+            break
+
+    latest_summary = dict(latest_run.summary_payload or {}) if latest_run else {}
+    latest_overlay = dict(latest_summary.get("market_factor_overlay") or {})
+    latest_frozen = dict(latest_overlay.get("frozen_paper_strategy") or {})
+    latest_has_frozen_overlay = bool(latest_frozen)
+    latest_run_date = latest_run.run_date if latest_run else None
+
+    frozen_items = [item for item in items if item.get("tracking_group") == "frozen_strategy"]
+    llm_control_items = [item for item in items if item.get("tracking_group") == "llm_paper_control"]
+    market_control_items = [
+        item
+        for item in items
+        if item.get("tracking_group") in {"market_factor_control", "market_random_control"}
+    ]
+
+    if frozen_items:
+        current_status = "tracking_active"
+        current_label = "已有冻结策略纸面跟踪标的"
+        current_message = "冻结策略已经写入正式纸面跟踪标的；后续只做前向观察，不根据跟踪期表现改参数。"
+    elif latest_run_date and (latest_run_date < frozen_at or not latest_has_frozen_overlay):
+        current_status = "waiting_first_frozen_run"
+        current_label = "等待首个冻结后正式批次"
+        current_message = "当前最新短投批次生成于规则冻结前，或尚未写入冻结策略覆盖层；下一次盘后批次会开始记录正式纸面跟踪。"
+    elif latest_has_frozen_overlay and not bool(latest_frozen.get("inserted")):
+        current_status = "no_signal"
+        current_label = "本批次未触发冻结策略"
+        current_message = "冻结策略已启用，但当前市场状态或候选池热度未满足条件；这也是纸面跟踪的一部分。"
+    else:
+        current_status = "waiting_signal"
+        current_label = "等待正式纸面信号"
+        current_message = "冻结策略合同已存在，等待下一次符合条件的批次。"
+
+    return {
+        "generated_at": utcnow().isoformat(),
+        "current_status": current_status,
+        "current_label": current_label,
+        "current_message": current_message,
+        "contract": contract,
+        "llm_control_contract": llm_contract,
+        "market_control_contract": market_control_contract,
+        "latest_run": (
+            {
+                "id": latest_run.id,
+                "run_date": latest_run.run_date.isoformat(),
+                "status": latest_run.status,
+                "trigger_source": latest_run.trigger_source,
+                "completed_at": _iso_or_none(latest_run.completed_at),
+                "has_frozen_overlay": latest_has_frozen_overlay,
+            }
+            if latest_run
+            else None
+        ),
+        "summary": {
+            "tracked_signal_count": len(frozen_items),
+            "llm_paper_control_signal_count": len(llm_control_items),
+            "market_control_signal_count": len(market_control_items),
+            "comparison_signal_count": len(items),
+            "required_forward_trading_days": int(contract.get("required_forward_trading_days") or 40),
+            "frozen_at": frozen_at.isoformat(),
+            "family": family,
+            "scope_note": str(contract.get("scope_note") or ""),
+            "llm_control_scope_note": str(llm_contract.get("scope_note") or ""),
+            "market_control_scope_note": str(market_control_contract.get("scope_note") or ""),
+        },
+        "items": items,
+    }
+
 
 def create_app(
     database_url: str | None = None,
@@ -674,10 +943,18 @@ def create_app(
                     benchmark_mode=benchmark_mode,
                     walk_forward_lookback_days=120,
                 )
-                market_factor_study_cache[benchmark_mode] = (time.monotonic(), result)
-                return result
+                enriched = _attach_shortpick_frozen_strategy_evidence(result)
+                market_factor_study_cache[benchmark_mode] = (time.monotonic(), enriched)
+                return enriched
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/shortpick-lab/paper-tracking")
+    def shortpick_paper_tracking(
+        access: StockAccessContext = Depends(require_stock_access),
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        return _build_shortpick_paper_tracking_ledger(session)
 
     @app.get("/shortpick-lab/replay-runs", response_model=ShortpickRunListResponse)
     def shortpick_replay_run_list(

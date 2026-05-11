@@ -3,16 +3,16 @@
   "reviewed_at": "2026-04-28",
   "files": {
     "frontend/src/App.tsx": {
-      "lines": 3063,
-      "reason": "Main app shell: event-analysis, operations audit, multi-view state, per-section loading skeleton tracking, and scoped cross-view error handling so background stock-detail failures do not bleed into the Short Pick Lab surface. Mobile UI JSX in dedicated components/mobile/*. Planned refactor deferred.",
+      "lines": 3095,
+      "reason": "Main app shell: event-analysis, operations audit, multi-view state, per-section loading skeleton tracking, and scoped cross-view error handling so background stock-detail failures do not bleed into the Short Pick Lab surface. It also reads Short Pick Lab paper-tracking status for the global daily-refresh banner so LLM control batches are not confused with the frozen paper strategy. Mobile UI JSX in dedicated components/mobile/*. Planned refactor deferred. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, and paper-tracking/backtest comparison surfaces; split remains deferred until the experiment contract stops changing.",
       "status": "planned_refactor",
-      "reviewed_at": "2026-05-08"
+      "reviewed_at": "2026-05-11"
     },
     "frontend/src/styles.css": {
-      "lines": 1415,
-      "reason": "Global CSS: variables, layout, component styles, Ant Design overrides, responsive breakpoints, dark-mode Select dropdown/selection-item fixes, and Short Pick Lab replay/strategy readout styling. Cascade-dependent.",
+      "lines": 1441,
+      "reason": "Global CSS: variables, layout, component styles, Ant Design overrides, responsive breakpoints, dark-mode Select dropdown/selection-item fixes, and Short Pick Lab replay/frozen paper-tracking readout styling. Cascade-dependent. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, and paper-tracking/backtest comparison surfaces; split remains deferred until the experiment contract stops changing.",
       "status": "accepted",
-      "reviewed_at": "2026-05-09"
+      "reviewed_at": "2026-05-11"
     },
     "src/ashare_evidence/analysis_pipeline.py": {
       "lines": 927,
@@ -21,16 +21,16 @@
       "reviewed_at": "2026-04-30"
     },
     "src/ashare_evidence/api.py": {
-      "lines": 1226,
-      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, improvement-suggestion, shortpick lab, shortpick replay, and market-factor study routes. The latest change exposes the Short Pick Lab strategy closeout study through the same shortpick route group and caches that heavy read-only study to avoid repeated market-wide recomputation on frontend navigation; router extraction remains possible but would add broad touch points across the current schema surface.",
+      "lines": 1503,
+      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, improvement-suggestion, shortpick lab, shortpick replay, and market-factor study routes. The shortpick market-factor endpoint attaches frozen paper-strategy evidence from the long-sample artifact while preserving cached read-only behavior, and the paper-tracking ledger endpoint projects frozen strategy status, LLM paper-control signals, same-pool market-factor controls, and four exit-track monitoring rules from existing shortpick runs/candidates without triggering market refresh or model work; router extraction remains possible but would add broad touch points across the current schema surface. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, and paper-tracking/backtest comparison surfaces; split remains deferred until the experiment contract stops changing.",
       "status": "accepted",
-      "reviewed_at": "2026-05-09"
+      "reviewed_at": "2026-05-11"
     },
     "src/ashare_evidence/cli.py": {
-      "lines": 891,
-      "reason": "CLI command group: data refresh, cache management, admin operations, event/improvement audit triggers, database write preflight (db.py), benchmark index bar sync, and shortpick replay/distillation/rejector/hard-veto/factor-rank/market-factor-study experiment commands, including benchmark-mode selection for market factor studies.",
+      "lines": 987,
+      "reason": "CLI command group: data refresh, cache management, admin operations, event/improvement audit triggers, database write preflight (db.py), benchmark index bar sync, and shortpick replay/distillation/rejector/hard-veto/factor-rank/market-factor-study/portfolio-backtest experiment commands, including benchmark-mode selection for market factor studies and long-sample shortpick capital-deployment backtests. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, and paper-tracking/backtest comparison surfaces; split remains deferred until the experiment contract stops changing.",
       "status": "accepted",
-      "reviewed_at": "2026-05-08"
+      "reviewed_at": "2026-05-11"
     },
     "src/ashare_evidence/dashboard.py": {
       "lines": 712,
@@ -105,10 +105,10 @@
       "reviewed_at": "2026-05-01"
     },
     "src/ashare_evidence/simulation.py": {
-      "lines": 1508,
-      "reason": "Cohesive simulation engine: position sizing, performance metrics, scenario config, order execution. Single-domain logic with tight internal coupling.",
+      "lines": 1796,
+      "reason": "Cohesive simulation engine: position sizing, performance metrics, scenario config, order execution. Single-domain logic with tight internal coupling. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, and paper-tracking/backtest comparison surfaces; split remains deferred until the experiment contract stops changing.",
       "status": "accepted",
-      "reviewed_at": "2026-04-28"
+      "reviewed_at": "2026-05-11"
     },
     "src/ashare_evidence/improvement_suggestions.py": {
       "lines": 1138,
@@ -135,16 +135,16 @@
       "reviewed_at": "2026-05-01"
     },
     "frontend/src/components/OperationsTabs.tsx": {
-      "lines": 1015,
-      "reason": "Operations dashboard tabs: suggestion-audit, filter state, model-picking modal, per-section loading skeletons for simulation_workspace, improvement_suggestions, manual_queue, replay, portfolios. The latest growth adds explicit completed-state rendering and hides worklist actions for finished suggestions; future split into per-tab components is still desirable.",
+      "lines": 1124,
+      "reason": "Operations dashboard tabs: suggestion-audit, filter state, model-picking modal, per-section loading skeletons for simulation_workspace, improvement_suggestions, manual_queue, replay, portfolios. The latest growth adds explicit completed-state rendering and hides worklist actions for finished suggestions; future split into per-tab components is still desirable. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, and paper-tracking/backtest comparison surfaces; split remains deferred until the experiment contract stops changing.",
       "status": "accepted",
-      "reviewed_at": "2026-05-03"
+      "reviewed_at": "2026-05-11"
     },
     "frontend/src/components/ShortpickLabView.tsx": {
-      "lines": 2072,
-      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, historical replay workbench state, and the strategy closeout readout in one Ant Design surface. Historical replay now includes a reduced non-expert default readout, aggregate statistical readouts, per-run drilldown, readable replay family labels, explicit loading states for slow replay feedback tables, and the market-factor closeout summary for cooldown/default, ret10-turnover/offensive, breadth/continuity gate, diversification diagnostics, and hard/strict veto strategy labels. Heavy replay aggregate/per-run feedback and strategy closeout data now load in the background instead of blocking initial lab or replay navigation. Live runs now label the formal strategy-default and offensive-control candidate groups alongside the LLM control group. It should be split into tab components after replay contracts stabilize, but keeping it together avoids cross-file churn during this visible replay closeout.",
+      "lines": 3142,
+      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, historical replay workbench state, and the strategy closeout readout in one Ant Design surface. Historical replay now includes a reduced non-expert default readout, aggregate statistical readouts, per-run drilldown, readable replay family labels, explicit loading states for slow replay feedback tables, and the frozen paper strategy summary with market-factor controls, multi-index references, cost stress, and paper-tracking status. Heavy replay aggregate/per-run feedback and strategy closeout data now load in the background instead of blocking initial lab or replay navigation. Live runs now surface the frozen paper strategy separately from LLM and market-factor control groups; the paper-tracking tab explains the four trading-day exit tracks, the strict daily LLM paper-control stock selected from the LLM recommendation pool, and same-pool market controls including offensive Top1, cooldown Top1, and deterministic random baseline. The no-live-run fallback now defaults to paper tracking without locking users out of replay/history tabs. It should be split into tab components after replay contracts stabilize, but keeping it together avoids cross-file churn during this visible replay closeout. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, and paper-tracking/backtest comparison surfaces; split remains deferred until the experiment contract stops changing.",
       "status": "planned_refactor",
-      "reviewed_at": "2026-05-09"
+      "reviewed_at": "2026-05-11"
     },
     "src/ashare_evidence/event_analyzer.py": {
       "lines": 526,
@@ -159,34 +159,40 @@
       "status": "accepted"
     },
     "src/ashare_evidence/shortpick_replay.py": {
-      "lines": 3773,
-      "reason": "Shortpick historical replay v1 keeps sealed packet construction, sealed-packet-only LLM execution, failed-round handling without production proxy fallback, rejected-source/source-id leakage preservation, market-cap fallback bucketing, baseline controls, LLM self/momentum-pool distillation, LLM reject-only momentum gating, high-precision hard-veto controls, deterministic sealed-market feature rerankers including 10d momentum + turnover and single-day-chase cooldown, random reject controls, leakage audit, compact replay run listing, per-run and aggregate validation statistics, scalar replay feedback aggregation that avoids deserializing large JSON payloads on page load, replay API helpers, post-audit contract normalization, and runtime-safe replay transaction boundaries in one first-version workflow. Diagnostic proxy remains explicit test mode only; split into packet/audit/baseline/distillation/rejector/ranker modules after the contract stabilizes.",
-      "reviewed_at": "2026-05-09",
+      "lines": 4604,
+      "reason": "Shortpick historical replay v1 keeps sealed packet construction, sealed-packet-only LLM execution, failed-round handling without production proxy fallback, rejected-source/source-id leakage preservation, market-cap fallback bucketing, baseline controls, LLM self/momentum-pool distillation, LLM reject-only momentum gating, high-precision hard-veto controls, deterministic sealed-market feature rerankers including 10d momentum + turnover and single-day-chase cooldown, random reject controls, leakage audit, compact replay run listing, per-run and aggregate validation statistics, scalar replay feedback aggregation that avoids deserializing large JSON payloads on page load, replay API helpers, post-audit contract normalization, and runtime-safe replay transaction boundaries in one first-version workflow. Diagnostic proxy remains explicit test mode only; split into packet/audit/baseline/distillation/rejector/ranker modules after the contract stabilizes. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, and paper-tracking/backtest comparison surfaces; split remains deferred until the experiment contract stops changing.",
+      "reviewed_at": "2026-05-11",
       "status": "planned_refactor"
     },
     "src/ashare_evidence/shortpick_market_factor_study.py": {
-      "lines": 957,
-      "reason": "Backend-only Short Pick Lab market-factor study command: loads daily bars, builds expanded momentum pools, evaluates fixed and walk-forward feature rerankers including 10d momentum + turnover, single-day-chase cooldown, industry-diversified diagnostics, and a train-threshold breadth/continuity regime gate, supports CSI300 and universe equal-weight benchmark modes, applies cost/entry assumptions, and summarizes train/holdout/replay windows plus portfolio-level and regime-bucket readouts. Kept cohesive while the research contract is still exploratory; split loader/evaluator/summary helpers if it becomes a production API.",
-      "reviewed_at": "2026-05-08",
+      "lines": 1064,
+      "reason": "Backend-only Short Pick Lab market-factor study command: loads daily bars, builds expanded momentum pools, evaluates fixed and walk-forward feature rerankers including 10d momentum + turnover, single-day-chase cooldown, industry-diversified diagnostics, and a train-threshold breadth/continuity regime gate, supports CSI300 and universe equal-weight benchmark modes, applies cost/entry assumptions, and summarizes train/holdout/replay windows plus portfolio-level and regime-bucket readouts. Kept cohesive while the research contract is still exploratory; split loader/evaluator/summary helpers if it becomes a production API. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, and paper-tracking/backtest comparison surfaces; split remains deferred until the experiment contract stops changing.",
+      "reviewed_at": "2026-05-11",
+      "status": "planned_refactor"
+    },
+    "src/ashare_evidence/shortpick_portfolio_backtest.py": {
+      "lines": 1009,
+      "reason": "Backend-only Short Pick Lab capital-deployment backtest: compares daily rolling 5x10k and weekly concentrated 1x50k modes over long daily-bar history, using the existing market-factor selection helpers, second-pick de-crowding variants, market-positive / overheating / breadth-pool regime gates, optional close-based stop loss, T+1 close-entry assumptions, transaction costs, limit-up entry filter, limit-down exit blocking, NAV/drawdown metrics, exit-reason and blocked-exit counts, yearly/monthly robustness readouts, multi-index benchmark references, production-evidence gates, simple momentum controls, and cost-stress checks. Kept in one research module while the portfolio evidence contract is still exploratory.",
+      "reviewed_at": "2026-05-09",
       "status": "planned_refactor"
     },
     "tests/test_shortpick_replay.py": {
-      "lines": 703,
-      "reason": "Shortpick replay contract tests cover historical sealed-packet execution, failed-round behavior, leakage rejection, feedback ordering, replay distillation family insertion, and reject-only momentum-gating controls. Kept together while the replay experiment contract is stabilizing.",
+      "lines": 940,
+      "reason": "Shortpick replay contract tests cover historical sealed-packet execution, failed-round behavior, leakage rejection, feedback ordering, replay distillation family insertion, and reject-only momentum-gating controls. Kept together while the replay experiment contract is stabilizing. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, and paper-tracking/backtest comparison surfaces; split remains deferred until the experiment contract stops changing.",
       "status": "accepted",
-      "reviewed_at": "2026-05-08"
+      "reviewed_at": "2026-05-11"
     },
     "tests/test_shortpick_lab.py": {
-      "lines": 1141,
-      "reason": "Short Pick Lab contract tests cover isolated executor behavior, DeepSeek search planning and fallback search, source integrity, candidate parsing, validation status handling, and live strategy overlay invariants. Kept together while the shortpick executor contract is still changing rapidly.",
+      "lines": 1395,
+      "reason": "Short Pick Lab contract tests cover isolated executor behavior, DeepSeek search planning and fallback search, source integrity, candidate parsing, validation status handling, live strategy overlay invariants, frozen paper-tracking contract rules, LLM paper-control selection, market-factor paper controls, four-track exit snapshot calculation, and display-horizon consistency for paper-tracked market controls. Kept together while the shortpick executor contract is still changing rapidly. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, and paper-tracking/backtest comparison surfaces; split remains deferred until the experiment contract stops changing.",
       "status": "accepted",
-      "reviewed_at": "2026-05-09"
+      "reviewed_at": "2026-05-11"
     },
     "src/ashare_evidence/shortpick_lab.py": {
-      "lines": 4671,
-      "reason": "Short Pick Lab workflow: native-web/open-discovery execution, source integrity, candidate parsing, validation, retry, serialization, and model feedback. Live runs now attach the selected market-factor overlay as first-class validation candidates after LLM consensus, while keeping consensus scoped to independent LLM candidates; the overlay refreshes the existing research universe only during run generation and commits per symbol to avoid long SQLite locks. DeepSeek search uses local SearXNG first and a public Sogou fallback when local engines return no usable results, while retaining fail-closed source enforcement. A module split remains desirable after the API contract stabilizes.",
+      "lines": 5614,
+      "reason": "Short Pick Lab workflow: native-web/open-discovery execution, source integrity, candidate parsing, validation, retry, serialization, and model feedback. Live runs now attach the frozen v3 paper-tracking strategy as a first-class candidate when its market-positive/not-overheated gate passes, mark exactly one LLM paper-control candidate per run via a frozen deterministic ranking rule, and add same-pool market controls for offensive Top1, cooldown Top1, and deterministic random Top40 selection. The frozen, LLM paper-control, and market-control validation payloads record mechanical 5-trading-day, mechanical 10-trading-day, conditional 5-to-10-day, and 10% take-profit exit tracks once the 10-day window is complete; paper-tracked market controls also use a 10-trading-day display horizon while ordinary non-tracked market candidates remain 5-day controls. The overlay refreshes the existing research universe only during run generation and commits per symbol to avoid long SQLite locks. DeepSeek search uses local SearXNG first and a public Sogou fallback when local engines return no usable results, while retaining fail-closed source enforcement. A module split remains desirable after the API contract stabilizes. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, and paper-tracking/backtest comparison surfaces; split remains deferred until the experiment contract stops changing.",
       "status": "planned_refactor",
-      "reviewed_at": "2026-05-09"
+      "reviewed_at": "2026-05-11"
     }
   }
 }

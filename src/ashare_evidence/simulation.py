@@ -18,6 +18,7 @@ from ashare_evidence.intraday_market import (
     get_intraday_market_status,
 )
 from ashare_evidence.lineage import build_lineage
+from ashare_evidence.market_rules import ACCOUNT_PROFILE_NEW_RETAIL_CASH, account_trade_eligibility, board_rule
 from ashare_evidence.models import (
     MarketBar,
     ModelVersion,
@@ -72,6 +73,9 @@ MAX_DECISION_DIFFS = 8
 MAX_MODEL_ADVICES = 4
 WATCHLIST_SCOPE_ACTIVE = "active_watchlist_default"
 WATCHLIST_SCOPE_CUSTOM = "custom"
+COMMISSION_RATE = 0.0003
+MIN_COMMISSION = 5.0
+SELL_STAMP_TAX_RATE = 0.0005
 
 
 def _sync_portfolio_backtest_artifact_payload(portfolio: PaperPortfolio) -> None:
@@ -110,6 +114,18 @@ def _round_down_board_lot(quantity: int) -> int:
     if quantity <= 0:
         return 0
     return int(quantity // PHASE5_BOARD_LOT * PHASE5_BOARD_LOT)
+
+
+def _near(left: float, right: float) -> bool:
+    return abs(left - right) <= max(0.01, abs(right) * 0.0001)
+
+
+def _commission(amount: float) -> float:
+    return round(max(amount * COMMISSION_RATE, MIN_COMMISSION), 2)
+
+
+def _sell_stamp_tax(amount: float) -> float:
+    return round(amount * SELL_STAMP_TAX_RATE, 2)
 
 
 def _board_lot_quantity_for_target_value(target_value: float, price: float) -> int:
@@ -743,6 +759,14 @@ def _model_advices(
         bar = latest_bars.get(symbol)
         if recommendation is None or bar is None:
             continue
+        eligibility = account_trade_eligibility(
+            symbol,
+            stock_profile=bar.stock,
+            account_profile=ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+            as_of=bar.observed_at,
+        )
+        if not eligibility["tradable"]:
+            continue
         summary = _serialize_recommendation(recommendation, artifact_root=artifact_root)
         reco = summary["recommendation"]
         price = float(bar.close_price)
@@ -911,7 +935,7 @@ def _workspace_payload(session: Session, simulation_session: SimulationSession) 
             "current_step": simulation_session.current_step,
             "step_interval_seconds": simulation_session.step_interval_seconds,
             "step_trigger_label": "30 分钟定时决策",
-            "fill_rule_label": "最新价即时成交",
+            "fill_rule_label": "最新价模拟成交，含A股权限、T+1、整手、涨跌停校验",
             "auto_execute_model": _effective_auto_execute_model(simulation_session),
             "auto_execute_model_requested": _auto_execute_requested(simulation_session),
             "auto_execute_status": auto_execution_context["auto_execute_status"],
@@ -1221,6 +1245,83 @@ def _recommendation_for_symbol(session: Session, symbol: str) -> Recommendation 
     return history[0] if history else None
 
 
+def _previous_daily_close(session: Session, stock_id: int, before_day: datetime) -> float | None:
+    previous = session.scalar(
+        select(MarketBar)
+        .where(
+            MarketBar.stock_id == stock_id,
+            MarketBar.timeframe == "1d",
+            MarketBar.observed_at < before_day,
+        )
+        .order_by(MarketBar.observed_at.desc(), MarketBar.id.desc())
+        .limit(1)
+    )
+    return float(previous.close_price) if previous is not None and previous.close_price else None
+
+
+def _is_one_price_limit_bar(latest_bar: MarketBar, *, previous_close: float, limit_pct: float, side: str) -> bool:
+    if previous_close <= 0 or limit_pct <= 0:
+        return False
+    one_price = (
+        _near(float(latest_bar.open_price), float(latest_bar.high_price))
+        and _near(float(latest_bar.high_price), float(latest_bar.low_price))
+        and _near(float(latest_bar.low_price), float(latest_bar.close_price))
+    )
+    if not one_price:
+        return False
+    day_return = float(latest_bar.close_price) / previous_close - 1.0
+    if side == "buy":
+        return day_return >= limit_pct * 0.95
+    return day_return <= -limit_pct * 0.95
+
+
+def _quantity_rule_detail(rule: dict[str, Any]) -> str:
+    minimum = int(rule.get("min_order_quantity") or rule.get("lot") or 100)
+    increment = int(rule.get("quantity_increment") or rule.get("lot") or 100)
+    if increment == 1:
+        return f"单笔不少于 {minimum} 股，之后可按 1 股递增。"
+    return f"单笔不少于 {minimum} 股，并按 {increment} 股整数倍申报。"
+
+
+def _valid_order_quantity(rule: dict[str, Any], *, side: str, quantity: int, current_quantity: int = 0) -> bool:
+    minimum = int(rule.get("min_order_quantity") or rule.get("lot") or 100)
+    increment = int(rule.get("quantity_increment") or rule.get("lot") or 100)
+    if quantity <= 0:
+        return False
+    if side == "sell" and current_quantity > 0 and current_quantity < minimum:
+        return quantity == current_quantity
+    return quantity >= minimum and (quantity - minimum) % increment == 0
+
+
+def _available_sell_quantity(
+    session: Session,
+    *,
+    portfolio: PaperPortfolio,
+    stock: Stock,
+    requested_at: datetime,
+) -> int:
+    fills = session.execute(
+        select(PaperOrder.side, PaperFill.quantity, PaperFill.filled_at)
+        .join(PaperFill, PaperFill.order_id == PaperOrder.id)
+        .where(
+            PaperOrder.portfolio_id == portfolio.id,
+            PaperOrder.stock_id == stock.id,
+            PaperOrder.status == "filled",
+            PaperFill.filled_at < requested_at,
+        )
+        .order_by(PaperFill.filled_at.asc(), PaperFill.id.asc())
+    ).all()
+    request_day = requested_at.date()
+    available = 0
+    for side, quantity, filled_at in fills:
+        if side == "buy":
+            if filled_at.date() < request_day:
+                available += int(quantity)
+        elif side == "sell":
+            available -= int(quantity)
+    return max(available, 0)
+
+
 def _create_fill_for_order(
     session: Session,
     simulation_session: SimulationSession,
@@ -1237,14 +1338,15 @@ def _create_fill_for_order(
     limit_price: float | None = None,
     actor_login: str | None = None,
 ) -> None:
-    fee = round(max(reference_price * quantity * 0.0003, 5.0), 2)
-    tax = round(reference_price * quantity * 0.001, 2) if side == "sell" else 0.0
+    gross_amount = reference_price * quantity
+    fee = _commission(gross_amount)
+    tax = _sell_stamp_tax(gross_amount) if side == "sell" else 0.0
     order_payload = {
         "simulation_session_key": simulation_session.session_key,
         "track_kind": track,
         "step_index": simulation_session.current_step,
         "execution_mode": "manual" if track == "manual" else "auto_model",
-        "fill_rule": "latest_price_immediate",
+        "fill_rule": "latest_price_a_share_guarded",
         "reason": reason,
         "action_summary": f"{'买入' if side == 'buy' else '卖出'} {quantity} 股",
     }
@@ -1271,7 +1373,7 @@ def _create_fill_for_order(
 
     fill_payload = {
         "simulation_session_key": simulation_session.session_key,
-        "matching_rule": "latest_price_immediate",
+        "matching_rule": "latest_price_a_share_guarded",
         "step_index": simulation_session.current_step,
     }
     fill = PaperFill(
@@ -1326,26 +1428,70 @@ def _create_fill_for_order(
 
 
 def _validate_order_request(
+    session: Session,
     summary: dict[str, Any],
     *,
+    portfolio: PaperPortfolio,
+    stock: Stock,
     symbol: str,
     side: str,
     quantity: int,
     reference_price: float,
+    requested_at: datetime,
+    latest_bar: MarketBar,
+    limit_price: float | None = None,
 ) -> None:
-    if quantity <= 0 or quantity % 100 != 0:
-        raise ValueError("一期模拟下单数量必须为 100 股整数倍。")
     if side not in {"buy", "sell"}:
         raise ValueError("仅支持 buy / sell。")
+    rule = board_rule(symbol, stock_profile=stock, as_of=requested_at)
+    holding = next((item for item in summary["holdings"] if item["symbol"] == symbol), None)
+    current_quantity = int(holding["quantity"]) if holding is not None else 0
+    if not _valid_order_quantity(rule, side=side, quantity=quantity, current_quantity=current_quantity):
+        raise ValueError(f"{rule['label']} 下单数量不符合规则：{_quantity_rule_detail(rule)}")
+    effective_price = float(limit_price if limit_price is not None else reference_price)
+    if effective_price <= 0:
+        raise ValueError("委托价格必须大于 0。")
+    eligibility = account_trade_eligibility(
+        symbol,
+        stock_profile=stock,
+        account_profile=ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+        as_of=requested_at,
+    )
+    if side == "buy" and not eligibility["tradable"]:
+        raise ValueError(f"当前账户权限不支持买入{eligibility['board_label']}标的：{eligibility['reason']}")
+
+    previous_close = _previous_daily_close(session, stock.id, latest_bar.observed_at)
+    limit_pct = rule.get("limit_pct")
+    if limit_price is not None and previous_close is not None and limit_pct is not None:
+        low_bound = previous_close * (1.0 - float(limit_pct))
+        high_bound = previous_close * (1.0 + float(limit_pct))
+        if not (low_bound <= float(limit_price) <= high_bound):
+            raise ValueError(
+                f"限价 {float(limit_price):.2f} 超出 {rule['label']} 当日涨跌停范围 "
+                f"{low_bound:.2f}-{high_bound:.2f}。"
+            )
+    if previous_close is not None and limit_pct is not None and _is_one_price_limit_bar(
+        latest_bar,
+        previous_close=previous_close,
+        limit_pct=float(limit_pct),
+        side=side,
+    ):
+        if side == "buy":
+            raise ValueError("当前价格形态接近一字涨停，按A股可执行口径不假设可以买入。")
+        raise ValueError("当前价格形态接近一字跌停，按A股可执行口径不假设可以卖出。")
+
     if side == "buy":
-        estimated_fee = round(max(reference_price * quantity * 0.0003, 5.0), 2)
-        estimated_cost = reference_price * quantity + estimated_fee
+        estimated_amount = effective_price * quantity
+        estimated_fee = _commission(estimated_amount)
+        estimated_cost = estimated_amount + estimated_fee
         if estimated_cost > float(summary["available_cash"]):
             raise ValueError("可用资金不足，无法按最新价即时成交。")
         return
-    holding = next((item for item in summary["holdings"] if item["symbol"] == symbol), None)
-    if holding is None or int(holding["quantity"]) < quantity:
+    if holding is None or current_quantity < quantity:
         raise ValueError("当前持仓不足，无法卖出指定数量。")
+    available_quantity = _available_sell_quantity(session, portfolio=portfolio, stock=stock, requested_at=requested_at)
+    if available_quantity < quantity:
+        raise ValueError(f"A股 T+1 约束下当前可卖 {available_quantity} 股，不能卖出 {quantity} 股。")
 
 
 def place_manual_order(
@@ -1380,15 +1526,21 @@ def place_manual_order(
     if latest_bar is None:
         raise LookupError(f"缺少 {normalized_symbol} 的最新价格。")
     reference_price = float(latest_bar.close_price)
+    requested_at = simulation_session.last_data_time or latest_bar.observed_at
     _validate_order_request(
+        session,
         manual_summary,
+        portfolio=manual_portfolio,
+        stock=stock,
         symbol=normalized_symbol,
         side=side,
         quantity=quantity,
         reference_price=reference_price,
+        requested_at=requested_at,
+        latest_bar=latest_bar,
+        limit_price=limit_price,
     )
     recommendation = _recommendation_for_symbol(session, normalized_symbol)
-    requested_at = simulation_session.last_data_time or latest_bar.observed_at
     _create_fill_for_order(
         session,
         simulation_session,
@@ -1484,12 +1636,20 @@ def step_simulation_session(
         },
     )
     if _effective_auto_execute_model(simulation_session) and recommendation is not None and primary["quantity"] and primary["quantity"] > 0:
+        latest_bar = _latest_market_bars(session, [primary["symbol"]]).get(primary["symbol"])
+        if latest_bar is None:
+            raise LookupError(f"缺少 {primary['symbol']} 的最新价格。")
         _validate_order_request(
+            session,
             model_summary,
+            portfolio=model_portfolio,
+            stock=recommendation.stock,
             symbol=primary["symbol"],
             side="buy" if primary["action"] == "buy" else "sell",
             quantity=primary["quantity"],
             reference_price=float(primary["reference_price"]),
+            requested_at=next_data_time,
+            latest_bar=latest_bar,
         )
         stock = recommendation.stock
         _create_fill_for_order(

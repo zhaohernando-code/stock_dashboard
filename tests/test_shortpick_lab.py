@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from datetime import UTC, date, datetime, timedelta
@@ -27,10 +28,20 @@ from ashare_evidence.models import (
     WatchlistFollow,
 )
 from ashare_evidence.shortpick_lab import (
+    SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY,
+    SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_TOP3_EQUAL_WEIGHT_CONTROL_ROLE,
     DeepseekLobeChatSearchShortpickExecutor,
     OpenAICompatibleShortpickExecutor,
     StaticShortpickExecutor,
     _normalize_shortpick_topic,
+    _shortpick_frozen_exit_track_results,
+    _upsert_shortpick_market_factor_candidate,
     build_shortpick_consensus,
     build_shortpick_model_feedback,
     default_shortpick_executors,
@@ -39,8 +50,11 @@ from ashare_evidence.shortpick_lab import (
     normalize_shortpick_candidate_topics,
     retry_failed_shortpick_rounds,
     run_shortpick_experiment,
+    shortpick_frozen_paper_strategy_contract,
+    shortpick_market_factor_paper_control_contracts,
     validate_recent_shortpick_runs,
 )
+from ashare_evidence.shortpick_policy import SHORTPICK_FROZEN_STRATEGY_CONFIG
 
 pytestmark = pytest.mark.runtime_integration
 
@@ -241,6 +255,12 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(payload["consensus"]["summary"]["cross_model_symbols"], ["688981.SH"])
         self.assertEqual(len(payload["candidates"]), 2)
         self.assertTrue(all(item["research_priority"] == "cross_model_same_symbol" for item in payload["candidates"]))
+        self.assertEqual(payload["summary"]["llm_paper_control"]["status"], "selected")
+        self.assertEqual(payload["summary"]["llm_paper_control"]["symbol"], "688981.SH")
+        self.assertEqual(
+            sum(1 for item in payload["candidates"] if item.get("tracking_role") == "llm_paper_control_primary"),
+            1,
+        )
         self.assertTrue(any(v["status"] == "completed" for v in payload["candidates"][0]["validations"]))
 
         with session_scope(self.database_url) as session:
@@ -921,22 +941,256 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertFalse(first_validation["official_validation"])
         self.assertIsNone(first_validation["stock_return"])
 
+    def test_frozen_paper_contract_tracks_four_trading_day_exit_windows(self) -> None:
+        contract = shortpick_frozen_paper_strategy_contract()
+        tracks = contract["monitoring_tracks"]
+        paper_tracking_config = SHORTPICK_FROZEN_STRATEGY_CONFIG["paper_tracking"]
+
+        self.assertEqual([item["key"] for item in tracks], [
+            "mechanical_5d",
+            "mechanical_10d",
+            "conditional_5_to_10d",
+            "take_profit_10pct",
+        ])
+        self.assertTrue(all(item["uses_trading_days"] for item in tracks))
+        self.assertIn("交易日", contract["mode"])
+        self.assertIn("低换手上升趋势", contract["label"])
+        self.assertIn("成交额和换手率", contract["pool_rule"])
+        self.assertIn("20日趋势向上", contract["selection_rule"])
+        self.assertNotIn("第2名", contract["selection_rule"])
+        conditional_track = next(item for item in tracks if item["key"] == "conditional_5_to_10d")
+        self.assertEqual(conditional_track["peak_giveback_pct"], paper_tracking_config["peak_giveback_pct"])
+        self.assertEqual(contract["version"], SHORTPICK_FROZEN_STRATEGY_CONFIG["version"])
+
+    def test_frozen_exit_tracks_are_computed_on_ten_trading_day_window(self) -> None:
+        candidate = ShortpickCandidate(
+            run_id=1,
+            candidate_key="shortpick-market-factor:1:frozen:1",
+            symbol="000001.SZ",
+            name="测试银行",
+            research_priority="market_factor_frozen_paper",
+            candidate_payload={"tracking_role": "frozen_paper_primary", "frozen_paper_strategy": {}},
+        )
+        start = datetime(2026, 5, 6, 7, 0, tzinfo=UTC)
+        closes = [100, 102, 104, 106, 108, 109, 107, 106, 105, 104, 103]
+        bars = [
+            MarketBar(
+                bar_key=f"track-{index}",
+                stock_id=1,
+                timeframe="1d",
+                observed_at=start + timedelta(days=index),
+                open_price=close - 1,
+                high_price=111 if index == 5 else close + 1,
+                low_price=close - 2,
+                close_price=close,
+                volume=1000,
+                amount=close * 1000,
+                raw_payload={},
+                license_tag="test",
+                usage_scope="internal-test",
+                redistribution_scope="none",
+                source_uri=f"test://track/{index}",
+                lineage_hash=compute_lineage_hash({"index": index}),
+            )
+            for index, close in enumerate(closes)
+        ]
+        benchmark_maps = {
+            "000300.SH": {
+                (start + timedelta(days=index)).date(): 200 + index
+                for index in range(len(closes))
+            }
+        }
+
+        tracks = _shortpick_frozen_exit_track_results(
+            candidate=candidate,
+            window=bars,
+            benchmark_maps=benchmark_maps,
+        )
+        by_key = {item["key"]: item for item in tracks}
+
+        self.assertEqual(set(by_key), {"mechanical_5d", "mechanical_10d", "conditional_5_to_10d", "take_profit_10pct"})
+        self.assertEqual(by_key["mechanical_5d"]["holding_trading_days"], 5)
+        self.assertEqual(by_key["mechanical_10d"]["holding_trading_days"], 10)
+        self.assertEqual(by_key["conditional_5_to_10d"]["exit_reason"], "trend_check_failed_after_day5")
+        self.assertEqual(by_key["take_profit_10pct"]["exit_reason"], "take_profit_10pct_touched")
+        self.assertAlmostEqual(by_key["take_profit_10pct"]["stock_return"], 0.10)
+
+    def test_llm_paper_control_candidate_gets_same_exit_tracks(self) -> None:
+        candidate = ShortpickCandidate(
+            run_id=1,
+            candidate_key="shortpick-candidate:1:llm",
+            symbol="688981.SH",
+            name="中芯国际",
+            research_priority="cross_model_same_symbol",
+            candidate_payload={"tracking_role": "llm_paper_control_primary"},
+        )
+        start = datetime(2026, 5, 6, 7, 0, tzinfo=UTC)
+        bars = [
+            MarketBar(
+                bar_key=f"llm-track-{index}",
+                stock_id=1,
+                timeframe="1d",
+                observed_at=start + timedelta(days=index),
+                open_price=100 + index,
+                high_price=101 + index,
+                low_price=99 + index,
+                close_price=100 + index,
+                volume=1000,
+                amount=(100 + index) * 1000,
+                raw_payload={},
+                license_tag="test",
+                usage_scope="internal-test",
+                redistribution_scope="none",
+                source_uri=f"test://llm-track/{index}",
+                lineage_hash=compute_lineage_hash({"llm_index": index}),
+            )
+            for index in range(11)
+        ]
+
+        tracks = _shortpick_frozen_exit_track_results(
+            candidate=candidate,
+            window=bars,
+            benchmark_maps={},
+        )
+
+        self.assertEqual([item["key"] for item in tracks], ["mechanical_5d", "mechanical_10d", "conditional_5_to_10d", "take_profit_10pct"])
+
+    def test_market_factor_paper_controls_get_same_exit_tracks(self) -> None:
+        contract = shortpick_market_factor_paper_control_contracts()
+        self.assertEqual(
+            [item["role"] for item in contract["controls"]],
+            [
+                SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE,
+                SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE,
+                SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE,
+                SHORTPICK_MARKET_FACTOR_TOP3_EQUAL_WEIGHT_CONTROL_ROLE,
+                SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE,
+                SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
+                SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
+            ],
+        )
+        for role in (
+            SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE,
+            SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE,
+            SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE,
+            SHORTPICK_MARKET_FACTOR_TOP3_EQUAL_WEIGHT_CONTROL_ROLE,
+            SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE,
+            SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
+            SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
+        ):
+            candidate = ShortpickCandidate(
+                run_id=1,
+                candidate_key=f"shortpick-market-factor:1:{role}:1",
+                symbol="000001.SZ",
+                name="测试银行",
+                research_priority="market_factor_default",
+                candidate_payload={"tracking_role": role},
+            )
+            start = datetime(2026, 5, 6, 7, 0, tzinfo=UTC)
+            bars = [
+                MarketBar(
+                    bar_key=f"{role}-{index}",
+                    stock_id=1,
+                    timeframe="1d",
+                    observed_at=start + timedelta(days=index),
+                    open_price=100 + index,
+                    high_price=101 + index,
+                    low_price=99 + index,
+                    close_price=100 + index,
+                    volume=1000,
+                    amount=(100 + index) * 1000,
+                    raw_payload={},
+                    license_tag="test",
+                    usage_scope="internal-test",
+                    redistribution_scope="none",
+                    source_uri=f"test://{role}/{index}",
+                    lineage_hash=compute_lineage_hash({"role": role, "index": index}),
+                )
+                for index in range(11)
+            ]
+
+            tracks = _shortpick_frozen_exit_track_results(
+                candidate=candidate,
+                window=bars,
+                benchmark_maps={},
+            )
+
+            self.assertEqual(
+                [item["key"] for item in tracks],
+                ["mechanical_5d", "mechanical_10d", "conditional_5_to_10d", "take_profit_10pct"],
+            )
+
+    def test_market_factor_paper_controls_use_ten_day_display_horizon(self) -> None:
+        self._seed_stock_bars("000001.SZ", "测试银行", [10 + index for index in range(22)])
+        with session_scope(self.database_url) as session:
+            run = ShortpickExperimentRun(
+                run_key="shortpick:test:paper-control-horizon",
+                run_date=date(2026, 5, 9),
+                prompt_version="test",
+                information_mode="native_web_open_discovery",
+                status="completed",
+                trigger_source="test",
+                started_at=datetime(2026, 5, 9, 8, 0, tzinfo=UTC),
+                completed_at=datetime(2026, 5, 9, 8, 1, tzinfo=UTC),
+            )
+            session.add(run)
+            session.flush()
+            item = {
+                "symbol": "000001.SZ",
+                "name": "测试银行",
+                "latest_trade_day": "2026-05-09",
+                "return_1d": 0.01,
+                "return_5d": 0.05,
+                "return_10d": 0.1,
+                "amount": 100000000.0,
+                "turnover_rate": 3.0,
+                "_market_factor_score": 1.2,
+                "_ret10_rank_percentile": 1.0,
+                "_turnover_rank_percentile": 1.0,
+                "_ret1_rank_percentile": 0.5,
+            }
+
+            tracked = _upsert_shortpick_market_factor_candidate(
+                session,
+                run=run,
+                item=item,
+                family=SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY,
+                rank=1,
+                pool=[item],
+                regime={},
+                tracking_role=SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE,
+            )
+            untracked = _upsert_shortpick_market_factor_candidate(
+                session,
+                run=run,
+                item=item,
+                family=SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY,
+                rank=2,
+                pool=[item],
+                regime={},
+                tracking_role="control",
+            )
+
+            self.assertEqual(tracked.horizon_trading_days, 10)
+            self.assertEqual(untracked.horizon_trading_days, 5)
+
     def test_suspended_or_no_current_bar_candidate_is_quarantined_from_research_pool(self) -> None:
         self._seed_stock_bars("600958.SH", "东方证券", [9.34], dates=[date(2026, 4, 17)])
         self._seed_stock_bars("000300.SH", "沪深300", [200, 202, 204], dates=[date(2026, 5, 6), date(2026, 5, 7), date(2026, 5, 8)])
         self._seed_stock_bars("000852.SH", "中证1000", [300, 303, 306], dates=[date(2026, 5, 6), date(2026, 5, 7), date(2026, 5, 8)])
         executors = [StaticShortpickExecutor("deepseek", "deepseek-test", "fake", _answer("600958.SH", "东方证券", "券商重组复牌", "https://a.example/news"))]
 
-        with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
-            with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
-                with session_scope(self.database_url) as session:
-                    payload = run_shortpick_experiment(
-                        session,
-                        run_date=date(2026, 5, 6),
-                        rounds_per_model=1,
-                        triggered_by="root",
-                        executors=executors,
-                    )
+        with patch.dict(os.environ, {"SHORTPICK_MARKET_FACTOR_SYNC": "0"}):
+            with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
+                with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
+                    with session_scope(self.database_url) as session:
+                        payload = run_shortpick_experiment(
+                            session,
+                            run_date=date(2026, 5, 6),
+                            rounds_per_model=1,
+                            triggered_by="root",
+                            executors=executors,
+                        )
 
         candidate = payload["candidates"][0]
         statuses = {item["status"] for item in candidate["validations"]}

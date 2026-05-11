@@ -354,6 +354,18 @@ body[data-theme="dark"] {
   color: var(--brand-strong);
 }
 
+.shortpick-frozen-status {
+  margin-top: 16px;
+}
+
+.shortpick-frozen-status .ant-alert {
+  margin-bottom: 12px;
+}
+
+.shortpick-frozen-metrics {
+  margin-top: 0;
+}
+
 .shortpick-replay-readout .ant-alert {
   margin-bottom: 16px;
 }
@@ -412,6 +424,20 @@ body[data-theme="dark"] {
 .shortpick-replay-horizon-tile strong,
 .shortpick-replay-family-summary strong {
   font-size: 22px;
+}
+
+.shortpick-replay-family-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  margin-top: 12px;
+}
+
+.shortpick-loading-value,
+.shortpick-empty-value {
+  color: var(--text-muted) !important;
+  font-size: 18px !important;
+  font-weight: 600;
 }
 
 .shortpick-replay-diagnostics {

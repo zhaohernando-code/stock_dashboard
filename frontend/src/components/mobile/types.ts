@@ -37,6 +37,8 @@ export interface MobileAppShellProps {
   runtimeSettings: RuntimeSettingsResponse | null;
   runtimeOverview: RuntimeOverviewResponse | null;
   scheduledRefreshStatus: ScheduledRefreshStatusView | null;
+  shortpickPaperTracking?: Record<string, unknown> | null;
+  shortpickPaperTrackingLoading?: boolean;
   onDismissScheduledRefreshStatus: () => void;
   modelApiKeys: ModelApiKeyView[];
   generatedAt: string | null;
