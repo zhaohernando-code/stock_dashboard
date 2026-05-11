@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from ashare_evidence.akshare_timeout import call_akshare_function
+from ashare_evidence.stock_master import DEFAULT_AKSHARE_TIMEOUT_SECONDS
+
 
 def fetch_external_data(symbol: str) -> dict[str, Any]:
     result: dict[str, Any] = {
@@ -15,9 +18,11 @@ def fetch_external_data(symbol: str) -> dict[str, Any]:
 
     # 1. 个股信息流（新浪/东方财富）
     try:
-        import akshare as ak  # type: ignore[import-untyped]
-
-        df = ak.stock_individual_info_flow(symbol=symbol)
+        df = call_akshare_function(
+            "stock_individual_info_flow",
+            kwargs={"symbol": symbol},
+            timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS,
+        )
         if df is not None and not df.empty:
             records = df.head(10).to_dict(orient="records")
             result["news_flow"] = [
@@ -30,9 +35,11 @@ def fetch_external_data(symbol: str) -> dict[str, Any]:
 
     # 2. 东财个股新闻（含新闻内容摘要）
     try:
-        import akshare as ak  # type: ignore[import-untyped]
-
-        df = ak.stock_news_em(symbol=symbol)
+        df = call_akshare_function(
+            "stock_news_em",
+            kwargs={"symbol": symbol},
+            timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS,
+        )
         if df is not None and not df.empty:
             records = df.head(10).to_dict(orient="records")
             result["stock_news"] = [
@@ -51,9 +58,7 @@ def fetch_external_data(symbol: str) -> dict[str, Any]:
 
     # 3. 财新主流媒体新闻（宏观/行业热点）
     try:
-        import akshare as ak  # type: ignore[import-untyped]
-
-        df = ak.stock_news_main_cx()
+        df = call_akshare_function("stock_news_main_cx", timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS)
         if df is not None and not df.empty:
             records = df.head(15).to_dict(orient="records")
             result["macro_news"] = [
@@ -65,9 +70,11 @@ def fetch_external_data(symbol: str) -> dict[str, Any]:
 
     # 4. 板块资金流向排名
     try:
-        import akshare as ak  # type: ignore[import-untyped]
-
-        df = ak.stock_sector_fund_flow_rank(indicator="今日")
+        df = call_akshare_function(
+            "stock_sector_fund_flow_rank",
+            kwargs={"indicator": "今日"},
+            timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS,
+        )
         if df is not None and not df.empty:
             records = df.head(8).to_dict(orient="records")
             result["sector_flow"] = [
@@ -83,9 +90,11 @@ def fetch_external_data(symbol: str) -> dict[str, Any]:
 
     # 5. 全市场个股资金流排名（判断相对位置）
     try:
-        import akshare as ak  # type: ignore[import-untyped]
-
-        df = ak.stock_individual_fund_flow_rank(indicator="今日")
+        df = call_akshare_function(
+            "stock_individual_fund_flow_rank",
+            kwargs={"indicator": "今日"},
+            timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS,
+        )
         if df is not None and not df.empty:
             target = df[df["代码"] == symbol]
             if not target.empty:

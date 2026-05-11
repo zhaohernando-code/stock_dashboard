@@ -7,9 +7,10 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ashare_evidence.akshare_timeout import call_akshare_function
 from ashare_evidence.lineage import build_lineage
 from ashare_evidence.models import MarketBar, Stock
-from ashare_evidence.stock_master import resolve_stock_profile
+from ashare_evidence.stock_master import DEFAULT_AKSHARE_TIMEOUT_SECONDS, akshare_runtime_ready, resolve_stock_profile
 
 CSI_BENCHMARKS: dict[str, dict[str, str]] = {
     "CSI300": {"symbol": "000300.SH", "label": "沪深300"},
@@ -79,22 +80,13 @@ def _ensure_index_stock(session: Session, symbol: str) -> Stock:
     return stock
 
 
-def _akshare_index_module() -> Any | None:
-    try:
-        import akshare as ak  # type: ignore[import-untyped]
-        return ak
-    except Exception:
-        return None
-
-
 def sync_benchmark_index_bars(
     session: Session,
     *,
     lookback_days: int = 400,
     progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
-    ak = _akshare_index_module()
-    if ak is None:
+    if not akshare_runtime_ready():
         return {"status": "skipped", "reason": "akshare_unavailable"}
     result: dict[str, Any] = {"status": "ok", "symbols": {}}
     today = datetime.now(UTC).date()
@@ -102,7 +94,11 @@ def sync_benchmark_index_bars(
     for symbol, akshare_code in _CSI_AKSHARE_SYMBOLS.items():
         try:
             stock = _ensure_index_stock(session, symbol)
-            frame = ak.stock_zh_index_daily(symbol=akshare_code)
+            frame = call_akshare_function(
+                "stock_zh_index_daily",
+                kwargs={"symbol": akshare_code},
+                timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS,
+            )
             if frame is None or getattr(frame, "empty", False):
                 result["symbols"][symbol] = {"status": "empty", "bars": 0}
                 continue

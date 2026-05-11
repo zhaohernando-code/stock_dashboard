@@ -10,6 +10,7 @@ from urllib import error, request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ashare_evidence.akshare_timeout import call_akshare_function
 from ashare_evidence.http_client import urlopen
 from ashare_evidence.models import ProviderCredential
 
@@ -161,7 +162,7 @@ def akshare_runtime_ready() -> bool:
 
 def _query_akshare_stock_basic(symbol: str) -> dict[str, Any] | None:
     try:
-        akshare = _load_akshare_module()
+        _load_akshare_module()
     except Exception:
         return None
 
@@ -173,7 +174,11 @@ def _query_akshare_stock_basic(symbol: str) -> dict[str, Any] | None:
     records: dict[str, Any] = {}
     try:
         if market == "SZ":
-            frame = akshare.stock_info_sz_name_code(symbol="A股列表")
+            frame = call_akshare_function(
+                "stock_info_sz_name_code",
+                kwargs={"symbol": "A股列表"},
+                timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS,
+            )
             row = frame.loc[frame["A股代码"].astype(str).str.zfill(6) == ticker]
             if not row.empty:
                 first = row.iloc[0]
@@ -184,7 +189,11 @@ def _query_akshare_stock_basic(symbol: str) -> dict[str, Any] | None:
                 }
         elif market == "SH":
             board = "科创板" if ticker.startswith("688") else "主板A股"
-            frame = akshare.stock_info_sh_name_code(symbol=board)
+            frame = call_akshare_function(
+                "stock_info_sh_name_code",
+                kwargs={"symbol": board},
+                timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS,
+            )
             row = frame.loc[frame["证券代码"].astype(str).str.zfill(6) == ticker]
             if not row.empty:
                 first = row.iloc[0]
@@ -194,7 +203,7 @@ def _query_akshare_stock_basic(symbol: str) -> dict[str, Any] | None:
                     "list_date": first.get("上市日期"),
                 }
         elif market == "BJ":
-            frame = akshare.stock_info_a_code_name()
+            frame = call_akshare_function("stock_info_a_code_name", timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS)
             row = frame.loc[frame["code"].astype(str).str.zfill(6) == ticker]
             if not row.empty:
                 first = row.iloc[0]
@@ -208,7 +217,11 @@ def _query_akshare_stock_basic(symbol: str) -> dict[str, Any] | None:
 
     detail_records: dict[str, Any] = {}
     try:
-        detail_frame = akshare.stock_individual_info_em(symbol=ticker, timeout=DEFAULT_AKSHARE_TIMEOUT_SECONDS)
+        detail_frame = call_akshare_function(
+            "stock_individual_info_em",
+            kwargs={"symbol": ticker, "timeout": DEFAULT_AKSHARE_TIMEOUT_SECONDS},
+            timeout_seconds=DEFAULT_AKSHARE_TIMEOUT_SECONDS,
+        )
         if detail_frame is not None and not getattr(detail_frame, "empty", False):
             detail_records = dict(zip(detail_frame["item"].tolist(), detail_frame["value"].tolist(), strict=False))
     except Exception:
