@@ -35,6 +35,7 @@ SHORTPICK_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_TIMEOUT_SECONDS:-7200}"
 SHORTPICK_VALIDATION_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_VALIDATION_TIMEOUT_SECONDS:-600}"
 SHORTPICK_VALIDATE_RECENT_DAYS="${ASHARE_SHORTPICK_VALIDATE_RECENT_DAYS:-30}"
 SHORTPICK_VALIDATE_RECENT_LIMIT="${ASHARE_SHORTPICK_VALIDATE_RECENT_LIMIT:-20}"
+DATABASE_LOCK_WAIT_SECONDS="${ASHARE_DATABASE_LOCK_WAIT_SECONDS:-60}"
 NETWORK_CHECK_ENABLED="${ASHARE_REFRESH_NETWORK_CHECK:-1}"
 NETWORK_PROBES="${ASHARE_REFRESH_NETWORK_PROBES:-https://www.baidu.com/ https://push2.eastmoney.com/}"
 SLOT_RETRY_INTERVAL_SECONDS="${ASHARE_SLOT_RETRY_INTERVAL_SECONDS:-1800}"
@@ -75,11 +76,33 @@ run_shortpick_validation_refresh() {
     --limit "$SHORTPICK_VALIDATE_RECENT_LIMIT"
 }
 
+wait_for_database_writable() {
+  local deadline=$((SECONDS + DATABASE_LOCK_WAIT_SECONDS))
+  while (( SECONDS < deadline )); do
+    if "$PYTHON_BIN" - "$ASHARE_DATABASE_URL" <<'PY' >/dev/null 2>&1
+from sqlalchemy import create_engine, text
+import sys
+
+engine = create_engine(sys.argv[1])
+with engine.connect() as connection:
+    connection.execute(text("BEGIN IMMEDIATE"))
+    connection.execute(text("ROLLBACK"))
+PY
+    then
+      return 0
+    fi
+    sleep 2
+  done
+  echo "Database did not become writable within ${DATABASE_LOCK_WAIT_SECONDS}s." >&2
+  return 1
+}
+
 run_shortpick_daily_cycle() {
   local target_date="$1"
   if ! run_with_timeout "$SHORTPICK_VALIDATION_TIMEOUT_SECONDS" run_shortpick_validation_refresh; then
     echo "Shortpick recent validation did not finish within ${SHORTPICK_VALIDATION_TIMEOUT_SECONDS}s; continuing with ${target_date} run." >&2
   fi
+  wait_for_database_writable
   local run_payload_file
   run_payload_file="$(mktemp)"
   run_shortpick_lab "$target_date" | tee "$run_payload_file"
