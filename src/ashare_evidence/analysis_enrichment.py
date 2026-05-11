@@ -11,6 +11,7 @@ from ashare_evidence.http_client import urlopen
 ANNOUNCEMENT_BODY_TIMEOUT = 8
 ANNOUNCEMENT_PDF_TIMEOUT = 15
 ANNOUNCEMENT_BODY_MAX_CHARS = 8000
+ANNOUNCEMENT_LLM_TIMEOUT = 30
 
 _HTML_TAG = re.compile(r"<[^>]+>")
 _HTML_ENTITY = re.compile(r"&[a-zA-Z]+;|&#\d+;")
@@ -209,9 +210,9 @@ def enrich_with_llm_analysis(
     financial_snapshot: dict[str, Any] | None = None,
 ) -> None:
     from ashare_evidence.news_analysis import (
-        analyze_announcements_batch,
         llm_sentiment_to_impact_direction,
     )
+    from ashare_evidence.akshare_timeout import call_module_function_with_timeout
 
     candidates = []
     for item in news_items:
@@ -222,10 +223,36 @@ def enrich_with_llm_analysis(
     if not candidates:
         return
 
-    try:
-        llm_results = analyze_announcements_batch(candidates, financial_snapshot=financial_snapshot)
-    except Exception:
-        return
+    llm_results = []
+    for item in candidates:
+        scoped_financial_snapshot = financial_snapshot if item.get("event_scope") == "earnings" else None
+        try:
+            llm_results.append(
+                call_module_function_with_timeout(
+                    "ashare_evidence.news_analysis",
+                    "analyze_announcement",
+                    args=(
+                        item["headline"],
+                        item.get("content_excerpt"),
+                        item.get("event_scope", "announcement"),
+                    ),
+                    kwargs={"financial_snapshot": scoped_financial_snapshot},
+                    timeout_seconds=ANNOUNCEMENT_LLM_TIMEOUT,
+                )
+            )
+        except Exception:
+            llm_results.append(
+                {
+                    "sentiment": "neutral",
+                    "sentiment_confidence": 0.0,
+                    "importance_score": 0.0,
+                    "key_findings": [],
+                    "impact_areas": [],
+                    "summary_sentence": "",
+                    "reasoning": "Announcement LLM analysis timed out or failed.",
+                    "_fallback": True,
+                }
+            )
 
     for item, llm in zip(candidates, llm_results):
         item["raw_payload"]["llm_analysis"] = llm
