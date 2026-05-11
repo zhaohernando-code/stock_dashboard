@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import socket
+import urllib.request
 from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
@@ -81,10 +82,35 @@ def _print_json(payload: Any) -> None:
 @contextmanager
 def _refresh_socket_timeout(timeout_seconds: int = DEFAULT_AKSHARE_TIMEOUT_SECONDS):
     previous_timeout = socket.getdefaulttimeout()
+    original_urlopen = urllib.request.urlopen
+    try:
+        import requests
+    except Exception:
+        requests = None
+        original_request = None
+    else:
+        original_request = requests.sessions.Session.request
+
+    def _urlopen_with_timeout(*args, **kwargs):
+        if kwargs.get("timeout") is None:
+            kwargs["timeout"] = timeout_seconds
+        return original_urlopen(*args, **kwargs)
+
+    def _request_with_timeout(self, method, url, **kwargs):
+        if kwargs.get("timeout") is None:
+            kwargs["timeout"] = timeout_seconds
+        return original_request(self, method, url, **kwargs)
+
     socket.setdefaulttimeout(timeout_seconds)
+    urllib.request.urlopen = _urlopen_with_timeout
+    if requests is not None and original_request is not None:
+        requests.sessions.Session.request = _request_with_timeout
     try:
         yield
     finally:
+        if requests is not None and original_request is not None:
+            requests.sessions.Session.request = original_request
+        urllib.request.urlopen = original_urlopen
         socket.setdefaulttimeout(previous_timeout)
 
 
