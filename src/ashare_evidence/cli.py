@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import socket
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -68,11 +70,23 @@ from ashare_evidence.shortpick_replay import (
     run_shortpick_replay_rejection,
 )
 from ashare_evidence.simulation import restart_simulation_session, step_simulation_session
+from ashare_evidence.stock_master import DEFAULT_AKSHARE_TIMEOUT_SECONDS
 from ashare_evidence.watchlist import active_watchlist_symbols, refresh_watchlist_symbol
 
 
 def _print_json(payload: Any) -> None:
     print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+
+
+@contextmanager
+def _refresh_socket_timeout(timeout_seconds: int = DEFAULT_AKSHARE_TIMEOUT_SECONDS):
+    previous_timeout = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(timeout_seconds)
+    try:
+        yield
+    finally:
+        socket.setdefaulttimeout(previous_timeout)
+
 
 def _should_initialize_database(database_url: str | None) -> bool:
     if not database_url:
@@ -728,13 +742,14 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--analysis-only 和 --ops-only 不能同时传入")
         preflight_database_writable(args.database_url)
     if args.command == "refresh-runtime-data":
-        with session_scope(args.database_url) as session:
-            payload = _refresh_runtime_data_output(
-                session,
-                analysis_only=args.analysis_only,
-                ops_only=args.ops_only,
-                skip_simulation=args.skip_simulation,
-            )
+        with _refresh_socket_timeout():
+            with session_scope(args.database_url) as session:
+                payload = _refresh_runtime_data_output(
+                    session,
+                    analysis_only=args.analysis_only,
+                    ops_only=args.ops_only,
+                    skip_simulation=args.skip_simulation,
+                )
         _print_json(payload)
         return 0
 
@@ -912,30 +927,31 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "phase5-daily-refresh":
-        with session_scope(args.database_url) as session:
-            refresh_payload = _refresh_runtime_data_output(
-                session,
-                analysis_only=args.analysis_only,
-                ops_only=args.ops_only,
-                skip_simulation=args.skip_simulation,
-            )
-            latest_study = _phase5_horizon_study_output(
-                session,
-                database_url=args.database_url,
-                include_history=False,
-                write_artifact=True,
-            )
-            history_study = _phase5_horizon_study_output(
-                session,
-                database_url=args.database_url,
-                include_history=True,
-                write_artifact=True,
-            )
-            holding_policy_study = _phase5_holding_policy_study_output(
-                session,
-                database_url=args.database_url,
-                write_artifact=True,
-            )
+        with _refresh_socket_timeout():
+            with session_scope(args.database_url) as session:
+                refresh_payload = _refresh_runtime_data_output(
+                    session,
+                    analysis_only=args.analysis_only,
+                    ops_only=args.ops_only,
+                    skip_simulation=args.skip_simulation,
+                )
+                latest_study = _phase5_horizon_study_output(
+                    session,
+                    database_url=args.database_url,
+                    include_history=False,
+                    write_artifact=True,
+                )
+                history_study = _phase5_horizon_study_output(
+                    session,
+                    database_url=args.database_url,
+                    include_history=True,
+                    write_artifact=True,
+                )
+                holding_policy_study = _phase5_holding_policy_study_output(
+                    session,
+                    database_url=args.database_url,
+                    write_artifact=True,
+                )
         _print_json({
             "refresh": refresh_payload,
             "phase5_horizon_studies": {
