@@ -122,7 +122,7 @@
     "shortpick_llm_one_stock_paper_control": "published_runtime_verified_waiting_first_post_change_run",
     "shortpick_final_same_pool_paper_controls": "published_runtime_verified_waiting_first_post_change_run",
     "shortpick_no_limit_chase_paper_control": "published_runtime_verified_run_121_backfilled_002384",
-    "shortpick_next_open_entry_paper_control": "repo_change_in_progress_pending_runtime_publish_and_today_backfill",
+    "shortpick_next_open_entry_paper_control": "published_runtime_verified_run_121_backfilled_600236_next_open",
     "shortpick_friend_suggested_paper_controls": "published_runtime_verified_diagnostic_controls",
     "shortpick_friend_suggested_historical_backtest": "completed_not_promoted_to_main",
     "shortpick_friend_suggested_group_display": "published_runtime_verified",
