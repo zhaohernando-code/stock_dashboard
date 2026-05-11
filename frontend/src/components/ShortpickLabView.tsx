@@ -951,6 +951,11 @@ function paperTrackingEntryDate(item: ShortpickPaperTrackingItem): string {
   return item.entry_date || nextWeekdayAfter(paperTrackingSignalDate(item));
 }
 
+function paperTrackingExpectedEntryText(item: ShortpickPaperTrackingItem): string {
+  const session = item.entry_rule?.includes("开盘") ? "开盘" : "收盘";
+  return `预计买入 ${paperTrackingEntryDate(item)} ${session}`;
+}
+
 function hasPaperTrackingEntered(item: ShortpickPaperTrackingItem, today = localDateString()): boolean {
   const entryDate = paperTrackingEntryDate(item);
   return /^\d{4}-\d{2}-\d{2}$/.test(entryDate) && entryDate <= today;
@@ -964,7 +969,11 @@ function paperTrackingChoiceTimingText(
   const runDate = typeof latestRun?.run_date === "string" ? latestRun.run_date : "";
   const signalDate = choiceRows[0] ? paperTrackingSignalDate(choiceRows[0]) : runDate;
   const entryDate = choiceRows[0] ? paperTrackingEntryDate(choiceRows[0]) : runDate ? nextWeekdayAfter(runDate) : "";
+  const hasOpenEntry = choiceRows.some((item) => item.entry_rule?.includes("开盘"));
   if (!signalDate) return choiceLabel === "下轮" ? "信号日待确认 · 次一交易日收盘买入" : "当前跟踪信号待确认";
+  if (hasOpenEntry) {
+    return `信号日 ${signalDate} · 预计买入日 ${entryDate}，不同对照按各自入场规则执行`;
+  }
   if (choiceLabel === "下轮") {
     return `信号日 ${signalDate} · 预计买入 ${entryDate} 收盘`;
   }
@@ -2011,7 +2020,8 @@ function PaperTrackingTab({
                       <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
                       {index === 0 && item.tracking_group === "frozen_strategy" ? <Tag color="purple">冻结规则优先</Tag> : null}
                     </Space>
-                    <Text type="secondary">{item.selection_label || "纸面对照"} · 预计买入 {paperTrackingEntryDate(item)} 收盘</Text>
+                    <Text type="secondary">{item.selection_label || "纸面对照"} · {paperTrackingExpectedEntryText(item)}</Text>
+                    <Text type="secondary">{item.entry_rule || "次一交易日收盘买入"}</Text>
                   </div>
                 </div>
               </List.Item>
