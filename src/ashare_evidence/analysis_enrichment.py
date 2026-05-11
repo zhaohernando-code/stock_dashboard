@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import os
 from io import BytesIO
 from math import tanh
 from typing import Any
@@ -221,6 +222,8 @@ def enrich_with_llm_analysis(
             continue
         candidates.append(item)
     if not candidates:
+        return
+    if os.environ.get("ASHARE_ENABLE_ANNOUNCEMENT_LLM_ENRICHMENT") != "1":
         return
 
     llm_results = []
