@@ -29,6 +29,7 @@ from ashare_evidence.models import (
     WatchlistFollow,
 )
 from ashare_evidence.shortpick_lab import (
+    SHORTPICK_INFORMATION_MODE,
     SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY,
     SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE,
@@ -1350,6 +1351,85 @@ class ShortpickLabTests(unittest.TestCase):
         )
         self.assertEqual(create_response.status_code, 403)
         self.assertIn("root role required", create_response.json()["detail"])
+
+    def test_paper_tracking_includes_prefreeze_seed_dates(self) -> None:
+        now = datetime(2026, 5, 11, 12, 0, tzinfo=UTC)
+        with session_scope(self.database_url) as session:
+            seed_run = ShortpickExperimentRun(
+                run_key="shortpick-prefreeze-paper-seed-test",
+                run_date=date(2026, 5, 8),
+                prompt_version="prefreeze-paper-seed-test",
+                information_mode=SHORTPICK_INFORMATION_MODE,
+                status="completed",
+                trigger_source="manual_prefreeze_seed",
+                triggered_by="root",
+                started_at=now,
+                completed_at=now,
+                model_config={},
+                summary_payload={
+                    "market_factor_overlay": {
+                        "frozen_paper_strategy": {
+                            "inserted": True,
+                            "gate_pass": True,
+                            "symbol": "601138.SH",
+                            "name": "工业富联",
+                        }
+                    }
+                },
+            )
+            latest_run = ShortpickExperimentRun(
+                run_key="shortpick-native-web-20260511-test",
+                run_date=date(2026, 5, 11),
+                prompt_version="test",
+                information_mode=SHORTPICK_INFORMATION_MODE,
+                status="completed",
+                trigger_source="scheduled_postmarket",
+                triggered_by="root",
+                started_at=now,
+                completed_at=now,
+                model_config={},
+                summary_payload={"market_factor_overlay": {"frozen_paper_strategy": {"inserted": True}}},
+            )
+            session.add_all([seed_run, latest_run])
+            session.flush()
+            session.add(
+                ShortpickCandidate(
+                    run_id=seed_run.id,
+                    candidate_key="shortpick-prefreeze-paper-seed-test:frozen",
+                    symbol="601138.SH",
+                    name="工业富联",
+                    normalized_theme="低换手上升趋势",
+                    horizon_trading_days=10,
+                    confidence=None,
+                    thesis="5月8日收盘后生成，5月11日入场。",
+                    catalysts=[],
+                    invalidation=[],
+                    risks=[],
+                    sources_payload=[],
+                    novelty_note=None,
+                    limitations=[],
+                    convergence_group="frozen",
+                    research_priority="market_factor_frozen_paper",
+                    parse_status="parsed",
+                    is_system_external=False,
+                    candidate_payload={
+                        "tracking_role": "frozen_paper_primary",
+                        "paper_tracking_signal_date": "2026-05-08",
+                        "paper_tracking_entry_date": "2026-05-11",
+                        "market_factor_overlay": {"source_rank": 1},
+                    },
+                )
+            )
+
+        client = TestClient(create_app(self.database_url, enable_background_ops_tick=False))
+        response = client.get("/shortpick-lab/paper-tracking")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["latest_run"]["run_date"], "2026-05-11")
+        by_symbol = {item["symbol"]: item for item in payload["items"]}
+        self.assertEqual(by_symbol["601138.SH"]["signal_date"], "2026-05-08")
+        self.assertEqual(by_symbol["601138.SH"]["entry_date"], "2026-05-11")
+        self.assertEqual(by_symbol["601138.SH"]["tracking_group"], "frozen_strategy")
 
     def test_run_list_supports_pagination_filters_and_retryable_summary(self) -> None:
         self._seed_daily_bars()

@@ -14,7 +14,7 @@ from pathlib import Path
 
 from fastapi import Body, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ashare_evidence.account_space import visible_account_spaces
@@ -261,12 +261,23 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
         .order_by(ShortpickExperimentRun.run_date.desc(), ShortpickExperimentRun.id.desc())
         .limit(1)
     )
+    tracking_role_expr = func.coalesce(func.json_extract(ShortpickCandidate.candidate_payload, "$.tracking_role"), "")
     raw_rows = session.execute(
         select(ShortpickExperimentRun, ShortpickCandidate)
         .join(ShortpickCandidate, ShortpickCandidate.run_id == ShortpickExperimentRun.id)
         .where(
             ShortpickExperimentRun.information_mode == SHORTPICK_INFORMATION_MODE,
-            ShortpickExperimentRun.run_date >= frozen_at,
+            or_(
+                ShortpickExperimentRun.run_date >= frozen_at,
+                ShortpickCandidate.research_priority == "market_factor_frozen_paper",
+                tracking_role_expr.in_(
+                    [
+                        "frozen_paper_primary",
+                        SHORTPICK_LLM_PAPER_CONTROL_ROLE,
+                        *sorted(SHORTPICK_MARKET_FACTOR_PAPER_CONTROL_ROLES),
+                    ]
+                ),
+            ),
             ShortpickCandidate.parse_status == "parsed",
         )
         .order_by(ShortpickExperimentRun.run_date.desc(), ShortpickCandidate.id.desc())
@@ -287,6 +298,8 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
         summary_overlay = dict((run.summary_payload or {}).get("market_factor_overlay") or {})
         frozen = dict(summary_overlay.get("frozen_paper_strategy") or {})
         regime = dict(summary_overlay.get("regime") or overlay.get("regime") or {})
+        signal_date = str(candidate_payload.get("paper_tracking_signal_date") or run.run_date.isoformat())
+        entry_date = str(candidate_payload.get("paper_tracking_entry_date") or "")
         market_control = _shortpick_market_control_contract_by_role(market_control_contract, tracking_role)
         if is_frozen_item:
             item_contract = contract
@@ -304,6 +317,8 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
                 "run_id": run.id,
                 "candidate_id": candidate.id,
                 "run_date": run.run_date.isoformat(),
+                "signal_date": signal_date,
+                "entry_date": entry_date,
                 "symbol": candidate.symbol,
                 "name": candidate.name,
                 "status": "tracking_signal",

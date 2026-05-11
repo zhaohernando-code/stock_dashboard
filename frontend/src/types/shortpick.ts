@@ -374,6 +374,8 @@ export interface ShortpickPaperTrackingItem {
   run_id: number;
   candidate_id: number;
   run_date: string;
+  signal_date?: string | null;
+  entry_date?: string | null;
   symbol: string;
   name: string;
   status: string;

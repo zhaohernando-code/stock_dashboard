@@ -943,8 +943,12 @@ function nextWeekdayAfter(runDate: string): string {
   return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
 }
 
+function paperTrackingSignalDate(item: ShortpickPaperTrackingItem): string {
+  return item.signal_date || item.run_date;
+}
+
 function paperTrackingEntryDate(item: ShortpickPaperTrackingItem): string {
-  return nextWeekdayAfter(item.run_date);
+  return item.entry_date || nextWeekdayAfter(paperTrackingSignalDate(item));
 }
 
 function hasPaperTrackingEntered(item: ShortpickPaperTrackingItem, today = localDateString()): boolean {
@@ -952,13 +956,19 @@ function hasPaperTrackingEntered(item: ShortpickPaperTrackingItem, today = local
   return /^\d{4}-\d{2}-\d{2}$/.test(entryDate) && entryDate <= today;
 }
 
-function paperTrackingChoiceTimingText(choiceLabel: "当前" | "下轮", latestRun?: Record<string, unknown> | null): string {
+function paperTrackingChoiceTimingText(
+  choiceLabel: "当前" | "下轮",
+  choiceRows: ShortpickPaperTrackingItem[],
+  latestRun?: Record<string, unknown> | null,
+): string {
   const runDate = typeof latestRun?.run_date === "string" ? latestRun.run_date : "";
-  if (!runDate) return choiceLabel === "下轮" ? "信号日待确认 · 次一交易日收盘买入" : "当前跟踪信号待确认";
+  const signalDate = choiceRows[0] ? paperTrackingSignalDate(choiceRows[0]) : runDate;
+  const entryDate = choiceRows[0] ? paperTrackingEntryDate(choiceRows[0]) : runDate ? nextWeekdayAfter(runDate) : "";
+  if (!signalDate) return choiceLabel === "下轮" ? "信号日待确认 · 次一交易日收盘买入" : "当前跟踪信号待确认";
   if (choiceLabel === "下轮") {
-    return `信号日 ${runDate} · 预计买入 ${nextWeekdayAfter(runDate)} 收盘`;
+    return `信号日 ${signalDate} · 预计买入 ${entryDate} 收盘`;
   }
-  return `当前跟踪 · 信号日 ${runDate} · 入场口径为次一交易日收盘买入`;
+  return `当前跟踪 · 信号日 ${signalDate} · 入场口径为次一交易日收盘买入`;
 }
 
 function latestPaperTrackingChoices(rows: ShortpickPaperTrackingItem[], latestRun?: Record<string, unknown> | null): ShortpickPaperTrackingItem[] {
@@ -968,9 +978,9 @@ function latestPaperTrackingChoices(rows: ShortpickPaperTrackingItem[], latestRu
     latestRunId ? Number(item.run_id) === latestRunId : latestRunDate ? item.run_date === latestRunDate : false
   ));
   const source = scoped.length ? scoped : rows;
-  const latestDate = source.reduce((value, item) => (item.run_date > value ? item.run_date : value), "");
+  const latestDate = source.reduce((value, item) => (paperTrackingSignalDate(item) > value ? paperTrackingSignalDate(item) : value), "");
   return source
-    .filter((item) => item.run_date === latestDate)
+    .filter((item) => paperTrackingSignalDate(item) === latestDate)
     .sort((left, right) => (
       paperTrackingDisplayRank(left) - paperTrackingDisplayRank(right)
       || Number(left.source_rank ?? 99) - Number(right.source_rank ?? 99)
@@ -1869,8 +1879,8 @@ function PaperTrackingTab({
   const enteredRows = rows.filter((item) => hasPaperTrackingEntered(item));
   const displayRows = showFrozenOnly ? enteredRows.filter((item) => item.tracking_group === "frozen_strategy") : enteredRows;
   const choiceLabel = paperTrackingChoiceLabel(latestRun);
-  const choiceTimingText = paperTrackingChoiceTimingText(choiceLabel, latestRun);
   const choiceRows = latestPaperTrackingChoices(rows, latestRun);
+  const choiceTimingText = paperTrackingChoiceTimingText(choiceLabel, choiceRows, latestRun);
   const pendingEntryDate = nextPendingEntryDate(rows);
   const monitoringTracks = (Array.isArray(contract.monitoring_tracks) ? contract.monitoring_tracks : []) as Record<string, unknown>[];
   const marketControls = (Array.isArray(marketControlContract.controls) ? marketControlContract.controls : []) as Record<string, unknown>[];
@@ -1881,7 +1891,7 @@ function PaperTrackingTab({
       key: "run_date",
       render: (value: string, item) => (
         <Space direction="vertical" size={0}>
-          <Text strong>{value}</Text>
+          <Text strong>{paperTrackingSignalDate(item)}</Text>
           <Text type="secondary">买入 {paperTrackingEntryDate(item)}</Text>
         </Space>
       ),
@@ -2105,7 +2115,7 @@ function PaperTrackingTab({
                       <Text strong>{item.name} · {item.symbol}</Text>
                       <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
                     </div>
-                    <Text type="secondary">信号 {item.run_date} · 买入 {paperTrackingEntryDate(item)} · {item.selection_label || "纸面对照"}</Text>
+                    <Text type="secondary">信号 {paperTrackingSignalDate(item)} · 买入 {paperTrackingEntryDate(item)} · {item.selection_label || "纸面对照"}</Text>
                     <Text>{item.entry_rule || "次一交易日收盘买入"}</Text>
                     <Text type="secondary">{item.exit_rule || "机械5日、机械10日、条件检查、10%触达止盈四轨监测"}</Text>
                     {item.thesis ? <Paragraph className="shortpick-paper-mobile-thesis">{item.thesis}</Paragraph> : null}
