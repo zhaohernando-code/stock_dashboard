@@ -1538,6 +1538,13 @@ function TodayRunTab({
   selectedBenchmark: string;
 }) {
   const llmControlCandidate = normalCandidates.find((item) => item.tracking_role === "llm_paper_control_primary");
+  const llmControl = llmControlCandidate?.llm_paper_control ?? {};
+  const llmAccountFilterRule = String(
+    llmControl.account_filter_rule ?? "仅允许沪深主板普通A股；排除科创板、创业板、北交所、ST/退市风险类标的。",
+  );
+  const llmSelectionRule = String(
+    llmControl.selection_rule ?? "先过滤到新开户普通现金账户可买范围；再优先跨模型同票，其次同模型重复、跨模型同题材、单模型高置信、系统外新视角；再按来源质量、置信度、来源数量、股票代码和候选ID稳定排序。",
+  );
   return (
     <>
       <Row gutter={[16, 16]} className="shortpick-metrics">
@@ -1579,8 +1586,11 @@ function TodayRunTab({
             <Descriptions.Item label="纸面对照">{llmControlCandidate.name} · {llmControlCandidate.symbol}</Descriptions.Item>
             <Descriptions.Item label="原始优先级">{priorityLabel(llmControlCandidate.research_priority)}</Descriptions.Item>
             <Descriptions.Item label="验证口径">同一入场，四轨退出</Descriptions.Item>
+            <Descriptions.Item label="账户过滤" span={3}>
+              {llmAccountFilterRule}
+            </Descriptions.Item>
             <Descriptions.Item label="选择规则" span={3}>
-              跨模型同票优先，其次同模型重复、跨模型同题材、单模型高置信、系统外新视角；再按来源质量和置信度稳定排序。
+              {llmSelectionRule}
             </Descriptions.Item>
           </Descriptions>
         ) : (

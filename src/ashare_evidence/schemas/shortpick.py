@@ -127,6 +127,8 @@ class ShortpickCandidateView(BaseModel):
     diagnostic_reason: str | None = None
     validations: list[ShortpickValidationView] = Field(default_factory=list)
     raw_round: ShortpickRoundView | None = None
+    tracking_role: str | None = None
+    llm_paper_control: dict[str, Any] = Field(default_factory=dict)
     experiment_mode: str | None = None
     baseline_family: str | None = None
     source_packet_id: str | None = None

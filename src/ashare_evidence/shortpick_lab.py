@@ -237,13 +237,15 @@ def shortpick_llm_paper_control_contract() -> dict[str, Any]:
         "version": SHORTPICK_LLM_PAPER_CONTROL_VERSION,
         "role": SHORTPICK_LLM_PAPER_CONTROL_ROLE,
         "label": "LLM纸面对照：每日固定规则选1只",
-        "mode": "从当日LLM自由推荐池中，按冻结排序规则选出1只；所有持有天数均按交易日计算",
-        "selection_rule": "优先跨模型同票，其次同模型重复、跨模型同题材、单模型高置信、系统外新视角；再按来源质量、置信度、来源数量、股票代码和候选ID稳定排序。",
+        "mode": "从当日LLM自由推荐池中，先按新开户普通现金账户口径过滤，再按冻结排序规则选出1只；所有持有天数均按交易日计算",
+        "account_profile": ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+        "account_filter_rule": "仅允许沪深主板普通A股；排除科创板、创业板、北交所、ST/退市风险类标的。",
+        "selection_rule": "先过滤到新开户普通现金账户可买范围；再优先跨模型同票，其次同模型重复、跨模型同题材、单模型高置信、系统外新视角；再按来源质量、置信度、来源数量、股票代码和候选ID稳定排序。",
         "monitoring_rule": "和冻结策略使用同一入场口径与四条退出轨道，避免从LLM推荐池中事后挑选。",
         "monitoring_tracks": shortpick_frozen_paper_strategy_contract()["monitoring_tracks"],
         "required_forward_trading_days": SHORTPICK_FROZEN_PAPER_REQUIRED_FORWARD_DAYS,
         "frozen_at": "2026-05-09",
-        "scope_note": "全量LLM推荐池继续保留为研究样本；只有按本规则提前标记的1只股票进入严格交易对照。",
+        "scope_note": "全量LLM推荐池继续保留为研究样本；只有先满足账户可买范围、再按本规则提前标记的1只股票进入严格交易对照。",
     }
 
 
@@ -2850,10 +2852,50 @@ def select_shortpick_llm_paper_control_candidate(session: Session, run: Shortpic
         session.flush()
         return result
 
+    eligible: list[ShortpickCandidate] = []
+    excluded_examples: list[dict[str, Any]] = []
+    excluded_count = 0
+    for candidate in parsed:
+        eligibility = account_trade_eligibility(
+            candidate.symbol,
+            stock_profile={"name": candidate.name},
+            account_profile=ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+            as_of=run.run_date,
+        )
+        if eligibility["tradable"]:
+            eligible.append(candidate)
+            continue
+        excluded_count += 1
+        if len(excluded_examples) < 12:
+            excluded_examples.append(
+                {
+                    "candidate_id": candidate.id,
+                    "symbol": candidate.symbol,
+                    "name": candidate.name,
+                    "board": eligibility["board"],
+                    "board_label": eligibility["board_label"],
+                    "reason": eligibility["reason"],
+                }
+            )
+    if not eligible:
+        result = {
+            **shortpick_llm_paper_control_contract(),
+            "status": "no_eligible_llm_candidate",
+            "selected": False,
+            "reason": "no_account_eligible_llm_candidate",
+            "raw_candidate_count": len(parsed),
+            "eligible_candidate_count": 0,
+            "excluded_candidate_count": excluded_count,
+            "excluded_examples": excluded_examples,
+        }
+        run.summary_payload = {**dict(run.summary_payload or {}), "llm_paper_control": result}
+        session.flush()
+        return result
+
     providers_by_symbol: dict[str, set[str]] = {}
     provider_counts_by_symbol: dict[str, dict[str, int]] = {}
     providers_by_theme: dict[str, set[str]] = {}
-    for candidate in parsed:
+    for candidate in eligible:
         round_record = session.get(ShortpickModelRound, candidate.round_id) if candidate.round_id else None
         provider_name = round_record.provider_name if round_record is not None else "unknown"
         topic_key = _candidate_topic_key(candidate)
@@ -2909,9 +2951,15 @@ def select_shortpick_llm_paper_control_candidate(session: Session, run: Shortpic
             int(score["candidate_id"]),
         )
 
-    ranked = sorted(parsed, key=sort_key)
+    ranked = sorted(eligible, key=sort_key)
     selected = ranked[0]
     components = score_components(selected)
+    selected_eligibility = account_trade_eligibility(
+        selected.symbol,
+        stock_profile={"name": selected.name},
+        account_profile=ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+        as_of=run.run_date,
+    )
     payload = dict(selected.candidate_payload or {})
     payload["tracking_role"] = SHORTPICK_LLM_PAPER_CONTROL_ROLE
     payload["llm_paper_control"] = {
@@ -2919,6 +2967,7 @@ def select_shortpick_llm_paper_control_candidate(session: Session, run: Shortpic
         "selected": True,
         "selection_rank": 1,
         "selection_score_components": components,
+        "account_eligibility": selected_eligibility,
         "selected_at": utcnow().isoformat(),
     }
     selected.candidate_payload = payload
@@ -2930,7 +2979,11 @@ def select_shortpick_llm_paper_control_candidate(session: Session, run: Shortpic
         "symbol": selected.symbol,
         "name": selected.name,
         "selection_score_components": components,
-        "eligible_candidate_count": len(parsed),
+        "account_eligibility": selected_eligibility,
+        "raw_candidate_count": len(parsed),
+        "eligible_candidate_count": len(eligible),
+        "excluded_candidate_count": excluded_count,
+        "excluded_examples": excluded_examples,
     }
     run.summary_payload = {**dict(run.summary_payload or {}), "llm_paper_control": result}
     session.flush()

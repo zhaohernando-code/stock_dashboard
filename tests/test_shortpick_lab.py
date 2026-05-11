@@ -23,6 +23,7 @@ from ashare_evidence.models import (
     Recommendation,
     ShortpickCandidate,
     ShortpickExperimentRun,
+    ShortpickModelRound,
     ShortpickValidationSnapshot,
     Stock,
     WatchlistFollow,
@@ -50,6 +51,7 @@ from ashare_evidence.shortpick_lab import (
     normalize_shortpick_candidate_topics,
     retry_failed_shortpick_rounds,
     run_shortpick_experiment,
+    select_shortpick_llm_paper_control_candidate,
     shortpick_frozen_paper_strategy_contract,
     shortpick_market_factor_paper_control_contracts,
     validate_recent_shortpick_runs,
@@ -187,6 +189,7 @@ class ShortpickLabTests(unittest.TestCase):
 
     def _seed_daily_bars(self) -> None:
         self._seed_stock_bars("688981.SH", "中芯国际", [100 + index * 2 for index in range(8)])
+        self._seed_stock_bars("600519.SH", "贵州茅台", [1500 + index * 2 for index in range(8)])
         self._seed_stock_bars("000300.SH", "沪深300", [200 + index for index in range(8)])
         self._seed_stock_bars("000852.SH", "中证1000", [300 + index * 1.5 for index in range(8)])
 
@@ -233,8 +236,8 @@ class ShortpickLabTests(unittest.TestCase):
     def test_run_builds_consensus_and_validation_without_polluting_main_pools(self) -> None:
         self._seed_daily_bars()
         executors = [
-            StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("688981.SH", "中芯国际", "半导体国产替代", "https://a.example/news")),
-            StaticShortpickExecutor("deepseek", "deepseek-test", "fake", _answer("688981.SH", "中芯国际", "半导体国产替代", "https://b.example/news")),
+            StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("600519.SH", "贵州茅台", "消费龙头修复", "https://a.example/news")),
+            StaticShortpickExecutor("deepseek", "deepseek-test", "fake", _answer("600519.SH", "贵州茅台", "消费龙头修复", "https://b.example/news")),
         ]
 
         with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
@@ -251,12 +254,12 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(payload["status"], "completed")
         self.assertEqual(payload["summary"]["completed_round_count"], 2)
         self.assertEqual(payload["consensus"]["research_priority"], "cross_model_same_symbol")
-        self.assertEqual(payload["consensus"]["summary"]["leader_symbols"], ["688981.SH"])
-        self.assertEqual(payload["consensus"]["summary"]["cross_model_symbols"], ["688981.SH"])
+        self.assertEqual(payload["consensus"]["summary"]["leader_symbols"], ["600519.SH"])
+        self.assertEqual(payload["consensus"]["summary"]["cross_model_symbols"], ["600519.SH"])
         self.assertEqual(len(payload["candidates"]), 2)
         self.assertTrue(all(item["research_priority"] == "cross_model_same_symbol" for item in payload["candidates"]))
         self.assertEqual(payload["summary"]["llm_paper_control"]["status"], "selected")
-        self.assertEqual(payload["summary"]["llm_paper_control"]["symbol"], "688981.SH")
+        self.assertEqual(payload["summary"]["llm_paper_control"]["symbol"], "600519.SH")
         self.assertEqual(
             sum(1 for item in payload["candidates"] if item.get("tracking_role") == "llm_paper_control_primary"),
             1,
@@ -264,8 +267,108 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertTrue(any(v["status"] == "completed" for v in payload["candidates"][0]["validations"]))
 
         with session_scope(self.database_url) as session:
-            self.assertEqual(session.scalar(select(WatchlistFollow).where(WatchlistFollow.symbol == "688981.SH")), None)
+            self.assertEqual(session.scalar(select(WatchlistFollow).where(WatchlistFollow.symbol == "600519.SH")), None)
             self.assertEqual(session.scalar(select(Recommendation).limit(1)), None)
+
+    def test_llm_paper_control_excludes_non_mainboard_for_new_retail_account(self) -> None:
+        with session_scope(self.database_url) as session:
+            run = ShortpickExperimentRun(
+                run_key="shortpick:test:llm-paper-account-filter",
+                run_date=date(2026, 5, 11),
+                prompt_version="test",
+                information_mode="native_web_open_discovery",
+                status="completed",
+                trigger_source="test",
+                started_at=datetime(2026, 5, 11, 8, 0, tzinfo=UTC),
+                completed_at=datetime(2026, 5, 11, 8, 1, tzinfo=UTC),
+                model_config={},
+                summary_payload={},
+            )
+            session.add(run)
+            session.flush()
+            rounds = [
+                ShortpickModelRound(
+                    run_id=run.id,
+                    round_key=f"shortpick:test:llm-paper-account-filter:{provider}",
+                    provider_name=provider,
+                    model_name="test-model",
+                    executor_kind="test",
+                    round_index=index,
+                    status="completed",
+                    raw_answer="{}",
+                    parsed_payload={},
+                    sources_payload=[],
+                    started_at=datetime(2026, 5, 11, 8, index, tzinfo=UTC),
+                    completed_at=datetime(2026, 5, 11, 8, index + 1, tzinfo=UTC),
+                )
+                for index, provider in enumerate(("deepseek", "openai"), start=1)
+            ]
+            session.add_all(rounds)
+            session.flush()
+            session.add_all(
+                [
+                    ShortpickCandidate(
+                        run_id=run.id,
+                        round_id=rounds[0].id,
+                        candidate_key="shortpick-candidate:test:300604",
+                        symbol="300604.SZ",
+                        name="长川科技",
+                        normalized_theme="半导体设备",
+                        confidence=0.9,
+                        research_priority="cross_model_same_symbol",
+                        parse_status="parsed",
+                        sources_payload=[{"credibility_status": "verified"}],
+                        candidate_payload={},
+                    ),
+                    ShortpickCandidate(
+                        run_id=run.id,
+                        round_id=rounds[1].id,
+                        candidate_key="shortpick-candidate:test:688981",
+                        symbol="688981.SH",
+                        name="中芯国际",
+                        normalized_theme="半导体设备",
+                        confidence=0.88,
+                        research_priority="same_model_repeat_symbol",
+                        parse_status="parsed",
+                        sources_payload=[{"credibility_status": "verified"}],
+                        candidate_payload={},
+                    ),
+                    ShortpickCandidate(
+                        run_id=run.id,
+                        round_id=rounds[1].id,
+                        candidate_key="shortpick-candidate:test:600519",
+                        symbol="600519.SH",
+                        name="贵州茅台",
+                        normalized_theme="消费修复",
+                        confidence=0.6,
+                        research_priority="single_model_high_conviction",
+                        parse_status="parsed",
+                        sources_payload=[{"credibility_status": "verified"}],
+                        candidate_payload={},
+                    ),
+                ]
+            )
+            session.flush()
+
+            result = select_shortpick_llm_paper_control_candidate(session, run)
+
+            self.assertEqual(result["status"], "selected")
+            self.assertEqual(result["symbol"], "600519.SH")
+            self.assertEqual(result["eligible_candidate_count"], 1)
+            self.assertEqual(result["excluded_candidate_count"], 2)
+            excluded = {item["symbol"]: item["board_label"] for item in result["excluded_examples"]}
+            self.assertEqual(excluded["300604.SZ"], "创业板")
+            self.assertEqual(excluded["688981.SH"], "科创板")
+            selected_candidates = session.scalars(
+                select(ShortpickCandidate).where(ShortpickCandidate.run_id == run.id)
+            ).all()
+            tracking_by_symbol = {
+                candidate.symbol: (candidate.candidate_payload or {}).get("tracking_role")
+                for candidate in selected_candidates
+            }
+            self.assertEqual(tracking_by_symbol["600519.SH"], "llm_paper_control_primary")
+            self.assertIsNone(tracking_by_symbol["300604.SZ"])
+            self.assertIsNone(tracking_by_symbol["688981.SH"])
 
     def test_ai_topic_normalization_clusters_cross_model_topic_without_string_match(self) -> None:
         self._seed_stock_bars("000831.SZ", "中国稀土", [40 + index for index in range(8)])

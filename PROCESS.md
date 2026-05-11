@@ -2,6 +2,10 @@
 
 反回归笔记和可复用经验。状态快照见 PROJECT_STATUS.json。
 
+## 2026-05-11
+
+- **LLM 纸面对照必须先过新开户主板可买过滤**：用户发现 `300604.SZ 长川科技` 被选为当天 LLM 纸面对照，但当前 `new_retail_cash_account` 口径只允许沪深主板普通 A 股，创业板/科创板/北交所/ST 都不能进入严格交易对照。根因是 LLM 纸面对照选择器只排除了系统 market-factor overlay，没有复用账户可交易性过滤。已修正为：全量 LLM 推荐池继续保留为研究样本，但标记 `llm_paper_control_primary` 前必须通过 `account_trade_eligibility(..., account_profile=new_retail_cash_account)`；被排除的候选会记录 `excluded_examples` 和板块原因。当天 runtime DB 已对 `run 121` 重新选择，清除 `300604.SZ` 的 LLM 对照标记，新的 LLM 纸面对照为 `600236.SH 桂冠电力`，`300604.SZ` 仅保留为普通 LLM 研究候选。
+
 ## 2026-05-10
 
 - **主板新账户长样本已补齐三大指数参照**：用户指出“当前 180 只主板样本库没有沪深300/中证500/中证1000指数序列”。根因是专用 Tushare 样本库只包含 180 只股票，`benchmark_references` 只能返回 `missing_series`；主库虽有指数，但只覆盖 2025-03-27 起，不足以支撑 2023-05 起长样本。已用 `sync_benchmark_index_bars(lookback_days=1400)` 向 `output/shortpick-mainboard-new-retail-tushare-20260510.db` 补入三大指数各 926 根日线，覆盖 2022-07-11 至 2026-05-08，并重跑 `output/shortpick-portfolio-backtest-new-retail-mainboard-current-20260510.json`。当前指数参照：沪深300 +19.73% / 最大回撤 -24.09%，中证500 +35.75% / 最大回撤 -31.09%，中证1000 +25.47% / 最大回撤 -38.85%；等权市场基准仍作为策略超额主基准。前端市场参照卡片改为同时展示三大指数；测试新增三大指数必须 available 的约束。
