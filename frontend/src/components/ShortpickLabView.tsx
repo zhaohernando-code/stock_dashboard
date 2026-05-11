@@ -294,7 +294,7 @@ function baselineFamilyLabel(value?: string | null): string {
   if (value === "random_strict_veto_then_momentum_rank") return "随机严格否决后动量排序";
   if (value === "momentum_turnover_rank") return "换手优先动量排序";
   if (value === "momentum_10d_rank") return "10日持续动量排序";
-  if (value === "momentum_10d_turnover_rank") return "10日动量换手复合排序";
+  if (value === "momentum_10d_turnover_rank") return "10日动量换手排序";
   if (value === "momentum_10d_turnover_cooldown_rank") return "10日动量换手降追高排序";
   if (value === "momentum_10d_turnover_cooldown_diversified_rank") return "分散后的动量换手";
   if (value === "momentum_continuity_turnover_rank") return "持续动量换手复合排序";
