@@ -1,6 +1,6 @@
 {
-  "annualized_excess_return": 0.0335,
-  "annualized_return": 0.031,
+  "annualized_excess_return": 0.0283,
+  "annualized_return": 0.0638,
   "artifact_id": "portfolio-backtest:sim-20260427134347-d43368-model",
   "artifact_type": "portfolio_backtest",
   "benchmark": {
@@ -6172,12 +6172,28 @@
       "nav": 206192.04,
       "observed_at": "2026-05-07T15:00:00",
       "trade_date": "2026-05-07"
+    },
+    {
+      "benchmark_nav": 201456.32,
+      "drawdown": 0.0,
+      "exposure": 0.2346,
+      "nav": 209216.04,
+      "observed_at": "2026-05-08T15:00:00",
+      "trade_date": "2026-05-08"
+    },
+    {
+      "benchmark_nav": 207103.03,
+      "drawdown": 0.0,
+      "exposure": 0.2474,
+      "nav": 212768.04,
+      "observed_at": "2026-05-11T15:00:00",
+      "trade_date": "2026-05-11"
     }
   ],
   "execution_assumptions": "daily_close_marking + paper_fills + T+1 + price_limit_checks",
   "exposure_summary": {
     "active_position_count": 1,
-    "invested_ratio": 0.2234
+    "invested_ratio": 0.2474
   },
   "manifest_id": "rolling-validation:phase2-portfolio-backtests",
   "max_drawdown": -0.0157,
@@ -6191,13 +6207,13 @@
     "active_position_count": 1,
     "rule_pass_rate": 1.0
   },
-  "sharpe_like_ratio": 2.133758,
+  "sharpe_like_ratio": 1.802548,
   "status": "research_candidate",
   "status_note": "组合回测已切到真实 daily 价格与 proxy benchmark；模型轨道的 simulation baseline 已升级为 constrained TopK，但仍处于 research candidate。",
   "strategy_definition": "模型按目标权重自动调仓、独立资金池运行，适合验证组合纪律与执行损耗。",
   "stress_period_summary": [
     {
-      "excess_return": 0.0335,
+      "excess_return": 0.0283,
       "max_drawdown": -0.0157,
       "period": "phase2_fixture_window"
     }
@@ -6207,6 +6223,6 @@
   "turnover_stats": {
     "turnover": 0.083333
   },
-  "win_rate": 0.996099,
+  "win_rate": 0.996109,
   "win_rate_definition": "positive_excess_nav_point_ratio_against_phase2_proxy"
 }
