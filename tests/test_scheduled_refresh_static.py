@@ -51,3 +51,13 @@ def test_shortpick_lab_is_part_of_postmarket_daily_cycle() -> None:
     assert "run_shortpick_daily_cycle" in script
     assert "run_shortpick_lab_slot \"$TODAY_STR\"" in script
     assert "run_with_timeout \"$SHORTPICK_TIMEOUT_SECONDS\" run_shortpick_daily_cycle \"$target_date\"\n  local exit_code=$?" in script
+
+
+def test_deepseek_shortpick_round_has_in_process_soft_timeout() -> None:
+    source = (REPO_ROOT / "src" / "ashare_evidence" / "shortpick_lab.py").read_text(encoding="utf-8")
+
+    assert "ASHARE_SHORTPICK_DEEPSEEK_ROUND_TIMEOUT_SECONDS" in source
+    assert "SHORTPICK_DEEPSEEK_SEARCH_TIMEOUT_SECONDS = 180" in source
+    assert "signal.setitimer(signal.ITIMER_REAL, timeout_seconds)" in source
+    assert "deepseek_tool_search_lobechat_searxng_v1" in source
+    assert "with _shortpick_executor_round_timeout(executor):\n            raw_answer = executor.complete(prompt)" in source

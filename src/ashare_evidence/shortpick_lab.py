@@ -6,9 +6,12 @@ import json
 import math
 import os
 import re
+import signal
 import subprocess
 import tempfile
+import threading
 from collections import defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -1169,6 +1172,43 @@ def _deepseek_search_backend_label(search_results: list[dict[str, Any]]) -> str:
     return "lobechat_searxng"
 
 
+def _shortpick_deepseek_round_timeout_seconds() -> int:
+    raw_value = os.getenv(
+        "ASHARE_SHORTPICK_DEEPSEEK_ROUND_TIMEOUT_SECONDS",
+        str(SHORTPICK_DEEPSEEK_SEARCH_TIMEOUT_SECONDS),
+    )
+    try:
+        return max(1, int(raw_value))
+    except ValueError:
+        return SHORTPICK_DEEPSEEK_SEARCH_TIMEOUT_SECONDS
+
+
+def _shortpick_executor_round_timeout_seconds(executor: ShortpickExecutor) -> int | None:
+    if executor.executor_kind == "deepseek_tool_search_lobechat_searxng_v1":
+        return _shortpick_deepseek_round_timeout_seconds()
+    return None
+
+
+@contextmanager
+def _shortpick_executor_round_timeout(executor: ShortpickExecutor):
+    timeout_seconds = _shortpick_executor_round_timeout_seconds(executor)
+    if timeout_seconds is None or threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    def _raise_timeout(signum: int, frame: Any) -> None:
+        raise TimeoutError(f"{executor.executor_kind} round timed out after {timeout_seconds}s.")
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    signal.signal(signal.SIGALRM, _raise_timeout)
+    previous_timer = signal.setitimer(signal.ITIMER_REAL, timeout_seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, previous_timer[0], previous_timer[1])
+        signal.signal(signal.SIGALRM, previous_handler)
+
+
 def default_shortpick_executors(session: Session) -> list[ShortpickExecutor]:
     executors: list[ShortpickExecutor] = []
     builtin = get_builtin_llm_executor_config()
@@ -1360,7 +1400,8 @@ def _execute_shortpick_round(
     )
     raw_answer: str | None = None
     try:
-        raw_answer = executor.complete(prompt)
+        with _shortpick_executor_round_timeout(executor):
+            raw_answer = executor.complete(prompt)
         round_record.raw_answer = raw_answer
         parsed = extract_shortpick_json(raw_answer)
         sources = _normalize_sources(parsed.get("sources_used"))
