@@ -25,7 +25,15 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ashare_evidence.akshare_timeout import call_akshare_function
-from ashare_evidence.analysis_pipeline import _fetch_daily_bars_akshare, _fetch_daily_bars_tushare
+from ashare_evidence.analysis_pipeline import (
+    _close_timestamp,
+    _fetch_daily_bars_akshare,
+    _fetch_daily_bars_tushare,
+    _json_safe,
+    _parse_day,
+    _to_float,
+    _tushare_rows,
+)
 from ashare_evidence.benchmark import CSI_BENCHMARKS, benchmark_close_maps, sync_benchmark_index_bars
 from ashare_evidence.db import utcnow
 from ashare_evidence.http_client import urlopen
@@ -35,6 +43,7 @@ from ashare_evidence.market_rules import ACCOUNT_PROFILE_NEW_RETAIL_CASH, accoun
 from ashare_evidence.models import (
     MarketBar,
     ModelApiKey,
+    ProviderCredential,
     Recommendation,
     SectorMembership,
     ShortpickCandidate,
@@ -186,6 +195,12 @@ SHORTPICK_MARKET_FACTOR_EXCLUDED_SYMBOLS = {
     "399300.SZ",
     *(definition["symbol"] for definition in CSI_BENCHMARKS.values()),
 }
+SHORTPICK_MARKET_FACTOR_MIN_FULL_UNIVERSE_SIZE = int(os.getenv("SHORTPICK_MARKET_FACTOR_MIN_FULL_UNIVERSE_SIZE", "1000"))
+SHORTPICK_MARKET_FACTOR_FULL_SYNC_LOOKBACK_DAYS = int(os.getenv("SHORTPICK_MARKET_FACTOR_FULL_SYNC_LOOKBACK_DAYS", "90"))
+SHORTPICK_MARKET_FACTOR_FULL_SYNC_MIN_TRADE_DAYS = int(os.getenv("SHORTPICK_MARKET_FACTOR_FULL_SYNC_MIN_TRADE_DAYS", "45"))
+SHORTPICK_MARKET_FACTOR_COARSE_SCREEN_SIZE = int(os.getenv("SHORTPICK_MARKET_FACTOR_COARSE_SCREEN_SIZE", "800"))
+SHORTPICK_MARKET_FACTOR_HOT_INDUSTRY_LIMIT = int(os.getenv("SHORTPICK_MARKET_FACTOR_HOT_INDUSTRY_LIMIT", "12"))
+SHORTPICK_MARKET_FACTOR_HOT_INDUSTRY_MIN_SYMBOLS = int(os.getenv("SHORTPICK_MARKET_FACTOR_HOT_INDUSTRY_MIN_SYMBOLS", "5"))
 SUSPICIOUS_SOURCE_PATTERNS = (
     re.compile(r"(?:123456|234567|345678|456789|987654|876543)"),
     re.compile(r"(.)\1{5,}"),
@@ -1473,6 +1488,7 @@ def run_shortpick_intraday_same_day_control(
 
 def insert_shortpick_intraday_same_day_candidate(session: Session, run: ShortpickExperimentRun) -> dict[str, Any]:
     removed = _delete_existing_market_factor_overlay_candidates(session, run_id=run.id)
+    universe_sync = _sync_shortpick_market_factor_universe(session, run.run_date, include_run_date=False)
     quote_snapshot = _fetch_shortpick_intraday_spot_quotes(
         symbols=_shortpick_intraday_universe_symbols(session, run.run_date)
     )
@@ -1484,6 +1500,7 @@ def insert_shortpick_intraday_same_day_candidate(session: Session, run: Shortpic
             "status": "failed" if quote_status in {"error", "unavailable", "empty"} else "skipped",
             "reason": "intraday_quote_unavailable" if quote_status in {"error", "unavailable", "empty"} else "no_intraday_market_factor_pool",
             "removed_existing_candidate_count": removed,
+            "market_data_sync": universe_sync,
             "quote_snapshot": quote_snapshot.get("summary", {}),
             **diagnostics,
         }
@@ -1573,6 +1590,7 @@ def insert_shortpick_intraday_same_day_candidate(session: Session, run: Shortpic
         },
         "market_factor_paper_controls": shortpick_market_factor_paper_control_contracts(),
         "regime": regime,
+        "market_data_sync": universe_sync,
         "quote_snapshot": quote_snapshot.get("summary", {}),
         "candidates": inserted,
         **diagnostics,
@@ -1584,23 +1602,27 @@ def insert_shortpick_intraday_same_day_candidate(session: Session, run: Shortpic
 
 def _shortpick_intraday_universe_symbols(session: Session, run_date: date) -> list[str]:
     cutoff = datetime.combine(run_date, datetime.min.time()).replace(tzinfo=UTC)
+    start_cutoff = datetime.combine(
+        run_date - timedelta(days=SHORTPICK_MARKET_FACTOR_FULL_SYNC_LOOKBACK_DAYS),
+        datetime.min.time(),
+    ).replace(tzinfo=UTC)
     rows = session.execute(
         select(Stock, MarketBar)
         .join(MarketBar, MarketBar.stock_id == Stock.id)
-        .where(MarketBar.timeframe == "1d", MarketBar.observed_at < cutoff)
+        .where(MarketBar.timeframe == "1d", MarketBar.observed_at >= start_cutoff, MarketBar.observed_at < cutoff)
         .order_by(Stock.symbol.asc(), MarketBar.observed_at.asc(), MarketBar.id.asc())
     ).all()
     bars_by_symbol: dict[str, list[MarketBar]] = defaultdict(list)
     stocks_by_symbol: dict[str, Stock] = {}
     for stock, bar in rows:
-        if not _stock_eligible_for_shortpick_market_factor(stock, run_date=run_date):
-            continue
         stocks_by_symbol[stock.symbol] = stock
         bars_by_symbol[stock.symbol].append(bar)
     return [
         symbol
         for symbol in sorted(bars_by_symbol)
-        if symbol in stocks_by_symbol and len(_dedupe_market_factor_bars(bars_by_symbol[symbol])) >= 20
+        if symbol in stocks_by_symbol
+        and _stock_eligible_for_shortpick_market_factor(stocks_by_symbol[symbol], run_date=run_date)
+        and len(_dedupe_market_factor_bars(bars_by_symbol[symbol])) >= 20
     ]
 
 
@@ -2241,40 +2263,48 @@ def _delete_existing_market_factor_overlay_candidates(session: Session, *, run_i
 
 def _shortpick_market_factor_contexts(session: Session, run_date: date) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     cutoff = datetime.combine(run_date, datetime.max.time()).replace(tzinfo=UTC)
+    start_cutoff = datetime.combine(
+        run_date - timedelta(days=SHORTPICK_MARKET_FACTOR_FULL_SYNC_LOOKBACK_DAYS),
+        datetime.min.time(),
+    ).replace(tzinfo=UTC)
     rows = session.execute(
         select(Stock, MarketBar)
         .join(MarketBar, MarketBar.stock_id == Stock.id)
-        .where(MarketBar.timeframe == "1d", MarketBar.observed_at <= cutoff)
+        .where(MarketBar.timeframe == "1d", MarketBar.observed_at >= start_cutoff, MarketBar.observed_at <= cutoff)
         .order_by(Stock.symbol.asc(), MarketBar.observed_at.asc(), MarketBar.id.asc())
     ).all()
     stocks_by_symbol: dict[str, Stock] = {}
     bars_by_symbol: dict[str, list[MarketBar]] = defaultdict(list)
     for stock, bar in rows:
-        if not _stock_eligible_for_shortpick_market_factor(stock, run_date=run_date):
-            continue
         stocks_by_symbol[stock.symbol] = stock
         bars_by_symbol[stock.symbol].append(bar)
 
     contexts: list[dict[str, Any]] = []
     for symbol, bars in bars_by_symbol.items():
+        stock = stocks_by_symbol[symbol]
+        if not _stock_eligible_for_shortpick_market_factor(stock, run_date=run_date):
+            continue
         unique_bars = _dedupe_market_factor_bars(bars)
         if len(unique_bars) < 21:
             continue
         latest = unique_bars[-1]
         if latest.close_price <= 0 or latest.amount <= 0:
             continue
-        context = _market_factor_context_from_bars(stocks_by_symbol[symbol], unique_bars)
+        context = _market_factor_context_from_bars(stock, unique_bars)
         if context is not None:
             contexts.append(context)
 
     latest_day = max((item["latest_trade_day"] for item in contexts), default=None)
     current_contexts = [item for item in contexts if item["latest_trade_day"] == latest_day] if latest_day else []
-    return current_contexts, {
+    screened_contexts, screen_summary = _shortpick_market_factor_coarse_screen(current_contexts)
+    return screened_contexts, {
         "run_date": run_date.isoformat(),
         "latest_trade_day": latest_day,
         "raw_symbol_count": len(bars_by_symbol),
-        "eligible_symbol_count": len(current_contexts),
+        "eligible_symbol_count": len(screened_contexts),
+        "full_eligible_symbol_count": len(current_contexts),
         "stale_symbol_count": max(len(contexts) - len(current_contexts), 0),
+        "coarse_screen": screen_summary,
     }
 
 
@@ -2284,24 +2314,29 @@ def _shortpick_market_factor_intraday_contexts(
     quote_snapshot: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     cutoff = datetime.combine(run_date, datetime.min.time()).replace(tzinfo=UTC)
+    start_cutoff = datetime.combine(
+        run_date - timedelta(days=SHORTPICK_MARKET_FACTOR_FULL_SYNC_LOOKBACK_DAYS),
+        datetime.min.time(),
+    ).replace(tzinfo=UTC)
     rows = session.execute(
         select(Stock, MarketBar)
         .join(MarketBar, MarketBar.stock_id == Stock.id)
-        .where(MarketBar.timeframe == "1d", MarketBar.observed_at < cutoff)
+        .where(MarketBar.timeframe == "1d", MarketBar.observed_at >= start_cutoff, MarketBar.observed_at < cutoff)
         .order_by(Stock.symbol.asc(), MarketBar.observed_at.asc(), MarketBar.id.asc())
     ).all()
     quotes = quote_snapshot.get("quotes") if isinstance(quote_snapshot.get("quotes"), dict) else {}
     stocks_by_symbol: dict[str, Stock] = {}
     bars_by_symbol: dict[str, list[MarketBar]] = defaultdict(list)
     for stock, bar in rows:
-        if not _stock_eligible_for_shortpick_market_factor(stock, run_date=run_date):
-            continue
         stocks_by_symbol[stock.symbol] = stock
         bars_by_symbol[stock.symbol].append(bar)
 
     contexts: list[dict[str, Any]] = []
     missing_quote_count = 0
     for symbol, bars in bars_by_symbol.items():
+        stock = stocks_by_symbol[symbol]
+        if not _stock_eligible_for_shortpick_market_factor(stock, run_date=run_date):
+            continue
         quote = quotes.get(symbol)
         if not isinstance(quote, dict):
             missing_quote_count += 1
@@ -2331,23 +2366,26 @@ def _shortpick_market_factor_intraday_contexts(
             turnover_rate=_coerce_float(quote.get("turnover_rate")),
             raw_payload={"synthetic_intraday_quote": quote},
         )
-        context = _market_factor_context_from_bars(stocks_by_symbol[symbol], [*unique_bars, synthetic])
+        context = _market_factor_context_from_bars(stock, [*unique_bars, synthetic])
         if context is None:
             continue
         context["_intraday_selection_quote"] = quote
         context["_intraday_quote_source"] = quote_snapshot.get("source_kind")
         contexts.append(context)
 
-    return contexts, {
+    screened_contexts, screen_summary = _shortpick_market_factor_coarse_screen(contexts)
+    return screened_contexts, {
         "run_date": run_date.isoformat(),
         "latest_trade_day": run_date.isoformat(),
         "intraday_quote_status": quote_snapshot.get("status"),
         "intraday_quote_generated_at": quote_snapshot.get("generated_at"),
         "raw_symbol_count": len(bars_by_symbol),
-        "eligible_symbol_count": len(contexts),
+        "eligible_symbol_count": len(screened_contexts),
+        "full_eligible_symbol_count": len(contexts),
         "missing_quote_count": missing_quote_count,
         "stale_symbol_count": 0,
         "intraday_same_day": True,
+        "coarse_screen": screen_summary,
     }
 
 
@@ -2524,38 +2562,391 @@ def _shortpick_symbol_from_spot_code(raw_code: Any) -> str | None:
     return f"{code}.SZ"
 
 
-def _sync_shortpick_market_factor_universe(session: Session, run_date: date) -> dict[str, Any]:
+class ShortpickMarketFactorUniverseError(RuntimeError):
+    pass
+
+
+def _shortpick_tushare_credential(session: Session) -> ProviderCredential | None:
+    return session.scalar(
+        select(ProviderCredential).where(
+            ProviderCredential.provider_name == "tushare",
+            ProviderCredential.enabled.is_(True),
+        )
+    )
+
+
+def _require_shortpick_tushare_credential(session: Session) -> ProviderCredential:
+    credential = _shortpick_tushare_credential(session)
+    if credential is None or not str(credential.access_token or "").strip():
+        raise ShortpickMarketFactorUniverseError("Tushare token is required for full eligible shortpick universe sync.")
+    return credential
+
+
+def _shortpick_symbol_from_tushare_code(raw_code: Any) -> str | None:
+    value = str(raw_code or "").strip().upper()
+    if not value:
+        return None
+    ticker, _, exchange = value.partition(".")
+    if not re.fullmatch(r"\d{6}", ticker):
+        return None
+    if exchange in {"SH", "SZ", "BJ"}:
+        return f"{ticker}.{exchange}"
+    if exchange == "SSE":
+        return f"{ticker}.SH"
+    if exchange == "SZSE":
+        return f"{ticker}.SZ"
+    if exchange == "BSE":
+        return f"{ticker}.BJ"
+    return _shortpick_symbol_from_spot_code(ticker)
+
+
+def _shortpick_exchange_from_symbol(symbol: str) -> str:
+    _, _, exchange = symbol.partition(".")
+    return exchange or "SH"
+
+
+def _shortpick_tushare_stock_profile(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "industry": row.get("industry"),
+        "market": row.get("market"),
+        "market_board": row.get("market"),
+        "exchange": row.get("exchange"),
+        "list_status": row.get("list_status"),
+        "profile_source": "tushare_stock_basic_full_universe",
+    }
+
+
+def _shortpick_stock_row_eligible(row: dict[str, Any], *, run_date: date) -> bool:
+    symbol = _shortpick_symbol_from_tushare_code(row.get("ts_code"))
+    if symbol is None:
+        return False
+    profile = {
+        "name": row.get("name"),
+        "listed_date": _parse_day(row.get("list_date")),
+        "profile_payload": _shortpick_tushare_stock_profile(row),
+    }
+    eligibility = account_trade_eligibility(
+        symbol,
+        stock_profile=profile,
+        account_profile=ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+        as_of=run_date,
+    )
+    return bool(eligibility["tradable"])
+
+
+def _upsert_shortpick_tushare_stock(session: Session, row: dict[str, Any], *, run_date: date) -> Stock | None:
+    symbol = _shortpick_symbol_from_tushare_code(row.get("ts_code"))
+    if symbol is None:
+        return None
+    if symbol in SHORTPICK_MARKET_FACTOR_EXCLUDED_SYMBOLS:
+        return None
+    name = str(row.get("name") or symbol).strip()
+    listed_date = _parse_day(row.get("list_date"))
+    profile_payload = _shortpick_tushare_stock_profile(row)
+    if not _shortpick_stock_row_eligible(row, run_date=run_date):
+        return None
+
+    existing = session.scalar(select(Stock).where(Stock.symbol == symbol))
+    ticker = symbol.split(".", 1)[0]
+    exchange = _shortpick_exchange_from_symbol(symbol)
+    stock_payload = {
+        "symbol": symbol,
+        "name": name,
+        "listed_date": listed_date.isoformat() if listed_date else None,
+        "profile_payload": profile_payload,
+    }
+    lineage = build_lineage(
+        stock_payload,
+        source_uri=f"tushare://stock_basic/{symbol}",
+        license_tag="tushare-pro",
+        usage_scope="internal_research",
+        redistribution_scope="limited-display",
+    )
+    if existing is None:
+        stock = Stock(
+            symbol=symbol,
+            ticker=ticker,
+            exchange=exchange,
+            name=name,
+            provider_symbol=symbol,
+            listed_date=listed_date,
+            delisted_date=None,
+            status="active",
+            profile_payload=profile_payload,
+            **lineage,
+        )
+        session.add(stock)
+        session.flush()
+        return stock
+
+    existing.ticker = ticker
+    existing.exchange = exchange
+    existing.name = name
+    existing.provider_symbol = symbol
+    existing.listed_date = listed_date
+    existing.delisted_date = None
+    existing.status = "active"
+    existing.profile_payload = {**dict(existing.profile_payload or {}), **profile_payload}
+    for key, value in lineage.items():
+        setattr(existing, key, value)
+    session.flush()
+    return existing
+
+
+def _sync_shortpick_tushare_stock_master(session: Session, run_date: date) -> tuple[list[Stock], dict[str, Any]]:
+    _require_shortpick_tushare_credential(session)
+    rows = _tushare_rows(
+        session,
+        api_name="stock_basic",
+        params={"list_status": "L"},
+        fields="ts_code,symbol,name,industry,list_date,exchange,market,list_status",
+    )
+    if not rows:
+        raise ShortpickMarketFactorUniverseError("Tushare stock_basic returned no rows for full eligible universe.")
+
+    eligible: list[Stock] = []
+    excluded_count = 0
+    for row in rows:
+        if _shortpick_stock_row_eligible(row, run_date=run_date):
+            stock = _upsert_shortpick_tushare_stock(session, row, run_date=run_date)
+            if stock is not None and _stock_eligible_for_shortpick_market_factor(stock, run_date=run_date):
+                eligible.append(stock)
+        else:
+            excluded_count += 1
+    session.flush()
+    unique = {stock.symbol: stock for stock in eligible}
+    eligible = [unique[symbol] for symbol in sorted(unique)]
+    if len(eligible) < SHORTPICK_MARKET_FACTOR_MIN_FULL_UNIVERSE_SIZE:
+        raise ShortpickMarketFactorUniverseError(
+            "Full eligible shortpick universe is unexpectedly small: "
+            f"{len(eligible)} < {SHORTPICK_MARKET_FACTOR_MIN_FULL_UNIVERSE_SIZE}."
+        )
+    return eligible, {
+        "tushare_stock_basic_rows": len(rows),
+        "account_eligible_symbol_count": len(eligible),
+        "excluded_symbol_count": excluded_count,
+    }
+
+
+def _shortpick_recent_tushare_trade_dates(session: Session, run_date: date, *, include_run_date: bool) -> list[date]:
+    start_date = run_date - timedelta(days=SHORTPICK_MARKET_FACTOR_FULL_SYNC_LOOKBACK_DAYS)
+    rows = _tushare_rows(
+        session,
+        api_name="trade_cal",
+        params={
+            "exchange": "SSE",
+            "start_date": start_date.strftime("%Y%m%d"),
+            "end_date": run_date.strftime("%Y%m%d"),
+        },
+        fields="exchange,cal_date,is_open,pretrade_date",
+    )
+    if not rows:
+        raise ShortpickMarketFactorUniverseError("Tushare trade_cal returned no rows for full universe sync.")
+    days = []
+    for row in rows:
+        if str(row.get("is_open")) not in {"1", "1.0", "True", "true"} and row.get("is_open") != 1:
+            continue
+        trade_day = _parse_day(row.get("cal_date"))
+        if trade_day is None:
+            continue
+        if not include_run_date and trade_day >= run_date:
+            continue
+        if include_run_date and trade_day > run_date:
+            continue
+        days.append(trade_day)
+    days = sorted(set(days))
+    if len(days) < 21:
+        raise ShortpickMarketFactorUniverseError(f"Tushare trade calendar only returned {len(days)} open days.")
+    return days[-max(21, SHORTPICK_MARKET_FACTOR_FULL_SYNC_MIN_TRADE_DAYS) :]
+
+
+def _existing_shortpick_bar_count_for_day(session: Session, *, trade_day: date, stock_ids: set[int]) -> int:
+    if not stock_ids:
+        return 0
+    observed_at = _close_timestamp(trade_day)
+    total = 0
+    stock_id_list = sorted(stock_ids)
+    for offset in range(0, len(stock_id_list), 800):
+        chunk = stock_id_list[offset : offset + 800]
+        total += (
+            session.scalar(
+                select(func.count(MarketBar.id)).where(
+                    MarketBar.timeframe == "1d",
+                    MarketBar.observed_at == observed_at,
+                    MarketBar.stock_id.in_(chunk),
+                )
+            )
+            or 0
+        )
+    return total
+
+
+def _bulk_upsert_shortpick_market_bars(
+    session: Session,
+    *,
+    stocks_by_symbol: dict[str, Stock],
+    market_rows: list[dict[str, Any]],
+    basic_rows: list[dict[str, Any]],
+    trade_day: date,
+) -> int:
+    basic_by_symbol: dict[str, dict[str, Any]] = {}
+    for row in basic_rows:
+        symbol = _shortpick_symbol_from_tushare_code(row.get("ts_code"))
+        if symbol:
+            basic_by_symbol[symbol] = row
+
+    records: list[tuple[str, dict[str, Any]]] = []
+    for row in market_rows:
+        symbol = _shortpick_symbol_from_tushare_code(row.get("ts_code"))
+        stock = stocks_by_symbol.get(symbol or "")
+        if stock is None:
+            continue
+        open_price = _to_float(row.get("open"))
+        high_price = _to_float(row.get("high"))
+        low_price = _to_float(row.get("low"))
+        close_price = _to_float(row.get("close"))
+        volume = _to_float(row.get("vol"))
+        amount = _to_float(row.get("amount"))
+        if None in {open_price, high_price, low_price, close_price, volume, amount}:
+            continue
+        basic = basic_by_symbol.get(symbol or "", {})
+        ticker = stock.ticker or str(symbol).split(".", 1)[0]
+        bar_key = f"bar-{ticker.lower()}-1d-{trade_day:%Y%m%d}"
+        raw_payload = {
+            **_json_safe(row),
+            "daily_basic": _json_safe(basic),
+            "provider_name": "tushare",
+            "dataset": "daily+daily_basic",
+            "shortpick_full_universe_sync": True,
+        }
+        values = {
+            "stock_id": stock.id,
+            "timeframe": "1d",
+            "observed_at": _close_timestamp(trade_day),
+            "open_price": float(open_price),
+            "high_price": float(high_price),
+            "low_price": float(low_price),
+            "close_price": float(close_price),
+            "volume": float(volume),
+            "amount": float(amount) * 1000.0,
+            "turnover_rate": ((_to_float(basic.get("turnover_rate")) or 0.0) / 100.0) if basic else None,
+            "adj_factor": None,
+            "total_mv": _to_float(basic.get("total_mv")),
+            "circ_mv": _to_float(basic.get("circ_mv")),
+            "pe_ttm": _to_float(basic.get("pe_ttm")),
+            "pb": _to_float(basic.get("pb")),
+            "raw_payload": raw_payload,
+            **build_lineage(
+                {"symbol": symbol, "trade_date": trade_day.isoformat(), "raw_payload": raw_payload},
+                source_uri=f"tushare://daily/{symbol}?trade_date={trade_day:%Y%m%d}",
+                license_tag="tushare-pro",
+                usage_scope="internal_research",
+                redistribution_scope="limited-display",
+            ),
+        }
+        records.append((bar_key, values))
+
+    existing_by_key: dict[str, MarketBar] = {}
+    keys = [key for key, _ in records]
+    for offset in range(0, len(keys), 800):
+        chunk = keys[offset : offset + 800]
+        existing_by_key.update({bar.bar_key: bar for bar in session.scalars(select(MarketBar).where(MarketBar.bar_key.in_(chunk))).all()})
+
+    upserted = 0
+    for bar_key, values in records:
+        existing = existing_by_key.get(bar_key)
+        if existing is None:
+            session.add(MarketBar(bar_key=bar_key, **values))
+        else:
+            for key, value in values.items():
+                setattr(existing, key, value)
+        upserted += 1
+    session.flush()
+    return upserted
+
+
+def _sync_shortpick_tushare_market_bars(
+    session: Session,
+    *,
+    run_date: date,
+    eligible_stocks: list[Stock],
+    include_run_date: bool,
+) -> dict[str, Any]:
+    trade_days = _shortpick_recent_tushare_trade_dates(session, run_date, include_run_date=include_run_date)
+    stocks_by_symbol = {stock.symbol: stock for stock in eligible_stocks}
+    stock_ids = {int(stock.id) for stock in eligible_stocks if stock.id is not None}
+    refreshed_days: list[str] = []
+    skipped_days = 0
+    total_upserted = 0
+    expected_floor = max(1, int(len(eligible_stocks) * 0.85))
+    for trade_day in trade_days:
+        existing_count = _existing_shortpick_bar_count_for_day(session, trade_day=trade_day, stock_ids=stock_ids)
+        if existing_count >= expected_floor:
+            skipped_days += 1
+            continue
+        trade_date = trade_day.strftime("%Y%m%d")
+        market_rows = _tushare_rows(
+            session,
+            api_name="daily",
+            params={"trade_date": trade_date},
+            fields="ts_code,trade_date,open,high,low,close,vol,amount",
+        )
+        basic_rows = _tushare_rows(
+            session,
+            api_name="daily_basic",
+            params={"trade_date": trade_date},
+            fields="ts_code,trade_date,turnover_rate,total_mv,circ_mv,pe_ttm,pb",
+        )
+        if not market_rows:
+            raise ShortpickMarketFactorUniverseError(f"Tushare daily returned no rows for {trade_date}.")
+        if not basic_rows:
+            raise ShortpickMarketFactorUniverseError(f"Tushare daily_basic returned no rows for {trade_date}.")
+        upserted = _bulk_upsert_shortpick_market_bars(
+            session,
+            stocks_by_symbol=stocks_by_symbol,
+            market_rows=market_rows,
+            basic_rows=basic_rows,
+            trade_day=trade_day,
+        )
+        if upserted < expected_floor:
+            raise ShortpickMarketFactorUniverseError(
+                f"Tushare full universe upsert for {trade_date} was too small: {upserted} < {expected_floor}."
+            )
+        total_upserted += upserted
+        refreshed_days.append(trade_day.isoformat())
+        session.commit()
+
+    return {
+        "trade_day_count": len(trade_days),
+        "trade_day_start": trade_days[0].isoformat() if trade_days else None,
+        "trade_day_end": trade_days[-1].isoformat() if trade_days else None,
+        "skipped_current_day_count": skipped_days,
+        "refreshed_day_count": len(refreshed_days),
+        "refreshed_days": refreshed_days[-10:],
+        "upserted_bar_count": total_upserted,
+    }
+
+
+def _sync_shortpick_market_factor_universe(session: Session, run_date: date, *, include_run_date: bool = True) -> dict[str, Any]:
     if os.getenv("SHORTPICK_MARKET_FACTOR_SYNC", "1").strip().lower() in {"0", "false", "no"}:
         return {"status": "disabled"}
-    stocks = session.scalars(select(Stock).order_by(Stock.symbol.asc())).all()
-    eligible = [stock for stock in stocks if _stock_eligible_for_shortpick_market_factor(stock, run_date=run_date)]
-    refreshed: list[str] = []
-    skipped_current = 0
-    failed: list[dict[str, str]] = []
-    for stock in eligible:
-        latest_day = session.scalar(
-            select(func.max(MarketBar.observed_at)).where(MarketBar.stock_id == stock.id, MarketBar.timeframe == "1d")
-        )
-        if latest_day is not None and latest_day.date() >= run_date:
-            skipped_current += 1
-            continue
-        try:
-            fetch = _fetch_shortpick_daily_market_data(session, stock.symbol)
-            upserted = _upsert_shortpick_market_bars(session, stock=stock, bars=fetch.bars)
-            session.commit()
-            if upserted:
-                refreshed.append(stock.symbol)
-        except Exception as exc:
-            session.rollback()
-            failed.append({"symbol": stock.symbol, "reason": str(exc)[:200]})
+    eligible, stock_master_summary = _sync_shortpick_tushare_stock_master(session, run_date)
+    session.commit()
+    bar_summary = _sync_shortpick_tushare_market_bars(
+        session,
+        run_date=run_date,
+        eligible_stocks=eligible,
+        include_run_date=include_run_date,
+    )
     return {
-        "status": "ok" if not failed else "partial",
+        "status": "ok",
+        "source": "tushare_full_eligible_new_retail_cash_mainboard",
         "target_date": run_date.isoformat(),
+        "include_run_date": include_run_date,
         "eligible_symbol_count": len(eligible),
-        "skipped_current_count": skipped_current,
-        "refreshed_symbol_count": len(refreshed),
-        "failed_symbol_count": len(failed),
-        "failed": failed[:20],
+        "minimum_required_eligible_symbol_count": SHORTPICK_MARKET_FACTOR_MIN_FULL_UNIVERSE_SIZE,
+        **stock_master_summary,
+        **bar_summary,
     }
 
 
@@ -2624,6 +3015,158 @@ def _market_factor_context_from_bars(stock: Stock, bars: list[MarketBar]) -> dic
     ):
         return None
     return context
+
+
+def _shortpick_context_industry(item: dict[str, Any]) -> str:
+    value = str(item.get("industry") or "").strip()
+    return value if value else "未分类"
+
+
+def _shortpick_manual_focus_industry_keywords() -> list[str]:
+    raw = os.getenv("SHORTPICK_MARKET_FACTOR_FOCUS_INDUSTRIES", "").strip()
+    if not raw:
+        return []
+    return [token.strip().lower() for token in re.split(r"[,，;；\\s]+", raw) if token.strip()]
+
+
+def _shortpick_metric_rank_maps(contexts: list[dict[str, Any]], keys: Iterable[str]) -> dict[str, dict[str, float]]:
+    result: dict[str, dict[str, float]] = {}
+    for key in keys:
+        values: list[tuple[str, float]] = []
+        for item in contexts:
+            value = item.get(key)
+            if value is None:
+                continue
+            numeric = float(value)
+            if math.isfinite(numeric):
+                values.append((str(item["symbol"]), numeric))
+        values.sort(key=lambda row: row[1])
+        if len(values) <= 1:
+            result[key] = {symbol: 0.5 for symbol, _ in values}
+            continue
+        ranks: dict[str, float] = {}
+        denominator = float(len(values) - 1)
+        for index, (symbol, _) in enumerate(values):
+            ranks[symbol] = round(index / denominator, 6)
+        result[key] = ranks
+    return result
+
+
+def _shortpick_market_factor_coarse_screen(contexts: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Reduce the full eligible universe to a deterministic research candidate set.
+
+    The full 2999-ish new-retail eligible universe remains the source of truth.
+    This stage only limits downstream strategy/backtest work by selecting hot
+    industries plus liquidity/momentum reserves, all using same-day available
+    market data.
+    """
+
+    full_count = len(contexts)
+    cap = max(SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_POOL_LIMIT, SHORTPICK_MARKET_FACTOR_COARSE_SCREEN_SIZE)
+    if full_count <= cap:
+        return contexts, {
+            "coarse_screen_enabled": False,
+            "coarse_screen_reason": "full_universe_within_cap",
+            "coarse_screen_size": full_count,
+            "coarse_screen_cap": cap,
+            "full_eligible_symbol_count": full_count,
+            "hot_industries": [],
+        }
+
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for item in contexts:
+        groups[_shortpick_context_industry(item)].append(item)
+
+    industry_scores: list[dict[str, Any]] = []
+    for industry, items in groups.items():
+        if len(items) < SHORTPICK_MARKET_FACTOR_HOT_INDUSTRY_MIN_SYMBOLS:
+            continue
+        ret10_values = [float(item["return_10d"]) for item in items]
+        ret5_values = [float(item["return_5d"]) for item in items]
+        amount_values = [float(item["amount"]) for item in items]
+        breadth10 = _positive_rate(ret10_values) or 0.0
+        score = (sum(ret10_values) / len(ret10_values)) + 0.5 * (sum(ret5_values) / len(ret5_values)) + 0.05 * breadth10
+        industry_scores.append(
+            {
+                "industry": industry,
+                "symbol_count": len(items),
+                "score": round(score, 6),
+                "return_10d_mean": round(sum(ret10_values) / len(ret10_values), 6),
+                "return_5d_mean": round(sum(ret5_values) / len(ret5_values), 6),
+                "breadth10": round(breadth10, 6),
+                "amount_mean": round(sum(amount_values) / len(amount_values), 2),
+            }
+        )
+    industry_scores.sort(
+        key=lambda item: (
+            float(item["score"]),
+            float(item["breadth10"]),
+            float(item["amount_mean"]),
+            int(item["symbol_count"]),
+        ),
+        reverse=True,
+    )
+    hot_industries = [str(item["industry"]) for item in industry_scores[:SHORTPICK_MARKET_FACTOR_HOT_INDUSTRY_LIMIT]]
+    focus_keywords = _shortpick_manual_focus_industry_keywords()
+
+    selected_symbols: set[str] = set()
+    for item in contexts:
+        industry = _shortpick_context_industry(item)
+        industry_lower = industry.lower()
+        if industry in hot_industries or any(keyword in industry_lower for keyword in focus_keywords):
+            selected_symbols.add(str(item["symbol"]))
+
+    reserve = max(100, cap // 4)
+    selected_symbols.update(str(item["symbol"]) for item in sorted(contexts, key=lambda item: float(item["amount"]), reverse=True)[:reserve])
+    selected_symbols.update(str(item["symbol"]) for item in sorted(contexts, key=lambda item: float(item["return_10d"]), reverse=True)[:reserve])
+    selected_symbols.update(str(item["symbol"]) for item in sorted(contexts, key=lambda item: float(item["return_20d"]), reverse=True)[:reserve])
+
+    rank_maps = _shortpick_metric_rank_maps(contexts, ("amount", "return_10d", "return_20d", "turnover_rate", "abs_return_1d"))
+    scored: list[dict[str, Any]] = []
+    for item in contexts:
+        symbol = str(item["symbol"])
+        industry_bonus = 0.15 if _shortpick_context_industry(item) in hot_industries else 0.0
+        focus_bonus = 0.10 if focus_keywords and any(keyword in _shortpick_context_industry(item).lower() for keyword in focus_keywords) else 0.0
+        low_abs_ret1_rank = 1.0 - rank_maps.get("abs_return_1d", {}).get(symbol, 0.5)
+        score = (
+            0.30 * rank_maps.get("return_20d", {}).get(symbol, 0.5)
+            + 0.25 * rank_maps.get("return_10d", {}).get(symbol, 0.5)
+            + 0.25 * rank_maps.get("amount", {}).get(symbol, 0.5)
+            + 0.10 * low_abs_ret1_rank
+            + industry_bonus
+            + focus_bonus
+        )
+        scored.append(
+            {
+                **item,
+                "_coarse_screen_score": round(score, 6),
+                "_coarse_screen_industry_hot": _shortpick_context_industry(item) in hot_industries,
+                "_coarse_screen_initial_match": symbol in selected_symbols,
+            }
+        )
+
+    scored.sort(
+        key=lambda item: (
+            bool(item.get("_coarse_screen_initial_match")),
+            float(item["_coarse_screen_score"]),
+            float(item["return_20d"]),
+            float(item["amount"]),
+            str(item["symbol"]),
+        ),
+        reverse=True,
+    )
+    screened = scored[:cap]
+    return screened, {
+        "coarse_screen_enabled": True,
+        "coarse_screen_method": "hot_industry_plus_liquidity_momentum_reserves_v1",
+        "coarse_screen_cap": cap,
+        "coarse_screen_size": len(screened),
+        "full_eligible_symbol_count": full_count,
+        "hot_industry_limit": SHORTPICK_MARKET_FACTOR_HOT_INDUSTRY_LIMIT,
+        "hot_industry_min_symbols": SHORTPICK_MARKET_FACTOR_HOT_INDUSTRY_MIN_SYMBOLS,
+        "hot_industries": industry_scores[:SHORTPICK_MARKET_FACTOR_HOT_INDUSTRY_LIMIT],
+        "manual_focus_industry_keywords": focus_keywords,
+    }
 
 
 def _shortpick_market_factor_pool(contexts: list[dict[str, Any]]) -> list[dict[str, Any]]:

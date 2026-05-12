@@ -273,7 +273,7 @@ def _fetch_daily_bars_tushare(session: Session, symbol: str) -> DailyMarketFetch
             "low_price": float(low_price),
             "close_price": float(close_price),
             "volume": float(volume),
-            "amount": float(amount),
+            "amount": float(amount) * 1000.0,
             "turnover_rate": turnover_by_day.get(trade_day.strftime("%Y%m%d")),
             "adj_factor": None,
             "total_mv": basic_mv_by_day.get(trade_day.strftime("%Y%m%d"), {}).get("total_mv"),

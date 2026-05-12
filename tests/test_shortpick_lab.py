@@ -135,12 +135,15 @@ def _answer(
 
 class ShortpickLabTests(unittest.TestCase):
     def setUp(self) -> None:
+        self.env_patch = patch.dict(os.environ, {"SHORTPICK_MARKET_FACTOR_SYNC": "0"})
+        self.env_patch.start()
         self.temp_dir = tempfile.TemporaryDirectory()
         database_path = Path(self.temp_dir.name) / "shortpick.db"
         self.database_url = f"sqlite:///{database_path}"
         init_database(self.database_url)
 
     def tearDown(self) -> None:
+        self.env_patch.stop()
         self.temp_dir.cleanup()
 
     def _seed_stock_bars(
