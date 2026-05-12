@@ -98,6 +98,7 @@ def test_shortpick_portfolio_backtest_compares_daily_and_weekly_modes() -> None:
 
         assert payload["experiment"] == "shortpick_portfolio_backtest"
         assert payload["config"]["account_profile"] == "new_retail_cash_account"
+        assert payload["config"]["entry_price_source"] == "next_close"
         assert payload["data_scope"]["raw_stock_like_series_count"] == 5
         assert payload["data_scope"]["stock_like_series_count"] == 4
         assert payload["data_scope"]["account_eligibility"]["excluded_board_counts"]["star"] == 1
@@ -148,6 +149,38 @@ def test_shortpick_portfolio_backtest_compares_daily_and_weekly_modes() -> None:
         assert "ret10" in payload["production_evidence"]["control_comparison"]["daily_rolling_controls"]
 
 
+def test_shortpick_portfolio_backtest_supports_next_open_and_same_day_proxy_entries() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_url = f"sqlite:///{Path(temp_dir) / 'portfolio-backtest.db'}"
+        init_database(database_url)
+        _seed_long_sample_fixture(database_url)
+
+        with session_scope(database_url) as session:
+            next_open = build_shortpick_portfolio_backtest(
+                session,
+                start_date=date(2026, 1, 1),
+                end_date=date(2026, 3, 5),
+                min_signal_symbol_count=3,
+                benchmark_mode="csi300",
+                entry_price_source="next_open",
+            )
+            same_close_proxy = build_shortpick_portfolio_backtest(
+                session,
+                start_date=date(2026, 1, 1),
+                end_date=date(2026, 3, 5),
+                min_signal_symbol_count=3,
+                benchmark_mode="csi300",
+                entry_price_source="same_close_proxy",
+            )
+
+        assert next_open["config"]["entry_price_source"] == "next_open"
+        assert "开盘价买入" in next_open["config"]["entry_price_source_note"]
+        assert same_close_proxy["config"]["entry_price_source"] == "same_close_proxy"
+        assert "14点同日买入" in same_close_proxy["config"]["entry_price_source_note"]
+        assert next_open["results"]["daily_rolling_5x10k"]["ret10_turnover_cooldown"]["summary"]["trade_count"] > 0
+        assert same_close_proxy["results"]["daily_rolling_5x10k"]["ret10_turnover_cooldown"]["summary"]["trade_count"] > 0
+
+
 def test_cli_shortpick_portfolio_backtest_can_write_output() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         database_url = f"sqlite:///{Path(temp_dir) / 'portfolio-backtest.db'}"
@@ -170,6 +203,8 @@ def test_cli_shortpick_portfolio_backtest_can_write_output() -> None:
                     "3",
                     "--benchmark-mode",
                     "csi300",
+                    "--entry-price-source",
+                    "next_open",
                     "--output",
                     str(output_path),
                 ]
@@ -181,5 +216,6 @@ def test_cli_shortpick_portfolio_backtest_can_write_output() -> None:
         saved = json.loads(output_path.read_text(encoding="utf-8"))
         assert saved["version"] == "shortpick-portfolio-backtest-v1"
         assert saved["config"]["account_profile"] == "new_retail_cash_account"
+        assert saved["config"]["entry_price_source"] == "next_open"
         assert saved["config"]["apply_limit_down_exit_filter"] is True
         assert saved["production_evidence"]["leading_strategy"] == LOW_TURNOVER_UPTREND_PORTFOLIO_STRATEGY

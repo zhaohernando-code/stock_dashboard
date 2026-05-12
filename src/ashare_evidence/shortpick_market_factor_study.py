@@ -30,6 +30,14 @@ DEFAULT_STRATEGIES = (
 )
 DEFAULT_HORIZONS = (1, 3, 5, 10, 20)
 BENCHMARK_MODES = {"csi300", "universe_equal_weight"}
+ENTRY_PRICE_SOURCE_NEXT_CLOSE = "next_close"
+ENTRY_PRICE_SOURCE_NEXT_OPEN = "next_open"
+ENTRY_PRICE_SOURCE_SAME_CLOSE_PROXY = "same_close_proxy"
+ENTRY_PRICE_SOURCES = {
+    ENTRY_PRICE_SOURCE_NEXT_CLOSE,
+    ENTRY_PRICE_SOURCE_NEXT_OPEN,
+    ENTRY_PRICE_SOURCE_SAME_CLOSE_PROXY,
+}
 REGIME_FEATURES = (
     "universe_ret10_mean",
     "universe_breadth10",
@@ -84,6 +92,7 @@ def build_shortpick_market_factor_study(
     cost_bps: float = 20.0,
     apply_limit_up_filter: bool = False,
     benchmark_mode: str = "universe_equal_weight",
+    entry_price_source: str = ENTRY_PRICE_SOURCE_NEXT_CLOSE,
     horizons: tuple[int, ...] = DEFAULT_HORIZONS,
     walk_forward_lookback_days: int = 120,
     account_profile: str = ACCOUNT_PROFILE_NEW_RETAIL_CASH,
@@ -96,6 +105,8 @@ def build_shortpick_market_factor_study(
     )
     if benchmark_mode not in BENCHMARK_MODES:
         raise ValueError(f"benchmark_mode must be one of {sorted(BENCHMARK_MODES)}")
+    if entry_price_source not in ENTRY_PRICE_SOURCES:
+        raise ValueError(f"entry_price_source must be one of {sorted(ENTRY_PRICE_SOURCES)}")
     benchmark = series_by_symbol.get("000300.SH")
     if benchmark_mode == "csi300" and benchmark is None:
         raise LookupError("CSI300 benchmark series 000300.SH is required.")
@@ -120,6 +131,7 @@ def build_shortpick_market_factor_study(
             horizons=horizons,
             cost_bps=cost_bps,
             apply_limit_up_filter=apply_limit_up_filter,
+            entry_price_source=entry_price_source,
         )
         for strategy, selection in selections.items()
     }
@@ -189,7 +201,7 @@ def build_shortpick_market_factor_study(
     )
     return {
         "experiment": "shortpick_market_factor_study",
-        "validation_mode": "market_only_after_close_t_plus_1_close_entry",
+        "validation_mode": f"market_only_after_close_{entry_price_source}_entry",
         "config": {
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
@@ -200,6 +212,8 @@ def build_shortpick_market_factor_study(
             "cost_bps": cost_bps,
             "apply_limit_up_filter": apply_limit_up_filter,
             "benchmark_mode": benchmark_mode,
+            "entry_price_source": entry_price_source,
+            "entry_price_source_note": _entry_price_source_note(entry_price_source),
             "horizons": list(horizons),
             "walk_forward_lookback_days": walk_forward_lookback_days,
             "account_profile": account_eligibility["account_profile"],
@@ -511,6 +525,7 @@ def _evaluation_rows(
     horizons: tuple[int, ...],
     cost_bps: float,
     apply_limit_up_filter: bool,
+    entry_price_source: str,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     roundtrip_cost = float(cost_bps) / 10000.0
@@ -529,6 +544,7 @@ def _evaluation_rows(
                     horizon=horizon,
                     roundtrip_cost=roundtrip_cost,
                     apply_limit_up_filter=apply_limit_up_filter,
+                    entry_price_source=entry_price_source,
                 )
                 if row is not None:
                     rows.append(row)
@@ -545,23 +561,26 @@ def _evaluate_one(
     horizon: int,
     roundtrip_cost: float,
     apply_limit_up_filter: bool,
+    entry_price_source: str,
 ) -> dict[str, Any] | None:
     signal_index = series.by_day.get(signal_day)
     if signal_index is None:
         return None
-    entry_index = signal_index + 1
+    entry_index = _entry_index_for_signal(signal_index, entry_price_source)
     exit_index = entry_index + horizon
     if exit_index >= len(series.bars):
         return None
     entry = series.bars[entry_index]
-    previous = series.bars[signal_index]
-    if apply_limit_up_filter and _entry_is_unfillable_limit_up(series, entry_index):
+    previous_index = max(0, entry_index - 1)
+    previous = series.bars[previous_index]
+    if apply_limit_up_filter and _entry_is_unfillable_for_source(series, entry_index, entry_price_source):
         return {
             "signal_day": signal_day,
             "symbol": series.symbol,
             "industry": series.industry,
             "horizon": horizon,
             "status": "entry_unfillable_limit_up",
+            "entry_price_source": entry_price_source,
         }
     exit_bar = series.bars[exit_index]
     benchmark_return, benchmark_count = _benchmark_return(
@@ -570,6 +589,7 @@ def _evaluate_one(
         benchmark_mode=benchmark_mode,
         entry_day=entry.day,
         exit_day=exit_bar.day,
+        entry_price_source=entry_price_source,
     )
     if benchmark_return is None:
         return {
@@ -578,8 +598,10 @@ def _evaluate_one(
             "industry": series.industry,
             "horizon": horizon,
             "status": "pending_benchmark_data",
+            "entry_price_source": entry_price_source,
         }
-    stock_return = exit_bar.close / entry.close - 1 if entry.close else None
+    entry_price = _entry_price(entry, entry_price_source)
+    stock_return = exit_bar.close / entry_price - 1 if entry_price else None
     if stock_return is None:
         return None
     return {
@@ -590,7 +612,9 @@ def _evaluate_one(
         "status": "completed",
         "entry_day": entry.day,
         "exit_day": exit_bar.day,
-        "entry_day_return": entry.close / previous.close - 1 if previous.close else None,
+        "entry_price_source": entry_price_source,
+        "entry_price": entry_price,
+        "entry_day_return": entry_price / previous.close - 1 if previous.close else None,
         "stock_return": stock_return,
         "benchmark_return": benchmark_return,
         "benchmark_mode": benchmark_mode,
@@ -607,6 +631,7 @@ def _benchmark_return(
     benchmark_mode: str,
     entry_day: date,
     exit_day: date,
+    entry_price_source: str = ENTRY_PRICE_SOURCE_NEXT_CLOSE,
 ) -> tuple[float | None, int]:
     if benchmark_mode == "csi300":
         if benchmark is None:
@@ -617,9 +642,10 @@ def _benchmark_return(
             return None, 0
         entry = benchmark.bars[entry_index]
         exit_bar = benchmark.bars[exit_index]
-        if not entry.close:
+        entry_price = _entry_price(entry, entry_price_source)
+        if not entry_price:
             return None, 0
-        return exit_bar.close / entry.close - 1, 1
+        return exit_bar.close / entry_price - 1, 1
     returns: list[float] = []
     for symbol, series in series_by_symbol.items():
         if symbol in INDEX_SYMBOLS:
@@ -630,8 +656,9 @@ def _benchmark_return(
             continue
         entry = series.bars[entry_index]
         exit_bar = series.bars[exit_index]
-        if entry.close:
-            returns.append(exit_bar.close / entry.close - 1)
+        entry_price = _entry_price(entry, entry_price_source)
+        if entry_price:
+            returns.append(exit_bar.close / entry_price - 1)
     if len(returns) < 30:
         return None, len(returns)
     return sum(returns) / len(returns), len(returns)
@@ -646,6 +673,41 @@ def _entry_is_unfillable_limit_up(series: _Series, entry_index: int) -> bool:
     limit_band = _limit_band(series.symbol, series.name)
     day_return = entry.close / previous.close - 1
     return bool(one_price and day_return >= limit_band * 0.95)
+
+
+def _entry_open_is_unfillable_limit_up(series: _Series, entry_index: int) -> bool:
+    entry = series.bars[entry_index]
+    previous = series.bars[entry_index - 1] if entry_index > 0 else None
+    if previous is None or not previous.close:
+        return True
+    limit_band = _limit_band(series.symbol, series.name)
+    return bool(entry.open / previous.close - 1 >= limit_band * 0.95)
+
+
+def _entry_is_unfillable_for_source(series: _Series, entry_index: int, entry_price_source: str) -> bool:
+    if entry_price_source == ENTRY_PRICE_SOURCE_NEXT_OPEN:
+        return _entry_open_is_unfillable_limit_up(series, entry_index)
+    return _entry_is_unfillable_limit_up(series, entry_index)
+
+
+def _entry_index_for_signal(signal_index: int, entry_price_source: str) -> int:
+    if entry_price_source == ENTRY_PRICE_SOURCE_SAME_CLOSE_PROXY:
+        return signal_index
+    return signal_index + 1
+
+
+def _entry_price(bar: _Bar, entry_price_source: str) -> float:
+    if entry_price_source == ENTRY_PRICE_SOURCE_NEXT_OPEN:
+        return float(bar.open)
+    return float(bar.close)
+
+
+def _entry_price_source_note(entry_price_source: str) -> str:
+    if entry_price_source == ENTRY_PRICE_SOURCE_NEXT_OPEN:
+        return "信号日生成后，按下一交易日开盘价买入；开盘接近涨停时按不可假设成交处理。"
+    if entry_price_source == ENTRY_PRICE_SOURCE_SAME_CLOSE_PROXY:
+        return "14点同日买入的日线代理口径：使用信号日收盘价近似盘中当前价，只用于诊断，不等同真实14:00全市场快照。"
+    return "原始冻结研究口径：信号日生成后，按下一交易日收盘价买入。"
 
 
 def _near(left: float, right: float) -> bool:

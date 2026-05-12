@@ -27,10 +27,10 @@
       "reviewed_at": "2026-05-12"
     },
     "src/ashare_evidence/cli.py": {
-      "lines": 1048,
-      "reason": "CLI command group: data refresh, cache management, admin operations, event/improvement audit triggers, database write preflight (db.py), benchmark index bar sync, and shortpick replay/distillation/rejector/hard-veto/factor-rank/market-factor-study/portfolio-backtest experiment commands, including benchmark-mode selection for market factor studies and long-sample shortpick capital-deployment backtests. 2026-05-12 review: growth adds the `shortpick-lab-intraday-same-day` time-boxed control entrypoint; command extraction remains deferred until the shortpick experiment surface stabilizes.",
+      "lines": 1060,
+      "reason": "CLI command group: data refresh, cache management, admin operations, event/improvement audit triggers, database write preflight (db.py), benchmark index bar sync, and shortpick replay/distillation/rejector/hard-veto/factor-rank/market-factor-study/portfolio-backtest experiment commands, including benchmark-mode selection for market factor studies and long-sample shortpick capital-deployment backtests. 2026-05-13 review: growth adds explicit shortpick `--entry-price-source` research modes for next-close, next-open, and same-close-proxy staged backtests; command extraction remains deferred until the shortpick experiment surface stabilizes.",
       "status": "accepted",
-      "reviewed_at": "2026-05-12"
+      "reviewed_at": "2026-05-13"
     },
     "src/ashare_evidence/dashboard.py": {
       "lines": 712,
@@ -165,15 +165,15 @@
       "status": "planned_refactor"
     },
     "src/ashare_evidence/shortpick_market_factor_study.py": {
-      "lines": 1064,
-      "reason": "Backend-only Short Pick Lab market-factor study command: loads daily bars, builds expanded momentum pools, evaluates fixed and walk-forward feature rerankers including 10d momentum + turnover, single-day-chase cooldown, industry-diversified diagnostics, and a train-threshold breadth/continuity regime gate, supports CSI300 and universe equal-weight benchmark modes, applies cost/entry assumptions, and summarizes train/holdout/replay windows plus portfolio-level and regime-bucket readouts. Kept cohesive while the research contract is still exploratory; split loader/evaluator/summary helpers if it becomes a production API. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, and paper-tracking/backtest comparison surfaces; split remains deferred until the experiment contract stops changing.",
-      "reviewed_at": "2026-05-11",
+      "lines": 1126,
+      "reason": "Backend-only Short Pick Lab market-factor study command: loads daily bars, builds expanded momentum pools, evaluates fixed and walk-forward feature rerankers including 10d momentum + turnover, single-day-chase cooldown, industry-diversified diagnostics, and a train-threshold breadth/continuity regime gate, supports CSI300 and universe equal-weight benchmark modes, applies cost/entry assumptions, and summarizes train/holdout/replay windows plus portfolio-level and regime-bucket readouts. Kept cohesive while the research contract is still exploratory; split loader/evaluator/summary helpers if it becomes a production API. 2026-05-13 review: growth comes from explicit next-close, next-open, and same-close-proxy entry assumptions plus conservative limit-up handling for staged account-executable evidence.",
+      "reviewed_at": "2026-05-13",
       "status": "planned_refactor"
     },
     "src/ashare_evidence/shortpick_portfolio_backtest.py": {
-      "lines": 1009,
-      "reason": "Backend-only Short Pick Lab capital-deployment backtest: compares daily rolling 5x10k and weekly concentrated 1x50k modes over long daily-bar history, using the existing market-factor selection helpers, second-pick de-crowding variants, market-positive / overheating / breadth-pool regime gates, optional close-based stop loss, T+1 close-entry assumptions, transaction costs, limit-up entry filter, limit-down exit blocking, NAV/drawdown metrics, exit-reason and blocked-exit counts, yearly/monthly robustness readouts, multi-index benchmark references, production-evidence gates, simple momentum controls, and cost-stress checks. Kept in one research module while the portfolio evidence contract is still exploratory.",
-      "reviewed_at": "2026-05-09",
+      "lines": 1149,
+      "reason": "Backend-only Short Pick Lab capital-deployment backtest: compares daily rolling 5x10k and weekly concentrated 1x50k modes over long daily-bar history, using the existing market-factor selection helpers, second-pick de-crowding variants, market-positive / overheating / breadth-pool regime gates, optional close-based stop loss, configurable next-close/next-open/same-close-proxy entry assumptions, transaction costs, limit-up entry filter, limit-down exit blocking, NAV/drawdown metrics, exit-reason and blocked-exit counts, yearly/monthly robustness readouts, multi-index benchmark references, production-evidence gates, simple momentum controls, and cost-stress checks. Kept in one research module while the portfolio evidence contract is still exploratory; 2026-05-13 growth is entry-price-source propagation through the same evidence gates.",
+      "reviewed_at": "2026-05-13",
       "status": "planned_refactor"
     },
     "tests/test_shortpick_replay.py": {

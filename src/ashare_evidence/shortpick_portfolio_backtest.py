@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 
 from ashare_evidence.market_rules import ACCOUNT_PROFILE_NEW_RETAIL_CASH, filter_account_eligible_series
 from ashare_evidence.shortpick_market_factor_study import (
+    ENTRY_PRICE_SOURCE_NEXT_CLOSE,
+    ENTRY_PRICE_SOURCES,
     INDEX_SYMBOLS,
     LOW_TURNOVER_UPTREND_STRATEGY,
     QUIET_BREAKOUT_BASE_STRATEGY,
@@ -17,7 +19,10 @@ from ashare_evidence.shortpick_market_factor_study import (
     _benchmark_return,
     _build_strategy_selections,
     _context_for_signal_day,
-    _entry_is_unfillable_limit_up,
+    _entry_index_for_signal,
+    _entry_is_unfillable_for_source,
+    _entry_price,
+    _entry_price_source_note,
     _limit_band,
     _load_daily_series,
     _mean,
@@ -105,7 +110,7 @@ class _OpenTrade:
     symbol: str
     strategy: str
     investment: float
-    entry_close: float
+    entry_price: float
 
 
 def build_shortpick_portfolio_backtest(
@@ -120,6 +125,7 @@ def build_shortpick_portfolio_backtest(
     daily_sleeve_cash: float = 10_000.0,
     cost_bps: float = 20.0,
     benchmark_mode: str = "universe_equal_weight",
+    entry_price_source: str = ENTRY_PRICE_SOURCE_NEXT_CLOSE,
     apply_limit_up_filter: bool = True,
     apply_limit_down_exit_filter: bool = True,
     min_signal_symbol_count: int = 45,
@@ -127,6 +133,8 @@ def build_shortpick_portfolio_backtest(
     account_profile: str = ACCOUNT_PROFILE_NEW_RETAIL_CASH,
 ) -> dict[str, Any]:
     """Backtest the two short-line capital deployment modes on a long market-only sample."""
+    if entry_price_source not in ENTRY_PRICE_SOURCES:
+        raise ValueError(f"entry_price_source must be one of {sorted(ENTRY_PRICE_SOURCES)}")
     raw_series_by_symbol = _load_daily_series(session)
     series_by_symbol, account_eligibility = filter_account_eligible_series(
         raw_series_by_symbol,
@@ -173,6 +181,7 @@ def build_shortpick_portfolio_backtest(
                 mode=mode,
                 horizon_days=horizon_days,
                 apply_limit_up_filter=apply_limit_up_filter,
+                entry_price_source=entry_price_source,
             )
             mode_results[strategy] = _simulate_portfolio(
                 series_by_symbol,
@@ -185,6 +194,7 @@ def build_shortpick_portfolio_backtest(
                 initial_cash=initial_cash,
                 daily_sleeve_cash=daily_sleeve_cash,
                 cost_bps=cost_bps,
+                entry_price_source=entry_price_source,
                 stop_loss_pct=STOP_LOSS_BY_STRATEGY.get(strategy),
                 apply_limit_down_exit_filter=apply_limit_down_exit_filter,
             )
@@ -198,6 +208,7 @@ def build_shortpick_portfolio_backtest(
         selections=selections,
         results=results,
         horizon_days=horizon_days,
+        entry_price_source=entry_price_source,
         apply_limit_up_filter=apply_limit_up_filter,
         apply_limit_down_exit_filter=apply_limit_down_exit_filter,
         initial_cash=initial_cash,
@@ -212,7 +223,7 @@ def build_shortpick_portfolio_backtest(
     return {
         "experiment": "shortpick_portfolio_backtest",
         "version": SHORTPICK_PORTFOLIO_BACKTEST_VERSION,
-        "validation_mode": "market_only_after_close_t_plus_1_close_entry_portfolio",
+        "validation_mode": f"market_only_after_close_{entry_price_source}_entry_portfolio",
         "config": {
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
@@ -223,6 +234,8 @@ def build_shortpick_portfolio_backtest(
             "daily_sleeve_cash": daily_sleeve_cash,
             "cost_bps": cost_bps,
             "benchmark_mode": benchmark_mode,
+            "entry_price_source": entry_price_source,
+            "entry_price_source_note": _entry_price_source_note(entry_price_source),
             "apply_limit_up_filter": apply_limit_up_filter,
             "apply_limit_down_exit_filter": apply_limit_down_exit_filter,
             "min_signal_symbol_count": min_signal_symbol_count,
@@ -300,6 +313,7 @@ def _build_trade_intents(
     mode: str,
     horizon_days: int,
     apply_limit_up_filter: bool,
+    entry_price_source: str,
 ) -> list[_TradeIntent]:
     signal_days = sorted(selections)
     if mode == "weekly_concentrated_1x50k":
@@ -323,11 +337,11 @@ def _build_trade_intents(
             signal_index = series.by_day.get(signal_day)
             if signal_index is None:
                 continue
-            entry_index = signal_index + 1
+            entry_index = _entry_index_for_signal(signal_index, entry_price_source)
             exit_index = entry_index + horizon_days
             if exit_index >= len(series.bars):
                 continue
-            if apply_limit_up_filter and _entry_is_unfillable_limit_up(series, entry_index):
+            if apply_limit_up_filter and _entry_is_unfillable_for_source(series, entry_index, entry_price_source):
                 continue
             intents.append(
                 _TradeIntent(
@@ -450,6 +464,7 @@ def _simulate_portfolio(
     initial_cash: float,
     daily_sleeve_cash: float,
     cost_bps: float,
+    entry_price_source: str,
     stop_loss_pct: float | None = None,
     apply_limit_down_exit_filter: bool = True,
 ) -> dict[str, Any]:
@@ -487,8 +502,8 @@ def _simulate_portfolio(
                 stop_loss_pct is not None
                 and current_day != trade.entry_day
                 and exit_close is not None
-                and trade.entry_close > 0
-                and exit_close / trade.entry_close - 1.0 <= -float(stop_loss_pct)
+                and trade.entry_price > 0
+                and exit_close / trade.entry_price - 1.0 <= -float(stop_loss_pct)
             ):
                 early_exit_reason = "close_stop_loss"
             if trade.exit_day != current_day and early_exit_reason is None:
@@ -517,7 +532,7 @@ def _simulate_portfolio(
                 )
                 still_open.append(trade)
                 continue
-            stock_return = exit_close / trade.entry_close - 1.0 if trade.entry_close else 0.0
+            stock_return = exit_close / trade.entry_price - 1.0 if trade.entry_price else 0.0
             net_return = stock_return - cost_rate
             proceeds = trade.investment * (1.0 + net_return)
             cash += proceeds
@@ -540,9 +555,16 @@ def _simulate_portfolio(
         entry_intents = intents_by_entry.get(current_day, [])
         entry_base_cash = float(daily_sleeve_cash) if mode == "daily_rolling_5x10k" else cash
         for intent in entry_intents:
-            entry_close = _close_on(series_by_symbol, intent.symbol, current_day)
-            if entry_close is None:
-                skipped.append({"signal_day": intent.signal_day.isoformat(), "symbol": intent.symbol, "reason": "missing_entry_close"})
+            entry_price = _entry_price_on(series_by_symbol, intent.symbol, current_day, entry_price_source)
+            if entry_price is None:
+                skipped.append(
+                    {
+                        "signal_day": intent.signal_day.isoformat(),
+                        "symbol": intent.symbol,
+                        "reason": "missing_entry_price",
+                        "entry_price_source": entry_price_source,
+                    }
+                )
                 continue
             target_cash = entry_base_cash * max(float(intent.sleeve_weight), 0.0)
             investment = min(float(target_cash), cash)
@@ -558,7 +580,7 @@ def _simulate_portfolio(
                     symbol=intent.symbol,
                     strategy=intent.strategy,
                     investment=investment,
-                    entry_close=entry_close,
+                    entry_price=entry_price,
                 )
             )
 
@@ -606,11 +628,21 @@ def _close_on(series_by_symbol: dict[str, Any], symbol: str, day: date) -> float
     return float(series.bars[index].close)
 
 
+def _entry_price_on(series_by_symbol: dict[str, Any], symbol: str, day: date, entry_price_source: str) -> float | None:
+    series = series_by_symbol.get(symbol)
+    if series is None:
+        return None
+    index = series.by_day.get(day)
+    if index is None:
+        return None
+    return _entry_price(series.bars[index], entry_price_source)
+
+
 def _marked_value(series_by_symbol: dict[str, Any], trade: _OpenTrade, day: date) -> float:
     close = _close_on(series_by_symbol, trade.symbol, day)
-    if close is None or trade.entry_close <= 0:
+    if close is None or trade.entry_price <= 0:
         return trade.investment
-    return trade.investment * close / trade.entry_close
+    return trade.investment * close / trade.entry_price
 
 
 def _exit_is_unfillable_limit_down(series: Any, exit_index: int) -> bool:
@@ -816,6 +848,7 @@ def _build_production_evidence(
     selections: dict[str, dict[date, list[str]]],
     results: dict[str, dict[str, Any]],
     horizon_days: int,
+    entry_price_source: str,
     apply_limit_up_filter: bool,
     apply_limit_down_exit_filter: bool,
     initial_cash: float,
@@ -836,6 +869,7 @@ def _build_production_evidence(
         trade_days=trade_days,
         selections=selections,
         horizon_days=horizon_days,
+        entry_price_source=entry_price_source,
         apply_limit_up_filter=apply_limit_up_filter,
         apply_limit_down_exit_filter=apply_limit_down_exit_filter,
         initial_cash=initial_cash,
@@ -960,6 +994,7 @@ def _cost_stress_results(
     trade_days: list[date],
     selections: dict[str, dict[date, list[str]]],
     horizon_days: int,
+    entry_price_source: str,
     apply_limit_up_filter: bool,
     apply_limit_down_exit_filter: bool,
     initial_cash: float,
@@ -972,6 +1007,7 @@ def _cost_stress_results(
         mode=LEADING_PAPER_MODE,
         horizon_days=horizon_days,
         apply_limit_up_filter=apply_limit_up_filter,
+        entry_price_source=entry_price_source,
     )
     output: dict[str, dict[str, Any]] = {}
     for cost_bps in (20.0, 50.0, 100.0, 150.0):
@@ -986,6 +1022,7 @@ def _cost_stress_results(
             initial_cash=initial_cash,
             daily_sleeve_cash=daily_sleeve_cash,
             cost_bps=cost_bps,
+            entry_price_source=entry_price_source,
             stop_loss_pct=STOP_LOSS_BY_STRATEGY.get(LEADING_PAPER_STRATEGY),
             apply_limit_down_exit_filter=apply_limit_down_exit_filter,
         )

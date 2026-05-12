@@ -567,6 +567,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["csi300", "universe_equal_weight"],
         default="universe_equal_weight",
     )
+    shortpick_market_factor_study.add_argument(
+        "--entry-price-source",
+        choices=["next_close", "next_open", "same_close_proxy"],
+        default="next_close",
+    )
     shortpick_market_factor_study.add_argument("--walk-forward-lookback-days", type=int, default=120)
 
     shortpick_portfolio_backtest = subparsers.add_parser(
@@ -594,6 +599,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--benchmark-mode",
         choices=["csi300", "universe_equal_weight"],
         default="universe_equal_weight",
+    )
+    shortpick_portfolio_backtest.add_argument(
+        "--entry-price-source",
+        choices=["next_close", "next_open", "same_close_proxy"],
+        default="next_close",
     )
     shortpick_portfolio_backtest.add_argument("--output", default=None)
 
@@ -941,6 +951,7 @@ def main(argv: list[str] | None = None) -> int:
                 cost_bps=args.cost_bps,
                 apply_limit_up_filter=args.apply_limit_up_filter,
                 benchmark_mode=args.benchmark_mode,
+                entry_price_source=args.entry_price_source,
                 walk_forward_lookback_days=args.walk_forward_lookback_days,
                 account_profile=args.account_profile,
             )
@@ -960,6 +971,7 @@ def main(argv: list[str] | None = None) -> int:
                 daily_sleeve_cash=args.daily_sleeve_cash,
                 cost_bps=args.cost_bps,
                 benchmark_mode=args.benchmark_mode,
+                entry_price_source=args.entry_price_source,
                 apply_limit_up_filter=not args.no_limit_up_filter,
                 apply_limit_down_exit_filter=not args.no_limit_down_exit_filter,
                 min_signal_symbol_count=args.min_signal_symbol_count,

@@ -24,5 +24,6 @@ output/external-reviews/
 output/shortpick-*.json
 output/shortpick-*.jsonl
 output/shortpick-*.db
+output/shortpick-staged-backtests/
 output/releases/*/
 !output/releases/latest-successful.json
