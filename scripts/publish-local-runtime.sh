@@ -101,6 +101,42 @@ SCHEDULED_PLIST="$HOME/Library/LaunchAgents/${SCHEDULED_LABEL}.plist"
 echo "[publish] Pausing scheduled-refresh"
 launchctl stop "$SCHEDULED_LABEL" 2>/dev/null || true
 
+ensure_scheduled_refresh_calendar() {
+  if [[ ! -f "$SCHEDULED_PLIST" ]]; then
+    return 0
+  fi
+  "$PYTHON_BIN" - "$SCHEDULED_PLIST" <<'PY'
+from pathlib import Path
+import plistlib
+import sys
+
+path = Path(sys.argv[1])
+with path.open("rb") as handle:
+    payload = plistlib.load(handle)
+intervals = payload.get("StartCalendarInterval")
+if isinstance(intervals, dict):
+    intervals = [intervals]
+elif not isinstance(intervals, list):
+    intervals = []
+required = [{"Hour": 13, "Minute": 55}, {"Hour": 16, "Minute": 20}]
+seen = {
+    (int(item.get("Hour")), int(item.get("Minute")))
+    for item in intervals
+    if isinstance(item, dict) and "Hour" in item and "Minute" in item
+}
+for item in required:
+    key = (item["Hour"], item["Minute"])
+    if key not in seen:
+        intervals.append(item)
+payload["StartCalendarInterval"] = sorted(
+    intervals,
+    key=lambda item: (int(item.get("Hour", 0)), int(item.get("Minute", 0))),
+)
+with path.open("wb") as handle:
+    plistlib.dump(payload, handle)
+PY
+}
+
 COMMIT_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 
 BACKUP_ROOT="$HOME/codex/runtime/projects/ashare-dashboard.backups"
@@ -213,13 +249,13 @@ cp "$MANIFEST_PATH" "$RUNTIME_ROOT/output/releases/latest-successful.json"
 printf '%s\n' "$COMMIT_SHA" > "$RUNTIME_ROOT/output/releases/latest-successful.commit"
 
 echo "[publish] Resuming scheduled-refresh"
-if ! launchctl print "gui/$(id -u)/$SCHEDULED_LABEL" >/dev/null 2>&1; then
-  if [[ ! -f "$SCHEDULED_PLIST" ]]; then
-    echo "Scheduled refresh plist missing: $SCHEDULED_PLIST" >&2
-    exit 1
-  fi
-  launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"
+if [[ ! -f "$SCHEDULED_PLIST" ]]; then
+  echo "Scheduled refresh plist missing: $SCHEDULED_PLIST" >&2
+  exit 1
 fi
+ensure_scheduled_refresh_calendar
+launchctl bootout "gui/$(id -u)" "$SCHEDULED_PLIST" 2>/dev/null || true
+launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"
 launchctl kickstart -k "gui/$(id -u)/$SCHEDULED_LABEL"
 
 echo "[publish] Triggering post-deploy data refresh"

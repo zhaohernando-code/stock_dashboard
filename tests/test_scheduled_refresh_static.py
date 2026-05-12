@@ -53,6 +53,27 @@ def test_shortpick_lab_is_part_of_postmarket_daily_cycle() -> None:
     assert "run_with_timeout \"$SHORTPICK_TIMEOUT_SECONDS\" run_shortpick_daily_cycle \"$target_date\"\n  local exit_code=$?" in script
 
 
+def test_intraday_same_day_shortpick_control_has_timeboxed_slot() -> None:
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert 'INTRADAY_SAME_DAY_REFRESH_AT="${ASHARE_INTRADAY_SAME_DAY_REFRESH_AT:-13:55}"' in script
+    assert 'SHORTPICK_INTRADAY_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_INTRADAY_TIMEOUT_SECONDS:-600}"' in script
+    assert "shortpick-lab-intraday-same-day" in script
+    assert "run_shortpick_intraday_same_day_slot \"$TODAY_STR\"" in script
+    assert 'time_lt "$NOW_HHMM" "$POSTMARKET_REFRESH_AT"' in script
+    assert 'run_with_timeout "$SHORTPICK_INTRADAY_TIMEOUT_SECONDS" run_shortpick_intraday_same_day "$target_date"' in script
+
+
+def test_publish_reloads_scheduled_refresh_calendar_slots() -> None:
+    script = (REPO_ROOT / "scripts" / "publish-local-runtime.sh").read_text(encoding="utf-8")
+
+    assert "ensure_scheduled_refresh_calendar" in script
+    assert '{"Hour": 13, "Minute": 55}' in script
+    assert '{"Hour": 16, "Minute": 20}' in script
+    assert 'launchctl bootout "gui/$(id -u)" "$SCHEDULED_PLIST"' in script
+    assert 'launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"' in script
+
+
 def test_deepseek_shortpick_round_has_in_process_soft_timeout() -> None:
     source = (REPO_ROOT / "src" / "ashare_evidence" / "shortpick_lab.py").read_text(encoding="utf-8")
 

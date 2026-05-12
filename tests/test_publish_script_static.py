@@ -50,6 +50,7 @@ def test_publish_bootstraps_scheduled_refresh_when_launchagent_is_unloaded() -> 
     script = SCRIPT_PATH.read_text(encoding="utf-8")
 
     assert 'SCHEDULED_PLIST="$HOME/Library/LaunchAgents/${SCHEDULED_LABEL}.plist"' in script
-    assert 'launchctl print "gui/$(id -u)/$SCHEDULED_LABEL"' in script
+    assert 'ensure_scheduled_refresh_calendar' in script
+    assert 'launchctl bootout "gui/$(id -u)" "$SCHEDULED_PLIST"' in script
     assert 'launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"' in script
     assert 'launchctl kickstart -k "gui/$(id -u)/$SCHEDULED_LABEL"' in script
