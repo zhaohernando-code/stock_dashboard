@@ -820,7 +820,7 @@ def main(argv: list[str] | None = None) -> int:
                 trigger_source="scheduled_intraday_cli",
             )
         _print_json(payload)
-        return 0
+        return 0 if payload.get("status") != "failed" else 1
 
     if args.command == "shortpick-lab-validate":
         with session_scope(args.database_url) as session:

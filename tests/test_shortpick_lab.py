@@ -1328,6 +1328,33 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(candidate_payload["paper_tracking_entry_date"], "2026-05-12")
         self.assertEqual(candidate_payload["paper_tracking_entry_price"], 12.25)
 
+    def test_intraday_same_day_control_fails_when_quote_source_unavailable(self) -> None:
+        trading_days = [date(2026, 4, 14) + timedelta(days=index) for index in range(20)]
+        self._seed_stock_bars(
+            "600001.SH",
+            "测试主板",
+            [10.0 + index * 0.1 for index in range(20)],
+            dates=trading_days,
+            profile_payload={"industry": "测试行业"},
+        )
+        quote_error = {
+            "status": "error",
+            "generated_at": "2026-05-12T05:55:00+00:00",
+            "source_kind": "test_spot",
+            "quotes": {},
+            "summary": {"status": "error", "reason": "spot quote unavailable"},
+        }
+
+        with patch("ashare_evidence.shortpick_lab._fetch_shortpick_intraday_spot_quotes", return_value=quote_error):
+            with session_scope(self.database_url) as session:
+                payload = run_shortpick_intraday_same_day_control(session, run_date=date(2026, 5, 12), triggered_by="test")
+
+        self.assertEqual(payload["status"], "failed")
+        self.assertIn("intraday_quote_unavailable", payload["summary"]["error"])
+        with session_scope(self.database_url) as session:
+            candidate_count = session.query(ShortpickCandidate).filter_by(run_id=payload["id"]).count()
+        self.assertEqual(candidate_count, 0)
+
     def test_no_limit_chase_control_filters_limit_up_chase_risk(self) -> None:
         self.assertTrue(_is_shortpick_no_limit_chase_risk({"return_1d": 0.095}))
         self.assertTrue(_is_shortpick_no_limit_chase_risk({"return_1d": 0.1002838}))

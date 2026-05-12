@@ -1449,6 +1449,8 @@ def run_shortpick_intraday_same_day_control(
     session.flush()
     try:
         overlay = insert_shortpick_intraday_same_day_candidate(session, run)
+        if overlay.get("status") == "failed":
+            raise RuntimeError(str(overlay.get("reason") or "intraday same-day control failed"))
         run.status = "completed"
         run.completed_at = utcnow()
         run.failed_at = None
@@ -1471,13 +1473,16 @@ def run_shortpick_intraday_same_day_control(
 
 def insert_shortpick_intraday_same_day_candidate(session: Session, run: ShortpickExperimentRun) -> dict[str, Any]:
     removed = _delete_existing_market_factor_overlay_candidates(session, run_id=run.id)
-    quote_snapshot = _fetch_shortpick_intraday_spot_quotes()
+    quote_snapshot = _fetch_shortpick_intraday_spot_quotes(
+        symbols=_shortpick_intraday_universe_symbols(session, run.run_date)
+    )
     contexts, diagnostics = _shortpick_market_factor_intraday_contexts(session, run.run_date, quote_snapshot)
     pool = _shortpick_market_factor_pool(contexts)
     if not pool:
+        quote_status = str(quote_snapshot.get("status") or "")
         result = {
-            "status": "skipped",
-            "reason": "no_intraday_market_factor_pool",
+            "status": "failed" if quote_status in {"error", "unavailable", "empty"} else "skipped",
+            "reason": "intraday_quote_unavailable" if quote_status in {"error", "unavailable", "empty"} else "no_intraday_market_factor_pool",
             "removed_existing_candidate_count": removed,
             "quote_snapshot": quote_snapshot.get("summary", {}),
             **diagnostics,
@@ -1575,6 +1580,28 @@ def insert_shortpick_intraday_same_day_candidate(session: Session, run: Shortpic
     run.summary_payload = {**dict(run.summary_payload or {}), "market_factor_overlay": result}
     session.flush()
     return result
+
+
+def _shortpick_intraday_universe_symbols(session: Session, run_date: date) -> list[str]:
+    cutoff = datetime.combine(run_date, datetime.min.time()).replace(tzinfo=UTC)
+    rows = session.execute(
+        select(Stock, MarketBar)
+        .join(MarketBar, MarketBar.stock_id == Stock.id)
+        .where(MarketBar.timeframe == "1d", MarketBar.observed_at < cutoff)
+        .order_by(Stock.symbol.asc(), MarketBar.observed_at.asc(), MarketBar.id.asc())
+    ).all()
+    bars_by_symbol: dict[str, list[MarketBar]] = defaultdict(list)
+    stocks_by_symbol: dict[str, Stock] = {}
+    for stock, bar in rows:
+        if not _stock_eligible_for_shortpick_market_factor(stock, run_date=run_date):
+            continue
+        stocks_by_symbol[stock.symbol] = stock
+        bars_by_symbol[stock.symbol].append(bar)
+    return [
+        symbol
+        for symbol in sorted(bars_by_symbol)
+        if symbol in stocks_by_symbol and len(_dedupe_market_factor_bars(bars_by_symbol[symbol])) >= 20
+    ]
 
 
 def _execute_shortpick_round(
@@ -2327,6 +2354,23 @@ def _shortpick_market_factor_intraday_contexts(
 def _fetch_shortpick_intraday_spot_quotes(*, symbols: Iterable[str] | None = None) -> dict[str, Any]:
     requested_symbols = {str(symbol).strip().upper() for symbol in symbols or [] if str(symbol).strip()}
     generated_at = utcnow().isoformat()
+    timeout_seconds = max(
+        90,
+        int(
+            os.getenv(
+                "SHORTPICK_INTRADAY_SPOT_TIMEOUT_SECONDS",
+                os.getenv("ASHARE_SHORTPICK_INTRADAY_SPOT_TIMEOUT_SECONDS", str(DEFAULT_AKSHARE_TIMEOUT_SECONDS)),
+            )
+        ),
+    )
+    if requested_symbols:
+        direct_snapshot = _fetch_shortpick_intraday_eastmoney_quotes(
+            sorted(requested_symbols),
+            generated_at=generated_at,
+            timeout_seconds=timeout_seconds,
+        )
+        if direct_snapshot.get("status") == "ok":
+            return direct_snapshot
     if not akshare_runtime_ready():
         return {
             "status": "unavailable",
@@ -2338,7 +2382,7 @@ def _fetch_shortpick_intraday_spot_quotes(*, symbols: Iterable[str] | None = Non
     try:
         frame = call_akshare_function(
             "stock_zh_a_spot_em",
-            timeout_seconds=max(10, int(os.getenv("SHORTPICK_INTRADAY_SPOT_TIMEOUT_SECONDS", str(DEFAULT_AKSHARE_TIMEOUT_SECONDS)))),
+            timeout_seconds=timeout_seconds,
         )
     except Exception as exc:
         return {
@@ -2393,6 +2437,80 @@ def _fetch_shortpick_intraday_spot_quotes(*, symbols: Iterable[str] | None = Non
             "source_kind": "akshare_stock_zh_a_spot_em",
         },
     }
+
+
+def _fetch_shortpick_intraday_eastmoney_quotes(
+    symbols: list[str],
+    *,
+    generated_at: str,
+    timeout_seconds: int,
+) -> dict[str, Any]:
+    fields = "f12,f14,f2,f17,f15,f16,f18,f5,f6,f8,f3"
+    quotes: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
+    for offset in range(0, len(symbols), 80):
+        batch = symbols[offset : offset + 80]
+        secids = ",".join(_shortpick_eastmoney_secid(symbol) for symbol in batch if _shortpick_eastmoney_secid(symbol))
+        if not secids:
+            continue
+        query = urlencode({"fltt": "2", "invt": "2", "fields": fields, "secids": secids})
+        url = f"https://push2.eastmoney.com/api/qt/ulist.np/get?{query}"
+        try:
+            with urlopen(url, timeout=timeout_seconds, disable_proxies=True) as response:
+                payload = json.loads(response.read().decode("utf-8", errors="replace"))
+        except Exception as exc:
+            errors.append(str(exc)[:160])
+            continue
+        for row in ((payload.get("data") or {}).get("diff") or []):
+            symbol = _shortpick_symbol_from_spot_code(row.get("f12"))
+            if symbol is None:
+                continue
+            price = _coerce_float(row.get("f2"))
+            if price is None or price <= 0:
+                continue
+            quotes[symbol] = {
+                "symbol": symbol,
+                "name": row.get("f14"),
+                "price": price,
+                "open": _coerce_float(row.get("f17")),
+                "high": _coerce_float(row.get("f15")),
+                "low": _coerce_float(row.get("f16")),
+                "previous_close": _coerce_float(row.get("f18")),
+                "return_pct": _coerce_float(row.get("f3")),
+                "volume": _coerce_float(row.get("f5")),
+                "amount": _coerce_float(row.get("f6")),
+                "turnover_rate": _coerce_float(row.get("f8")),
+                "captured_at": generated_at,
+                "provider": "eastmoney_push2",
+            }
+    status = "ok" if quotes else "empty"
+    summary: dict[str, Any] = {
+        "status": status,
+        "requested_symbol_count": len(symbols),
+        "quote_count": len(quotes),
+        "generated_at": generated_at,
+        "source_kind": "eastmoney_push2_ulist_direct",
+    }
+    if errors:
+        summary["errors"] = errors[:3]
+    return {
+        "status": status,
+        "generated_at": generated_at,
+        "source_kind": "eastmoney_push2_ulist_direct",
+        "quotes": quotes,
+        "summary": summary,
+    }
+
+
+def _shortpick_eastmoney_secid(symbol: str) -> str | None:
+    code, _, exchange = symbol.partition(".")
+    if not re.fullmatch(r"\d{6}", code):
+        return None
+    if exchange == "SH":
+        return f"1.{code}"
+    if exchange == "SZ":
+        return f"0.{code}"
+    return None
 
 
 def _shortpick_symbol_from_spot_code(raw_code: Any) -> str | None:

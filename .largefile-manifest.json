@@ -183,15 +183,15 @@
       "reviewed_at": "2026-05-11"
     },
     "tests/test_shortpick_lab.py": {
-      "lines": 1791,
-      "reason": "Short Pick Lab contract tests cover isolated executor behavior, DeepSeek search planning and fallback search, source integrity, candidate parsing, validation status handling, live strategy overlay invariants, frozen paper-tracking contract rules, LLM paper-control selection, market-factor paper controls, four-track exit snapshot calculation, and display-horizon consistency for paper-tracked market controls. Kept together while the shortpick executor contract is still changing rapidly. 2026-05-12 review: growth adds regression coverage for the intraday same-day control inserting a same-day candidate from a patched realtime quote snapshot and using the captured current price as entry; split remains deferred until the experiment contract stops changing.",
+      "lines": 1818,
+      "reason": "Short Pick Lab integration/regression tests spanning candidate parsing, paper controls, validation, and intraday same-day entry failure handling. 2026-05-12 review: growth covers fail-closed quote outages for the 14点同日买入版.",
       "status": "accepted",
       "reviewed_at": "2026-05-12"
     },
     "src/ashare_evidence/shortpick_lab.py": {
-      "lines": 6266,
-      "reason": "Short Pick Lab workflow: native-web/open-discovery execution, source integrity, candidate parsing, validation, retry, serialization, and model feedback. Live runs now attach the frozen paper-tracking strategy as a first-class candidate, mark exactly one LLM paper-control candidate per run via a frozen deterministic ranking rule, and add same-pool market controls for offensive Top1, cooldown Top1, deterministic random Top40 selection, no-limit-chase executable risk, next-open entry timing, and intraday same-day entry timing. 2026-05-12 review: growth adds the deterministic 14点同日买入版 runner, realtime spot quote snapshot projection, captured same-day entry price source, and validation support for `same_day_intraday_current`; a module split remains desirable after the shortpick API contract stabilizes.",
-      "status": "planned_refactor",
+      "lines": 6384,
+      "reason": "Short Pick Lab experiment runner, market-factor overlays, paper-tracking validation, and intraday same-day entry control. 2026-05-12 review: growth adds direct EastMoney quote fallback and fail-closed handling so the 14点同日买入版 cannot mark a quote outage as a completed zero-candidate run.",
+      "status": "accepted",
       "reviewed_at": "2026-05-12"
     }
   }
