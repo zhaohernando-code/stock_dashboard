@@ -24,7 +24,7 @@
 - **runtime DB 是 live 真值源**：repo 本地库、样本库、output artifact 只能用于复现和研究；对用户解释当前页面时以 runtime DB/API 为准。
 - **canonical 不可用先分层排查**：先查 localhost 5173/8000 健康，再查 canonical 是否 302 到登录页，再查 tunnel/remote port ownership；不要先误判为代码失效。
 - **canonical stale 多半是路由或隧道问题**：页面旧、接口新、资源健康时，优先检查 tunnel、远端端口和缓存态，再决定是否重新发布。
-- **LaunchAgent 要区分任务和服务**：定时任务用 `RunAtLoad` + `StartCalendarInterval` 或 `StartInterval`；服务进程用 `RunAtLoad` + `KeepAlive`。需要精确时钟触发时不能只靠 `StartInterval=300`。
+- **LaunchAgent 要区分任务和服务**：定时任务用 `RunAtLoad` + `StartCalendarInterval` 或 `StartInterval`；服务进程用 `RunAtLoad` + `KeepAlive`。需要精确时钟触发时不能只靠 `StartInterval=300`；关键时点应配置显式 calendar trigger，并让任务用 slot state 保证多次唤醒不重复写入。
 - **SSH 隧道要自愈且能清旧占用**：重连失败先查远端旧 sshd 是否占端口；清理脚本改动后跑语法检查；隧道进程遇错应退避重试。
 - **SQLite 写锁要按工作流避让**：批量短投验证、历史回放、盘后刷新和页面验收不要无脑并发；遇到等待时先判断锁持有者，不要把慢写误判为 Python 崩溃。
 

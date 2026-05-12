@@ -69,6 +69,8 @@ def test_publish_reloads_scheduled_refresh_calendar_slots() -> None:
 
     assert "ensure_scheduled_refresh_calendar" in script
     assert '{"Hour": 13, "Minute": 55}' in script
+    assert '{"Hour": 14, "Minute": 0}' in script
+    assert '{"Hour": 14, "Minute": 5}' in script
     assert '{"Hour": 16, "Minute": 20}' in script
     assert 'launchctl bootout "gui/$(id -u)" "$SCHEDULED_PLIST"' in script
     assert 'launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"' in script

@@ -118,7 +118,12 @@ if isinstance(intervals, dict):
     intervals = [intervals]
 elif not isinstance(intervals, list):
     intervals = []
-required = [{"Hour": 13, "Minute": 55}, {"Hour": 16, "Minute": 20}]
+required = [
+    {"Hour": 13, "Minute": 55},
+    {"Hour": 14, "Minute": 0},
+    {"Hour": 14, "Minute": 5},
+    {"Hour": 16, "Minute": 20},
+]
 seen = {
     (int(item.get("Hour")), int(item.get("Minute")))
     for item in intervals

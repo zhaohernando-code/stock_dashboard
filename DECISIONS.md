@@ -6,7 +6,7 @@
 
 补充说明
 - 这个对照组回答的是“当天推荐、当天收盘前买入”的入场时点问题，不改变冻结主线的次一交易日收盘买入口径，也不替代 16:20 盘后完整 shortpick lab。
-- 为了满足 14:00 前后可见，调度默认 `13:55` 启动，只运行已冻结的确定性市场因子规则和 AKShare 实时全市场快照，不跑完整 LLM daily-analysis；完整 LLM 批次仍跟随 16:20 盘后 slot。
+- 为了满足 14:00 前后可见，调度默认 `13:55` 启动，只运行已冻结的确定性市场因子规则和 AKShare 实时全市场快照，不跑完整 LLM daily-analysis；LaunchAgent 还会在 `14:00`、`14:05` 显式唤醒同一 slot 作为兜底，成功后由 slot state 防重复写入；完整 LLM 批次仍跟随 16:20 盘后 slot。
 - 纸面跟踪必须记录独立 `entry_price_source = same_day_intraday_current`、同日 signal/entry date 和捕获到的 entry price；页面展示为“盘中当前价买入”，避免被误读为次日收盘或次日开盘。
 
 [2026-05-07T18:52:00+08:00] Short Pick Lab return feedback requires three benchmark dimensions:
