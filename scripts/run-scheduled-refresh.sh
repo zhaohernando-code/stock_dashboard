@@ -41,6 +41,7 @@ DATABASE_LOCK_WAIT_SECONDS="${ASHARE_DATABASE_LOCK_WAIT_SECONDS:-60}"
 NETWORK_CHECK_ENABLED="${ASHARE_REFRESH_NETWORK_CHECK:-1}"
 NETWORK_PROBES="${ASHARE_REFRESH_NETWORK_PROBES:-https://www.baidu.com/ https://push2.eastmoney.com/}"
 SLOT_RETRY_INTERVAL_SECONDS="${ASHARE_SLOT_RETRY_INTERVAL_SECONDS:-1800}"
+SHORTPICK_INTRADAY_RETRY_INTERVAL_SECONDS="${ASHARE_SHORTPICK_INTRADAY_RETRY_INTERVAL_SECONDS:-60}"
 
 run_runtime_refresh() {
   "$PYTHON_BIN" -m ashare_evidence.cli refresh-runtime-data \
@@ -277,12 +278,13 @@ slot_completed() {
 slot_recently_failed() {
   local target_date="$1"
   local slot_name="$2"
+  local retry_interval_seconds="${3:-$SLOT_RETRY_INTERVAL_SECONDS}"
   local failed_file
   failed_file="$(slot_failed_file "$target_date" "$slot_name")"
   if [[ ! -f "$failed_file" ]]; then
     return 1
   fi
-  "$PYTHON_BIN" - "$failed_file" "$SLOT_RETRY_INTERVAL_SECONDS" <<'PY'
+  "$PYTHON_BIN" - "$failed_file" "$retry_interval_seconds" <<'PY'
 import os
 import sys
 import time
@@ -300,12 +302,13 @@ PY
 slot_recently_attempted() {
   local target_date="$1"
   local slot_name="$2"
+  local retry_interval_seconds="${3:-$SLOT_RETRY_INTERVAL_SECONDS}"
   local attempt_file
   attempt_file="$(slot_attempt_file "$target_date" "$slot_name")"
   if [[ ! -f "$attempt_file" ]]; then
     return 1
   fi
-  "$PYTHON_BIN" - "$attempt_file" "$SLOT_RETRY_INTERVAL_SECONDS" <<'PY'
+  "$PYTHON_BIN" - "$attempt_file" "$retry_interval_seconds" <<'PY'
 import os
 import sys
 import time
@@ -468,11 +471,11 @@ run_shortpick_intraday_same_day_slot() {
   if slot_completed "$target_date" "$slot_name"; then
     return 0
   fi
-  if slot_recently_attempted "$target_date" "$slot_name"; then
+  if slot_recently_attempted "$target_date" "$slot_name" "$SHORTPICK_INTRADAY_RETRY_INTERVAL_SECONDS"; then
     echo "Recent ${slot_name} attempt for ${target_date}; waiting before retry." >&2
     return 0
   fi
-  if slot_recently_failed "$target_date" "$slot_name"; then
+  if slot_recently_failed "$target_date" "$slot_name" "$SHORTPICK_INTRADAY_RETRY_INTERVAL_SECONDS"; then
     echo "Recent ${slot_name} failure for ${target_date}; waiting before retry." >&2
     return 0
   fi

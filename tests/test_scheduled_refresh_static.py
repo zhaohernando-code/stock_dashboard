@@ -58,8 +58,10 @@ def test_intraday_same_day_shortpick_control_has_timeboxed_slot() -> None:
 
     assert 'INTRADAY_SAME_DAY_REFRESH_AT="${ASHARE_INTRADAY_SAME_DAY_REFRESH_AT:-13:55}"' in script
     assert 'SHORTPICK_INTRADAY_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_INTRADAY_TIMEOUT_SECONDS:-600}"' in script
+    assert 'SHORTPICK_INTRADAY_RETRY_INTERVAL_SECONDS="${ASHARE_SHORTPICK_INTRADAY_RETRY_INTERVAL_SECONDS:-60}"' in script
     assert "shortpick-lab-intraday-same-day" in script
     assert "run_shortpick_intraday_same_day_slot \"$TODAY_STR\"" in script
+    assert 'slot_recently_failed "$target_date" "$slot_name" "$SHORTPICK_INTRADAY_RETRY_INTERVAL_SECONDS"' in script
     assert 'time_lt "$NOW_HHMM" "$POSTMARKET_REFRESH_AT"' in script
     assert 'run_with_timeout "$SHORTPICK_INTRADAY_TIMEOUT_SECONDS" run_shortpick_intraday_same_day "$target_date"' in script
 
