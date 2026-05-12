@@ -123,7 +123,7 @@
     "shortpick_final_same_pool_paper_controls": "published_runtime_verified_waiting_first_post_change_run",
     "shortpick_no_limit_chase_paper_control": "published_runtime_verified_run_121_backfilled_002384",
     "shortpick_next_open_entry_paper_control": "published_runtime_verified_run_121_backfilled_600236_next_open",
-    "shortpick_intraday_same_day_entry_control": "implemented_pending_runtime_publish_and_next_trading_day_slot",
+    "shortpick_intraday_same_day_entry_control": "published_runtime_verified_manifest_20260512T024051Z_9779c4f_contract_visible_pending_next_trading_day_slot",
     "shortpick_friend_suggested_paper_controls": "published_runtime_verified_diagnostic_controls",
     "shortpick_friend_suggested_historical_backtest": "completed_not_promoted_to_main",
     "shortpick_friend_suggested_group_display": "published_runtime_verified",
