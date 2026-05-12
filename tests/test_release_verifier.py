@@ -70,24 +70,44 @@ class ReleaseVerifierTests(unittest.TestCase):
 
     def test_normalize_payload_for_fingerprint_ignores_data_latency_seconds(self) -> None:
         left = {
+            "overview": {
+                "run_health": {
+                    "note": "已同步 4 只标的的 5 分钟行情，新增或更新 9 根 K 线。",
+                    "status": "warn",
+                }
+            },
+            "today_at_a_glance": {"refresh_status": "warn"},
             "simulation_workspace": {
                 "session": {
                     "data_latency_seconds": 32889,
                     "intraday_source_status": {
                         "data_latency_seconds": 32889,
+                        "fallback_used": True,
                         "message": "已同步 4 只标的的 5 分钟行情，新增或更新 8 根 K 线。",
+                        "provider_label": "AKShare 分钟兜底",
+                        "source_kind": "akshare_hist_min_em",
                         "status": "stale",
                     },
                 }
             }
         }
         right = {
+            "overview": {
+                "run_health": {
+                    "note": "当前未获取新的实时分钟行情，继续使用本地已缓存的 5 分钟真实数据。",
+                    "status": "pass",
+                }
+            },
+            "today_at_a_glance": {"refresh_status": "pass"},
             "simulation_workspace": {
                 "session": {
                     "data_latency_seconds": 32890,
                     "intraday_source_status": {
                         "data_latency_seconds": 32890,
+                        "fallback_used": False,
                         "message": "已同步 4 只标的的 5 分钟行情，新增或更新 6 根 K 线。",
+                        "provider_label": "本地已缓存 5 分钟数据",
+                        "source_kind": "cached_5min",
                         "status": "stale",
                     },
                 }

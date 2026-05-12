@@ -75,10 +75,10 @@
       "reviewed_at": "2026-05-01"
     },
     "src/ashare_evidence/release_verifier.py": {
-      "lines": 752,
-      "reason": "Release verification: build check, health check, parity verification. Single workflow.",
+      "lines": 759,
+      "reason": "Release verification: build check, health check, parity verification, and narrowly scoped runtime-noise normalization for intraday fields. Single workflow.",
       "status": "accepted",
-      "reviewed_at": "2026-04-28"
+      "reviewed_at": "2026-05-12"
     },
     "src/ashare_evidence/runtime_config.py": {
       "lines": 602,

@@ -8,7 +8,7 @@ import re
 import ssl
 import sys
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from http.cookiejar import CookieJar
 from pathlib import Path
 from typing import Any
@@ -311,7 +311,13 @@ def _should_drop_contextual_fingerprint_field(
             and path[-1] == "launch_gates"
             and parent.get("gate") in NOISY_LAUNCH_GATE_CURRENT_VALUE_LABELS
         )
-        or (key == "message" and path and path[-1] == "intraday_source_status")
+        or (key in {"note", "status"} and path and path[-1] == "run_health")
+        or (key == "refresh_status" and path and path[-1] == "today_at_a_glance")
+        or (
+            key in {"fallback_used", "message", "provider_label", "provider_name", "source_kind"}
+            and path
+            and path[-1] == "intraday_source_status"
+        )
         or (key in {"observed", "status"} and path and path[-1] == "performance_thresholds")
         or (key == "warning_gate_count" and path and path[-1] == "launch_readiness")
     )
@@ -504,8 +510,8 @@ def verify_release_parity(args: argparse.Namespace) -> Path:
     previous_successful_manifest = _load_previous_successful_manifest(output_root)
 
     commit_sha = args.expected_commit_sha.strip()
-    released_at = datetime.now(timezone.utc).isoformat()
-    release_id = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{commit_sha[:12]}"
+    released_at = datetime.now(UTC).isoformat()
+    release_id = f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}-{commit_sha[:12]}"
     artifact_root = output_root / release_id
     artifact_root.mkdir(parents=True, exist_ok=True)
 
