@@ -952,7 +952,8 @@ function paperTrackingEntryDate(item: ShortpickPaperTrackingItem): string {
 }
 
 function paperTrackingExpectedEntryText(item: ShortpickPaperTrackingItem): string {
-  const session = item.entry_rule?.includes("开盘") ? "开盘" : "收盘";
+  const isIntraday = Boolean(item.entry_rule?.includes("盘中") || item.entry_rule?.includes("当前价"));
+  const session = isIntraday ? "盘中" : item.entry_rule?.includes("开盘") ? "开盘" : "收盘";
   return `预计买入 ${paperTrackingEntryDate(item)} ${session}`;
 }
 
@@ -970,7 +971,11 @@ function paperTrackingChoiceTimingText(
   const signalDate = choiceRows[0] ? paperTrackingSignalDate(choiceRows[0]) : runDate;
   const entryDate = choiceRows[0] ? paperTrackingEntryDate(choiceRows[0]) : runDate ? nextWeekdayAfter(runDate) : "";
   const hasOpenEntry = choiceRows.some((item) => item.entry_rule?.includes("开盘"));
+  const hasIntradayEntry = choiceRows.some((item) => item.entry_rule?.includes("盘中") || item.entry_rule?.includes("当前价"));
   if (!signalDate) return choiceLabel === "下轮" ? "信号日待确认 · 次一交易日收盘买入" : "当前跟踪信号待确认";
+  if (hasIntradayEntry) {
+    return `信号日 ${signalDate} · 含同日盘中当前价买入对照`;
+  }
   if (hasOpenEntry) {
     return `信号日 ${signalDate} · 预计买入日 ${entryDate}，不同对照按各自入场规则执行`;
   }

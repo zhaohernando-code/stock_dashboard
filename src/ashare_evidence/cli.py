@@ -53,6 +53,7 @@ from ashare_evidence.services import get_latest_recommendation_summary, get_reco
 from ashare_evidence.shortpick_lab import (
     retry_failed_shortpick_rounds,
     run_shortpick_experiment,
+    run_shortpick_intraday_same_day_control,
     validate_recent_shortpick_runs,
     validate_shortpick_run,
 )
@@ -437,6 +438,13 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_run.add_argument("--run-date", default=None)
     shortpick_run.add_argument("--rounds-per-model", type=int, default=5)
 
+    shortpick_intraday = subparsers.add_parser(
+        "shortpick-lab-intraday-same-day",
+        help="Run the time-boxed intraday same-day entry control using frozen short-pick rules.",
+    )
+    shortpick_intraday.add_argument("--database-url", default=None)
+    shortpick_intraday.add_argument("--run-date", default=None)
+
     shortpick_validate = subparsers.add_parser(
         "shortpick-lab-validate",
         help="Refresh post-pick validation snapshots for one short-pick lab run.",
@@ -799,6 +807,17 @@ def main(argv: list[str] | None = None) -> int:
                 rounds_per_model=args.rounds_per_model,
                 triggered_by="scheduled_cli",
                 trigger_source="scheduled_cli",
+            )
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-lab-intraday-same-day":
+        with session_scope(args.database_url) as session:
+            payload = run_shortpick_intraday_same_day_control(
+                session,
+                run_date=None if args.run_date is None else date.fromisoformat(args.run_date),
+                triggered_by="scheduled_cli",
+                trigger_source="scheduled_intraday_cli",
             )
         _print_json(payload)
         return 0

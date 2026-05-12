@@ -1,5 +1,14 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-05-12T10:35:00+08:00] Intraday same-day shortpick control is time-boxed and deterministic:
+
+短投试验田新增一个盘中同日入场对照组：交易日下午先用实时行情替代当日收盘价，沿用冻结低换手上升趋势规则选股；推荐生成后再读取一次当前价，作为该对照组的纸面买入价。
+
+补充说明
+- 这个对照组回答的是“当天推荐、当天收盘前买入”的入场时点问题，不改变冻结主线的次一交易日收盘买入口径，也不替代 16:20 盘后完整 shortpick lab。
+- 为了满足 14:00 前后可见，调度默认 `13:55` 启动，只运行已冻结的确定性市场因子规则和 AKShare 实时全市场快照，不跑完整 LLM daily-analysis；完整 LLM 批次仍跟随 16:20 盘后 slot。
+- 纸面跟踪必须记录独立 `entry_price_source = same_day_intraday_current`、同日 signal/entry date 和捕获到的 entry price；页面展示为“盘中当前价买入”，避免被误读为次日收盘或次日开盘。
+
 [2026-05-07T18:52:00+08:00] Short Pick Lab return feedback requires three benchmark dimensions:
 
 短投试验田的收益反馈不能继续只展示单一沪深300超额。后续实现必须把后验收益拆成 `沪深300 / 中证1000 / 同板块等权` 三个可切换 benchmark 维度，并让研究池、历史验证队列和模型反馈使用同一组选中口径。

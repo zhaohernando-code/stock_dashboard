@@ -28,10 +28,12 @@ NOW_HHMM="${ASHARE_SCHEDULED_REFRESH_AT:-$(TZ="$TIMEZONE" date '+%H:%M')}"
 NOW_DOW="$(TZ="$TIMEZONE" date '+%u')"
 TODAY_STR="$(TZ="$TIMEZONE" date '+%Y-%m-%d')"
 POSTMARKET_REFRESH_AT="${ASHARE_POSTMARKET_DAILY_REFRESH_AT:-16:20}"
+INTRADAY_SAME_DAY_REFRESH_AT="${ASHARE_INTRADAY_SAME_DAY_REFRESH_AT:-13:55}"
 REFRESH_STATE_DIR="${ASHARE_SCHEDULED_REFRESH_STATE_DIR:-$HOME/.cache/codex/ashare-dashboard-refresh}"
 RUN_LOCK_DIR="$REFRESH_STATE_DIR/run.lock"
 DAILY_REFRESH_TIMEOUT_SECONDS="${ASHARE_DAILY_REFRESH_TIMEOUT_SECONDS:-7200}"
 SHORTPICK_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_TIMEOUT_SECONDS:-7200}"
+SHORTPICK_INTRADAY_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_INTRADAY_TIMEOUT_SECONDS:-600}"
 SHORTPICK_VALIDATION_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_VALIDATION_TIMEOUT_SECONDS:-600}"
 SHORTPICK_VALIDATE_RECENT_DAYS="${ASHARE_SHORTPICK_VALIDATE_RECENT_DAYS:-30}"
 SHORTPICK_VALIDATE_RECENT_LIMIT="${ASHARE_SHORTPICK_VALIDATE_RECENT_LIMIT:-20}"
@@ -60,6 +62,13 @@ run_shortpick_lab() {
     --database-url "$ASHARE_DATABASE_URL" \
     --run-date "$target_date" \
     --rounds-per-model "${ASHARE_SHORTPICK_ROUNDS_PER_MODEL:-5}"
+}
+
+run_shortpick_intraday_same_day() {
+  local target_date="$1"
+  "$PYTHON_BIN" -m ashare_evidence.cli shortpick-lab-intraday-same-day \
+    --database-url "$ASHARE_DATABASE_URL" \
+    --run-date "$target_date"
 }
 
 run_shortpick_retry_failed_rounds() {
@@ -450,6 +459,50 @@ run_shortpick_lab_slot() {
   return 1
 }
 
+run_shortpick_intraday_same_day_slot() {
+  local target_date="$1"
+  local slot_name="shortpick_intraday_same_day"
+  if [[ "${ASHARE_ENABLE_SHORTPICK_INTRADAY_SAME_DAY:-1}" != "1" ]]; then
+    return 0
+  fi
+  if slot_completed "$target_date" "$slot_name"; then
+    return 0
+  fi
+  if slot_recently_attempted "$target_date" "$slot_name"; then
+    echo "Recent ${slot_name} attempt for ${target_date}; waiting before retry." >&2
+    return 0
+  fi
+  if slot_recently_failed "$target_date" "$slot_name"; then
+    echo "Recent ${slot_name} failure for ${target_date}; waiting before retry." >&2
+    return 0
+  fi
+  if ! network_available; then
+    mark_slot_deferred "$target_date" "$slot_name" "当前未联网，14点同日入场对照等待联网后补跑。"
+    return 0
+  fi
+  if ! acquire_run_lock; then
+    return 0
+  fi
+  local started_at
+  started_at="$(TZ="$TIMEZONE" date '+%Y-%m-%dT%H:%M:%S%z')"
+  mark_slot_attempted "$target_date" "$slot_name"
+  write_run_context "$target_date" "$slot_name"
+  trap release_run_lock EXIT
+  echo "Running shortpick intraday same-day control for ${target_date} at ${NOW_HHMM}."
+  run_with_timeout "$SHORTPICK_INTRADAY_TIMEOUT_SECONDS" run_shortpick_intraday_same_day "$target_date"
+  local exit_code=$?
+  if [[ "$exit_code" == "0" ]]; then
+    mark_slot_completed "$target_date" "$slot_name"
+    release_run_lock
+    trap - EXIT
+    return 0
+  fi
+  mark_slot_failed "$target_date" "$slot_name" "$exit_code" "$started_at"
+  release_run_lock
+  trap - EXIT
+  return 1
+}
+
 within_market_hours() {
   [[ "$NOW_HHMM" > "09:30" && "$NOW_HHMM" < "11:31" ]] || [[ "$NOW_HHMM" > "13:00" && "$NOW_HHMM" < "15:01" ]]
 }
@@ -505,6 +558,14 @@ previous_trading_date() {
 }
 
 run_due_daily_refreshes() {
+  if [[ "$NOW_DOW" -le 5 ]] \
+    && time_ge "$NOW_HHMM" "$INTRADAY_SAME_DAY_REFRESH_AT" \
+    && time_lt "$NOW_HHMM" "$POSTMARKET_REFRESH_AT" \
+    && is_trading_day "$TODAY_STR"; then
+    run_shortpick_intraday_same_day_slot "$TODAY_STR"
+    return 0
+  fi
+
   if [[ "$NOW_DOW" -le 5 ]] && time_ge "$NOW_HHMM" "$POSTMARKET_REFRESH_AT" && is_trading_day "$TODAY_STR"; then
     run_daily_refresh_slot "$TODAY_STR" "postmarket"
     run_shortpick_lab_slot "$TODAY_STR"
@@ -522,6 +583,11 @@ run_due_daily_refreshes() {
 
 if time_ge "$NOW_HHMM" "$POSTMARKET_REFRESH_AT" || [[ "$NOW_DOW" -gt 5 ]]; then
   run_due_daily_refreshes
+elif time_ge "$NOW_HHMM" "$INTRADAY_SAME_DAY_REFRESH_AT" && is_trading_day "$TODAY_STR"; then
+  run_due_daily_refreshes
+  if within_market_hours; then
+    run_runtime_refresh --ops-only
+  fi
 elif is_trading_day "$TODAY_STR" && within_market_hours; then
   run_runtime_refresh --ops-only
 else

@@ -33,6 +33,8 @@ from ashare_evidence.shortpick_lab import (
     SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_DEFAULT_FAMILY,
     SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_FAMILY,
     SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE,
@@ -45,6 +47,7 @@ from ashare_evidence.shortpick_lab import (
     StaticShortpickExecutor,
     _is_shortpick_no_limit_chase_risk,
     _normalize_shortpick_topic,
+    _shortpick_entry_execution_price,
     _shortpick_entry_tradeability,
     _shortpick_frozen_exit_track_results,
     _upsert_shortpick_market_factor_candidate,
@@ -56,6 +59,7 @@ from ashare_evidence.shortpick_lab import (
     normalize_shortpick_candidate_topics,
     retry_failed_shortpick_rounds,
     run_shortpick_experiment,
+    run_shortpick_intraday_same_day_control,
     select_shortpick_llm_paper_control_candidate,
     shortpick_frozen_paper_strategy_contract,
     shortpick_market_factor_paper_control_contracts,
@@ -1177,6 +1181,7 @@ class ShortpickLabTests(unittest.TestCase):
                 SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
                 SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
                 SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
+                SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
             ],
         )
         for role in (
@@ -1189,6 +1194,7 @@ class ShortpickLabTests(unittest.TestCase):
             SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
             SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
             SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
+            SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
         ):
             candidate = ShortpickCandidate(
                 run_id=1,
@@ -1231,6 +1237,96 @@ class ShortpickLabTests(unittest.TestCase):
                 [item["key"] for item in tracks],
                 ["mechanical_5d", "mechanical_10d", "conditional_5_to_10d", "take_profit_10pct"],
             )
+
+    def test_intraday_same_day_control_uses_captured_entry_price(self) -> None:
+        candidate = ShortpickCandidate(
+            run_id=1,
+            candidate_key="shortpick-market-factor:1:intraday-entry:1",
+            symbol="000001.SZ",
+            name="测试银行",
+            research_priority="market_factor_intraday_same_day_low_turnover_uptrend",
+            candidate_payload={
+                "tracking_role": SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
+                "paper_tracking_entry_price_source": "same_day_intraday_current",
+                "paper_tracking_entry_price": 10.25,
+            },
+        )
+        entry = MarketBar(
+            bar_key="intraday-entry",
+            stock_id=1,
+            timeframe="1d",
+            observed_at=datetime(2026, 5, 12, 7, 0, tzinfo=UTC),
+            open_price=10.0,
+            high_price=10.8,
+            low_price=9.9,
+            close_price=10.6,
+            volume=1000,
+            amount=10600,
+            raw_payload={},
+            license_tag="test",
+            usage_scope="internal-test",
+            redistribution_scope="none",
+            source_uri="test://intraday-entry",
+            lineage_hash=compute_lineage_hash({"bar": "intraday-entry"}),
+        )
+
+        self.assertEqual(_shortpick_entry_execution_price(candidate=candidate, entry=entry), 10.25)
+
+    def test_intraday_same_day_control_inserts_same_day_candidate(self) -> None:
+        trading_days = [date(2026, 4, 14) + timedelta(days=index) for index in range(20)]
+        self._seed_stock_bars(
+            "600001.SH",
+            "测试主板",
+            [10.0 + index * 0.1 for index in range(20)],
+            dates=trading_days,
+            profile_payload={"industry": "测试行业"},
+        )
+        full_snapshot = {
+            "status": "ok",
+            "generated_at": "2026-05-12T05:55:00+00:00",
+            "source_kind": "test_spot",
+            "quotes": {
+                "600001.SH": {
+                    "symbol": "600001.SH",
+                    "name": "测试主板",
+                    "price": 12.20,
+                    "open": 12.00,
+                    "high": 12.30,
+                    "low": 11.90,
+                    "amount": 200000000.0,
+                    "volume": 1000000.0,
+                    "turnover_rate": 1.2,
+                    "captured_at": "2026-05-12T05:55:00+00:00",
+                }
+            },
+            "summary": {"status": "ok", "quote_count": 1},
+        }
+        entry_snapshot = {
+            **full_snapshot,
+            "generated_at": "2026-05-12T05:56:00+00:00",
+            "quotes": {
+                "600001.SH": {
+                    **full_snapshot["quotes"]["600001.SH"],
+                    "price": 12.25,
+                    "captured_at": "2026-05-12T05:56:00+00:00",
+                }
+            },
+        }
+
+        with patch("ashare_evidence.shortpick_lab._fetch_shortpick_intraday_spot_quotes", side_effect=[full_snapshot, entry_snapshot]):
+            with session_scope(self.database_url) as session:
+                payload = run_shortpick_intraday_same_day_control(session, run_date=date(2026, 5, 12), triggered_by="test")
+
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["summary"]["market_factor_overlay"]["inserted_candidate_count"], 1)
+        self.assertEqual(payload["candidates"][0]["tracking_role"], SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE)
+        self.assertEqual(payload["candidates"][0]["baseline_family"], SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_FAMILY)
+        with session_scope(self.database_url) as session:
+            candidate = session.scalar(select(ShortpickCandidate).where(ShortpickCandidate.run_id == payload["id"]))
+            self.assertIsNotNone(candidate)
+            candidate_payload = candidate.candidate_payload
+        self.assertEqual(candidate_payload["paper_tracking_entry_date"], "2026-05-12")
+        self.assertEqual(candidate_payload["paper_tracking_entry_price"], 12.25)
 
     def test_no_limit_chase_control_filters_limit_up_chase_risk(self) -> None:
         self.assertTrue(_is_shortpick_no_limit_chase_risk({"return_1d": 0.095}))

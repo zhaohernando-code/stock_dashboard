@@ -188,6 +188,13 @@ DEFAULT_POLICY_CONFIGS: dict[tuple[str, str], dict[str, Any]] = {
                 "strategy": "low_turnover_20d_uptrend_liquid_top120_next_open_entry",
                 "entry_price_source": "next_open",
             },
+            "intraday_same_day_low_turnover_uptrend": {
+                "family": "liquid_low_turnover_20d_uptrend_intraday_same_day_entry",
+                "role": "market_factor_control_intraday_same_day_entry",
+                "strategy": "low_turnover_20d_uptrend_liquid_top120_intraday_same_day_entry",
+                "entry_price_source": "same_day_intraday_current",
+                "target_publish_time": "14:00",
+            },
             "quiet_breakout_rank2": {
                 "family": "quiet_20d_5d_breakout_rank2",
                 "role": "market_factor_control_quiet_breakout_rank2",

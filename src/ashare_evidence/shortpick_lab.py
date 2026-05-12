@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import threading
 from collections import defaultdict
+from collections.abc import Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -23,6 +24,7 @@ from urllib.parse import urlencode, urlparse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ashare_evidence.akshare_timeout import call_akshare_function
 from ashare_evidence.analysis_pipeline import _fetch_daily_bars_akshare, _fetch_daily_bars_tushare
 from ashare_evidence.benchmark import CSI_BENCHMARKS, benchmark_close_maps, sync_benchmark_index_bars
 from ashare_evidence.db import utcnow
@@ -47,7 +49,7 @@ from ashare_evidence.recommendation_selection import recommendation_recency_orde
 from ashare_evidence.research_artifact_store import artifact_root_from_database_url, write_shortpick_lab_artifact
 from ashare_evidence.runtime_config import get_builtin_llm_executor_config, resolve_llm_key_candidates
 from ashare_evidence.shortpick_policy import SHORTPICK_FROZEN_STRATEGY_CONFIG
-from ashare_evidence.stock_master import resolve_stock_profile
+from ashare_evidence.stock_master import DEFAULT_AKSHARE_TIMEOUT_SECONDS, akshare_runtime_ready, resolve_stock_profile
 
 SHORTPICK_PROMPT_VERSION = "native_web_open_discovery_v1"
 SHORTPICK_INFORMATION_MODE = "native_web_open_discovery"
@@ -147,6 +149,10 @@ SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE = str(_SHORTPICK_OP
 SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_FAMILY = str(_SHORTPICK_OPEN_ENTRY_LOW_TURNOVER_CONFIG["family"])
 SHORTPICK_ENTRY_PRICE_SOURCE_CLOSE = "next_close"
 SHORTPICK_ENTRY_PRICE_SOURCE_OPEN = str(_SHORTPICK_OPEN_ENTRY_LOW_TURNOVER_CONFIG["entry_price_source"])
+_SHORTPICK_INTRADAY_SAME_DAY_CONFIG = _SHORTPICK_CONTROL_CONFIG["intraday_same_day_low_turnover_uptrend"]
+SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE = str(_SHORTPICK_INTRADAY_SAME_DAY_CONFIG["role"])
+SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_FAMILY = str(_SHORTPICK_INTRADAY_SAME_DAY_CONFIG["family"])
+SHORTPICK_ENTRY_PRICE_SOURCE_INTRADAY = str(_SHORTPICK_INTRADAY_SAME_DAY_CONFIG["entry_price_source"])
 _SHORTPICK_QUIET_BREAKOUT_CONFIG = _SHORTPICK_CONTROL_CONFIG["quiet_breakout_rank2"]
 SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_CONTROL_ROLE = str(_SHORTPICK_QUIET_BREAKOUT_CONFIG["role"])
 SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_FAMILY = str(_SHORTPICK_QUIET_BREAKOUT_CONFIG["family"])
@@ -169,6 +175,7 @@ SHORTPICK_MARKET_FACTOR_PAPER_CONTROL_ROLES = {
     SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
 }
 SHORTPICK_MARKET_FACTOR_BREADTH10_THRESHOLD = float(_SHORTPICK_MARKET_FACTOR_CONFIG["breadth10_threshold"])
 SHORTPICK_MARKET_FACTOR_POOL_RET10_THRESHOLD = float(_SHORTPICK_MARKET_FACTOR_CONFIG["pool_ret10_threshold"])
@@ -315,6 +322,13 @@ def shortpick_market_factor_paper_control_contracts() -> dict[str, Any]:
                 "label": "次日开盘买入版",
                 "selection_rule": "沿用冻结低换手上升趋势第1名，只把入场价格从次一交易日收盘改为次一交易日开盘；若次日开盘价接近涨停，则不假设开盘可成交。",
                 "entry_rule": "次一交易日开盘买入；开盘直接接近涨停时标记为不可假设成交。",
+            },
+            {
+                "role": SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
+                "label": "14点同日买入版",
+                "selection_rule": "交易日下午用实时行情替代当日收盘价，沿用冻结低换手上升趋势选股规则；推荐生成后再读取一次当前价作为纸面买入价。",
+                "entry_rule": "信号日盘中当前价买入；若当前价接近涨停，则标记为不可假设成交。",
+                "target_publish_time": str(_SHORTPICK_INTRADAY_SAME_DAY_CONFIG["target_publish_time"]),
             },
         ],
         "scope_note": "单票分析当前覆盖不足，且历史LLM过滤/硬否决没有证明增益；暂不升入冻结真实跟踪，只保留为后续研究方向。",
@@ -1389,6 +1403,180 @@ def run_shortpick_experiment(
     return serialize_shortpick_run(session, run, include_raw=True)
 
 
+def run_shortpick_intraday_same_day_control(
+    session: Session,
+    *,
+    run_date: date | None = None,
+    triggered_by: str | None = None,
+    trigger_source: str = "scheduled_intraday_cli",
+) -> dict[str, Any]:
+    """Run the time-boxed same-day entry control without LLM rounds.
+
+    The 14:00 SLA is incompatible with the full multi-model discovery run, so
+    this path only runs the already-frozen deterministic market-factor rule and
+    a broad realtime quote snapshot.
+    """
+
+    target_date = run_date or datetime.now(UTC).date()
+    started_at = utcnow()
+    run = ShortpickExperimentRun(
+        run_key=f"shortpick-intraday-same-day:{target_date.isoformat()}:{started_at:%Y%m%d%H%M%S%f}",
+        run_date=target_date,
+        prompt_version="intraday_same_day_low_turnover_v1",
+        information_mode=SHORTPICK_INFORMATION_MODE,
+        status="running",
+        trigger_source=trigger_source,
+        triggered_by=triggered_by,
+        started_at=started_at,
+        completed_at=None,
+        failed_at=None,
+        model_config={
+            "rounds_per_model": 0,
+            "native_web_search": False,
+            "controlled_search": False,
+            "market_factor_overlay": {
+                "enabled": True,
+                "mode": "intraday_same_day_control",
+                "frozen_paper_strategy": shortpick_frozen_paper_strategy_contract(),
+                "family": SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_FAMILY,
+                "entry_price_source": SHORTPICK_ENTRY_PRICE_SOURCE_INTRADAY,
+                "target_publish_time": str(_SHORTPICK_INTRADAY_SAME_DAY_CONFIG["target_publish_time"]),
+            },
+        },
+        summary_payload={},
+    )
+    session.add(run)
+    session.flush()
+    try:
+        overlay = insert_shortpick_intraday_same_day_candidate(session, run)
+        run.status = "completed"
+        run.completed_at = utcnow()
+        run.failed_at = None
+        run.summary_payload = {
+            "completed_round_count": 0,
+            "failed_round_count": 0,
+            "parse_failed_count": 0,
+            "candidate_count": session.scalar(select(func.count(ShortpickCandidate.id)).where(ShortpickCandidate.run_id == run.id)) or 0,
+            "market_factor_overlay": overlay,
+            "boundary": "intraday_same_day_control_no_llm_no_main_pool_write",
+        }
+    except Exception as exc:
+        run.status = "failed"
+        run.failed_at = utcnow()
+        run.summary_payload = {"error": str(exc), "boundary": "intraday_same_day_control_no_llm_no_main_pool_write"}
+    session.commit()
+    session.refresh(run)
+    return serialize_shortpick_run(session, run, include_raw=True)
+
+
+def insert_shortpick_intraday_same_day_candidate(session: Session, run: ShortpickExperimentRun) -> dict[str, Any]:
+    removed = _delete_existing_market_factor_overlay_candidates(session, run_id=run.id)
+    quote_snapshot = _fetch_shortpick_intraday_spot_quotes()
+    contexts, diagnostics = _shortpick_market_factor_intraday_contexts(session, run.run_date, quote_snapshot)
+    pool = _shortpick_market_factor_pool(contexts)
+    if not pool:
+        result = {
+            "status": "skipped",
+            "reason": "no_intraday_market_factor_pool",
+            "removed_existing_candidate_count": removed,
+            "quote_snapshot": quote_snapshot.get("summary", {}),
+            **diagnostics,
+        }
+        run.summary_payload = {**dict(run.summary_payload or {}), "market_factor_overlay": result}
+        session.flush()
+        return result
+
+    universe_ret10_mean = _mean_or_none([float(item["return_10d"]) for item in contexts])
+    breadth10 = _positive_rate([float(item["return_10d"]) for item in contexts])
+    pool_ret1_mean = _mean_or_none([float(item["return_1d"]) for item in pool])
+    pool_ret10_mean = _mean_or_none([float(item["return_10d"]) for item in pool])
+    frozen_gate_pass = bool(
+        breadth10 is not None and breadth10 >= SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_BREADTH10_MIN
+    )
+    regime = {
+        "universe_ret10_mean": universe_ret10_mean,
+        "breadth10": breadth10,
+        "pool_ret1_mean": pool_ret1_mean,
+        "pool_ret10_mean": pool_ret10_mean,
+        "frozen_paper_gate_pass": frozen_gate_pass,
+        "frozen_paper_gate": shortpick_frozen_paper_strategy_contract()["gate"],
+        "interpretation": "盘中同日入场对照；只用于比较入场时点，不改变冻结主线。",
+    }
+    low_turnover_pool = sorted(
+        contexts,
+        key=lambda item: (float(item["amount"]), float(item["turnover_rate"])),
+        reverse=True,
+    )[:SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_POOL_LIMIT]
+    low_turnover_ranked = [
+        item
+        for item in _rank_shortpick_market_factor_pool(
+            low_turnover_pool,
+            family=SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_FAMILY,
+        )
+        if float(item.get("return_20d") or 0.0) > SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_RETURN20_MIN
+    ]
+    inserted: list[dict[str, Any]] = []
+    if frozen_gate_pass and low_turnover_ranked:
+        selected = {
+            **low_turnover_ranked[0],
+            "_pool_limit_override": SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_POOL_LIMIT,
+        }
+        entry_quote_snapshot = _fetch_shortpick_intraday_spot_quotes(symbols=[str(selected["symbol"])])
+        entry_quote = (entry_quote_snapshot.get("quotes") or {}).get(str(selected["symbol"])) or selected.get("_intraday_selection_quote")
+        if isinstance(entry_quote, dict):
+            selected["_intraday_entry_quote"] = entry_quote
+            selected["_intraday_entry_price"] = entry_quote.get("price") or selected.get("close")
+        else:
+            selected["_intraday_entry_quote"] = selected.get("_intraday_selection_quote")
+            selected["_intraday_entry_price"] = selected.get("close")
+        candidate = _upsert_shortpick_market_factor_candidate(
+            session,
+            run=run,
+            item=selected,
+            family=SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_FAMILY,
+            rank=1,
+            pool=low_turnover_pool,
+            regime=regime,
+            source_rank=1,
+            tracking_role=SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
+        )
+        inserted.append(
+            {
+                "candidate_id": candidate.id,
+                "symbol": candidate.symbol,
+                "name": candidate.name,
+                "baseline_family": SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_FAMILY,
+                "rank": 1,
+                "source_rank": 1,
+                "tracking_role": SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
+                "entry_price_source": SHORTPICK_ENTRY_PRICE_SOURCE_INTRADAY,
+                "entry_price": selected.get("_intraday_entry_price"),
+                "score": selected.get("_market_factor_score"),
+            }
+        )
+    result = {
+        "status": "inserted" if inserted else "skipped",
+        "reason": None if inserted else "frozen_gate_or_rank_not_triggered",
+        "removed_existing_candidate_count": removed,
+        "inserted_candidate_count": len(inserted),
+        "pool_limit": SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_POOL_LIMIT,
+        "families": [SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_FAMILY],
+        "frozen_paper_strategy": {
+            **shortpick_frozen_paper_strategy_contract(),
+            "gate_pass": frozen_gate_pass,
+            "inserted": bool(inserted),
+        },
+        "market_factor_paper_controls": shortpick_market_factor_paper_control_contracts(),
+        "regime": regime,
+        "quote_snapshot": quote_snapshot.get("summary", {}),
+        "candidates": inserted,
+        **diagnostics,
+    }
+    run.summary_payload = {**dict(run.summary_payload or {}), "market_factor_overlay": result}
+    session.flush()
+    return result
+
+
 def _execute_shortpick_round(
     session: Session,
     run: ShortpickExperimentRun,
@@ -2063,6 +2251,161 @@ def _shortpick_market_factor_contexts(session: Session, run_date: date) -> tuple
     }
 
 
+def _shortpick_market_factor_intraday_contexts(
+    session: Session,
+    run_date: date,
+    quote_snapshot: dict[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    cutoff = datetime.combine(run_date, datetime.min.time()).replace(tzinfo=UTC)
+    rows = session.execute(
+        select(Stock, MarketBar)
+        .join(MarketBar, MarketBar.stock_id == Stock.id)
+        .where(MarketBar.timeframe == "1d", MarketBar.observed_at < cutoff)
+        .order_by(Stock.symbol.asc(), MarketBar.observed_at.asc(), MarketBar.id.asc())
+    ).all()
+    quotes = quote_snapshot.get("quotes") if isinstance(quote_snapshot.get("quotes"), dict) else {}
+    stocks_by_symbol: dict[str, Stock] = {}
+    bars_by_symbol: dict[str, list[MarketBar]] = defaultdict(list)
+    for stock, bar in rows:
+        if not _stock_eligible_for_shortpick_market_factor(stock, run_date=run_date):
+            continue
+        stocks_by_symbol[stock.symbol] = stock
+        bars_by_symbol[stock.symbol].append(bar)
+
+    contexts: list[dict[str, Any]] = []
+    missing_quote_count = 0
+    for symbol, bars in bars_by_symbol.items():
+        quote = quotes.get(symbol)
+        if not isinstance(quote, dict):
+            missing_quote_count += 1
+            continue
+        price = _coerce_float(quote.get("price"))
+        amount = _coerce_float(quote.get("amount"))
+        if price is None or price <= 0 or amount is None or amount <= 0:
+            missing_quote_count += 1
+            continue
+        unique_bars = _dedupe_market_factor_bars(bars)
+        if len(unique_bars) < 20:
+            continue
+        open_price = _coerce_float(quote.get("open")) or price
+        high_price = _coerce_float(quote.get("high")) or max(open_price, price)
+        low_price = _coerce_float(quote.get("low")) or min(open_price, price)
+        synthetic = MarketBar(
+            bar_key=f"synthetic-intraday-{symbol}-{run_date.isoformat()}",
+            stock_id=stocks_by_symbol[symbol].id,
+            timeframe="1d",
+            observed_at=datetime.combine(run_date, datetime.max.time()).replace(tzinfo=UTC),
+            open_price=float(open_price),
+            high_price=float(high_price),
+            low_price=float(low_price),
+            close_price=float(price),
+            volume=float(_coerce_float(quote.get("volume")) or 0.0),
+            amount=float(amount),
+            turnover_rate=_coerce_float(quote.get("turnover_rate")),
+            raw_payload={"synthetic_intraday_quote": quote},
+        )
+        context = _market_factor_context_from_bars(stocks_by_symbol[symbol], [*unique_bars, synthetic])
+        if context is None:
+            continue
+        context["_intraday_selection_quote"] = quote
+        context["_intraday_quote_source"] = quote_snapshot.get("source_kind")
+        contexts.append(context)
+
+    return contexts, {
+        "run_date": run_date.isoformat(),
+        "latest_trade_day": run_date.isoformat(),
+        "intraday_quote_status": quote_snapshot.get("status"),
+        "intraday_quote_generated_at": quote_snapshot.get("generated_at"),
+        "raw_symbol_count": len(bars_by_symbol),
+        "eligible_symbol_count": len(contexts),
+        "missing_quote_count": missing_quote_count,
+        "stale_symbol_count": 0,
+        "intraday_same_day": True,
+    }
+
+
+def _fetch_shortpick_intraday_spot_quotes(*, symbols: Iterable[str] | None = None) -> dict[str, Any]:
+    requested_symbols = {str(symbol).strip().upper() for symbol in symbols or [] if str(symbol).strip()}
+    generated_at = utcnow().isoformat()
+    if not akshare_runtime_ready():
+        return {
+            "status": "unavailable",
+            "generated_at": generated_at,
+            "source_kind": "akshare_stock_zh_a_spot_em",
+            "quotes": {},
+            "summary": {"status": "unavailable", "reason": "akshare_runtime_not_ready"},
+        }
+    try:
+        frame = call_akshare_function(
+            "stock_zh_a_spot_em",
+            timeout_seconds=max(10, int(os.getenv("SHORTPICK_INTRADAY_SPOT_TIMEOUT_SECONDS", str(DEFAULT_AKSHARE_TIMEOUT_SECONDS)))),
+        )
+    except Exception as exc:
+        return {
+            "status": "error",
+            "generated_at": generated_at,
+            "source_kind": "akshare_stock_zh_a_spot_em",
+            "quotes": {},
+            "summary": {"status": "error", "reason": str(exc)[:200]},
+        }
+    if frame is None or getattr(frame, "empty", False):
+        return {
+            "status": "empty",
+            "generated_at": generated_at,
+            "source_kind": "akshare_stock_zh_a_spot_em",
+            "quotes": {},
+            "summary": {"status": "empty", "reason": "spot_quote_frame_empty"},
+        }
+    quotes: dict[str, dict[str, Any]] = {}
+    for row in frame.to_dict(orient="records"):
+        symbol = _shortpick_symbol_from_spot_code(row.get("代码") or row.get("code"))
+        if symbol is None or (requested_symbols and symbol not in requested_symbols):
+            continue
+        price = _coerce_float(row.get("最新价") or row.get("price"))
+        if price is None or price <= 0:
+            continue
+        quotes[symbol] = {
+            "symbol": symbol,
+            "name": row.get("名称") or row.get("name"),
+            "price": price,
+            "open": _coerce_float(row.get("今开") or row.get("open")),
+            "high": _coerce_float(row.get("最高") or row.get("high")),
+            "low": _coerce_float(row.get("最低") or row.get("low")),
+            "previous_close": _coerce_float(row.get("昨收") or row.get("pre_close")),
+            "return_pct": _coerce_float(row.get("涨跌幅") or row.get("pct_chg")),
+            "volume": _coerce_float(row.get("成交量") or row.get("volume")),
+            "amount": _coerce_float(row.get("成交额") or row.get("amount")),
+            "turnover_rate": _coerce_float(row.get("换手率") or row.get("turnover_rate")),
+            "captured_at": generated_at,
+            "provider": "akshare",
+        }
+    status = "ok" if quotes else "empty"
+    return {
+        "status": status,
+        "generated_at": generated_at,
+        "source_kind": "akshare_stock_zh_a_spot_em",
+        "quotes": quotes,
+        "summary": {
+            "status": status,
+            "requested_symbol_count": len(requested_symbols),
+            "quote_count": len(quotes),
+            "generated_at": generated_at,
+            "source_kind": "akshare_stock_zh_a_spot_em",
+        },
+    }
+
+
+def _shortpick_symbol_from_spot_code(raw_code: Any) -> str | None:
+    code = str(raw_code or "").strip()
+    if not re.fullmatch(r"\d{6}", code):
+        return None
+    if code.startswith(("4", "8", "9")):
+        return f"{code}.BJ"
+    if code.startswith(("5", "6", "7")):
+        return f"{code}.SH"
+    return f"{code}.SZ"
+
+
 def _sync_shortpick_market_factor_universe(session: Session, run_date: date) -> dict[str, Any]:
     if os.getenv("SHORTPICK_MARKET_FACTOR_SYNC", "1").strip().lower() in {"0", "false", "no"}:
         return {"status": "disabled"}
@@ -2366,6 +2709,11 @@ def _upsert_shortpick_market_factor_candidate(
             f"{family_label}：沿用冻结低换手上升趋势第 {source_rank or rank} 名，"
             "只把入场价格从次一交易日收盘改为次一交易日开盘；若开盘价接近涨停，则不假设开盘可成交。"
         )
+    elif tracking_role == SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE:
+        thesis = (
+            f"{family_label}：交易日下午用实时行情替代当日收盘价，沿用冻结低换手上升趋势第 {source_rank or rank} 名，"
+            "并在推荐生成后再读取一次当前价作为纸面买入价。"
+        )
     elif tracking_role == SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_CONTROL_ROLE:
         thesis = (
             f"{family_label}：从当日波动较小且流动性靠前的池子里，选择10日不弱、当日不过热的第 {source_rank or rank} 名，"
@@ -2434,13 +2782,24 @@ def _upsert_shortpick_market_factor_candidate(
             "entry_price_source": (
                 SHORTPICK_ENTRY_PRICE_SOURCE_OPEN
                 if tracking_role == SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE
+                else SHORTPICK_ENTRY_PRICE_SOURCE_INTRADAY
+                if tracking_role == SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE
                 else SHORTPICK_ENTRY_PRICE_SOURCE_CLOSE
             ),
+            "intraday_quote": item.get("_intraday_selection_quote"),
+            "intraday_entry_quote": item.get("_intraday_entry_quote"),
             "regime": regime,
         },
     }
     if tracking_role == SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE:
         payload["paper_tracking_entry_price_source"] = SHORTPICK_ENTRY_PRICE_SOURCE_OPEN
+    if tracking_role == SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE:
+        signal_date = str(item.get("latest_trade_day") or run.run_date.isoformat())
+        payload["paper_tracking_entry_price_source"] = SHORTPICK_ENTRY_PRICE_SOURCE_INTRADAY
+        payload["paper_tracking_signal_date"] = signal_date
+        payload["paper_tracking_entry_date"] = signal_date
+        payload["paper_tracking_entry_price"] = item.get("_intraday_entry_price")
+        payload["paper_tracking_entry_quote"] = item.get("_intraday_entry_quote")
     candidate = ShortpickCandidate(
         run_id=run.id,
         round_id=None,
@@ -2492,6 +2851,8 @@ def _upsert_shortpick_market_factor_candidate(
             if tracking_role == SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE
             else "market_factor_open_entry_low_turnover_uptrend"
             if tracking_role == SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE
+            else "market_factor_intraday_same_day_low_turnover_uptrend"
+            if tracking_role == SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE
             else "market_factor_quiet_breakout"
             if tracking_role == SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_CONTROL_ROLE
             else "market_factor_offensive"
@@ -2528,6 +2889,8 @@ def _shortpick_market_factor_family_label(family: str) -> str:
         return "可执行风控版"
     if family == SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_FAMILY:
         return "次日开盘买入版"
+    if family == SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_FAMILY:
+        return "14点同日买入版"
     if family == SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_FAMILY:
         return "安静突破二候选"
     return "动量成交量"
@@ -3436,8 +3799,10 @@ def _upsert_validation_snapshot(
     round_record = session.get(ShortpickModelRound, candidate.round_id) if candidate.round_id else None
     signal_available_at = _shortpick_signal_available_at(run, round_record)
     signal_trade_day = signal_available_at.date()
+    entry_price_source = _shortpick_entry_price_source(candidate)
+    same_day_intraday_entry = entry_price_source == SHORTPICK_ENTRY_PRICE_SOURCE_INTRADAY
     latest_bar_day = bars[-1].observed_at.date()
-    if latest_bar_day <= signal_trade_day:
+    if latest_bar_day < signal_trade_day or (latest_bar_day == signal_trade_day and not same_day_intraday_entry):
         existing.status = "suspended_or_no_current_bar" if latest_bar_day < signal_trade_day else "pending_forward_window"
         _clear_validation_metrics(existing)
         existing.validation_payload = {
@@ -3456,7 +3821,11 @@ def _upsert_validation_snapshot(
         }
         return existing
 
-    entry_index = next((idx for idx, bar in enumerate(bars) if bar.observed_at.date() > signal_trade_day), None)
+    def is_entry_bar(bar: MarketBar) -> bool:
+        bar_day = bar.observed_at.date()
+        return bar_day >= signal_trade_day if same_day_intraday_entry else bar_day > signal_trade_day
+
+    entry_index = next((idx for idx, bar in enumerate(bars) if is_entry_bar(bar)), None)
     if entry_index is None:
         existing.status = "pending_entry_bar"
         _clear_validation_metrics(existing)
@@ -3474,7 +3843,6 @@ def _upsert_validation_snapshot(
 
     tradeability = _shortpick_entry_tradeability(candidate=candidate, bars=bars, entry_index=entry_index)
     entry_price = _shortpick_entry_execution_price(candidate=candidate, entry=bars[entry_index])
-    entry_price_source = _shortpick_entry_price_source(candidate)
     if tradeability["tradeability_status"] != SHORTPICK_OFFICIAL_TRADEABILITY_STATUS:
         entry = bars[entry_index]
         existing.status = str(tradeability["tradeability_status"])
@@ -3683,6 +4051,14 @@ def _shortpick_entry_tradeability(
         ):
             evidence["tradeability_status"] = "entry_unfillable_limit_up"
             evidence["reason"] = "Entry open appears to be near limit-up, so open-entry research cannot assume a fill."
+        elif (
+            entry_price_source == SHORTPICK_ENTRY_PRICE_SOURCE_INTRADAY
+            and entry_price is not None
+            and previous.close_price
+            and (entry_price / previous.close_price) - 1 >= limit_band * 0.95
+        ):
+            evidence["tradeability_status"] = "entry_unfillable_limit_up"
+            evidence["reason"] = "Intraday entry price appears to be near limit-up, so same-day paper tracking cannot assume a fill."
         elif day_return is not None and one_price and day_return >= limit_band * 0.95:
             evidence["tradeability_status"] = "entry_unfillable_limit_up"
             evidence["reason"] = "Entry day appears to be one-price limit-up, so official validation cannot assume a fill."
@@ -3697,15 +4073,24 @@ def _shortpick_entry_price_source(candidate: ShortpickCandidate) -> str:
     source = str(payload.get("paper_tracking_entry_price_source") or "")
     if source == SHORTPICK_ENTRY_PRICE_SOURCE_OPEN:
         return SHORTPICK_ENTRY_PRICE_SOURCE_OPEN
+    if source == SHORTPICK_ENTRY_PRICE_SOURCE_INTRADAY:
+        return SHORTPICK_ENTRY_PRICE_SOURCE_INTRADAY
     overlay = payload.get("market_factor_overlay") if isinstance(payload.get("market_factor_overlay"), dict) else {}
     if str(overlay.get("entry_price_source") or "") == SHORTPICK_ENTRY_PRICE_SOURCE_OPEN:
         return SHORTPICK_ENTRY_PRICE_SOURCE_OPEN
+    if str(overlay.get("entry_price_source") or "") == SHORTPICK_ENTRY_PRICE_SOURCE_INTRADAY:
+        return SHORTPICK_ENTRY_PRICE_SOURCE_INTRADAY
     return SHORTPICK_ENTRY_PRICE_SOURCE_CLOSE
 
 
 def _shortpick_entry_execution_price(*, candidate: ShortpickCandidate, entry: MarketBar) -> float | None:
-    if _shortpick_entry_price_source(candidate) == SHORTPICK_ENTRY_PRICE_SOURCE_OPEN:
+    source = _shortpick_entry_price_source(candidate)
+    if source == SHORTPICK_ENTRY_PRICE_SOURCE_OPEN:
         return entry.open_price
+    if source == SHORTPICK_ENTRY_PRICE_SOURCE_INTRADAY:
+        payload = candidate.candidate_payload if isinstance(candidate.candidate_payload, dict) else {}
+        captured = _coerce_float(payload.get("paper_tracking_entry_price"))
+        return captured if captured is not None and captured > 0 else entry.close_price
     return entry.close_price
 
 
