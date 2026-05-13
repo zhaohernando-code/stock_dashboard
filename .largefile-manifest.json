@@ -183,16 +183,16 @@
       "reviewed_at": "2026-05-11"
     },
     "tests/test_shortpick_lab.py": {
-      "lines": 1818,
-      "reason": "Short Pick Lab integration/regression tests spanning candidate parsing, paper controls, validation, and intraday same-day entry failure handling. 2026-05-12 review: growth covers fail-closed quote outages for the 14点同日买入版.",
+      "lines": 1898,
+      "reason": "Short Pick Lab integration/regression tests spanning candidate parsing, paper controls, validation, and intraday same-day entry failure handling. 2026-05-13 review: growth covers fail-closed quote outages and selection-time limit-up skip behavior for the 14点同日买入版.",
       "status": "accepted",
-      "reviewed_at": "2026-05-12"
+      "reviewed_at": "2026-05-13"
     },
     "src/ashare_evidence/shortpick_lab.py": {
-      "lines": 6928,
-      "reason": "Short Pick Lab experiment runner, market-factor overlays, paper-tracking validation, and intraday same-day entry control. 2026-05-13 review: growth covers the new full-universe hard-rule overlay/paper-tracking controls and preserves the current-bar skip counter under both old and explicit summary keys; split remains deferred because this runner still owns the live paper ledger contract.",
+      "lines": 6982,
+      "reason": "Short Pick Lab experiment runner, market-factor overlays, paper-tracking validation, and intraday same-day entry control. 2026-05-13 review: growth covers the new full-universe hard-rule overlay/paper-tracking controls, current-bar skip counter compatibility, selection-time limit-up skip behavior for the 14点同日买入版, and EastMoney push2delay quote fallback; split remains deferred because this runner still owns the live paper ledger contract.",
       "status": "accepted",
-      "reviewed_at": "2026-05-12"
+      "reviewed_at": "2026-05-13"
     }
   }
 }

@@ -517,7 +517,7 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
                 "entry_rule": (
                     "次一交易日开盘买入；开盘直接接近涨停时标记为不可假设成交"
                     if entry_price_source == "next_open"
-                    else "信号日盘中当前价买入；当前价接近涨停时标记为不可假设成交"
+                    else "信号日盘中当前价买入；当前价接近涨停时跳过候选，不假设可以买入"
                     if entry_price_source == "same_day_intraday_current"
                     else "次一交易日收盘买入"
                 ),

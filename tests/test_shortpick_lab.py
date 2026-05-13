@@ -1331,6 +1331,83 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(candidate_payload["paper_tracking_entry_date"], "2026-05-12")
         self.assertEqual(candidate_payload["paper_tracking_entry_price"], 12.25)
 
+    def test_intraday_same_day_control_skips_limit_up_entry_candidate(self) -> None:
+        trading_days = [date(2026, 4, 22) + timedelta(days=index) for index in range(20)]
+        self._seed_stock_bars(
+            "600001.SH",
+            "测试涨停",
+            [10.0 + index * 0.2 for index in range(20)],
+            dates=trading_days,
+            profile_payload={"industry": "测试行业"},
+        )
+        self._seed_stock_bars(
+            "600002.SH",
+            "测试可买",
+            [9.8 + index * 0.18 for index in range(20)],
+            dates=trading_days,
+            profile_payload={"industry": "测试行业"},
+        )
+        full_snapshot = {
+            "status": "ok",
+            "generated_at": "2026-05-12T05:55:00+00:00",
+            "source_kind": "test_spot",
+            "quotes": {
+                "600001.SH": {
+                    "symbol": "600001.SH",
+                    "name": "测试涨停",
+                    "price": 15.18,
+                    "open": 14.0,
+                    "high": 15.18,
+                    "low": 13.9,
+                    "previous_close": 13.80,
+                    "return_pct": 10.0,
+                    "amount": 600000000.0,
+                    "volume": 1000000.0,
+                    "turnover_rate": 1.0,
+                    "captured_at": "2026-05-12T05:55:00+00:00",
+                },
+                "600002.SH": {
+                    "symbol": "600002.SH",
+                    "name": "测试可买",
+                    "price": 13.50,
+                    "open": 13.10,
+                    "high": 13.60,
+                    "low": 13.00,
+                    "previous_close": 13.22,
+                    "return_pct": 2.12,
+                    "amount": 500000000.0,
+                    "volume": 1000000.0,
+                    "turnover_rate": 1.0,
+                    "captured_at": "2026-05-12T05:55:00+00:00",
+                },
+            },
+            "summary": {"status": "ok", "quote_count": 2},
+        }
+        limit_entry_snapshot = {
+            **full_snapshot,
+            "generated_at": "2026-05-12T05:56:00+00:00",
+            "quotes": {"600001.SH": full_snapshot["quotes"]["600001.SH"]},
+        }
+        tradable_entry_snapshot = {
+            **full_snapshot,
+            "generated_at": "2026-05-12T05:57:00+00:00",
+            "quotes": {"600002.SH": full_snapshot["quotes"]["600002.SH"]},
+        }
+
+        with patch(
+            "ashare_evidence.shortpick_lab._fetch_shortpick_intraday_spot_quotes",
+            side_effect=[full_snapshot, limit_entry_snapshot, tradable_entry_snapshot],
+        ):
+            with session_scope(self.database_url) as session:
+                payload = run_shortpick_intraday_same_day_control(session, run_date=date(2026, 5, 12), triggered_by="test")
+
+        overlay = payload["summary"]["market_factor_overlay"]
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(overlay["inserted_candidate_count"], 1)
+        self.assertEqual(overlay["excluded_entry_unfillable_count"], 1)
+        self.assertEqual(overlay["excluded_entry_unfillable"][0]["symbol"], "600001.SH")
+        self.assertEqual(payload["candidates"][0]["symbol"], "600002.SH")
+
     def test_intraday_same_day_control_fails_when_quote_source_unavailable(self) -> None:
         trading_days = [date(2026, 4, 14) + timedelta(days=index) for index in range(20)]
         self._seed_stock_bars(

@@ -342,7 +342,7 @@ def shortpick_market_factor_paper_control_contracts() -> dict[str, Any]:
                 "role": SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
                 "label": "14点同日买入版",
                 "selection_rule": "交易日下午用实时行情替代当日收盘价，沿用冻结低换手上升趋势选股规则；推荐生成后再读取一次当前价作为纸面买入价。",
-                "entry_rule": "信号日盘中当前价买入；若当前价接近涨停，则标记为不可假设成交。",
+                "entry_rule": "信号日盘中当前价买入；若当前价接近涨停，则跳过该候选，不假设可以买入。",
                 "target_publish_time": str(_SHORTPICK_INTRADAY_SAME_DAY_CONFIG["target_publish_time"]),
             },
         ],
@@ -1538,44 +1538,65 @@ def insert_shortpick_intraday_same_day_candidate(session: Session, run: Shortpic
         if float(item.get("return_20d") or 0.0) > SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_RETURN20_MIN
     ]
     inserted: list[dict[str, Any]] = []
+    excluded_entry_unfillable: list[dict[str, Any]] = []
     if frozen_gate_pass and low_turnover_ranked:
-        selected = {
-            **low_turnover_ranked[0],
-            "_pool_limit_override": SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_POOL_LIMIT,
-        }
-        entry_quote_snapshot = _fetch_shortpick_intraday_spot_quotes(symbols=[str(selected["symbol"])])
-        entry_quote = (entry_quote_snapshot.get("quotes") or {}).get(str(selected["symbol"])) or selected.get("_intraday_selection_quote")
-        if isinstance(entry_quote, dict):
-            selected["_intraday_entry_quote"] = entry_quote
-            selected["_intraday_entry_price"] = entry_quote.get("price") or selected.get("close")
-        else:
-            selected["_intraday_entry_quote"] = selected.get("_intraday_selection_quote")
-            selected["_intraday_entry_price"] = selected.get("close")
-        candidate = _upsert_shortpick_market_factor_candidate(
-            session,
-            run=run,
-            item=selected,
-            family=SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_FAMILY,
-            rank=1,
-            pool=low_turnover_pool,
-            regime=regime,
-            source_rank=1,
-            tracking_role=SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
-        )
-        inserted.append(
-            {
-                "candidate_id": candidate.id,
-                "symbol": candidate.symbol,
-                "name": candidate.name,
-                "baseline_family": SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_FAMILY,
-                "rank": 1,
-                "source_rank": 1,
-                "tracking_role": SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
-                "entry_price_source": SHORTPICK_ENTRY_PRICE_SOURCE_INTRADAY,
-                "entry_price": selected.get("_intraday_entry_price"),
-                "score": selected.get("_market_factor_score"),
+        for source_rank, ranked_item in enumerate(low_turnover_ranked, start=1):
+            selected = {
+                **ranked_item,
+                "_pool_limit_override": SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_POOL_LIMIT,
             }
-        )
+            entry_quote_snapshot = _fetch_shortpick_intraday_spot_quotes(symbols=[str(selected["symbol"])])
+            entry_quote = (entry_quote_snapshot.get("quotes") or {}).get(str(selected["symbol"])) or selected.get(
+                "_intraday_selection_quote"
+            )
+            if isinstance(entry_quote, dict):
+                selected["_intraday_entry_quote"] = entry_quote
+                selected["_intraday_entry_price"] = entry_quote.get("price") or selected.get("close")
+            else:
+                selected["_intraday_entry_quote"] = selected.get("_intraday_selection_quote")
+                selected["_intraday_entry_price"] = selected.get("close")
+            if _is_shortpick_intraday_limit_up_entry_risk(selected):
+                excluded_entry_unfillable.append(
+                    {
+                        "symbol": selected.get("symbol"),
+                        "name": selected.get("name"),
+                        "source_rank": source_rank,
+                        "entry_price": selected.get("_intraday_entry_price"),
+                        "previous_close": (
+                            selected.get("_intraday_entry_quote", {}).get("previous_close")
+                            if isinstance(selected.get("_intraday_entry_quote"), dict)
+                            else None
+                        ),
+                        "reason": "entry_unfillable_limit_up",
+                    }
+                )
+                continue
+            candidate = _upsert_shortpick_market_factor_candidate(
+                session,
+                run=run,
+                item=selected,
+                family=SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_FAMILY,
+                rank=1,
+                pool=low_turnover_pool,
+                regime=regime,
+                source_rank=source_rank,
+                tracking_role=SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
+            )
+            inserted.append(
+                {
+                    "candidate_id": candidate.id,
+                    "symbol": candidate.symbol,
+                    "name": candidate.name,
+                    "baseline_family": SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_FAMILY,
+                    "rank": 1,
+                    "source_rank": source_rank,
+                    "tracking_role": SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
+                    "entry_price_source": SHORTPICK_ENTRY_PRICE_SOURCE_INTRADAY,
+                    "entry_price": selected.get("_intraday_entry_price"),
+                    "score": selected.get("_market_factor_score"),
+                }
+            )
+            break
     result = {
         "status": "inserted" if inserted else "skipped",
         "reason": None if inserted else "frozen_gate_or_rank_not_triggered",
@@ -1592,6 +1613,8 @@ def insert_shortpick_intraday_same_day_candidate(session: Session, run: Shortpic
         "regime": regime,
         "market_data_sync": universe_sync,
         "quote_snapshot": quote_snapshot.get("summary", {}),
+        "excluded_entry_unfillable_count": len(excluded_entry_unfillable),
+        "excluded_entry_unfillable": excluded_entry_unfillable[:10],
         "candidates": inserted,
         **diagnostics,
     }
@@ -2236,8 +2259,44 @@ def insert_shortpick_market_factor_overlay_candidates(session: Session, run: Sho
     return result
 
 
+def _shortpick_limit_band_for_symbol(symbol: str, name: str | None = None) -> float:
+    normalized_name = str(name or "")
+    if "ST" in normalized_name.upper():
+        return LIMIT_UP_BANDS["st"]
+    if symbol.endswith(".BJ"):
+        return LIMIT_UP_BANDS["beijing"]
+    if symbol.startswith(("300", "301", "688", "689")):
+        return LIMIT_UP_BANDS["star_or_chinext"]
+    return LIMIT_UP_BANDS["default"]
+
+
 def _is_shortpick_no_limit_chase_risk(item: dict[str, Any]) -> bool:
     return float(item.get("return_1d") or 0.0) >= SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_RETURN1_MAX
+
+
+def _is_shortpick_intraday_limit_up_entry_risk(item: dict[str, Any]) -> bool:
+    quote = item.get("_intraday_entry_quote")
+    if not isinstance(quote, dict):
+        quote = item.get("_intraday_selection_quote")
+    if not isinstance(quote, dict):
+        quote = {}
+    entry_price = _coerce_float(quote.get("price")) or _coerce_float(item.get("_intraday_entry_price")) or _coerce_float(
+        item.get("close")
+    )
+    previous_close = _coerce_float(quote.get("previous_close"))
+    if previous_close is None:
+        return_pct = _coerce_float(quote.get("return_pct"))
+        if return_pct is None and entry_price is not None and item.get("return_1d") is not None:
+            item_return = _coerce_float(item.get("return_1d"))
+            if item_return is not None and item_return > -0.99:
+                previous_close = entry_price / (1.0 + item_return)
+    limit_band = _shortpick_limit_band_for_symbol(str(item.get("symbol") or ""), str(item.get("name") or ""))
+    if entry_price is not None and previous_close is not None and previous_close > 0:
+        return (entry_price / previous_close - 1.0) >= limit_band * 0.95
+    return_pct = _coerce_float(quote.get("return_pct"))
+    if return_pct is not None:
+        return (return_pct / 100.0) >= limit_band * 0.95
+    return False
 
 
 def _delete_existing_market_factor_overlay_candidates(session: Session, *, run_id: int) -> int:
@@ -2492,12 +2551,16 @@ def _fetch_shortpick_intraday_eastmoney_quotes(
         if not secids:
             continue
         query = urlencode({"fltt": "2", "invt": "2", "fields": fields, "secids": secids})
-        url = f"https://push2.eastmoney.com/api/qt/ulist.np/get?{query}"
-        try:
-            with urlopen(url, timeout=timeout_seconds, disable_proxies=True) as response:
-                payload = json.loads(response.read().decode("utf-8", errors="replace"))
-        except Exception as exc:
-            errors.append(str(exc)[:160])
+        payload: dict[str, Any] | None = None
+        for host in ("https://push2.eastmoney.com", "https://push2delay.eastmoney.com"):
+            url = f"{host}/api/qt/ulist.np/get?{query}"
+            try:
+                with urlopen(url, timeout=timeout_seconds, disable_proxies=True) as response:
+                    payload = json.loads(response.read().decode("utf-8", errors="replace"))
+                break
+            except Exception as exc:
+                errors.append(f"{host}: {str(exc)[:120]}")
+        if payload is None:
             continue
         for row in ((payload.get("data") or {}).get("diff") or []):
             symbol = _shortpick_symbol_from_spot_code(row.get("f12"))
@@ -4757,16 +4820,7 @@ def _shortpick_entry_execution_price(*, candidate: ShortpickCandidate, entry: Ma
 
 
 def _infer_shortpick_limit_band(candidate: ShortpickCandidate) -> float:
-    symbol = candidate.symbol.upper()
-    name = candidate.name.upper()
-    if "ST" in name:
-        return LIMIT_UP_BANDS["st"]
-    if symbol.endswith(".BJ"):
-        return LIMIT_UP_BANDS["beijing"]
-    ticker = symbol.split(".", 1)[0]
-    if ticker.startswith(("300", "301", "688")):
-        return LIMIT_UP_BANDS["star_or_chinext"]
-    return LIMIT_UP_BANDS["default"]
+    return _shortpick_limit_band_for_symbol(candidate.symbol, candidate.name)
 
 
 def _float_near(left: float | None, right: float | None, *, tolerance: float = 1e-6) -> bool:

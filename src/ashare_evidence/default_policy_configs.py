@@ -194,6 +194,7 @@ DEFAULT_POLICY_CONFIGS: dict[tuple[str, str], dict[str, Any]] = {
                 "strategy": "low_turnover_20d_uptrend_liquid_top120_intraday_same_day_entry",
                 "entry_price_source": "same_day_intraday_current",
                 "target_publish_time": "14:00",
+                "entry_unfillable_limit_up_policy": "skip_candidate",
             },
             "quiet_breakout_rank2": {
                 "family": "quiet_20d_5d_breakout_rank2",
