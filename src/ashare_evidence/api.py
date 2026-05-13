@@ -119,9 +119,7 @@ from ashare_evidence.shortpick_lab import (
     shortpick_market_factor_paper_control_contracts,
     validate_shortpick_run,
 )
-from ashare_evidence.shortpick_market_factor_study import build_shortpick_market_factor_study
 from ashare_evidence.shortpick_replay import (
-    build_shortpick_replay_feedback,
     get_shortpick_replay_run,
     get_shortpick_replay_sources,
     list_shortpick_replay_candidates,
@@ -147,18 +145,207 @@ from ashare_evidence.watchlist import (
 )
 
 LOGGER = logging.getLogger(__name__)
-SHORTPICK_PORTFOLIO_BACKTEST_ARTIFACT = Path("output/shortpick-portfolio-backtest-new-retail-mainboard-current-20260510.json")
+SHORTPICK_PORTFOLIO_BACKTEST_ARTIFACT = Path("output/shortpick-portfolio-backtest-new-retail-mainboard-current.json")
+LEGACY_SHORTPICK_PORTFOLIO_BACKTEST_ARTIFACT = Path("output/shortpick-portfolio-backtest-new-retail-mainboard-current-20260510.json")
+STAGED_SHORTPICK_PORTFOLIO_BACKTEST_ARTIFACT = Path("output/shortpick-staged-backtests/20260512T221426/full_window-next_close.json")
+SHORTPICK_MARKET_FACTOR_STUDY_ARTIFACT = Path("output/shortpick-market-factor-study-current.json")
+SHORTPICK_REPLAY_FEEDBACK_CACHE_ARTIFACT = Path("output/shortpick-replay-feedback-cache.json")
 
 
-def _shortpick_portfolio_artifact_path() -> Path:
-    candidates = [
-        SHORTPICK_PORTFOLIO_BACKTEST_ARTIFACT,
-        Path(__file__).resolve().parents[2] / SHORTPICK_PORTFOLIO_BACKTEST_ARTIFACT,
-    ]
+def _existing_project_artifact_path(relative_path: Path, *, env_var: str | None = None) -> Path:
+    candidates: list[Path] = []
+    if env_var:
+        configured = os.getenv(env_var)
+        if configured:
+            candidates.append(Path(configured).expanduser())
+    candidates.extend([
+        relative_path,
+        Path(__file__).resolve().parents[2] / relative_path,
+    ])
     for candidate in candidates:
         if candidate.exists():
             return candidate
     return candidates[-1]
+
+
+def _shortpick_portfolio_artifact_path() -> Path:
+    configured = os.getenv("ASHARE_SHORTPICK_PORTFOLIO_BACKTEST_ARTIFACT")
+    if configured:
+        configured_path = Path(configured).expanduser()
+        if configured_path.exists():
+            return configured_path
+        return configured_path
+    for relative_path in (
+        SHORTPICK_PORTFOLIO_BACKTEST_ARTIFACT,
+        STAGED_SHORTPICK_PORTFOLIO_BACKTEST_ARTIFACT,
+        LEGACY_SHORTPICK_PORTFOLIO_BACKTEST_ARTIFACT,
+    ):
+        candidate = _existing_project_artifact_path(relative_path)
+        if candidate.exists():
+            return candidate
+    return Path(__file__).resolve().parents[2] / SHORTPICK_PORTFOLIO_BACKTEST_ARTIFACT
+
+
+def _shortpick_market_factor_study_artifact_path() -> Path:
+    return _existing_project_artifact_path(SHORTPICK_MARKET_FACTOR_STUDY_ARTIFACT, env_var="ASHARE_SHORTPICK_MARKET_FACTOR_STUDY_ARTIFACT")
+
+
+def _shortpick_replay_feedback_cache_artifact_path() -> Path:
+    return _existing_project_artifact_path(SHORTPICK_REPLAY_FEEDBACK_CACHE_ARTIFACT, env_var="ASHARE_SHORTPICK_REPLAY_FEEDBACK_CACHE_ARTIFACT")
+
+
+def _read_json_artifact(path: Path, *, label: str) -> dict[str, object]:
+    if not path.exists():
+        raise LookupError(f"{label} artifact is missing: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{label} artifact is not valid JSON: {path}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"{label} artifact root must be a JSON object: {path}")
+    return payload
+
+
+def _load_shortpick_market_factor_study_artifact(benchmark_mode: str) -> dict[str, object]:
+    artifact_path = _shortpick_market_factor_study_artifact_path()
+    payload = (
+        _read_json_artifact(artifact_path, label="shortpick market-factor study")
+        if artifact_path.exists()
+        else _derive_market_factor_study_from_portfolio_artifact()
+    )
+    config = payload.get("config") if isinstance(payload.get("config"), dict) else {}
+    artifact_benchmark_mode = str(config.get("benchmark_mode") or "universe_equal_weight")
+    if artifact_benchmark_mode != benchmark_mode:
+        raise LookupError(
+            "shortpick market-factor study artifact benchmark mismatch: "
+            f"requested={benchmark_mode}, artifact={artifact_benchmark_mode}"
+        )
+    enriched = _attach_shortpick_frozen_strategy_evidence(dict(payload))
+    enriched.setdefault("artifact_path", str(artifact_path))
+    return enriched
+
+
+def _derive_market_factor_study_from_portfolio_artifact() -> dict[str, object]:
+    artifact_path = _shortpick_portfolio_artifact_path()
+    artifact = _read_json_artifact(artifact_path, label="shortpick portfolio backtest")
+    daily_results = ((artifact.get("results") or {}).get("daily_rolling_5x10k") or {})
+    if not isinstance(daily_results, dict) or not daily_results:
+        raise LookupError(f"shortpick portfolio artifact has no daily_rolling_5x10k stats: {artifact_path}")
+    data_scope = artifact.get("data_scope") if isinstance(artifact.get("data_scope"), dict) else {}
+    config = artifact.get("config") if isinstance(artifact.get("config"), dict) else {}
+    strategies = set(daily_results)
+    alias_sources = {
+        "ret10_turnover_cooldown_regime_gate": "ret10_turnover_cooldown_market_positive_cooldown",
+        "ret10_amount_turnover_cooldown": "ret10_amount_turnover_strong_breadth_rank2_stop12",
+    }
+    strategies.update(alias_sources)
+
+    def summary_for(strategy: str) -> dict[str, object]:
+        source_strategy = alias_sources.get(strategy, strategy)
+        source = daily_results.get(source_strategy) if isinstance(daily_results.get(source_strategy), dict) else {}
+        summary = source.get("summary") if isinstance(source.get("summary"), dict) else {}
+        trade_count = int(summary.get("trade_count") or 0)
+        excess = summary.get("excess_total_return")
+        total = summary.get("total_return")
+        max_drawdown = summary.get("max_drawdown")
+        block = {
+            "completed_count": trade_count,
+            "portfolio_count": trade_count,
+            "completed_member_count": trade_count,
+            "mean_net_excess_return": excess,
+            "trimmed_mean_net_excess_return": excess,
+            "positive_net_excess_rate": summary.get("positive_trade_rate"),
+            "mean_stock_return": total,
+            "max_additive_drawdown": max_drawdown,
+        }
+        return {
+            "selected_symbol_day_count": trade_count,
+            "completed_count": trade_count,
+            "mean_net_excess_return": excess,
+            "trimmed_mean_net_excess_return": excess,
+            "positive_net_excess_rate": summary.get("positive_trade_rate"),
+            "by_horizon": {"5": block},
+            "source": "portfolio_backtest_artifact",
+            "source_strategy": source_strategy,
+        }
+
+    def portfolio_for(strategy: str) -> dict[str, object]:
+        source_strategy = alias_sources.get(strategy, strategy)
+        source = daily_results.get(source_strategy) if isinstance(daily_results.get(source_strategy), dict) else {}
+        summary = source.get("summary") if isinstance(source.get("summary"), dict) else {}
+        trade_count = int(summary.get("trade_count") or 0)
+        excess = summary.get("excess_total_return")
+        total = summary.get("total_return")
+        max_drawdown = summary.get("max_drawdown")
+        block = {
+            "portfolio_count": trade_count,
+            "completed_member_count": trade_count,
+            "mean_net_excess_return": excess,
+            "trimmed_mean_net_excess_return": excess,
+            "positive_net_excess_rate": summary.get("positive_trade_rate"),
+        }
+        return {
+            "portfolio_count": trade_count,
+            "signal_day_count": data_scope.get("signal_day_count"),
+            "completed_member_count": trade_count,
+            "average_member_count": 1,
+            "mean_net_excess_return": excess,
+            "trimmed_mean_net_excess_return": excess,
+            "positive_net_excess_rate": summary.get("positive_trade_rate"),
+            "volatility": summary.get("volatility"),
+            "worst_portfolio_return": summary.get("worst_trade_return"),
+            "best_portfolio_return": summary.get("best_trade_return"),
+            "max_additive_drawdown": max_drawdown,
+            "by_horizon": {"5": block},
+            "source": "portfolio_backtest_artifact",
+            "source_strategy": source_strategy,
+            "total_return": total,
+            "excess_total_return": excess,
+            "max_drawdown": max_drawdown,
+            "trade_count": trade_count,
+        }
+
+    period_summary = {
+        period: {strategy: summary_for(strategy) for strategy in sorted(strategies)}
+        for period in ("train", "holdout", "replay_window", "all")
+    }
+    portfolio_summary = {
+        period: {strategy: portfolio_for(strategy) for strategy in sorted(strategies)}
+        for period in ("train", "holdout", "replay_window", "all")
+    }
+    return {
+        "experiment": "shortpick_market_factor_study_precomputed",
+        "validation_mode": "portfolio_artifact_precomputed",
+        "config": {
+            **config,
+            "benchmark_mode": str(config.get("benchmark_mode") or "universe_equal_weight"),
+            "source_artifact_path": str(artifact_path),
+        },
+        "data_scope": data_scope,
+        "period_summary": period_summary,
+        "paired_vs_base": {period: {} for period in ("train", "holdout", "replay_window", "all")},
+        "walk_forward_selection": {},
+        "regime_gate": {"allowed_signal_day_count": 0, "source": "portfolio_backtest_artifact"},
+        "monthly_summary": {},
+        "portfolio_summary": portfolio_summary,
+        "regime_summary": {},
+    }
+
+
+def _load_shortpick_replay_feedback_from_cache(run_id: int | None) -> dict[str, object]:
+    artifact_path = _shortpick_replay_feedback_cache_artifact_path()
+    payload = _read_json_artifact(artifact_path, label="shortpick replay feedback cache")
+    if run_id is None:
+        feedback = payload.get("aggregate")
+    else:
+        runs = payload.get("runs") if isinstance(payload.get("runs"), dict) else {}
+        feedback = runs.get(str(run_id))
+    if not isinstance(feedback, dict):
+        raise LookupError(
+            "shortpick replay feedback cache is missing "
+            f"{'aggregate feedback' if run_id is None else f'run {run_id} feedback'}: {artifact_path}"
+        )
+    return feedback
 
 
 def _attach_shortpick_frozen_strategy_evidence(payload: dict[str, object]) -> dict[str, object]:
@@ -953,23 +1140,13 @@ def create_app(
                 cached = market_factor_study_cache.get(benchmark_mode)
                 if cached and now - cached[0] < market_factor_study_ttl_seconds:
                     return cached[1]
-                result = build_shortpick_market_factor_study(
-                    session,
-                    start_date=date(2023, 5, 25),
-                    end_date=date(2026, 4, 30),
-                    train_end=date(2026, 2, 27),
-                    holdout_start=date(2026, 3, 1),
-                    pool_limit=40,
-                    rank_limit=6,
-                    cost_bps=20.0,
-                    benchmark_mode=benchmark_mode,
-                    walk_forward_lookback_days=120,
-                )
-                enriched = _attach_shortpick_frozen_strategy_evidence(result)
+                enriched = _load_shortpick_market_factor_study_artifact(benchmark_mode)
                 market_factor_study_cache[benchmark_mode] = (time.monotonic(), enriched)
                 return enriched
+        except LookupError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @app.get("/shortpick-lab/paper-tracking")
     def shortpick_paper_tracking(
@@ -1041,14 +1218,24 @@ def create_app(
             get_shortpick_replay_run(session, run_id, include_raw=False)
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        return build_shortpick_replay_feedback(session, run_id=run_id)
+        try:
+            return _load_shortpick_replay_feedback_from_cache(run_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @app.get("/shortpick-lab/replay-feedback")
     def shortpick_replay_aggregate_feedback(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        return build_shortpick_replay_feedback(session, run_id=None)
+        try:
+            return _load_shortpick_replay_feedback_from_cache(run_id=None)
+        except LookupError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @app.post("/shortpick-lab/runs", response_model=ShortpickRunView)
     def shortpick_run_create(

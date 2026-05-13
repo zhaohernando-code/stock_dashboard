@@ -2921,6 +2921,7 @@ def _sync_shortpick_tushare_market_bars(
         "trade_day_start": trade_days[0].isoformat() if trade_days else None,
         "trade_day_end": trade_days[-1].isoformat() if trade_days else None,
         "skipped_current_day_count": skipped_days,
+        "skipped_current_count": skipped_days,
         "refreshed_day_count": len(refreshed_days),
         "refreshed_days": refreshed_days[-10:],
         "upserted_bar_count": total_upserted,

@@ -21,14 +21,14 @@
       "reviewed_at": "2026-04-30"
     },
     "src/ashare_evidence/api.py": {
-      "lines": 1525,
-      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, improvement-suggestion, shortpick lab, shortpick replay, and market-factor study routes. The shortpick market-factor endpoint attaches frozen paper-strategy evidence from the long-sample artifact while preserving cached read-only behavior, and the paper-tracking ledger endpoint projects frozen strategy status, LLM paper-control signals, same-pool market-factor controls, execution-timing controls, intraday same-day entry controls, and four exit-track monitoring rules from existing shortpick runs/candidates without triggering market refresh or model work; router extraction remains possible but would add broad touch points across the current schema surface. 2026-05-12 review: growth comes from projecting `same_day_intraday_current` as a distinct paper-tracking entry rule so the new 14点同日买入版 is not mislabelled as next-close or next-open.",
+      "lines": 1712,
+      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, improvement-suggestion, shortpick lab, shortpick replay, and market-factor study routes. The shortpick market-factor endpoint attaches frozen paper-strategy evidence from the long-sample artifact while preserving cached read-only behavior, and the paper-tracking ledger endpoint projects frozen strategy status, LLM paper-control signals, same-pool market-factor controls, execution-timing controls, intraday same-day entry controls, and four exit-track monitoring rules from existing shortpick runs/candidates without triggering market refresh or model work; router extraction remains possible but would add broad touch points across the current schema surface. 2026-05-13 review: growth moves historical replay feedback and market-factor study display onto materialized artifact reads so the served page no longer computes aggregate statistics on request.",
       "status": "accepted",
       "reviewed_at": "2026-05-12"
     },
     "src/ashare_evidence/cli.py": {
-      "lines": 1060,
-      "reason": "CLI command group: data refresh, cache management, admin operations, event/improvement audit triggers, database write preflight (db.py), benchmark index bar sync, and shortpick replay/distillation/rejector/hard-veto/factor-rank/market-factor-study/portfolio-backtest experiment commands, including benchmark-mode selection for market factor studies and long-sample shortpick capital-deployment backtests. 2026-05-13 review: growth adds explicit shortpick `--entry-price-source` research modes for next-close, next-open, and same-close-proxy staged backtests; command extraction remains deferred until the shortpick experiment surface stabilizes.",
+      "lines": 1090,
+      "reason": "CLI command group: data refresh, cache management, admin operations, event/improvement audit triggers, database write preflight (db.py), benchmark index bar sync, and shortpick replay/distillation/rejector/hard-veto/factor-rank/market-factor-study/portfolio-backtest experiment commands, including benchmark-mode selection for market factor studies and long-sample shortpick capital-deployment backtests. 2026-05-13 review: growth adds explicit shortpick `--entry-price-source` research modes plus `shortpick-replay-feedback-cache` materialization for the served historical replay UI; command extraction remains deferred until the shortpick experiment surface stabilizes.",
       "status": "accepted",
       "reviewed_at": "2026-05-13"
     },
@@ -159,8 +159,8 @@
       "status": "accepted"
     },
     "src/ashare_evidence/shortpick_replay.py": {
-      "lines": 4604,
-      "reason": "Shortpick historical replay v1 keeps sealed packet construction, sealed-packet-only LLM execution, failed-round handling without production proxy fallback, rejected-source/source-id leakage preservation, market-cap fallback bucketing, baseline controls, LLM self/momentum-pool distillation, LLM reject-only momentum gating, high-precision hard-veto controls, deterministic sealed-market feature rerankers including 10d momentum + turnover and single-day-chase cooldown, random reject controls, leakage audit, compact replay run listing, per-run and aggregate validation statistics, scalar replay feedback aggregation that avoids deserializing large JSON payloads on page load, replay API helpers, post-audit contract normalization, and runtime-safe replay transaction boundaries in one first-version workflow. Diagnostic proxy remains explicit test mode only; split into packet/audit/baseline/distillation/rejector/ranker modules after the contract stabilizes. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, and paper-tracking/backtest comparison surfaces; split remains deferred until the experiment contract stops changing.",
+      "lines": 4706,
+      "reason": "Shortpick historical replay v1 keeps sealed packet construction, sealed-packet-only LLM execution, failed-round handling without production proxy fallback, rejected-source/source-id leakage preservation, market-cap fallback bucketing, baseline controls, LLM self/momentum-pool distillation, LLM reject-only momentum gating, high-precision hard-veto controls, deterministic sealed-market feature rerankers including 10d momentum + turnover and single-day-chase cooldown, random reject controls, leakage audit, compact replay run listing, per-run and aggregate validation statistics, scalar replay feedback aggregation that avoids deserializing large JSON payloads on page load, replay API helpers, post-audit contract normalization, and runtime-safe replay transaction boundaries in one first-version workflow. Diagnostic proxy remains explicit test mode only; split into packet/audit/baseline/distillation/rejector/ranker modules after the contract stabilizes. 2026-05-13 review: growth adds replay feedback cache materialization and a lightweight run-list serializer so browser history pages read precomputed statistics instead of recomputing per request.",
       "reviewed_at": "2026-05-11",
       "status": "planned_refactor"
     },
@@ -189,8 +189,8 @@
       "reviewed_at": "2026-05-12"
     },
     "src/ashare_evidence/shortpick_lab.py": {
-      "lines": 6384,
-      "reason": "Short Pick Lab experiment runner, market-factor overlays, paper-tracking validation, and intraday same-day entry control. 2026-05-12 review: growth adds direct EastMoney quote fallback and fail-closed handling so the 14点同日买入版 cannot mark a quote outage as a completed zero-candidate run.",
+      "lines": 6928,
+      "reason": "Short Pick Lab experiment runner, market-factor overlays, paper-tracking validation, and intraday same-day entry control. 2026-05-13 review: growth covers the new full-universe hard-rule overlay/paper-tracking controls and preserves the current-bar skip counter under both old and explicit summary keys; split remains deferred because this runner still owns the live paper ledger contract.",
       "status": "accepted",
       "reviewed_at": "2026-05-12"
     }

@@ -8,6 +8,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from pathlib import Path
 from time import sleep
 from typing import Any
 
@@ -44,12 +45,12 @@ from ashare_evidence.shortpick_lab import (
     extract_shortpick_json,
     get_shortpick_run,
     list_shortpick_candidates,
-    list_shortpick_runs,
 )
 
 SHORTPICK_HISTORICAL_REPLAY_MODE = "historical_replay"
 SHORTPICK_HISTORICAL_REPLAY_PROMPT_VERSION = "shortpick_historical_replay_v1"
 SHORTPICK_REPLAY_EXPERIMENT_MODE = "historical_replay"
+SHORTPICK_REPLAY_FEEDBACK_CACHE_VERSION = "shortpick-replay-feedback-cache-v1"
 SHORTPICK_REPLAY_SOURCE_LOOKBACK_DAYS = 21
 SHORTPICK_REPLAY_LLM_MODE_ENV = "ASHARE_SHORTPICK_REPLAY_LLM_MODE"
 SHORTPICK_REPLAY_BASELINE_FAMILIES = (
@@ -956,24 +957,56 @@ def list_shortpick_replay_runs(
     date_to: date | None = None,
     include_raw: bool = False,
 ) -> dict[str, Any]:
-    payload = list_shortpick_runs(
-        session,
-        status=status,
-        date_from=date_from,
-        date_to=date_to,
-        limit=limit,
-        offset=offset,
-        information_mode=SHORTPICK_HISTORICAL_REPLAY_MODE,
-        include_raw=include_raw,
-        include_candidates=False,
-        compact_summary=True,
+    normalized_limit = max(1, min(int(limit), 100))
+    normalized_offset = max(0, int(offset))
+    query = (
+        select(ShortpickExperimentRun)
+        .where(ShortpickExperimentRun.information_mode == SHORTPICK_HISTORICAL_REPLAY_MODE)
+        .order_by(ShortpickExperimentRun.run_date.desc(), ShortpickExperimentRun.id.desc())
     )
+    if status:
+        query = query.where(ShortpickExperimentRun.status == status)
+    if date_from is not None:
+        query = query.where(ShortpickExperimentRun.run_date >= date_from)
+    if date_to is not None:
+        query = query.where(ShortpickExperimentRun.run_date <= date_to)
+    runs = [run for run in session.scalars(query).all() if not _is_diagnostic_replay_run(run)]
     items = [
-        item
-        for item in payload["items"]
-        if item.get("information_mode") == SHORTPICK_HISTORICAL_REPLAY_MODE and not _is_diagnostic_replay_payload(item)
+        _serialize_replay_run_list_item(run, include_raw=include_raw)
+        for run in runs[normalized_offset:normalized_offset + normalized_limit]
     ]
-    return {**payload, "items": items, "total": len(items)}
+    return {"generated_at": utcnow(), "items": items, "total": len(runs), "limit": normalized_limit, "offset": normalized_offset}
+
+
+def _serialize_replay_run_list_item(run: ShortpickExperimentRun, *, include_raw: bool) -> dict[str, Any]:
+    summary = dict(run.summary_payload or {})
+    source_packet = summary.get("source_packet")
+    if isinstance(source_packet, dict):
+        compact_packet = dict(source_packet)
+        compact_packet.pop("official_sources", None)
+        compact_packet.pop("diagnostic_sources", None)
+        compact_packet.pop("rejected_sources", None)
+        summary["source_packet"] = compact_packet
+    summary.pop("replay_feedback", None)
+    summary.setdefault("operational_status", run.status)
+    return {
+        "id": run.id,
+        "run_key": run.run_key,
+        "run_date": run.run_date,
+        "prompt_version": run.prompt_version,
+        "information_mode": run.information_mode,
+        "status": run.status,
+        "trigger_source": run.trigger_source,
+        "triggered_by": run.triggered_by,
+        "started_at": run.started_at,
+        "completed_at": run.completed_at,
+        "failed_at": run.failed_at,
+        "model_config": dict(run.model_config or {}),
+        "summary": summary,
+        "rounds": [],
+        "consensus": None,
+        "candidates": [],
+    }
 
 
 def get_shortpick_replay_run(session: Session, run_id: int, *, include_raw: bool = False) -> dict[str, Any]:
@@ -3900,6 +3933,75 @@ def _random_rejection_pick_payload(
             "rejection_design": "random_reject_then_mechanical_momentum_rank",
         },
     }
+
+
+def refresh_shortpick_replay_feedback_cache(
+    session: Session,
+    *,
+    output_path: str | Path,
+    validate_missing: bool = True,
+) -> dict[str, Any]:
+    """Materialize replay feedback so the live UI never recomputes it on page load."""
+    runs = session.scalars(
+        select(ShortpickExperimentRun)
+        .where(ShortpickExperimentRun.information_mode == SHORTPICK_HISTORICAL_REPLAY_MODE)
+        .order_by(ShortpickExperimentRun.run_date.asc(), ShortpickExperimentRun.id.asc())
+    ).all()
+    run_feedback: dict[str, dict[str, Any]] = {}
+    validated_run_count = 0
+    updated_summary_count = 0
+    skipped_run_count = 0
+    for run in runs:
+        if _is_diagnostic_replay_run(run):
+            skipped_run_count += 1
+            continue
+        parsed_candidate_count = session.scalar(
+            select(func.count())
+            .select_from(ShortpickCandidate)
+            .where(
+                ShortpickCandidate.run_id == run.id,
+                ShortpickCandidate.parse_status == "parsed",
+                ShortpickCandidate.symbol != "PARSE_FAILED",
+            )
+        )
+        if int(parsed_candidate_count or 0) == 0:
+            skipped_run_count += 1
+            continue
+        validation_count = session.scalar(
+            select(func.count())
+            .select_from(ShortpickValidationSnapshot)
+            .join(ShortpickCandidate, ShortpickValidationSnapshot.candidate_id == ShortpickCandidate.id)
+            .where(ShortpickCandidate.run_id == run.id)
+        )
+        if validate_missing and int(validation_count or 0) == 0:
+            validate_historical_replay_run(session, int(run.id), horizons=SHORTPICK_DEFAULT_HORIZONS)
+            validated_run_count += 1
+        summary = dict(run.summary_payload or {})
+        feedback = summary.get("replay_feedback")
+        if not isinstance(feedback, dict):
+            feedback = build_shortpick_replay_feedback(session, run_id=int(run.id))
+            summary["replay_feedback"] = _json_safe(feedback)
+            run.summary_payload = summary
+            updated_summary_count += 1
+        run_feedback[str(run.id)] = _json_safe(feedback)
+    aggregate_feedback = _json_safe(build_shortpick_replay_feedback(session, run_id=None))
+    payload = {
+        "schema_version": SHORTPICK_REPLAY_FEEDBACK_CACHE_VERSION,
+        "generated_at": utcnow().isoformat(),
+        "aggregate": aggregate_feedback,
+        "runs": run_feedback,
+        "metadata": {
+            "run_count": len(run_feedback),
+            "validated_missing_run_count": validated_run_count,
+            "updated_summary_count": updated_summary_count,
+            "skipped_run_count": skipped_run_count,
+            "aggregate_validation_count": aggregate_feedback.get("overall", {}).get("validation_count"),
+        },
+    }
+    target = Path(output_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
+    return payload
 
 
 def _replay_validation_rows(session: Session, *, run_id: int | None) -> list[dict[str, Any]]:

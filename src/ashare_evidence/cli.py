@@ -63,6 +63,7 @@ from ashare_evidence.shortpick_portfolio_backtest import (
     write_shortpick_portfolio_backtest,
 )
 from ashare_evidence.shortpick_replay import (
+    refresh_shortpick_replay_feedback_cache,
     run_shortpick_historical_replay,
     run_shortpick_historical_replay_concurrent,
     run_shortpick_replay_distillation,
@@ -544,6 +545,14 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_replay_factor_rank.add_argument("--momentum-pool-limit", type=int, default=40)
     shortpick_replay_factor_rank.add_argument("--rank-limit", type=int, default=6)
 
+    shortpick_replay_feedback_cache = subparsers.add_parser(
+        "shortpick-replay-feedback-cache",
+        help="Materialize historical replay feedback cache for the served Short Pick Lab page.",
+    )
+    shortpick_replay_feedback_cache.add_argument("--database-url", default=None)
+    shortpick_replay_feedback_cache.add_argument("--output-path", default="output/shortpick-replay-feedback-cache.json")
+    shortpick_replay_feedback_cache.add_argument("--skip-validate-missing", action="store_true")
+
     shortpick_market_factor_study = subparsers.add_parser(
         "shortpick-market-factor-study",
         help="Run a market-only shortpick factor ranking study across a broader daily-bar history.",
@@ -573,6 +582,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="next_close",
     )
     shortpick_market_factor_study.add_argument("--walk-forward-lookback-days", type=int, default=120)
+    shortpick_market_factor_study.add_argument("--output-path", default=None)
 
     shortpick_portfolio_backtest = subparsers.add_parser(
         "shortpick-portfolio-backtest",
@@ -938,6 +948,20 @@ def main(argv: list[str] | None = None) -> int:
         _print_json(payload)
         return 0
 
+    if args.command == "shortpick-replay-feedback-cache":
+        with session_scope(args.database_url) as session:
+            payload = refresh_shortpick_replay_feedback_cache(
+                session,
+                output_path=args.output_path,
+                validate_missing=not args.skip_validate_missing,
+            )
+        _print_json({
+            "status": "ok",
+            "output_path": args.output_path,
+            "metadata": payload.get("metadata", {}),
+        })
+        return 0
+
     if args.command == "shortpick-market-factor-study":
         with session_scope(args.database_url) as session:
             payload = build_shortpick_market_factor_study(
@@ -955,6 +979,12 @@ def main(argv: list[str] | None = None) -> int:
                 walk_forward_lookback_days=args.walk_forward_lookback_days,
                 account_profile=args.account_profile,
             )
+        if args.output_path:
+            output_path = Path(args.output_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
+            _print_json({"status": "ok", "output_path": str(output_path)})
+            return 0
         _print_json(payload)
         return 0
 
