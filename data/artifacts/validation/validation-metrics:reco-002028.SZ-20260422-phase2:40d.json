@@ -23,37 +23,37 @@
   "coverage_ratio": 1.0,
   "feature_drift_summary": {
     "coverage_status": "full_baseline",
-    "evaluation_observation_count": 91,
-    "feature_snapshot_count": 691,
+    "evaluation_observation_count": 93,
+    "feature_snapshot_count": 693,
     "horizon": 40,
     "status": "stable_fixture_snapshot"
   },
   "horizon": 40,
-  "ic_mean": 0.466211,
+  "ic_mean": 0.450665,
   "industry_slice_metrics": [],
   "manifest_id": "rolling-validation:reco-002028.SZ-20260422-phase2",
   "market_regime_metrics": [
     {
       "coverage_status": "full_baseline",
       "market_regime_tag": "phase5_active_watchlist_research_candidate",
-      "net_excess_return": 0.139256,
-      "rank_ic_mean": 0.004133
+      "net_excess_return": 0.13927,
+      "rank_ic_mean": 0.001694
     }
   ],
-  "net_excess_return": 0.139256,
+  "net_excess_return": 0.13927,
   "period_metrics": [
     {
       "horizon": 40,
       "mean_excess_return": 0.139649,
       "mean_return": 0.139649,
       "sample_count": 81,
-      "walk_forward_window_count": 32
+      "walk_forward_window_count": 34
     }
   ],
   "positive_excess_rate": 0.654321,
   "rank_ic_ir": 9.0,
-  "rank_ic_mean": 0.004133,
-  "rank_ic_std": 0.000459,
+  "rank_ic_mean": 0.001694,
+  "rank_ic_std": 0.000188,
   "sample_count": 81,
   "status": "research_candidate",
   "status_note": "已有滚动验证产物，当前仍处于观察阶段，尚未完成正式验证。",
@@ -66,11 +66,11 @@
     },
     {
       "positive_excess_rate": 0.317073,
-      "rank_ic_mean": -0.113066,
+      "rank_ic_mean": -0.130662,
       "sample_count": 41,
       "slice_label": "late"
     }
   ],
-  "turnover": 0.112261,
-  "turnover_mean": 0.112261
+  "turnover": 0.108333,
+  "turnover_mean": 0.108333
 }

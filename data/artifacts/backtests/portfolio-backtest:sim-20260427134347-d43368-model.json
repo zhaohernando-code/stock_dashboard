@@ -1,6 +1,6 @@
 {
-  "annualized_excess_return": 0.0283,
-  "annualized_return": 0.0638,
+  "annualized_excess_return": -0.0028,
+  "annualized_return": 0.0623,
   "artifact_id": "portfolio-backtest:sim-20260427134347-d43368-model",
   "artifact_type": "portfolio_backtest",
   "benchmark": {
@@ -17,7 +17,7 @@
   },
   "drawdown_series_ref": "phase2-drawdown:sim-20260427134347-d43368-model",
   "drawdown_stats": {
-    "current_drawdown": 0.0,
+    "current_drawdown": -0.0027,
     "max_drawdown": -0.0157
   },
   "equity_curve": [
@@ -6188,12 +6188,28 @@
       "nav": 212768.04,
       "observed_at": "2026-05-11T15:00:00",
       "trade_date": "2026-05-11"
+    },
+    {
+      "benchmark_nav": 209481.68,
+      "drawdown": 0.0,
+      "exposure": 0.2483,
+      "nav": 213032.04,
+      "observed_at": "2026-05-12T15:00:00",
+      "trade_date": "2026-05-12"
+    },
+    {
+      "benchmark_nav": 213008.38,
+      "drawdown": -0.0027,
+      "exposure": 0.2463,
+      "nav": 212456.04,
+      "observed_at": "2026-05-13T15:00:00",
+      "trade_date": "2026-05-13"
     }
   ],
   "execution_assumptions": "daily_close_marking + paper_fills + T+1 + price_limit_checks",
   "exposure_summary": {
     "active_position_count": 1,
-    "invested_ratio": 0.2474
+    "invested_ratio": 0.2463
   },
   "manifest_id": "rolling-validation:phase2-portfolio-backtests",
   "max_drawdown": -0.0157,
@@ -6207,13 +6223,13 @@
     "active_position_count": 1,
     "rule_pass_rate": 1.0
   },
-  "sharpe_like_ratio": 1.802548,
+  "sharpe_like_ratio": -0.178344,
   "status": "research_candidate",
   "status_note": "组合回测已切到真实 daily 价格与 proxy benchmark；模型轨道的 simulation baseline 已升级为 constrained TopK，但仍处于 research candidate。",
   "strategy_definition": "模型按目标权重自动调仓、独立资金池运行，适合验证组合纪律与执行损耗。",
   "stress_period_summary": [
     {
-      "excess_return": 0.0283,
+      "excess_return": -0.0028,
       "max_drawdown": -0.0157,
       "period": "phase2_fixture_window"
     }
@@ -6223,6 +6239,6 @@
   "turnover_stats": {
     "turnover": 0.083333
   },
-  "win_rate": 0.996109,
+  "win_rate": 0.994825,
   "win_rate_definition": "positive_excess_nav_point_ratio_against_phase2_proxy"
 }

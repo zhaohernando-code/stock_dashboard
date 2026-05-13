@@ -3,57 +3,57 @@
   "bucket_returns": [
     {
       "bucket": "bottom",
-      "mean_excess_return": 0.057376,
+      "mean_excess_return": 0.106762,
       "sample_count": 26
     },
     {
       "bucket": "middle",
-      "mean_excess_return": 0.178137,
+      "mean_excess_return": 0.111138,
       "sample_count": 26
     },
     {
       "bucket": "top",
-      "mean_excess_return": -0.099542,
+      "mean_excess_return": -0.082582,
       "sample_count": 27
     }
   ],
-  "bucket_spread_mean": -0.156918,
+  "bucket_spread_mean": -0.189344,
   "bucket_spread_std": 0.244505,
   "coverage": 1.0,
   "coverage_ratio": 1.0,
   "feature_drift_summary": {
     "coverage_status": "full_baseline",
-    "evaluation_observation_count": 91,
-    "feature_snapshot_count": 691,
+    "evaluation_observation_count": 93,
+    "feature_snapshot_count": 693,
     "horizon": 40,
     "status": "stable_fixture_snapshot"
   },
   "horizon": 40,
-  "ic_mean": 0.090905,
+  "ic_mean": -0.098263,
   "industry_slice_metrics": [],
   "manifest_id": "rolling-validation:reco-002270.SZ-20260420-phase2",
   "market_regime_metrics": [
     {
       "coverage_status": "full_baseline",
       "market_regime_tag": "phase5_active_watchlist_research_candidate",
-      "net_excess_return": 0.043368,
-      "rank_ic_mean": -0.241602
+      "net_excess_return": 0.043374,
+      "rank_ic_mean": -0.336027
     }
   ],
-  "net_excess_return": 0.043368,
+  "net_excess_return": 0.043374,
   "period_metrics": [
     {
       "horizon": 40,
       "mean_excess_return": 0.04349,
       "mean_return": 0.04349,
       "sample_count": 79,
-      "walk_forward_window_count": 32
+      "walk_forward_window_count": 34
     }
   ],
   "positive_excess_rate": 0.417722,
   "rank_ic_ir": -8.888194,
-  "rank_ic_mean": -0.241602,
-  "rank_ic_std": 0.027182,
+  "rank_ic_mean": -0.336027,
+  "rank_ic_std": 0.037806,
   "sample_count": 79,
   "status": "research_candidate",
   "status_note": "已有滚动验证产物，当前仍处于观察阶段，尚未完成正式验证。",
@@ -66,11 +66,11 @@
     },
     {
       "positive_excess_rate": 0.025,
-      "rank_ic_mean": -0.396811,
+      "rank_ic_mean": -0.40469,
       "sample_count": 40,
       "slice_label": "late"
     }
   ],
-  "turnover": 0.034863,
-  "turnover_mean": 0.034863
+  "turnover": 0.032971,
+  "turnover_mean": 0.032971
 }

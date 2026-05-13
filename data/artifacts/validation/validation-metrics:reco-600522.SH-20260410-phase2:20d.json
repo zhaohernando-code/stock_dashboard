@@ -8,52 +8,52 @@
     },
     {
       "bucket": "middle",
-      "mean_excess_return": 0.21906,
+      "mean_excess_return": 0.214973,
       "sample_count": 30
     },
     {
       "bucket": "top",
-      "mean_excess_return": 0.102134,
+      "mean_excess_return": 0.106089,
       "sample_count": 31
     }
   ],
-  "bucket_spread_mean": -0.024771,
+  "bucket_spread_mean": -0.020816,
   "bucket_spread_std": 0.219943,
   "coverage": 1.0,
   "coverage_ratio": 1.0,
   "feature_drift_summary": {
     "coverage_status": "full_baseline",
-    "evaluation_observation_count": 91,
-    "feature_snapshot_count": 691,
+    "evaluation_observation_count": 93,
+    "feature_snapshot_count": 693,
     "horizon": 20,
     "status": "stable_fixture_snapshot"
   },
   "horizon": 20,
-  "ic_mean": -0.140436,
+  "ic_mean": -0.212626,
   "industry_slice_metrics": [],
   "manifest_id": "rolling-validation:reco-600522.SH-20260410-phase2",
   "market_regime_metrics": [
     {
       "coverage_status": "full_baseline",
       "market_regime_tag": "phase5_active_watchlist_research_candidate",
-      "net_excess_return": 0.148667,
-      "rank_ic_mean": -0.064644
+      "net_excess_return": 0.148668,
+      "rank_ic_mean": -0.083851
     }
   ],
-  "net_excess_return": 0.148667,
+  "net_excess_return": 0.148668,
   "period_metrics": [
     {
       "horizon": 20,
       "mean_excess_return": 0.148847,
       "mean_return": 0.148847,
       "sample_count": 91,
-      "walk_forward_window_count": 32
+      "walk_forward_window_count": 34
     }
   ],
   "positive_excess_rate": 0.78022,
   "rank_ic_ir": -9.539392,
-  "rank_ic_mean": -0.064644,
-  "rank_ic_std": 0.006777,
+  "rank_ic_mean": -0.083851,
+  "rank_ic_std": 0.00879,
   "sample_count": 91,
   "status": "research_candidate",
   "status_note": "已有滚动验证产物，当前仍处于观察阶段，尚未完成正式验证。",
@@ -66,11 +66,11 @@
     },
     {
       "positive_excess_rate": 0.608696,
-      "rank_ic_mean": -0.3786,
+      "rank_ic_mean": -0.438421,
       "sample_count": 46,
       "slice_label": "late"
     }
   ],
-  "turnover": 0.051333,
-  "turnover_mean": 0.051333
+  "turnover": 0.05129,
+  "turnover_mean": 0.05129
 }
