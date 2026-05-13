@@ -652,6 +652,7 @@ const STRATEGY_DUAL_TEST_CONFIGS: StrategyDualTestConfig[] = [
 type StrategyMetricDisplay = {
   value?: number | null;
   secondaryValue?: number | null;
+  secondaryLabel?: string;
   sampleCount?: number | null;
   secondarySampleCount?: number | null;
   label: string;
@@ -678,6 +679,7 @@ function marketStudyPeriodMetric(
   return {
     value,
     secondaryValue: trimmed,
+    secondaryLabel: "去极值均值",
     sampleCount: completed,
     secondarySampleCount: selected,
     label: `短窗口${horizon}日逐候选平均超额`,
@@ -703,6 +705,7 @@ function marketStudyPortfolioMetricDisplay(
   return {
     value,
     secondaryValue: trimmed,
+    secondaryLabel: "去极值均值",
     sampleCount: portfolioCount,
     secondarySampleCount: summary.completed_member_count,
     label: `短窗口${horizon}日同日组合平均超额`,
@@ -724,6 +727,7 @@ function replayCandidateMetricDisplay(
   return {
     value: metric.value,
     secondaryValue: metric.tradableValue,
+    secondaryLabel: "可交易口径",
     sampleCount: metric.sampleCount,
     secondarySampleCount: metric.tradableSampleCount,
     label: `封闭回放${metric.label}`,
@@ -744,6 +748,7 @@ function rollingPortfolioMetricDisplay(
   return {
     value: recordValue<number>(summary, "excess_total_return"),
     secondaryValue: recordValue<number>(summary, "total_return"),
+    secondaryLabel: "组合总收益",
     sampleCount: recordValue<number>(summary, "trade_count"),
     secondarySampleCount: recordValue<number>(summary, "day_count"),
     label: "长样本5万元滚动资金曲线超额",
@@ -757,17 +762,20 @@ function StrategyMetricCell({ metric }: { metric: StrategyMetricDisplay | null }
   if (!metric) {
     return (
       <Space direction="vertical" size={0}>
-        <Tag>未跑</Tag>
-        <Text type="secondary">该策略尚无这个口径的数据</Text>
+        <Tag color="red">统计缺失</Tag>
+        <Text type="secondary">该策略缺少预计算统计，请补齐历史回放 artifact。</Text>
       </Space>
     );
   }
+  const showSecondary = metric.secondaryValue !== undefined
+    && metric.secondaryValue !== null
+    && (metric.value === undefined || metric.value === null || Math.abs(Number(metric.secondaryValue) - Number(metric.value)) > 0.000001);
   return (
     <Space direction="vertical" size={0}>
       <Text className={`value-${valueTone(metric.value)}`}>{formatPercent(metric.value)}</Text>
       <Text type="secondary">{metric.label}</Text>
-      {metric.secondaryValue !== undefined && metric.secondaryValue !== null ? (
-        <Text type="secondary">辅助 {formatPercent(metric.secondaryValue)}</Text>
+      {showSecondary ? (
+        <Text type="secondary">{metric.secondaryLabel ?? "补充指标"} {formatPercent(metric.secondaryValue)}</Text>
       ) : null}
       <Text type="secondary">{metric.detail}</Text>
       <Text type="secondary">{metric.source}</Text>
@@ -3085,7 +3093,7 @@ function ReplayStatisticalSummary({
                       title: "补充信息",
                       render: (_, item) => (
                         <Space direction="vertical" size={0}>
-                          <Text>收益 {formatPercent(item.display_total_return)}</Text>
+                          <Text>组合总收益 {formatPercent(item.display_total_return)}</Text>
                           <Text type="secondary">最大回撤 {formatPercent(item.display_max_drawdown)}</Text>
                         </Space>
                       ),
@@ -3132,7 +3140,7 @@ function ReplayFeedbackCards({
                   <Text className={`value-${valueTone(display.value)}`}>{display.label} {formatPercent(display.value)}</Text>
                   {family.display_source === "portfolio_backtest" ? (
                     <>
-                      <Text type="secondary">收益 {formatPercent(family.display_total_return)} · 交易 {formatNumber(Number(family.display_trade_count ?? 0))} 次</Text>
+                      <Text type="secondary">组合总收益 {formatPercent(family.display_total_return)} · 交易 {formatNumber(Number(family.display_trade_count ?? 0))} 次</Text>
                       <Text type="secondary">最大回撤 {formatPercent(family.display_max_drawdown)}</Text>
                     </>
                   ) : (
