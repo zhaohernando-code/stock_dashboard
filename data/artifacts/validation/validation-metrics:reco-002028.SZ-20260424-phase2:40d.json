@@ -23,8 +23,8 @@
   "coverage_ratio": 1.0,
   "feature_drift_summary": {
     "coverage_status": "full_baseline",
-    "evaluation_observation_count": 93,
-    "feature_snapshot_count": 693,
+    "evaluation_observation_count": 94,
+    "feature_snapshot_count": 694,
     "horizon": 40,
     "status": "stable_fixture_snapshot"
   },
@@ -47,7 +47,7 @@
       "mean_excess_return": 0.138698,
       "mean_return": 0.138698,
       "sample_count": 83,
-      "walk_forward_window_count": 34
+      "walk_forward_window_count": 35
     }
   ],
   "positive_excess_rate": 0.662651,
