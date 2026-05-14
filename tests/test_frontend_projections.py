@@ -5,10 +5,12 @@ from time import perf_counter
 
 from ashare_evidence.db import init_database, session_scope, utcnow
 from ashare_evidence.frontend_projections import (
+    SHORTPICK_MODEL_FEEDBACK_PROJECTION_KEY,
     get_ready_frontend_projection_payload,
     home_shell_projection_key,
     operations_summary_projection_key,
     refresh_frontend_projections,
+    simulation_workspace_summary_projection_key,
     stable_payload_fingerprint,
     upsert_frontend_projection,
 )
@@ -124,6 +126,50 @@ def test_home_shell_projection_materializes_account_shell_payload() -> None:
     assert payload["candidates"]["items"]
     assert payload["glossary"]
     assert payload["scheduled_refresh_status"] is None
+
+
+def test_shortpick_model_feedback_projection_materializes_empty_feedback_payload() -> None:
+    database_url = "sqlite:///:memory:"
+    init_database(database_url)
+
+    with session_scope(database_url) as session:
+        result = refresh_frontend_projections(session, projection="shortpick_model_feedback")
+        session.flush()
+        payload = get_ready_frontend_projection_payload(session, SHORTPICK_MODEL_FEEDBACK_PROJECTION_KEY)
+
+    assert result["status"] == "ok"
+    assert result["refreshed"][0]["projection_group"] == "shortpick"
+    assert payload is not None
+    assert payload["models"] == []
+    assert payload["overall"]["run_count"] == 0
+    assert payload["overall"]["round_count"] == 0
+
+
+def test_simulation_workspace_summary_projection_materializes_detail_payload() -> None:
+    database_url = "sqlite:///:memory:"
+    init_database(database_url)
+    with session_scope(database_url) as session:
+        seed_watchlist_fixture(session, symbols=("600519.SH", "300750.SZ"))
+
+    with session_scope(database_url) as session:
+        result = refresh_frontend_projections(
+            session,
+            projection="simulation_workspace_summary",
+            target_login="root",
+        )
+        session.flush()
+        payload = get_ready_frontend_projection_payload(
+            session,
+            simulation_workspace_summary_projection_key(target_login="root"),
+            target_login="root",
+        )
+
+    assert result["status"] == "ok"
+    assert result["refreshed"][0]["projection_group"] == "simulation"
+    assert payload is not None
+    assert payload["section"] == "simulation_workspace"
+    assert set(payload["simulation_workspace"]["session"]["watch_symbols"]) == {"600519.SH", "300750.SZ"}
+    assert set(payload["simulation_workspace"]["configuration"]["watch_symbols"]) == {"600519.SH", "300750.SZ"}
 
 
 def test_operations_summary_endpoint_metrics_replace_full_dashboard_metrics() -> None:

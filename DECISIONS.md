@@ -9,7 +9,9 @@
 - 第一批接入 `shortpick_replay_feedback:v1`，把 aggregate replay feedback + decision projection 预先物化；`/shortpick-lab/replay-feedback` 优先读投影，缺投影才走兼容 fallback。
 - 第二批接入 `operations_summary:v1:{target_login}:{sample_symbol}`，按账号和样本股票物化运营复盘摘要；`/dashboard/operations/summary` 不再在前端请求里执行 `run_operations_tick()`，返回前还会把性能阈值改写为当前 summary API 耗时和 summary payload 体积，避免页面继续展示完整聚合构建的旧耗时。
 - 第三批接入 `home_shell:v1:{target_login}`，把首页首屏的 `watchlist + candidates + glossary` 合成单个账号隔离 projection；`/dashboard/shell` 优先读投影，只在请求时附加轻量 scheduled-refresh 状态。
-- 后续迁移顺序应是：`shortpick_model_feedback`、`simulation_workspace_summary`。这些接口都应拆成“快投影首屏 + 按需下钻明细”。
+- 第四批接入 `shortpick_model_feedback:v1`，把模型反馈页的 rounds/candidates/validation 聚合预先物化；`/shortpick-lab/model-feedback` 优先读投影，缺投影才兼容现算。
+- 第五批接入 `simulation_workspace_summary:v1:{target_login}`，把运营复盘模拟参数下钻区的 simulation workspace 预先物化；`/dashboard/operations/details?section=simulation_workspace` 优先读投影，避免打开运营复盘时同步构建模拟工作区。
+- 后续迁移顺序应是：继续观察真实接口耗时后再迁移 `shortpick_market_factor_study` 或更细的 operations detail sections，不再把重统计接回页面请求热路径。
 - 投影刷新可以跟随盘后 slot 或维护命令执行，但不得在页面请求里写库、补行情、跑回测或触发 LLM。
 
 [2026-05-14T18:55:00+08:00] Shortpick scheduled maintenance must not sit on the live frontend hot path:

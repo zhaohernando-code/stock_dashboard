@@ -13,8 +13,10 @@ from ashare_evidence.models import FrontendProjection
 
 FRONTEND_PROJECTION_VERSION = "frontend-projection-v1"
 SHORTPICK_REPLAY_FEEDBACK_PROJECTION_KEY = "shortpick_replay_feedback:v1"
+SHORTPICK_MODEL_FEEDBACK_PROJECTION_KEY = "shortpick_model_feedback:v1"
 OPERATIONS_SUMMARY_PROJECTION_PREFIX = "operations_summary:v1"
 HOME_SHELL_PROJECTION_PREFIX = "home_shell:v1"
+SIMULATION_WORKSPACE_SUMMARY_PROJECTION_PREFIX = "simulation_workspace_summary:v1"
 
 
 def operations_summary_projection_key(*, target_login: str, sample_symbol: str) -> str:
@@ -23,6 +25,10 @@ def operations_summary_projection_key(*, target_login: str, sample_symbol: str) 
 
 def home_shell_projection_key(*, target_login: str) -> str:
     return f"{HOME_SHELL_PROJECTION_PREFIX}:{target_login}"
+
+
+def simulation_workspace_summary_projection_key(*, target_login: str) -> str:
+    return f"{SIMULATION_WORKSPACE_SUMMARY_PROJECTION_PREFIX}:{target_login}"
 
 
 def stable_payload_fingerprint(payload: Any) -> str:
@@ -122,6 +128,30 @@ def refresh_shortpick_replay_feedback_frontend_projection(session: Session) -> d
         metadata_payload={
             "source": "shortpick_replay_feedback_cache_plus_decision_projection",
             "usage": "GET /shortpick-lab/replay-feedback",
+        },
+    )
+    return {
+        "projection_key": projection.projection_key,
+        "projection_group": projection.projection_group,
+        "status": projection.status,
+        "generated_at": projection.generated_at.isoformat(),
+        "source_fingerprint": projection.source_fingerprint,
+        "payload_size_bytes": len(json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")),
+    }
+
+
+def refresh_shortpick_model_feedback_frontend_projection(session: Session) -> dict[str, Any]:
+    from ashare_evidence.shortpick_lab import build_shortpick_model_feedback
+
+    payload = build_shortpick_model_feedback(session)
+    projection = upsert_frontend_projection(
+        session,
+        SHORTPICK_MODEL_FEEDBACK_PROJECTION_KEY,
+        projection_group="shortpick",
+        payload=payload,
+        metadata_payload={
+            "source": "build_shortpick_model_feedback",
+            "usage": "GET /shortpick-lab/model-feedback",
         },
     )
     return {
@@ -246,6 +276,48 @@ def refresh_home_shell_frontend_projection(
     }
 
 
+def refresh_simulation_workspace_summary_frontend_projection(
+    session: Session,
+    *,
+    target_login: str = "root",
+) -> dict[str, Any]:
+    from ashare_evidence.simulation import get_simulation_workspace
+
+    workspace = get_simulation_workspace(
+        session,
+        owner_login=target_login,
+        actor_login=target_login,
+        actor_role="root" if target_login == "root" else "member",
+        record_presence=False,
+    )
+    payload = {
+        "section": "simulation_workspace",
+        "generated_at": workspace["session"].get("last_data_time") or workspace["session"].get("started_at"),
+        "simulation_workspace": workspace,
+    }
+    projection = upsert_frontend_projection(
+        session,
+        simulation_workspace_summary_projection_key(target_login=target_login),
+        projection_group="simulation",
+        target_login=target_login,
+        payload=payload,
+        metadata_payload={
+            "source": "get_simulation_workspace",
+            "usage": "GET /dashboard/operations/details?section=simulation_workspace",
+            "target_login": target_login,
+        },
+    )
+    return {
+        "projection_key": projection.projection_key,
+        "projection_group": projection.projection_group,
+        "target_login": projection.target_login,
+        "status": projection.status,
+        "generated_at": projection.generated_at.isoformat(),
+        "source_fingerprint": projection.source_fingerprint,
+        "payload_size_bytes": len(json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")),
+    }
+
+
 def refresh_frontend_projections(
     session: Session,
     *,
@@ -256,6 +328,10 @@ def refresh_frontend_projections(
     refreshed: list[dict[str, Any]] = []
     if projection in {"all", "home_shell"}:
         refreshed.append(refresh_home_shell_frontend_projection(session, target_login=target_login))
+    if projection in {"all", "shortpick_model_feedback"}:
+        refreshed.append(refresh_shortpick_model_feedback_frontend_projection(session))
+    if projection in {"all", "simulation_workspace_summary"}:
+        refreshed.append(refresh_simulation_workspace_summary_frontend_projection(session, target_login=target_login))
     if projection in {"all", "shortpick_replay_feedback"}:
         refreshed.append(refresh_shortpick_replay_feedback_frontend_projection(session))
     if projection in {"all", "operations_summary"}:

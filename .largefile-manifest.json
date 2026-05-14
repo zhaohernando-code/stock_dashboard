@@ -21,16 +21,16 @@
       "reviewed_at": "2026-04-30"
     },
     "src/ashare_evidence/api.py": {
-      "lines": 1946,
-      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, improvement-suggestion, shortpick lab, shortpick replay, and market-factor study routes. The shortpick market-factor endpoint attaches frozen paper-strategy evidence from the long-sample artifact while preserving cached read-only behavior, and the paper-tracking ledger endpoint projects frozen strategy status, LLM paper-control signals, same-pool market-factor controls, execution-timing controls, intraday same-day entry controls, and four exit-track monitoring rules from existing shortpick runs/candidates without triggering market refresh or model work; router extraction remains possible but would add broad touch points across the current schema surface. 2026-05-14 review: growth moves historical replay feedback, market-factor study display, operations summary, and home shell onto materialized frontend projections, and annotates the summary endpoint with live API/payload metrics instead of full-dashboard build metrics.",
+      "lines": 1962,
+      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, improvement-suggestion, shortpick lab, shortpick replay, and market-factor study routes. The shortpick market-factor endpoint attaches frozen paper-strategy evidence from the long-sample artifact while preserving cached read-only behavior, and the paper-tracking ledger endpoint projects frozen strategy status, LLM paper-control signals, same-pool market-factor controls, execution-timing controls, intraday same-day entry controls, and four exit-track monitoring rules from existing shortpick runs/candidates without triggering market refresh or model work; router extraction remains possible but would add broad touch points across the current schema surface. 2026-05-14 review: growth moves historical replay feedback, model feedback, market-factor study display, operations summary, home shell, and simulation workspace detail onto materialized frontend projections, and annotates the summary endpoint with live API/payload metrics instead of full-dashboard build metrics.",
       "status": "accepted",
       "reviewed_at": "2026-05-14"
     },
     "src/ashare_evidence/cli.py": {
-      "lines": 1090,
-      "reason": "CLI command group: data refresh, cache management, admin operations, event/improvement audit triggers, database write preflight (db.py), benchmark index bar sync, and shortpick replay/distillation/rejector/hard-veto/factor-rank/market-factor-study/portfolio-backtest experiment commands, including benchmark-mode selection for market factor studies and long-sample shortpick capital-deployment backtests. 2026-05-13 review: growth adds explicit shortpick `--entry-price-source` research modes plus `shortpick-replay-feedback-cache` materialization for the served historical replay UI; command extraction remains deferred until the shortpick experiment surface stabilizes.",
+      "lines": 1128,
+      "reason": "CLI command group: data refresh, cache management, admin operations, event/improvement audit triggers, database write preflight (db.py), benchmark index bar sync, and shortpick replay/distillation/rejector/hard-veto/factor-rank/market-factor-study/portfolio-backtest experiment commands, including benchmark-mode selection for market factor studies and long-sample shortpick capital-deployment backtests. 2026-05-14 review: growth extends `frontend-projections-refresh` to include home shell, shortpick model feedback, operations summary, and simulation workspace summary projections; command extraction remains deferred until the projection contract stabilizes.",
       "status": "accepted",
-      "reviewed_at": "2026-05-13"
+      "reviewed_at": "2026-05-14"
     },
     "src/ashare_evidence/dashboard.py": {
       "lines": 718,
@@ -105,10 +105,10 @@
       "reviewed_at": "2026-05-01"
     },
     "src/ashare_evidence/simulation.py": {
-      "lines": 1796,
-      "reason": "Cohesive simulation engine: position sizing, performance metrics, scenario config, order execution. Single-domain logic with tight internal coupling. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, and paper-tracking/backtest comparison surfaces; split remains deferred until the experiment contract stops changing.",
+      "lines": 1798,
+      "reason": "Cohesive simulation engine: position sizing, performance metrics, scenario config, order execution. Single-domain logic with tight internal coupling. 2026-05-14 review: growth only adds a read-path option to skip account-presence writes when building the simulation workspace projection; split remains deferred until the experiment contract stops changing.",
       "status": "accepted",
-      "reviewed_at": "2026-05-11"
+      "reviewed_at": "2026-05-14"
     },
     "src/ashare_evidence/improvement_suggestions.py": {
       "lines": 1138,

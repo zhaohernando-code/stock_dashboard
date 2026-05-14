@@ -26,11 +26,13 @@ from ashare_evidence.dashboard import (
 )
 from ashare_evidence.db import get_database_url, get_session_factory, init_database, utcnow
 from ashare_evidence.frontend_projections import (
+    SHORTPICK_MODEL_FEEDBACK_PROJECTION_KEY,
     SHORTPICK_REPLAY_FEEDBACK_PROJECTION_KEY,
     build_home_shell_projection_payload,
     get_ready_frontend_projection_payload,
     home_shell_projection_key,
     operations_summary_projection_key,
+    simulation_workspace_summary_projection_key,
 )
 from ashare_evidence.improvement_suggestions import (
     accept_suggestion_for_plan,
@@ -1321,6 +1323,12 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        projection = get_ready_frontend_projection_payload(
+            session,
+            SHORTPICK_MODEL_FEEDBACK_PROJECTION_KEY,
+        )
+        if projection is not None:
+            return projection
         return build_shortpick_model_feedback(session)
 
     @app.get("/shortpick-lab/market-factor-study")
@@ -1688,6 +1696,14 @@ def create_app(
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
         require_stock_root(access)
+        if section == "simulation_workspace":
+            projection = get_ready_frontend_projection_payload(
+                session,
+                simulation_workspace_summary_projection_key(target_login=access.target_login),
+                target_login=access.target_login,
+            )
+            if projection is not None:
+                return projection
         try:
             return build_operations_detail(
                 session,

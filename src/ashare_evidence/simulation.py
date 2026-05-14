@@ -1000,14 +1000,16 @@ def get_simulation_workspace(
     owner_login: str = ROOT_ACCOUNT_LOGIN,
     actor_login: str = ROOT_ACCOUNT_LOGIN,
     actor_role: str = ROLE_ROOT,
+    record_presence: bool = True,
 ) -> dict[str, Any]:
-    record_account_presence(
-        session,
-        actor_login=actor_login,
-        actor_role=actor_role,
-        target_login=owner_login,
-        mark_acted=False,
-    )
+    if record_presence:
+        record_account_presence(
+            session,
+            actor_login=actor_login,
+            actor_role=actor_role,
+            target_login=owner_login,
+            mark_acted=False,
+        )
     simulation_session = ensure_simulation_session(session, owner_login=owner_login)
     session.flush()
     return _workspace_payload(session, simulation_session)
