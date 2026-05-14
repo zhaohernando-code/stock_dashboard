@@ -294,6 +294,7 @@ class ShortpickModelFeedbackItem(BaseModel):
     validation_by_horizon: list[ShortpickFeedbackGroup] = Field(default_factory=list)
     validation_by_priority: list[ShortpickFeedbackGroup] = Field(default_factory=list)
     validation_by_theme: list[ShortpickFeedbackGroup] = Field(default_factory=list)
+    validation_by_industry: list[ShortpickFeedbackGroup] = Field(default_factory=list)
     channels: list[dict[str, Any]] = Field(default_factory=list)
 
 

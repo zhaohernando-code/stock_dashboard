@@ -300,6 +300,7 @@ export interface ShortpickModelFeedbackItem {
   validation_by_horizon: ShortpickFeedbackGroup[];
   validation_by_priority: ShortpickFeedbackGroup[];
   validation_by_theme: ShortpickFeedbackGroup[];
+  validation_by_industry: ShortpickFeedbackGroup[];
   channels?: ShortpickModelFeedbackChannel[];
 }
 

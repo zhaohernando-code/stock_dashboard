@@ -2563,7 +2563,8 @@ function FeedbackDetails({ item, selectedBenchmark }: { item: ShortpickModelFeed
       ) : null}
       <FeedbackGroupList title="周期表现" groups={item.validation_by_horizon} selectedBenchmark={selectedBenchmark} />
       <FeedbackGroupList title="优先级表现" groups={item.validation_by_priority} selectedBenchmark={selectedBenchmark} />
-      <FeedbackGroupList title="题材表现" groups={item.validation_by_theme} selectedBenchmark={selectedBenchmark} />
+      <FeedbackGroupList title="题材表现（归并）" groups={item.validation_by_theme ?? []} selectedBenchmark={selectedBenchmark} />
+      <FeedbackGroupList title="所属板块表现" groups={item.validation_by_industry ?? []} selectedBenchmark={selectedBenchmark} />
     </div>
   );
 }

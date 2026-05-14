@@ -83,6 +83,19 @@ SHORTPICK_HARD_LEAKAGE_REASONS = {
     "unverified_source_time",
     "future_leakage_suspected",
 }
+SHORTPICK_TOPIC_ROLLUP_ALIASES: dict[str, tuple[str, str]] = {
+    "commercial_aerospace_launch_spree": ("commercial_space", "商业航天"),
+    "commercial_aerospace_launch": ("commercial_space", "商业航天"),
+    "commercial_aerospace_defense": ("commercial_space", "商业航天"),
+    "commercial_space": ("commercial_space", "商业航天"),
+    "low_altitude_economy_operations": ("low_altitude_economy", "低空经济"),
+    "low_altitude_economy": ("low_altitude_economy", "低空经济"),
+    "semiconductor_mask_localization": ("semiconductor_localization", "半导体国产替代"),
+    "semiconductor_fab_engineering_orders": ("semiconductor_localization", "半导体国产替代"),
+    "semiconductor_localization": ("semiconductor_localization", "半导体国产替代"),
+    "ai_computing_optical_communication": ("ai_compute_hardware", "AI算力硬件"),
+    "ai_compute_hardware": ("ai_compute_hardware", "AI算力硬件"),
+}
 SHORTPICK_PRIMARY_BENCHMARK_ID = "CSI300"
 SHORTPICK_RESEARCH_BENCHMARK_IDS = ["CSI1000"]
 SHORTPICK_BENCHMARK_DIMENSION_HS300 = "hs300"
@@ -3710,20 +3723,53 @@ def _candidate_topic(candidate: ShortpickCandidate) -> dict[str, Any]:
     return topic
 
 
-def _candidate_topic_key(candidate: ShortpickCandidate) -> str:
+def _candidate_topic_rollup(candidate: ShortpickCandidate) -> tuple[str, str] | None:
     topic = _candidate_topic(candidate)
     topic_id = _coerce_text(topic.get("topic_cluster_id"))
-    if topic_id and topic_id != "unclassified" and topic.get("status") != "topic_uncertain":
-        return topic_id
-    return "unclassified"
+    if not topic_id or topic_id == "unclassified" or topic.get("status") == "topic_uncertain":
+        return None
+    normalized_id = _stable_topic_slug(topic_id)
+    if normalized_id in SHORTPICK_TOPIC_ROLLUP_ALIASES:
+        return SHORTPICK_TOPIC_ROLLUP_ALIASES[normalized_id]
+    label = _coerce_text(topic.get("label_zh")) or candidate.normalized_theme or normalized_id
+    return normalized_id, label
+
+
+def _candidate_topic_key(candidate: ShortpickCandidate) -> str:
+    rollup = _candidate_topic_rollup(candidate)
+    return rollup[0] if rollup else "unclassified"
 
 
 def _candidate_topic_label(candidate: ShortpickCandidate) -> str:
-    topic = _candidate_topic(candidate)
-    label = _coerce_text(topic.get("label_zh"))
-    if label:
-        return label
-    return candidate.normalized_theme or "未归类题材"
+    rollup = _candidate_topic_rollup(candidate)
+    return rollup[1] if rollup else "未归类题材"
+
+
+def _candidate_industry_map(session: Session, candidates: list[ShortpickCandidate]) -> dict[str, str]:
+    symbols = sorted({candidate.symbol for candidate in candidates if candidate.symbol})
+    if not symbols:
+        return {}
+    rows = session.execute(select(Stock.symbol, Stock.profile_payload).where(Stock.symbol.in_(symbols))).all()
+    output: dict[str, str] = {}
+    for symbol, profile_payload in rows:
+        profile = profile_payload if isinstance(profile_payload, dict) else {}
+        label = _coerce_text(profile.get("industry") or profile.get("sector") or profile.get("template_key"))
+        if label:
+            output[str(symbol)] = label
+    return output
+
+
+def _candidate_industry_label(candidate: ShortpickCandidate, industry_by_symbol: dict[str, str]) -> str:
+    payload = candidate.candidate_payload if isinstance(candidate.candidate_payload, dict) else {}
+    return (
+        industry_by_symbol.get(candidate.symbol)
+        or _coerce_text(payload.get("industry") or payload.get("sector") or payload.get("stock_industry"))
+        or "未归类板块"
+    )
+
+
+def _candidate_industry_key(candidate: ShortpickCandidate, industry_by_symbol: dict[str, str]) -> str:
+    return _stable_topic_slug(_candidate_industry_label(candidate, industry_by_symbol)) or "unknown_industry"
 
 
 def normalize_shortpick_candidate_topics(
@@ -6360,6 +6406,8 @@ def _shortpick_feedback_item(
         row for row in tradable_rows
         if row["validation"].status == "completed"
     ]
+    industry_by_symbol = _candidate_industry_map(session, model_candidates)
+    classified_topic_rows = [row for row in validation_rows if _candidate_topic_rollup(row["candidate"]) is not None]
     return {
         "provider_name": provider_name,
         "model_name": model_name,
@@ -6388,9 +6436,15 @@ def _shortpick_feedback_item(
             label_fn=lambda row: _shortpick_research_priority_label(row["candidate"].research_priority),
         ),
         "validation_by_theme": _feedback_groups(
-            validation_rows,
+            classified_topic_rows,
             key_fn=lambda row: _candidate_topic_key(row["candidate"]),
             label_fn=lambda row: _candidate_topic_label(row["candidate"]),
+            limit=12,
+        ),
+        "validation_by_industry": _feedback_groups(
+            validation_rows,
+            key_fn=lambda row: _candidate_industry_key(row["candidate"], industry_by_symbol),
+            label_fn=lambda row: _candidate_industry_label(row["candidate"], industry_by_symbol),
             limit=12,
         ),
         "channels": channels or [],

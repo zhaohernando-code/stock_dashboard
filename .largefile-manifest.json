@@ -140,9 +140,15 @@
       "status": "accepted",
       "reviewed_at": "2026-05-11"
     },
+    "frontend/src/types/shortpick.ts": {
+      "lines": 501,
+      "reason": "Short Pick Lab frontend API contract types for live batches, paper tracking, model feedback, replay feedback, and decision readouts. It crossed the manifest threshold by adding the explicit industry-performance group beside rolled-up topic performance; keeping the contract in one file preserves import stability while the Short Pick Lab API surface is still evolving.",
+      "status": "accepted",
+      "reviewed_at": "2026-05-14"
+    },
     "frontend/src/components/ShortpickLabView.tsx": {
-      "lines": 4065,
-      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, historical replay workbench state, and the strategy closeout readout in one Ant Design surface. Historical replay now includes a reduced non-expert default readout, aggregate statistical readouts, per-run drilldown, readable replay family labels, explicit loading states for slow replay feedback tables, and the frozen paper strategy summary with market-factor controls, multi-index references, cost stress, and paper-tracking status. Heavy replay aggregate/per-run feedback and strategy closeout data now load in the background instead of blocking initial lab or replay navigation. Live runs now surface the frozen paper strategy separately from LLM and market-factor control groups; the paper-tracking tab explains the four trading-day exit tracks, the strict daily LLM paper-control stock selected from the LLM recommendation pool, and same-pool market controls including offensive Top1, cooldown Top1, deterministic random baseline, next-open entry timing, and intraday same-day entry timing. 2026-05-14 review: growth is limited to readable historical replay labels and sample guardrails: entry/regime/period keys are displayed in Chinese, default regime rows are coarse trend buckets, low monthly-sample buckets are hidden from the conclusion table, and supplemented trade-level regime rows are preferred when the offline artifact exists.",
+      "lines": 4066,
+      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, historical replay workbench state, and the strategy closeout readout in one Ant Design surface. Historical replay now includes a reduced non-expert default readout, aggregate statistical readouts, per-run drilldown, readable replay family labels, explicit loading states for slow replay feedback tables, and the frozen paper strategy summary with market-factor controls, multi-index references, cost stress, and paper-tracking status. Heavy replay aggregate/per-run feedback and strategy closeout data now load in the background instead of blocking initial lab or replay navigation. Live runs now surface the frozen paper strategy separately from LLM and market-factor control groups; the paper-tracking tab explains the four trading-day exit tracks, the strict daily LLM paper-control stock selected from the LLM recommendation pool, and same-pool market controls including offensive Top1, cooldown Top1, deterministic random baseline, next-open entry timing, and intraday same-day entry timing. 2026-05-14 review: growth is limited to readable historical replay labels and sample guardrails: entry/regime/period keys are displayed in Chinese, default regime rows are coarse trend buckets, low monthly-sample buckets are hidden from the conclusion table, supplemented trade-level regime rows are preferred when the offline artifact exists, and model-feedback now separates rolled-up topic performance from stock industry performance.",
       "status": "planned_refactor",
       "reviewed_at": "2026-05-14"
     },
@@ -183,14 +189,14 @@
       "reviewed_at": "2026-05-11"
     },
     "tests/test_shortpick_lab.py": {
-      "lines": 1914,
-      "reason": "Short Pick Lab integration/regression tests spanning candidate parsing, paper controls, validation, and intraday same-day entry failure handling. 2026-05-14 review: growth locks model-feedback display aggregation, readable priority/channel labels, and nonzero tradable-sample projection fields while preserving existing API compatibility.",
+      "lines": 1916,
+      "reason": "Short Pick Lab integration/regression tests spanning candidate parsing, paper controls, validation, and intraday same-day entry failure handling. 2026-05-14 review: growth locks model-feedback display aggregation, readable priority/channel labels, nonzero tradable-sample projection fields, and the split between rolled-up topic performance and stock industry performance while preserving existing API compatibility.",
       "status": "accepted",
       "reviewed_at": "2026-05-14"
     },
     "src/ashare_evidence/shortpick_lab.py": {
-      "lines": 7151,
-      "reason": "Short Pick Lab experiment runner, market-factor overlays, paper-tracking validation, and intraday same-day entry control. 2026-05-14 review: growth is the read-only model-feedback projection layer that groups executor channels under the two real model labels, maps research-priority keys to user-facing labels, and now carries real tradable-sample counters so missing fields do not render as 0/0; split remains deferred because this runner still owns the live paper ledger contract.",
+      "lines": 7205,
+      "reason": "Short Pick Lab experiment runner, market-factor overlays, paper-tracking validation, and intraday same-day entry control. 2026-05-14 review: growth is the read-only model-feedback projection layer that groups executor channels under the two real model labels, maps research-priority keys to user-facing labels, carries real tradable-sample counters so missing fields do not render as 0/0, and separates normalized topic rollups from stock industry buckets; split remains deferred because this runner still owns the live paper ledger contract.",
       "status": "accepted",
       "reviewed_at": "2026-05-14"
     }

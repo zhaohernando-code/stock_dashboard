@@ -1862,6 +1862,8 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(one_day_group["completed_tradable_sample_count"], 1)
         self.assertGreaterEqual(openai_feedback["tradable_sample_count"], openai_feedback["official_sample_count"])
         self.assertGreaterEqual(openai_feedback["completed_tradable_sample_count"], openai_feedback["completed_official_sample_count"])
+        self.assertTrue(openai_feedback["validation_by_industry"])
+        self.assertNotIn("C 制造业", [group["label"] for group in openai_feedback["validation_by_theme"]])
         self.assertTrue(any(group["label"] == "单模型高置信" for group in openai_feedback["validation_by_priority"]))
         self.assertEqual(chatgpt_group["display_model_label"], "ChatGPT 5.5")
         self.assertEqual(chatgpt_group["round_count"], 1)
