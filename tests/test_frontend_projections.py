@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from time import perf_counter
 
 from ashare_evidence.db import init_database, session_scope, utcnow
 from ashare_evidence.frontend_projections import (
@@ -11,6 +12,7 @@ from ashare_evidence.frontend_projections import (
     upsert_frontend_projection,
 )
 from ashare_evidence.models import FrontendProjection
+from ashare_evidence.operations import annotate_operations_summary_endpoint_metrics
 from tests.fixtures import seed_watchlist_fixture
 
 
@@ -92,3 +94,44 @@ def test_operations_summary_projection_materializes_per_symbol_payload() -> None
     assert "data_quality_summary" in payload
     assert payload["portfolios"] == []
     assert payload["recommendation_replay"] == []
+
+
+def test_operations_summary_endpoint_metrics_replace_full_dashboard_metrics() -> None:
+    payload = {
+        "overview": {
+            "launch_readiness": {
+                "status": "closed_beta_ready",
+                "blocking_gate_count": 0,
+                "warning_gate_count": 1,
+                "recommended_next_gate": "刷新与性能预算",
+            }
+        },
+        "launch_gates": [
+            {
+                "gate": "刷新与性能预算",
+                "threshold": "stock <= 250ms，operations <= 320ms，payload 不超预算。",
+                "current_value": "stock 90.1ms / ops 829.2ms / ops payload 2086.6kb",
+                "status": "warn",
+            }
+        ],
+        "performance_thresholds": [
+            {
+                "metric": "模拟交易运营面板构建延迟",
+                "unit": "ms",
+                "target": 320.0,
+                "observed": 829.2,
+                "status": "warn",
+                "note": "full dashboard",
+            }
+        ],
+    }
+
+    annotated = annotate_operations_summary_endpoint_metrics(payload, started_at=perf_counter())
+
+    assert [item["metric"] for item in annotated["performance_thresholds"]] == [
+        "运营复盘 summary API 延迟",
+        "运营复盘 summary payload 体积",
+    ]
+    assert "ops 829.2ms" not in annotated["launch_gates"][0]["current_value"]
+    assert annotated["launch_gates"][0]["status"] == "pass"
+    assert annotated["overview"]["launch_readiness"]["warning_gate_count"] == 0

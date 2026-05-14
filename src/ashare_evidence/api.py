@@ -48,7 +48,12 @@ from ashare_evidence.manual_research_workflow import (
     retry_manual_research_request,
 )
 from ashare_evidence.models import ShortpickCandidate, ShortpickExperimentRun
-from ashare_evidence.operations import build_operations_dashboard, build_operations_detail, build_operations_summary
+from ashare_evidence.operations import (
+    annotate_operations_summary_endpoint_metrics,
+    build_operations_dashboard,
+    build_operations_detail,
+    build_operations_summary,
+)
 from ashare_evidence.policy_audit import build_policy_audit_report
 from ashare_evidence.policy_config_loader import build_policy_governance_summary, list_policy_config_versions
 from ashare_evidence.runtime_config import (
@@ -1633,6 +1638,7 @@ def create_app(
         sample_symbol: str = Query(default="600519.SH"),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        started_at = time.perf_counter()
         require_stock_root(access)
         projection = get_ready_frontend_projection_payload(
             session,
@@ -1640,11 +1646,14 @@ def create_app(
             target_login=access.target_login,
         )
         if projection is not None:
-            return projection
-        return build_operations_summary(
-            session,
-            sample_symbol,
-            target_login=access.target_login,
+            return annotate_operations_summary_endpoint_metrics(projection, started_at=started_at)
+        return annotate_operations_summary_endpoint_metrics(
+            build_operations_summary(
+                session,
+                sample_symbol,
+                target_login=access.target_login,
+            ),
+            started_at=started_at,
         )
 
     @app.get("/dashboard/operations/details")

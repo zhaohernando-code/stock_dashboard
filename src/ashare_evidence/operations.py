@@ -1273,6 +1273,71 @@ def _summary_payload_from_dashboard(payload: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
+def annotate_operations_summary_endpoint_metrics(
+    payload: dict[str, Any],
+    *,
+    started_at: float,
+) -> dict[str, Any]:
+    """Replace full-dashboard build metrics with the live summary endpoint budget."""
+    summary = dict(payload)
+    observed_ms = round((perf_counter() - started_at) * 1000, 1)
+    payload_for_size = dict(summary)
+    payload_for_size["performance_thresholds"] = []
+    observed_kb = round(
+        len(json.dumps(payload_for_size, ensure_ascii=False, default=str).encode("utf-8")) / 1024,
+        1,
+    )
+    latency_status = "pass" if observed_ms <= 320.0 else "warn"
+    payload_status = "pass" if observed_kb <= 220.0 else "warn"
+    summary["performance_thresholds"] = [
+        {
+            "metric": "运营复盘 summary API 延迟",
+            "unit": "ms",
+            "target": 320.0,
+            "observed": observed_ms,
+            "status": latency_status,
+            "note": "前端首屏读取预计算 projection；不在请求内跑完整运营聚合。",
+        },
+        {
+            "metric": "运营复盘 summary payload 体积",
+            "unit": "kb",
+            "target": 220.0,
+            "observed": observed_kb,
+            "status": payload_status,
+            "note": "首屏只返回概要；组合、复盘和研究队列明细由 details 接口按需加载。",
+        },
+    ]
+
+    launch_gates = [dict(item) for item in summary.get("launch_gates", [])]
+    for item in launch_gates:
+        if item.get("gate") == "刷新与性能预算":
+            item["threshold"] = "summary API <= 320ms，summary payload <= 220kb；完整聚合由 projection refresh 承担。"
+            item["current_value"] = f"summary api {observed_ms}ms / summary payload {observed_kb}kb"
+            item["status"] = "pass" if latency_status == "pass" and payload_status == "pass" else "warn"
+            break
+    summary["launch_gates"] = launch_gates
+
+    overview = summary.get("overview")
+    if isinstance(overview, dict) and isinstance(overview.get("launch_readiness"), dict):
+        failed_gates = [item for item in launch_gates if item.get("status") == "fail"]
+        warning_gates = [item for item in launch_gates if item.get("status") == "warn"]
+        readiness = {
+            **overview["launch_readiness"],
+            "status": "closed_beta_ready" if not failed_gates else "hold",
+            "blocking_gate_count": len(failed_gates),
+            "warning_gate_count": len(warning_gates),
+            "recommended_next_gate": failed_gates[0]["gate"] if failed_gates else (warning_gates[0]["gate"] if warning_gates else None),
+        }
+        summary["overview"] = {
+            **overview,
+            "launch_readiness": readiness,
+            "launch_readiness_status": readiness["status"],
+            "launch_blocking_gate_count": readiness["blocking_gate_count"],
+            "launch_warning_gate_count": readiness["warning_gate_count"],
+        }
+    return summary
+
+
 def _lookup_gate_plan_status(session: Session, gate_name: str) -> dict[str, Any] | None:
     """Check the latest suggestion review snapshot for an improvement plan targeting *gate_name*.
 

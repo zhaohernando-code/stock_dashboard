@@ -21,10 +21,10 @@
       "reviewed_at": "2026-04-30"
     },
     "src/ashare_evidence/api.py": {
-      "lines": 1712,
-      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, improvement-suggestion, shortpick lab, shortpick replay, and market-factor study routes. The shortpick market-factor endpoint attaches frozen paper-strategy evidence from the long-sample artifact while preserving cached read-only behavior, and the paper-tracking ledger endpoint projects frozen strategy status, LLM paper-control signals, same-pool market-factor controls, execution-timing controls, intraday same-day entry controls, and four exit-track monitoring rules from existing shortpick runs/candidates without triggering market refresh or model work; router extraction remains possible but would add broad touch points across the current schema surface. 2026-05-13 review: growth moves historical replay feedback and market-factor study display onto materialized artifact reads so the served page no longer computes aggregate statistics on request.",
+      "lines": 1922,
+      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, improvement-suggestion, shortpick lab, shortpick replay, and market-factor study routes. The shortpick market-factor endpoint attaches frozen paper-strategy evidence from the long-sample artifact while preserving cached read-only behavior, and the paper-tracking ledger endpoint projects frozen strategy status, LLM paper-control signals, same-pool market-factor controls, execution-timing controls, intraday same-day entry controls, and four exit-track monitoring rules from existing shortpick runs/candidates without triggering market refresh or model work; router extraction remains possible but would add broad touch points across the current schema surface. 2026-05-14 review: growth moves historical replay feedback, market-factor study display, and operations summary onto materialized frontend projections, and annotates the summary endpoint with live API/payload metrics instead of full-dashboard build metrics.",
       "status": "accepted",
-      "reviewed_at": "2026-05-12"
+      "reviewed_at": "2026-05-14"
     },
     "src/ashare_evidence/cli.py": {
       "lines": 1090,
@@ -57,10 +57,10 @@
       "reviewed_at": "2026-04-28"
     },
     "src/ashare_evidence/operations.py": {
-      "lines": 1979,
-      "reason": "Operations dashboard builder with tightly coupled payload functions, order checks, summary/detail split, and suggestion-audit surfaces. Extraction was considered, but the current payload-building path still shares too much domain state to split safely in this closeout turn.",
+      "lines": 2091,
+      "reason": "Operations dashboard builder with tightly coupled payload functions, order checks, summary/detail split, suggestion-audit surfaces, and frontend summary endpoint metric annotation. Extraction was considered, but the current payload-building path still shares too much domain state to split safely in this closeout turn. 2026-05-14 review: summary projection work keeps the operations page hot path small while preserving existing detail builders.",
       "status": "accepted",
-      "reviewed_at": "2026-05-01"
+      "reviewed_at": "2026-05-14"
     },
     "src/ashare_evidence/phase2/holding_policy_experiments.py": {
       "lines": 750,
