@@ -432,6 +432,60 @@ body[data-theme="dark"] {
   margin-bottom: 16px;
 }
 
+.shortpick-replay-decision {
+  margin-bottom: 16px;
+}
+
+.shortpick-replay-decision-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.shortpick-replay-decision-tile,
+.shortpick-replay-funnel-step {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  background: var(--panel-bg);
+}
+
+.shortpick-replay-decision-tile span,
+.shortpick-replay-funnel-step span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.shortpick-replay-decision-tile strong,
+.shortpick-replay-funnel-step strong {
+  color: var(--brand-strong);
+  font-size: 18px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.shortpick-replay-funnel,
+.shortpick-replay-entry-matrix {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.shortpick-replay-funnel h5.ant-typography,
+.shortpick-replay-entry-matrix h5.ant-typography {
+  margin: 0;
+}
+
+.shortpick-replay-funnel-steps {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(118px, 1fr));
+  gap: 10px;
+}
+
 .shortpick-strategy-closeout {
   display: grid;
   gap: 12px;
@@ -1355,8 +1409,13 @@ body[data-theme="dark"] .chart-shell,
   }
 
   .shortpick-replay-question-grid,
+  .shortpick-replay-decision-grid,
   .shortpick-replay-horizon-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .shortpick-replay-funnel-steps {
+    grid-template-columns: repeat(3, minmax(118px, 1fr));
   }
 }
 
@@ -1409,7 +1468,12 @@ body[data-theme="dark"] .chart-shell,
   }
 
   .shortpick-replay-question-grid,
+  .shortpick-replay-decision-grid,
   .shortpick-replay-horizon-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .shortpick-replay-funnel-steps {
     grid-template-columns: 1fr;
   }
 

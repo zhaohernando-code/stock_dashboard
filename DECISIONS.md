@@ -1,5 +1,16 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-05-14T10:20:00+08:00] Short Pick Lab historical replay first screen must be a read-only decision projection:
+
+短投试验田历史回放的首屏不再只堆统计表，必须先回答“LLM 自由选股是否有可验证优势、冻结纸面策略是否只能继续观察、候选平均质量和组合资金曲线是否一致、当前最大 blocker 是什么”。这些结论只能由已物化的 replay feedback、market-factor study、staged portfolio backtest 和 paper tracking ledger 投影得到，页面打开时不得触发重回测、行情同步、模型调用或数据库写入。
+
+补充说明
+- API 兼容保留既有 `families`、`overall.validation_by_horizon` 与 market-factor study 字段；新增读数挂在 aggregate replay feedback 的 `overall.decision_readout`、`overall.execution_funnel`、`overall.entry_sensitivity_matrix`，单 run feedback 不附带全局结论。
+- 可执行性漏斗必须显式标出不同 basis：股票池口径和候选验证行口径不能被解释成同一个分母的真实漏斗；缺 artifact 时返回结构化 pending/missing，不由前端猜测。
+- 入场矩阵并排展示 `next_close`、`next_open`、`same_close_proxy`、`same_day_intraday_current`。其中 `same_close_proxy` 永远只代表日线代理，不得写成真实 14:00 全市场成交证明。
+- 候选逐条验证与组合资金曲线是两个研究问题：前者衡量选股池平均 alpha，后者衡量账户资金滚动执行后的收益、超额、回撤和交易频率。页面与结论必须分开读。
+- Phase 2/3 backlog 固定进入同一 projection 命名：`regime_stability`、`confidence_intervals`、`return_attribution`、`forward_tracking_alignment`。后续开发补 artifact，不重新定义方向。
+
 [2026-05-12T10:35:00+08:00] Intraday same-day shortpick control is time-boxed and deterministic:
 
 短投试验田新增一个盘中同日入场对照组：交易日下午先用实时行情替代当日收盘价，沿用冻结低换手上升趋势规则选股；推荐生成后再读取一次当前价，作为该对照组的纸面买入价。

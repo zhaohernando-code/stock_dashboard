@@ -336,7 +336,75 @@ export interface ShortpickReplayFeedbackResponse {
   experiment_mode: string;
   run_id?: number | null;
   families: ShortpickReplayFeedbackFamily[];
-  overall: Record<string, unknown>;
+  overall: Record<string, unknown> & {
+    decision_readout?: ShortpickReplayDecisionReadout;
+    execution_funnel?: ShortpickReplayExecutionFunnel;
+    entry_sensitivity_matrix?: ShortpickReplayEntrySensitivityMatrix;
+    regime_stability?: Record<string, unknown>;
+    confidence_intervals?: Record<string, unknown>;
+    return_attribution?: Record<string, unknown>;
+    forward_tracking_alignment?: Record<string, unknown>;
+  };
+}
+
+export interface ShortpickReplayDecisionQuestion {
+  id: string;
+  label: string;
+  status: string;
+  headline: string;
+  reason?: string | null;
+  metric_label?: string | null;
+  metric_value?: number | null;
+  sample_count?: number | null;
+  candidate_metric_value?: number | null;
+  portfolio_metric_value?: number | null;
+}
+
+export interface ShortpickReplayDecisionReadout {
+  status: string;
+  basis?: string | null;
+  questions: ShortpickReplayDecisionQuestion[];
+}
+
+export interface ShortpickReplayExecutionFunnelStep {
+  id: string;
+  label: string;
+  status: string;
+  count?: number | null;
+  basis?: string | null;
+  invert_meaning?: boolean;
+}
+
+export interface ShortpickReplayExecutionFunnel {
+  status: string;
+  basis?: string | null;
+  reason?: string | null;
+  note?: string | null;
+  steps: ShortpickReplayExecutionFunnelStep[];
+}
+
+export interface ShortpickReplayEntrySensitivityRow {
+  entry_price_source: string;
+  label: string;
+  status: string;
+  assumption_level?: string | null;
+  entry_price_source_note?: string | null;
+  artifact_path?: string | null;
+  trade_count?: number | null;
+  skipped_count?: number | null;
+  blocked_exit_count?: number | null;
+  total_return?: number | null;
+  excess_total_return?: number | null;
+  max_drawdown?: number | null;
+  reason?: string | null;
+}
+
+export interface ShortpickReplayEntrySensitivityMatrix {
+  status: string;
+  strategy_key?: string | null;
+  strategy_label?: string | null;
+  reason?: string | null;
+  rows: ShortpickReplayEntrySensitivityRow[];
 }
 
 export interface ShortpickMarketPortfolioMetric {

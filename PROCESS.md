@@ -55,6 +55,7 @@
 - **市场因子 overlay 删除重建要局部化**：重新投影某个 run 时只删除该 run 的 market-factor overlay 和关联验证，不影响 LLM 原始候选和其他运行记录。
 - **无 live run 也要能看历史回放**：试验田 tab 的可见性不能只挂在 latest live run 上；只有 replay 数据时也应显示历史回放。
 - **短投列表接口要轻量**：run 列表不嵌 full candidates、source packet、raw answer；大 payload 走下钻接口，避免打开试验田时解析数 MB JSON。
+- **历史分析结论只做 projection**：首屏决策读数、可执行性漏斗、入场矩阵必须由已完成 artifact 或只读 ledger 投影；缺字段显示待补原因，不在前端拼结论，也不在页面请求里补跑研究任务。
 
 ## 历史回放与证据隔离
 

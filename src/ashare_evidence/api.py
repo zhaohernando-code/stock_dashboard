@@ -125,6 +125,7 @@ from ashare_evidence.shortpick_replay import (
     list_shortpick_replay_candidates,
     list_shortpick_replay_runs,
 )
+from ashare_evidence.shortpick_replay_readout import build_shortpick_replay_decision_projection
 from ashare_evidence.simulation import (
     end_simulation_session,
     get_simulation_workspace,
@@ -148,6 +149,11 @@ LOGGER = logging.getLogger(__name__)
 SHORTPICK_PORTFOLIO_BACKTEST_ARTIFACT = Path("output/shortpick-portfolio-backtest-new-retail-mainboard-current.json")
 LEGACY_SHORTPICK_PORTFOLIO_BACKTEST_ARTIFACT = Path("output/shortpick-portfolio-backtest-new-retail-mainboard-current-20260510.json")
 STAGED_SHORTPICK_PORTFOLIO_BACKTEST_ARTIFACT = Path("output/shortpick-staged-backtests/20260512T221426/full_window-next_close.json")
+STAGED_SHORTPICK_ENTRY_ARTIFACTS = {
+    "next_close": Path("output/shortpick-staged-backtests/20260512T221426/full_window-next_close.json"),
+    "next_open": Path("output/shortpick-staged-backtests/20260512T221426/full_window-next_open.json"),
+    "same_close_proxy": Path("output/shortpick-staged-backtests/20260512T221426/full_window-same_close_proxy.json"),
+}
 SHORTPICK_MARKET_FACTOR_STUDY_ARTIFACT = Path("output/shortpick-market-factor-study-current.json")
 SHORTPICK_REPLAY_FEEDBACK_CACHE_ARTIFACT = Path("output/shortpick-replay-feedback-cache.json")
 
@@ -346,6 +352,70 @@ def _load_shortpick_replay_feedback_from_cache(run_id: int | None) -> dict[str, 
             f"{'aggregate feedback' if run_id is None else f'run {run_id} feedback'}: {artifact_path}"
         )
     return feedback
+
+
+def _shortpick_entry_artifact_env_var(entry_price_source: str) -> str:
+    normalized = entry_price_source.upper().replace("-", "_")
+    return f"ASHARE_SHORTPICK_STAGED_BACKTEST_{normalized}_ARTIFACT"
+
+
+def _load_shortpick_entry_sensitivity_artifacts() -> dict[str, dict[str, object]]:
+    artifacts: dict[str, dict[str, object]] = {}
+    for entry_price_source, relative_path in STAGED_SHORTPICK_ENTRY_ARTIFACTS.items():
+        artifact_path = _existing_project_artifact_path(
+            relative_path,
+            env_var=_shortpick_entry_artifact_env_var(entry_price_source),
+        )
+        if not artifact_path.exists():
+            continue
+        try:
+            artifacts[entry_price_source] = {
+                "artifact_path": str(artifact_path),
+                "payload": _read_json_artifact(artifact_path, label=f"shortpick staged {entry_price_source} backtest"),
+            }
+        except ValueError as exc:
+            artifacts[entry_price_source] = {
+                "artifact_path": str(artifact_path),
+                "artifact_error": str(exc),
+            }
+    return artifacts
+
+
+def _attach_shortpick_replay_decision_projection(
+    feedback: dict[str, object],
+    *,
+    session: Session,
+) -> dict[str, object]:
+    enriched = dict(feedback)
+    overall = dict(enriched.get("overall") or {})
+    projection_inputs: dict[str, object] = {}
+    try:
+        projection_inputs["market_study"] = _load_shortpick_market_factor_study_artifact("universe_equal_weight")
+    except (LookupError, ValueError) as exc:
+        projection_inputs["market_study"] = {
+            "projection_status": "missing_artifact",
+            "projection_reason": str(exc),
+        }
+    projection_inputs["entry_artifacts"] = _load_shortpick_entry_sensitivity_artifacts()
+    try:
+        projection_inputs["paper_tracking"] = _build_shortpick_paper_tracking_ledger(session)
+    except Exception as exc:  # pragma: no cover - defensive runtime projection
+        projection_inputs["paper_tracking"] = {
+            "current_status": "missing_ledger",
+            "current_message": str(exc),
+            "summary": {},
+            "items": [],
+        }
+    overall.update(
+        build_shortpick_replay_decision_projection(
+            enriched,
+            market_study=projection_inputs["market_study"],  # type: ignore[arg-type]
+            entry_artifacts=projection_inputs["entry_artifacts"],  # type: ignore[arg-type]
+            paper_tracking=projection_inputs["paper_tracking"],  # type: ignore[arg-type]
+        )
+    )
+    enriched["overall"] = overall
+    return enriched
 
 
 def _attach_shortpick_frozen_strategy_evidence(payload: dict[str, object]) -> dict[str, object]:
@@ -1231,7 +1301,8 @@ def create_app(
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
         try:
-            return _load_shortpick_replay_feedback_from_cache(run_id=None)
+            feedback = _load_shortpick_replay_feedback_from_cache(run_id=None)
+            return _attach_shortpick_replay_decision_projection(feedback, session=session)
         except LookupError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:

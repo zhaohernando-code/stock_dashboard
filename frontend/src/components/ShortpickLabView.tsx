@@ -33,6 +33,9 @@ import type {
   ShortpickModelFeedbackResponse,
   ShortpickPaperTrackingItem,
   ShortpickPaperTrackingResponse,
+  ShortpickReplayDecisionQuestion,
+  ShortpickReplayEntrySensitivityRow,
+  ShortpickReplayExecutionFunnelStep,
   ShortpickReplayFeedbackResponse,
   ShortpickReplayFeedbackFamily,
   ShortpickReplaySourceResponse,
@@ -235,6 +238,44 @@ function replayGateReasonText(value?: unknown): string {
     return "样本覆盖已足够做聚合比较。";
   }
   return reason;
+}
+
+function replayDecisionStatusColor(value?: string | null): string {
+  if (!value) return "default";
+  if (value.includes("ready") || value.includes("aligned") || value.includes("tracking")) return "green";
+  if (value.includes("missing") || value.includes("blocker") || value.includes("gap") || value.includes("failed") || value.includes("no_verified")) return "red";
+  if (value.includes("observe") || value.includes("waiting") || value.includes("insufficient")) return "gold";
+  return "blue";
+}
+
+function replayDecisionStatusLabel(value?: string | null): string {
+  if (value === "observe_only") return "只观察";
+  if (value === "no_verified_advantage") return "优势不足";
+  if (value === "insufficient_sample") return "样本不足";
+  if (value === "paper_tracking_only") return "纸面跟踪";
+  if (value === "forward_observation") return "前向观察";
+  if (value === "waiting_forward_sample") return "待前向";
+  if (value === "directionally_aligned") return "方向一致";
+  if (value === "execution_gap") return "执行落差";
+  if (value === "selection_gap") return "选股待改善";
+  if (value === "production_gate_blocker") return "门槛未过";
+  if (value === "drawdown_blocker") return "回撤约束";
+  if (value === "sample_blocker") return "样本不足";
+  if (value === "forward_sample_blocker") return "前向样本";
+  if (value === "entry_assumption_blocker") return "入场假设";
+  if (value === "missing_artifact") return "待产物";
+  if (value === "forward_tracking_only") return "仅前向";
+  if (value === "diagnostic_proxy") return "代理诊断";
+  if (value === "research_backtest") return "历史研究";
+  if (value === "live_forward_paper") return "纸面前向";
+  return value || "待判断";
+}
+
+function funnelBasisLabel(value?: string | null): string {
+  if (value === "stock_series") return "股票池";
+  if (value === "candidate_horizon_rows") return "候选-周期";
+  if (value === "blocked_candidate_horizon_rows") return "不可买行";
+  return value || "待补";
 }
 
 function loadingAwareText(loading: boolean, value: string | number | null | undefined, emptyText = "暂无数据") {
@@ -2529,6 +2570,7 @@ function HistoricalReplayTab({
           description="批次、候选明细、全局统计和策略收口会分段返回；表格会在对应数据到达后自动更新。"
         />
       ) : null}
+      <ReplayDecisionReadout feedback={aggregateFeedback} loading={aggregateFeedbackLoading} />
       <ReplayStatisticalSummary
         feedback={aggregateFeedback}
         loading={aggregateFeedbackLoading}
@@ -2730,6 +2772,153 @@ function HistoricalReplayTab({
         ]}
       />
     </>
+  );
+}
+
+function ReplayDecisionReadout({
+  feedback,
+  loading,
+}: {
+  feedback: ShortpickReplayFeedbackResponse | null;
+  loading: boolean;
+}) {
+  const decision = feedback?.overall?.decision_readout;
+  const funnel = feedback?.overall?.execution_funnel;
+  const entryMatrix = feedback?.overall?.entry_sensitivity_matrix;
+  const questions = decision?.questions ?? [];
+  const entryColumns: ColumnsType<ShortpickReplayEntrySensitivityRow> = [
+    {
+      title: "入场口径",
+      key: "entry",
+      render: (_, item) => (
+        <Space direction="vertical" size={0}>
+          <Space wrap>
+            <Text strong>{item.label}</Text>
+            <Tag color={replayDecisionStatusColor(item.assumption_level)}>
+              {replayDecisionStatusLabel(item.assumption_level)}
+            </Tag>
+          </Space>
+          <Text type="secondary">{item.entry_price_source_note || item.reason || "待产物补齐"}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: "交易",
+      key: "trades",
+      render: (_, item) => (
+        <Space direction="vertical" size={0}>
+          <Text>{item.status === "missing_artifact" ? "待产物" : `${formatNumber(Number(item.trade_count ?? 0))} 笔`}</Text>
+          <Text type="secondary">跳过 {formatNumber(Number(item.skipped_count ?? 0))} · 出口受限 {formatNumber(Number(item.blocked_exit_count ?? 0))}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: "收益 / 超额",
+      key: "return",
+      render: (_, item) => (
+        <Space direction="vertical" size={0}>
+          <Text className={`value-${valueTone(item.excess_total_return)}`}>超额 {formatPercent(item.excess_total_return)}</Text>
+          <Text type="secondary">总收益 {formatPercent(item.total_return)}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: "最大回撤",
+      key: "drawdown",
+      render: (_, item) => <Text className={`value-${valueTone(item.max_drawdown)}`}>{formatPercent(item.max_drawdown)}</Text>,
+    },
+  ];
+
+  if (loading && !feedback) {
+    return (
+      <Card className="panel-card shortpick-replay-decision" title="历史分析结论">
+        <Skeleton active paragraph={{ rows: 5 }} />
+      </Card>
+    );
+  }
+
+  if (!decision) {
+    return (
+      <Card className="panel-card shortpick-replay-decision" title="历史分析结论">
+        <Alert
+          showIcon
+          type="warning"
+          message="决策读数待产物补齐"
+          description="历史回放统计已加载，但后端尚未返回 decision_readout；页面不会临时推导研究结论。"
+        />
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="panel-card shortpick-replay-decision" title="历史分析结论">
+      <div className="shortpick-replay-decision-grid">
+        {questions.map((item: ShortpickReplayDecisionQuestion) => (
+          <div key={item.id} className="shortpick-replay-decision-tile">
+            <Space wrap size={6}>
+              <span>{item.label}</span>
+              <Tag color={replayDecisionStatusColor(item.status)}>{replayDecisionStatusLabel(item.status)}</Tag>
+            </Space>
+            <strong>{item.headline}</strong>
+            {item.metric_label ? (
+              <Text className={`value-${valueTone(item.metric_value)}`}>
+                {item.metric_label} {formatPercent(item.metric_value)}
+              </Text>
+            ) : null}
+            {item.candidate_metric_value !== undefined || item.portfolio_metric_value !== undefined ? (
+              <Text type="secondary">
+                候选 {formatPercent(item.candidate_metric_value)} · 组合 {formatPercent(item.portfolio_metric_value)}
+              </Text>
+            ) : null}
+            {item.sample_count !== undefined && item.sample_count !== null ? (
+              <Text type="secondary">样本 {formatNumber(Number(item.sample_count))}</Text>
+            ) : null}
+            <Text type="secondary">{item.reason || "读取预计算产物，不在页面请求时重算。"}</Text>
+          </div>
+        ))}
+      </div>
+
+      <div className="shortpick-replay-funnel">
+        <Space direction="vertical" size={2}>
+          <Title level={5}>可执行性漏斗</Title>
+          <Text type="secondary">
+            {funnel?.status === "missing_artifact"
+              ? funnel.reason || "缺失字段会显示待产物补齐，不使用前端猜测值。"
+              : funnel?.note || "缺失字段会显示待产物补齐，不使用前端猜测值。"}
+          </Text>
+        </Space>
+        <div className="shortpick-replay-funnel-steps">
+          {(funnel?.steps ?? []).map((step: ShortpickReplayExecutionFunnelStep) => (
+            <div key={step.id} className="shortpick-replay-funnel-step">
+              <span>{step.label}</span>
+              <strong>{step.count === null || step.count === undefined ? "待补" : formatNumber(Number(step.count))}</strong>
+              <Text type="secondary">{step.invert_meaning ? "剔除项" : funnelBasisLabel(step.basis)}</Text>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="shortpick-replay-entry-matrix">
+        <Space direction="vertical" size={2}>
+          <Title level={5}>入场假设矩阵</Title>
+          <Text type="secondary">
+            {entryMatrix?.status === "missing_artifact"
+              ? entryMatrix.reason || "待入场口径产物补齐。"
+              : entryMatrix?.strategy_label || "当前冻结策略"}
+            ；14点同日口径只按日线代理展示，不等同真实盘中全市场快照。
+          </Text>
+        </Space>
+        <Table
+          className="shortpick-replay-stat-table"
+          rowKey="entry_price_source"
+          size="small"
+          pagination={false}
+          columns={entryColumns}
+          dataSource={entryMatrix?.rows ?? []}
+          locale={{ emptyText: "待入场口径产物补齐" }}
+        />
+      </div>
+    </Card>
   );
 }
 
