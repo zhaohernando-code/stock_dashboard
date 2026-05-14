@@ -184,14 +184,21 @@ function marketRegimeDisplayLabel(item: Record<string, unknown> | string | null 
     }
     return trendRegimeLabel(item);
   }
-  const trend = String(item?.trend_regime ?? item?.regime_group_key ?? item?.market_regime_tag ?? "");
-  const volatility = String(item?.volatility_regime ?? "");
-  const sizeStyle = String(item?.size_style_regime ?? "");
-  const isTrendOnly = String(item?.regime_granularity ?? "") === "trend_regime" || !String(item?.market_regime_tag ?? "").includes(":");
+  const rawTag = String(item?.market_regime_tag ?? item?.regime_group_key ?? "");
+  const rawParts = rawTag.includes(":") ? rawTag.split(":") : [];
+  const trend = String(item?.trend_regime ?? rawParts[0] ?? item?.regime_group_key ?? item?.market_regime_tag ?? "");
+  const volatility = String(item?.volatility_regime ?? rawParts[1] ?? "");
+  const sizeStyle = String(item?.size_style_regime ?? rawParts[2] ?? "");
+  const isTrendOnly = String(item?.regime_granularity ?? "") === "trend_regime" || (!rawTag.includes(":") && !volatility && !sizeStyle);
   if (isTrendOnly) return trendRegimeLabel(trend);
   return [trendRegimeLabel(trend), volatilityRegimeLabel(volatility), sizeStyleRegimeLabel(sizeStyle)]
     .filter(Boolean)
     .join(" · ") || "行情待补";
+}
+
+function isRecognizedMarketRegimeRow(item: Record<string, unknown>): boolean {
+  const value = String(item.market_regime_tag ?? item.regime_group_key ?? item.trend_regime ?? "");
+  return Boolean(value) && value !== "missing" && value !== "missing_regime" && !value.includes("missing");
 }
 
 function periodKindLabel(value?: string | null): string {
@@ -2957,6 +2964,10 @@ function ReplayDecisionReadout({
   const robustStrategyRegimeWinners = displayedStrategyRegimeWinners.filter((item) => Number(recordValue<number>(item, "winner_sample_count") ?? recordValue<number>(item, "winner_trade_count") ?? 0) >= regimeSampleThreshold);
   const strategyRegimeRowsForTable = robustStrategyRegimeWinners.length ? robustStrategyRegimeWinners : displayedStrategyRegimeWinners;
   const hiddenLowSampleRegimeCount = displayedStrategyRegimeWinners.length - strategyRegimeRowsForTable.length;
+  const recognizedStrategyRegimeRows = strategyRegimeRowsForTable.filter(isRecognizedMarketRegimeRow);
+  const primaryStrategyRegimeRows = recognizedStrategyRegimeRows.filter((item) => String(item.entry_price_source ?? "") === "next_close");
+  const visibleStrategyRegimeRows = (primaryStrategyRegimeRows.length ? primaryStrategyRegimeRows : recognizedStrategyRegimeRows).slice(0, 6);
+  const hiddenUnrecognizedRegimeCount = strategyRegimeRowsForTable.length - recognizedStrategyRegimeRows.length;
   const strategyRegimeCoverage = Array.isArray(strategySlice.regime_coverage_rows) ? strategySlice.regime_coverage_rows as Record<string, unknown>[] : [];
   const strategyOverallRows = Array.isArray(strategySlice.overall_strategy_rows) ? strategySlice.overall_strategy_rows as Record<string, unknown>[] : [];
   const portfolioConfidence = recordValue<Record<string, unknown>>(strategySlice, "portfolio_confidence_intervals") ?? {};
@@ -3065,51 +3076,62 @@ function ReplayDecisionReadout({
         ))}
       </div>
 
-      <div className="shortpick-replay-funnel">
-        <Space direction="vertical" size={2}>
-          <Title level={5}>可执行性漏斗</Title>
-          <Text type="secondary">
-            {funnel?.status === "missing_artifact"
-              ? funnel.reason || "缺失字段会显示待产物补齐，不使用前端猜测值。"
-              : funnel?.note || "缺失字段会显示待产物补齐，不使用前端猜测值。"}
-          </Text>
-        </Space>
-        <div className="shortpick-replay-funnel-steps">
-          {(funnel?.steps ?? []).map((step: ShortpickReplayExecutionFunnelStep) => (
-            <div key={step.id} className="shortpick-replay-funnel-step">
-              <span>{step.label}</span>
-              <strong>{step.count === null || step.count === undefined ? "待补" : formatNumber(Number(step.count))}</strong>
-              <Text type="secondary">{step.invert_meaning ? "剔除项" : funnelBasisLabel(step.basis)}</Text>
-            </div>
-          ))}
-        </div>
-      </div>
+      <Collapse
+        className="shortpick-replay-diagnostics"
+        items={[{
+          key: "execution-assumptions",
+          label: "执行口径和入场假设",
+          children: (
+            <>
+              <div className="shortpick-replay-funnel">
+                <Space direction="vertical" size={2}>
+                  <Title level={5}>可执行性漏斗</Title>
+                  <Text type="secondary">
+                    {funnel?.status === "missing_artifact"
+                      ? funnel.reason || "缺失字段会显示待产物补齐，不使用前端猜测值。"
+                      : funnel?.note || "缺失字段会显示待产物补齐，不使用前端猜测值。"}
+                  </Text>
+                </Space>
+                <div className="shortpick-replay-funnel-steps">
+                  {(funnel?.steps ?? []).map((step: ShortpickReplayExecutionFunnelStep) => (
+                    <div key={step.id} className="shortpick-replay-funnel-step">
+                      <span>{step.label}</span>
+                      <strong>{step.count === null || step.count === undefined ? "待补" : formatNumber(Number(step.count))}</strong>
+                      <Text type="secondary">{step.invert_meaning ? "剔除项" : funnelBasisLabel(step.basis)}</Text>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="shortpick-replay-entry-matrix">
+                <Space direction="vertical" size={2}>
+                  <Title level={5}>入场假设矩阵</Title>
+                  <Text type="secondary">
+                    {entryMatrix?.status === "missing_artifact"
+                      ? entryMatrix.reason || "待入场口径产物补齐。"
+                      : entryMatrix?.strategy_label || "当前冻结策略"}
+                    ；14点同日口径只按日线代理展示，不等同真实盘中全市场快照。
+                  </Text>
+                </Space>
+                <Table
+                  className="shortpick-replay-stat-table"
+                  rowKey="entry_price_source"
+                  size="small"
+                  pagination={false}
+                  columns={entryColumns}
+                  dataSource={entryMatrix?.rows ?? []}
+                  locale={{ emptyText: "待入场口径产物补齐" }}
+                />
+              </div>
+            </>
+          ),
+        }]}
+      />
 
       <div className="shortpick-replay-entry-matrix">
         <Space direction="vertical" size={2}>
-          <Title level={5}>入场假设矩阵</Title>
-          <Text type="secondary">
-            {entryMatrix?.status === "missing_artifact"
-              ? entryMatrix.reason || "待入场口径产物补齐。"
-              : entryMatrix?.strategy_label || "当前冻结策略"}
-            ；14点同日口径只按日线代理展示，不等同真实盘中全市场快照。
-          </Text>
-        </Space>
-        <Table
-          className="shortpick-replay-stat-table"
-          rowKey="entry_price_source"
-          size="small"
-          pagination={false}
-          columns={entryColumns}
-          dataSource={entryMatrix?.rows ?? []}
-          locale={{ emptyText: "待入场口径产物补齐" }}
-        />
-      </div>
-
-        <div className="shortpick-replay-entry-matrix">
-        <Space direction="vertical" size={2}>
           <Title level={5}>稳定性、置信与归因</Title>
-          <Text type="secondary">这些读数只来自离线 replay cache、staged portfolio artifact、交易级策略切片 artifact 和只读纸面 ledger；行情表优先使用交易级切片补足低样本行情桶。</Text>
+          <Text type="secondary">先看下方 6 个判断卡和“关键行情结论”；完整统计、置信区间和归因明细已折叠到下方，需要追溯时再展开。</Text>
         </Space>
         <div className="shortpick-replay-decision-grid">
           <div className="shortpick-replay-decision-tile">
@@ -3242,13 +3264,23 @@ function ReplayDecisionReadout({
             },
           ]}
           title={() => (
-            <Text type="secondary">
-              默认只展示不少于 {formatNumber(regimeSampleThreshold)} 个{regimeSampleUnit}的行情结论；低样本分桶{hiddenLowSampleRegimeCount > 0 ? `已收起 ${formatNumber(hiddenLowSampleRegimeCount)} 个` : "未收起"}。
-            </Text>
+            <Space direction="vertical" size={0}>
+              <Text strong>关键行情结论</Text>
+              <Text type="secondary">
+                默认只看已识别行情，并优先显示次日收盘买入口径；低样本分桶{hiddenLowSampleRegimeCount > 0 ? `已收起 ${formatNumber(hiddenLowSampleRegimeCount)} 个` : "未收起"}，行情未识别{hiddenUnrecognizedRegimeCount > 0 ? `已收起 ${formatNumber(hiddenUnrecognizedRegimeCount)} 个` : "未收起"}。
+              </Text>
+            </Space>
           )}
-          dataSource={strategyRegimeRowsForTable.slice(0, 10)}
+          dataSource={visibleStrategyRegimeRows}
           locale={{ emptyText: String(strategySlice.reason ?? "待长窗口策略切片产物补齐") }}
         />
+        <Collapse
+          className="shortpick-replay-diagnostics"
+          items={[{
+            key: "historical-detail",
+            label: "完整统计、置信区间和归因明细",
+            children: (
+              <>
         <Table
           className="shortpick-replay-stat-table"
           rowKey={(item) => `${String(item.entry_price_source)}-${String(item.strategy)}`}
@@ -3409,6 +3441,10 @@ function ReplayDecisionReadout({
           ]}
           dataSource={industryAttributionRows}
           locale={{ emptyText: String(industryAttribution.reason ?? "待行业归因产物补齐") }}
+        />
+              </>
+            ),
+          }]}
         />
       </div>
     </Card>
