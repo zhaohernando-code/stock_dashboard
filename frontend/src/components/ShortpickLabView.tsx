@@ -2788,7 +2788,6 @@ function ReplayDecisionReadout({
   const decision = feedback?.overall?.decision_readout;
   const funnel = feedback?.overall?.execution_funnel;
   const entryMatrix = feedback?.overall?.entry_sensitivity_matrix;
-  const confidence = recordValue<Record<string, unknown>>(feedback?.overall, "confidence_intervals") ?? {};
   const regime = recordValue<Record<string, unknown>>(feedback?.overall, "regime_stability") ?? {};
   const attribution = recordValue<Record<string, unknown>>(feedback?.overall, "return_attribution") ?? {};
   const forwardAlignment = recordValue<Record<string, unknown>>(feedback?.overall, "forward_tracking_alignment") ?? {};
@@ -2796,9 +2795,6 @@ function ReplayDecisionReadout({
   const strategySliceScope = recordValue<Record<string, unknown>>(strategySlice, "data_scope") ?? {};
   const strategySliceAdequacy = recordValue<Record<string, unknown>>(strategySlice, "sample_adequacy") ?? {};
   const questions = decision?.questions ?? [];
-  const confidenceRows = Array.isArray(confidence.rows) ? confidence.rows as Record<string, unknown>[] : [];
-  const attributionRows = Array.isArray(attribution.rows) ? attribution.rows as Record<string, unknown>[] : [];
-  const portfolioPeriods = Array.isArray(regime.portfolio_periods) ? regime.portfolio_periods as Record<string, unknown>[] : [];
   const marketRegime = recordValue<Record<string, unknown>>(regime, "market_regime") ?? {};
   const industryStability = recordValue<Record<string, unknown>>(regime, "industry_theme") ?? {};
   const industryAttribution = recordValue<Record<string, unknown>>(attribution, "industry_theme") ?? {};
@@ -2808,12 +2804,20 @@ function ReplayDecisionReadout({
   const strategyRegimeWinners = Array.isArray(strategySlice.regime_winner_rows) ? strategySlice.regime_winner_rows as Record<string, unknown>[] : [];
   const strategyRegimeCoverage = Array.isArray(strategySlice.regime_coverage_rows) ? strategySlice.regime_coverage_rows as Record<string, unknown>[] : [];
   const strategyOverallRows = Array.isArray(strategySlice.overall_strategy_rows) ? strategySlice.overall_strategy_rows as Record<string, unknown>[] : [];
-  const defaultConfidence = confidenceRows.find((item) => item.family === "momentum_10d_turnover_cooldown_rank" && item.eligibility === "tradable")
-    ?? confidenceRows[0];
-  const defaultAttribution = attributionRows.find((item) => item.family === "momentum_10d_turnover_cooldown_rank")
-    ?? attributionRows[0];
-  const nextCloseYearly = portfolioPeriods.find((item) => item.entry_price_source === "next_close" && item.period_kind === "yearly")
-    ?? portfolioPeriods[0];
+  const portfolioConfidence = recordValue<Record<string, unknown>>(strategySlice, "portfolio_confidence_intervals") ?? {};
+  const portfolioStability = recordValue<Record<string, unknown>>(strategySlice, "portfolio_stability") ?? {};
+  const portfolioAttribution = recordValue<Record<string, unknown>>(strategySlice, "portfolio_return_attribution") ?? {};
+  const portfolioForwardAlignment = recordValue<Record<string, unknown>>(strategySlice, "portfolio_forward_tracking_alignment") ?? forwardAlignment;
+  const portfolioConfidenceRows = Array.isArray(portfolioConfidence.rows) ? portfolioConfidence.rows as Record<string, unknown>[] : [];
+  const portfolioPeriodSummaryRows = Array.isArray(portfolioStability.period_summary_rows) ? portfolioStability.period_summary_rows as Record<string, unknown>[] : [];
+  const portfolioAttributionRows = Array.isArray(portfolioAttribution.rows) ? portfolioAttribution.rows as Record<string, unknown>[] : [];
+  const portfolioSymbolIndustry = recordValue<Record<string, unknown>>(portfolioAttribution, "symbol_industry") ?? {};
+  const defaultPortfolioConfidence = portfolioConfidenceRows.find((item) => item.entry_price_source === "next_close" && item.strategy === "low_turnover_20d_uptrend_liquid_top120")
+    ?? portfolioConfidenceRows[0];
+  const defaultPortfolioAttribution = portfolioAttributionRows.find((item) => item.entry_price_source === "next_close" && item.strategy === "low_turnover_20d_uptrend_liquid_top120")
+    ?? portfolioAttributionRows[0];
+  const defaultPortfolioStability = portfolioPeriodSummaryRows.find((item) => item.entry_price_source === "next_close" && item.strategy === "low_turnover_20d_uptrend_liquid_top120" && item.period_kind === "month")
+    ?? portfolioPeriodSummaryRows[0];
   const entryColumns: ColumnsType<ShortpickReplayEntrySensitivityRow> = [
     {
       title: "入场口径",
@@ -2981,51 +2985,51 @@ function ReplayDecisionReadout({
           </div>
           <div className="shortpick-replay-decision-tile">
             <Space wrap size={6}>
-              <span>置信区间</span>
-              <Tag color={recordValue<boolean>(defaultConfidence, "lower_bound_positive") ? "green" : "gold"}>
-                {projectionStatusLabel(String(confidence.status ?? "missing_artifact"))}
+              <span>组合置信区间</span>
+              <Tag color={recordValue<boolean>(defaultPortfolioConfidence, "lower_bound_positive") ? "green" : "gold"}>
+                {projectionStatusLabel(String(portfolioConfidence.status ?? "missing_artifact"))}
               </Tag>
             </Space>
-            <strong>{recordValue<boolean>(defaultConfidence, "lower_bound_positive") ? "下沿仍为正" : "下沿未过晋级线"}</strong>
-            <Text className={`value-${valueTone(recordValue<number>(defaultConfidence, "lower_excess_return"))}`}>
-              下沿 {formatPercent(recordValue<number>(defaultConfidence, "lower_excess_return"))}
+            <strong>{recordValue<boolean>(defaultPortfolioConfidence, "lower_bound_positive") ? "下沿仍为正" : "下沿未过晋级线"}</strong>
+            <Text className={`value-${valueTone(recordValue<number>(defaultPortfolioConfidence, "lower_excess_return"))}`}>
+              月度下沿 {formatPercent(recordValue<number>(defaultPortfolioConfidence, "lower_excess_return"))}
             </Text>
             <Text type="secondary">
-              均值 {formatPercent(recordValue<number>(defaultConfidence, "mean_excess_return"))} · 日期 {formatNumber(Number(recordValue<number>(defaultConfidence, "sample_date_count") ?? 0))}
+              均值 {formatPercent(recordValue<number>(defaultPortfolioConfidence, "mean_excess_return"))} · 月份 {formatNumber(Number(recordValue<number>(defaultPortfolioConfidence, "sample_period_count") ?? 0))}
             </Text>
           </div>
           <div className="shortpick-replay-decision-tile">
             <Space wrap size={6}>
-              <span>时间稳定性</span>
-              <Tag color={portfolioPeriods.length ? "blue" : "default"}>{projectionStatusLabel(String(regime.status ?? "missing_artifact"))}</Tag>
+              <span>组合时间稳定性</span>
+              <Tag color={portfolioPeriodSummaryRows.length ? "blue" : "default"}>{projectionStatusLabel(String(portfolioStability.status ?? "missing_artifact"))}</Tag>
             </Space>
-            <strong>{recordValue<string>(nextCloseYearly, "worst_period") || "待产物"}</strong>
-            <Text className={`value-${valueTone(recordValue<number>(nextCloseYearly, "worst_period_excess_return"))}`}>
-              最弱期 {formatPercent(recordValue<number>(nextCloseYearly, "worst_period_excess_return"))}
+            <strong>{recordValue<string>(defaultPortfolioStability, "worst_period") || "待产物"}</strong>
+            <Text className={`value-${valueTone(recordValue<number>(defaultPortfolioStability, "worst_period_excess_return"))}`}>
+              最弱期 {formatPercent(recordValue<number>(defaultPortfolioStability, "worst_period_excess_return"))}
             </Text>
-            <Text type="secondary">正超额期占比 {formatPercent(recordValue<number>(nextCloseYearly, "positive_excess_period_rate"))}</Text>
+            <Text type="secondary">正超额期占比 {formatPercent(recordValue<number>(defaultPortfolioStability, "positive_excess_period_rate"))}</Text>
           </div>
           <div className="shortpick-replay-decision-tile">
             <Space wrap size={6}>
-              <span>收益归因</span>
-              <Tag color={attributionRows.length ? "blue" : "default"}>{projectionStatusLabel(String(attribution.status ?? "missing_artifact"))}</Tag>
+              <span>组合收益归因</span>
+              <Tag color={portfolioAttributionRows.length ? "blue" : "default"}>{projectionStatusLabel(String(portfolioAttribution.status ?? "missing_artifact"))}</Tag>
             </Space>
-            <strong>{recordValue<string>(defaultAttribution, "best_symbol") || "待归因"}</strong>
-            <Text className={`value-${valueTone(recordValue<number>(defaultAttribution, "drop_best_symbol_mean_excess_return"))}`}>
-              去最佳单票 {formatPercent(recordValue<number>(defaultAttribution, "drop_best_symbol_mean_excess_return"))}
+            <strong>{recordValue<string>(defaultPortfolioAttribution, "best_month") || "待归因"}</strong>
+            <Text className={`value-${valueTone(recordValue<number>(defaultPortfolioAttribution, "drop_best_month_mean_excess_return"))}`}>
+              去最佳月份 {formatPercent(recordValue<number>(defaultPortfolioAttribution, "drop_best_month_mean_excess_return"))}
             </Text>
-            <Text type="secondary">最弱月份 {recordValue<string>(defaultAttribution, "worst_month") || "待补"} · {formatPercent(recordValue<number>(defaultAttribution, "worst_month_mean_excess_return"))}</Text>
+            <Text type="secondary">最弱月份 {recordValue<string>(defaultPortfolioAttribution, "worst_month") || "待补"} · {formatPercent(recordValue<number>(defaultPortfolioAttribution, "worst_month_mean_excess_return"))}</Text>
           </div>
           <div className="shortpick-replay-decision-tile">
             <Space wrap size={6}>
               <span>前向对齐</span>
-              <Tag color={String(forwardAlignment.status) === "ready_for_alignment" ? "green" : "gold"}>
-                {projectionStatusLabel(String(forwardAlignment.status ?? "missing_artifact"))}
+              <Tag color={String(portfolioForwardAlignment.status) === "ready_for_alignment" ? "green" : "gold"}>
+                {projectionStatusLabel(String(portfolioForwardAlignment.status ?? "missing_artifact"))}
               </Tag>
             </Space>
-            <strong>{projectionDecisionLabel(String(forwardAlignment.decision ?? "continue_observation"))}</strong>
-            <Text>纸面信号 {formatNumber(Number(forwardAlignment.paper_tracked_signal_count ?? 0))}</Text>
-            <Text type="secondary">历史组合期望 {formatPercent(recordValue<number>(forwardAlignment, "historical_portfolio_expected_excess"))}</Text>
+            <strong>{projectionDecisionLabel(String(portfolioForwardAlignment.decision ?? "continue_observation"))}</strong>
+            <Text>纸面信号 {formatNumber(Number(portfolioForwardAlignment.paper_tracked_signal_count ?? 0))}</Text>
+            <Text type="secondary">非 LLM 历史组合期望 {formatPercent(recordValue<number>(portfolioForwardAlignment, "historical_portfolio_expected_excess"))}</Text>
           </div>
         </div>
         <Table
@@ -3096,7 +3100,7 @@ function ReplayDecisionReadout({
           size="small"
           pagination={false}
           columns={[
-            { title: "置信口径", render: (_, item) => String(item.label ?? "--") },
+            { title: "组合置信口径", render: (_, item) => `${String(item.entry_price_source ?? "--")} · ${String(item.label ?? "--")}` },
             {
               title: "均值 / 区间",
               render: (_, item) => (
@@ -3106,34 +3110,64 @@ function ReplayDecisionReadout({
                 </Space>
               ),
             },
-            { title: "样本", render: (_, item) => `${formatNumber(Number(recordValue<number>(item, "sample_date_count") ?? 0))} 日 / ${formatNumber(Number(recordValue<number>(item, "sample_count") ?? 0))} 条` },
+            { title: "样本", render: (_, item) => `${formatNumber(Number(recordValue<number>(item, "sample_period_count") ?? recordValue<number>(item, "sample_count") ?? 0))} 个月度组合样本` },
             { title: "判断", render: (_, item) => projectionDecisionLabel(String(item.promotion_decision ?? "")) },
           ]}
-          dataSource={confidenceRows.slice(0, 4)}
-          locale={{ emptyText: String(confidence.reason ?? "待置信区间产物补齐") }}
+          dataSource={portfolioConfidenceRows.slice(0, 8)}
+          locale={{ emptyText: String(portfolioConfidence.reason ?? "待组合置信区间产物补齐") }}
         />
         <Table
           className="shortpick-replay-stat-table"
-          rowKey={(item) => String(item.family)}
+          rowKey={(item) => `${String(item.entry_price_source)}-${String(item.strategy)}`}
           size="small"
           pagination={false}
           columns={[
-            { title: "归因口径", render: (_, item) => String(item.label ?? item.family ?? "--") },
-            { title: "最佳 / 最差单票", render: (_, item) => `${String(item.best_symbol ?? "--")} / ${String(item.worst_symbol ?? "--")}` },
-            { title: "最佳 / 最差日期", render: (_, item) => `${String(item.best_date ?? "--")} / ${String(item.worst_date ?? "--")}` },
+            { title: "组合归因口径", render: (_, item) => `${String(item.entry_price_source ?? "--")} · ${String(item.label ?? item.strategy ?? "--")}` },
+            { title: "最佳 / 最差月份", render: (_, item) => `${String(item.best_month ?? "--")} / ${String(item.worst_month ?? "--")}` },
+            { title: "最佳 / 最差行情", render: (_, item) => `${String(item.best_regime ?? "--")} / ${String(item.worst_regime ?? "--")}` },
             {
               title: "去贡献项后",
               render: (_, item) => (
                 <Space direction="vertical" size={0}>
-                  <Text>去最佳单票 {formatPercent(recordValue<number>(item, "drop_best_symbol_mean_excess_return"))}</Text>
-                  <Text type="secondary">去最佳月份 {formatPercent(recordValue<number>(item, "drop_best_month_mean_excess_return"))}</Text>
+                  <Text>去最佳月份 {formatPercent(recordValue<number>(item, "drop_best_month_mean_excess_return"))}</Text>
+                  <Text type="secondary">去最佳行情 {formatPercent(recordValue<number>(item, "drop_best_regime_mean_excess_return"))}</Text>
                 </Space>
               ),
             },
           ]}
-          dataSource={attributionRows}
-          locale={{ emptyText: String(attribution.reason ?? "待收益归因产物补齐") }}
+          dataSource={portfolioAttributionRows.slice(0, 8)}
+          locale={{ emptyText: String(portfolioAttribution.reason ?? "待组合收益归因产物补齐") }}
         />
+        <Table
+          className="shortpick-replay-stat-table"
+          rowKey={(item) => `${String(item.entry_price_source)}-${String(item.strategy)}-${String(item.period_kind)}`}
+          size="small"
+          pagination={false}
+          columns={[
+            { title: "稳定口径", render: (_, item) => `${String(item.entry_price_source ?? "--")} · ${String(item.label ?? item.strategy ?? "--")}` },
+            { title: "周期", render: (_, item) => String(item.period_kind ?? "--") },
+            {
+              title: "均值 / 正超额",
+              render: (_, item) => (
+                <Space direction="vertical" size={0}>
+                  <Text className={`value-${valueTone(recordValue<number>(item, "mean_excess_return"))}`}>均值 {formatPercent(recordValue<number>(item, "mean_excess_return"))}</Text>
+                  <Text type="secondary">正超额 {formatPercent(recordValue<number>(item, "positive_excess_period_rate"))}</Text>
+                </Space>
+              ),
+            },
+            { title: "最佳 / 最弱期", render: (_, item) => `${String(item.best_period ?? "--")} / ${String(item.worst_period ?? "--")}` },
+          ]}
+          dataSource={portfolioPeriodSummaryRows.filter((item) => item.entry_price_source === "next_close").slice(0, 8)}
+          locale={{ emptyText: String(portfolioStability.reason ?? "待组合稳定性产物补齐") }}
+        />
+        {portfolioSymbolIndustry.status === "missing_artifact" ? (
+          <Alert
+            showIcon
+            type="warning"
+            message="股票/行业归因待全量逐笔 artifact"
+            description={String(portfolioSymbolIndustry.reason ?? "当前组合产物不使用 trades_sample 外推股票或行业贡献。")}
+          />
+        ) : null}
         <Table
           className="shortpick-replay-stat-table"
           rowKey={(item) => `${String(item.family)}-${String(item.market_regime_tag)}`}

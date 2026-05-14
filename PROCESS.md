@@ -57,6 +57,7 @@
 - **短投列表接口要轻量**：run 列表不嵌 full candidates、source packet、raw answer；大 payload 走下钻接口，避免打开试验田时解析数 MB JSON。
 - **历史分析结论只做 projection**：首屏决策读数、可执行性漏斗、入场矩阵必须由已完成 artifact 或只读 ledger 投影；缺字段显示待补原因，不在前端拼结论，也不在页面请求里补跑研究任务。
 - **长窗口策略证据要和 LLM replay 分名**：当 LLM 历史 replay 时间窗过短时，可以用 full-window staged portfolio artifact 扩充确定性策略族的跨时段和分行情证据，但页面必须明确它回答的是组合路径稳定性，不等同于扩充了 LLM 自由选股样本。
+- **非 LLM 高级分析也要声明数据粒度**：组合级置信区间、稳定性和归因可以从 staged portfolio 月度/季度/行情桶产物投影；股票/行业归因必须等全量逐笔 artifact，不能用 `trades_sample` 外推。
 
 ## 历史回放与证据隔离
 

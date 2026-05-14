@@ -125,7 +125,7 @@ from ashare_evidence.shortpick_replay import (
     list_shortpick_replay_candidates,
     list_shortpick_replay_runs,
 )
-from ashare_evidence.shortpick_replay_readout import build_shortpick_replay_decision_projection
+from ashare_evidence.shortpick_replay_readout import CURRENT_FROZEN_STRATEGY, build_shortpick_replay_decision_projection
 from ashare_evidence.simulation import (
     end_simulation_session,
     get_simulation_workspace,
@@ -428,6 +428,13 @@ def _attach_shortpick_replay_decision_projection(
             "summary": {},
             "items": [],
         }
+    if isinstance(projection_inputs.get("strategy_slice_evidence"), dict):
+        strategy_slice = dict(projection_inputs["strategy_slice_evidence"])  # type: ignore[arg-type]
+        strategy_slice["portfolio_forward_tracking_alignment"] = _shortpick_portfolio_forward_tracking_alignment(
+            strategy_slice,
+            projection_inputs["paper_tracking"] if isinstance(projection_inputs.get("paper_tracking"), dict) else {},
+        )
+        projection_inputs["strategy_slice_evidence"] = strategy_slice
     overall.update(
         build_shortpick_replay_decision_projection(
             enriched,
@@ -439,6 +446,40 @@ def _attach_shortpick_replay_decision_projection(
     overall["strategy_slice_evidence"] = projection_inputs["strategy_slice_evidence"]
     enriched["overall"] = overall
     return enriched
+
+
+def _shortpick_portfolio_forward_tracking_alignment(
+    strategy_slice: dict[str, object],
+    paper_tracking: dict[str, object],
+) -> dict[str, object]:
+    rows = [
+        item
+        for item in strategy_slice.get("overall_strategy_rows") or []
+        if isinstance(item, dict) and str(item.get("strategy") or "") == CURRENT_FROZEN_STRATEGY
+    ]
+    summary = paper_tracking.get("summary") if isinstance(paper_tracking.get("summary"), dict) else {}
+    tracked_signal_count = int(summary.get("tracked_signal_count") or 0)
+    required_forward_days = int(summary.get("required_forward_trading_days") or 40)
+    status = "insufficient_forward_sample" if tracked_signal_count < 20 else "ready_for_alignment"
+    preferred = next((item for item in rows if item.get("entry_price_source") == "next_close"), rows[0] if rows else {})
+    historical_expected = preferred.get("mean_net_excess_return") if isinstance(preferred, dict) else None
+    return {
+        "status": status if rows else "missing_artifact",
+        "basis": "strategy_slice_evidence_plus_read_only_paper_tracking_ledger",
+        "strategy": CURRENT_FROZEN_STRATEGY,
+        "historical_expectation_rows": rows,
+        "historical_portfolio_expected_excess": historical_expected,
+        "paper_tracked_signal_count": tracked_signal_count,
+        "required_forward_trading_days": required_forward_days,
+        "current_paper_status": paper_tracking.get("current_status"),
+        "deviation_excess": None,
+        "decision": "continue_observation" if status == "insufficient_forward_sample" else "review_alignment",
+        "reason": (
+            "前向纸面样本尚不足，当前只展示非 LLM 策略长窗口期望与跟踪样本数，不判断偏离。"
+            if status == "insufficient_forward_sample"
+            else "前向样本达到最小数量后，应比较真实纸面结果和同口径策略长窗口期望。"
+        ),
+    }
 
 
 def _attach_shortpick_frozen_strategy_evidence(payload: dict[str, object]) -> dict[str, object]:

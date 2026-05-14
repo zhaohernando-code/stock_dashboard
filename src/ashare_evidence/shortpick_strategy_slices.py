@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import calendar
 import json
+import random
 from collections import defaultdict
 from datetime import date
 from pathlib import Path
@@ -122,6 +123,9 @@ def build_shortpick_strategy_slice_evidence_from_staged_artifacts(
                         )
 
     regime_rows = _portfolio_regime_rows(monthly_regime_inputs)
+    confidence_intervals = _portfolio_confidence_intervals(period_rows)
+    stability = _portfolio_stability_rows(period_rows, regime_rows)
+    attribution = _portfolio_return_attribution(period_rows, regime_rows)
     signal_from = min((scope.get("signal_date_from") for scope in data_scopes if scope.get("signal_date_from")), default=None)
     signal_to = max((scope.get("signal_date_to") for scope in data_scopes if scope.get("signal_date_to")), default=None)
     signal_days = max((int(scope.get("signal_day_count") or 0) for scope in data_scopes), default=0)
@@ -165,6 +169,9 @@ def build_shortpick_strategy_slice_evidence_from_staged_artifacts(
         "regime_strategy_rows": regime_rows,
         "regime_winner_rows": _portfolio_regime_winner_rows(regime_rows, min_period_count=min_regime_period_count),
         "regime_coverage_rows": regime_coverage_rows,
+        "portfolio_confidence_intervals": confidence_intervals,
+        "portfolio_stability": stability,
+        "portfolio_return_attribution": attribution,
     }
 
 
@@ -415,6 +422,7 @@ def _portfolio_regime_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "period_count": len(values),
                 "trade_count": len(values),
                 "signal_date_count": len(values),
+                "periods": sorted(str(item["period"]) for item in values if item.get("period")),
                 "mean_net_return": _round(_mean(returns)),
                 "mean_net_excess_return": _round(_mean(excess)),
                 "positive_net_excess_rate": _positive_rate(excess),
@@ -498,6 +506,316 @@ def _portfolio_regime_winner_rows(rows: list[dict[str, Any]], *, min_period_coun
             }
         )
     return output
+
+
+def _portfolio_confidence_intervals(period_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    monthly_rows = [
+        row
+        for row in period_rows
+        if row.get("period_kind") == "month"
+        and row.get("excess_return") is not None
+        and row.get("period")
+    ]
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in monthly_rows:
+        grouped[(str(row.get("entry_price_source")), str(row.get("strategy")))].append(row)
+
+    rows: list[dict[str, Any]] = []
+    for (entry_price_source, strategy), values in sorted(grouped.items(), key=lambda item: item[0]):
+        excess = [float(item["excess_return"]) for item in values if item.get("excess_return") is not None]
+        if len(excess) < 2:
+            continue
+        rng = random.Random(f"shortpick-strategy-slice-ci:{entry_price_source}:{strategy}")
+        bootstrap_means = []
+        for _ in range(1000):
+            sample = [excess[rng.randrange(len(excess))] for _ in excess]
+            bootstrap_means.append(_mean(sample))
+        lower = _percentile(bootstrap_means, 0.025)
+        upper = _percentile(bootstrap_means, 0.975)
+        mean_value = _mean(excess)
+        lower_positive = lower is not None and lower > 0
+        sample = values[0]
+        rows.append(
+            {
+                "id": f"{entry_price_source}_{strategy}_monthly_portfolio",
+                "entry_price_source": entry_price_source,
+                "strategy": strategy,
+                "label": sample.get("label") or _strategy_label(strategy),
+                "method": "monthly_portfolio_clustered_bootstrap",
+                "mean_excess_return": _round(mean_value),
+                "lower_excess_return": _round(lower),
+                "upper_excess_return": _round(upper),
+                "lower_bound_positive": lower_positive,
+                "promotion_decision": "eligible_by_ci_lower_bound" if lower_positive else "blocked_by_ci_lower_bound",
+                "sample_period_count": len(excess),
+                "sample_date_count": len(excess),
+                "sample_count": len(excess),
+                "basis": "monthly_portfolio_excess_return",
+            }
+        )
+    rows.sort(
+        key=lambda item: (
+            str(item["entry_price_source"]) != ENTRY_PRICE_SOURCE_NEXT_CLOSE,
+            -float(item.get("lower_excess_return") if item.get("lower_excess_return") is not None else -999.0),
+            -float(item.get("mean_excess_return") if item.get("mean_excess_return") is not None else -999.0),
+        )
+    )
+    return {
+        "status": "ready" if rows else "missing_artifact",
+        "method": "monthly_portfolio_clustered_bootstrap",
+        "basis": "full_window_staged_portfolio_monthly_excess",
+        "note": "非 LLM 组合策略晋级只看月度组合超额 bootstrap 下沿是否为正；不使用短窗口候选均值替代。",
+        "rows": rows,
+        **({} if rows else {"reason": "staged portfolio artifact 缺少可用月度组合收益。"}),
+    }
+
+
+def _portfolio_stability_rows(
+    period_rows: list[dict[str, Any]],
+    regime_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    monthly = [
+        row
+        for row in period_rows
+        if row.get("period_kind") == "month"
+        and row.get("period")
+        and row.get("excess_return") is not None
+    ]
+    quarter_rows = _portfolio_period_group_rows(monthly, period_kind="quarter")
+    year_rows = [row for row in period_rows if row.get("period_kind") == "year" and row.get("excess_return") is not None]
+    summary_rows: list[dict[str, Any]] = []
+    for period_kind, rows in (
+        ("month", monthly),
+        ("quarter", quarter_rows),
+        ("year", year_rows),
+    ):
+        summary_rows.extend(_portfolio_period_summary_rows(rows, period_kind=period_kind))
+    return {
+        "status": "ready" if summary_rows or regime_rows else "missing_artifact",
+        "basis": "full_window_staged_portfolio_period_and_regime_rows",
+        "time_slices": {
+            "month": monthly,
+            "quarter": quarter_rows,
+            "year": year_rows,
+        },
+        "period_summary_rows": summary_rows,
+        "market_regime": {
+            "status": "ready" if regime_rows else "missing_artifact",
+            "basis": "monthly_portfolio_periods_grouped_by_market_regime",
+            "rows": regime_rows,
+            **({} if regime_rows else {"reason": "缺少月度行情标签或组合月度收益。"}),
+        },
+    }
+
+
+def _portfolio_period_group_rows(rows: list[dict[str, Any]], *, period_kind: str) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        period = str(row.get("period") or "")
+        if len(period) < 7:
+            continue
+        year = int(period[:4])
+        month = int(period[5:7])
+        if period_kind == "quarter":
+            period_key = f"{year}-Q{((month - 1) // 3) + 1}"
+        else:
+            period_key = str(year)
+        grouped[(str(row.get("entry_price_source")), str(row.get("strategy")), period_key)].append(row)
+    output: list[dict[str, Any]] = []
+    for (entry_price_source, strategy, period), values in sorted(grouped.items(), key=lambda item: item[0]):
+        returns = [float(item["return"]) for item in values if item.get("return") is not None]
+        benchmark = [float(item["benchmark_return"]) for item in values if item.get("benchmark_return") is not None]
+        excess = [float(item["excess_return"]) for item in values if item.get("excess_return") is not None]
+        sample = values[0]
+        output.append(
+            {
+                "entry_price_source": entry_price_source,
+                "strategy": strategy,
+                "label": sample.get("label") or _strategy_label(strategy),
+                "period_kind": period_kind,
+                "period": period,
+                "return": _round(_compound_returns(returns)),
+                "benchmark_return": _round(_compound_returns(benchmark)),
+                "excess_return": _round(_mean(excess)),
+                "period_count": len(values),
+                "basis": "monthly_portfolio_periods_grouped",
+            }
+        )
+    return output
+
+
+def _portfolio_period_summary_rows(rows: list[dict[str, Any]], *, period_kind: str) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        grouped[(str(row.get("entry_price_source")), str(row.get("strategy")))].append(row)
+    output: list[dict[str, Any]] = []
+    for (entry_price_source, strategy), values in sorted(grouped.items(), key=lambda item: item[0]):
+        excess = [float(item["excess_return"]) for item in values if item.get("excess_return") is not None]
+        if not excess:
+            continue
+        best = max(values, key=lambda item: float(item.get("excess_return") if item.get("excess_return") is not None else -999.0))
+        worst = min(values, key=lambda item: float(item.get("excess_return") if item.get("excess_return") is not None else 999.0))
+        sample = values[0]
+        output.append(
+            {
+                "entry_price_source": entry_price_source,
+                "strategy": strategy,
+                "label": sample.get("label") or _strategy_label(strategy),
+                "period_kind": period_kind,
+                "period_count": len(excess),
+                "mean_excess_return": _round(_mean(excess)),
+                "positive_excess_period_rate": _positive_rate(excess),
+                "best_period": best.get("period"),
+                "best_period_excess_return": best.get("excess_return"),
+                "worst_period": worst.get("period"),
+                "worst_period_excess_return": worst.get("excess_return"),
+            }
+        )
+    return output
+
+
+def _portfolio_return_attribution(
+    period_rows: list[dict[str, Any]],
+    regime_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    monthly = [
+        row
+        for row in period_rows
+        if row.get("period_kind") == "month"
+        and row.get("period")
+        and row.get("excess_return") is not None
+    ]
+    quarter = _portfolio_period_group_rows(monthly, period_kind="quarter")
+    rows: list[dict[str, Any]] = []
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    regimes: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    quarters: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in monthly:
+        grouped[(str(row.get("entry_price_source")), str(row.get("strategy")))].append(row)
+    for row in regime_rows:
+        regimes[(str(row.get("entry_price_source")), str(row.get("strategy")))].append(row)
+    for row in quarter:
+        quarters[(str(row.get("entry_price_source")), str(row.get("strategy")))].append(row)
+
+    for key, values in sorted(grouped.items(), key=lambda item: item[0]):
+        entry_price_source, strategy = key
+        excess = [float(item["excess_return"]) for item in values if item.get("excess_return") is not None]
+        if not excess:
+            continue
+        best_month = max(values, key=lambda item: float(item.get("excess_return") if item.get("excess_return") is not None else -999.0))
+        worst_month = min(values, key=lambda item: float(item.get("excess_return") if item.get("excess_return") is not None else 999.0))
+        regime_values = regimes.get(key) or []
+        quarter_values = quarters.get(key) or []
+        best_regime = _best_row(regime_values, "mean_net_excess_return")
+        worst_regime = _worst_row(regime_values, "mean_net_excess_return")
+        best_quarter = _best_row(quarter_values, "excess_return")
+        worst_quarter = _worst_row(quarter_values, "excess_return")
+        sample = values[0]
+        rows.append(
+            {
+                "entry_price_source": entry_price_source,
+                "strategy": strategy,
+                "label": sample.get("label") or _strategy_label(strategy),
+                "mean_excess_return": _round(_mean(excess)),
+                "sample_count": len(excess),
+                "best_month": best_month.get("period"),
+                "best_month_mean_excess_return": best_month.get("excess_return"),
+                "worst_month": worst_month.get("period"),
+                "worst_month_mean_excess_return": worst_month.get("excess_return"),
+                "best_quarter": best_quarter.get("period") if best_quarter else None,
+                "best_quarter_excess_return": best_quarter.get("excess_return") if best_quarter else None,
+                "worst_quarter": worst_quarter.get("period") if worst_quarter else None,
+                "worst_quarter_excess_return": worst_quarter.get("excess_return") if worst_quarter else None,
+                "best_regime": best_regime.get("market_regime_tag") if best_regime else None,
+                "best_regime_mean_excess_return": best_regime.get("mean_net_excess_return") if best_regime else None,
+                "worst_regime": worst_regime.get("market_regime_tag") if worst_regime else None,
+                "worst_regime_mean_excess_return": worst_regime.get("mean_net_excess_return") if worst_regime else None,
+                "drop_best_month_mean_excess_return": _round(_mean([
+                    float(item["excess_return"])
+                    for item in values
+                    if item.get("period") != best_month.get("period") and item.get("excess_return") is not None
+                ])),
+                "drop_worst_month_mean_excess_return": _round(_mean([
+                    float(item["excess_return"])
+                    for item in values
+                    if item.get("period") != worst_month.get("period") and item.get("excess_return") is not None
+                ])),
+                "drop_best_regime_mean_excess_return": _drop_regime_mean(values, regime_values, best_regime),
+                "symbol_industry_attribution_status": "missing_artifact",
+                "symbol_industry_attribution_reason": "当前 staged portfolio artifact 只保留组合期度和少量 trades_sample，不足以证明完整股票/行业贡献；页面不得用样本片段外推。",
+                "basis": "monthly_portfolio_periods_and_regime_rows",
+            }
+        )
+    rows.sort(
+        key=lambda item: (
+            str(item["entry_price_source"]) != ENTRY_PRICE_SOURCE_NEXT_CLOSE,
+            -float(item.get("mean_excess_return") if item.get("mean_excess_return") is not None else -999.0),
+        )
+    )
+    return {
+        "status": "ready" if rows else "missing_artifact",
+        "basis": "full_window_staged_portfolio_period_and_regime_rows",
+        "horizon_days": 5,
+        "rows": rows,
+        "symbol_industry": {
+            "status": "missing_artifact",
+            "reason": "完整股票/行业归因需要全量逐笔交易 artifact；当前仅使用组合期度归因，不用 trades_sample 外推。",
+        },
+        **({} if rows else {"reason": "staged portfolio artifact 缺少组合期度收益。"}),
+    }
+
+
+def _drop_regime_mean(
+    period_rows: list[dict[str, Any]],
+    regime_rows: list[dict[str, Any]],
+    best_regime: dict[str, Any] | None,
+) -> float | None:
+    if not best_regime:
+        return None
+    tag = best_regime.get("market_regime_tag")
+    excluded_periods = set()
+    for row in regime_rows:
+        if row.get("market_regime_tag") != tag:
+            continue
+        excluded_periods.update(str(period) for period in row.get("periods") or [])
+    remaining = [
+        float(row["excess_return"])
+        for row in period_rows
+        if row.get("excess_return") is not None and str(row.get("period")) not in excluded_periods
+    ]
+    return _round(_mean(remaining))
+
+
+def _best_row(rows: list[dict[str, Any]], field: str) -> dict[str, Any] | None:
+    values = [row for row in rows if row.get(field) is not None]
+    return None if not values else max(values, key=lambda item: float(item.get(field) or 0.0))
+
+
+def _worst_row(rows: list[dict[str, Any]], field: str) -> dict[str, Any] | None:
+    values = [row for row in rows if row.get(field) is not None]
+    return None if not values else min(values, key=lambda item: float(item.get(field) or 0.0))
+
+
+def _compound_returns(values: list[float]) -> float | None:
+    if not values:
+        return None
+    total = 1.0
+    for value in values:
+        total *= 1.0 + value
+    return total - 1.0
+
+
+def _percentile(values: list[float | None], pct: float) -> float | None:
+    clean = sorted(float(value) for value in values if value is not None)
+    if not clean:
+        return None
+    if len(clean) == 1:
+        return clean[0]
+    position = (len(clean) - 1) * pct
+    lower = int(position)
+    upper = min(lower + 1, len(clean) - 1)
+    fraction = position - lower
+    return clean[lower] + (clean[upper] - clean[lower]) * fraction
 
 
 def _contexts_by_signal_day(series_by_symbol: dict[str, Any], *, signal_days: list[date]) -> dict[date, list[dict[str, Any]]]:
