@@ -42,6 +42,7 @@ def test_shortpick_lab_is_part_of_postmarket_daily_cycle() -> None:
     assert 'ASHARE_ENABLE_SHORTPICK_LAB:-1' in script
     assert "shortpick-lab-validate-recent" in script
     assert "frontend-projections-refresh" in script
+    assert "--projection all" in script
     assert 'SHORTPICK_VALIDATION_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_VALIDATION_TIMEOUT_SECONDS:-600}"' in script
     assert 'SHORTPICK_VALIDATE_RECENT_BEFORE_RUN="${ASHARE_SHORTPICK_VALIDATE_RECENT_BEFORE_RUN:-0}"' in script
     assert 'SHORTPICK_RETRY_FAILED_AFTER_RUN="${ASHARE_SHORTPICK_RETRY_FAILED_AFTER_RUN:-0}"' in script

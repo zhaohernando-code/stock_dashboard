@@ -7,7 +7,8 @@
 补充说明
 - 投影表固定字段包括 `projection_key`、`projection_group`、`target_login`、`status`、`version`、`generated_at`、`expires_at`、`source_fingerprint`、`payload`、`metadata_payload`。
 - 第一批接入 `shortpick_replay_feedback:v1`，把 aggregate replay feedback + decision projection 预先物化；`/shortpick-lab/replay-feedback` 优先读投影，缺投影才走兼容 fallback。
-- 后续迁移顺序应是：`operations_summary`、`home_shell`、`shortpick_model_feedback`、`simulation_workspace_summary`。这些接口都应拆成“快投影首屏 + 按需下钻明细”。
+- 第二批接入 `operations_summary:v1:{target_login}:{sample_symbol}`，按账号和样本股票物化运营复盘摘要；`/dashboard/operations/summary` 不再在前端请求里执行 `run_operations_tick()`。
+- 后续迁移顺序应是：`home_shell`、`shortpick_model_feedback`、`simulation_workspace_summary`。这些接口都应拆成“快投影首屏 + 按需下钻明细”。
 - 投影刷新可以跟随盘后 slot 或维护命令执行，但不得在页面请求里写库、补行情、跑回测或触发 LLM。
 
 [2026-05-14T18:55:00+08:00] Shortpick scheduled maintenance must not sit on the live frontend hot path:

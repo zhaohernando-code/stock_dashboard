@@ -561,8 +561,15 @@ def build_parser() -> argparse.ArgumentParser:
     frontend_projections_refresh.add_argument("--database-url", default=None)
     frontend_projections_refresh.add_argument(
         "--projection",
-        choices=["all", "shortpick_replay_feedback"],
+        choices=["all", "shortpick_replay_feedback", "operations_summary"],
         default="all",
+    )
+    frontend_projections_refresh.add_argument("--target-login", default="root")
+    frontend_projections_refresh.add_argument(
+        "--sample-symbol",
+        action="append",
+        default=None,
+        help="Sample symbol to precompute for operations_summary. May be provided multiple times.",
     )
 
     shortpick_market_factor_study = subparsers.add_parser(
@@ -977,7 +984,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "frontend-projections-refresh":
         init_database(args.database_url)
         with session_scope(args.database_url) as session:
-            payload = refresh_frontend_projections(session, projection=args.projection)
+            payload = refresh_frontend_projections(
+                session,
+                projection=args.projection,
+                target_login=args.target_login,
+                sample_symbols=args.sample_symbol,
+            )
         _print_json(payload)
         return 0
 

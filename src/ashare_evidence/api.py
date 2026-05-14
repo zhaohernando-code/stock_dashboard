@@ -28,6 +28,7 @@ from ashare_evidence.db import get_database_url, get_session_factory, init_datab
 from ashare_evidence.frontend_projections import (
     SHORTPICK_REPLAY_FEEDBACK_PROJECTION_KEY,
     get_ready_frontend_projection_payload,
+    operations_summary_projection_key,
 )
 from ashare_evidence.improvement_suggestions import (
     accept_suggestion_for_plan,
@@ -1633,7 +1634,13 @@ def create_app(
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
         require_stock_root(access)
-        run_operations_tick(session)
+        projection = get_ready_frontend_projection_payload(
+            session,
+            operations_summary_projection_key(target_login=access.target_login, sample_symbol=sample_symbol),
+            target_login=access.target_login,
+        )
+        if projection is not None:
+            return projection
         return build_operations_summary(
             session,
             sample_symbol,
