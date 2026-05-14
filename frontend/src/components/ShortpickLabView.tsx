@@ -1347,6 +1347,9 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
     void loadPaperTracking();
     void loadValidationQueue(1, DEFAULT_VALIDATION_PAGE_SIZE);
     void loadFeedback();
+    if (activeWorkspaceTab === "replay") {
+      void loadReplay(undefined, { includeMarketStudy: true });
+    }
   }, []);
 
   const benchmarkSwitcher = (

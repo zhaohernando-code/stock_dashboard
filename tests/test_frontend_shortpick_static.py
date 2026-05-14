@@ -58,6 +58,8 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("长样本5万元滚动资金曲线超额", component_source)
         self.assertIn("短窗口候选统计", component_source)
         self.assertIn("组合资金曲线", component_source)
+        self.assertIn('activeWorkspaceTab === "replay"', component_source)
+        self.assertIn("void loadReplay(undefined, { includeMarketStudy: true })", component_source)
         self.assertIn("历史分析结论", component_source)
         self.assertIn("可执行性漏斗", component_source)
         self.assertIn("入场假设矩阵", component_source)
