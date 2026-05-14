@@ -144,8 +144,8 @@
     "frontend_projection_store": "published_runtime_verified_manifest_20260514T113307Z_8d552e2bf4ee",
     "operations_summary_projection": "published_runtime_verified_manifest_20260514T115111Z_deb41270f84e",
     "home_shell_projection": "published_runtime_verified_manifest_20260514T120852Z_f3925187e50d",
-    "shortpick_model_feedback_projection": "in_progress",
-    "simulation_workspace_summary_projection": "in_progress"
+    "shortpick_model_feedback_projection": "published_runtime_verified_manifest_20260514T122211Z_396a3df6d26a",
+    "simulation_workspace_summary_projection": "published_runtime_verified_manifest_20260514T122211Z_396a3df6d26a"
   },
   "latest_findings": [
     {
