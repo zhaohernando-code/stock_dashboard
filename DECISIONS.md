@@ -1,5 +1,15 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-05-14T14:20:00+08:00] Short Pick Lab historical replay Phase 2/3 projections are now artifact-backed:
+
+历史回放的剩余分析面板已从“待补命名”推进为离线 artifact projection：aggregate replay feedback 现在物化 `regime_stability`、`confidence_intervals`、`return_attribution`，readout builder 同步投影 `forward_tracking_alignment`。前端只能消费这些已物化字段，不在页面打开时临时 bootstrap、重回测或自行推断缺项。
+
+补充说明
+- `confidence_intervals` 使用按交易日聚类的 deterministic bootstrap；策略晋级判断必须优先看区间下沿是否仍为正，而不是只看均值。
+- `regime_stability` 当前已覆盖月份/季度和 staged portfolio 年/月 slices；真正的市场状态标签、行业/题材稳定性仍必须等待专门 artifact，缺失时继续结构化显示 pending/missing。
+- `return_attribution` 当前覆盖整体、LLM 与默认冻结候选家族的最佳/最差单票、日期、月份和去贡献项后的均值；行业/题材归因不得由前端猜测。
+- `forward_tracking_alignment` 在纸面跟踪样本不足时必须保持 `continue_observation` / `insufficient_forward_sample`，不能用历史同口径期望替代真实前向结果。
+
 [2026-05-14T10:20:00+08:00] Short Pick Lab historical replay first screen must be a read-only decision projection:
 
 短投试验田历史回放的首屏不再只堆统计表，必须先回答“LLM 自由选股是否有可验证优势、冻结纸面策略是否只能继续观察、候选平均质量和组合资金曲线是否一致、当前最大 blocker 是什么”。这些结论只能由已物化的 replay feedback、market-factor study、staged portfolio backtest 和 paper tracking ledger 投影得到，页面打开时不得触发重回测、行情同步、模型调用或数据库写入。
