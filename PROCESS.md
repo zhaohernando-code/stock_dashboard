@@ -27,6 +27,7 @@
 - **LaunchAgent 要区分任务和服务**：定时任务用 `RunAtLoad` + `StartCalendarInterval` 或 `StartInterval`；服务进程用 `RunAtLoad` + `KeepAlive`。需要精确时钟触发时不能只靠 `StartInterval=300`；关键时点应配置显式 calendar trigger，并让任务用 slot state 保证多次唤醒不重复写入。
 - **SSH 隧道要自愈且能清旧占用**：重连失败先查远端旧 sshd 是否占端口；清理脚本改动后跑语法检查；隧道进程遇错应退避重试。
 - **SQLite 写锁要按工作流避让**：批量短投验证、历史回放、盘后刷新和页面验收不要无脑并发；遇到等待时先判断锁持有者，不要把慢写误判为 Python 崩溃。
+- **维护型短投补算不能挂在前台热路径**：recent validation catch-up、failed-round retry、长窗口回测和行业归因补数都属于维护任务；默认不要接在 live daily shortpick slot 后继续占 SQLite 写锁。需要补跑时用显式开关或维护窗口，并在前后检查前端小接口健康。
 - **大 universe 回测必须先扁平化数据**：3000 只股票级别的历史回测不要在循环里反复构造 ORM 对象或重复扫描全市场基准；先把日线、特征、候选池和基准路径变成可复用的扁平缓存，再做小网格或精确确认。
 
 ## 策略与研究
@@ -55,6 +56,7 @@
 - **市场因子 overlay 删除重建要局部化**：重新投影某个 run 时只删除该 run 的 market-factor overlay 和关联验证，不影响 LLM 原始候选和其他运行记录。
 - **无 live run 也要能看历史回放**：试验田 tab 的可见性不能只挂在 latest live run 上；只有 replay 数据时也应显示历史回放。
 - **短投列表接口要轻量**：run 列表不嵌 full candidates、source packet、raw answer；大 payload 走下钻接口，避免打开试验田时解析数 MB JSON。
+- **历史回放聚合接口要投影后再下发**：长窗口策略证据可以来自重 artifact，但 `/shortpick-lab/replay-feedback` 只应返回首屏和当前下钻需要的 rows；全量 period/regime/time-slice 明细留在 artifact 或专门下钻接口里。
 - **历史分析结论只做 projection**：首屏决策读数、可执行性漏斗、入场矩阵必须由已完成 artifact 或只读 ledger 投影；缺字段显示待补原因，不在前端拼结论，也不在页面请求里补跑研究任务。
 - **长窗口策略证据要和 LLM replay 分名**：当 LLM 历史 replay 时间窗过短时，可以用 full-window staged portfolio artifact 扩充确定性策略族的跨时段和分行情证据，但页面必须明确它回答的是组合路径稳定性，不等同于扩充了 LLM 自由选股样本。
 - **非 LLM 高级分析也要声明数据粒度**：组合级置信区间、稳定性和归因可以从 staged portfolio 月度/季度/行情桶产物投影；股票/行业归因必须等全量逐笔 artifact，不能用 `trades_sample` 外推。

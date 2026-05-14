@@ -42,8 +42,12 @@ def test_shortpick_lab_is_part_of_postmarket_daily_cycle() -> None:
     assert 'ASHARE_ENABLE_SHORTPICK_LAB:-1' in script
     assert "shortpick-lab-validate-recent" in script
     assert 'SHORTPICK_VALIDATION_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_VALIDATION_TIMEOUT_SECONDS:-600}"' in script
+    assert 'SHORTPICK_VALIDATE_RECENT_BEFORE_RUN="${ASHARE_SHORTPICK_VALIDATE_RECENT_BEFORE_RUN:-0}"' in script
+    assert 'SHORTPICK_RETRY_FAILED_AFTER_RUN="${ASHARE_SHORTPICK_RETRY_FAILED_AFTER_RUN:-0}"' in script
     assert 'DATABASE_LOCK_WAIT_SECONDS="${ASHARE_DATABASE_LOCK_WAIT_SECONDS:-60}"' in script
     assert 'run_with_timeout "$SHORTPICK_VALIDATION_TIMEOUT_SECONDS" run_shortpick_validation_refresh' in script
+    assert 'set ASHARE_SHORTPICK_VALIDATE_RECENT_BEFORE_RUN=1 for maintenance catch-up' in script
+    assert 'set ASHARE_SHORTPICK_RETRY_FAILED_AFTER_RUN=1 for maintenance retry' in script
     assert "continuing with ${target_date} run" in script
     assert "wait_for_database_writable" in script
     assert 'connection.execute(text("BEGIN IMMEDIATE"))' in script

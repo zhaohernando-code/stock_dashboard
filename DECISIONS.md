@@ -1,5 +1,15 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-05-14T18:55:00+08:00] Shortpick scheduled maintenance must not sit on the live frontend hot path:
+
+前端大面积请求超时的直接原因不是历史分析新增数据，而是短投定时刷新里的 recent validation / failed-round retry 与前端读接口争用 runtime SQLite，导致 `/auth/context`、`/watchlist`、短投接口等无关小请求一起触发 `database is locked`。这些补历史和补失败轮次的维护动作以后默认不跟随 daily shortpick slot 自动执行，只能通过显式环境开关进入维护窗口。
+
+补充说明
+- `ASHARE_SHORTPICK_VALIDATE_RECENT_BEFORE_RUN` 默认 `0`；需要补 recent validation 时显式设为 `1`，并避开用户验收和前端使用窗口。
+- `ASHARE_SHORTPICK_RETRY_FAILED_AFTER_RUN` 默认 `0`；retry failed rounds 保留能力，但不再默认接在 live daily run 后继续占库。
+- 历史回放接口可以继续返回离线策略切片结论，但只下发首屏和下钻实际使用的 projection 字段，不把 `period_strategy_rows`、`regime_strategy_rows`、`portfolio_stability.time_slices` 这类重明细整包塞进 `/shortpick-lab/replay-feedback`。
+- 如果再看到多接口同时超时，排查顺序先看 runtime DB 锁持有者和 scheduled refresh 子进程，再评估 payload 大小；不要先把所有超时归因于前端表格数据量。
+
 [2026-05-14T17:10:00+08:00] Short Pick Lab long-window strategy slices must extend breadth without pretending to be LLM replay:
 
 历史回放的 LLM 候选逐条验证仍只有 2026-01-05 至 2026-04-30，不能包装成跨周期结论。为了补广度和深度，页面新增 `strategy_slice_evidence` 离线 artifact：复用已完成的 full-window staged portfolio artifacts，把确定性策略族扩展到 2023-05-16 至 2026-04-29、717 个信号日、约 2999 个新开户主板可交易序列，并按月度组合路径贴本地指数推导的市场阶段标签。

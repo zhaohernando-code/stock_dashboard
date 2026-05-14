@@ -37,6 +37,8 @@ SHORTPICK_INTRADAY_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_INTRADAY_TIMEOUT_SECONDS:
 SHORTPICK_VALIDATION_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_VALIDATION_TIMEOUT_SECONDS:-600}"
 SHORTPICK_VALIDATE_RECENT_DAYS="${ASHARE_SHORTPICK_VALIDATE_RECENT_DAYS:-30}"
 SHORTPICK_VALIDATE_RECENT_LIMIT="${ASHARE_SHORTPICK_VALIDATE_RECENT_LIMIT:-20}"
+SHORTPICK_VALIDATE_RECENT_BEFORE_RUN="${ASHARE_SHORTPICK_VALIDATE_RECENT_BEFORE_RUN:-0}"
+SHORTPICK_RETRY_FAILED_AFTER_RUN="${ASHARE_SHORTPICK_RETRY_FAILED_AFTER_RUN:-0}"
 DATABASE_LOCK_WAIT_SECONDS="${ASHARE_DATABASE_LOCK_WAIT_SECONDS:-60}"
 NETWORK_CHECK_ENABLED="${ASHARE_REFRESH_NETWORK_CHECK:-1}"
 NETWORK_PROBES="${ASHARE_REFRESH_NETWORK_PROBES:-https://www.baidu.com/ https://push2.eastmoney.com/}"
@@ -109,8 +111,13 @@ PY
 
 run_shortpick_daily_cycle() {
   local target_date="$1"
-  if ! run_with_timeout "$SHORTPICK_VALIDATION_TIMEOUT_SECONDS" run_shortpick_validation_refresh; then
-    echo "Shortpick recent validation did not finish within ${SHORTPICK_VALIDATION_TIMEOUT_SECONDS}s; continuing with ${target_date} run." >&2
+  if [[ "$SHORTPICK_VALIDATE_RECENT_BEFORE_RUN" == "1" ]]; then
+    wait_for_database_writable
+    if ! run_with_timeout "$SHORTPICK_VALIDATION_TIMEOUT_SECONDS" run_shortpick_validation_refresh; then
+      echo "Shortpick recent validation did not finish within ${SHORTPICK_VALIDATION_TIMEOUT_SECONDS}s; continuing with ${target_date} run." >&2
+    fi
+  else
+    echo "Skipping shortpick recent validation before daily run; set ASHARE_SHORTPICK_VALIDATE_RECENT_BEFORE_RUN=1 for maintenance catch-up." >&2
   fi
   wait_for_database_writable
   local run_payload_file
@@ -130,8 +137,10 @@ else:
 PY
 )"
   rm -f "$run_payload_file"
-  if [[ -n "$run_id" ]]; then
+  if [[ -n "$run_id" && "$SHORTPICK_RETRY_FAILED_AFTER_RUN" == "1" ]]; then
     run_shortpick_retry_failed_rounds "$run_id"
+  elif [[ -n "$run_id" ]]; then
+    echo "Skipping shortpick failed-round retry after daily run; set ASHARE_SHORTPICK_RETRY_FAILED_AFTER_RUN=1 for maintenance retry." >&2
   fi
 }
 

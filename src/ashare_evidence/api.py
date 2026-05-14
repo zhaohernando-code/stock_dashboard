@@ -220,6 +220,58 @@ def _read_json_artifact(path: Path, *, label: str) -> dict[str, object]:
     return payload
 
 
+def _copy_dict_keys(source: dict[str, object], keys: tuple[str, ...]) -> dict[str, object]:
+    return {key: source[key] for key in keys if key in source}
+
+
+def _slim_shortpick_strategy_slice_evidence(payload: dict[str, object]) -> dict[str, object]:
+    """Project the offline strategy-slice artifact to the fields used by replay UI."""
+    slim = _copy_dict_keys(
+        payload,
+        (
+            "experiment",
+            "version",
+            "status",
+            "reason",
+            "basis",
+            "artifact_path",
+            "config",
+            "data_scope",
+            "sample_adequacy",
+            "overall_strategy_rows",
+            "regime_winner_rows",
+            "regime_coverage_rows",
+            "portfolio_forward_tracking_alignment",
+        ),
+    )
+    confidence = payload.get("portfolio_confidence_intervals")
+    if isinstance(confidence, dict):
+        slim["portfolio_confidence_intervals"] = _copy_dict_keys(
+            confidence,
+            ("status", "reason", "basis", "method", "note", "rows"),
+        )
+    stability = payload.get("portfolio_stability")
+    if isinstance(stability, dict):
+        slim_stability = _copy_dict_keys(
+            stability,
+            ("status", "reason", "basis", "period_summary_rows"),
+        )
+        market_regime = stability.get("market_regime")
+        if isinstance(market_regime, dict):
+            slim_stability["market_regime"] = _copy_dict_keys(
+                market_regime,
+                ("status", "reason", "basis"),
+            )
+        slim["portfolio_stability"] = slim_stability
+    attribution = payload.get("portfolio_return_attribution")
+    if isinstance(attribution, dict):
+        slim["portfolio_return_attribution"] = _copy_dict_keys(
+            attribution,
+            ("status", "reason", "basis", "horizon_days", "rows", "symbol_industry"),
+        )
+    return slim
+
+
 def _load_shortpick_market_factor_study_artifact(benchmark_mode: str) -> dict[str, object]:
     artifact_path = _shortpick_market_factor_study_artifact_path()
     payload = (
@@ -434,7 +486,7 @@ def _attach_shortpick_replay_decision_projection(
             strategy_slice,
             projection_inputs["paper_tracking"] if isinstance(projection_inputs.get("paper_tracking"), dict) else {},
         )
-        projection_inputs["strategy_slice_evidence"] = strategy_slice
+        projection_inputs["strategy_slice_evidence"] = _slim_shortpick_strategy_slice_evidence(strategy_slice)
     overall.update(
         build_shortpick_replay_decision_projection(
             enriched,
