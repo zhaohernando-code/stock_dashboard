@@ -152,9 +152,9 @@
     "simulation_workspace_summary_projection": "published_runtime_verified_manifest_20260514T122211Z_396a3df6d26a",
     "shortpick_model_feedback_topic_industry_split": "published_runtime_local_verified_manifest_20260514T143425Z_056994335016_canonical_auth_blocked",
     "shortpick_historical_replay_decision_first_default_view": "published_runtime_local_verified_manifest_20260514T145553Z_b6f3ba080a88_canonical_auth_blocked",
-    "shortpick_historical_replay_full_trade_attribution": "implemented_cache_refreshed_pending_publish",
-    "shortpick_historical_replay_llm_stratified_expansion": "18_real_runs_completed_cache_refreshed_pending_publish",
-    "shortpick_intraday_quote_snapshot_artifact": "implemented_pending_publish"
+    "shortpick_historical_replay_full_trade_attribution": "published_runtime_local_verified_manifest_20260514T160512Z_b72c764cfaea_canonical_auth_blocked",
+    "shortpick_historical_replay_llm_stratified_expansion": "18_real_runs_completed_cache_refreshed_published_runtime_local_verified_manifest_20260514T160512Z_b72c764cfaea_canonical_auth_blocked",
+    "shortpick_intraday_quote_snapshot_artifact": "published_runtime_verified_manifest_20260514T160512Z_b72c764cfaea"
   },
   "latest_findings": [
     {
