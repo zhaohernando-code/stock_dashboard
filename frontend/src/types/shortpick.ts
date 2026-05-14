@@ -282,6 +282,9 @@ export interface ShortpickModelFeedbackItem {
   provider_name: string;
   model_name: string;
   executor_kind: string;
+  model_group_key?: string | null;
+  display_model_label?: string | null;
+  channel_label?: string | null;
   round_count: number;
   completed_round_count: number;
   failed_round_count: number;
@@ -297,11 +300,29 @@ export interface ShortpickModelFeedbackItem {
   validation_by_horizon: ShortpickFeedbackGroup[];
   validation_by_priority: ShortpickFeedbackGroup[];
   validation_by_theme: ShortpickFeedbackGroup[];
+  channels?: ShortpickModelFeedbackChannel[];
+}
+
+export interface ShortpickModelFeedbackChannel {
+  provider_name: string;
+  model_name: string;
+  executor_kind: string;
+  channel_label?: string | null;
+  round_count: number;
+  completed_round_count: number;
+  failed_round_count: number;
+  parse_failed_candidate_count: number;
+  candidate_row_count?: number;
+  unique_symbol_run_count?: number;
+  official_sample_count?: number;
+  completed_official_sample_count?: number;
+  success_rate?: number | null;
 }
 
 export interface ShortpickModelFeedbackResponse {
   generated_at: string;
   models: ShortpickModelFeedbackItem[];
+  model_groups?: ShortpickModelFeedbackItem[];
   overall: Record<string, unknown>;
 }
 

@@ -141,10 +141,10 @@
       "reviewed_at": "2026-05-11"
     },
     "frontend/src/components/ShortpickLabView.tsx": {
-      "lines": 3367,
-      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, historical replay workbench state, and the strategy closeout readout in one Ant Design surface. Historical replay now includes a reduced non-expert default readout, aggregate statistical readouts, per-run drilldown, readable replay family labels, explicit loading states for slow replay feedback tables, and the frozen paper strategy summary with market-factor controls, multi-index references, cost stress, and paper-tracking status. Heavy replay aggregate/per-run feedback and strategy closeout data now load in the background instead of blocking initial lab or replay navigation. Live runs now surface the frozen paper strategy separately from LLM and market-factor control groups; the paper-tracking tab explains the four trading-day exit tracks, the strict daily LLM paper-control stock selected from the LLM recommendation pool, and same-pool market controls including offensive Top1, cooldown Top1, deterministic random baseline, next-open entry timing, and intraday same-day entry timing. 2026-05-13 review: growth is limited to making historical replay return labels explicit, replacing generic `辅助` and ambiguous `收益` with named statistics such as `组合总收益`, `可交易口径`, and `去极值均值`; split remains deferred until experiment contracts stabilize.",
+      "lines": 3964,
+      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, historical replay workbench state, and the strategy closeout readout in one Ant Design surface. Historical replay now includes a reduced non-expert default readout, aggregate statistical readouts, per-run drilldown, readable replay family labels, explicit loading states for slow replay feedback tables, and the frozen paper strategy summary with market-factor controls, multi-index references, cost stress, and paper-tracking status. Heavy replay aggregate/per-run feedback and strategy closeout data now load in the background instead of blocking initial lab or replay navigation. Live runs now surface the frozen paper strategy separately from LLM and market-factor control groups; the paper-tracking tab explains the four trading-day exit tracks, the strict daily LLM paper-control stock selected from the LLM recommendation pool, and same-pool market controls including offensive Top1, cooldown Top1, deterministic random baseline, next-open entry timing, and intraday same-day entry timing. 2026-05-14 review: growth is limited to display-only model-feedback grouping and readable labels so the page defaults to the two real models while keeping executor channels in drilldown; split remains deferred until experiment contracts stabilize.",
       "status": "planned_refactor",
-      "reviewed_at": "2026-05-13"
+      "reviewed_at": "2026-05-14"
     },
     "src/ashare_evidence/event_analyzer.py": {
       "lines": 526,
@@ -183,16 +183,16 @@
       "reviewed_at": "2026-05-11"
     },
     "tests/test_shortpick_lab.py": {
-      "lines": 1898,
-      "reason": "Short Pick Lab integration/regression tests spanning candidate parsing, paper controls, validation, and intraday same-day entry failure handling. 2026-05-13 review: growth covers fail-closed quote outages and selection-time limit-up skip behavior for the 14点同日买入版.",
+      "lines": 1908,
+      "reason": "Short Pick Lab integration/regression tests spanning candidate parsing, paper controls, validation, and intraday same-day entry failure handling. 2026-05-14 review: growth only locks model-feedback display aggregation and readable priority/channel labels while preserving existing API compatibility.",
       "status": "accepted",
-      "reviewed_at": "2026-05-13"
+      "reviewed_at": "2026-05-14"
     },
     "src/ashare_evidence/shortpick_lab.py": {
-      "lines": 6982,
-      "reason": "Short Pick Lab experiment runner, market-factor overlays, paper-tracking validation, and intraday same-day entry control. 2026-05-13 review: growth covers the new full-universe hard-rule overlay/paper-tracking controls, current-bar skip counter compatibility, selection-time limit-up skip behavior for the 14点同日买入版, and EastMoney push2delay quote fallback; split remains deferred because this runner still owns the live paper ledger contract.",
+      "lines": 7123,
+      "reason": "Short Pick Lab experiment runner, market-factor overlays, paper-tracking validation, and intraday same-day entry control. 2026-05-14 review: growth is the read-only model-feedback projection layer that groups executor channels under the two real model labels and maps research-priority keys to user-facing labels; split remains deferred because this runner still owns the live paper ledger contract.",
       "status": "accepted",
-      "reviewed_at": "2026-05-13"
+      "reviewed_at": "2026-05-14"
     }
   }
 }

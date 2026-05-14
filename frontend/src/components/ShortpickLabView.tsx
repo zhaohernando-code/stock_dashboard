@@ -66,12 +66,20 @@ function priorityLabel(value: string): string {
   if (value === "market_factor_default") return "策略默认";
   if (value === "market_factor_offensive") return "进攻对照";
   if (value === "market_factor_frozen_paper") return "冻结纸面策略";
+  if (value === "market_factor_no_limit_chase") return "不追涨停控制";
+  if (value === "market_factor_next_open_entry") return "次日开盘入场控制";
+  if (value === "market_factor_top3_equal_weight") return "前三名等权组合";
+  if (value === "market_factor_intraday_same_day_low_turnover_uptrend") return "14点同日低换手上升趋势";
+  if (value === "momentum_10d_turnover_top3_equal_weight") return "10日动量换手 Top3 等权";
+  if (value === "baseline_control") return "基线对照";
+  if (value === "pending_consensus") return "等待共识";
+  if (value === "tradeability_blocked") return "账户不可执行";
   if (value === "high_convergence") return "高收敛";
   if (value === "theme_convergence") return "题材收敛";
   if (value === "divergent_novel") return "发散新颖";
   if (value === "watch_only") return "观察";
   if (value === "failed_or_unusable") return "不可用";
-  return "待聚合";
+  return "其他实验分组";
 }
 
 function priorityColor(value: string): string {
@@ -81,10 +89,55 @@ function priorityColor(value: string): string {
   if (value === "market_factor_default") return "green";
   if (value === "market_factor_offensive") return "cyan";
   if (value === "market_factor_frozen_paper") return "purple";
+  if (value === "market_factor_no_limit_chase") return "green";
+  if (value === "market_factor_next_open_entry") return "cyan";
+  if (value === "market_factor_top3_equal_weight") return "geekblue";
+  if (value === "market_factor_intraday_same_day_low_turnover_uptrend") return "blue";
+  if (value === "momentum_10d_turnover_top3_equal_weight") return "geekblue";
+  if (value === "baseline_control") return "default";
+  if (value === "pending_consensus") return "gold";
+  if (value === "tradeability_blocked") return "red";
   if (value === "divergent_novel") return "blue";
   if (value === "watch_only") return "default";
   if (value === "failed_or_unusable") return "red";
   return "default";
+}
+
+function looksLikeInternalKey(value?: string | null): boolean {
+  return Boolean(value && /^[a-z0-9_:-]+$/i.test(value) && value.includes("_"));
+}
+
+function modelFeedbackDisplayName(item: ShortpickModelFeedbackItem): string {
+  if (item.display_model_label && !looksLikeInternalKey(item.display_model_label)) return item.display_model_label;
+  if (item.model_group_key === "deepseek_v4_pro_1m" || item.provider_name === "deepseek") return "DeepSeek V4 Pro 1M";
+  if (item.model_group_key === "chatgpt_5_5" || item.provider_name === "openai") return "ChatGPT 5.5";
+  return "历史占位 / 不可归因样本";
+}
+
+function channelDisplayLabel(value?: string | null): string {
+  if (value === "deepseek_tool_search_lobechat_searxng_v1") return "今日联网自由选股";
+  if (value === "isolated_codex_cli") return "今日 ChatGPT 自由选股";
+  if (value === "historical_replay_sealed_packet_llm") return "历史密封包回放";
+  if (value === "historical_replay_llm_self_distiller") return "历史自蒸馏";
+  if (value === "historical_replay_momentum_pool_distiller") return "动量池蒸馏";
+  if (value === "historical_replay_momentum_pool_hard_veto") return "动量池 hard-veto 控制";
+  if (value === "historical_replay_momentum_pool_rejector") return "动量池 rejector 控制";
+  if (!value || looksLikeInternalKey(value)) return "实验通道";
+  return value;
+}
+
+function modelFeedbackSubLabel(item: ShortpickModelFeedbackItem): string {
+  if (item.executor_kind === "model_group") {
+    const channelCount = item.channels?.length ?? 0;
+    return channelCount > 0 ? `${channelCount} 个实验通道` : "按真实模型聚合";
+  }
+  return channelDisplayLabel(item.channel_label ?? item.executor_kind);
+}
+
+function feedbackGroupDisplayLabel(title: string, group: ShortpickFeedbackGroup): string {
+  if (title === "优先级表现") return priorityLabel(group.group_key);
+  if (group.label && !looksLikeInternalKey(group.label)) return group.label;
+  return "其他分组";
 }
 
 function statusColor(value: string): string {
@@ -1474,8 +1527,8 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
       align: "center",
       render: (_, item) => (
         <Space direction="vertical" size={0} align="center" className="shortpick-centered-cell">
-          <Text strong>{item.provider_name}:{item.model_name}</Text>
-          <Text type="secondary">{item.executor_kind}</Text>
+          <Text strong>{modelFeedbackDisplayName(item)}</Text>
+          <Text type="secondary">{modelFeedbackSubLabel(item)}</Text>
         </Space>
       ),
     },
@@ -2375,6 +2428,7 @@ function ModelFeedbackTab({
   const overall = feedback?.overall ?? {};
   const checkpoints = recordValue<Record<string, unknown>>(overall, "evaluation_checkpoints");
   const checkpointStatus = String(checkpoints?.status ?? "not_ready");
+  const feedbackRows = feedback?.model_groups?.length ? feedback.model_groups : feedback?.models ?? [];
   return (
     <>
       <Row gutter={[16, 16]} className="shortpick-metrics shortpick-feedback-summary">
@@ -2405,7 +2459,7 @@ function ModelFeedbackTab({
           size="middle"
           loading={loading}
           columns={columns}
-          dataSource={feedback?.models ?? []}
+          dataSource={feedbackRows}
           expandable={{
             expandedRowRender: (item) => <FeedbackDetails item={item} selectedBenchmark={selectedBenchmark} />,
           }}
@@ -2419,6 +2473,27 @@ function ModelFeedbackTab({
 function FeedbackDetails({ item, selectedBenchmark }: { item: ShortpickModelFeedbackItem; selectedBenchmark: string }) {
   return (
     <div className="shortpick-feedback-detail">
+      {item.channels?.length ? (
+        <div>
+          <Title level={5}>实验通道</Title>
+          <List
+            size="small"
+            dataSource={item.channels}
+            renderItem={(channel) => (
+              <List.Item>
+                <Space wrap>
+                  <Text strong>{channelDisplayLabel(channel.channel_label ?? channel.executor_kind)}</Text>
+                  <Text>{channel.completed_round_count} / {channel.round_count} 成功</Text>
+                  <Text>候选 {channel.candidate_row_count ?? 0}</Text>
+                  <Text>正式样本 {channel.completed_official_sample_count ?? 0}/{channel.official_sample_count ?? 0}</Text>
+                  <Text>成功率 {formatPercent(channel.success_rate)}</Text>
+                  {channel.parse_failed_candidate_count ? <Text type="secondary">解析失败 {channel.parse_failed_candidate_count}</Text> : null}
+                </Space>
+              </List.Item>
+            )}
+          />
+        </div>
+      ) : null}
       <FeedbackGroupList title="周期表现" groups={item.validation_by_horizon} selectedBenchmark={selectedBenchmark} />
       <FeedbackGroupList title="优先级表现" groups={item.validation_by_priority} selectedBenchmark={selectedBenchmark} />
       <FeedbackGroupList title="题材表现" groups={item.validation_by_theme} selectedBenchmark={selectedBenchmark} />
@@ -2442,7 +2517,7 @@ function FeedbackGroupList({ title, groups, selectedBenchmark }: { title: string
           return (
             <List.Item>
               <Space wrap>
-                <Text strong>{group.label}</Text>
+                <Text strong>{feedbackGroupDisplayLabel(title, group)}</Text>
                 <Text>严格来源 {group.completed_official_sample_count ?? group.completed_validation_count}/{group.official_sample_count ?? group.sample_count}</Text>
                 <Text>可交易验证 {group.completed_tradable_sample_count ?? 0}/{group.tradable_sample_count ?? 0}</Text>
                 <Text type="secondary">原始 {group.sample_count}</Text>

@@ -274,6 +274,9 @@ class ShortpickModelFeedbackItem(BaseModel):
     provider_name: str
     model_name: str
     executor_kind: str
+    model_group_key: str | None = None
+    display_model_label: str | None = None
+    channel_label: str | None = None
     round_count: int
     completed_round_count: int
     failed_round_count: int
@@ -289,9 +292,11 @@ class ShortpickModelFeedbackItem(BaseModel):
     validation_by_horizon: list[ShortpickFeedbackGroup] = Field(default_factory=list)
     validation_by_priority: list[ShortpickFeedbackGroup] = Field(default_factory=list)
     validation_by_theme: list[ShortpickFeedbackGroup] = Field(default_factory=list)
+    channels: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ShortpickModelFeedbackResponse(BaseModel):
     generated_at: datetime
     models: list[ShortpickModelFeedbackItem] = Field(default_factory=list)
+    model_groups: list[ShortpickModelFeedbackItem] = Field(default_factory=list)
     overall: dict[str, Any] = Field(default_factory=dict)

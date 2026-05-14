@@ -141,6 +141,7 @@ def test_shortpick_model_feedback_projection_materializes_empty_feedback_payload
     assert result["refreshed"][0]["projection_group"] == "shortpick"
     assert payload is not None
     assert payload["models"] == []
+    assert payload["model_groups"] == []
     assert payload["overall"]["run_count"] == 0
     assert payload["overall"]["round_count"] == 0
 

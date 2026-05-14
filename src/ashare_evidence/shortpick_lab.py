@@ -6254,6 +6254,128 @@ def list_shortpick_validation_queue(
     }
 
 
+def _shortpick_model_group_key(provider_name: str, model_name: str) -> str:
+    normalized = f"{provider_name}:{model_name}".lower()
+    if provider_name == "deepseek" or "deepseek" in normalized:
+        return "deepseek_v4_pro_1m"
+    if provider_name == "openai" or "gpt-5.5" in normalized or "chatgpt" in normalized:
+        return "chatgpt_5_5"
+    return "legacy_unattributed"
+
+
+def _shortpick_model_group_label(group_key: str) -> str:
+    labels = {
+        "deepseek_v4_pro_1m": "DeepSeek V4 Pro 1M",
+        "chatgpt_5_5": "ChatGPT 5.5",
+        "legacy_unattributed": "历史占位 / 不可归因样本",
+    }
+    return labels.get(group_key, "其他模型组")
+
+
+def _shortpick_feedback_channel_label(executor_kind: str) -> str:
+    labels = {
+        "deepseek_tool_search_lobechat_searxng_v1": "今日联网自由选股",
+        "isolated_codex_cli": "今日 ChatGPT 自由选股",
+        "historical_replay_sealed_packet_llm": "历史密封包回放",
+        "historical_replay_llm_self_distiller": "历史自蒸馏",
+        "historical_replay_momentum_pool_distiller": "动量池蒸馏",
+        "historical_replay_momentum_pool_hard_veto": "动量池 hard-veto 控制",
+        "historical_replay_momentum_pool_rejector": "动量池 rejector 控制",
+    }
+    return labels.get(executor_kind, "实验通道")
+
+
+def _shortpick_research_priority_label(value: str | None) -> str:
+    labels = {
+        "cross_model_same_symbol": "跨模型同票",
+        "same_model_repeat_symbol": "同模型重复",
+        "cross_model_same_topic": "跨模型同题材",
+        "single_model_high_conviction": "单模型高置信",
+        "market_factor_default": "策略默认",
+        "market_factor_offensive": "进攻对照",
+        "market_factor_frozen_paper": "冻结纸面策略",
+        "market_factor_no_limit_chase": "不追涨停控制",
+        "market_factor_next_open_entry": "次日开盘入场控制",
+        "market_factor_top3_equal_weight": "前三名等权组合",
+        "market_factor_intraday_same_day_low_turnover_uptrend": "14点同日低换手上升趋势",
+        "momentum_10d_turnover_top3_equal_weight": "10日动量换手 Top3 等权",
+        "baseline_control": "基线对照",
+        "pending_consensus": "等待共识",
+        "tradeability_blocked": "账户不可执行",
+        "high_convergence": "高收敛",
+        "theme_convergence": "题材收敛",
+        "divergent_novel": "发散新颖",
+        "watch_only": "观察",
+        "failed_or_unusable": "不可用",
+    }
+    return labels.get(value or "", "其他实验分组")
+
+
+def _shortpick_feedback_item(
+    session: Session,
+    *,
+    provider_name: str,
+    model_name: str,
+    executor_kind: str,
+    model_rounds: list[ShortpickModelRound],
+    model_candidates: list[ShortpickCandidate],
+    validation_rows: list[dict[str, Any]],
+    display_model_label: str | None = None,
+    model_group_key: str | None = None,
+    channels: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    round_ids = {round_record.id for round_record in model_rounds}
+    source_counts: dict[str, int] = {}
+    for candidate in model_candidates:
+        for source in candidate.sources_payload or []:
+            status = str(source.get("credibility_status") or "unchecked")
+            source_counts[status] = source_counts.get(status, 0) + 1
+    completed_round_count = sum(1 for round_record in model_rounds if round_record.status == "completed")
+    failed_round_count = sum(1 for round_record in model_rounds if round_record.status == "failed")
+    unique_symbol_runs = {
+        (candidate.run_id, candidate.symbol)
+        for candidate in model_candidates
+    }
+    official_rows = [row for row in validation_rows if _validation_is_official(row["validation"])]
+    completed_official_rows = [
+        row for row in official_rows
+        if row["validation"].status == "completed"
+    ]
+    return {
+        "provider_name": provider_name,
+        "model_name": model_name,
+        "executor_kind": executor_kind,
+        "model_group_key": model_group_key or _shortpick_model_group_key(provider_name, model_name),
+        "display_model_label": display_model_label or _shortpick_model_group_label(_shortpick_model_group_key(provider_name, model_name)),
+        "channel_label": _shortpick_feedback_channel_label(executor_kind),
+        "round_count": len(model_rounds),
+        "completed_round_count": completed_round_count,
+        "failed_round_count": failed_round_count,
+        "retryable_failed_round_count": sum(1 for round_record in model_rounds if _round_retryable(round_record)),
+        "parse_failed_candidate_count": _parse_failed_count_for_rounds(session, round_ids),
+        "candidate_row_count": len(model_candidates),
+        "candidate_horizon_row_count": len(validation_rows),
+        "unique_symbol_run_count": len(unique_symbol_runs),
+        "official_sample_count": len(official_rows),
+        "completed_official_sample_count": len(completed_official_rows),
+        "success_rate": round(completed_round_count / len(model_rounds), 6) if model_rounds else None,
+        "source_credibility_counts": source_counts,
+        "validation_by_horizon": _feedback_groups(validation_rows, key_fn=lambda row: str(row["validation"].horizon_days), label_fn=lambda row: f"{row['validation'].horizon_days}日"),
+        "validation_by_priority": _feedback_groups(
+            validation_rows,
+            key_fn=lambda row: row["candidate"].research_priority,
+            label_fn=lambda row: _shortpick_research_priority_label(row["candidate"].research_priority),
+        ),
+        "validation_by_theme": _feedback_groups(
+            validation_rows,
+            key_fn=lambda row: _candidate_topic_key(row["candidate"]),
+            label_fn=lambda row: _candidate_topic_label(row["candidate"]),
+            limit=12,
+        ),
+        "channels": channels or [],
+    }
+
+
 def build_shortpick_model_feedback(session: Session) -> dict[str, Any]:
     rounds = session.scalars(select(ShortpickModelRound).order_by(ShortpickModelRound.id.asc())).all()
     candidates = session.scalars(
@@ -6279,50 +6401,66 @@ def build_shortpick_model_feedback(session: Session) -> dict[str, Any]:
         ]
         round_ids = {round_record.id for round_record in model_rounds}
         model_candidates = [candidate for candidate in candidates if candidate.round_id in round_ids]
-        source_counts: dict[str, int] = {}
-        for candidate in model_candidates:
-            for source in candidate.sources_payload or []:
-                status = str(source.get("credibility_status") or "unchecked")
-                source_counts[status] = source_counts.get(status, 0) + 1
         validation_rows = _validation_feedback_rows(session, model_candidates)
-        completed_round_count = sum(1 for round_record in model_rounds if round_record.status == "completed")
-        failed_round_count = sum(1 for round_record in model_rounds if round_record.status == "failed")
-        unique_symbol_runs = {
-            (candidate.run_id, candidate.symbol)
-            for candidate in model_candidates
-        }
-        official_rows = [row for row in validation_rows if _validation_is_official(row["validation"])]
-        completed_official_rows = [
-            row for row in official_rows
-            if row["validation"].status == "completed"
-        ]
         items.append(
-            {
-                "provider_name": provider_name,
-                "model_name": model_name,
-                "executor_kind": executor_kind,
-                "round_count": len(model_rounds),
-                "completed_round_count": completed_round_count,
-                "failed_round_count": failed_round_count,
-                "retryable_failed_round_count": sum(1 for round_record in model_rounds if _round_retryable(round_record)),
-                "parse_failed_candidate_count": _parse_failed_count_for_rounds(session, round_ids),
-                "candidate_row_count": len(model_candidates),
-                "candidate_horizon_row_count": len(validation_rows),
-                "unique_symbol_run_count": len(unique_symbol_runs),
-                "official_sample_count": len(official_rows),
-                "completed_official_sample_count": len(completed_official_rows),
-                "success_rate": round(completed_round_count / len(model_rounds), 6) if model_rounds else None,
-                "source_credibility_counts": source_counts,
-                "validation_by_horizon": _feedback_groups(validation_rows, key_fn=lambda row: str(row["validation"].horizon_days), label_fn=lambda row: f"{row['validation'].horizon_days}日"),
-                "validation_by_priority": _feedback_groups(validation_rows, key_fn=lambda row: row["candidate"].research_priority, label_fn=lambda row: row["candidate"].research_priority),
-                "validation_by_theme": _feedback_groups(
-                    validation_rows,
-                    key_fn=lambda row: _candidate_topic_key(row["candidate"]),
-                    label_fn=lambda row: _candidate_topic_label(row["candidate"]),
-                    limit=12,
-                ),
-            }
+            _shortpick_feedback_item(
+                session,
+                provider_name=provider_name,
+                model_name=model_name,
+                executor_kind=executor_kind,
+                model_rounds=model_rounds,
+                model_candidates=model_candidates,
+                validation_rows=validation_rows,
+            )
         )
+    model_groups: list[dict[str, Any]] = []
+    real_group_keys = sorted({
+        _shortpick_model_group_key(provider_name, model_name)
+        for provider_name, model_name, _ in model_keys
+        if _shortpick_model_group_key(provider_name, model_name) != "legacy_unattributed"
+    })
+    for group_key in real_group_keys:
+        group_rounds = [
+            round_record for round_record in rounds
+            if _shortpick_model_group_key(round_record.provider_name, round_record.model_name) == group_key
+        ]
+        group_round_ids = {round_record.id for round_record in group_rounds}
+        group_candidates = [candidate for candidate in candidates if candidate.round_id in group_round_ids]
+        group_validation_rows = _validation_feedback_rows(session, group_candidates)
+        channel_items = [
+            {
+                "provider_name": item["provider_name"],
+                "model_name": item["model_name"],
+                "executor_kind": item["executor_kind"],
+                "channel_label": item["channel_label"],
+                "round_count": item["round_count"],
+                "completed_round_count": item["completed_round_count"],
+                "failed_round_count": item["failed_round_count"],
+                "parse_failed_candidate_count": item["parse_failed_candidate_count"],
+                "candidate_row_count": item["candidate_row_count"],
+                "unique_symbol_run_count": item["unique_symbol_run_count"],
+                "official_sample_count": item["official_sample_count"],
+                "completed_official_sample_count": item["completed_official_sample_count"],
+                "success_rate": item["success_rate"],
+            }
+            for item in items
+            if item["model_group_key"] == group_key
+        ]
+        model_groups.append(
+            _shortpick_feedback_item(
+                session,
+                provider_name=group_key,
+                model_name=_shortpick_model_group_label(group_key),
+                executor_kind="model_group",
+                model_group_key=group_key,
+                display_model_label=_shortpick_model_group_label(group_key),
+                model_rounds=group_rounds,
+                model_candidates=group_candidates,
+                validation_rows=group_validation_rows,
+                channels=channel_items,
+            )
+        )
+    legacy_channels = [item for item in items if item["model_group_key"] == "legacy_unattributed"]
     all_validation_rows = _validation_feedback_rows(session, candidates)
     completed_official_rows = [
         row
@@ -6332,12 +6470,15 @@ def build_shortpick_model_feedback(session: Session) -> dict[str, Any]:
     return {
         "generated_at": utcnow(),
         "models": items,
+        "model_groups": model_groups,
         "overall": {
             "run_count": session.scalar(select(func.count(ShortpickExperimentRun.id))) or 0,
             "round_count": len(rounds),
             "candidate_count": len(candidates),
             "validation_count": session.scalar(select(func.count(ShortpickValidationSnapshot.id))) or 0,
             "unique_symbol_run_count": len({(candidate.run_id, candidate.symbol) for candidate in candidates}),
+            "display_model_group_count": len(model_groups),
+            "legacy_unattributed_channel_count": len(legacy_channels),
             "official_validation_mode": SHORTPICK_OFFICIAL_VALIDATION_MODE,
             "benchmark_dimensions": _shortpick_benchmark_dimension_options(),
             "evaluation_checkpoints": _shortpick_evaluation_checkpoints(completed_official_rows),
