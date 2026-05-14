@@ -158,6 +158,11 @@ class MultiAccountApiTests(unittest.TestCase):
         self.assertEqual(watchlist_response.status_code, 200)
         self.assertEqual(watchlist_response.json()["items"], [])
 
+        member_shell = self.client.get("/dashboard/shell", headers=member_headers)
+        self.assertEqual(member_shell.status_code, 200)
+        self.assertEqual(member_shell.json()["watchlist"]["items"], [])
+        self.assertEqual(member_shell.json()["candidates"]["items"], [])
+
         runtime_overview = self.client.get("/runtime/overview", headers=member_headers)
         self.assertEqual(runtime_overview.status_code, 200)
         self.assertNotIn("provider_credentials", runtime_overview.json())
@@ -192,6 +197,10 @@ class MultiAccountApiTests(unittest.TestCase):
         act_as_watchlist = self.client.get("/watchlist", headers=self._headers("root", "root", act_as="member-a"))
         self.assertEqual(act_as_watchlist.status_code, 200)
         self.assertEqual({item["symbol"] for item in act_as_watchlist.json()["items"]}, {"688981.SH"})
+
+        act_as_shell = self.client.get("/dashboard/shell", headers=self._headers("root", "root", act_as="member-a"))
+        self.assertEqual(act_as_shell.status_code, 200)
+        self.assertEqual({item["symbol"] for item in act_as_shell.json()["watchlist"]["items"]}, {"688981.SH"})
 
         root_watchlist = self.client.get("/watchlist", headers=root_headers)
         self.assertEqual(root_watchlist.status_code, 200)

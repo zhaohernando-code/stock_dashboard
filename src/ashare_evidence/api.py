@@ -27,7 +27,9 @@ from ashare_evidence.dashboard import (
 from ashare_evidence.db import get_database_url, get_session_factory, init_database, utcnow
 from ashare_evidence.frontend_projections import (
     SHORTPICK_REPLAY_FEEDBACK_PROJECTION_KEY,
+    build_home_shell_projection_payload,
     get_ready_frontend_projection_payload,
+    home_shell_projection_key,
     operations_summary_projection_key,
 )
 from ashare_evidence.improvement_suggestions import (
@@ -71,6 +73,7 @@ from ashare_evidence.scheduled_refresh_status import get_scheduled_refresh_statu
 from ashare_evidence.schemas import (
     AuthContextResponse,
     CandidateListResponse,
+    DashboardShellResponse,
     FollowUpAnalysisRequest,
     FollowUpAnalysisResponse,
     LatestRecommendationResponse,
@@ -1602,10 +1605,31 @@ def create_app(
     @app.get("/dashboard/candidates", response_model=CandidateListResponse)
     def dashboard_candidates(
         limit: int = Query(default=8, ge=1, le=20),
-        _access: StockAccessContext = Depends(require_stock_access),
+        access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        return list_candidate_recommendations(session, limit=limit)
+        return list_candidate_recommendations(session, limit=limit, account_login=access.target_login)
+
+    @app.get("/dashboard/shell", response_model=DashboardShellResponse)
+    def dashboard_shell(
+        access: StockAccessContext = Depends(require_stock_access),
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        projection = get_ready_frontend_projection_payload(
+            session,
+            home_shell_projection_key(target_login=access.target_login),
+            target_login=access.target_login,
+        )
+        if projection is None:
+            projection = build_home_shell_projection_payload(
+                session,
+                target_login=access.target_login,
+                actor_login=access.actor_login,
+                actor_role=access.actor_role,
+            )
+        projection = dict(projection)
+        projection["scheduled_refresh_status"] = get_scheduled_refresh_status()
+        return projection
 
     @app.get("/dashboard/glossary")
     def dashboard_glossary(_access: StockAccessContext = Depends(require_stock_access)) -> list[dict[str, str]]:

@@ -3,6 +3,17 @@ import type { DashboardShellPayload, WatchlistResponse, CandidateListResponse, G
 
 export function loadShellData(): Promise<{ data: DashboardShellPayload; source: ReturnType<typeof buildSourceInfo> }> {
   return (async () => {
+    try {
+      const shell = await request<DashboardShellPayload>("/dashboard/shell");
+      return {
+        data: shell,
+        source: buildSourceInfo(),
+      };
+    } catch (shellError) {
+      if (!(shellError instanceof Error) || !shellError.message.toLowerCase().includes("404")) {
+        throw shellError;
+      }
+    }
     const [watchlist, candidates, glossary, scheduledRefreshStatus] = await Promise.all([
       request<WatchlistResponse>("/watchlist"),
       request<CandidateListResponse>("/dashboard/candidates?limit=8"),

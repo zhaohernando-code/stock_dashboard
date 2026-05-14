@@ -14,10 +14,15 @@ from ashare_evidence.models import FrontendProjection
 FRONTEND_PROJECTION_VERSION = "frontend-projection-v1"
 SHORTPICK_REPLAY_FEEDBACK_PROJECTION_KEY = "shortpick_replay_feedback:v1"
 OPERATIONS_SUMMARY_PROJECTION_PREFIX = "operations_summary:v1"
+HOME_SHELL_PROJECTION_PREFIX = "home_shell:v1"
 
 
 def operations_summary_projection_key(*, target_login: str, sample_symbol: str) -> str:
     return f"{OPERATIONS_SUMMARY_PROJECTION_PREFIX}:{target_login}:{sample_symbol.upper()}"
+
+
+def home_shell_projection_key(*, target_login: str) -> str:
+    return f"{HOME_SHELL_PROJECTION_PREFIX}:{target_login}"
 
 
 def stable_payload_fingerprint(payload: Any) -> str:
@@ -183,6 +188,64 @@ def refresh_operations_summary_frontend_projections(
     ]
 
 
+def build_home_shell_projection_payload(
+    session: Session,
+    *,
+    target_login: str,
+    actor_login: str = "root",
+    actor_role: str = "root",
+    include_scheduled_refresh_status: bool = False,
+) -> dict[str, Any]:
+    from ashare_evidence.dashboard import get_glossary_entries, list_candidate_recommendations
+    from ashare_evidence.scheduled_refresh_status import get_scheduled_refresh_status
+    from ashare_evidence.watchlist import list_watchlist_entries
+
+    payload = {
+        "watchlist": list_watchlist_entries(
+            session,
+            target_login=target_login,
+            actor_login=actor_login,
+            actor_role=actor_role,
+            record_presence=False,
+        ),
+        "candidates": list_candidate_recommendations(session, limit=8, account_login=target_login),
+        "glossary": get_glossary_entries(),
+        "scheduled_refresh_status": None,
+    }
+    if include_scheduled_refresh_status:
+        payload["scheduled_refresh_status"] = get_scheduled_refresh_status()
+    return payload
+
+
+def refresh_home_shell_frontend_projection(
+    session: Session,
+    *,
+    target_login: str = "root",
+) -> dict[str, Any]:
+    payload = build_home_shell_projection_payload(session, target_login=target_login)
+    projection = upsert_frontend_projection(
+        session,
+        home_shell_projection_key(target_login=target_login),
+        projection_group="home",
+        target_login=target_login,
+        payload=payload,
+        metadata_payload={
+            "source": "watchlist_candidates_glossary",
+            "usage": "GET /dashboard/shell",
+            "target_login": target_login,
+        },
+    )
+    return {
+        "projection_key": projection.projection_key,
+        "projection_group": projection.projection_group,
+        "target_login": projection.target_login,
+        "status": projection.status,
+        "generated_at": projection.generated_at.isoformat(),
+        "source_fingerprint": projection.source_fingerprint,
+        "payload_size_bytes": len(json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")),
+    }
+
+
 def refresh_frontend_projections(
     session: Session,
     *,
@@ -191,6 +254,8 @@ def refresh_frontend_projections(
     sample_symbols: list[str] | None = None,
 ) -> dict[str, Any]:
     refreshed: list[dict[str, Any]] = []
+    if projection in {"all", "home_shell"}:
+        refreshed.append(refresh_home_shell_frontend_projection(session, target_login=target_login))
     if projection in {"all", "shortpick_replay_feedback"}:
         refreshed.append(refresh_shortpick_replay_feedback_frontend_projection(session))
     if projection in {"all", "operations_summary"}:

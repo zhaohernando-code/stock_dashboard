@@ -561,7 +561,7 @@ def build_parser() -> argparse.ArgumentParser:
     frontend_projections_refresh.add_argument("--database-url", default=None)
     frontend_projections_refresh.add_argument(
         "--projection",
-        choices=["all", "shortpick_replay_feedback", "operations_summary"],
+        choices=["all", "home_shell", "shortpick_replay_feedback", "operations_summary"],
         default="all",
     )
     frontend_projections_refresh.add_argument("--target-login", default="root")

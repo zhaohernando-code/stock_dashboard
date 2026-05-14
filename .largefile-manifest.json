@@ -21,8 +21,8 @@
       "reviewed_at": "2026-04-30"
     },
     "src/ashare_evidence/api.py": {
-      "lines": 1922,
-      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, improvement-suggestion, shortpick lab, shortpick replay, and market-factor study routes. The shortpick market-factor endpoint attaches frozen paper-strategy evidence from the long-sample artifact while preserving cached read-only behavior, and the paper-tracking ledger endpoint projects frozen strategy status, LLM paper-control signals, same-pool market-factor controls, execution-timing controls, intraday same-day entry controls, and four exit-track monitoring rules from existing shortpick runs/candidates without triggering market refresh or model work; router extraction remains possible but would add broad touch points across the current schema surface. 2026-05-14 review: growth moves historical replay feedback, market-factor study display, and operations summary onto materialized frontend projections, and annotates the summary endpoint with live API/payload metrics instead of full-dashboard build metrics.",
+      "lines": 1946,
+      "reason": "FastAPI application with dashboard, simulation, settings, manual-research, watchlist, stock, event-analysis, improvement-suggestion, shortpick lab, shortpick replay, and market-factor study routes. The shortpick market-factor endpoint attaches frozen paper-strategy evidence from the long-sample artifact while preserving cached read-only behavior, and the paper-tracking ledger endpoint projects frozen strategy status, LLM paper-control signals, same-pool market-factor controls, execution-timing controls, intraday same-day entry controls, and four exit-track monitoring rules from existing shortpick runs/candidates without triggering market refresh or model work; router extraction remains possible but would add broad touch points across the current schema surface. 2026-05-14 review: growth moves historical replay feedback, market-factor study display, operations summary, and home shell onto materialized frontend projections, and annotates the summary endpoint with live API/payload metrics instead of full-dashboard build metrics.",
       "status": "accepted",
       "reviewed_at": "2026-05-14"
     },
@@ -33,10 +33,10 @@
       "reviewed_at": "2026-05-13"
     },
     "src/ashare_evidence/dashboard.py": {
-      "lines": 712,
-      "reason": "Dashboard views: hero payload, price chart, follow-up prompt, candidate list, change detection, and event-analysis / data-quality projections. The added growth is still concentrated in dashboard serialization logic.",
+      "lines": 718,
+      "reason": "Dashboard views: hero payload, price chart, follow-up prompt, candidate list, change detection, and event-analysis / data-quality projections. 2026-05-14 review: candidate list now accepts an optional account scope so the materialized home shell can preserve member-space isolation while keeping the existing default helper behavior.",
       "status": "accepted",
-      "reviewed_at": "2026-05-01"
+      "reviewed_at": "2026-05-14"
     },
     "src/ashare_evidence/intraday_market.py": {
       "lines": 528,

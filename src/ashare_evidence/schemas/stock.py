@@ -332,6 +332,13 @@ class WatchlistResponse(BaseModel):
     items: list[WatchlistItemView] = Field(default_factory=list)
 
 
+class DashboardShellResponse(BaseModel):
+    watchlist: WatchlistResponse
+    candidates: CandidateListResponse
+    glossary: list[dict[str, str]] = Field(default_factory=list)
+    scheduled_refresh_status: dict[str, Any] | None = None
+
+
 class WatchlistCreateRequest(BaseModel):
     symbol: str
     name: str | None = None

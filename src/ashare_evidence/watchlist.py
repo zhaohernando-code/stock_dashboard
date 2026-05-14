@@ -280,14 +280,16 @@ def list_watchlist_entries(
     target_login: str = ROOT_ACCOUNT_LOGIN,
     actor_login: str = ROOT_ACCOUNT_LOGIN,
     actor_role: str = ROLE_ROOT,
+    record_presence: bool = True,
 ) -> dict[str, Any]:
-    record_account_presence(
-        session,
-        actor_login=actor_login,
-        actor_role=actor_role,
-        target_login=target_login,
-        mark_acted=False,
-    )
+    if record_presence:
+        record_account_presence(
+            session,
+            actor_login=actor_login,
+            actor_role=actor_role,
+            target_login=target_login,
+            mark_acted=False,
+        )
     follows = session.scalars(
         select(WatchlistFollow)
         .where(

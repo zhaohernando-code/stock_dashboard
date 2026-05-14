@@ -557,8 +557,13 @@ def _follow_up_payload(summary: dict[str, Any], change: dict[str, Any], evidence
     }
 
 
-def list_candidate_recommendations(session: Session, limit: int = 8) -> dict[str, Any]:
-    active_symbols = set(active_watchlist_symbols(session))
+def list_candidate_recommendations(
+    session: Session,
+    limit: int = 8,
+    *,
+    account_login: str | None = None,
+) -> dict[str, Any]:
+    active_symbols = set(active_watchlist_symbols(session, account_login=account_login))
     bind = session.get_bind()
     artifact_root = artifact_root_from_database_url(bind.url.render_as_string(hide_password=False) if bind else None)
     if not active_symbols:
