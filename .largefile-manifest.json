@@ -183,14 +183,14 @@
       "reviewed_at": "2026-05-11"
     },
     "tests/test_shortpick_lab.py": {
-      "lines": 1908,
-      "reason": "Short Pick Lab integration/regression tests spanning candidate parsing, paper controls, validation, and intraday same-day entry failure handling. 2026-05-14 review: growth only locks model-feedback display aggregation and readable priority/channel labels while preserving existing API compatibility.",
+      "lines": 1914,
+      "reason": "Short Pick Lab integration/regression tests spanning candidate parsing, paper controls, validation, and intraday same-day entry failure handling. 2026-05-14 review: growth locks model-feedback display aggregation, readable priority/channel labels, and nonzero tradable-sample projection fields while preserving existing API compatibility.",
       "status": "accepted",
       "reviewed_at": "2026-05-14"
     },
     "src/ashare_evidence/shortpick_lab.py": {
-      "lines": 7123,
-      "reason": "Short Pick Lab experiment runner, market-factor overlays, paper-tracking validation, and intraday same-day entry control. 2026-05-14 review: growth is the read-only model-feedback projection layer that groups executor channels under the two real model labels and maps research-priority keys to user-facing labels; split remains deferred because this runner still owns the live paper ledger contract.",
+      "lines": 7151,
+      "reason": "Short Pick Lab experiment runner, market-factor overlays, paper-tracking validation, and intraday same-day entry control. 2026-05-14 review: growth is the read-only model-feedback projection layer that groups executor channels under the two real model labels, maps research-priority keys to user-facing labels, and now carries real tradable-sample counters so missing fields do not render as 0/0; split remains deferred because this runner still owns the live paper ledger contract.",
       "status": "accepted",
       "reviewed_at": "2026-05-14"
     }

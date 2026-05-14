@@ -77,6 +77,12 @@ SHORTPICK_DIAGNOSTIC_VALIDATION_STATUSES = {
     "entry_unfillable_limit_up",
     "tradeability_uncertain",
 }
+SHORTPICK_HARD_LEAKAGE_REASONS = {
+    "source_not_in_packet",
+    "source_after_cutoff",
+    "unverified_source_time",
+    "future_leakage_suspected",
+}
 SHORTPICK_PRIMARY_BENCHMARK_ID = "CSI300"
 SHORTPICK_RESEARCH_BENCHMARK_IDS = ["CSI1000"]
 SHORTPICK_BENCHMARK_DIMENSION_HS300 = "hs300"
@@ -5781,6 +5787,14 @@ def _validation_is_official(snapshot: ShortpickValidationSnapshot) -> bool:
     )
 
 
+def _validation_is_tradable_sample(snapshot: ShortpickValidationSnapshot) -> bool:
+    payload = _validation_payload(snapshot)
+    if payload.get("tradeability_status") != SHORTPICK_OFFICIAL_TRADEABILITY_STATUS:
+        return False
+    reasons = {str(reason) for reason in payload.get("leakage_audit_reasons") or []}
+    return not bool(reasons & SHORTPICK_HARD_LEAKAGE_REASONS)
+
+
 def _candidate_is_diagnostic(validations: list[ShortpickValidationSnapshot]) -> bool:
     if not validations:
         return False
@@ -6341,6 +6355,11 @@ def _shortpick_feedback_item(
         row for row in official_rows
         if row["validation"].status == "completed"
     ]
+    tradable_rows = [row for row in validation_rows if _validation_is_tradable_sample(row["validation"])]
+    completed_tradable_rows = [
+        row for row in tradable_rows
+        if row["validation"].status == "completed"
+    ]
     return {
         "provider_name": provider_name,
         "model_name": model_name,
@@ -6358,6 +6377,8 @@ def _shortpick_feedback_item(
         "unique_symbol_run_count": len(unique_symbol_runs),
         "official_sample_count": len(official_rows),
         "completed_official_sample_count": len(completed_official_rows),
+        "tradable_sample_count": len(tradable_rows),
+        "completed_tradable_sample_count": len(completed_tradable_rows),
         "success_rate": round(completed_round_count / len(model_rounds), 6) if model_rounds else None,
         "source_credibility_counts": source_counts,
         "validation_by_horizon": _feedback_groups(validation_rows, key_fn=lambda row: str(row["validation"].horizon_days), label_fn=lambda row: f"{row['validation'].horizon_days}日"),
@@ -6441,6 +6462,8 @@ def build_shortpick_model_feedback(session: Session) -> dict[str, Any]:
                 "unique_symbol_run_count": item["unique_symbol_run_count"],
                 "official_sample_count": item["official_sample_count"],
                 "completed_official_sample_count": item["completed_official_sample_count"],
+                "tradable_sample_count": item["tradable_sample_count"],
+                "completed_tradable_sample_count": item["completed_tradable_sample_count"],
                 "success_rate": item["success_rate"],
             }
             for item in items
@@ -6595,8 +6618,11 @@ def _feedback_groups(
     for key, group_rows in grouped.items():
         validations = [row["validation"] for row in group_rows]
         official_rows = [row for row in group_rows if _validation_is_official(row["validation"])]
+        tradable_rows = [row for row in group_rows if _validation_is_tradable_sample(row["validation"])]
         official_validations = [row["validation"] for row in official_rows]
+        tradable_validations = [row["validation"] for row in tradable_rows]
         completed = [validation for validation in official_validations if validation.status == "completed"]
+        completed_tradable = [validation for validation in tradable_validations if validation.status == "completed"]
         stock_returns = [float(validation.stock_return) for validation in completed if validation.stock_return is not None]
         excess_returns = [float(validation.excess_return) for validation in completed if validation.excess_return is not None]
         benchmark_metrics = {
@@ -6618,9 +6644,11 @@ def _feedback_groups(
                 "label": labels[key],
                 "sample_count": len(validations),
                 "official_sample_count": len(official_validations),
+                "tradable_sample_count": len(tradable_validations),
                 "unique_symbol_run_count": len({(row["candidate"].run_id, row["candidate"].symbol) for row in group_rows}),
                 "completed_validation_count": len(completed),
                 "completed_official_sample_count": len(completed),
+                "completed_tradable_sample_count": len(completed_tradable),
                 "mean_stock_return": _mean_or_none(stock_returns),
                 "mean_excess_return": _mean_or_none(excess_returns),
                 "trimmed_mean_excess_return": _trimmed_mean_or_none(excess_returns),

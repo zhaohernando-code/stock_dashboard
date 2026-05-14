@@ -287,6 +287,8 @@ class ShortpickModelFeedbackItem(BaseModel):
     unique_symbol_run_count: int = 0
     official_sample_count: int = 0
     completed_official_sample_count: int = 0
+    tradable_sample_count: int = 0
+    completed_tradable_sample_count: int = 0
     success_rate: float | None = None
     source_credibility_counts: dict[str, int] = Field(default_factory=dict)
     validation_by_horizon: list[ShortpickFeedbackGroup] = Field(default_factory=list)
