@@ -143,7 +143,7 @@
     "frontend_timeout_db_lock_mitigation": "published_runtime_verified_manifest_20260514T111843Z_48fe2a487aaf",
     "frontend_projection_store": "published_runtime_verified_manifest_20260514T113307Z_8d552e2bf4ee",
     "operations_summary_projection": "published_runtime_verified_manifest_20260514T115111Z_deb41270f84e",
-    "home_shell_projection": "in_progress"
+    "home_shell_projection": "published_runtime_verified_manifest_20260514T120852Z_f3925187e50d"
   },
   "latest_findings": [
     {
