@@ -9,6 +9,7 @@
 - 分行情胜出表以月度组合超额按市场阶段聚合，回答“组合资金曲线在不同市场环境下是否稳定”；它不是逐候选 LLM alpha，也不是实盘成交证明。
 - 当前第一版使用已完成的 `full_window-next_close / next_open / same_close_proxy` staged artifacts，避免从页面或 API 请求里重跑 3000 股票级别回测。后续如需每日增量刷新，应继续作为慢预计算产物处理。
 - 初始读数显示冻结低换手上升趋势在部分震荡行情桶胜出，但并非所有行情桶最优；页面因此只能把冻结策略表述为当前最稳纸面主线，不能写成全行情最优策略。
+- 本轮已发布并在 localhost 与认证后的 canonical route 验证：历史回放页显示长窗口策略样本 `717` 信号日、`2,999` 只可交易序列、`6` 个可用行情桶，以及分行情胜出表中的冻结策略位置。
 
 [2026-05-14T14:48:00+08:00] Short Pick Lab historical replay market-regime and industry evidence must stay offline:
 
