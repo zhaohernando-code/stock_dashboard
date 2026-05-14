@@ -1228,3 +1228,13 @@ After the topic/industry split, result review showed that `C 制造业` still do
 - 默认关键行情表只看已识别行情，并优先显示 `next_close` 对应的“次日收盘买入”口径；`missing_regime` 行保留在 artifact 中，但从默认结论表收起。
 - 页面说明明确提示“先看 6 个判断卡和关键行情结论”，下方折叠区用于追溯，不再让非专业读者在首屏面对长表格。
 - 本轮发布 manifest `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260514T145553Z-b6f3ba080a88/manifest.json`，deploy verifier `19 passed, 0 failed`；localhost `试验田 -> 历史回放` 已验证默认出现“执行口径和入场假设”“完整统计、置信区间和归因明细”“短窗口 LLM 回放统计”等折叠项，关键行情表显示中文行情桶且默认不出现“行情待识别/其他行情”。canonical 入口在 Playwright 未登录会话中跳转到统一登录页，本轮未越过登录态复验业务页。
+
+[2026-05-15T00:08:00+08:00] Historical replay evidence should include full trade attribution, stratified LLM expansion, and real intraday quote snapshots:
+本轮把剩余数据/算法补强项落到可执行 artifact，而不是只留在前端说明里。非 LLM 长窗口 artifact 现在输出完整逐笔交易行与股票、行业、信号日、行情桶归因；LLM 回放新增显式日期 CLI，可按行情分层扩样；未来 14:00 同日入场控制会保存真实 quote snapshot artifact，避免把日线 proxy 当成真实盘中成交证据。
+
+补充说明
+- `output/shortpick-strategy-trade-regime-evidence.json` 已重建：覆盖 `2023-05-16` 到 `2026-04-29`，`717` 个信号日，`14180` 笔逐笔交易，股票/行业/日期/行情归因来自完整 trade rows，不再从 staged `trades_sample` 外推。
+- 前端“完整统计、置信区间和归因明细”折叠区在 artifact ready 时显示“逐笔股票贡献”和“逐笔行业贡献”；默认首屏仍保持决策优先。
+- 新增 `shortpick-replay-dates` CLI，支持 JSON array、newline 文件，或带 `dates` 字段的 artifact。已按最大行情桶各取早/中/晚生成 `18` 个分层日期，并用真实 sealed-packet LLM 跑完 `18/18` 个 completed run。
+- `output/shortpick-replay-feedback-cache.json` 已刷新到 `126` 个历史 replay run、`13460` 条 aggregate validation；前端 projection `shortpick_replay_feedback:v1` 已刷新，payload 约 `1.23MB`。
+- `run_shortpick_intraday_same_day_control` 会为 selection universe 写 `shortpick-intraday-quote-snapshot:{run_id}:selection_universe` artifact，payload 保留完整 quote snapshot、采集时间、来源和边界说明。历史未采集日期仍不能用日线 proxy 回填成真实 14:00 成交。

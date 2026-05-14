@@ -299,6 +299,9 @@ def _slim_shortpick_strategy_slice_evidence(payload: dict[str, object]) -> dict[
             attribution,
             ("status", "reason", "basis", "horizon_days", "rows", "symbol_industry"),
         )
+        symbol_industry = _shortpick_symbol_industry_trade_attribution(payload)
+        if symbol_industry:
+            slim["portfolio_return_attribution"]["symbol_industry"] = symbol_industry  # type: ignore[index]
     return slim
 
 
@@ -317,6 +320,35 @@ def _shortpick_trade_regime_evidence_projection(payload: dict[str, object]) -> d
             "sample_adequacy",
             "regime_winner_rows",
             "regime_coverage_rows",
+            "trade_attribution",
+        ),
+    )
+
+
+def _shortpick_symbol_industry_trade_attribution(payload: dict[str, object]) -> dict[str, object] | None:
+    candidates = []
+    trade_attr = payload.get("trade_attribution")
+    if isinstance(trade_attr, dict):
+        candidates.append(trade_attr)
+    trade_regime = payload.get("trade_regime_evidence")
+    if isinstance(trade_regime, dict) and isinstance(trade_regime.get("trade_attribution"), dict):
+        candidates.append(trade_regime["trade_attribution"])  # type: ignore[arg-type]
+    source = next((item for item in candidates if item.get("status") == "ready"), None)
+    if not isinstance(source, dict):
+        return None
+    return _copy_dict_keys(
+        source,
+        (
+            "status",
+            "reason",
+            "basis",
+            "note",
+            "sample_trade_count",
+            "rows",
+            "top_symbol_rows",
+            "top_industry_rows",
+            "top_signal_day_rows",
+            "top_regime_rows",
         ),
     )
 

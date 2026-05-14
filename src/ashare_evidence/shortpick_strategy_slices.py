@@ -253,6 +253,7 @@ def build_shortpick_strategy_slice_evidence(
                 entry_price_source=entry_price_source,
             )
             for intent in intents:
+                series = series_by_symbol.get(intent.symbol)
                 entry_price = _entry_price_on(series_by_symbol, intent.symbol, intent.entry_day, entry_price_source)
                 exit_close = _close_on(series_by_symbol, intent.symbol, intent.exit_day)
                 if entry_price is None or exit_close is None or entry_price <= 0:
@@ -278,6 +279,8 @@ def build_shortpick_strategy_slice_evidence(
                         "entry_day": intent.entry_day,
                         "exit_day": intent.exit_day,
                         "symbol": intent.symbol,
+                        "name": series.name if series is not None else intent.symbol,
+                        "industry": series.industry if series is not None else "unknown",
                         "gross_return": gross_return,
                         "net_return": net_return,
                         "benchmark_return": benchmark_return,
@@ -315,6 +318,7 @@ def build_shortpick_strategy_slice_evidence(
     )
     regime_coverage_rows = _regime_coverage_rows(signal_days, regime_tags)
     winners = _regime_winner_rows(regime_rows, min_trade_count=min_regime_trade_count)
+    trade_attribution = _trade_level_attribution(trade_rows)
 
     return {
         "experiment": "shortpick_strategy_slice_evidence",
@@ -335,6 +339,7 @@ def build_shortpick_strategy_slice_evidence(
             "mode": LEADING_PAPER_MODE,
             "strategies": list(strategies),
             "frozen_strategy": LEADING_PAPER_STRATEGY,
+            "full_trade_rows_included": True,
         },
         "data_scope": {
             "signal_day_count": len(signal_days),
@@ -356,7 +361,161 @@ def build_shortpick_strategy_slice_evidence(
         "period_strategy_rows": period_rows,
         "regime_winner_rows": winners,
         "regime_coverage_rows": regime_coverage_rows,
+        "trade_attribution": trade_attribution,
+        "trade_rows": [_json_safe_row(row) for row in trade_rows],
     }
+
+
+def _trade_level_attribution(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    usable = [row for row in rows if row.get("net_excess_return") is not None]
+    attribution_rows = _trade_attribution_strategy_rows(usable)
+    return {
+        "status": "ready" if usable else "missing_artifact",
+        "basis": "full_trade_rows_grouped_by_symbol_industry_signal_day_and_regime",
+        "sample_trade_count": len(usable),
+        "note": "逐笔交易级归因来自完整离线 strategy-slice trade_rows，不使用 staged portfolio trades_sample 外推。",
+        "rows": attribution_rows,
+        "top_symbol_rows": _trade_group_attribution_rows(
+            usable,
+            group_keys=("entry_price_source", "strategy", "symbol"),
+            extra_keys=("label", "name", "industry"),
+            limit_per_strategy=8,
+        ),
+        "top_industry_rows": _trade_group_attribution_rows(
+            usable,
+            group_keys=("entry_price_source", "strategy", "industry"),
+            extra_keys=("label",),
+            limit_per_strategy=8,
+        ),
+        "top_signal_day_rows": _trade_group_attribution_rows(
+            usable,
+            group_keys=("entry_price_source", "strategy", "signal_day"),
+            extra_keys=("label",),
+            limit_per_strategy=8,
+        ),
+        "top_regime_rows": _trade_group_attribution_rows(
+            usable,
+            group_keys=("entry_price_source", "strategy", "market_regime_tag"),
+            extra_keys=("label", "trend_regime", "volatility_regime", "size_style_regime"),
+            limit_per_strategy=8,
+        ),
+        **({} if usable else {"reason": "完整逐笔交易行为空，无法生成股票/行业归因。"}),
+    }
+
+
+def _trade_attribution_strategy_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        grouped[(str(row.get("entry_price_source")), str(row.get("strategy")))].append(row)
+    output = []
+    for (entry_price_source, strategy), values in sorted(grouped.items(), key=lambda item: item[0]):
+        sample = values[0]
+        best_symbol = _trade_best_group(values, "symbol")
+        worst_symbol = _trade_worst_group(values, "symbol")
+        best_industry = _trade_best_group(values, "industry")
+        worst_industry = _trade_worst_group(values, "industry")
+        best_day = _trade_best_group(values, "signal_day")
+        worst_day = _trade_worst_group(values, "signal_day")
+        total_excess = _sum_metric(values, "net_excess_return")
+        output.append(
+            _json_safe_row(
+                {
+                    "entry_price_source": entry_price_source,
+                    "strategy": strategy,
+                    "label": sample.get("label") or _strategy_label(strategy),
+                    "trade_count": len(values),
+                    "symbol_count": len({row.get("symbol") for row in values}),
+                    "industry_count": len({row.get("industry") for row in values}),
+                    "mean_net_excess_return": _round(_mean([float(row["net_excess_return"]) for row in values])),
+                    "positive_net_excess_rate": _positive_rate([float(row["net_excess_return"]) for row in values]),
+                    "sum_net_excess_return": _round(total_excess),
+                    "best_symbol": best_symbol.get("group_value") if best_symbol else None,
+                    "best_symbol_name": best_symbol.get("name") if best_symbol else None,
+                    "best_symbol_sum_net_excess_return": best_symbol.get("sum_net_excess_return") if best_symbol else None,
+                    "worst_symbol": worst_symbol.get("group_value") if worst_symbol else None,
+                    "worst_symbol_name": worst_symbol.get("name") if worst_symbol else None,
+                    "worst_symbol_sum_net_excess_return": worst_symbol.get("sum_net_excess_return") if worst_symbol else None,
+                    "best_industry": best_industry.get("group_value") if best_industry else None,
+                    "best_industry_sum_net_excess_return": best_industry.get("sum_net_excess_return") if best_industry else None,
+                    "worst_industry": worst_industry.get("group_value") if worst_industry else None,
+                    "worst_industry_sum_net_excess_return": worst_industry.get("sum_net_excess_return") if worst_industry else None,
+                    "best_signal_day": best_day.get("group_value") if best_day else None,
+                    "best_signal_day_sum_net_excess_return": best_day.get("sum_net_excess_return") if best_day else None,
+                    "worst_signal_day": worst_day.get("group_value") if worst_day else None,
+                    "worst_signal_day_sum_net_excess_return": worst_day.get("sum_net_excess_return") if worst_day else None,
+                }
+            )
+        )
+    output.sort(
+        key=lambda item: (
+            str(item["entry_price_source"]) != ENTRY_PRICE_SOURCE_NEXT_CLOSE,
+            -float(item.get("sum_net_excess_return") if item.get("sum_net_excess_return") is not None else -999.0),
+        )
+    )
+    return output
+
+
+def _trade_group_attribution_rows(
+    rows: list[dict[str, Any]],
+    *,
+    group_keys: tuple[str, ...],
+    extra_keys: tuple[str, ...],
+    limit_per_strategy: int,
+) -> list[dict[str, Any]]:
+    grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        grouped[tuple(row.get(key) for key in group_keys)].append(row)
+    all_rows: list[dict[str, Any]] = []
+    for key_values, values in grouped.items():
+        sample = values[0]
+        result: dict[str, Any] = {key: value for key, value in zip(group_keys, key_values)}
+        for key in extra_keys:
+            result[key] = sample.get(key)
+        excess = [float(row["net_excess_return"]) for row in values if row.get("net_excess_return") is not None]
+        result.update(
+            {
+                "group_value": key_values[-1],
+                "trade_count": len(values),
+                "symbol_count": len({row.get("symbol") for row in values}),
+                "sum_net_excess_return": _round(_sum_metric(values, "net_excess_return")),
+                "mean_net_excess_return": _round(_mean(excess)),
+                "positive_net_excess_rate": _positive_rate(excess),
+            }
+        )
+        all_rows.append(_json_safe_row(result))
+
+    bucketed: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in all_rows:
+        bucketed[(str(row.get("entry_price_source")), str(row.get("strategy")))].append(row)
+    output: list[dict[str, Any]] = []
+    for _, values in sorted(bucketed.items(), key=lambda item: item[0]):
+        ranked = sorted(
+            values,
+            key=lambda item: (
+                abs(float(item.get("sum_net_excess_return") if item.get("sum_net_excess_return") is not None else 0.0)),
+                int(item.get("trade_count") or 0),
+            ),
+            reverse=True,
+        )
+        output.extend(ranked[:limit_per_strategy])
+    return output
+
+
+def _trade_best_group(rows: list[dict[str, Any]], key: str) -> dict[str, Any] | None:
+    grouped = _trade_group_attribution_rows(rows, group_keys=(key,), extra_keys=("name", "industry"), limit_per_strategy=100000)
+    values = [row for row in grouped if row.get("sum_net_excess_return") is not None]
+    return None if not values else max(values, key=lambda item: float(item.get("sum_net_excess_return") or 0.0))
+
+
+def _trade_worst_group(rows: list[dict[str, Any]], key: str) -> dict[str, Any] | None:
+    grouped = _trade_group_attribution_rows(rows, group_keys=(key,), extra_keys=("name", "industry"), limit_per_strategy=100000)
+    values = [row for row in grouped if row.get("sum_net_excess_return") is not None]
+    return None if not values else min(values, key=lambda item: float(item.get("sum_net_excess_return") or 0.0))
+
+
+def _sum_metric(rows: list[dict[str, Any]], key: str) -> float | None:
+    values = [float(row[key]) for row in rows if row.get(key) is not None]
+    return None if not values else sum(values)
 
 
 def _slice_rows(

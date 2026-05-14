@@ -29,6 +29,7 @@ from ashare_evidence.shortpick_replay import (
     list_shortpick_replay_runs,
     run_shortpick_historical_replay,
     run_shortpick_historical_replay_concurrent,
+    run_shortpick_historical_replay_dates,
     run_shortpick_replay_distillation,
     run_shortpick_replay_distillation_concurrent,
     run_shortpick_replay_rejection,
@@ -157,6 +158,36 @@ def _seed_replay_fixture(database_url: str) -> None:
                 **_lineage({"link": "after"}, "test://news-link/after"),
             )
         )
+
+
+def test_historical_replay_dates_runs_explicit_weekday_set_once(monkeypatch) -> None:
+    called_dates: list[date] = []
+
+    def fake_run_one_replay_date(session, *, as_of_date, rounds, candidate_limit, account_profile, triggered_by):
+        called_dates.append(as_of_date)
+        return {
+            "as_of_date": as_of_date.isoformat(),
+            "rounds": rounds,
+            "candidate_limit": candidate_limit,
+            "account_profile": account_profile,
+            "triggered_by": triggered_by,
+        }
+
+    monkeypatch.setattr("ashare_evidence.shortpick_replay._run_one_replay_date", fake_run_one_replay_date)
+
+    payload = run_shortpick_historical_replay_dates(
+        None,
+        replay_dates=[date(2026, 5, 9), date(2026, 5, 8), date(2026, 5, 8)],
+        rounds=2,
+        candidate_limit=4,
+        triggered_by="unit-test",
+    )
+
+    assert called_dates == [date(2026, 5, 8)]
+    assert payload["date_mode"] == "explicit_stratified_dates"
+    assert payload["date_count"] == 2
+    assert payload["run_count"] == 1
+    assert payload["skipped_dates"] == [{"date": "2026-05-09", "reason": "weekend"}]
 
 
 def test_historical_replay_creates_isolated_candidates_and_rejected_sources(monkeypatch) -> None:

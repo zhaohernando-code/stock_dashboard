@@ -5,6 +5,7 @@ from ashare_evidence.shortpick_strategy_slices import (
     _portfolio_return_attribution,
     _regime_winner_rows,
     _sample_adequacy,
+    _trade_level_attribution,
 )
 
 
@@ -120,3 +121,41 @@ def test_portfolio_return_attribution_refuses_trades_sample_industry_extrapolati
     assert payload["rows"][0]["drop_best_regime_mean_excess_return"] == -0.02
     assert payload["symbol_industry"]["status"] == "missing_artifact"
     assert "不用 trades_sample 外推" in payload["symbol_industry"]["reason"]
+
+
+def test_trade_level_attribution_uses_full_trade_rows_for_symbol_and_industry():
+    rows = [
+        {
+            "entry_price_source": "next_close",
+            "strategy": "low_turnover_20d_uptrend_liquid_top120",
+            "label": "低换手上升趋势",
+            "signal_day": date(2025, 1, 2),
+            "symbol": "600001.SH",
+            "name": "贡献股份",
+            "industry": "光模块",
+            "market_regime_tag": "range_bound:low_volatility:balanced_size",
+            "net_return": 0.04,
+            "net_excess_return": 0.03,
+        },
+        {
+            "entry_price_source": "next_close",
+            "strategy": "low_turnover_20d_uptrend_liquid_top120",
+            "label": "低换手上升趋势",
+            "signal_day": date(2025, 1, 3),
+            "symbol": "600002.SH",
+            "name": "拖累股份",
+            "industry": "电池",
+            "market_regime_tag": "range_bound:low_volatility:balanced_size",
+            "net_return": -0.02,
+            "net_excess_return": -0.04,
+        },
+    ]
+
+    payload = _trade_level_attribution(rows)
+
+    assert payload["status"] == "ready"
+    assert payload["sample_trade_count"] == 2
+    assert payload["rows"][0]["best_symbol"] == "600001.SH"
+    assert payload["rows"][0]["worst_industry"] == "电池"
+    assert payload["top_symbol_rows"][0]["name"] == "拖累股份"
+    assert payload["top_industry_rows"][0]["industry"] == "电池"

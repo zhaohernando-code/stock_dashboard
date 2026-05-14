@@ -2989,6 +2989,8 @@ function ReplayDecisionReadout({
   const portfolioPeriodSummaryRows = Array.isArray(portfolioStability.period_summary_rows) ? portfolioStability.period_summary_rows as Record<string, unknown>[] : [];
   const portfolioAttributionRows = Array.isArray(portfolioAttribution.rows) ? portfolioAttribution.rows as Record<string, unknown>[] : [];
   const portfolioSymbolIndustry = recordValue<Record<string, unknown>>(portfolioAttribution, "symbol_industry") ?? {};
+  const portfolioTopSymbolRows = Array.isArray(portfolioSymbolIndustry.top_symbol_rows) ? portfolioSymbolIndustry.top_symbol_rows as Record<string, unknown>[] : [];
+  const portfolioTopIndustryRows = Array.isArray(portfolioSymbolIndustry.top_industry_rows) ? portfolioSymbolIndustry.top_industry_rows as Record<string, unknown>[] : [];
   const defaultPortfolioConfidence = portfolioConfidenceRows.find((item) => item.entry_price_source === "next_close" && item.strategy === "low_turnover_20d_uptrend_liquid_top120")
     ?? portfolioConfidenceRows[0];
   const defaultPortfolioAttribution = portfolioAttributionRows.find((item) => item.entry_price_source === "next_close" && item.strategy === "low_turnover_20d_uptrend_liquid_top120")
@@ -3387,6 +3389,60 @@ function ReplayDecisionReadout({
             message="股票/行业归因待全量逐笔 artifact"
             description={String(portfolioSymbolIndustry.reason ?? "当前组合产物不使用 trades_sample 外推股票或行业贡献。")}
           />
+        ) : null}
+        {portfolioSymbolIndustry.status === "ready" ? (
+          <>
+            <Table
+              className="shortpick-replay-stat-table"
+              rowKey={(item) => `${String(item.entry_price_source)}-${String(item.strategy)}-${String(item.symbol)}`}
+              size="small"
+              pagination={false}
+              title={() => (
+                <Space direction="vertical" size={0}>
+                  <Text strong>逐笔股票贡献</Text>
+                  <Text type="secondary">{String(portfolioSymbolIndustry.note ?? "来自完整逐笔交易 artifact；按贡献绝对值展示。")}</Text>
+                </Space>
+              )}
+              columns={[
+                { title: "股票", render: (_, item) => `${String(item.name ?? "--")} · ${String(item.symbol ?? "--")}` },
+                { title: "行业", render: (_, item) => String(item.industry ?? "--") },
+                { title: "口径", render: (_, item) => `${entryPriceSourceLabel(String(item.entry_price_source ?? ""))} · ${String(item.label ?? item.strategy ?? "--")}` },
+                {
+                  title: "贡献 / 样本",
+                  render: (_, item) => (
+                    <Space direction="vertical" size={0}>
+                      <Text className={`value-${valueTone(recordValue<number>(item, "sum_net_excess_return"))}`}>合计 {formatPercent(recordValue<number>(item, "sum_net_excess_return"))}</Text>
+                      <Text type="secondary">{formatNumber(Number(recordValue<number>(item, "trade_count") ?? 0))} 笔 · 均值 {formatPercent(recordValue<number>(item, "mean_net_excess_return"))}</Text>
+                    </Space>
+                  ),
+                },
+              ]}
+              dataSource={portfolioTopSymbolRows.slice(0, 10)}
+              locale={{ emptyText: "待逐笔股票归因补齐" }}
+            />
+            <Table
+              className="shortpick-replay-stat-table"
+              rowKey={(item) => `${String(item.entry_price_source)}-${String(item.strategy)}-${String(item.industry)}`}
+              size="small"
+              pagination={false}
+              title={() => <Text strong>逐笔行业贡献</Text>}
+              columns={[
+                { title: "行业", render: (_, item) => String(item.industry ?? "--") },
+                { title: "口径", render: (_, item) => `${entryPriceSourceLabel(String(item.entry_price_source ?? ""))} · ${String(item.label ?? item.strategy ?? "--")}` },
+                {
+                  title: "贡献 / 样本",
+                  render: (_, item) => (
+                    <Space direction="vertical" size={0}>
+                      <Text className={`value-${valueTone(recordValue<number>(item, "sum_net_excess_return"))}`}>合计 {formatPercent(recordValue<number>(item, "sum_net_excess_return"))}</Text>
+                      <Text type="secondary">{formatNumber(Number(recordValue<number>(item, "trade_count") ?? 0))} 笔 · 正超额 {formatPercent(recordValue<number>(item, "positive_net_excess_rate"))}</Text>
+                    </Space>
+                  ),
+                },
+              ]}
+              dataSource={portfolioTopIndustryRows.slice(0, 10)}
+              locale={{ emptyText: "待逐笔行业归因补齐" }}
+            />
+          </>
         ) : null}
         <Table
           className="shortpick-replay-stat-table"

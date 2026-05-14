@@ -67,6 +67,7 @@ from ashare_evidence.shortpick_replay import (
     refresh_shortpick_replay_feedback_cache,
     run_shortpick_historical_replay,
     run_shortpick_historical_replay_concurrent,
+    run_shortpick_historical_replay_dates,
     run_shortpick_replay_distillation,
     run_shortpick_replay_distillation_concurrent,
     run_shortpick_replay_factor_rank_experiment,
@@ -81,6 +82,22 @@ from ashare_evidence.watchlist import active_watchlist_symbols, refresh_watchlis
 
 def _print_json(payload: Any) -> None:
     print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+
+
+def _parse_shortpick_replay_dates(date_values: list[str], dates_file: str | None) -> list[date]:
+    raw_values = list(date_values or [])
+    if dates_file:
+        file_payload = Path(dates_file).read_text(encoding="utf-8").strip()
+        if file_payload:
+            if file_payload.startswith("["):
+                parsed = json.loads(file_payload)
+                raw_values.extend(str(item) for item in parsed)
+            elif file_payload.startswith("{"):
+                parsed = json.loads(file_payload)
+                raw_values.extend(str(item) for item in parsed.get("dates") or [])
+            else:
+                raw_values.extend(line.strip() for line in file_payload.splitlines() if line.strip())
+    return sorted({date.fromisoformat(item) for item in raw_values})
 
 
 @contextmanager
@@ -492,6 +509,31 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=1,
         help="Run sealed-packet LLM requests concurrently while keeping SQLite writes serial.",
+    )
+
+    shortpick_replay_dates = subparsers.add_parser(
+        "shortpick-replay-dates",
+        help="Build historical sealed-packet replay runs for explicit stratified replay dates.",
+    )
+    shortpick_replay_dates.add_argument("--database-url", default=None)
+    shortpick_replay_dates.add_argument(
+        "--date",
+        dest="dates",
+        action="append",
+        default=[],
+        help="Replay date in YYYY-MM-DD format. Can be provided multiple times.",
+    )
+    shortpick_replay_dates.add_argument(
+        "--dates-file",
+        default=None,
+        help="JSON array or newline-delimited file of YYYY-MM-DD replay dates.",
+    )
+    shortpick_replay_dates.add_argument("--rounds", type=int, default=5)
+    shortpick_replay_dates.add_argument("--candidate-limit", type=int, default=3)
+    shortpick_replay_dates.add_argument(
+        "--account-profile",
+        choices=["new_retail_cash_account", "unrestricted"],
+        default="new_retail_cash_account",
     )
 
     shortpick_replay_distill = subparsers.add_parser(
@@ -942,6 +984,22 @@ def main(argv: list[str] | None = None) -> int:
                 )
             else:
                 payload = run_shortpick_historical_replay(session, **replay_kwargs)
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-replay-dates":
+        replay_dates = _parse_shortpick_replay_dates(args.dates, args.dates_file)
+        if not replay_dates:
+            raise SystemExit("shortpick-replay-dates requires at least one --date or --dates-file entry")
+        with session_scope(args.database_url) as session:
+            payload = run_shortpick_historical_replay_dates(
+                session,
+                replay_dates=replay_dates,
+                rounds=args.rounds,
+                candidate_limit=args.candidate_limit,
+                account_profile=args.account_profile,
+                triggered_by="stratified_replay_cli",
+            )
         _print_json(payload)
         return 0
 

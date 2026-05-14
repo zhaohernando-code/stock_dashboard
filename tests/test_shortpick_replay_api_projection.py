@@ -14,6 +14,13 @@ def test_strategy_slice_response_projection_keeps_ui_fields_and_drops_heavy_deta
             "status": "ready",
             "data_scope": {"signal_day_count": 717},
             "regime_winner_rows": [{"market_regime_tag": "range_bound", "winner_trade_count": 162}],
+            "trade_attribution": {
+                "status": "ready",
+                "sample_trade_count": 2,
+                "top_symbol_rows": [{"symbol": "600001.SH"}],
+                "top_industry_rows": [{"industry": "光模块"}],
+                "top_signal_day_rows": [{"signal_day": "2025-01-02"}],
+            },
             "regime_strategy_rows": [{"heavy": True}],
         },
         "overall_strategy_rows": [{"strategy": "low_turnover"}],
@@ -87,6 +94,13 @@ def test_strategy_slice_response_projection_keeps_ui_fields_and_drops_heavy_deta
         "status": "ready",
         "data_scope": {"signal_day_count": 717},
         "regime_winner_rows": [{"market_regime_tag": "range_bound", "winner_trade_count": 162}],
+        "trade_attribution": {
+            "status": "ready",
+            "sample_trade_count": 2,
+            "top_symbol_rows": [{"symbol": "600001.SH"}],
+            "top_industry_rows": [{"industry": "光模块"}],
+            "top_signal_day_rows": [{"signal_day": "2025-01-02"}],
+        },
     }
     assert slim["overall_strategy_rows"] == [{"strategy": "low_turnover"}]
     assert slim["regime_winner_rows"] == [{"regime": "up"}]
@@ -110,7 +124,13 @@ def test_strategy_slice_response_projection_keeps_ui_fields_and_drops_heavy_deta
     assert slim["portfolio_return_attribution"] == {
         "status": "ready",
         "rows": [{"strategy": "low_turnover"}],
-        "symbol_industry": {"status": "missing_artifact", "reason": "trades_sample only"},
+        "symbol_industry": {
+            "status": "ready",
+            "sample_trade_count": 2,
+            "top_symbol_rows": [{"symbol": "600001.SH"}],
+            "top_industry_rows": [{"industry": "光模块"}],
+            "top_signal_day_rows": [{"signal_day": "2025-01-02"}],
+        },
     }
     assert "period_strategy_rows" not in slim
     assert "regime_strategy_rows" not in slim

@@ -1322,6 +1322,11 @@ class ShortpickLabTests(unittest.TestCase):
 
         self.assertEqual(payload["status"], "completed")
         self.assertEqual(payload["summary"]["market_factor_overlay"]["inserted_candidate_count"], 1)
+        quote_artifact = payload["summary"]["market_factor_overlay"]["quote_snapshot_artifact"]
+        self.assertEqual(quote_artifact["quote_count"], 1)
+        quote_payload = json.loads(Path(quote_artifact["artifact_path"]).read_text(encoding="utf-8"))
+        self.assertEqual(quote_payload["quotes"]["600001.SH"]["price"], 12.2)
+        self.assertIn("不能用日线 proxy 回填成真实14:00成交", quote_payload["note"])
         self.assertEqual(payload["candidates"][0]["tracking_role"], SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE)
         self.assertEqual(payload["candidates"][0]["baseline_family"], SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_FAMILY)
         with session_scope(self.database_url) as session:

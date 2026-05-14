@@ -226,6 +226,48 @@ def run_shortpick_historical_replay(
     }
 
 
+def run_shortpick_historical_replay_dates(
+    session: Session,
+    *,
+    replay_dates: list[date] | tuple[date, ...],
+    rounds: int = 5,
+    candidate_limit: int = 3,
+    account_profile: str = ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+    triggered_by: str | None = None,
+) -> dict[str, Any]:
+    normalized_dates = sorted({item for item in replay_dates})
+    normalized_rounds = max(1, min(int(rounds), 10))
+    normalized_limit = max(1, min(int(candidate_limit), 10))
+    replay_runs: list[dict[str, Any]] = []
+    skipped_dates: list[dict[str, str]] = []
+    for replay_date in normalized_dates:
+        if replay_date.weekday() >= 5:
+            skipped_dates.append({"date": replay_date.isoformat(), "reason": "weekend"})
+            continue
+        run = _run_one_replay_date(
+            session,
+            as_of_date=replay_date,
+            rounds=normalized_rounds,
+            candidate_limit=normalized_limit,
+            account_profile=account_profile,
+            triggered_by=triggered_by,
+        )
+        replay_runs.append(run)
+    return {
+        "experiment_mode": SHORTPICK_REPLAY_EXPERIMENT_MODE,
+        "date_mode": "explicit_stratified_dates",
+        "date_count": len(normalized_dates),
+        "dates": [item.isoformat() for item in normalized_dates],
+        "skipped_dates": skipped_dates,
+        "rounds": normalized_rounds,
+        "candidate_limit": normalized_limit,
+        "account_profile": account_profile,
+        "account_profile_label": ACCOUNT_PROFILE_LABELS.get(account_profile, account_profile),
+        "run_count": len(replay_runs),
+        "runs": replay_runs,
+    }
+
+
 def run_shortpick_historical_replay_concurrent(
     session: Session,
     *,

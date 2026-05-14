@@ -1519,6 +1519,12 @@ def insert_shortpick_intraday_same_day_candidate(session: Session, run: Shortpic
     quote_snapshot = _fetch_shortpick_intraday_spot_quotes(
         symbols=_shortpick_intraday_universe_symbols(session, run.run_date)
     )
+    quote_snapshot_artifact = _write_shortpick_intraday_quote_snapshot_artifact(
+        session,
+        run,
+        quote_snapshot,
+        snapshot_role="selection_universe",
+    )
     contexts, diagnostics = _shortpick_market_factor_intraday_contexts(session, run.run_date, quote_snapshot)
     pool = _shortpick_market_factor_pool(contexts)
     if not pool:
@@ -1529,6 +1535,7 @@ def insert_shortpick_intraday_same_day_candidate(session: Session, run: Shortpic
             "removed_existing_candidate_count": removed,
             "market_data_sync": universe_sync,
             "quote_snapshot": quote_snapshot.get("summary", {}),
+            "quote_snapshot_artifact": quote_snapshot_artifact,
             **diagnostics,
         }
         run.summary_payload = {**dict(run.summary_payload or {}), "market_factor_overlay": result}
@@ -1640,6 +1647,7 @@ def insert_shortpick_intraday_same_day_candidate(session: Session, run: Shortpic
         "regime": regime,
         "market_data_sync": universe_sync,
         "quote_snapshot": quote_snapshot.get("summary", {}),
+        "quote_snapshot_artifact": quote_snapshot_artifact,
         "excluded_entry_unfillable_count": len(excluded_entry_unfillable),
         "excluded_entry_unfillable": excluded_entry_unfillable[:10],
         "candidates": inserted,
@@ -1648,6 +1656,44 @@ def insert_shortpick_intraday_same_day_candidate(session: Session, run: Shortpic
     run.summary_payload = {**dict(run.summary_payload or {}), "market_factor_overlay": result}
     session.flush()
     return result
+
+
+def _write_shortpick_intraday_quote_snapshot_artifact(
+    session: Session,
+    run: ShortpickExperimentRun,
+    quote_snapshot: dict[str, Any],
+    *,
+    snapshot_role: str,
+) -> dict[str, Any]:
+    artifact_id = f"shortpick-intraday-quote-snapshot:{run.id}:{snapshot_role}"
+    payload = {
+        "artifact_id": artifact_id,
+        "artifact_type": "shortpick_lab_intraday_quote_snapshot",
+        "run_key": run.run_key,
+        "run_id": run.id,
+        "run_date": run.run_date.isoformat(),
+        "snapshot_role": snapshot_role,
+        "captured_at": quote_snapshot.get("generated_at") or utcnow().isoformat(),
+        "source_kind": quote_snapshot.get("source_kind"),
+        "status": quote_snapshot.get("status"),
+        "summary": quote_snapshot.get("summary") or {},
+        "quotes": quote_snapshot.get("quotes") or {},
+        "boundary": "real_intraday_quote_snapshot_for_future_same_day_entry_evidence",
+        "note": "该 artifact 只证明采集时刻的盘中报价；历史未采集日期不能用日线 proxy 回填成真实14:00成交。",
+    }
+    path = write_shortpick_lab_artifact(
+        artifact_id=artifact_id,
+        root=_artifact_root(session),
+        payload=payload,
+    )
+    return {
+        "artifact_id": artifact_id,
+        "artifact_path": str(path),
+        "status": payload["status"],
+        "quote_count": len(payload["quotes"]) if isinstance(payload["quotes"], dict) else 0,
+        "captured_at": payload["captured_at"],
+        "snapshot_role": snapshot_role,
+    }
 
 
 def _shortpick_intraday_universe_symbols(session: Session, run_date: date) -> list[str]:
