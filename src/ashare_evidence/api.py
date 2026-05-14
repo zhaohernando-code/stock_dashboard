@@ -25,6 +25,10 @@ from ashare_evidence.dashboard import (
     list_candidate_recommendations,
 )
 from ashare_evidence.db import get_database_url, get_session_factory, init_database, utcnow
+from ashare_evidence.frontend_projections import (
+    SHORTPICK_REPLAY_FEEDBACK_PROJECTION_KEY,
+    get_ready_frontend_projection_payload,
+)
 from ashare_evidence.improvement_suggestions import (
     accept_suggestion_for_plan,
     run_improvement_suggestion_review,
@@ -1416,6 +1420,9 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        projection = get_ready_frontend_projection_payload(session, SHORTPICK_REPLAY_FEEDBACK_PROJECTION_KEY)
+        if projection is not None:
+            return projection
         try:
             feedback = _load_shortpick_replay_feedback_from_cache(run_id=None)
             return _attach_shortpick_replay_decision_projection(feedback, session=session)

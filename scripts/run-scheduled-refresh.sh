@@ -88,6 +88,12 @@ run_shortpick_validation_refresh() {
     --limit "$SHORTPICK_VALIDATE_RECENT_LIMIT"
 }
 
+run_frontend_projection_refresh() {
+  "$PYTHON_BIN" -m ashare_evidence.cli frontend-projections-refresh \
+    --database-url "$ASHARE_DATABASE_URL" \
+    --projection all
+}
+
 wait_for_database_writable() {
   local deadline=$((SECONDS + DATABASE_LOCK_WAIT_SECONDS))
   while (( SECONDS < deadline )); do
@@ -141,6 +147,9 @@ PY
     run_shortpick_retry_failed_rounds "$run_id"
   elif [[ -n "$run_id" ]]; then
     echo "Skipping shortpick failed-round retry after daily run; set ASHARE_SHORTPICK_RETRY_FAILED_AFTER_RUN=1 for maintenance retry." >&2
+  fi
+  if ! run_frontend_projection_refresh; then
+    echo "Frontend projection refresh failed; keeping previous projection rows." >&2
   fi
 }
 

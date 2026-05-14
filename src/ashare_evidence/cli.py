@@ -14,6 +14,7 @@ from ashare_evidence.cli_event import add_event_check_parser, handle_event_check
 from ashare_evidence.cli_research import add_research_parsers, handle_factor_observation, handle_weight_sweep
 from ashare_evidence.dashboard import get_glossary_entries, get_stock_dashboard, list_candidate_recommendations
 from ashare_evidence.db import init_database, preflight_database_writable, session_scope
+from ashare_evidence.frontend_projections import refresh_frontend_projections
 from ashare_evidence.improvement_suggestions import run_improvement_suggestion_review
 from ashare_evidence.intraday_market import sync_intraday_market
 from ashare_evidence.operations import build_operations_dashboard
@@ -553,6 +554,17 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_replay_feedback_cache.add_argument("--output-path", default="output/shortpick-replay-feedback-cache.json")
     shortpick_replay_feedback_cache.add_argument("--skip-validate-missing", action="store_true")
 
+    frontend_projections_refresh = subparsers.add_parser(
+        "frontend-projections-refresh",
+        help="Materialize small frontend-facing projection rows from existing artifacts and read-only ledgers.",
+    )
+    frontend_projections_refresh.add_argument("--database-url", default=None)
+    frontend_projections_refresh.add_argument(
+        "--projection",
+        choices=["all", "shortpick_replay_feedback"],
+        default="all",
+    )
+
     shortpick_market_factor_study = subparsers.add_parser(
         "shortpick-market-factor-study",
         help="Run a market-only shortpick factor ranking study across a broader daily-bar history.",
@@ -960,6 +972,13 @@ def main(argv: list[str] | None = None) -> int:
             "output_path": args.output_path,
             "metadata": payload.get("metadata", {}),
         })
+        return 0
+
+    if args.command == "frontend-projections-refresh":
+        init_database(args.database_url)
+        with session_scope(args.database_url) as session:
+            payload = refresh_frontend_projections(session, projection=args.projection)
+        _print_json(payload)
         return 0
 
     if args.command == "shortpick-market-factor-study":

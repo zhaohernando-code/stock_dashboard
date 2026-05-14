@@ -489,6 +489,23 @@ class AppSetting(TimestampedMixin, Base):
     setting_value: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
 
 
+class FrontendProjection(TimestampedMixin, Base):
+    __tablename__ = "frontend_projections"
+    __table_args__ = (UniqueConstraint("projection_key", name="uq_frontend_projection_key"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    projection_key: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    projection_group: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    target_login: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="ready", index=True)
+    version: Mapped[str] = mapped_column(String(32), nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    metadata_payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+
+
 class PolicyConfigVersion(TimestampedMixin, Base):
     __tablename__ = "policy_config_versions"
     __table_args__ = (

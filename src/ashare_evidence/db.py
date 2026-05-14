@@ -194,6 +194,29 @@ def init_database(database_url: str | None = None) -> Engine:
 
 def _run_schema_migrations(engine: Engine) -> None:
     inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    if "frontend_projections" not in existing_tables:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS frontend_projections ("
+                    "id INTEGER NOT NULL PRIMARY KEY, "
+                    "projection_key VARCHAR(128) NOT NULL, "
+                    "projection_group VARCHAR(64) NOT NULL, "
+                    "target_login VARCHAR(128), "
+                    "status VARCHAR(32) NOT NULL DEFAULT 'ready', "
+                    "version VARCHAR(32) NOT NULL, "
+                    "generated_at DATETIME NOT NULL, "
+                    "expires_at DATETIME, "
+                    "source_fingerprint VARCHAR(64) NOT NULL, "
+                    "payload JSON NOT NULL, "
+                    "metadata_payload JSON NOT NULL, "
+                    "created_at DATETIME NOT NULL, "
+                    "updated_at DATETIME NOT NULL, "
+                    "CONSTRAINT uq_frontend_projection_key UNIQUE (projection_key)"
+                    ")"
+                )
+            )
     column_specs = {
         "paper_portfolios": {
             "owner_login": "VARCHAR(128) NOT NULL DEFAULT 'root'",
@@ -229,6 +252,13 @@ def _run_schema_migrations(engine: Engine) -> None:
         "CREATE INDEX IF NOT EXISTS idx_simulation_sessions_owner_login ON simulation_sessions(owner_login)",
         "CREATE INDEX IF NOT EXISTS idx_simulation_events_owner_login ON simulation_events(owner_login)",
         "CREATE INDEX IF NOT EXISTS idx_simulation_events_actor_login ON simulation_events(actor_login)",
+        "CREATE INDEX IF NOT EXISTS idx_frontend_projections_projection_key ON frontend_projections(projection_key)",
+        "CREATE INDEX IF NOT EXISTS idx_frontend_projections_projection_group ON frontend_projections(projection_group)",
+        "CREATE INDEX IF NOT EXISTS idx_frontend_projections_target_login ON frontend_projections(target_login)",
+        "CREATE INDEX IF NOT EXISTS idx_frontend_projections_status ON frontend_projections(status)",
+        "CREATE INDEX IF NOT EXISTS idx_frontend_projections_generated_at ON frontend_projections(generated_at)",
+        "CREATE INDEX IF NOT EXISTS idx_frontend_projections_expires_at ON frontend_projections(expires_at)",
+        "CREATE INDEX IF NOT EXISTS idx_frontend_projections_source_fingerprint ON frontend_projections(source_fingerprint)",
     ]
     with engine.begin() as conn:
         for statement in index_statements:

@@ -1,5 +1,15 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-05-14T19:40:00+08:00] Frontend-facing statistics should be materialized as projections:
+
+随着历史分析、运营复盘和短投试验田数据量扩大，前端接口不能继续在页面请求时直接拼研究态流水、长窗口统计和 artifact projection。新增通用 `frontend_projections` 表作为前端专用读模型：后台定时或显式触发刷新统计，页面 API 只读小 payload；缺失或过期时显示结构化待刷新状态，而不是在打开页面时重算。
+
+补充说明
+- 投影表固定字段包括 `projection_key`、`projection_group`、`target_login`、`status`、`version`、`generated_at`、`expires_at`、`source_fingerprint`、`payload`、`metadata_payload`。
+- 第一批接入 `shortpick_replay_feedback:v1`，把 aggregate replay feedback + decision projection 预先物化；`/shortpick-lab/replay-feedback` 优先读投影，缺投影才走兼容 fallback。
+- 后续迁移顺序应是：`operations_summary`、`home_shell`、`shortpick_model_feedback`、`simulation_workspace_summary`。这些接口都应拆成“快投影首屏 + 按需下钻明细”。
+- 投影刷新可以跟随盘后 slot 或维护命令执行，但不得在页面请求里写库、补行情、跑回测或触发 LLM。
+
 [2026-05-14T18:55:00+08:00] Shortpick scheduled maintenance must not sit on the live frontend hot path:
 
 前端大面积请求超时的直接原因不是历史分析新增数据，而是短投定时刷新里的 recent validation / failed-round retry 与前端读接口争用 runtime SQLite，导致 `/auth/context`、`/watchlist`、短投接口等无关小请求一起触发 `database is locked`。这些补历史和补失败轮次的维护动作以后默认不跟随 daily shortpick slot 自动执行，只能通过显式环境开关进入维护窗口。
