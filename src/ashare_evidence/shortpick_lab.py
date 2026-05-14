@@ -96,6 +96,14 @@ SHORTPICK_TOPIC_ROLLUP_ALIASES: dict[str, tuple[str, str]] = {
     "ai_computing_optical_communication": ("ai_compute_hardware", "AI算力硬件"),
     "ai_compute_hardware": ("ai_compute_hardware", "AI算力硬件"),
 }
+SHORTPICK_INDUSTRY_LABEL_OVERRIDES_BY_SYMBOL = {
+    "300207.SZ": "电池",
+    "300762.SZ": "军工通信",
+    "301511.SZ": "铜箔",
+    "300757.SZ": "机器人自动化",
+    "300775.SZ": "航空装备",
+    "300308.SZ": "光模块",
+}
 SHORTPICK_PRIMARY_BENCHMARK_ID = "CSI300"
 SHORTPICK_RESEARCH_BENCHMARK_IDS = ["CSI1000"]
 SHORTPICK_BENCHMARK_DIMENSION_HS300 = "hs300"
@@ -3761,11 +3769,14 @@ def _candidate_industry_map(session: Session, candidates: list[ShortpickCandidat
 
 def _candidate_industry_label(candidate: ShortpickCandidate, industry_by_symbol: dict[str, str]) -> str:
     payload = candidate.candidate_payload if isinstance(candidate.candidate_payload, dict) else {}
-    return (
+    label = (
         industry_by_symbol.get(candidate.symbol)
         or _coerce_text(payload.get("industry") or payload.get("sector") or payload.get("stock_industry"))
         or "未归类板块"
     )
+    if label in {"C 制造业", "制造业"}:
+        return SHORTPICK_INDUSTRY_LABEL_OVERRIDES_BY_SYMBOL.get(candidate.symbol, label)
+    return label
 
 
 def _candidate_industry_key(candidate: ShortpickCandidate, industry_by_symbol: dict[str, str]) -> str:

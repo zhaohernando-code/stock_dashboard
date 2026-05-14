@@ -195,8 +195,8 @@
       "reviewed_at": "2026-05-14"
     },
     "src/ashare_evidence/shortpick_lab.py": {
-      "lines": 7205,
-      "reason": "Short Pick Lab experiment runner, market-factor overlays, paper-tracking validation, and intraday same-day entry control. 2026-05-14 review: growth is the read-only model-feedback projection layer that groups executor channels under the two real model labels, maps research-priority keys to user-facing labels, carries real tradable-sample counters so missing fields do not render as 0/0, and separates normalized topic rollups from stock industry buckets; split remains deferred because this runner still owns the live paper ledger contract.",
+      "lines": 7216,
+      "reason": "Short Pick Lab experiment runner, market-factor overlays, paper-tracking validation, and intraday same-day entry control. 2026-05-14 review: growth is the read-only model-feedback projection layer that groups executor channels under the two real model labels, maps research-priority keys to user-facing labels, carries real tradable-sample counters so missing fields do not render as 0/0, separates normalized topic rollups from stock industry buckets, and overrides known overly coarse `C 制造业` profile labels with more informative sector labels; split remains deferred because this runner still owns the live paper ledger contract.",
       "status": "accepted",
       "reviewed_at": "2026-05-14"
     }
