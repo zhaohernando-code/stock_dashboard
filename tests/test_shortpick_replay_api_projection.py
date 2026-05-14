@@ -10,6 +10,12 @@ def test_strategy_slice_response_projection_keeps_ui_fields_and_drops_heavy_deta
         "data_scope": {"signal_day_count": 717},
         "sample_adequacy": {"status": "broad_enough_for_controls"},
         "artifact_path": "output/shortpick-strategy-slice-evidence.json",
+        "trade_regime_evidence": {
+            "status": "ready",
+            "data_scope": {"signal_day_count": 717},
+            "regime_winner_rows": [{"market_regime_tag": "range_bound", "winner_trade_count": 162}],
+            "regime_strategy_rows": [{"heavy": True}],
+        },
         "overall_strategy_rows": [{"strategy": "low_turnover"}],
         "regime_winner_rows": [{"regime": "up"}],
         "regime_coverage_rows": [{"regime": "up", "month_count": 3}],
@@ -77,6 +83,11 @@ def test_strategy_slice_response_projection_keeps_ui_fields_and_drops_heavy_deta
     slim = _slim_shortpick_strategy_slice_evidence(payload)
 
     assert slim["data_scope"] == {"signal_day_count": 717}
+    assert slim["trade_regime_evidence"] == {
+        "status": "ready",
+        "data_scope": {"signal_day_count": 717},
+        "regime_winner_rows": [{"market_regime_tag": "range_bound", "winner_trade_count": 162}],
+    }
     assert slim["overall_strategy_rows"] == [{"strategy": "low_turnover"}]
     assert slim["regime_winner_rows"] == [{"regime": "up"}]
     assert slim["coarse_regime_winner_rows"][0]["market_regime_tag"] == "range_bound"

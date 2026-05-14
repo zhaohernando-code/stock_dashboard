@@ -172,6 +172,7 @@ STAGED_SHORTPICK_ENTRY_ARTIFACTS = {
 SHORTPICK_MARKET_FACTOR_STUDY_ARTIFACT = Path("output/shortpick-market-factor-study-current.json")
 SHORTPICK_REPLAY_FEEDBACK_CACHE_ARTIFACT = Path("output/shortpick-replay-feedback-cache.json")
 SHORTPICK_STRATEGY_SLICE_EVIDENCE_ARTIFACT = Path("output/shortpick-strategy-slice-evidence.json")
+SHORTPICK_TRADE_REGIME_EVIDENCE_ARTIFACT = Path("output/shortpick-strategy-trade-regime-evidence.json")
 
 
 def _existing_project_artifact_path(relative_path: Path, *, env_var: str | None = None) -> Path:
@@ -223,6 +224,13 @@ def _shortpick_strategy_slice_evidence_artifact_path() -> Path:
     )
 
 
+def _shortpick_trade_regime_evidence_artifact_path() -> Path:
+    return _existing_project_artifact_path(
+        SHORTPICK_TRADE_REGIME_EVIDENCE_ARTIFACT,
+        env_var="ASHARE_SHORTPICK_TRADE_REGIME_EVIDENCE_ARTIFACT",
+    )
+
+
 def _read_json_artifact(path: Path, *, label: str) -> dict[str, object]:
     if not path.exists():
         raise LookupError(f"{label} artifact is missing: {path}")
@@ -253,6 +261,7 @@ def _slim_shortpick_strategy_slice_evidence(payload: dict[str, object]) -> dict[
             "config",
             "data_scope",
             "sample_adequacy",
+            "trade_regime_evidence",
             "overall_strategy_rows",
             "regime_winner_rows",
             "regime_coverage_rows",
@@ -262,6 +271,9 @@ def _slim_shortpick_strategy_slice_evidence(payload: dict[str, object]) -> dict[
     coarse_regime_winners = _shortpick_coarse_regime_winner_rows(payload)
     if coarse_regime_winners:
         slim["coarse_regime_winner_rows"] = coarse_regime_winners
+    trade_regime_evidence = payload.get("trade_regime_evidence")
+    if isinstance(trade_regime_evidence, dict):
+        slim["trade_regime_evidence"] = _shortpick_trade_regime_evidence_projection(trade_regime_evidence)  # type: ignore[arg-type]
     confidence = payload.get("portfolio_confidence_intervals")
     if isinstance(confidence, dict):
         slim["portfolio_confidence_intervals"] = _copy_dict_keys(
@@ -288,6 +300,25 @@ def _slim_shortpick_strategy_slice_evidence(payload: dict[str, object]) -> dict[
             ("status", "reason", "basis", "horizon_days", "rows", "symbol_industry"),
         )
     return slim
+
+
+def _shortpick_trade_regime_evidence_projection(payload: dict[str, object]) -> dict[str, object]:
+    return _copy_dict_keys(
+        payload,
+        (
+            "experiment",
+            "version",
+            "status",
+            "reason",
+            "basis",
+            "artifact_path",
+            "config",
+            "data_scope",
+            "sample_adequacy",
+            "regime_winner_rows",
+            "regime_coverage_rows",
+        ),
+    )
 
 
 def _shortpick_coarse_regime_winner_rows(payload: dict[str, object]) -> list[dict[str, object]]:
@@ -599,6 +630,22 @@ def _attach_shortpick_replay_decision_projection(
             "reason": str(exc),
             "artifact_path": str(strategy_slice_artifact_path),
         }
+    trade_regime_artifact_path = _shortpick_trade_regime_evidence_artifact_path()
+    try:
+        trade_regime_evidence = _read_json_artifact(
+            trade_regime_artifact_path,
+            label="shortpick trade-regime evidence",
+        )
+        trade_regime_evidence["artifact_path"] = str(trade_regime_artifact_path)
+        if isinstance(projection_inputs.get("strategy_slice_evidence"), dict):
+            projection_inputs["strategy_slice_evidence"]["trade_regime_evidence"] = _shortpick_trade_regime_evidence_projection(trade_regime_evidence)  # type: ignore[index]
+    except (LookupError, ValueError) as exc:
+        if isinstance(projection_inputs.get("strategy_slice_evidence"), dict):
+            projection_inputs["strategy_slice_evidence"]["trade_regime_evidence"] = {  # type: ignore[index]
+                "status": "missing_artifact",
+                "reason": str(exc),
+                "artifact_path": str(trade_regime_artifact_path),
+            }
     try:
         projection_inputs["paper_tracking"] = _build_shortpick_paper_tracking_ledger(session)
     except Exception as exc:  # pragma: no cover - defensive runtime projection

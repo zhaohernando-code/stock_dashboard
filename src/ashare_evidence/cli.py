@@ -73,6 +73,7 @@ from ashare_evidence.shortpick_replay import (
     run_shortpick_replay_hard_veto_experiment,
     run_shortpick_replay_rejection,
 )
+from ashare_evidence.shortpick_strategy_slices import build_shortpick_strategy_slice_evidence
 from ashare_evidence.simulation import restart_simulation_session, step_simulation_session
 from ashare_evidence.stock_master import DEFAULT_AKSHARE_TIMEOUT_SECONDS
 from ashare_evidence.watchlist import active_watchlist_symbols, refresh_watchlist_symbol
@@ -643,6 +644,38 @@ def build_parser() -> argparse.ArgumentParser:
     )
     shortpick_portfolio_backtest.add_argument("--output", default=None)
 
+    shortpick_strategy_slice_evidence = subparsers.add_parser(
+        "shortpick-strategy-slice-evidence",
+        help="Build offline trade-level strategy slice evidence for Short Pick Lab history analysis.",
+    )
+    shortpick_strategy_slice_evidence.add_argument("--database-url", default=None)
+    shortpick_strategy_slice_evidence.add_argument("--start-date", default="2023-05-16")
+    shortpick_strategy_slice_evidence.add_argument("--end-date", default="2026-04-29")
+    shortpick_strategy_slice_evidence.add_argument(
+        "--entry-price-source",
+        action="append",
+        choices=["next_close", "next_open", "same_close_proxy"],
+        default=None,
+        help="Entry price source to include. May be provided multiple times. Defaults to all staged entry sources.",
+    )
+    shortpick_strategy_slice_evidence.add_argument("--pool-limit", type=int, default=40)
+    shortpick_strategy_slice_evidence.add_argument("--rank-limit", type=int, default=6)
+    shortpick_strategy_slice_evidence.add_argument("--horizon-days", type=int, default=5)
+    shortpick_strategy_slice_evidence.add_argument("--cost-bps", type=float, default=20.0)
+    shortpick_strategy_slice_evidence.add_argument("--min-signal-symbol-count", type=int, default=1000)
+    shortpick_strategy_slice_evidence.add_argument("--min-regime-trade-count", type=int, default=30)
+    shortpick_strategy_slice_evidence.add_argument(
+        "--benchmark-mode",
+        choices=["csi300", "universe_equal_weight"],
+        default="universe_equal_weight",
+    )
+    shortpick_strategy_slice_evidence.add_argument(
+        "--account-profile",
+        choices=["new_retail_cash_account", "unrestricted"],
+        default="new_retail_cash_account",
+    )
+    shortpick_strategy_slice_evidence.add_argument("--output", default="output/shortpick-strategy-trade-regime-evidence.json")
+
     phase5_daily = subparsers.add_parser(
         "phase5-daily-refresh",
         help="Run the daily Phase 5 refresh workflow: refresh runtime data, then write latest/history horizon-study snapshots.",
@@ -1048,6 +1081,37 @@ def main(argv: list[str] | None = None) -> int:
         if args.output:
             path = write_shortpick_portfolio_backtest(payload, output_path=args.output)
             payload = {**payload, "artifact": {"path": str(path)}}
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-strategy-slice-evidence":
+        entry_price_sources = tuple(args.entry_price_source or ["next_close", "next_open", "same_close_proxy"])
+        with session_scope(args.database_url) as session:
+            payload = build_shortpick_strategy_slice_evidence(
+                session,
+                start_date=date.fromisoformat(args.start_date),
+                end_date=date.fromisoformat(args.end_date),
+                entry_price_sources=entry_price_sources,
+                pool_limit=args.pool_limit,
+                rank_limit=args.rank_limit,
+                horizon_days=args.horizon_days,
+                cost_bps=args.cost_bps,
+                benchmark_mode=args.benchmark_mode,
+                min_signal_symbol_count=args.min_signal_symbol_count,
+                min_regime_trade_count=args.min_regime_trade_count,
+                account_profile=args.account_profile,
+            )
+        if args.output:
+            output_path = Path(args.output)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
+            _print_json({
+                "status": "ok",
+                "output_path": str(output_path),
+                "regime_winner_count": len(payload.get("regime_winner_rows") or []),
+                "signal_day_count": (payload.get("data_scope") or {}).get("signal_day_count") if isinstance(payload.get("data_scope"), dict) else None,
+            })
+            return 0
         _print_json(payload)
         return 0
 

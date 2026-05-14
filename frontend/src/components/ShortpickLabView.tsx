@@ -2945,8 +2945,15 @@ function ReplayDecisionReadout({
   const industryAttributionRows = Array.isArray(industryAttribution.rows) ? industryAttribution.rows as Record<string, unknown>[] : [];
   const strategyRegimeWinners = Array.isArray(strategySlice.regime_winner_rows) ? strategySlice.regime_winner_rows as Record<string, unknown>[] : [];
   const strategyCoarseRegimeWinners = Array.isArray(strategySlice.coarse_regime_winner_rows) ? strategySlice.coarse_regime_winner_rows as Record<string, unknown>[] : [];
-  const displayedStrategyRegimeWinners = strategyCoarseRegimeWinners.length ? strategyCoarseRegimeWinners : strategyRegimeWinners;
-  const robustStrategyRegimeWinners = displayedStrategyRegimeWinners.filter((item) => Number(recordValue<number>(item, "winner_sample_count") ?? 0) >= 12);
+  const tradeRegimeEvidence = recordValue<Record<string, unknown>>(strategySlice, "trade_regime_evidence") ?? {};
+  const tradeRegimeAdequacy = recordValue<Record<string, unknown>>(tradeRegimeEvidence, "sample_adequacy") ?? {};
+  const tradeRegimeWinnerRows = Array.isArray(tradeRegimeEvidence.regime_winner_rows) ? tradeRegimeEvidence.regime_winner_rows as Record<string, unknown>[] : [];
+  const displayedStrategyRegimeWinners = tradeRegimeWinnerRows.length ? tradeRegimeWinnerRows : strategyCoarseRegimeWinners.length ? strategyCoarseRegimeWinners : strategyRegimeWinners;
+  const regimeTableUsesTradeSamples = tradeRegimeWinnerRows.length > 0;
+  const regimeSampleUnit = regimeTableUsesTradeSamples ? "交易样本" : "月度组合样本";
+  const regimeSampleThreshold = regimeTableUsesTradeSamples ? 30 : 12;
+  const regimeCoverageAdequacy = regimeTableUsesTradeSamples ? tradeRegimeAdequacy : strategySliceAdequacy;
+  const robustStrategyRegimeWinners = displayedStrategyRegimeWinners.filter((item) => Number(recordValue<number>(item, "winner_sample_count") ?? recordValue<number>(item, "winner_trade_count") ?? 0) >= regimeSampleThreshold);
   const strategyRegimeRowsForTable = robustStrategyRegimeWinners.length ? robustStrategyRegimeWinners : displayedStrategyRegimeWinners;
   const hiddenLowSampleRegimeCount = displayedStrategyRegimeWinners.length - strategyRegimeRowsForTable.length;
   const strategyRegimeCoverage = Array.isArray(strategySlice.regime_coverage_rows) ? strategySlice.regime_coverage_rows as Record<string, unknown>[] : [];
@@ -3101,7 +3108,7 @@ function ReplayDecisionReadout({
         <div className="shortpick-replay-entry-matrix">
         <Space direction="vertical" size={2}>
           <Title level={5}>稳定性、置信与归因</Title>
-          <Text type="secondary">这些读数只来自离线 replay cache、staged portfolio artifact 和只读纸面 ledger；行情表默认按趋势大类聚合，细分行情桶只作为下钻，不把个位数月份包装成强结论。</Text>
+          <Text type="secondary">这些读数只来自离线 replay cache、staged portfolio artifact、交易级策略切片 artifact 和只读纸面 ledger；行情表优先使用交易级切片补足低样本行情桶。</Text>
         </Space>
         <div className="shortpick-replay-decision-grid">
           <div className="shortpick-replay-decision-tile">
@@ -3123,12 +3130,14 @@ function ReplayDecisionReadout({
             <Space wrap size={6}>
               <span>行情切片覆盖</span>
               <Tag color={strategyRegimeCoverage.length >= 4 ? "blue" : "gold"}>
-                {projectionStatusLabel(String(strategySliceAdequacy.status ?? "missing_artifact"))}
+                {projectionStatusLabel(String(regimeCoverageAdequacy.status ?? "missing_artifact"))}
               </Tag>
             </Space>
-            <strong>{formatNumber(Number(strategySliceAdequacy.useful_regime_count ?? 0))} 个可用行情桶</strong>
-            <Text>最低分组门槛 {formatNumber(Number(strategySliceAdequacy.min_regime_period_count ?? strategySliceAdequacy.min_regime_trade_count ?? 0))} 个周期样本</Text>
-            <Text type="secondary">当前分桶依据是月度组合路径；细桶过窄时只作观察，不作为策略切换证明。</Text>
+            <strong>{formatNumber(Number(regimeCoverageAdequacy.useful_regime_count ?? 0))} 个可用行情桶</strong>
+            <Text>最低分组门槛 {formatNumber(Number(regimeCoverageAdequacy.min_regime_trade_count ?? regimeCoverageAdequacy.min_regime_period_count ?? 0))} 个{regimeSampleUnit}</Text>
+            <Text type="secondary">
+              {regimeTableUsesTradeSamples ? "已补充交易级行情切片；月度组合切片继续用于置信区间。" : "当前分桶依据是月度组合路径；细桶过窄时只作观察，不作为策略切换证明。"}
+            </Text>
           </div>
           <div className="shortpick-replay-decision-tile">
             <Space wrap size={6}>
@@ -3191,7 +3200,7 @@ function ReplayDecisionReadout({
                 <Space direction="vertical" size={0}>
                   <Text strong>{entryPriceSourceLabel(String(item.entry_price_source ?? ""))} · {marketRegimeDisplayLabel(item)}</Text>
                   <Text type="secondary">
-                    {String(item.regime_granularity ?? "") === "trend_regime" ? "行情大类" : "细分行情桶"} · 月度组合路径
+                    {String(item.regime_granularity ?? "") === "trend_regime" ? "行情大类" : "细分行情桶"} · {regimeTableUsesTradeSamples ? "交易级切片" : "月度组合路径"}
                   </Text>
                 </Space>
               ),
@@ -3211,10 +3220,10 @@ function ReplayDecisionReadout({
                 <Space direction="vertical" size={0}>
                   <Text className={`value-${valueTone(recordValue<number>(item, "winner_mean_net_excess_return"))}`}>均值 {formatPercent(recordValue<number>(item, "winner_mean_net_excess_return"))}</Text>
                   <Text type="secondary">
-                    {formatNumber(Number(recordValue<number>(item, "winner_sample_count") ?? recordValue<number>(item, "winner_trade_count") ?? 0))} 个月度组合样本 · 胜率 {formatPercent(recordValue<number>(item, "winner_positive_net_excess_rate"))}
+                    {formatNumber(Number(recordValue<number>(item, "winner_sample_count") ?? recordValue<number>(item, "winner_trade_count") ?? 0))} 个{regimeSampleUnit} · 胜率 {formatPercent(recordValue<number>(item, "winner_positive_net_excess_rate"))}
                   </Text>
-                  <Tag color={Number(recordValue<number>(item, "winner_sample_count") ?? 0) < 12 ? "gold" : "blue"}>
-                    {regimeSampleCaution(Number(recordValue<number>(item, "winner_sample_count") ?? 0))}
+                  <Tag color={Number(recordValue<number>(item, "winner_sample_count") ?? recordValue<number>(item, "winner_trade_count") ?? 0) < regimeSampleThreshold ? "gold" : "blue"}>
+                    {regimeSampleCaution(Number(recordValue<number>(item, "winner_sample_count") ?? recordValue<number>(item, "winner_trade_count") ?? 0))}
                   </Tag>
                 </Space>
               ),
@@ -3233,7 +3242,7 @@ function ReplayDecisionReadout({
           ]}
           title={() => (
             <Text type="secondary">
-              默认只展示不少于 12 个月度组合样本的行情结论；低样本分桶{hiddenLowSampleRegimeCount > 0 ? `已收起 ${formatNumber(hiddenLowSampleRegimeCount)} 个` : "未收起"}。
+              默认只展示不少于 {formatNumber(regimeSampleThreshold)} 个{regimeSampleUnit}的行情结论；低样本分桶{hiddenLowSampleRegimeCount > 0 ? `已收起 ${formatNumber(hiddenLowSampleRegimeCount)} 个` : "未收起"}。
             </Text>
           )}
           dataSource={strategyRegimeRowsForTable.slice(0, 10)}
