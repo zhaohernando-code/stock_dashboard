@@ -1219,3 +1219,12 @@ After the topic/industry split, result review showed that `C 制造业` still do
 - Current corrected labels include `电池`、`军工通信`、`铜箔`、`机器人自动化`、`航空装备`、`光模块`.
 - Runtime projection after refresh shows DeepSeek's `所属板块表现` led by `电气设备`、`通信设备`、`百货`、`元器件`、`航空`、`半导体`、`小金属`、`空运`、`铜箔`、`铁路`、`水运`、`机器人自动化`; `C 制造业` no longer dominates or appears in the visible top board rows.
 - 本轮发布 manifest `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260514T143425Z-056994335016/manifest.json`，deploy verifier `19 passed, 0 failed`；localhost `试验田 -> LLM模型反馈 -> DeepSeek V4 Pro 1M` 已验证。
+
+[2026-05-14T22:58:00+08:00] Historical replay default view should be decision-first for non-expert reading:
+`试验田 -> 历史回放` 默认视图不再把执行假设、完整统计、候选回放明细和来源审计全部展开。首屏只保留历史分析结论、6 个稳定性判断卡和“关键行情结论”；执行口径、入场假设、短窗口 LLM 回放统计、完整统计/置信/归因、模型与策略对比、批次/候选/来源审计全部折叠到明确命名的下钻区。
+
+补充说明
+- 行情胜出表现在会解析 object row 中的 `market_regime_tag` 三段标签，展示为“震荡行情 · 低波动 · 大小盘均衡”这类中文读数，不再把 `range_bound:low_volatility:balanced_size` 落成“其他行情”。
+- 默认关键行情表只看已识别行情，并优先显示 `next_close` 对应的“次日收盘买入”口径；`missing_regime` 行保留在 artifact 中，但从默认结论表收起。
+- 页面说明明确提示“先看 6 个判断卡和关键行情结论”，下方折叠区用于追溯，不再让非专业读者在首屏面对长表格。
+- 本轮发布 manifest `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260514T145553Z-b6f3ba080a88/manifest.json`，deploy verifier `19 passed, 0 failed`；localhost `试验田 -> 历史回放` 已验证默认出现“执行口径和入场假设”“完整统计、置信区间和归因明细”“短窗口 LLM 回放统计”等折叠项，关键行情表显示中文行情桶且默认不出现“行情待识别/其他行情”。canonical 入口在 Playwright 未登录会话中跳转到统一登录页，本轮未越过登录态复验业务页。
