@@ -22,6 +22,8 @@ from ashare_evidence.models import (
 from ashare_evidence.shortpick_lab import SHORTPICK_INFORMATION_MODE, list_shortpick_runs
 from ashare_evidence.shortpick_replay import (
     _build_universe,
+    _replay_regime_stability_projection,
+    _replay_return_attribution,
     build_shortpick_replay_feedback,
     get_shortpick_replay_sources,
     list_shortpick_replay_runs,
@@ -206,6 +208,91 @@ def test_historical_replay_creates_isolated_candidates_and_rejected_sources(monk
             assert sources["rejected_sources"]
             assert sources["rejected_sources"][0]["reject_reason"] == "source_after_cutoff"
             assert sources["tradable_universe"]["tradeable_count"] >= 6
+
+
+def test_replay_evidence_projection_builds_market_regime_and_industry_artifacts() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_url = f"sqlite:///{Path(temp_dir) / 'replay-evidence.db'}"
+        init_database(database_url)
+        with session_scope(database_url) as session:
+            for symbol, name, base, step in (
+                ("000300.SH", "沪深300", 100.0, 1.0),
+                ("000852.SH", "中证1000", 100.0, 2.0),
+            ):
+                stock = Stock(
+                    symbol=symbol,
+                    ticker=symbol.split(".")[0],
+                    exchange=symbol.split(".")[1],
+                    name=name,
+                    provider_symbol=symbol,
+                    listed_date=date(2020, 1, 1),
+                    status="active",
+                    profile_payload={"industry": "benchmark"},
+                    **_lineage({"symbol": symbol}, f"test://stock/{symbol}"),
+                )
+                session.add(stock)
+                session.flush()
+                for index in range(10):
+                    observed_day = date(2026, 5, 1) + timedelta(days=index)
+                    close_price = base + index * step
+                    session.add(
+                        MarketBar(
+                            bar_key=f"regime-{symbol}-{index}",
+                            stock_id=stock.id,
+                            timeframe="1d",
+                            observed_at=datetime(observed_day.year, observed_day.month, observed_day.day, 7, 0, tzinfo=UTC),
+                            open_price=close_price - 0.2,
+                            high_price=close_price + 0.5,
+                            low_price=close_price - 0.5,
+                            close_price=close_price,
+                            volume=100000 + index,
+                            amount=(100000 + index) * close_price,
+                            raw_payload={},
+                            **_lineage({"symbol": symbol, "index": index}, f"test://bar/{symbol}/{index}"),
+                        )
+                    )
+            rows = [
+                {
+                    "candidate_id": 1,
+                    "symbol": "600001.SH",
+                    "industry": "半导体",
+                    "horizon_days": 5,
+                    "status": "completed",
+                    "excess_return": 0.04,
+                    "stock_return": 0.06,
+                    "baseline_family": "llm",
+                    "official_sample_eligible": True,
+                    "tradable_sample_eligible": True,
+                    "run_id": 1,
+                    "run_date": date(2026, 5, 8),
+                },
+                {
+                    "candidate_id": 2,
+                    "symbol": "600002.SH",
+                    "industry": "银行",
+                    "horizon_days": 5,
+                    "status": "completed",
+                    "excess_return": -0.02,
+                    "stock_return": -0.01,
+                    "baseline_family": "momentum_10d_turnover_cooldown_rank",
+                    "official_sample_eligible": True,
+                    "tradable_sample_eligible": True,
+                    "run_id": 2,
+                    "run_date": date(2026, 5, 9),
+                },
+            ]
+
+            regime = _replay_regime_stability_projection(rows, session=session)
+            attribution = _replay_return_attribution(rows)
+
+            assert regime["market_regime"]["status"] == "ready"
+            assert regime["market_regime"]["coverage"]["tagged_date_count"] == 2
+            assert regime["market_regime"]["rows"][0]["market_regime_tag"]
+            assert regime["industry_theme"]["status"] == "ready"
+            assert regime["industry_theme"]["rows"][0]["industry"] in {"半导体", "银行"}
+            assert attribution["industry_theme"]["status"] == "ready"
+            assert attribution["industry_theme"]["best_industry"] == "半导体"
+            assert attribution["industry_theme"]["worst_industry"] == "银行"
 
 
 def test_replay_feedback_compares_llm_and_baselines_without_live_pollution(monkeypatch) -> None:

@@ -2796,6 +2796,12 @@ function ReplayDecisionReadout({
   const confidenceRows = Array.isArray(confidence.rows) ? confidence.rows as Record<string, unknown>[] : [];
   const attributionRows = Array.isArray(attribution.rows) ? attribution.rows as Record<string, unknown>[] : [];
   const portfolioPeriods = Array.isArray(regime.portfolio_periods) ? regime.portfolio_periods as Record<string, unknown>[] : [];
+  const marketRegime = recordValue<Record<string, unknown>>(regime, "market_regime") ?? {};
+  const industryStability = recordValue<Record<string, unknown>>(regime, "industry_theme") ?? {};
+  const industryAttribution = recordValue<Record<string, unknown>>(attribution, "industry_theme") ?? {};
+  const marketRegimeRows = Array.isArray(marketRegime.rows) ? marketRegime.rows as Record<string, unknown>[] : [];
+  const industryStabilityRows = Array.isArray(industryStability.rows) ? industryStability.rows as Record<string, unknown>[] : [];
+  const industryAttributionRows = Array.isArray(industryAttribution.rows) ? industryAttribution.rows as Record<string, unknown>[] : [];
   const defaultConfidence = confidenceRows.find((item) => item.family === "momentum_10d_turnover_cooldown_rank" && item.eligibility === "tradable")
     ?? confidenceRows[0];
   const defaultAttribution = attributionRows.find((item) => item.family === "momentum_10d_turnover_cooldown_rank")
@@ -3033,6 +3039,71 @@ function ReplayDecisionReadout({
           ]}
           dataSource={attributionRows}
           locale={{ emptyText: String(attribution.reason ?? "待收益归因产物补齐") }}
+        />
+        <Table
+          className="shortpick-replay-stat-table"
+          rowKey={(item) => `${String(item.family)}-${String(item.market_regime_tag)}`}
+          size="small"
+          pagination={false}
+          columns={[
+            { title: "市场阶段", render: (_, item) => String(item.market_regime_tag ?? "--") },
+            { title: "口径", render: (_, item) => String(item.label ?? item.family ?? "--") },
+            {
+              title: "超额 / 胜率",
+              render: (_, item) => (
+                <Space direction="vertical" size={0}>
+                  <Text className={`value-${valueTone(recordValue<number>(item, "mean_excess_return"))}`}>均值 {formatPercent(recordValue<number>(item, "mean_excess_return"))}</Text>
+                  <Text type="secondary">正超额 {formatPercent(recordValue<number>(item, "positive_excess_rate"))}</Text>
+                </Space>
+              ),
+            },
+            { title: "样本", render: (_, item) => `${formatNumber(Number(recordValue<number>(item, "sample_date_count") ?? 0))} 日 / ${formatNumber(Number(recordValue<number>(item, "sample_count") ?? 0))} 条` },
+          ]}
+          dataSource={marketRegimeRows.slice(0, 8)}
+          locale={{ emptyText: String(marketRegime.reason ?? "待市场阶段产物补齐") }}
+        />
+        <Table
+          className="shortpick-replay-stat-table"
+          rowKey={(item) => `${String(item.family)}-${String(item.industry)}`}
+          size="small"
+          pagination={false}
+          columns={[
+            { title: "行业/题材", render: (_, item) => String(item.industry ?? "--") },
+            { title: "口径", render: (_, item) => String(item.label ?? item.family ?? "--") },
+            {
+              title: "稳定性",
+              render: (_, item) => (
+                <Space direction="vertical" size={0}>
+                  <Text className={`value-${valueTone(recordValue<number>(item, "mean_excess_return"))}`}>均值 {formatPercent(recordValue<number>(item, "mean_excess_return"))}</Text>
+                  <Text type="secondary">正超额 {formatPercent(recordValue<number>(item, "positive_excess_rate"))}</Text>
+                </Space>
+              ),
+            },
+            { title: "样本", render: (_, item) => `${formatNumber(Number(recordValue<number>(item, "sample_date_count") ?? 0))} 日 / ${formatNumber(Number(recordValue<number>(item, "sample_count") ?? 0))} 条` },
+          ]}
+          dataSource={industryStabilityRows.slice(0, 8)}
+          locale={{ emptyText: String(industryStability.reason ?? "待行业/题材稳定性产物补齐") }}
+        />
+        <Table
+          className="shortpick-replay-stat-table"
+          rowKey={(item) => String(item.family)}
+          size="small"
+          pagination={false}
+          columns={[
+            { title: "行业归因口径", render: (_, item) => String(item.label ?? item.family ?? "--") },
+            { title: "最佳 / 最差行业", render: (_, item) => `${String(item.best_industry ?? "--")} / ${String(item.worst_industry ?? "--")}` },
+            {
+              title: "去最佳行业后",
+              render: (_, item) => (
+                <Text className={`value-${valueTone(recordValue<number>(item, "drop_best_industry_mean_excess_return"))}`}>
+                  {formatPercent(recordValue<number>(item, "drop_best_industry_mean_excess_return"))}
+                </Text>
+              ),
+            },
+            { title: "样本", render: (_, item) => formatNumber(Number(recordValue<number>(item, "sample_count") ?? 0)) },
+          ]}
+          dataSource={industryAttributionRows}
+          locale={{ emptyText: String(industryAttribution.reason ?? "待行业归因产物补齐") }}
         />
       </div>
     </Card>

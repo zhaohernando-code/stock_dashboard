@@ -1,13 +1,22 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-05-14T14:48:00+08:00] Short Pick Lab historical replay market-regime and industry evidence must stay offline:
+
+历史回放补充测试开始落地市场阶段与行业/题材两类 artifact。市场阶段只允许由 replay cache 物化时读取本地 CSI300/CSI1000 日线生成标签；行业/题材稳定性和归因只允许来自候选 payload 里的既有行业/题材字段。页面打开时不得补拉行情、补行业映射、重回测或按当前前端状态推断缺项。
+
+补充说明
+- 市场阶段标签采用 `trend_regime:volatility_regime:size_style_regime` 组合，当前由 20 日沪深300收益、20 日日收益波动、中证1000相对沪深300强弱离线推导。
+- 行业/题材表必须同时展示稳定性和归因：前者看各行业内 5 日可交易超额均值与正超额率，后者看最佳/最差行业以及去最佳行业后的均值。
+- 这些字段仍属于历史研究表达，不改变冻结纸面策略、不改生产权重，也不能替代真实前向纸面 tracking。
+
 [2026-05-14T14:20:00+08:00] Short Pick Lab historical replay Phase 2/3 projections are now artifact-backed:
 
 历史回放的剩余分析面板已从“待补命名”推进为离线 artifact projection：aggregate replay feedback 现在物化 `regime_stability`、`confidence_intervals`、`return_attribution`，readout builder 同步投影 `forward_tracking_alignment`。前端只能消费这些已物化字段，不在页面打开时临时 bootstrap、重回测或自行推断缺项。
 
 补充说明
 - `confidence_intervals` 使用按交易日聚类的 deterministic bootstrap；策略晋级判断必须优先看区间下沿是否仍为正，而不是只看均值。
-- `regime_stability` 当前已覆盖月份/季度和 staged portfolio 年/月 slices；真正的市场状态标签、行业/题材稳定性仍必须等待专门 artifact，缺失时继续结构化显示 pending/missing。
-- `return_attribution` 当前覆盖整体、LLM 与默认冻结候选家族的最佳/最差单票、日期、月份和去贡献项后的均值；行业/题材归因不得由前端猜测。
+- `regime_stability` 当前已覆盖月份/季度和 staged portfolio 年/月 slices；2026-05-14 后续实现已补市场状态标签与行业/题材稳定性 projection，仍必须由 cache 物化，不得前端猜测。
+- `return_attribution` 当前覆盖整体、LLM 与默认冻结候选家族的最佳/最差单票、日期、月份和去贡献项后的均值；2026-05-14 后续实现已补行业/题材归因 projection，仍必须由 cache 物化。
 - `forward_tracking_alignment` 在纸面跟踪样本不足时必须保持 `continue_observation` / `insufficient_forward_sample`，不能用历史同口径期望替代真实前向结果。
 
 [2026-05-14T10:20:00+08:00] Short Pick Lab historical replay first screen must be a read-only decision projection:
