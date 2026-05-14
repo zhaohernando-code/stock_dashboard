@@ -156,6 +156,7 @@ STAGED_SHORTPICK_ENTRY_ARTIFACTS = {
 }
 SHORTPICK_MARKET_FACTOR_STUDY_ARTIFACT = Path("output/shortpick-market-factor-study-current.json")
 SHORTPICK_REPLAY_FEEDBACK_CACHE_ARTIFACT = Path("output/shortpick-replay-feedback-cache.json")
+SHORTPICK_STRATEGY_SLICE_EVIDENCE_ARTIFACT = Path("output/shortpick-strategy-slice-evidence.json")
 
 
 def _existing_project_artifact_path(relative_path: Path, *, env_var: str | None = None) -> Path:
@@ -198,6 +199,13 @@ def _shortpick_market_factor_study_artifact_path() -> Path:
 
 def _shortpick_replay_feedback_cache_artifact_path() -> Path:
     return _existing_project_artifact_path(SHORTPICK_REPLAY_FEEDBACK_CACHE_ARTIFACT, env_var="ASHARE_SHORTPICK_REPLAY_FEEDBACK_CACHE_ARTIFACT")
+
+
+def _shortpick_strategy_slice_evidence_artifact_path() -> Path:
+    return _existing_project_artifact_path(
+        SHORTPICK_STRATEGY_SLICE_EVIDENCE_ARTIFACT,
+        env_var="ASHARE_SHORTPICK_STRATEGY_SLICE_EVIDENCE_ARTIFACT",
+    )
 
 
 def _read_json_artifact(path: Path, *, label: str) -> dict[str, object]:
@@ -397,6 +405,20 @@ def _attach_shortpick_replay_decision_projection(
             "projection_reason": str(exc),
         }
     projection_inputs["entry_artifacts"] = _load_shortpick_entry_sensitivity_artifacts()
+    strategy_slice_artifact_path = _shortpick_strategy_slice_evidence_artifact_path()
+    try:
+        projection_inputs["strategy_slice_evidence"] = _read_json_artifact(
+            strategy_slice_artifact_path,
+            label="shortpick strategy slice evidence",
+        )
+        if isinstance(projection_inputs["strategy_slice_evidence"], dict):
+            projection_inputs["strategy_slice_evidence"]["artifact_path"] = str(strategy_slice_artifact_path)  # type: ignore[index]
+    except (LookupError, ValueError) as exc:
+        projection_inputs["strategy_slice_evidence"] = {
+            "status": "missing_artifact",
+            "reason": str(exc),
+            "artifact_path": str(strategy_slice_artifact_path),
+        }
     try:
         projection_inputs["paper_tracking"] = _build_shortpick_paper_tracking_ledger(session)
     except Exception as exc:  # pragma: no cover - defensive runtime projection
@@ -414,6 +436,7 @@ def _attach_shortpick_replay_decision_projection(
             paper_tracking=projection_inputs["paper_tracking"],  # type: ignore[arg-type]
         )
     )
+    overall["strategy_slice_evidence"] = projection_inputs["strategy_slice_evidence"]
     enriched["overall"] = overall
     return enriched
 

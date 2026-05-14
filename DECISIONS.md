@@ -1,5 +1,15 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-05-14T17:10:00+08:00] Short Pick Lab long-window strategy slices must extend breadth without pretending to be LLM replay:
+
+历史回放的 LLM 候选逐条验证仍只有 2026-01-05 至 2026-04-30，不能包装成跨周期结论。为了补广度和深度，页面新增 `strategy_slice_evidence` 离线 artifact：复用已完成的 full-window staged portfolio artifacts，把确定性策略族扩展到 2023-05-16 至 2026-04-29、717 个信号日、约 2999 个新开户主板可交易序列，并按月度组合路径贴本地指数推导的市场阶段标签。
+
+补充说明
+- 这个 artifact 只扩充确定性市场因子策略族，不扩充真实 LLM 自由选股 replay；页面必须继续说明“长窗口策略样本不替代 LLM 短窗口 replay”。
+- 分行情胜出表以月度组合超额按市场阶段聚合，回答“组合资金曲线在不同市场环境下是否稳定”；它不是逐候选 LLM alpha，也不是实盘成交证明。
+- 当前第一版使用已完成的 `full_window-next_close / next_open / same_close_proxy` staged artifacts，避免从页面或 API 请求里重跑 3000 股票级别回测。后续如需每日增量刷新，应继续作为慢预计算产物处理。
+- 初始读数显示冻结低换手上升趋势在部分震荡行情桶胜出，但并非所有行情桶最优；页面因此只能把冻结策略表述为当前最稳纸面主线，不能写成全行情最优策略。
+
 [2026-05-14T14:48:00+08:00] Short Pick Lab historical replay market-regime and industry evidence must stay offline:
 
 历史回放补充测试开始落地市场阶段与行业/题材两类 artifact。市场阶段只允许由 replay cache 物化时读取本地 CSI300/CSI1000 日线生成标签；行业/题材稳定性和归因只允许来自候选 payload 里的既有行业/题材字段。页面打开时不得补拉行情、补行业映射、重回测或按当前前端状态推断缺项。

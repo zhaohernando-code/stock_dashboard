@@ -2792,6 +2792,9 @@ function ReplayDecisionReadout({
   const regime = recordValue<Record<string, unknown>>(feedback?.overall, "regime_stability") ?? {};
   const attribution = recordValue<Record<string, unknown>>(feedback?.overall, "return_attribution") ?? {};
   const forwardAlignment = recordValue<Record<string, unknown>>(feedback?.overall, "forward_tracking_alignment") ?? {};
+  const strategySlice = recordValue<Record<string, unknown>>(feedback?.overall, "strategy_slice_evidence") ?? {};
+  const strategySliceScope = recordValue<Record<string, unknown>>(strategySlice, "data_scope") ?? {};
+  const strategySliceAdequacy = recordValue<Record<string, unknown>>(strategySlice, "sample_adequacy") ?? {};
   const questions = decision?.questions ?? [];
   const confidenceRows = Array.isArray(confidence.rows) ? confidence.rows as Record<string, unknown>[] : [];
   const attributionRows = Array.isArray(attribution.rows) ? attribution.rows as Record<string, unknown>[] : [];
@@ -2802,6 +2805,9 @@ function ReplayDecisionReadout({
   const marketRegimeRows = Array.isArray(marketRegime.rows) ? marketRegime.rows as Record<string, unknown>[] : [];
   const industryStabilityRows = Array.isArray(industryStability.rows) ? industryStability.rows as Record<string, unknown>[] : [];
   const industryAttributionRows = Array.isArray(industryAttribution.rows) ? industryAttribution.rows as Record<string, unknown>[] : [];
+  const strategyRegimeWinners = Array.isArray(strategySlice.regime_winner_rows) ? strategySlice.regime_winner_rows as Record<string, unknown>[] : [];
+  const strategyRegimeCoverage = Array.isArray(strategySlice.regime_coverage_rows) ? strategySlice.regime_coverage_rows as Record<string, unknown>[] : [];
+  const strategyOverallRows = Array.isArray(strategySlice.overall_strategy_rows) ? strategySlice.overall_strategy_rows as Record<string, unknown>[] : [];
   const defaultConfidence = confidenceRows.find((item) => item.family === "momentum_10d_turnover_cooldown_rank" && item.eligibility === "tradable")
     ?? confidenceRows[0];
   const defaultAttribution = attributionRows.find((item) => item.family === "momentum_10d_turnover_cooldown_rank")
@@ -2949,6 +2955,32 @@ function ReplayDecisionReadout({
         <div className="shortpick-replay-decision-grid">
           <div className="shortpick-replay-decision-tile">
             <Space wrap size={6}>
+              <span>长窗口策略样本</span>
+              <Tag color={String(strategySlice.status) === "ready" ? "green" : "default"}>
+                {projectionStatusLabel(String(strategySlice.status ?? "missing_artifact"))}
+              </Tag>
+            </Space>
+            <strong>
+              {String(strategySliceScope.signal_date_from ?? "待补")} - {String(strategySliceScope.signal_date_to ?? "待补")}
+            </strong>
+            <Text>
+              {formatNumber(Number(strategySliceScope.signal_day_count ?? 0))} 信号日 · {formatNumber(Number(strategySliceScope.stock_like_series_count ?? 0))} 只可交易序列
+            </Text>
+            <Text type="secondary">覆盖 {formatNumber(Number(strategySliceAdequacy.year_count ?? 0))} 年；这是确定性策略族切片，不替代 LLM 短窗口 replay。</Text>
+          </div>
+          <div className="shortpick-replay-decision-tile">
+            <Space wrap size={6}>
+              <span>行情切片覆盖</span>
+              <Tag color={strategyRegimeCoverage.length >= 4 ? "blue" : "gold"}>
+                {projectionStatusLabel(String(strategySliceAdequacy.status ?? "missing_artifact"))}
+              </Tag>
+            </Space>
+            <strong>{formatNumber(Number(strategySliceAdequacy.useful_regime_count ?? 0))} 个可用行情桶</strong>
+            <Text>最低分组门槛 {formatNumber(Number(strategySliceAdequacy.min_regime_period_count ?? strategySliceAdequacy.min_regime_trade_count ?? 0))} 个周期样本</Text>
+            <Text type="secondary">行情桶不足时继续作为观察证据，不作为策略切换证明。</Text>
+          </div>
+          <div className="shortpick-replay-decision-tile">
+            <Space wrap size={6}>
               <span>置信区间</span>
               <Tag color={recordValue<boolean>(defaultConfidence, "lower_bound_positive") ? "green" : "gold"}>
                 {projectionStatusLabel(String(confidence.status ?? "missing_artifact"))}
@@ -2996,6 +3028,68 @@ function ReplayDecisionReadout({
             <Text type="secondary">历史组合期望 {formatPercent(recordValue<number>(forwardAlignment, "historical_portfolio_expected_excess"))}</Text>
           </div>
         </div>
+        <Table
+          className="shortpick-replay-stat-table"
+          rowKey={(item) => `${String(item.entry_price_source)}-${String(item.market_regime_tag)}`}
+          size="small"
+          pagination={false}
+          columns={[
+            { title: "入场 / 行情", render: (_, item) => `${String(item.entry_price_source ?? "--")} · ${String(item.market_regime_tag ?? "--")}` },
+            {
+              title: "胜出策略",
+              render: (_, item) => (
+                <Space direction="vertical" size={0}>
+                  <Text strong>{String(item.winner_label ?? item.winner_strategy ?? "--")}</Text>
+                  <Text type="secondary">候选策略 {formatNumber(Number(recordValue<number>(item, "eligible_strategy_count") ?? 0))} 个</Text>
+                </Space>
+              ),
+            },
+            {
+              title: "胜出超额 / 样本",
+              render: (_, item) => (
+                <Space direction="vertical" size={0}>
+                  <Text className={`value-${valueTone(recordValue<number>(item, "winner_mean_net_excess_return"))}`}>均值 {formatPercent(recordValue<number>(item, "winner_mean_net_excess_return"))}</Text>
+                  <Text type="secondary">{formatNumber(Number(recordValue<number>(item, "winner_sample_count") ?? recordValue<number>(item, "winner_trade_count") ?? 0))} 个样本 · 胜率 {formatPercent(recordValue<number>(item, "winner_positive_net_excess_rate"))}</Text>
+                </Space>
+              ),
+            },
+            {
+              title: "冻结策略位置",
+              render: (_, item) => (
+                <Space direction="vertical" size={0}>
+                  <Tag color={recordValue<boolean>(item, "frozen_is_winner") ? "green" : "gold"}>
+                    {recordValue<boolean>(item, "frozen_is_winner") ? "本桶胜出" : `第 ${String(item.frozen_rank ?? "--")}`}
+                  </Tag>
+                  <Text type="secondary">冻结超额 {formatPercent(recordValue<number>(item, "frozen_mean_net_excess_return"))}</Text>
+                </Space>
+              ),
+            },
+          ]}
+          dataSource={strategyRegimeWinners.slice(0, 10)}
+          locale={{ emptyText: String(strategySlice.reason ?? "待长窗口策略切片产物补齐") }}
+        />
+        <Table
+          className="shortpick-replay-stat-table"
+          rowKey={(item) => `${String(item.entry_price_source)}-${String(item.strategy)}`}
+          size="small"
+          pagination={false}
+          columns={[
+            { title: "长窗口策略", render: (_, item) => String(item.label ?? item.strategy ?? "--") },
+            { title: "入场", render: (_, item) => String(item.entry_price_source ?? "--") },
+            {
+              title: "组合超额 / 胜率",
+              render: (_, item) => (
+                <Space direction="vertical" size={0}>
+                  <Text className={`value-${valueTone(recordValue<number>(item, "mean_net_excess_return"))}`}>超额 {formatPercent(recordValue<number>(item, "mean_net_excess_return"))}</Text>
+                  <Text type="secondary">胜率 {formatPercent(recordValue<number>(item, "positive_net_excess_rate"))}</Text>
+                </Space>
+              ),
+            },
+            { title: "样本", render: (_, item) => `${formatNumber(Number(recordValue<number>(item, "signal_date_count") ?? 0))} 日 / ${formatNumber(Number(recordValue<number>(item, "trade_count") ?? 0))} 笔` },
+          ]}
+          dataSource={strategyOverallRows.slice(0, 8)}
+          locale={{ emptyText: String(strategySlice.reason ?? "待长窗口策略切片产物补齐") }}
+        />
         <Table
           className="shortpick-replay-stat-table"
           rowKey={(item) => String(item.id ?? item.label)}
