@@ -45,21 +45,27 @@ def build_shortpick_replay_decision_projection(
             entry_artifacts=entry_artifacts,
             paper_tracking=paper_tracking,
         ),
-        "regime_stability": _deferred_projection(
-            "phase_2_backlog",
-            "行情阶段、月份、行业稳定性将在下一阶段由预计算 artifact 提供；当前不在页面请求时临时聚合。",
+        "regime_stability": _regime_stability(
+            overall=overall,
+            entry_artifacts=entry_artifacts,
+            market_study=market_study,
         ),
-        "confidence_intervals": _deferred_projection(
-            "phase_2_backlog",
-            "按交易日聚类的 bootstrap 置信区间待后续离线产物补齐；策略晋级不得只看当前均值。",
+        "confidence_intervals": _artifact_projection(
+            overall,
+            "confidence_intervals",
+            "missing_artifact",
+            "按交易日聚类的 bootstrap 置信区间需要 replay feedback cache 离线产物；页面不得临时抽样。",
         ),
-        "return_attribution": _deferred_projection(
-            "phase_3_backlog",
-            "最佳/最差股票、日期、行业和去贡献项后的收益归因待后续 artifact 补齐。",
+        "return_attribution": _artifact_projection(
+            overall,
+            "return_attribution",
+            "missing_artifact",
+            "收益归因需要 replay feedback cache 离线产物；页面不得临时聚合候选明细。",
         ),
-        "forward_tracking_alignment": _deferred_projection(
-            "phase_3_backlog",
-            "历史预期 vs 纸面跟踪偏离读数待前向样本继续积累后补齐。",
+        "forward_tracking_alignment": _forward_tracking_alignment(
+            default_family=default_family,
+            frozen_summary=frozen_summary,
+            paper_tracking=paper_tracking,
         ),
     }
 
@@ -307,6 +313,111 @@ def _intraday_forward_row(paper_tracking: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _regime_stability(
+    *,
+    overall: dict[str, Any],
+    entry_artifacts: dict[str, dict[str, Any]],
+    market_study: dict[str, Any],
+) -> dict[str, Any]:
+    cached = dict(_dict(overall.get("regime_stability")))
+    portfolio_periods = _portfolio_period_stability(entry_artifacts)
+    regime_summary = _dict(market_study.get("regime_summary"))
+    if cached:
+        output = dict(cached)
+    else:
+        output = {
+            "status": "missing_artifact",
+            "basis": "precomputed_artifacts",
+            "reason": "缺少 replay feedback cache 稳定性产物；页面不得临时聚合。",
+        }
+    if portfolio_periods:
+        output["portfolio_periods"] = portfolio_periods
+        if output.get("status") == "missing_artifact":
+            output["status"] = "partial_ready"
+    if regime_summary:
+        output["market_regime"] = {
+            "status": "ready",
+            "source": "shortpick_market_factor_study",
+            "features": sorted(regime_summary.keys()),
+        }
+    else:
+        output.setdefault("market_regime", {
+            "status": "missing_artifact",
+            "reason": "market-factor study 当前没有 regime_summary 产物。",
+        })
+    return output
+
+
+def _portfolio_period_stability(entry_artifacts: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    rows = []
+    for entry_source, artifact in sorted(entry_artifacts.items()):
+        payload = _dict(_dict(artifact).get("payload"))
+        result = _dict(_dict(_dict(payload.get("results")).get("daily_rolling_5x10k")).get(CURRENT_FROZEN_STRATEGY))
+        for period_kind in ("monthly", "yearly"):
+            periods = [_dict(item) for item in result.get(period_kind) or [] if isinstance(item, dict)]
+            values = [_float(item.get("excess_return")) for item in periods]
+            values = [value for value in values if value is not None]
+            if not values:
+                continue
+            worst = min(periods, key=lambda item: _float(item.get("excess_return")) if _float(item.get("excess_return")) is not None else 999.0)
+            best = max(periods, key=lambda item: _float(item.get("excess_return")) if _float(item.get("excess_return")) is not None else -999.0)
+            rows.append(
+                {
+                    "entry_price_source": entry_source,
+                    "period_kind": period_kind,
+                    "period_count": len(values),
+                    "positive_excess_period_rate": sum(1 for value in values if value > 0) / len(values),
+                    "mean_excess_return": round(sum(values) / len(values), 6),
+                    "worst_period": worst.get("period"),
+                    "worst_period_excess_return": _float(worst.get("excess_return")),
+                    "best_period": best.get("period"),
+                    "best_period_excess_return": _float(best.get("excess_return")),
+                }
+            )
+    return rows
+
+
+def _artifact_projection(
+    overall: dict[str, Any],
+    key: str,
+    status: str,
+    reason: str,
+) -> dict[str, Any]:
+    payload = _dict(overall.get(key))
+    return payload if payload else {"status": status, "reason": reason}
+
+
+def _forward_tracking_alignment(
+    *,
+    default_family: dict[str, Any],
+    frozen_summary: dict[str, Any],
+    paper_tracking: dict[str, Any],
+) -> dict[str, Any]:
+    default_metric = _family_horizon_metric(default_family, CORE_HORIZON)
+    historical_candidate_expected = _float(default_metric.get("tradable_mean_excess_return") or default_metric.get("mean_excess_return"))
+    historical_portfolio_expected = _float(frozen_summary.get("excess_total_return"))
+    paper_summary = _dict(paper_tracking.get("summary"))
+    tracked_signal_count = _int(paper_summary.get("tracked_signal_count"))
+    required_forward_days = _int(paper_summary.get("required_forward_trading_days"))
+    status = "insufficient_forward_sample" if tracked_signal_count < 20 else "ready_for_alignment"
+    return {
+        "status": status,
+        "basis": "historical_projection_plus_read_only_paper_tracking_ledger",
+        "historical_candidate_expected_excess": historical_candidate_expected,
+        "historical_portfolio_expected_excess": historical_portfolio_expected,
+        "paper_tracked_signal_count": tracked_signal_count,
+        "required_forward_trading_days": required_forward_days,
+        "current_paper_status": paper_tracking.get("current_status"),
+        "deviation_excess": None,
+        "decision": "continue_observation" if status == "insufficient_forward_sample" else "review_alignment",
+        "reason": (
+            "前向纸面样本尚不足，当前只展示同口径历史期望与跟踪样本数，不判断偏离。"
+            if status == "insufficient_forward_sample"
+            else "前向样本达到最小数量后，应比较真实纸面结果和历史同口径期望。"
+        ),
+    }
+
+
 def _funnel_step(id_: str, label: str, count: Any, basis: str, *, invert: bool = False) -> dict[str, Any]:
     parsed_count = _int(count)
     return {
@@ -317,10 +428,6 @@ def _funnel_step(id_: str, label: str, count: Any, basis: str, *, invert: bool =
         "basis": basis,
         "invert_meaning": invert,
     }
-
-
-def _deferred_projection(status: str, reason: str) -> dict[str, str]:
-    return {"status": status, "reason": reason}
 
 
 def _find_family(families: list[dict[str, Any]], family_key: str) -> dict[str, Any]:

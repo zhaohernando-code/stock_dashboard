@@ -1082,6 +1082,15 @@ def build_shortpick_replay_feedback(session: Session, *, run_id: int | None = No
         )
     factor_ic_gate = _factor_ic_gate_readout(session)
     news_calibration = _news_calibration_readout(session)
+    aggregate_projection = (
+        {
+            "regime_stability": _replay_regime_stability_projection(rows),
+            "confidence_intervals": _replay_confidence_intervals(rows),
+            "return_attribution": _replay_return_attribution(rows),
+        }
+        if run_id is None
+        else {}
+    )
     return {
         "generated_at": utcnow(),
         "experiment_mode": SHORTPICK_REPLAY_EXPERIMENT_MODE,
@@ -1103,6 +1112,7 @@ def build_shortpick_replay_feedback(session: Session, *, run_id: int | None = No
             "tradable_robustness_metrics": _robustness_metrics(rows, eligibility_key="tradable_sample_eligible"),
             "factor_ic_gate": factor_ic_gate,
             "news_calibration": news_calibration,
+            **aggregate_projection,
         },
     }
 
@@ -4280,6 +4290,277 @@ def _robustness_metrics(rows: list[dict[str, Any]], *, eligibility_key: str = "o
         "best_symbol": best_symbol,
         "sample_count": len(values),
     }
+
+
+def _replay_confidence_intervals(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    focus_rows = []
+    for family in ("llm", "momentum_10d_turnover_cooldown_rank", "overall"):
+        scoped_rows = rows if family == "overall" else [row for row in rows if row["baseline_family"] == family]
+        for eligibility_key, label_suffix in (
+            ("official_sample_eligible", "严格来源"),
+            ("tradable_sample_eligible", "可交易"),
+        ):
+            row = _clustered_bootstrap_interval(
+                scoped_rows,
+                family=family,
+                label_suffix=label_suffix,
+                eligibility_key=eligibility_key,
+                horizon_days=5,
+            )
+            if row:
+                focus_rows.append(row)
+    return {
+        "status": "ready" if focus_rows else "missing_artifact",
+        "method": "trading_day_clustered_bootstrap",
+        "basis": "precomputed_replay_validation_rows",
+        "note": "按 replay signal date 聚类抽样；策略晋级只参考置信区间下沿是否为正，不参考单一均值。",
+        "rows": focus_rows,
+    }
+
+
+def _clustered_bootstrap_interval(
+    rows: list[dict[str, Any]],
+    *,
+    family: str,
+    label_suffix: str,
+    eligibility_key: str,
+    horizon_days: int,
+) -> dict[str, Any] | None:
+    completed = [
+        row
+        for row in rows
+        if row.get(eligibility_key)
+        and row["status"] == "completed"
+        and int(row["horizon_days"]) == horizon_days
+        and row["excess_return"] is not None
+        and row.get("run_date") is not None
+    ]
+    by_date: dict[date, list[float]] = {}
+    symbols: set[str] = set()
+    for row in completed:
+        by_date.setdefault(row["run_date"], []).append(float(row["excess_return"]))
+        symbols.add(str(row["symbol"]))
+    date_means = [_mean(values) for _, values in sorted(by_date.items()) if values]
+    if len(date_means) < 2:
+        return None
+    rng = random.Random(f"shortpick-replay-ci:{family}:{eligibility_key}:{horizon_days}")
+    bootstrap_means = []
+    for _ in range(1000):
+        sample = [date_means[rng.randrange(len(date_means))] for _ in date_means]
+        bootstrap_means.append(_mean(sample))
+    lower = _percentile(bootstrap_means, 0.025)
+    upper = _percentile(bootstrap_means, 0.975)
+    mean_value = _mean([float(row["excess_return"]) for row in completed])
+    lower_positive = lower is not None and lower > 0
+    family_label = "整体" if family == "overall" else _baseline_label(family)
+    return {
+        "id": f"{family}_{horizon_days}d_{eligibility_key.replace('_sample_eligible', '')}",
+        "family": family,
+        "label": f"{family_label} {horizon_days}日{label_suffix}",
+        "horizon_days": horizon_days,
+        "eligibility": eligibility_key.replace("_sample_eligible", ""),
+        "mean_excess_return": None if mean_value is None else round(mean_value, 6),
+        "lower_excess_return": None if lower is None else round(lower, 6),
+        "upper_excess_return": None if upper is None else round(upper, 6),
+        "lower_bound_positive": lower_positive,
+        "promotion_decision": "eligible_by_ci_lower_bound" if lower_positive else "blocked_by_ci_lower_bound",
+        "sample_date_count": len(date_means),
+        "sample_stock_count": len(symbols),
+        "sample_count": len(completed),
+    }
+
+
+def _replay_regime_stability_projection(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    focus_families = ("llm", "momentum_10d_turnover_cooldown_rank")
+    month_rows = _time_slice_rows(rows, period="month", focus_families=focus_families)
+    quarter_rows = _time_slice_rows(rows, period="quarter", focus_families=focus_families)
+    return {
+        "status": "ready" if month_rows or quarter_rows else "missing_artifact",
+        "basis": "precomputed_replay_validation_rows",
+        "time_slices": {
+            "month": month_rows,
+            "quarter": quarter_rows,
+        },
+        "market_regime": {
+            "status": "missing_artifact",
+            "reason": "历史 replay cache 当前没有逐日市场状态标签；后续需要离线补齐 regime artifact。",
+        },
+        "industry_theme": {
+            "status": "missing_artifact",
+            "reason": "历史 replay cache 当前没有行业/题材归因字段；后续需要离线补齐行业映射 artifact。",
+        },
+    }
+
+
+def _time_slice_rows(
+    rows: list[dict[str, Any]],
+    *,
+    period: str,
+    focus_families: tuple[str, ...],
+) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        if row["baseline_family"] not in focus_families:
+            continue
+        if int(row["horizon_days"]) != 5:
+            continue
+        if not row["tradable_sample_eligible"] or row["status"] != "completed" or row["excess_return"] is None:
+            continue
+        run_date = row.get("run_date")
+        if not isinstance(run_date, date):
+            continue
+        if period == "quarter":
+            period_key = f"{run_date.year}-Q{((run_date.month - 1) // 3) + 1}"
+        else:
+            period_key = f"{run_date.year}-{run_date.month:02d}"
+        grouped.setdefault((str(row["baseline_family"]), period_key), []).append(row)
+    output = []
+    for (family, period_key), values in sorted(grouped.items(), key=lambda item: (item[0][0], item[0][1])):
+        excess = [float(row["excess_return"]) for row in values]
+        dates = {row["run_date"] for row in values}
+        output.append(
+            {
+                "family": family,
+                "label": _baseline_label(family),
+                "period": period_key,
+                "horizon_days": 5,
+                "mean_excess_return": _round_or_none(_mean(excess)),
+                "positive_excess_rate": _positive_rate(excess),
+                "sample_count": len(excess),
+                "sample_date_count": len(dates),
+            }
+        )
+    return output
+
+
+def _replay_return_attribution(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    focus = [
+        ("overall", rows),
+        ("llm", [row for row in rows if row["baseline_family"] == "llm"]),
+        (
+            "momentum_10d_turnover_cooldown_rank",
+            [row for row in rows if row["baseline_family"] == "momentum_10d_turnover_cooldown_rank"],
+        ),
+    ]
+    return {
+        "status": "ready" if rows else "missing_artifact",
+        "basis": "precomputed_replay_validation_rows",
+        "horizon_days": 5,
+        "rows": [
+            row
+            for family, family_rows in focus
+            if (row := _return_attribution_row(family, family_rows)) is not None
+        ],
+        "industry_theme": {
+            "status": "missing_artifact",
+            "reason": "行业/题材级最佳最差贡献需要行业映射 artifact，当前不在页面请求时临时补齐。",
+        },
+    }
+
+
+def _return_attribution_row(family: str, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    completed = [
+        row
+        for row in rows
+        if row["tradable_sample_eligible"]
+        and row["status"] == "completed"
+        and int(row["horizon_days"]) == 5
+        and row["excess_return"] is not None
+    ]
+    if not completed:
+        return None
+    values = [float(row["excess_return"]) for row in completed]
+    by_symbol = _group_excess(completed, "symbol")
+    by_date = _group_excess(completed, "run_date")
+    by_month: dict[str, list[float]] = {}
+    for row in completed:
+        run_date = row.get("run_date")
+        if isinstance(run_date, date):
+            by_month.setdefault(f"{run_date.year}-{run_date.month:02d}", []).append(float(row["excess_return"]))
+    best_symbol, best_symbol_mean = _best_group(by_symbol)
+    worst_symbol, worst_symbol_mean = _worst_group(by_symbol)
+    best_date, best_date_mean = _best_group(by_date)
+    worst_date, worst_date_mean = _worst_group(by_date)
+    best_month, best_month_mean = _best_group(by_month)
+    worst_month, worst_month_mean = _worst_group(by_month)
+    return {
+        "family": family,
+        "label": "整体" if family == "overall" else _baseline_label(family),
+        "mean_excess_return": _round_or_none(_mean(values)),
+        "sample_count": len(values),
+        "best_symbol": best_symbol,
+        "best_symbol_mean_excess_return": _round_or_none(best_symbol_mean),
+        "worst_symbol": worst_symbol,
+        "worst_symbol_mean_excess_return": _round_or_none(worst_symbol_mean),
+        "best_date": None if best_date is None else str(best_date),
+        "best_date_mean_excess_return": _round_or_none(best_date_mean),
+        "worst_date": None if worst_date is None else str(worst_date),
+        "worst_date_mean_excess_return": _round_or_none(worst_date_mean),
+        "best_month": best_month,
+        "best_month_mean_excess_return": _round_or_none(best_month_mean),
+        "worst_month": worst_month,
+        "worst_month_mean_excess_return": _round_or_none(worst_month_mean),
+        "drop_best_symbol_mean_excess_return": _round_or_none(_mean([
+            float(row["excess_return"])
+            for row in completed
+            if best_symbol is None or row["symbol"] != best_symbol
+        ])),
+        "drop_best_date_mean_excess_return": _round_or_none(_mean([
+            float(row["excess_return"])
+            for row in completed
+            if best_date is None or row["run_date"] != best_date
+        ])),
+        "drop_best_month_mean_excess_return": _round_or_none(_mean([
+            float(row["excess_return"])
+            for row in completed
+            if best_month is None
+            or not isinstance(row.get("run_date"), date)
+            or f"{row['run_date'].year}-{row['run_date'].month:02d}" != best_month
+        ])),
+    }
+
+
+def _group_excess(rows: list[dict[str, Any]], key: str) -> dict[Any, list[float]]:
+    grouped: dict[Any, list[float]] = {}
+    for row in rows:
+        group_key = row.get(key)
+        if group_key is None:
+            continue
+        grouped.setdefault(group_key, []).append(float(row["excess_return"]))
+    return grouped
+
+
+def _best_group(grouped: dict[Any, list[float]]) -> tuple[Any | None, float | None]:
+    if not grouped:
+        return None, None
+    key = max(grouped, key=lambda item: _mean(grouped[item]) or -999.0)
+    return key, _mean(grouped[key])
+
+
+def _worst_group(grouped: dict[Any, list[float]]) -> tuple[Any | None, float | None]:
+    if not grouped:
+        return None, None
+    key = min(grouped, key=lambda item: _mean(grouped[item]) or 999.0)
+    return key, _mean(grouped[key])
+
+
+def _percentile(values: list[float], quantile: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    index = (len(ordered) - 1) * quantile
+    lower = int(index)
+    upper = min(lower + 1, len(ordered) - 1)
+    weight = index - lower
+    return ordered[lower] * (1 - weight) + ordered[upper] * weight
+
+
+def _round_or_none(value: float | None) -> float | None:
+    return None if value is None else round(value, 6)
+
+
+def _mean(values: list[float]) -> float | None:
+    return sum(values) / len(values) if values else None
 
 
 def _factor_ic_gate_readout(session: Session) -> dict[str, Any]:

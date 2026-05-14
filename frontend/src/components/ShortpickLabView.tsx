@@ -2788,7 +2788,20 @@ function ReplayDecisionReadout({
   const decision = feedback?.overall?.decision_readout;
   const funnel = feedback?.overall?.execution_funnel;
   const entryMatrix = feedback?.overall?.entry_sensitivity_matrix;
+  const confidence = recordValue<Record<string, unknown>>(feedback?.overall, "confidence_intervals") ?? {};
+  const regime = recordValue<Record<string, unknown>>(feedback?.overall, "regime_stability") ?? {};
+  const attribution = recordValue<Record<string, unknown>>(feedback?.overall, "return_attribution") ?? {};
+  const forwardAlignment = recordValue<Record<string, unknown>>(feedback?.overall, "forward_tracking_alignment") ?? {};
   const questions = decision?.questions ?? [];
+  const confidenceRows = Array.isArray(confidence.rows) ? confidence.rows as Record<string, unknown>[] : [];
+  const attributionRows = Array.isArray(attribution.rows) ? attribution.rows as Record<string, unknown>[] : [];
+  const portfolioPeriods = Array.isArray(regime.portfolio_periods) ? regime.portfolio_periods as Record<string, unknown>[] : [];
+  const defaultConfidence = confidenceRows.find((item) => item.family === "momentum_10d_turnover_cooldown_rank" && item.eligibility === "tradable")
+    ?? confidenceRows[0];
+  const defaultAttribution = attributionRows.find((item) => item.family === "momentum_10d_turnover_cooldown_rank")
+    ?? attributionRows[0];
+  const nextCloseYearly = portfolioPeriods.find((item) => item.entry_price_source === "next_close" && item.period_kind === "yearly")
+    ?? portfolioPeriods[0];
   const entryColumns: ColumnsType<ShortpickReplayEntrySensitivityRow> = [
     {
       title: "入场口径",
@@ -2921,8 +2934,126 @@ function ReplayDecisionReadout({
           locale={{ emptyText: "待入场口径产物补齐" }}
         />
       </div>
+
+      <div className="shortpick-replay-entry-matrix">
+        <Space direction="vertical" size={2}>
+          <Title level={5}>稳定性、置信与归因</Title>
+          <Text type="secondary">这些读数只来自离线 replay cache、staged portfolio artifact 和只读纸面 ledger；缺失项继续显示待补。</Text>
+        </Space>
+        <div className="shortpick-replay-decision-grid">
+          <div className="shortpick-replay-decision-tile">
+            <Space wrap size={6}>
+              <span>置信区间</span>
+              <Tag color={recordValue<boolean>(defaultConfidence, "lower_bound_positive") ? "green" : "gold"}>
+                {projectionStatusLabel(String(confidence.status ?? "missing_artifact"))}
+              </Tag>
+            </Space>
+            <strong>{recordValue<boolean>(defaultConfidence, "lower_bound_positive") ? "下沿仍为正" : "下沿未过晋级线"}</strong>
+            <Text className={`value-${valueTone(recordValue<number>(defaultConfidence, "lower_excess_return"))}`}>
+              下沿 {formatPercent(recordValue<number>(defaultConfidence, "lower_excess_return"))}
+            </Text>
+            <Text type="secondary">
+              均值 {formatPercent(recordValue<number>(defaultConfidence, "mean_excess_return"))} · 日期 {formatNumber(Number(recordValue<number>(defaultConfidence, "sample_date_count") ?? 0))}
+            </Text>
+          </div>
+          <div className="shortpick-replay-decision-tile">
+            <Space wrap size={6}>
+              <span>时间稳定性</span>
+              <Tag color={portfolioPeriods.length ? "blue" : "default"}>{projectionStatusLabel(String(regime.status ?? "missing_artifact"))}</Tag>
+            </Space>
+            <strong>{recordValue<string>(nextCloseYearly, "worst_period") || "待产物"}</strong>
+            <Text className={`value-${valueTone(recordValue<number>(nextCloseYearly, "worst_period_excess_return"))}`}>
+              最弱期 {formatPercent(recordValue<number>(nextCloseYearly, "worst_period_excess_return"))}
+            </Text>
+            <Text type="secondary">正超额期占比 {formatPercent(recordValue<number>(nextCloseYearly, "positive_excess_period_rate"))}</Text>
+          </div>
+          <div className="shortpick-replay-decision-tile">
+            <Space wrap size={6}>
+              <span>收益归因</span>
+              <Tag color={attributionRows.length ? "blue" : "default"}>{projectionStatusLabel(String(attribution.status ?? "missing_artifact"))}</Tag>
+            </Space>
+            <strong>{recordValue<string>(defaultAttribution, "best_symbol") || "待归因"}</strong>
+            <Text className={`value-${valueTone(recordValue<number>(defaultAttribution, "drop_best_symbol_mean_excess_return"))}`}>
+              去最佳单票 {formatPercent(recordValue<number>(defaultAttribution, "drop_best_symbol_mean_excess_return"))}
+            </Text>
+            <Text type="secondary">最弱月份 {recordValue<string>(defaultAttribution, "worst_month") || "待补"} · {formatPercent(recordValue<number>(defaultAttribution, "worst_month_mean_excess_return"))}</Text>
+          </div>
+          <div className="shortpick-replay-decision-tile">
+            <Space wrap size={6}>
+              <span>前向对齐</span>
+              <Tag color={String(forwardAlignment.status) === "ready_for_alignment" ? "green" : "gold"}>
+                {projectionStatusLabel(String(forwardAlignment.status ?? "missing_artifact"))}
+              </Tag>
+            </Space>
+            <strong>{projectionDecisionLabel(String(forwardAlignment.decision ?? "continue_observation"))}</strong>
+            <Text>纸面信号 {formatNumber(Number(forwardAlignment.paper_tracked_signal_count ?? 0))}</Text>
+            <Text type="secondary">历史组合期望 {formatPercent(recordValue<number>(forwardAlignment, "historical_portfolio_expected_excess"))}</Text>
+          </div>
+        </div>
+        <Table
+          className="shortpick-replay-stat-table"
+          rowKey={(item) => String(item.id ?? item.label)}
+          size="small"
+          pagination={false}
+          columns={[
+            { title: "置信口径", render: (_, item) => String(item.label ?? "--") },
+            {
+              title: "均值 / 区间",
+              render: (_, item) => (
+                <Space direction="vertical" size={0}>
+                  <Text>均值 {formatPercent(recordValue<number>(item, "mean_excess_return"))}</Text>
+                  <Text type="secondary">下沿 {formatPercent(recordValue<number>(item, "lower_excess_return"))} · 上沿 {formatPercent(recordValue<number>(item, "upper_excess_return"))}</Text>
+                </Space>
+              ),
+            },
+            { title: "样本", render: (_, item) => `${formatNumber(Number(recordValue<number>(item, "sample_date_count") ?? 0))} 日 / ${formatNumber(Number(recordValue<number>(item, "sample_count") ?? 0))} 条` },
+            { title: "判断", render: (_, item) => projectionDecisionLabel(String(item.promotion_decision ?? "")) },
+          ]}
+          dataSource={confidenceRows.slice(0, 4)}
+          locale={{ emptyText: String(confidence.reason ?? "待置信区间产物补齐") }}
+        />
+        <Table
+          className="shortpick-replay-stat-table"
+          rowKey={(item) => String(item.family)}
+          size="small"
+          pagination={false}
+          columns={[
+            { title: "归因口径", render: (_, item) => String(item.label ?? item.family ?? "--") },
+            { title: "最佳 / 最差单票", render: (_, item) => `${String(item.best_symbol ?? "--")} / ${String(item.worst_symbol ?? "--")}` },
+            { title: "最佳 / 最差日期", render: (_, item) => `${String(item.best_date ?? "--")} / ${String(item.worst_date ?? "--")}` },
+            {
+              title: "去贡献项后",
+              render: (_, item) => (
+                <Space direction="vertical" size={0}>
+                  <Text>去最佳单票 {formatPercent(recordValue<number>(item, "drop_best_symbol_mean_excess_return"))}</Text>
+                  <Text type="secondary">去最佳月份 {formatPercent(recordValue<number>(item, "drop_best_month_mean_excess_return"))}</Text>
+                </Space>
+              ),
+            },
+          ]}
+          dataSource={attributionRows}
+          locale={{ emptyText: String(attribution.reason ?? "待收益归因产物补齐") }}
+        />
+      </div>
     </Card>
   );
+}
+
+function projectionStatusLabel(value: string): string {
+  if (value === "ready") return "已就绪";
+  if (value === "partial_ready") return "部分就绪";
+  if (value === "insufficient_forward_sample") return "继续观察";
+  if (value === "ready_for_alignment") return "可对齐";
+  if (value === "missing_artifact") return "待产物";
+  return value || "待判断";
+}
+
+function projectionDecisionLabel(value: string): string {
+  if (value === "eligible_by_ci_lower_bound") return "下沿为正";
+  if (value === "blocked_by_ci_lower_bound") return "下沿未过";
+  if (value === "continue_observation") return "继续观察";
+  if (value === "review_alignment") return "检查偏离";
+  return value || "待判断";
 }
 
 function ReplayStrategyCloseout({

@@ -142,8 +142,10 @@ def test_shortpick_replay_readout_handles_missing_artifacts_without_frontend_gue
     assert projection["entry_sensitivity_matrix"]["status"] == "missing_artifact"
     assert "不得临时回测" in projection["entry_sensitivity_matrix"]["reason"]
     assert projection["entry_sensitivity_matrix"]["rows"][0]["status"] == "missing_artifact"
-    assert projection["regime_stability"]["status"] == "phase_2_backlog"
-    assert projection["return_attribution"]["status"] == "phase_3_backlog"
+    assert projection["regime_stability"]["status"] == "missing_artifact"
+    assert projection["confidence_intervals"]["status"] == "missing_artifact"
+    assert projection["return_attribution"]["status"] == "missing_artifact"
+    assert projection["forward_tracking_alignment"]["status"] == "insufficient_forward_sample"
 
 
 def test_same_close_proxy_is_serialized_as_daily_proxy_not_intraday_proof():
@@ -164,3 +166,47 @@ def test_same_close_proxy_is_serialized_as_daily_proxy_not_intraday_proof():
     assert row["assumption_level"] == "diagnostic_proxy"
     assert "代理" in row["entry_price_source_note"]
     assert "不等同真实14:00" in row["entry_price_source_note"]
+
+
+def test_shortpick_replay_readout_surfaces_phase_two_three_artifacts():
+    feedback = _replay_feedback()
+    feedback["overall"]["confidence_intervals"] = {
+        "status": "ready",
+        "rows": [
+            {
+                "id": "default_5d_tradable",
+                "family": "momentum_10d_turnover_cooldown_rank",
+                "eligibility": "tradable",
+                "lower_bound_positive": False,
+            }
+        ],
+    }
+    feedback["overall"]["return_attribution"] = {
+        "status": "ready",
+        "rows": [{"family": "momentum_10d_turnover_cooldown_rank", "best_symbol": "002384.SZ"}],
+    }
+    feedback["overall"]["regime_stability"] = {
+        "status": "ready",
+        "time_slices": {"month": [{"period": "2026-04"}]},
+    }
+    entry = _entry_artifact("next_close", "次日收盘买入。")
+    entry["payload"]["results"]["daily_rolling_5x10k"]["low_turnover_20d_uptrend_liquid_top120"]["monthly"] = [
+        {"period": "2026-04", "excess_return": 0.1},
+        {"period": "2026-05", "excess_return": -0.2},
+    ]
+    entry["payload"]["results"]["daily_rolling_5x10k"]["low_turnover_20d_uptrend_liquid_top120"]["yearly"] = [
+        {"period": "2026", "excess_return": -0.05},
+    ]
+
+    projection = build_shortpick_replay_decision_projection(
+        feedback,
+        market_study=_market_study(),
+        entry_artifacts={"next_close": entry},
+        paper_tracking={"current_status": "tracking_active", "summary": {"tracked_signal_count": 4}},
+    )
+
+    assert projection["confidence_intervals"]["status"] == "ready"
+    assert projection["return_attribution"]["rows"][0]["best_symbol"] == "002384.SZ"
+    assert projection["regime_stability"]["status"] == "ready"
+    assert projection["regime_stability"]["portfolio_periods"]
+    assert projection["forward_tracking_alignment"]["historical_portfolio_expected_excess"] == 0.1314
