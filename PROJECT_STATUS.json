@@ -142,7 +142,7 @@
     "shortpick_non_llm_strategy_slice_advanced_analytics": "published_runtime_verified_manifest_20260514T094419Z_767ca3a77f04",
     "frontend_timeout_db_lock_mitigation": "published_runtime_verified_manifest_20260514T111843Z_48fe2a487aaf",
     "frontend_projection_store": "published_runtime_verified_manifest_20260514T113307Z_8d552e2bf4ee",
-    "operations_summary_projection": "published_runtime_verified_manifest_20260514T114443Z_e000343b3548_pending_final_manifest"
+    "operations_summary_projection": "published_runtime_verified_manifest_20260514T115111Z_deb41270f84e"
   },
   "latest_findings": [
     {
