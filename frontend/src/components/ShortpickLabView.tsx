@@ -2724,12 +2724,23 @@ function HistoricalReplayTab({
         />
       ) : null}
       <ReplayDecisionReadout feedback={aggregateFeedback} loading={aggregateFeedbackLoading} />
-      <ReplayStatisticalSummary
-        feedback={aggregateFeedback}
-        loading={aggregateFeedbackLoading}
-        marketStudy={marketStudy}
-        marketStudyLoading={marketStudyLoading}
-        selectedBenchmark={selectedBenchmark}
+      <Collapse
+        className="shortpick-replay-diagnostics"
+        items={[
+          {
+            key: "short-window-replay",
+            label: "短窗口 LLM 回放统计",
+            children: (
+              <ReplayStatisticalSummary
+                feedback={aggregateFeedback}
+                loading={aggregateFeedbackLoading}
+                marketStudy={marketStudy}
+                marketStudyLoading={marketStudyLoading}
+                selectedBenchmark={selectedBenchmark}
+              />
+            ),
+          },
+        ]}
       />
 
       <Collapse
