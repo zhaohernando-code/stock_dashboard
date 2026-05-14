@@ -14,7 +14,41 @@ def test_strategy_slice_response_projection_keeps_ui_fields_and_drops_heavy_deta
         "regime_winner_rows": [{"regime": "up"}],
         "regime_coverage_rows": [{"regime": "up", "month_count": 3}],
         "period_strategy_rows": [{"heavy": True}],
-        "regime_strategy_rows": [{"heavy": True}],
+        "regime_strategy_rows": [
+            {
+                "entry_price_source": "next_close",
+                "trend_regime": "range_bound",
+                "market_regime_tag": "range_bound:low_volatility:balanced_size",
+                "strategy": "low_turnover_20d_uptrend_liquid_top120",
+                "label": "低换手上升趋势",
+                "period_count": 8,
+                "mean_net_return": 0.02,
+                "mean_net_excess_return": 0.03,
+                "positive_net_excess_rate": 0.75,
+            },
+            {
+                "entry_price_source": "next_close",
+                "trend_regime": "range_bound",
+                "market_regime_tag": "range_bound:normal_volatility:balanced_size",
+                "strategy": "low_turnover_20d_uptrend_liquid_top120",
+                "label": "低换手上升趋势",
+                "period_count": 4,
+                "mean_net_return": 0.01,
+                "mean_net_excess_return": 0.02,
+                "positive_net_excess_rate": 0.5,
+            },
+            {
+                "entry_price_source": "next_close",
+                "trend_regime": "range_bound",
+                "market_regime_tag": "range_bound:low_volatility:balanced_size",
+                "strategy": "base",
+                "label": "基础动量",
+                "period_count": 12,
+                "mean_net_return": 0.01,
+                "mean_net_excess_return": 0.01,
+                "positive_net_excess_rate": 0.5,
+            },
+        ],
         "portfolio_confidence_intervals": {
             "status": "ready",
             "method": "bootstrap",
@@ -45,6 +79,11 @@ def test_strategy_slice_response_projection_keeps_ui_fields_and_drops_heavy_deta
     assert slim["data_scope"] == {"signal_day_count": 717}
     assert slim["overall_strategy_rows"] == [{"strategy": "low_turnover"}]
     assert slim["regime_winner_rows"] == [{"regime": "up"}]
+    assert slim["coarse_regime_winner_rows"][0]["market_regime_tag"] == "range_bound"
+    assert slim["coarse_regime_winner_rows"][0]["regime_granularity"] == "trend_regime"
+    assert slim["coarse_regime_winner_rows"][0]["winner_sample_count"] == 12
+    assert slim["coarse_regime_winner_rows"][0]["winner_mean_net_excess_return"] == 0.026667
+    assert slim["coarse_regime_winner_rows"][0]["frozen_is_winner"] is True
     assert slim["regime_coverage_rows"] == [{"regime": "up", "month_count": 3}]
     assert slim["portfolio_forward_tracking_alignment"] == {"status": "insufficient_forward_sample"}
     assert slim["portfolio_confidence_intervals"] == {

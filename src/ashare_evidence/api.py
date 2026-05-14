@@ -259,6 +259,9 @@ def _slim_shortpick_strategy_slice_evidence(payload: dict[str, object]) -> dict[
             "portfolio_forward_tracking_alignment",
         ),
     )
+    coarse_regime_winners = _shortpick_coarse_regime_winner_rows(payload)
+    if coarse_regime_winners:
+        slim["coarse_regime_winner_rows"] = coarse_regime_winners
     confidence = payload.get("portfolio_confidence_intervals")
     if isinstance(confidence, dict):
         slim["portfolio_confidence_intervals"] = _copy_dict_keys(
@@ -285,6 +288,116 @@ def _slim_shortpick_strategy_slice_evidence(payload: dict[str, object]) -> dict[
             ("status", "reason", "basis", "horizon_days", "rows", "symbol_industry"),
         )
     return slim
+
+
+def _shortpick_coarse_regime_winner_rows(payload: dict[str, object]) -> list[dict[str, object]]:
+    """Derive broader trend-regime winners from monthly regime strategy rows.
+
+    The raw staged artifact groups monthly portfolio periods by
+    trend:volatility:size-style. That is useful for diagnostics, but it leaves
+    many visible buckets with only a few months. The UI defaults to this coarser
+    trend-only projection and keeps the fine-grained artifact available for
+    future drilldown.
+    """
+    source_rows = [
+        row
+        for row in payload.get("regime_strategy_rows") or []
+        if isinstance(row, dict)
+    ]
+    grouped: dict[tuple[str, str], dict[str, list[dict[str, object]]]] = {}
+    for row in source_rows:
+        period_count = int(row.get("period_count") or row.get("trade_count") or 0)
+        if period_count <= 0:
+            continue
+        entry = str(row.get("entry_price_source") or "")
+        trend = str(row.get("trend_regime") or "missing")
+        strategy = str(row.get("strategy") or "")
+        if not entry or not strategy:
+            continue
+        grouped.setdefault((entry, trend), {}).setdefault(strategy, []).append(row)
+
+    output: list[dict[str, object]] = []
+    for (entry, trend), strategy_rows in sorted(grouped.items(), key=lambda item: item[0]):
+        ranked = sorted(
+            (
+                _shortpick_aggregate_regime_strategy_rows(strategy, rows, trend)
+                for strategy, rows in strategy_rows.items()
+            ),
+            key=lambda item: (
+                float(item.get("mean_net_excess_return") if item.get("mean_net_excess_return") is not None else -999.0),
+                float(item.get("mean_net_return") if item.get("mean_net_return") is not None else -999.0),
+            ),
+            reverse=True,
+        )
+        if not ranked:
+            continue
+        winner = ranked[0]
+        frozen_index = next(
+            (
+                index
+                for index, item in enumerate(ranked, start=1)
+                if item.get("strategy") == CURRENT_FROZEN_STRATEGY
+            ),
+            None,
+        )
+        frozen = ranked[frozen_index - 1] if frozen_index is not None else None
+        output.append(
+            {
+                "entry_price_source": entry,
+                "market_regime_tag": trend,
+                "regime_group_key": trend,
+                "regime_granularity": "trend_regime",
+                "eligible_strategy_count": len(ranked),
+                "winner_strategy": winner.get("strategy"),
+                "winner_label": winner.get("label"),
+                "winner_period_count": winner.get("period_count"),
+                "winner_trade_count": winner.get("period_count"),
+                "winner_sample_count": winner.get("period_count"),
+                "winner_mean_net_excess_return": winner.get("mean_net_excess_return"),
+                "winner_positive_net_excess_rate": winner.get("positive_net_excess_rate"),
+                "frozen_rank": frozen_index,
+                "frozen_strategy": frozen.get("strategy") if frozen else CURRENT_FROZEN_STRATEGY,
+                "frozen_label": frozen.get("label") if frozen else "低换手上升趋势",
+                "frozen_period_count": frozen.get("period_count") if frozen else None,
+                "frozen_trade_count": frozen.get("period_count") if frozen else None,
+                "frozen_sample_count": frozen.get("period_count") if frozen else None,
+                "frozen_mean_net_excess_return": frozen.get("mean_net_excess_return") if frozen else None,
+                "frozen_is_winner": frozen_index == 1,
+                "basis": "monthly_portfolio_periods_grouped_by_trend_regime",
+            }
+        )
+    return output
+
+
+def _shortpick_aggregate_regime_strategy_rows(
+    strategy: str,
+    rows: list[dict[str, object]],
+    trend: str,
+) -> dict[str, object]:
+    period_count = sum(int(row.get("period_count") or row.get("trade_count") or 0) for row in rows)
+
+    def weighted_mean(key: str) -> float | None:
+        numerator = 0.0
+        denominator = 0
+        for row in rows:
+            value = row.get(key)
+            weight = int(row.get("period_count") or row.get("trade_count") or 0)
+            if value is None or weight <= 0:
+                continue
+            numerator += float(value) * weight
+            denominator += weight
+        return round(numerator / denominator, 6) if denominator else None
+
+    sample = rows[0]
+    return {
+        "strategy": strategy,
+        "label": sample.get("label") or strategy,
+        "trend_regime": trend,
+        "period_count": period_count,
+        "mean_net_return": weighted_mean("mean_net_return"),
+        "mean_net_excess_return": weighted_mean("mean_net_excess_return"),
+        "positive_net_excess_rate": weighted_mean("positive_net_excess_rate"),
+    }
 
 
 def _load_shortpick_market_factor_study_artifact(benchmark_mode: str) -> dict[str, object]:

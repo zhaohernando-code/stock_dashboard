@@ -140,6 +140,73 @@ function feedbackGroupDisplayLabel(title: string, group: ShortpickFeedbackGroup)
   return "其他分组";
 }
 
+function entryPriceSourceLabel(value?: string | null): string {
+  if (value === "next_close") return "次日收盘买入";
+  if (value === "next_open") return "次日开盘买入";
+  if (value === "same_close_proxy") return "同日收盘代理";
+  if (value === "same_day_intraday_current") return "14点盘中买入";
+  if (!value) return "待补入场口径";
+  return "其他入场口径";
+}
+
+function trendRegimeLabel(value?: string | null): string {
+  if (value === "uptrend") return "上行行情";
+  if (value === "downtrend") return "下行行情";
+  if (value === "range_bound") return "震荡行情";
+  if (value === "missing" || value === "missing_regime") return "行情待识别";
+  if (!value) return "行情待补";
+  return "其他行情";
+}
+
+function volatilityRegimeLabel(value?: string | null): string {
+  if (value === "low_volatility") return "低波动";
+  if (value === "normal_volatility") return "常规波动";
+  if (value === "high_volatility") return "高波动";
+  if (value === "missing") return "波动待识别";
+  return "";
+}
+
+function sizeStyleRegimeLabel(value?: string | null): string {
+  if (value === "balanced_size") return "大小盘均衡";
+  if (value === "large_cap_lead") return "大盘占优";
+  if (value === "small_cap_lead") return "小盘占优";
+  if (value === "missing") return "风格待识别";
+  return "";
+}
+
+function marketRegimeDisplayLabel(item: Record<string, unknown> | string | null | undefined): string {
+  if (typeof item === "string") {
+    const parts = item.split(":");
+    if (parts.length >= 3) {
+      return [trendRegimeLabel(parts[0]), volatilityRegimeLabel(parts[1]), sizeStyleRegimeLabel(parts[2])]
+        .filter(Boolean)
+        .join(" · ");
+    }
+    return trendRegimeLabel(item);
+  }
+  const trend = String(item?.trend_regime ?? item?.regime_group_key ?? item?.market_regime_tag ?? "");
+  const volatility = String(item?.volatility_regime ?? "");
+  const sizeStyle = String(item?.size_style_regime ?? "");
+  const isTrendOnly = String(item?.regime_granularity ?? "") === "trend_regime" || !String(item?.market_regime_tag ?? "").includes(":");
+  if (isTrendOnly) return trendRegimeLabel(trend);
+  return [trendRegimeLabel(trend), volatilityRegimeLabel(volatility), sizeStyleRegimeLabel(sizeStyle)]
+    .filter(Boolean)
+    .join(" · ") || "行情待补";
+}
+
+function periodKindLabel(value?: string | null): string {
+  if (value === "month") return "月度";
+  if (value === "quarter") return "季度";
+  if (value === "year") return "年度";
+  return "周期待补";
+}
+
+function regimeSampleCaution(sampleCount: number): string {
+  if (sampleCount < 6) return "低样本";
+  if (sampleCount < 12) return "观察样本";
+  return "样本尚可";
+}
+
 function statusColor(value: string): string {
   if (value === "completed" || value === "success") return "green";
   if (value === "running") return "blue";
@@ -2877,6 +2944,11 @@ function ReplayDecisionReadout({
   const industryStabilityRows = Array.isArray(industryStability.rows) ? industryStability.rows as Record<string, unknown>[] : [];
   const industryAttributionRows = Array.isArray(industryAttribution.rows) ? industryAttribution.rows as Record<string, unknown>[] : [];
   const strategyRegimeWinners = Array.isArray(strategySlice.regime_winner_rows) ? strategySlice.regime_winner_rows as Record<string, unknown>[] : [];
+  const strategyCoarseRegimeWinners = Array.isArray(strategySlice.coarse_regime_winner_rows) ? strategySlice.coarse_regime_winner_rows as Record<string, unknown>[] : [];
+  const displayedStrategyRegimeWinners = strategyCoarseRegimeWinners.length ? strategyCoarseRegimeWinners : strategyRegimeWinners;
+  const robustStrategyRegimeWinners = displayedStrategyRegimeWinners.filter((item) => Number(recordValue<number>(item, "winner_sample_count") ?? 0) >= 12);
+  const strategyRegimeRowsForTable = robustStrategyRegimeWinners.length ? robustStrategyRegimeWinners : displayedStrategyRegimeWinners;
+  const hiddenLowSampleRegimeCount = displayedStrategyRegimeWinners.length - strategyRegimeRowsForTable.length;
   const strategyRegimeCoverage = Array.isArray(strategySlice.regime_coverage_rows) ? strategySlice.regime_coverage_rows as Record<string, unknown>[] : [];
   const strategyOverallRows = Array.isArray(strategySlice.overall_strategy_rows) ? strategySlice.overall_strategy_rows as Record<string, unknown>[] : [];
   const portfolioConfidence = recordValue<Record<string, unknown>>(strategySlice, "portfolio_confidence_intervals") ?? {};
@@ -3026,10 +3098,10 @@ function ReplayDecisionReadout({
         />
       </div>
 
-      <div className="shortpick-replay-entry-matrix">
+        <div className="shortpick-replay-entry-matrix">
         <Space direction="vertical" size={2}>
           <Title level={5}>稳定性、置信与归因</Title>
-          <Text type="secondary">这些读数只来自离线 replay cache、staged portfolio artifact 和只读纸面 ledger；缺失项继续显示待补。</Text>
+          <Text type="secondary">这些读数只来自离线 replay cache、staged portfolio artifact 和只读纸面 ledger；行情表默认按趋势大类聚合，细分行情桶只作为下钻，不把个位数月份包装成强结论。</Text>
         </Space>
         <div className="shortpick-replay-decision-grid">
           <div className="shortpick-replay-decision-tile">
@@ -3056,7 +3128,7 @@ function ReplayDecisionReadout({
             </Space>
             <strong>{formatNumber(Number(strategySliceAdequacy.useful_regime_count ?? 0))} 个可用行情桶</strong>
             <Text>最低分组门槛 {formatNumber(Number(strategySliceAdequacy.min_regime_period_count ?? strategySliceAdequacy.min_regime_trade_count ?? 0))} 个周期样本</Text>
-            <Text type="secondary">行情桶不足时继续作为观察证据，不作为策略切换证明。</Text>
+            <Text type="secondary">当前分桶依据是月度组合路径；细桶过窄时只作观察，不作为策略切换证明。</Text>
           </div>
           <div className="shortpick-replay-decision-tile">
             <Space wrap size={6}>
@@ -3109,11 +3181,21 @@ function ReplayDecisionReadout({
         </div>
         <Table
           className="shortpick-replay-stat-table"
-          rowKey={(item) => `${String(item.entry_price_source)}-${String(item.market_regime_tag)}`}
+          rowKey={(item) => `${String(item.entry_price_source)}-${String(item.regime_group_key ?? item.market_regime_tag)}`}
           size="small"
           pagination={false}
           columns={[
-            { title: "入场 / 行情", render: (_, item) => `${String(item.entry_price_source ?? "--")} · ${String(item.market_regime_tag ?? "--")}` },
+            {
+              title: "入场 / 行情",
+              render: (_, item) => (
+                <Space direction="vertical" size={0}>
+                  <Text strong>{entryPriceSourceLabel(String(item.entry_price_source ?? ""))} · {marketRegimeDisplayLabel(item)}</Text>
+                  <Text type="secondary">
+                    {String(item.regime_granularity ?? "") === "trend_regime" ? "行情大类" : "细分行情桶"} · 月度组合路径
+                  </Text>
+                </Space>
+              ),
+            },
             {
               title: "胜出策略",
               render: (_, item) => (
@@ -3128,7 +3210,12 @@ function ReplayDecisionReadout({
               render: (_, item) => (
                 <Space direction="vertical" size={0}>
                   <Text className={`value-${valueTone(recordValue<number>(item, "winner_mean_net_excess_return"))}`}>均值 {formatPercent(recordValue<number>(item, "winner_mean_net_excess_return"))}</Text>
-                  <Text type="secondary">{formatNumber(Number(recordValue<number>(item, "winner_sample_count") ?? recordValue<number>(item, "winner_trade_count") ?? 0))} 个样本 · 胜率 {formatPercent(recordValue<number>(item, "winner_positive_net_excess_rate"))}</Text>
+                  <Text type="secondary">
+                    {formatNumber(Number(recordValue<number>(item, "winner_sample_count") ?? recordValue<number>(item, "winner_trade_count") ?? 0))} 个月度组合样本 · 胜率 {formatPercent(recordValue<number>(item, "winner_positive_net_excess_rate"))}
+                  </Text>
+                  <Tag color={Number(recordValue<number>(item, "winner_sample_count") ?? 0) < 12 ? "gold" : "blue"}>
+                    {regimeSampleCaution(Number(recordValue<number>(item, "winner_sample_count") ?? 0))}
+                  </Tag>
                 </Space>
               ),
             },
@@ -3144,7 +3231,12 @@ function ReplayDecisionReadout({
               ),
             },
           ]}
-          dataSource={strategyRegimeWinners.slice(0, 10)}
+          title={() => (
+            <Text type="secondary">
+              默认只展示不少于 12 个月度组合样本的行情结论；低样本分桶{hiddenLowSampleRegimeCount > 0 ? `已收起 ${formatNumber(hiddenLowSampleRegimeCount)} 个` : "未收起"}。
+            </Text>
+          )}
+          dataSource={strategyRegimeRowsForTable.slice(0, 10)}
           locale={{ emptyText: String(strategySlice.reason ?? "待长窗口策略切片产物补齐") }}
         />
         <Table
@@ -3154,7 +3246,7 @@ function ReplayDecisionReadout({
           pagination={false}
           columns={[
             { title: "长窗口策略", render: (_, item) => String(item.label ?? item.strategy ?? "--") },
-            { title: "入场", render: (_, item) => String(item.entry_price_source ?? "--") },
+            { title: "入场", render: (_, item) => entryPriceSourceLabel(String(item.entry_price_source ?? "")) },
             {
               title: "组合超额 / 胜率",
               render: (_, item) => (
@@ -3175,7 +3267,7 @@ function ReplayDecisionReadout({
           size="small"
           pagination={false}
           columns={[
-            { title: "组合置信口径", render: (_, item) => `${String(item.entry_price_source ?? "--")} · ${String(item.label ?? "--")}` },
+            { title: "组合置信口径", render: (_, item) => `${entryPriceSourceLabel(String(item.entry_price_source ?? ""))} · ${String(item.label ?? "--")}` },
             {
               title: "均值 / 区间",
               render: (_, item) => (
@@ -3197,9 +3289,9 @@ function ReplayDecisionReadout({
           size="small"
           pagination={false}
           columns={[
-            { title: "组合归因口径", render: (_, item) => `${String(item.entry_price_source ?? "--")} · ${String(item.label ?? item.strategy ?? "--")}` },
+            { title: "组合归因口径", render: (_, item) => `${entryPriceSourceLabel(String(item.entry_price_source ?? ""))} · ${String(item.label ?? item.strategy ?? "--")}` },
             { title: "最佳 / 最差月份", render: (_, item) => `${String(item.best_month ?? "--")} / ${String(item.worst_month ?? "--")}` },
-            { title: "最佳 / 最差行情", render: (_, item) => `${String(item.best_regime ?? "--")} / ${String(item.worst_regime ?? "--")}` },
+            { title: "最佳 / 最差行情", render: (_, item) => `${marketRegimeDisplayLabel(String(item.best_regime ?? ""))} / ${marketRegimeDisplayLabel(String(item.worst_regime ?? ""))}` },
             {
               title: "去贡献项后",
               render: (_, item) => (
@@ -3219,8 +3311,8 @@ function ReplayDecisionReadout({
           size="small"
           pagination={false}
           columns={[
-            { title: "稳定口径", render: (_, item) => `${String(item.entry_price_source ?? "--")} · ${String(item.label ?? item.strategy ?? "--")}` },
-            { title: "周期", render: (_, item) => String(item.period_kind ?? "--") },
+            { title: "稳定口径", render: (_, item) => `${entryPriceSourceLabel(String(item.entry_price_source ?? ""))} · ${String(item.label ?? item.strategy ?? "--")}` },
+            { title: "周期", render: (_, item) => periodKindLabel(String(item.period_kind ?? "")) },
             {
               title: "均值 / 正超额",
               render: (_, item) => (
@@ -3249,7 +3341,7 @@ function ReplayDecisionReadout({
           size="small"
           pagination={false}
           columns={[
-            { title: "市场阶段", render: (_, item) => String(item.market_regime_tag ?? "--") },
+            { title: "市场阶段", render: (_, item) => marketRegimeDisplayLabel(item) },
             { title: "口径", render: (_, item) => String(item.label ?? item.family ?? "--") },
             {
               title: "超额 / 胜率",
