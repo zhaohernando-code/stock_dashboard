@@ -155,7 +155,7 @@
     "shortpick_historical_replay_full_trade_attribution": "published_runtime_local_verified_latest_successful_canonical_auth_blocked",
     "shortpick_historical_replay_llm_stratified_expansion": "18_real_runs_completed_cache_refreshed_published_runtime_local_verified_latest_successful_canonical_auth_blocked",
         "shortpick_intraday_quote_snapshot_artifact": "published_runtime_verified_latest_successful",
-        "research_artifact_runtime_storage_flow": "published_runtime_local_verified_manifest_20260516T143128Z_6130f5ca7d24_canonical_auth_redirect_canonical_dirty_artifacts_copied_to_runtime_data_artifacts"
+        "research_artifact_runtime_storage_flow": "published_runtime_local_verified_latest_successful_canonical_auth_redirect_canonical_dirty_artifacts_copied_to_runtime_data_artifacts"
     },
   "latest_findings": [
     {

@@ -1248,5 +1248,5 @@ canonical checkout 中的 `data/artifacts` 改动经抽样确认是正常 phase2
 - `ASHARE_ARTIFACT_ROOT` 现在优先级高于 sqlite DB 推导，便于运行时和维护任务显式指向 runtime/output 数据目录。
 - artifact 写入增加 source-checkout 保护：默认拒绝写入 `PROJECT_ROOT/artifacts` 和 `PROJECT_ROOT/data/artifacts`，只有显式设置 `ASHARE_ALLOW_REPO_ARTIFACT_WRITES=1` 才允许 intentional fixture refresh。
 - `run-scheduled-refresh.sh`、`start-local-backend.sh`、`publish-local-runtime.sh` 均会显式导出 artifact root；发布后的 post-deploy refresh 固定写入 `$RUNTIME_ROOT/data/artifacts`。
-- 已发布到 runtime，release manifest `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260516T143128Z-6130f5ca7d24/manifest.json`，deploy verifier `19 passed, 0 failed`；localhost 浏览器验证首页实际服务正常。canonical 入口未登录会话返回登录跳转，本轮未越过登录态复验业务页。
+- 已发布到 runtime，并更新 `output/releases/latest-successful.json`；deploy verifier `19 passed, 0 failed`；localhost 浏览器验证首页实际服务正常。canonical 入口未登录会话返回登录跳转，本轮未越过登录态复验业务页。
 - canonical 中现有 dirty artifact 文件暂未清理或回滚，等待明确批准后再从源码 checkout 移除这些生成产物改动。
