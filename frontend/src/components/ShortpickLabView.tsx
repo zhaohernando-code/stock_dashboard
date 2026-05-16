@@ -2,7 +2,6 @@ import {
   Alert,
   Button,
   Card,
-  Checkbox,
   Collapse,
   Descriptions,
   Empty,
@@ -1186,6 +1185,34 @@ function nextPendingEntryDate(rows: ShortpickPaperTrackingItem[]): string {
     .sort()[0] ?? "";
 }
 
+type PaperTrackingGroupFilter = "" | "frozen_strategy" | "llm_paper_control" | "market_factor_control" | "market_random_control";
+type PaperTrackingEntryStateFilter = "entered" | "pending" | "";
+type PaperTrackingEntryRuleFilter = "" | "next_close" | "next_open" | "same_day_intraday_current";
+
+function paperTrackingEntryRuleKey(item: ShortpickPaperTrackingItem): PaperTrackingEntryRuleFilter {
+  const entryRule = item.entry_rule ?? "";
+  if (entryRule.includes("开盘")) return "next_open";
+  if (entryRule.includes("盘中") || entryRule.includes("当前价")) return "same_day_intraday_current";
+  return "next_close";
+}
+
+function paperTrackingSearchText(item: ShortpickPaperTrackingItem): string {
+  return [
+    item.symbol,
+    item.name,
+    paperTrackingSignalDate(item),
+    paperTrackingEntryDate(item),
+    paperTrackingGroupLabel(item.tracking_group),
+    item.selection_label,
+    item.entry_rule,
+    item.exit_rule,
+    item.thesis,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
 export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
   const [runs, setRuns] = useState<ShortpickRunView[]>([]);
   const [selectedRun, setSelectedRun] = useState<ShortpickRunView | null>(null);
@@ -2068,9 +2095,21 @@ function PaperTrackingTab({
   const summary = tracking?.summary ?? {};
   const latestRun = tracking?.latest_run ?? null;
   const rows = tracking?.items ?? [];
-  const [showFrozenOnly, setShowFrozenOnly] = useState(false);
-  const enteredRows = rows.filter((item) => hasPaperTrackingEntered(item));
-  const displayRows = showFrozenOnly ? enteredRows.filter((item) => item.tracking_group === "frozen_strategy") : enteredRows;
+  const [ledgerSearch, setLedgerSearch] = useState("");
+  const [ledgerGroupFilter, setLedgerGroupFilter] = useState<PaperTrackingGroupFilter>("");
+  const [ledgerEntryStateFilter, setLedgerEntryStateFilter] = useState<PaperTrackingEntryStateFilter>("entered");
+  const [ledgerEntryRuleFilter, setLedgerEntryRuleFilter] = useState<PaperTrackingEntryRuleFilter>("");
+  const normalizedLedgerSearch = ledgerSearch.trim().toLowerCase();
+  const displayRows = rows.filter((item) => {
+    const entered = hasPaperTrackingEntered(item);
+    if (ledgerEntryStateFilter === "entered" && !entered) return false;
+    if (ledgerEntryStateFilter === "pending" && entered) return false;
+    if (ledgerGroupFilter && item.tracking_group !== ledgerGroupFilter) return false;
+    if (ledgerEntryRuleFilter && paperTrackingEntryRuleKey(item) !== ledgerEntryRuleFilter) return false;
+    if (normalizedLedgerSearch && !paperTrackingSearchText(item).includes(normalizedLedgerSearch)) return false;
+    return true;
+  });
+  const filteredOutCount = Math.max(rows.length - displayRows.length, 0);
   const choiceLabel = paperTrackingChoiceLabel(latestRun);
   const choiceRows = latestPaperTrackingChoices(rows, latestRun);
   const choiceTimingText = paperTrackingChoiceTimingText(choiceLabel, choiceRows, latestRun);
@@ -2281,12 +2320,69 @@ function PaperTrackingTab({
       <Card
         className="panel-card shortpick-paper-ledger-card"
         title="纸面跟踪记录（正式策略与对照组）"
-        extra={(
-          <Checkbox checked={showFrozenOnly} onChange={(event) => setShowFrozenOnly(event.target.checked)}>
-            仅看冻结规则
-          </Checkbox>
-        )}
       >
+        <Space wrap className="shortpick-filter-bar shortpick-paper-ledger-filter-bar">
+          <Input.Search
+            allowClear
+            className="shortpick-paper-ledger-search"
+            placeholder="搜索股票、代码、策略、日期"
+            value={ledgerSearch}
+            onChange={(event) => setLedgerSearch(event.target.value)}
+            onSearch={(value) => setLedgerSearch(value)}
+          />
+          <Select
+            className="shortpick-paper-ledger-select"
+            placeholder="记录分组"
+            value={ledgerGroupFilter || undefined}
+            allowClear
+            options={[
+              { value: "frozen_strategy", label: "冻结策略" },
+              { value: "llm_paper_control", label: "LLM纸面对照" },
+              { value: "market_factor_control", label: "市场因子对照" },
+              { value: "market_random_control", label: "同池随机基线" },
+            ]}
+            onChange={(value) => setLedgerGroupFilter((value ?? "") as PaperTrackingGroupFilter)}
+          />
+          <Select
+            className="shortpick-paper-ledger-select"
+            placeholder="入场状态"
+            value={ledgerEntryStateFilter || undefined}
+            options={[
+              { value: "entered", label: "已入场" },
+              { value: "pending", label: "等待入场" },
+              { value: "", label: "全部状态" },
+            ]}
+            onChange={(value) => setLedgerEntryStateFilter((value ?? "") as PaperTrackingEntryStateFilter)}
+          />
+          <Select
+            className="shortpick-paper-ledger-select"
+            placeholder="买入口径"
+            value={ledgerEntryRuleFilter || undefined}
+            allowClear
+            options={[
+              { value: "next_close", label: "收盘买入" },
+              { value: "next_open", label: "开盘买入" },
+              { value: "same_day_intraday_current", label: "盘中买入" },
+            ]}
+            onChange={(value) => setLedgerEntryRuleFilter((value ?? "") as PaperTrackingEntryRuleFilter)}
+          />
+          <Text type="secondary">
+            显示 {displayRows.length} / {rows.length} 条{filteredOutCount ? ` · 已筛掉 ${filteredOutCount} 条` : ""}
+          </Text>
+          {(ledgerSearch || ledgerGroupFilter || ledgerEntryStateFilter !== "entered" || ledgerEntryRuleFilter) ? (
+            <Button
+              size="small"
+              onClick={() => {
+                setLedgerSearch("");
+                setLedgerGroupFilter("");
+                setLedgerEntryStateFilter("entered");
+                setLedgerEntryRuleFilter("");
+              }}
+            >
+              重置
+            </Button>
+          ) : null}
+        </Space>
         {displayRows.length ? (
           <>
             <Table
@@ -2320,11 +2416,15 @@ function PaperTrackingTab({
           </>
         ) : (
           <Empty
-            description={loading
-              ? "纸面跟踪状态加载中"
-              : pendingEntryDate
-                ? `尚无已入场纸面记录；最新信号将在 ${pendingEntryDate} 收盘买入后进入跟踪记录。`
-                : "尚无已入场纸面记录；等待首个冻结后盘后批次。"}
+            description={
+              loading
+                ? "纸面跟踪状态加载中"
+                : rows.length
+                  ? "没有符合当前筛选条件的纸面跟踪记录。"
+                  : pendingEntryDate
+                    ? `尚无已入场纸面记录；最新信号将在 ${pendingEntryDate} 收盘买入后进入跟踪记录。`
+                    : "尚无已入场纸面记录；等待首个冻结后盘后批次。"
+            }
           />
         )}
       </Card>

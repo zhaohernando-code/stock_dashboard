@@ -428,6 +428,18 @@ body[data-theme="dark"] {
   margin-bottom: 0;
 }
 
+.shortpick-paper-ledger-filter-bar {
+  align-items: center;
+}
+
+.shortpick-paper-ledger-search {
+  width: 260px;
+}
+
+.shortpick-paper-ledger-select {
+  min-width: 132px;
+}
+
 .shortpick-replay-readout .ant-alert {
   margin-bottom: 16px;
 }
@@ -1463,7 +1475,9 @@ body[data-theme="dark"] .chart-shell,
   }
 
   .shortpick-run-select,
-  .shortpick-filter-input {
+  .shortpick-filter-input,
+  .shortpick-paper-ledger-search,
+  .shortpick-paper-ledger-select {
     width: 100%;
   }
 
