@@ -4,8 +4,11 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from ashare_evidence.research_artifact_store import (
+    PROJECT_ROOT,
+    artifact_root_from_database_url,
     portfolio_backtest_artifact_id,
     read_backtest_artifact,
     read_phase5_holding_policy_experiment_artifact,
@@ -23,6 +26,7 @@ from ashare_evidence.research_artifact_store import (
     write_phase5_horizon_study_artifact,
     write_phase5_producer_contract_study_artifact,
     write_replay_alignment_artifact,
+    write_shortpick_lab_artifact,
     write_validation_metrics,
 )
 from ashare_evidence.research_artifacts import (
@@ -39,6 +43,24 @@ from ashare_evidence.research_artifacts import (
 
 
 class ResearchArtifactStoreTests(unittest.TestCase):
+    def test_artifact_root_env_overrides_sqlite_database_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            configured_root = Path(temp_dir) / "runtime-artifacts"
+            database_url = f"sqlite:///{Path(temp_dir) / 'db' / 'ashare_dashboard.db'}"
+
+            with patch.dict("os.environ", {"ASHARE_ARTIFACT_ROOT": str(configured_root)}):
+                self.assertEqual(artifact_root_from_database_url(database_url), configured_root)
+
+    def test_repo_artifact_writes_require_explicit_allow(self) -> None:
+        target_root = PROJECT_ROOT / "data" / "artifacts"
+
+        with self.assertRaisesRegex(RuntimeError, "Refusing to write generated research artifact"):
+            write_shortpick_lab_artifact(
+                artifact_id="unit-test-guard",
+                payload={"status": "should_not_write_to_repo"},
+                root=target_root,
+            )
+
     def test_resolve_backtest_artifact_falls_back_to_canonical_portfolio_key(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

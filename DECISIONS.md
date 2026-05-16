@@ -1239,3 +1239,13 @@ After the topic/industry split, result review showed that `C 制造业` still do
 - `output/shortpick-replay-feedback-cache.json` 已刷新到 `126` 个历史 replay run、`13460` 条 aggregate validation；前端 projection `shortpick_replay_feedback:v1` 已刷新，payload 约 `1.23MB`。
 - `run_shortpick_intraday_same_day_control` 会为 selection universe 写 `shortpick-intraday-quote-snapshot:{run_id}:selection_universe` artifact，payload 保留完整 quote snapshot、采集时间、来源和边界说明。历史未采集日期仍不能用日线 proxy 回填成真实 14:00 成交。
 - 本轮发布成功并更新 `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/latest-successful.json`，deploy verifier `19 passed, 0 failed`；localhost `试验田 -> 历史回放` 已验证默认决策视图、交易级行情切片、展开后的逐笔股票/行业贡献。canonical 入口在 Playwright 未登录会话中跳转统一登录页，本轮未越过登录态复验业务页。
+
+[2026-05-16T22:45:00+08:00] Generated research artifacts belong in runtime data, not the source checkout:
+canonical checkout 中的 `data/artifacts` 改动经抽样确认是正常 phase2/phase5 统计产物再生成：manifest/validation/backtest JSON 均符合既有 artifact contract，典型 diff 是 2026-05-15 交易日加入后样本从 94 到 95、滚动窗口从 35 到 36。这些数据可信到可以作为运行时只读缓存继续使用，但不应作为源码改动提交。
+
+补充说明
+- 已将 canonical `data/artifacts` 内容同步到 `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts`；运行时目录当前 JSON 全量解析通过，`1041` 个 artifact 文件无坏 JSON。
+- `ASHARE_ARTIFACT_ROOT` 现在优先级高于 sqlite DB 推导，便于运行时和维护任务显式指向 runtime/output 数据目录。
+- artifact 写入增加 source-checkout 保护：默认拒绝写入 `PROJECT_ROOT/artifacts` 和 `PROJECT_ROOT/data/artifacts`，只有显式设置 `ASHARE_ALLOW_REPO_ARTIFACT_WRITES=1` 才允许 intentional fixture refresh。
+- `run-scheduled-refresh.sh`、`start-local-backend.sh`、`publish-local-runtime.sh` 均会显式导出 artifact root；发布后的 post-deploy refresh 固定写入 `$RUNTIME_ROOT/data/artifacts`。
+- canonical 中现有 dirty artifact 文件暂未清理或回滚，等待明确批准后再从源码 checkout 移除这些生成产物改动。

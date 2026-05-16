@@ -22,6 +22,7 @@ def test_publish_python_bin_covers_verifier_and_refresh() -> None:
     script = SCRIPT_PATH.read_text(encoding="utf-8")
 
     assert 'PYTHON_BIN="${PYTHON_BIN:-python3}"' in script
+    assert 'export ASHARE_ARTIFACT_ROOT="${ASHARE_ARTIFACT_ROOT:-$RUNTIME_ROOT/data/artifacts}"' in script
     assert 'PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.release_verifier' in script
     assert '--release-output-root "$RUNTIME_ROOT/output/releases"' in script
     assert 'PYTHONPATH="$RUNTIME_ROOT/src" "$PYTHON_BIN" -m ashare_evidence.cli refresh-runtime-data' in script

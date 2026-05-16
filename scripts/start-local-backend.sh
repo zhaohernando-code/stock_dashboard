@@ -22,5 +22,6 @@ fi
 
 export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 export ASHARE_DATABASE_URL="${ASHARE_DATABASE_URL:-sqlite:///$REPO_ROOT/data/ashare_dashboard.db}"
+export ASHARE_ARTIFACT_ROOT="${ASHARE_ARTIFACT_ROOT:-$REPO_ROOT/data/artifacts}"
 
 exec "$VENV_PATH/bin/python" -m uvicorn ashare_evidence.api:app --host 127.0.0.1 --port "$PORT"

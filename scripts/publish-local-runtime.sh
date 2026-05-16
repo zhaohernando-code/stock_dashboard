@@ -269,6 +269,7 @@ if [[ -f "$BACKEND_ENV_FILE" ]]; then
   source "$BACKEND_ENV_FILE"
   set +a
 fi
+export ASHARE_ARTIFACT_ROOT="${ASHARE_ARTIFACT_ROOT:-$RUNTIME_ROOT/data/artifacts}"
 if [[ "$REFRESH_MODE" == "skip" ]]; then
   echo "[publish] Data refresh skipped by ASHARE_PUBLISH_REFRESH_MODE=skip"
 elif [[ "$REFRESH_MODE" == "async" ]]; then

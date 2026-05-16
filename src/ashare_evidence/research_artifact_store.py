@@ -21,6 +21,10 @@ from ashare_evidence.research_artifacts import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "artifacts"
+REPO_ARTIFACT_ROOTS = (
+    PROJECT_ROOT / "artifacts",
+    PROJECT_ROOT / "data" / "artifacts",
+)
 ARTIFACT_FOLDERS = {
     "rolling_validation": "manifests",
     "validation_metrics": "validation",
@@ -45,6 +49,9 @@ def _artifact_root(root: Path | None = None) -> Path:
 
 
 def artifact_root_from_database_url(database_url: str | None) -> Path:
+    configured = os.getenv("ASHARE_ARTIFACT_ROOT")
+    if configured:
+        return Path(configured)
     if database_url and database_url.startswith("sqlite:///") and database_url != "sqlite:///:memory:":
         db_path = Path(database_url.removeprefix("sqlite:///")).resolve()
         return db_path.parent / "artifacts"
@@ -58,10 +65,28 @@ def artifact_path(artifact_type: str, artifact_id: str, *, root: Path | None = N
 
 def _write_model(model: BaseModel, artifact_type: str, artifact_id: str, *, root: Path | None = None) -> Path:
     target = artifact_path(artifact_type, artifact_id, root=root)
+    _ensure_artifact_write_allowed(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     payload = model.model_dump(mode="json")
     target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return target
+
+
+def _ensure_artifact_write_allowed(target: Path) -> None:
+    if os.getenv("ASHARE_ALLOW_REPO_ARTIFACT_WRITES") == "1":
+        return
+    resolved_target = target.resolve()
+    for repo_root in REPO_ARTIFACT_ROOTS:
+        resolved_root = repo_root.resolve()
+        try:
+            resolved_target.relative_to(resolved_root)
+        except ValueError:
+            continue
+        raise RuntimeError(
+            "Refusing to write generated research artifact into the source checkout. "
+            f"target={resolved_target}. Set ASHARE_ARTIFACT_ROOT to a runtime/output data directory, "
+            "or set ASHARE_ALLOW_REPO_ARTIFACT_WRITES=1 only for an intentional fixture refresh."
+        )
 
 
 def _read_model(model_type: type[ArtifactModel], artifact_type: str, artifact_id: str, *, root: Path | None = None) -> ArtifactModel:
@@ -93,6 +118,7 @@ def write_shortpick_lab_artifact(
     root: Path | None = None,
 ) -> Path:
     target = artifact_path("shortpick_lab", artifact_id, root=root)
+    _ensure_artifact_write_allowed(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
     return target
