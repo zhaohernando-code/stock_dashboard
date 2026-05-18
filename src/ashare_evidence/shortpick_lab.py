@@ -361,8 +361,8 @@ def shortpick_market_factor_paper_control_contracts() -> dict[str, Any]:
             },
             {
                 "role": SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
-                "label": "次日开盘买入版",
-                "selection_rule": "沿用冻结低换手上升趋势第1名，只把入场价格从次一交易日收盘改为次一交易日开盘；若次日开盘价接近涨停，则不假设开盘可成交。",
+                "label": "冻结候选 v2：次日开盘买入",
+                "selection_rule": "沿用冻结 v1 的低换手上升趋势第1名，只把入场价格从次一交易日收盘改为次一交易日开盘；若次日开盘价接近涨停，则不假设开盘可成交。",
                 "entry_rule": "次一交易日开盘买入；开盘直接接近涨停时标记为不可假设成交。",
             },
             {

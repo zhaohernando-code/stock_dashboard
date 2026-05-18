@@ -1250,3 +1250,12 @@ canonical checkout 中的 `data/artifacts` 改动经抽样确认是正常 phase2
 - `run-scheduled-refresh.sh`、`start-local-backend.sh`、`publish-local-runtime.sh` 均会显式导出 artifact root；发布后的 post-deploy refresh 固定写入 `$RUNTIME_ROOT/data/artifacts`。
 - 已发布到 runtime，并更新 `output/releases/latest-successful.json`；deploy verifier `19 passed, 0 failed`；localhost 浏览器验证首页实际服务正常。canonical 入口未登录会话返回登录跳转，本轮未越过登录态复验业务页。
 - canonical 中现有 dirty artifact 文件暂未清理或回滚，等待明确批准后再从源码 checkout 移除这些生成产物改动。
+
+[2026-05-18T20:05:00+08:00] Shortpick open-entry line is promoted as frozen candidate v2, not a silent replacement:
+历史回放和首批 live 纸面跟踪都显示，当前低换手上升趋势策略在“次日开盘买入”口径下优于“次日收盘买入”。该差异属于入场价格源变更，不是文案改名，因此不能覆盖现有冻结 v1 的历史连续性。
+
+补充说明
+- `frozen_paper_primary` 继续表示冻结 v1：同一选股规则，次一交易日收盘买入。
+- `market_factor_control_low_turnover_uptrend_next_open_entry` 在纸面跟踪 API/前端中提升为 `frozen_strategy_v2`：冻结候选 v2，次一交易日开盘买入。
+- v2 复用现有候选生成、可成交性检查、验证快照和四轨退出计算；本轮只调整分组、标签、汇总和前端展示，不改变交易计算流程。
+- 正式主线切换仍需更多 live 批次确认；当前产品显示应让 v1/v2 并排，而不是把 v2 包装成已经替代 v1。

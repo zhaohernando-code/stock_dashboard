@@ -119,6 +119,7 @@ from ashare_evidence.services import get_latest_recommendation_summary, get_reco
 from ashare_evidence.shortpick_lab import (
     SHORTPICK_INFORMATION_MODE,
     SHORTPICK_LLM_PAPER_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_PAPER_CONTROL_ROLES,
     SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE,
     build_shortpick_model_feedback,
@@ -815,6 +816,8 @@ def _shortpick_market_control_contract_by_role(contract: dict[str, object], role
 def _shortpick_tracking_group_for_role(role: str, *, is_frozen_item: bool, is_llm_control_item: bool) -> str:
     if is_frozen_item:
         return "frozen_strategy"
+    if role == SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE:
+        return "frozen_strategy_v2"
     if is_llm_control_item:
         return "llm_paper_control"
     if role == SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE:
@@ -997,6 +1000,7 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
     latest_run_date = latest_run.run_date if latest_run else None
 
     frozen_items = [item for item in items if item.get("tracking_group") == "frozen_strategy"]
+    frozen_v2_items = [item for item in items if item.get("tracking_group") == "frozen_strategy_v2"]
     llm_control_items = [item for item in items if item.get("tracking_group") == "llm_paper_control"]
     market_control_items = [
         item
@@ -1043,6 +1047,7 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
         ),
         "summary": {
             "tracked_signal_count": len(frozen_items),
+            "frozen_v2_signal_count": len(frozen_v2_items),
             "llm_paper_control_signal_count": len(llm_control_items),
             "market_control_signal_count": len(market_control_items),
             "comparison_signal_count": len(items),

@@ -1846,6 +1846,61 @@ class ShortpickLabTests(unittest.TestCase):
                     },
                 )
             )
+            open_candidate = ShortpickCandidate(
+                run_id=seed_run.id,
+                candidate_key="shortpick-prefreeze-paper-seed-test:frozen-v2-open",
+                symbol="600000.SH",
+                name="浦发银行",
+                normalized_theme="低换手上升趋势",
+                horizon_trading_days=10,
+                confidence=None,
+                thesis="v2 沿用冻结选股，次日开盘入场。",
+                catalysts=[],
+                invalidation=[],
+                risks=[],
+                sources_payload=[],
+                novelty_note=None,
+                limitations=[],
+                convergence_group="frozen-v2",
+                research_priority="market_factor_open_entry_low_turnover_uptrend",
+                parse_status="parsed",
+                is_system_external=False,
+                candidate_payload={
+                    "tracking_role": SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
+                    "paper_tracking_signal_date": "2026-05-08",
+                    "paper_tracking_entry_date": "2026-05-11",
+                    "paper_tracking_entry_price_source": "next_open",
+                    "market_factor_overlay": {"source_rank": 1},
+                },
+            )
+            session.add(open_candidate)
+            session.flush()
+            session.add(
+                ShortpickValidationSnapshot(
+                    candidate_id=open_candidate.id,
+                    horizon_days=5,
+                    status="completed",
+                    entry_at=datetime(2026, 5, 11, 1, 30, tzinfo=UTC),
+                    exit_at=datetime(2026, 5, 18, 7, 0, tzinfo=UTC),
+                    entry_close=100,
+                    exit_close=111,
+                    stock_return=0.11,
+                    benchmark_return=0.01,
+                    excess_return=0.10,
+                    max_favorable_return=0.12,
+                    max_drawdown=-0.01,
+                    validation_payload={
+                        "paper_tracking_exit_tracks": [
+                            {
+                                "key": "mechanical_5d",
+                                "label": "机械5日",
+                                "exit_trade_day": "2026-05-18",
+                                "stock_return": 0.11,
+                            }
+                        ]
+                    },
+                )
+            )
 
         client = TestClient(create_app(self.database_url, enable_background_ops_tick=False))
         response = client.get("/shortpick-lab/paper-tracking")
@@ -1858,6 +1913,10 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(by_symbol["601138.SH"]["tracking_group"], "frozen_strategy")
         self.assertEqual(by_symbol["601138.SH"]["validation_status"], "completed")
         self.assertEqual(by_symbol["601138.SH"]["paper_tracking_exit_tracks"][0]["key"], "mechanical_5d")
+        self.assertEqual(by_symbol["600000.SH"]["tracking_group"], "frozen_strategy_v2")
+        self.assertEqual(by_symbol["600000.SH"]["selection_label"], "冻结候选 v2：次日开盘买入")
+        self.assertEqual(payload["summary"]["tracked_signal_count"], 1)
+        self.assertEqual(payload["summary"]["frozen_v2_signal_count"], 1)
 
     def test_run_list_supports_pagination_filters_and_retryable_summary(self) -> None:
         self._seed_daily_bars()

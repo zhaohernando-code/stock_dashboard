@@ -1064,6 +1064,7 @@ function paperTrackingGroupLabel(value?: string | null): string {
   if (value === "llm_paper_control") return "LLM纸面对照";
   if (value === "market_factor_control") return "市场因子对照";
   if (value === "market_random_control") return "同池随机基线";
+  if (value === "frozen_strategy_v2") return "冻结候选 v2";
   if (value === "frozen_strategy") return "冻结策略";
   return "纸面跟踪";
 }
@@ -1072,6 +1073,7 @@ function paperTrackingGroupColor(value?: string | null): string {
   if (value === "llm_paper_control") return "blue";
   if (value === "market_factor_control") return "cyan";
   if (value === "market_random_control") return "default";
+  if (value === "frozen_strategy_v2") return "geekblue";
   if (value === "frozen_strategy") return "purple";
   return "default";
 }
@@ -1085,10 +1087,11 @@ function initialShortpickWorkspaceTab(): ShortpickWorkspaceTab {
 
 function paperTrackingDisplayRank(item: ShortpickPaperTrackingItem): number {
   if (item.tracking_group === "frozen_strategy") return 0;
-  if (item.tracking_group === "llm_paper_control") return 1;
-  if (item.tracking_group === "market_factor_control") return 2;
-  if (item.tracking_group === "market_random_control") return 3;
-  return 4;
+  if (item.tracking_group === "frozen_strategy_v2") return 1;
+  if (item.tracking_group === "llm_paper_control") return 2;
+  if (item.tracking_group === "market_factor_control") return 3;
+  if (item.tracking_group === "market_random_control") return 4;
+  return 5;
 }
 
 function paperTrackingChoiceLabel(latestRun?: Record<string, unknown> | null): "当前" | "下轮" {
@@ -1185,7 +1188,7 @@ function nextPendingEntryDate(rows: ShortpickPaperTrackingItem[]): string {
     .sort()[0] ?? "";
 }
 
-type PaperTrackingGroupFilter = "" | "frozen_strategy" | "llm_paper_control" | "market_factor_control" | "market_random_control";
+type PaperTrackingGroupFilter = "" | "frozen_strategy" | "frozen_strategy_v2" | "llm_paper_control" | "market_factor_control" | "market_random_control";
 type PaperTrackingEntryStateFilter = "entered" | "pending" | "";
 type PaperTrackingEntryRuleFilter = "" | "next_close" | "next_open" | "same_day_intraday_current";
 type PaperTrackingExitStateFilter = "" | "mechanical_5d_done" | "waiting_exit";
@@ -2176,6 +2179,8 @@ function PaperTrackingTab({
   const pendingEntryDate = nextPendingEntryDate(rows);
   const monitoringTracks = (Array.isArray(contract.monitoring_tracks) ? contract.monitoring_tracks : []) as Record<string, unknown>[];
   const marketControls = (Array.isArray(marketControlContract.controls) ? marketControlContract.controls : []) as Record<string, unknown>[];
+  const frozenV2Control = marketControls.find((control) => control.role === "market_factor_control_low_turnover_uptrend_next_open_entry") ?? {};
+  const marketControlRows = marketControls.filter((control) => control.role !== "market_factor_control_low_turnover_uptrend_next_open_entry");
   const enteredRows = rows.filter((item) => hasPaperTrackingEntered(item));
   const mechanical5dRows = rows.filter(hasPaperTrackingMechanical5dExit).sort(comparePaperTrackingRows);
   const latestMechanical5d = mechanical5dRows[0] ?? null;
@@ -2273,7 +2278,14 @@ function PaperTrackingTab({
             <div className="shortpick-metric">
               <span>正式跟踪数</span>
               <strong>{Number(summary.tracked_signal_count ?? 0)}</strong>
-              <Text type="secondary">前向观察 {Number(summary.required_forward_trading_days ?? contract.required_forward_trading_days ?? 40)} 个交易日</Text>
+              <Text type="secondary">v1 收盘买入主线</Text>
+            </div>
+          </Col>
+          <Col xs={24} md={6}>
+            <div className="shortpick-metric">
+              <span>v2开盘候选</span>
+              <strong>{Number(summary.frozen_v2_signal_count ?? 0)}</strong>
+              <Text type="secondary">同股同退出轨道</Text>
             </div>
           </Col>
           <Col xs={24} md={6}>
@@ -2344,6 +2356,7 @@ function PaperTrackingTab({
                       <Text strong>{item.name} · {item.symbol}</Text>
                       <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
                       {index === 0 && item.tracking_group === "frozen_strategy" ? <Tag color="purple">冻结规则优先</Tag> : null}
+                      {item.tracking_group === "frozen_strategy_v2" ? <Tag color="geekblue">开盘买候选</Tag> : null}
                     </Space>
                     <Text type="secondary">{item.selection_label || "纸面对照"} · {paperTrackingExpectedEntryText(item)}</Text>
                     <Text type="secondary">{item.entry_rule || "次一交易日收盘买入"}</Text>
@@ -2360,6 +2373,7 @@ function PaperTrackingTab({
       <Card className="panel-card" title="冻结规则">
         <Descriptions size="small" column={{ xs: 1, md: 2 }}>
           <Descriptions.Item label="策略名称" span={2}>{String(contract.label ?? "冻结纸面策略：低换手上升趋势四轨监测")}</Descriptions.Item>
+          <Descriptions.Item label="版本定位">v1 收盘买入主线</Descriptions.Item>
           <Descriptions.Item label="运行方式">{String(contract.mode ?? "每日滚动 5x1万；持有天数按交易日计算")}</Descriptions.Item>
           <Descriptions.Item label="候选池">{String(contract.pool_rule ?? "先扩大动量成交量候选池")}</Descriptions.Item>
           <Descriptions.Item label="选择规则">{String(contract.selection_rule ?? "当全市场10日上涨占比不低于45%时，选择20日趋势向上、成交额较高且换手率相对不拥挤的第1名")}</Descriptions.Item>
@@ -2383,6 +2397,17 @@ function PaperTrackingTab({
         ) : null}
       </Card>
 
+      <Card className="panel-card" title="冻结候选 v2 规则">
+        <Descriptions size="small" column={{ xs: 1, md: 2 }}>
+          <Descriptions.Item label="策略名称" span={2}>{String(frozenV2Control.label ?? "冻结候选 v2：次日开盘买入")}</Descriptions.Item>
+          <Descriptions.Item label="版本定位">v2 开盘买入候选线</Descriptions.Item>
+          <Descriptions.Item label="运行方式">沿用 v1 选股，入场改为次一交易日开盘价</Descriptions.Item>
+          <Descriptions.Item label="选择规则" span={2}>{String(frozenV2Control.selection_rule ?? "沿用冻结 v1 的低换手上升趋势第1名，只改变入场价源。")}</Descriptions.Item>
+          <Descriptions.Item label="可执行性" span={2}>{String(frozenV2Control.entry_rule ?? "次一交易日开盘买入；开盘直接接近涨停时标记为不可假设成交。")}</Descriptions.Item>
+          <Descriptions.Item label="监测规则" span={2}>与 v1 使用同一组机械5日、机械10日、条件检查和10%触达止盈退出轨道。</Descriptions.Item>
+        </Descriptions>
+      </Card>
+
       <Card className="panel-card" title="LLM纸面对照规则">
         <Descriptions size="small" column={{ xs: 1, md: 2 }}>
           <Descriptions.Item label="对照名称" span={2}>{String(llmControlContract.label ?? "LLM纸面对照：每日固定规则选1只")}</Descriptions.Item>
@@ -2402,11 +2427,11 @@ function PaperTrackingTab({
           <Descriptions.Item label="监测规则" span={2}>{String(marketControlContract.monitoring_rule ?? "和冻结策略使用同一入场口径与四条退出轨道。")}</Descriptions.Item>
           <Descriptions.Item label="边界说明" span={2}>{String(summary.market_control_scope_note ?? marketControlContract.scope_note ?? "单票分析暂不升入冻结真实跟踪。")}</Descriptions.Item>
         </Descriptions>
-        {marketControls.length ? (
+        {marketControlRows.length ? (
           <List
             className="shortpick-track-list"
             size="small"
-            dataSource={marketControls}
+            dataSource={marketControlRows}
             renderItem={(control) => (
               <List.Item>
                 <Space direction="vertical" size={0}>
@@ -2439,6 +2464,7 @@ function PaperTrackingTab({
             allowClear
             options={[
               { value: "frozen_strategy", label: "冻结策略" },
+              { value: "frozen_strategy_v2", label: "冻结候选 v2" },
               { value: "llm_paper_control", label: "LLM纸面对照" },
               { value: "market_factor_control", label: "市场因子对照" },
               { value: "market_random_control", label: "同池随机基线" },
