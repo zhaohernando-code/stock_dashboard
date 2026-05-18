@@ -1915,6 +1915,7 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(by_symbol["601138.SH"]["paper_tracking_exit_tracks"][0]["key"], "mechanical_5d")
         self.assertEqual(by_symbol["600000.SH"]["tracking_group"], "frozen_strategy_v2")
         self.assertEqual(by_symbol["600000.SH"]["selection_label"], "冻结候选 v2：次日开盘买入")
+        self.assertEqual(by_symbol["600000.SH"]["exit_rule"], "与 v1 使用同一组选股和四轨退出；入场价格源为次一交易日开盘。")
         self.assertEqual(payload["summary"]["tracked_signal_count"], 1)
         self.assertEqual(payload["summary"]["frozen_v2_signal_count"], 1)
 
