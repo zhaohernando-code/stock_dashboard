@@ -1188,6 +1188,7 @@ function nextPendingEntryDate(rows: ShortpickPaperTrackingItem[]): string {
 type PaperTrackingGroupFilter = "" | "frozen_strategy" | "llm_paper_control" | "market_factor_control" | "market_random_control";
 type PaperTrackingEntryStateFilter = "entered" | "pending" | "";
 type PaperTrackingEntryRuleFilter = "" | "next_close" | "next_open" | "same_day_intraday_current";
+type PaperTrackingExitStateFilter = "" | "mechanical_5d_done" | "waiting_exit";
 
 function paperTrackingEntryRuleKey(item: ShortpickPaperTrackingItem): PaperTrackingEntryRuleFilter {
   const entryRule = item.entry_rule ?? "";
@@ -1222,6 +1223,19 @@ function paperTrackingPrimaryExitTrack(item: ShortpickPaperTrackingItem): Record
   return tracks.find((track) => track.key === "mechanical_5d") ?? tracks[0] ?? null;
 }
 
+function paperTrackingMechanical5dExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
+  return paperTrackingExitTracks(item).find((track) => track.key === "mechanical_5d") ?? null;
+}
+
+function hasPaperTrackingMechanical5dExit(item: ShortpickPaperTrackingItem): boolean {
+  return paperTrackingMechanical5dExitTrack(item) !== null;
+}
+
+function paperTrackingExitDay(item: ShortpickPaperTrackingItem): string {
+  const track = paperTrackingPrimaryExitTrack(item);
+  return String(track?.exit_trade_day ?? item.exit_at ?? "");
+}
+
 function paperTrackingExitText(item: ShortpickPaperTrackingItem): string {
   const track = paperTrackingPrimaryExitTrack(item);
   if (track) {
@@ -1240,6 +1254,19 @@ function paperTrackingExitReturn(item: ShortpickPaperTrackingItem): number | nul
   const track = paperTrackingPrimaryExitTrack(item);
   if (track && typeof track.stock_return === "number") return track.stock_return;
   return typeof item.stock_return === "number" ? item.stock_return : null;
+}
+
+function comparePaperTrackingRows(left: ShortpickPaperTrackingItem, right: ShortpickPaperTrackingItem): number {
+  const leftExit = hasPaperTrackingMechanical5dExit(left) ? 1 : 0;
+  const rightExit = hasPaperTrackingMechanical5dExit(right) ? 1 : 0;
+  if (leftExit !== rightExit) return rightExit - leftExit;
+  const leftExitDay = paperTrackingExitDay(left);
+  const rightExitDay = paperTrackingExitDay(right);
+  if (leftExitDay !== rightExitDay) return rightExitDay.localeCompare(leftExitDay);
+  const leftSignal = paperTrackingSignalDate(left);
+  const rightSignal = paperTrackingSignalDate(right);
+  if (leftSignal !== rightSignal) return rightSignal.localeCompare(leftSignal);
+  return paperTrackingDisplayRank(left) - paperTrackingDisplayRank(right);
 }
 
 export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
@@ -2128,16 +2155,20 @@ function PaperTrackingTab({
   const [ledgerGroupFilter, setLedgerGroupFilter] = useState<PaperTrackingGroupFilter>("");
   const [ledgerEntryStateFilter, setLedgerEntryStateFilter] = useState<PaperTrackingEntryStateFilter>("entered");
   const [ledgerEntryRuleFilter, setLedgerEntryRuleFilter] = useState<PaperTrackingEntryRuleFilter>("");
+  const [ledgerExitStateFilter, setLedgerExitStateFilter] = useState<PaperTrackingExitStateFilter>("");
   const normalizedLedgerSearch = ledgerSearch.trim().toLowerCase();
   const displayRows = rows.filter((item) => {
     const entered = hasPaperTrackingEntered(item);
+    const hasMechanical5dExit = hasPaperTrackingMechanical5dExit(item);
     if (ledgerEntryStateFilter === "entered" && !entered) return false;
     if (ledgerEntryStateFilter === "pending" && entered) return false;
+    if (ledgerExitStateFilter === "mechanical_5d_done" && !hasMechanical5dExit) return false;
+    if (ledgerExitStateFilter === "waiting_exit" && (!entered || hasMechanical5dExit)) return false;
     if (ledgerGroupFilter && item.tracking_group !== ledgerGroupFilter) return false;
     if (ledgerEntryRuleFilter && paperTrackingEntryRuleKey(item) !== ledgerEntryRuleFilter) return false;
     if (normalizedLedgerSearch && !paperTrackingSearchText(item).includes(normalizedLedgerSearch)) return false;
     return true;
-  });
+  }).sort(comparePaperTrackingRows);
   const filteredOutCount = Math.max(rows.length - displayRows.length, 0);
   const choiceLabel = paperTrackingChoiceLabel(latestRun);
   const choiceRows = latestPaperTrackingChoices(rows, latestRun);
@@ -2145,6 +2176,10 @@ function PaperTrackingTab({
   const pendingEntryDate = nextPendingEntryDate(rows);
   const monitoringTracks = (Array.isArray(contract.monitoring_tracks) ? contract.monitoring_tracks : []) as Record<string, unknown>[];
   const marketControls = (Array.isArray(marketControlContract.controls) ? marketControlContract.controls : []) as Record<string, unknown>[];
+  const enteredRows = rows.filter((item) => hasPaperTrackingEntered(item));
+  const mechanical5dRows = rows.filter(hasPaperTrackingMechanical5dExit).sort(comparePaperTrackingRows);
+  const latestMechanical5d = mechanical5dRows[0] ?? null;
+  const waitingExitRows = enteredRows.filter((item) => !hasPaperTrackingMechanical5dExit(item));
   const columns: ColumnsType<ShortpickPaperTrackingItem> = [
     {
       title: "信号 / 买入",
@@ -2253,6 +2288,31 @@ function PaperTrackingTab({
               <span>市场对照数</span>
               <strong>{Number(summary.market_control_signal_count ?? 0)}</strong>
               <Text type="secondary">第1名、降追高、随机同池基线</Text>
+            </div>
+          </Col>
+        </Row>
+        <Row gutter={[12, 12]} className="shortpick-frozen-metrics">
+          <Col xs={24} md={8}>
+            <div className="shortpick-metric">
+              <span>机械5日已退出</span>
+              <strong>{mechanical5dRows.length}</strong>
+              <Text type="secondary">正式策略与对照组</Text>
+            </div>
+          </Col>
+          <Col xs={24} md={8}>
+            <div className="shortpick-metric">
+              <span>等待5日窗口</span>
+              <strong>{waitingExitRows.length}</strong>
+              <Text type="secondary">已入场但尚未触发机械5日</Text>
+            </div>
+          </Col>
+          <Col xs={24} md={8}>
+            <div className="shortpick-metric">
+              <span>最新5日退出</span>
+              <strong>{latestMechanical5d ? paperTrackingExitDay(latestMechanical5d) : "--"}</strong>
+              <Text type="secondary">
+                {latestMechanical5d ? `${latestMechanical5d.name} ${formatPercent(paperTrackingExitReturn(latestMechanical5d))}` : "暂无完成记录"}
+              </Text>
             </div>
           </Col>
         </Row>
@@ -2408,10 +2468,21 @@ function PaperTrackingTab({
             ]}
             onChange={(value) => setLedgerEntryRuleFilter((value ?? "") as PaperTrackingEntryRuleFilter)}
           />
+          <Select
+            className="shortpick-paper-ledger-select"
+            placeholder="退出状态"
+            value={ledgerExitStateFilter || undefined}
+            allowClear
+            options={[
+              { value: "mechanical_5d_done", label: "机械5日已退出" },
+              { value: "waiting_exit", label: "等待5日窗口" },
+            ]}
+            onChange={(value) => setLedgerExitStateFilter((value ?? "") as PaperTrackingExitStateFilter)}
+          />
           <Text type="secondary">
             显示 {displayRows.length} / {rows.length} 条{filteredOutCount ? ` · 已筛掉 ${filteredOutCount} 条` : ""}
           </Text>
-          {(ledgerSearch || ledgerGroupFilter || ledgerEntryStateFilter !== "entered" || ledgerEntryRuleFilter) ? (
+          {(ledgerSearch || ledgerGroupFilter || ledgerEntryStateFilter !== "entered" || ledgerEntryRuleFilter || ledgerExitStateFilter) ? (
             <Button
               size="small"
               onClick={() => {
@@ -2419,6 +2490,7 @@ function PaperTrackingTab({
                 setLedgerGroupFilter("");
                 setLedgerEntryStateFilter("entered");
                 setLedgerEntryRuleFilter("");
+                setLedgerExitStateFilter("");
               }}
             >
               重置
