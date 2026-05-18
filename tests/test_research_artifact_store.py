@@ -51,6 +51,14 @@ class ResearchArtifactStoreTests(unittest.TestCase):
             with patch.dict("os.environ", {"ASHARE_ARTIFACT_ROOT": str(configured_root)}):
                 self.assertEqual(artifact_root_from_database_url(database_url), configured_root)
 
+    def test_in_memory_sqlite_artifact_root_uses_temp_directory(self) -> None:
+        root = artifact_root_from_database_url("sqlite:///:memory:")
+
+        self.assertTrue(root.is_absolute())
+        self.assertNotEqual(root, PROJECT_ROOT / "artifacts")
+        self.assertNotEqual(root, PROJECT_ROOT / "data" / "artifacts")
+        self.assertIn("ashare-evidence-artifacts", root.parts)
+
     def test_repo_artifact_writes_require_explicit_allow(self) -> None:
         target_root = PROJECT_ROOT / "data" / "artifacts"
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from pathlib import Path
 from typing import TypeVar
 
@@ -57,6 +58,8 @@ def artifact_root_from_database_url(database_url: str | None) -> Path:
     configured = os.getenv("ASHARE_ARTIFACT_ROOT")
     if configured:
         return Path(configured)
+    if database_url == "sqlite:///:memory:":
+        return Path(tempfile.gettempdir()) / "ashare-evidence-artifacts" / f"memory-{os.getpid()}"
     if database_url and database_url.startswith("sqlite:///") and database_url != "sqlite:///:memory:":
         db_path = Path(database_url.removeprefix("sqlite:///")).resolve()
         return db_path.parent / "artifacts"
