@@ -21,10 +21,6 @@ from ashare_evidence.research_artifacts import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "artifacts"
-REPO_ARTIFACT_ROOTS = (
-    PROJECT_ROOT / "artifacts",
-    PROJECT_ROOT / "data" / "artifacts",
-)
 ARTIFACT_FOLDERS = {
     "rolling_validation": "manifests",
     "validation_metrics": "validation",
@@ -39,6 +35,15 @@ ARTIFACT_FOLDERS = {
 }
 
 ArtifactModel = TypeVar("ArtifactModel", bound=BaseModel)
+
+
+def _source_artifact_roots() -> tuple[Path, ...]:
+    if not (PROJECT_ROOT / ".git").exists():
+        return ()
+    return (
+        PROJECT_ROOT / "artifacts",
+        PROJECT_ROOT / "data" / "artifacts",
+    )
 
 
 def _artifact_root(root: Path | None = None) -> Path:
@@ -76,7 +81,7 @@ def _ensure_artifact_write_allowed(target: Path) -> None:
     if os.getenv("ASHARE_ALLOW_REPO_ARTIFACT_WRITES") == "1":
         return
     resolved_target = target.resolve()
-    for repo_root in REPO_ARTIFACT_ROOTS:
+    for repo_root in _source_artifact_roots():
         resolved_root = repo_root.resolve()
         try:
             resolved_target.relative_to(resolved_root)

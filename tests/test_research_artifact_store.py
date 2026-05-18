@@ -61,6 +61,21 @@ class ResearchArtifactStoreTests(unittest.TestCase):
                 root=target_root,
             )
 
+    def test_runtime_data_artifact_root_is_writable_without_project_git_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime_root = Path(temp_dir) / "ashare-dashboard"
+            target_root = runtime_root / "data" / "artifacts"
+
+            with patch("ashare_evidence.research_artifact_store.PROJECT_ROOT", runtime_root):
+                artifact_path = write_shortpick_lab_artifact(
+                    artifact_id="unit-test-runtime-artifact",
+                    payload={"status": "runtime_write_allowed"},
+                    root=target_root,
+                )
+
+            self.assertEqual(artifact_path.parent, target_root / "shortpick_lab")
+            self.assertTrue(artifact_path.exists())
+
     def test_resolve_backtest_artifact_falls_back_to_canonical_portfolio_key(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

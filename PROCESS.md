@@ -22,6 +22,7 @@
 ## 运行态与发布
 
 - **runtime DB 是 live 真值源**：repo 本地库、样本库、output artifact 只能用于复现和研究；对用户解释当前页面时以 runtime DB/API 为准。
+- **artifact 写入保护要识别项目级 `.git`**：开发仓里的 `data/artifacts` 仍属于源码污染风险，必须拒绝刷新脚本直接写入；同步后的 runtime 目录没有项目级 `.git`，其中的 `data/artifacts` 是 live 数据目录，不能被同一保护误判为 source checkout。
 - **canonical 不可用先分层排查**：先查 localhost 5173/8000 健康，再查 canonical 是否 302 到登录页，再查 tunnel/remote port ownership；不要先误判为代码失效。
 - **canonical stale 多半是路由或隧道问题**：页面旧、接口新、资源健康时，优先检查 tunnel、远端端口和缓存态，再决定是否重新发布。
 - **LaunchAgent 要区分任务和服务**：定时任务用 `RunAtLoad` + `StartCalendarInterval` 或 `StartInterval`；服务进程用 `RunAtLoad` + `KeepAlive`。需要精确时钟触发时不能只靠 `StartInterval=300`；关键时点应配置显式 calendar trigger，并让任务用 slot state 保证多次唤醒不重复写入。
