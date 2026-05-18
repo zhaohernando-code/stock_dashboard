@@ -39,6 +39,7 @@ SHORTPICK_VALIDATION_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_VALIDATION_TIMEOUT_SECO
 SHORTPICK_VALIDATE_RECENT_DAYS="${ASHARE_SHORTPICK_VALIDATE_RECENT_DAYS:-30}"
 SHORTPICK_VALIDATE_RECENT_LIMIT="${ASHARE_SHORTPICK_VALIDATE_RECENT_LIMIT:-20}"
 SHORTPICK_VALIDATE_RECENT_BEFORE_RUN="${ASHARE_SHORTPICK_VALIDATE_RECENT_BEFORE_RUN:-0}"
+SHORTPICK_VALIDATE_RECENT_AFTER_RUN="${ASHARE_SHORTPICK_VALIDATE_RECENT_AFTER_RUN:-1}"
 SHORTPICK_RETRY_FAILED_AFTER_RUN="${ASHARE_SHORTPICK_RETRY_FAILED_AFTER_RUN:-0}"
 DATABASE_LOCK_WAIT_SECONDS="${ASHARE_DATABASE_LOCK_WAIT_SECONDS:-60}"
 NETWORK_CHECK_ENABLED="${ASHARE_REFRESH_NETWORK_CHECK:-1}"
@@ -86,7 +87,8 @@ run_shortpick_validation_refresh() {
   "$PYTHON_BIN" -m ashare_evidence.cli shortpick-lab-validate-recent \
     --database-url "$ASHARE_DATABASE_URL" \
     --days "$SHORTPICK_VALIDATE_RECENT_DAYS" \
-    --limit "$SHORTPICK_VALIDATE_RECENT_LIMIT"
+    --limit "$SHORTPICK_VALIDATE_RECENT_LIMIT" \
+    --existing-market-data-only
 }
 
 run_frontend_projection_refresh() {
@@ -148,6 +150,12 @@ PY
     run_shortpick_retry_failed_rounds "$run_id"
   elif [[ -n "$run_id" ]]; then
     echo "Skipping shortpick failed-round retry after daily run; set ASHARE_SHORTPICK_RETRY_FAILED_AFTER_RUN=1 for maintenance retry." >&2
+  fi
+  if [[ "$SHORTPICK_VALIDATE_RECENT_AFTER_RUN" == "1" ]]; then
+    wait_for_database_writable
+    if ! run_with_timeout "$SHORTPICK_VALIDATION_TIMEOUT_SECONDS" run_shortpick_validation_refresh; then
+      echo "Shortpick recent validation did not finish within ${SHORTPICK_VALIDATION_TIMEOUT_SECONDS}s; continuing with frontend projection refresh." >&2
+    fi
   fi
   if ! run_frontend_projection_refresh; then
     echo "Frontend projection refresh failed; keeping previous projection rows." >&2

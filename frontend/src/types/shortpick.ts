@@ -477,6 +477,16 @@ export interface ShortpickPaperTrackingItem {
   entry_rule?: string | null;
   exit_rule?: string | null;
   monitoring_tracks?: Record<string, unknown>[];
+  validation_status?: string | null;
+  validation_horizon_days?: number | null;
+  entry_at?: string | null;
+  exit_at?: string | null;
+  entry_price?: number | null;
+  exit_price?: number | null;
+  stock_return?: number | null;
+  excess_return?: number | null;
+  validation_by_horizon?: Record<string, unknown>[];
+  paper_tracking_exit_tracks?: Record<string, unknown>[];
   holding_days?: number | null;
   stop_loss_pct?: number | null;
   thesis?: string | null;

@@ -472,6 +472,7 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_validate.add_argument("--database-url", default=None)
     shortpick_validate.add_argument("--run-id", type=int, required=True)
     shortpick_validate.add_argument("--horizon", type=int, action="append", default=None)
+    shortpick_validate.add_argument("--existing-market-data-only", action="store_true")
 
     shortpick_validate_recent = subparsers.add_parser(
         "shortpick-lab-validate-recent",
@@ -481,6 +482,7 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_validate_recent.add_argument("--days", type=int, default=30)
     shortpick_validate_recent.add_argument("--limit", type=int, default=20)
     shortpick_validate_recent.add_argument("--horizon", type=int, action="append", default=None)
+    shortpick_validate_recent.add_argument("--existing-market-data-only", action="store_true")
 
     shortpick_retry_failed = subparsers.add_parser(
         "shortpick-lab-retry-failed",
@@ -945,7 +947,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "shortpick-lab-validate":
         with session_scope(args.database_url) as session:
-            payload = validate_shortpick_run(session, args.run_id, horizons=args.horizon)
+            payload = validate_shortpick_run(
+                session,
+                args.run_id,
+                horizons=args.horizon,
+                sync_market_data=not args.existing_market_data_only,
+                sync_benchmarks=not args.existing_market_data_only,
+                include_sector_benchmark=not args.existing_market_data_only,
+            )
         _print_json(payload)
         return 0
 
@@ -956,6 +965,9 @@ def main(argv: list[str] | None = None) -> int:
                 days=args.days,
                 limit=args.limit,
                 horizons=args.horizon,
+                sync_market_data=not args.existing_market_data_only,
+                sync_benchmarks=not args.existing_market_data_only,
+                include_sector_benchmark=not args.existing_market_data_only,
             )
         _print_json(payload)
         return 0

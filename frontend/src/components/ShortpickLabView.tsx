@@ -1213,6 +1213,35 @@ function paperTrackingSearchText(item: ShortpickPaperTrackingItem): string {
     .toLowerCase();
 }
 
+function paperTrackingExitTracks(item: ShortpickPaperTrackingItem): Record<string, unknown>[] {
+  return Array.isArray(item.paper_tracking_exit_tracks) ? item.paper_tracking_exit_tracks : [];
+}
+
+function paperTrackingPrimaryExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
+  const tracks = paperTrackingExitTracks(item);
+  return tracks.find((track) => track.key === "mechanical_5d") ?? tracks[0] ?? null;
+}
+
+function paperTrackingExitText(item: ShortpickPaperTrackingItem): string {
+  const track = paperTrackingPrimaryExitTrack(item);
+  if (track) {
+    const label = String(track.label ?? "退出");
+    const exitDay = String(track.exit_trade_day ?? item.exit_at ?? "");
+    return `${label}${exitDay ? ` ${exitDay}` : ""}`;
+  }
+  if (item.validation_status === "completed" && item.exit_at) {
+    return `${Number(item.validation_horizon_days ?? 0) || "--"}日 ${formatDate(item.exit_at)}`;
+  }
+  if (item.validation_status && item.validation_status !== "not_started") return statusLabel(item.validation_status);
+  return "等待窗口";
+}
+
+function paperTrackingExitReturn(item: ShortpickPaperTrackingItem): number | null {
+  const track = paperTrackingPrimaryExitTrack(item);
+  if (track && typeof track.stock_return === "number") return track.stock_return;
+  return typeof item.stock_return === "number" ? item.stock_return : null;
+}
+
 export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
   const [runs, setRuns] = useState<ShortpickRunView[]>([]);
   const [selectedRun, setSelectedRun] = useState<ShortpickRunView | null>(null);
@@ -2168,6 +2197,19 @@ function PaperTrackingTab({
       ),
     },
     {
+      title: "退出结果",
+      key: "exit",
+      render: (_, item) => {
+        const exitReturn = paperTrackingExitReturn(item);
+        return (
+          <Space direction="vertical" size={0}>
+            <Text>{paperTrackingExitText(item)}</Text>
+            <Text type="secondary">收益 {formatPercent(exitReturn)}</Text>
+          </Space>
+        );
+      },
+    },
+    {
       title: "说明",
       dataIndex: "thesis",
       key: "thesis",
@@ -2406,6 +2448,7 @@ function PaperTrackingTab({
                       <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
                     </div>
                     <Text type="secondary">信号 {paperTrackingSignalDate(item)} · 买入 {paperTrackingEntryDate(item)} · {item.selection_label || "纸面对照"}</Text>
+                    <Text type="secondary">{paperTrackingExitText(item)} · 收益 {formatPercent(paperTrackingExitReturn(item))}</Text>
                     <Text>{item.entry_rule || "次一交易日收盘买入"}</Text>
                     <Text type="secondary">{item.exit_rule || "机械5日、机械10日、条件检查、10%触达止盈四轨监测"}</Text>
                     {item.thesis ? <Paragraph className="shortpick-paper-mobile-thesis">{item.thesis}</Paragraph> : null}

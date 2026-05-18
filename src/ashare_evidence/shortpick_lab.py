@@ -4310,6 +4310,9 @@ def validate_shortpick_run(
     run_id: int,
     *,
     horizons: list[int] | None = None,
+    sync_market_data: bool = True,
+    sync_benchmarks: bool = True,
+    include_sector_benchmark: bool = True,
 ) -> dict[str, Any]:
     run = session.get(ShortpickExperimentRun, run_id)
     if run is None:
@@ -4328,18 +4331,22 @@ def validate_shortpick_run(
     benchmark_sync = (
         {"status": "historical_replay_existing_only", "reason": "Historical replay never fetches current benchmark data."}
         if historical_replay
+        else {"status": "existing_market_data_only", "reason": "Validation refresh used already-ingested benchmark bars."}
+        if not sync_benchmarks
         else _sync_shortpick_benchmarks(session)
         if parsed_candidates
         else {"status": "skipped", "reason": "no_parsed_candidates"}
     )
     updated = 0
+    benchmark_maps = benchmark_close_maps(session) if parsed_candidates else {}
     for candidate in parsed_candidates:
         market_sync = (
             {"status": "historical_replay_existing_only", "reason": "Historical replay never fetches current market data."}
             if historical_replay
+            else {"status": "existing_market_data_only", "reason": "Validation refresh used already-ingested candidate bars."}
+            if not sync_market_data
             else _sync_shortpick_candidate_market_data(session, candidate)
         )
-        benchmark_maps = benchmark_close_maps(session)
         for horizon in target_horizons:
             _upsert_validation_snapshot(
                 session,
@@ -4348,6 +4355,7 @@ def validate_shortpick_run(
                 int(horizon),
                 benchmark_maps=benchmark_maps,
                 market_sync=market_sync,
+                include_sector_benchmark=include_sector_benchmark,
             )
             updated += 1
     display_gate = _apply_shortpick_candidate_display_gates(session, run_id=run_id)
@@ -4371,6 +4379,9 @@ def validate_recent_shortpick_runs(
     days: int = 30,
     limit: int = 20,
     horizons: list[int] | None = None,
+    sync_market_data: bool = True,
+    sync_benchmarks: bool = True,
+    include_sector_benchmark: bool = True,
 ) -> dict[str, Any]:
     """Refresh validation snapshots for recent completed short-pick lab runs."""
 
@@ -4388,7 +4399,14 @@ def validate_recent_shortpick_runs(
     ).all()
     refreshed: list[dict[str, Any]] = []
     for run in runs:
-        result = validate_shortpick_run(session, run.id, horizons=target_horizons)
+        result = validate_shortpick_run(
+            session,
+            run.id,
+            horizons=target_horizons,
+            sync_market_data=sync_market_data,
+            sync_benchmarks=sync_benchmarks,
+            include_sector_benchmark=include_sector_benchmark,
+        )
         refreshed.append(
             {
                 "run_id": run.id,
@@ -4761,7 +4779,7 @@ def _upsert_validation_snapshot(
     )
     frozen_exit_tracks = (
         _shortpick_frozen_exit_track_results(candidate=candidate, window=window, benchmark_maps=benchmark_maps)
-        if horizon == SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS
+        if horizon >= SHORTPICK_FROZEN_PAPER_CHECK_START_DAY
         else []
     )
     if primary_return is None:
@@ -5055,12 +5073,12 @@ def _shortpick_frozen_exit_track_results(
 ) -> list[dict[str, Any]]:
     if not _is_paper_tracking_exit_track_candidate(candidate):
         return []
-    if len(window) <= SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS:
+    if len(window) <= SHORTPICK_FROZEN_PAPER_CHECK_START_DAY:
         return []
     entry = window[0]
     entry_price = _shortpick_entry_execution_price(candidate=candidate, entry=entry)
     entry_price_source = _shortpick_entry_price_source(candidate)
-    max_index = SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS
+    max_index = min(SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS, len(window) - 1)
     tracks = [
         _shortpick_exit_track_payload(
             key="mechanical_5d",
@@ -5074,6 +5092,10 @@ def _shortpick_frozen_exit_track_results(
             exit_reason="mechanical_5d_close",
             benchmark_maps=benchmark_maps,
         ),
+    ]
+    if max_index < SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS:
+        return tracks
+    tracks.append(
         _shortpick_exit_track_payload(
             key="mechanical_10d",
             label="机械10日",
@@ -5085,8 +5107,8 @@ def _shortpick_frozen_exit_track_results(
             exit_price=window[max_index].close_price,
             exit_reason="mechanical_10d_close",
             benchmark_maps=benchmark_maps,
-        ),
-    ]
+        )
+    )
     conditional_index, conditional_reason = _shortpick_conditional_exit_index(
         window[: max_index + 1],
         entry_price=entry_price,

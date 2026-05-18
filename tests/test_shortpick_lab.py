@@ -528,6 +528,43 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(payload["runs"][0]["updated_validation_count"], 1)
         self.assertEqual(payload["runs"][0]["summary"]["completed_validation_count"], 3)
 
+    def test_validate_recent_can_use_existing_market_data_only(self) -> None:
+        self._seed_daily_bars()
+        executors = [
+            StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("688981.SH", "中芯国际", "半导体国产替代", "https://a.example/news")),
+        ]
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
+            with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
+                with session_scope(self.database_url) as session:
+                    run_shortpick_experiment(
+                        session,
+                        run_date=date(2026, 5, 5),
+                        rounds_per_model=1,
+                        triggered_by="root",
+                        executors=executors,
+                    )
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks") as sync_benchmarks:
+            with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data") as sync_market:
+                with session_scope(self.database_url) as session:
+                    payload = validate_recent_shortpick_runs(
+                        session,
+                        days=30,
+                        limit=5,
+                        horizons=[1],
+                        sync_market_data=False,
+                        sync_benchmarks=False,
+                    )
+
+        sync_benchmarks.assert_not_called()
+        sync_market.assert_not_called()
+        self.assertEqual(payload["refreshed_run_count"], 1)
+        with session_scope(self.database_url) as session:
+            run = session.scalar(select(ShortpickExperimentRun))
+            assert run is not None
+            self.assertEqual(run.summary_payload["benchmark_sync"]["status"], "existing_market_data_only")
+
     def test_parse_failure_keeps_research_lab_artifact_and_candidate_boundary(self) -> None:
         executors = [StaticShortpickExecutor("openai", "gpt-test", "fake", "not-json")]
 
@@ -1130,6 +1167,44 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(by_key["take_profit_10pct"]["exit_reason"], "take_profit_10pct_touched")
         self.assertAlmostEqual(by_key["take_profit_10pct"]["stock_return"], 0.10)
 
+    def test_frozen_exit_tracks_include_mechanical_5d_before_ten_day_window(self) -> None:
+        candidate = ShortpickCandidate(
+            run_id=1,
+            candidate_key="shortpick-market-factor:1:frozen:5d",
+            symbol="000001.SZ",
+            name="测试银行",
+            research_priority="market_factor_frozen_paper",
+            candidate_payload={"tracking_role": "frozen_paper_primary", "frozen_paper_strategy": {}},
+        )
+        start = datetime(2026, 5, 11, 7, 0, tzinfo=UTC)
+        bars = [
+            MarketBar(
+                bar_key=f"track-5d-{index}",
+                stock_id=1,
+                timeframe="1d",
+                observed_at=start + timedelta(days=index),
+                open_price=100 + index,
+                high_price=102 + index,
+                low_price=99 + index,
+                close_price=100 + index,
+                volume=1000,
+                amount=(100 + index) * 1000,
+                raw_payload={},
+                license_tag="test",
+                usage_scope="internal-test",
+                redistribution_scope="none",
+                source_uri=f"test://track-5d/{index}",
+                lineage_hash=compute_lineage_hash({"index": index}),
+            )
+            for index in range(6)
+        ]
+
+        tracks = _shortpick_frozen_exit_track_results(candidate=candidate, window=bars, benchmark_maps={})
+
+        self.assertEqual([item["key"] for item in tracks], ["mechanical_5d"])
+        self.assertEqual(tracks[0]["exit_trade_day"], "2026-05-16")
+        self.assertEqual(tracks[0]["holding_trading_days"], 5)
+
     def test_llm_paper_control_candidate_gets_same_exit_tracks(self) -> None:
         candidate = ShortpickCandidate(
             run_id=1,
@@ -1717,31 +1792,57 @@ class ShortpickLabTests(unittest.TestCase):
             )
             session.add_all([seed_run, latest_run])
             session.flush()
+            candidate = ShortpickCandidate(
+                run_id=seed_run.id,
+                candidate_key="shortpick-prefreeze-paper-seed-test:frozen",
+                symbol="601138.SH",
+                name="工业富联",
+                normalized_theme="低换手上升趋势",
+                horizon_trading_days=10,
+                confidence=None,
+                thesis="5月8日收盘后生成，5月11日入场。",
+                catalysts=[],
+                invalidation=[],
+                risks=[],
+                sources_payload=[],
+                novelty_note=None,
+                limitations=[],
+                convergence_group="frozen",
+                research_priority="market_factor_frozen_paper",
+                parse_status="parsed",
+                is_system_external=False,
+                candidate_payload={
+                    "tracking_role": "frozen_paper_primary",
+                    "paper_tracking_signal_date": "2026-05-08",
+                    "paper_tracking_entry_date": "2026-05-11",
+                    "market_factor_overlay": {"source_rank": 1},
+                },
+            )
+            session.add(candidate)
+            session.flush()
             session.add(
-                ShortpickCandidate(
-                    run_id=seed_run.id,
-                    candidate_key="shortpick-prefreeze-paper-seed-test:frozen",
-                    symbol="601138.SH",
-                    name="工业富联",
-                    normalized_theme="低换手上升趋势",
-                    horizon_trading_days=10,
-                    confidence=None,
-                    thesis="5月8日收盘后生成，5月11日入场。",
-                    catalysts=[],
-                    invalidation=[],
-                    risks=[],
-                    sources_payload=[],
-                    novelty_note=None,
-                    limitations=[],
-                    convergence_group="frozen",
-                    research_priority="market_factor_frozen_paper",
-                    parse_status="parsed",
-                    is_system_external=False,
-                    candidate_payload={
-                        "tracking_role": "frozen_paper_primary",
-                        "paper_tracking_signal_date": "2026-05-08",
-                        "paper_tracking_entry_date": "2026-05-11",
-                        "market_factor_overlay": {"source_rank": 1},
+                ShortpickValidationSnapshot(
+                    candidate_id=candidate.id,
+                    horizon_days=5,
+                    status="completed",
+                    entry_at=datetime(2026, 5, 11, 7, 0, tzinfo=UTC),
+                    exit_at=datetime(2026, 5, 18, 7, 0, tzinfo=UTC),
+                    entry_close=100,
+                    exit_close=108,
+                    stock_return=0.08,
+                    benchmark_return=0.01,
+                    excess_return=0.07,
+                    max_favorable_return=0.09,
+                    max_drawdown=-0.01,
+                    validation_payload={
+                        "paper_tracking_exit_tracks": [
+                            {
+                                "key": "mechanical_5d",
+                                "label": "机械5日",
+                                "exit_trade_day": "2026-05-18",
+                                "stock_return": 0.08,
+                            }
+                        ]
                     },
                 )
             )
@@ -1755,6 +1856,8 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(by_symbol["601138.SH"]["signal_date"], "2026-05-08")
         self.assertEqual(by_symbol["601138.SH"]["entry_date"], "2026-05-11")
         self.assertEqual(by_symbol["601138.SH"]["tracking_group"], "frozen_strategy")
+        self.assertEqual(by_symbol["601138.SH"]["validation_status"], "completed")
+        self.assertEqual(by_symbol["601138.SH"]["paper_tracking_exit_tracks"][0]["key"], "mechanical_5d")
 
     def test_run_list_supports_pagination_filters_and_retryable_summary(self) -> None:
         self._seed_daily_bars()

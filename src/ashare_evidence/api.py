@@ -51,7 +51,7 @@ from ashare_evidence.manual_research_workflow import (
     list_manual_research_requests,
     retry_manual_research_request,
 )
-from ashare_evidence.models import ShortpickCandidate, ShortpickExperimentRun
+from ashare_evidence.models import ShortpickCandidate, ShortpickExperimentRun, ShortpickValidationSnapshot
 from ashare_evidence.operations import (
     annotate_operations_summary_endpoint_metrics,
     build_operations_dashboard,
@@ -824,6 +824,54 @@ def _shortpick_tracking_group_for_role(role: str, *, is_frozen_item: bool, is_ll
     return "paper_tracking"
 
 
+def _paper_tracking_validation_snapshot(session: Session, candidate_id: int) -> dict[str, object]:
+    validations = session.scalars(
+        select(ShortpickValidationSnapshot)
+        .where(ShortpickValidationSnapshot.candidate_id == candidate_id)
+        .order_by(ShortpickValidationSnapshot.horizon_days.asc())
+    ).all()
+    if not validations:
+        return {
+            "validation_status": "not_started",
+            "validation_by_horizon": [],
+            "paper_tracking_exit_tracks": [],
+        }
+    by_horizon: list[dict[str, object]] = []
+    exit_tracks_by_key: dict[str, dict[str, object]] = {}
+    selected = validations[-1]
+    for validation in validations:
+        payload = validation.validation_payload if isinstance(validation.validation_payload, dict) else {}
+        tracks = [item for item in payload.get("paper_tracking_exit_tracks") or [] if isinstance(item, dict)]
+        for track in tracks:
+            key = str(track.get("key") or "")
+            if key:
+                exit_tracks_by_key[key] = dict(track)
+        if validation.status == "completed":
+            selected = validation
+        by_horizon.append(
+            {
+                "horizon_days": validation.horizon_days,
+                "status": validation.status,
+                "entry_at": _iso_or_none(validation.entry_at),
+                "exit_at": _iso_or_none(validation.exit_at),
+                "stock_return": validation.stock_return,
+                "excess_return": validation.excess_return,
+            }
+        )
+    return {
+        "validation_status": selected.status,
+        "validation_horizon_days": selected.horizon_days,
+        "entry_at": _iso_or_none(selected.entry_at),
+        "exit_at": _iso_or_none(selected.exit_at),
+        "entry_price": selected.entry_close,
+        "exit_price": selected.exit_close,
+        "stock_return": selected.stock_return,
+        "excess_return": selected.excess_return,
+        "validation_by_horizon": by_horizon,
+        "paper_tracking_exit_tracks": list(exit_tracks_by_key.values()),
+    }
+
+
 def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object]:
     contract = shortpick_frozen_paper_strategy_contract()
     llm_contract = shortpick_llm_paper_control_contract()
@@ -893,52 +941,52 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
             is_frozen_item=is_frozen_item,
             is_llm_control_item=is_llm_control_item,
         )
-        items.append(
-            {
-                "run_id": run.id,
-                "candidate_id": candidate.id,
-                "run_date": run.run_date.isoformat(),
-                "signal_date": signal_date,
-                "entry_date": entry_date,
-                "symbol": candidate.symbol,
-                "name": candidate.name,
-                "status": "tracking_signal",
-                "tracking_group": tracking_group,
-                "tracking_role": tracking_role or ("frozen_paper_primary" if is_frozen_item else ""),
-                "selection_label": str(item_contract.get("label") or "纸面对照"),
-                "source_rank": int(overlay.get("source_rank") or llm_control.get("selection_rank") or 2),
-                "entry_rule": (
-                    "次一交易日开盘买入；开盘直接接近涨停时标记为不可假设成交"
-                    if entry_price_source == "next_open"
-                    else "信号日盘中当前价买入；当前价接近涨停时跳过候选，不假设可以买入"
-                    if entry_price_source == "same_day_intraday_current"
-                    else "次一交易日收盘买入"
-                ),
-                "exit_rule": str(
-                    item_contract.get("risk_rule")
-                    or item_contract.get("monitoring_rule")
-                    or item_contract.get("selection_rule")
-                    or "四轨退出监测"
-                ),
-                "monitoring_tracks": item_contract.get("monitoring_tracks") if isinstance(item_contract.get("monitoring_tracks"), list) else monitoring_tracks,
-                "holding_days": max_holding_days,
-                "stop_loss_pct": 0.08,
-                "thesis": candidate.thesis,
-                "gate": {
-                    "passed": bool(frozen.get("gate_pass", True)) if is_frozen_item else True,
-                    "inserted": bool(frozen.get("inserted", True)) if is_frozen_item else bool(llm_control.get("selected", True)),
-                },
-                "regime": {
-                    "universe_ret10_mean": regime.get("universe_ret10_mean"),
-                    "pool_ret1_mean": regime.get("pool_ret1_mean"),
-                    "breadth10": regime.get("breadth10"),
-                    "pool_ret10_mean": regime.get("pool_ret10_mean"),
-                },
-                "selection_score_components": llm_control.get("selection_score_components") if is_llm_control_item else overlay,
-                "created_at": _iso_or_none(candidate.created_at),
-                "updated_at": _iso_or_none(candidate.updated_at),
-            }
-        )
+        item = {
+            "run_id": run.id,
+            "candidate_id": candidate.id,
+            "run_date": run.run_date.isoformat(),
+            "signal_date": signal_date,
+            "entry_date": entry_date,
+            "symbol": candidate.symbol,
+            "name": candidate.name,
+            "status": "tracking_signal",
+            "tracking_group": tracking_group,
+            "tracking_role": tracking_role or ("frozen_paper_primary" if is_frozen_item else ""),
+            "selection_label": str(item_contract.get("label") or "纸面对照"),
+            "source_rank": int(overlay.get("source_rank") or llm_control.get("selection_rank") or 2),
+            "entry_rule": (
+                "次一交易日开盘买入；开盘直接接近涨停时标记为不可假设成交"
+                if entry_price_source == "next_open"
+                else "信号日盘中当前价买入；当前价接近涨停时跳过候选，不假设可以买入"
+                if entry_price_source == "same_day_intraday_current"
+                else "次一交易日收盘买入"
+            ),
+            "exit_rule": str(
+                item_contract.get("risk_rule")
+                or item_contract.get("monitoring_rule")
+                or item_contract.get("selection_rule")
+                or "四轨退出监测"
+            ),
+            "monitoring_tracks": item_contract.get("monitoring_tracks") if isinstance(item_contract.get("monitoring_tracks"), list) else monitoring_tracks,
+            "holding_days": max_holding_days,
+            "stop_loss_pct": 0.08,
+            "thesis": candidate.thesis,
+            "gate": {
+                "passed": bool(frozen.get("gate_pass", True)) if is_frozen_item else True,
+                "inserted": bool(frozen.get("inserted", True)) if is_frozen_item else bool(llm_control.get("selected", True)),
+            },
+            "regime": {
+                "universe_ret10_mean": regime.get("universe_ret10_mean"),
+                "pool_ret1_mean": regime.get("pool_ret1_mean"),
+                "breadth10": regime.get("breadth10"),
+                "pool_ret10_mean": regime.get("pool_ret10_mean"),
+            },
+            "selection_score_components": llm_control.get("selection_score_components") if is_llm_control_item else overlay,
+            "created_at": _iso_or_none(candidate.created_at),
+            "updated_at": _iso_or_none(candidate.updated_at),
+        }
+        item.update(_paper_tracking_validation_snapshot(session, candidate.id))
+        items.append(item)
         if len(items) >= 160:
             break
 
