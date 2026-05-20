@@ -8,11 +8,6 @@ import pytest
 
 import ashare_evidence.cli as cli_module
 import ashare_evidence.cli_autonomous_flow as cli_autonomous_flow
-from ashare_evidence.autonomous_flow import PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT
-from ashare_evidence.research_artifact_store import (
-    read_phase5_cycle_ledger_artifact,
-    read_phase5_scheduler_diagnostic_artifact,
-)
 from tests.helpers_cli_autonomous_flow import (
     _args,
     _assert_no_nested_flow_payload,
@@ -27,12 +22,27 @@ from tests.helpers_cli_autonomous_flow import (
     _ok_tick_result,
     _plan_result,
 )
-from tests.test_cli_autonomous_flow_smoke import _write_happy_path_artifacts
+from tests.helpers_cli_autonomous_flow_smoke import (
+    _assert_diagnostic_smoke_recorded,
+    _run_cli_diagnostic,
+    _write_happy_path_artifacts,
+)
 
 
-def test_phase5_local_cycle_step_diagnostic_requires_explicit_id_and_observed_at(
+@pytest.mark.parametrize(
+    ("diagnostic_id", "observed_at", "missing_arguments"),
+    [
+        (None, None, ["--diagnostic-id", "--observed-at"]),
+        (None, "2026-05-20T10:00:00Z", ["--diagnostic-id"]),
+        ("diagnostic-1", None, ["--observed-at"]),
+    ],
+)
+def test_phase5_local_cycle_step_diagnostic_requires_explicit_arguments(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    diagnostic_id: str | None,
+    observed_at: str | None,
+    missing_arguments: list[str],
 ) -> None:
     def fail_tick(**_kwargs: Any) -> _FakeTickResult:
         raise AssertionError("diagnostic argument validation should happen before tick")
@@ -43,38 +53,15 @@ def test_phase5_local_cycle_step_diagnostic_requires_explicit_id_and_observed_at
     monkeypatch.setattr(cli_autonomous_flow, "run_phase5_local_cycle_tick", fail_tick)
     monkeypatch.setattr(cli_autonomous_flow, "run_phase5_local_cycle_service", fail_service)
 
-    exit_code = cli_autonomous_flow.handle_phase5_local_cycle_step_command(_args(output="diagnostic"))
-
-    assert exit_code == 2
-    payload = json.loads(capsys.readouterr().out)
-    assert payload == {
-        "status": "error",
-        "command": "phase5-local-cycle-step",
-        "error_type": "MissingRequiredDiagnosticArgument",
-        "message": "--diagnostic-id and --observed-at are required for diagnostic output.",
-        "missing_arguments": ["--diagnostic-id", "--observed-at"],
-    }
-
-
-@pytest.mark.parametrize(
-    ("diagnostic_id", "observed_at", "missing_arguments"),
-    [
-        (None, "2026-05-20T10:00:00Z", ["--diagnostic-id"]),
-        ("diagnostic-1", None, ["--observed-at"]),
-    ],
-)
-def test_phase5_local_cycle_step_diagnostic_requires_each_diagnostic_argument(
-    capsys: pytest.CaptureFixture[str],
-    diagnostic_id: str | None,
-    observed_at: str | None,
-    missing_arguments: list[str],
-) -> None:
     exit_code = cli_autonomous_flow.handle_phase5_local_cycle_step_command(
         _args(output="diagnostic", diagnostic_id=diagnostic_id, observed_at=observed_at)
     )
 
     assert exit_code == 2
     payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "error"
+    assert payload["error_type"] == "MissingRequiredDiagnosticArgument"
+    assert payload["message"] == "--diagnostic-id and --observed-at are required for diagnostic output."
     assert payload["missing_arguments"] == missing_arguments
 
 
@@ -218,74 +205,39 @@ def test_phase5_local_cycle_step_diagnostic_error_tick_returns_zero_with_record_
     _assert_no_nested_flow_payload(payload)
 
 
+@pytest.mark.parametrize(
+    "case",
+    [
+        ("cycle-20260520-smoke", "diagnostic-20260520-cli", True, "continue_tracking", "info", True),
+        ("cycle-missing-diagnostic", "diagnostic-missing-cli", False, "open_recovery_ticket", "error", False),
+    ],
+)
 def test_phase5_local_cycle_step_diagnostic_smoke_records_real_artifact(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    case: tuple[str, str, bool, str, str, bool],
 ) -> None:
+    cycle_id, diagnostic_id, write_artifacts, action, severity, cycle_event_recorded = case
     artifact_root = tmp_path / "artifacts"
-    _write_happy_path_artifacts(artifact_root)
+    if write_artifacts:
+        _write_happy_path_artifacts(artifact_root)
     monkeypatch.setattr(cli_module, "init_database", lambda _database_url=None: None)
 
-    exit_code = cli_module.main(
-        [
-            "phase5-local-cycle-step",
-            "--cycle-id",
-            "cycle-20260520-smoke",
-            "--artifact-root",
-            str(artifact_root),
-            "--output",
-            "diagnostic",
-            "--diagnostic-id",
-            "diagnostic-20260520-cli",
-            "--observed-at",
-            "2026-05-20T10:01:00Z",
-        ]
+    exit_code = _run_cli_diagnostic(
+        artifact_root=artifact_root,
+        cycle_id=cycle_id,
+        diagnostic_id=diagnostic_id,
     )
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
-    stored = read_phase5_scheduler_diagnostic_artifact(payload["diagnostic_id"], root=artifact_root)
-    stored_cycle = read_phase5_cycle_ledger_artifact(payload["cycle_id"], root=artifact_root)
-    assert payload["execution_mode"] == "diagnostic_record"
-    assert payload["action"] == "continue_tracking"
-    assert payload["cycle_event_recorded"] is True
-    assert stored.observed_at == "2026-05-20T10:01:00Z"
-    assert stored.scheduler_action == "continue_tracking"
-    assert PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT in stored_cycle.event_refs
-    _assert_no_nested_flow_payload(payload)
-
-
-def test_phase5_local_cycle_step_diagnostic_smoke_records_missing_cycle(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    artifact_root = tmp_path / "artifacts"
-    monkeypatch.setattr(cli_module, "init_database", lambda _database_url=None: None)
-
-    exit_code = cli_module.main(
-        [
-            "phase5-local-cycle-step",
-            "--cycle-id",
-            "cycle-missing-diagnostic",
-            "--artifact-root",
-            str(artifact_root),
-            "--output",
-            "diagnostic",
-            "--diagnostic-id",
-            "diagnostic-missing-cli",
-            "--observed-at",
-            "2026-05-20T10:01:00Z",
-        ]
+    _assert_diagnostic_smoke_recorded(
+        payload=payload,
+        artifact_root=artifact_root,
+        cycle_id=cycle_id,
+        expected_action=action,
+        expected_severity=severity,
+        expected_cycle_event_recorded=cycle_event_recorded,
     )
-
-    assert exit_code == 0
-    payload = json.loads(capsys.readouterr().out)
-    stored = read_phase5_scheduler_diagnostic_artifact(payload["diagnostic_id"], root=artifact_root)
-    assert payload["action"] == "open_recovery_ticket"
-    assert payload["severity"] == "error"
-    assert payload["cycle_event_recorded"] is False
-    assert stored.cycle_id == "cycle-missing-diagnostic"
-    assert stored.scheduler_action == "open_recovery_ticket"
     _assert_no_nested_flow_payload(payload)
