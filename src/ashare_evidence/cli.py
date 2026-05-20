@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from ashare_evidence.benchmark import sync_benchmark_index_bars
+from ashare_evidence.cli_autonomous_flow import (
+    add_autonomous_flow_parsers,
+    handle_phase5_local_cycle_step_command,
+)
 from ashare_evidence.cli_event import add_event_check_parser, handle_event_check, run_refresh_event_checks
 from ashare_evidence.cli_governance import (
     add_governance_parsers,
@@ -399,6 +403,7 @@ def build_parser() -> argparse.ArgumentParser:
     glossary = subparsers.add_parser("glossary", help="Show the dashboard glossary entries.")
     glossary.add_argument("--database-url", default=None)
 
+    add_autonomous_flow_parsers(subparsers)
     add_governance_parsers(subparsers)
 
     policy_config = subparsers.add_parser("policy-configs", help="List active and historical governed policy configs.")
@@ -740,6 +745,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_policy_audit_command(args)
     if args.command == "contract-registry-check":
         return handle_contract_registry_check_command(args)
+    if args.command == "phase5-local-cycle-step":
+        return handle_phase5_local_cycle_step_command(args)
     if _should_initialize_database(args.database_url):
         init_database(args.database_url)
     if args.command == "latest":
