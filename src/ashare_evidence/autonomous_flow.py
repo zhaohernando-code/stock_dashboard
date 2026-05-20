@@ -25,6 +25,8 @@ PHASE5_GATE_EVALUATED_EVENT = "phase5.gate.evaluated.v1"
 PHASE5_PROJECTION_REFRESHED_EVENT = "phase5.projection.refreshed.v1"
 PHASE5_RECOVERY_RECORDED_EVENT = "phase5.recovery.recorded.v1"
 RUNTIME_PUBLISH_VERIFIED_EVENT = "runtime.publish.verified.v1"
+PHASE5_CLOSEOUT_STATUSES = {"completed", "degraded", "blocked"}
+PHASE5_NEXT_ACTIONS = {"continue_tracking", "rebuild_projection", "retry_failed_step", "redesign", "blocked", "none"}
 
 
 class Phase5CycleNotFoundError(LookupError):
@@ -219,6 +221,27 @@ def attach_publish_verification(
     return updated
 
 
+def finish_phase5_cycle(
+    *,
+    cycle_id: str,
+    status: str,
+    finished_at: str,
+    next_action: str,
+    root: Path | None = None,
+) -> Phase5CycleLedgerArtifact:
+    _validate_cycle_closeout(status=status, finished_at=finished_at, next_action=next_action)
+    cycle = _require_cycle(cycle_id, root=root)
+    updated = cycle.model_copy(
+        update={
+            "status": status,
+            "finished_at": finished_at,
+            "next_action": next_action,
+        }
+    )
+    write_phase5_cycle_ledger_artifact(updated, root=root)
+    return updated
+
+
 def _require_cycle(cycle_id: str, *, root: Path | None = None) -> Phase5CycleLedgerArtifact:
     cycle = read_phase5_cycle_ledger_artifact_if_exists(cycle_id, root=root)
     if cycle is None:
@@ -250,6 +273,23 @@ def _cycle_status_after_recovery(current_status: str, final_status: str) -> str:
     if final_status == "degraded" and current_status not in {"blocked", "completed"}:
         return "degraded"
     return current_status
+
+
+def _validate_cycle_closeout(*, status: str, finished_at: str, next_action: str) -> None:
+    if status not in PHASE5_CLOSEOUT_STATUSES:
+        allowed = ", ".join(sorted(PHASE5_CLOSEOUT_STATUSES))
+        raise ValueError(f"phase5 closeout status must be one of: {allowed}")
+    if next_action not in PHASE5_NEXT_ACTIONS:
+        allowed = ", ".join(sorted(PHASE5_NEXT_ACTIONS))
+        raise ValueError(f"phase5 closeout next_action must be one of: {allowed}")
+    if not finished_at:
+        raise ValueError("phase5 closeout finished_at must be provided by the caller")
+    if status == "blocked" and next_action != "blocked":
+        raise ValueError('phase5 blocked closeout requires next_action="blocked"')
+    if status == "completed" and next_action in {"blocked", "retry_failed_step"}:
+        raise ValueError("phase5 completed closeout cannot use blocked or retry_failed_step next_action")
+    if status == "degraded" and next_action == "none":
+        raise ValueError('phase5 degraded closeout cannot use next_action="none"')
 
 
 def _sha256_digest(path: Path) -> str:
