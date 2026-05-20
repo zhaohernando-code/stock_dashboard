@@ -1,5 +1,17 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-05-20T00:00:00+08:00] Autonomous development flow trials must use registry-first design and bounded reruns:
+
+当前项目将作为自动化开发平台的流程试验田。新的流程不再把多 agent 并行产出本身视为成功，而是要求每轮都完成“流程设计 -> 试运行 -> 自动评估 -> 有条件重跑 -> 固化”的闭环。
+
+本轮 Trial A 证明，直接并行生成全局协议和依赖该协议的模块设计，会让模块文档临时发明事件或接口，即使单份文档看起来完整，系统级合同仍会漂移。因此后续流程采用 registry-first 顺序：先冻结术语、事件、artifact family、module interface 和成熟度矩阵，再把这些 allowlist 作为子进程输入。Trial B 按这个规则重跑后，Phase 5 纵向切片只引用已注册的 `*.v1` 事件、artifact family 和 interface id，质量从可用草案提升到可进入实现拆解的流程草案。
+
+补充说明
+- Trial B 仍不等同于 production 平台设计。`phase5_cycle_ledger`、`phase5_recovery_ticket`、`phase5_gate_readout` 的正式持久化位置，以及 registry 是否升级为 JSON Schema / DB registry / 代码生成 allowlist，仍是后续架构决策。
+- 子进程只负责 owned files，不负责主线状态、发布、合并、最终质量结论或项目状态更新。主进程负责评审、重跑决策、固化和 closeout。
+- 任何后续实现任务如果引用未注册事件、artifact 或接口，应先更新 registry，再重跑受影响模块；不能通过总结文字把接口漂移解释为可接受。
+- 为降低长文档读取导致的超时和成本，主进程必须先生成短 `Context Pack`，只传递目标、边界、owned files、registry allowlist、成熟度限制、必读路径和禁止动作。
+
 [2026-05-14T19:40:00+08:00] Frontend-facing statistics should be materialized as projections:
 
 随着历史分析、运营复盘和短投试验田数据量扩大，前端接口不能继续在页面请求时直接拼研究态流水、长窗口统计和 artifact projection。新增通用 `frontend_projections` 表作为前端专用读模型：后台定时或显式触发刷新统计，页面 API 只读小 payload；缺失或过期时显示结构化待刷新状态，而不是在打开页面时重算。
