@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 
+import ashare_evidence.autonomous_flow_scheduler_executor as scheduler_executor
+from ashare_evidence.autonomous_flow_scheduler_action_contract import get_phase5_scheduler_action_contract
 from ashare_evidence.autonomous_flow_scheduler_executor import dry_run_phase5_scheduler_plan
 from tests.helpers_autonomous_flow_scheduler import _plan
 
@@ -106,6 +108,28 @@ def test_planned_effects_and_blocking_reasons_are_stably_deduped() -> None:
         "artifact cycle id mismatch",
         "contract registry failed",
     ]
+
+
+def test_dry_run_planned_effects_come_from_action_contract() -> None:
+    result = dry_run_phase5_scheduler_plan(_plan(action="redesign", reason="design gate requested review"))
+    contract = get_phase5_scheduler_action_contract("redesign")
+
+    assert result.planned_effects == list(contract.planned_effects)
+
+
+def test_dry_run_uses_contract_lookup_for_planned_effects(monkeypatch) -> None:
+    class StubContract:
+        planned_effects = ("contract_effect", "contract_effect")
+
+    monkeypatch.setattr(
+        scheduler_executor,
+        "get_phase5_scheduler_action_contract",
+        lambda action: StubContract(),
+    )
+
+    result = dry_run_phase5_scheduler_plan(_plan(action="retry_failed_step"))
+
+    assert result.planned_effects == ["contract_effect"]
 
 
 def test_payload_does_not_leak_nested_plan_tick_payload_or_sensitive_refs() -> None:
