@@ -10,16 +10,19 @@ from ashare_evidence.autonomous_flow import (
     PHASE5_ARTIFACT_PRODUCED_EVENT,
     PHASE5_CYCLE_STARTED_EVENT,
     PHASE5_GATE_EVALUATED_EVENT,
+    PHASE5_PROJECTION_REFRESHED_EVENT,
     PHASE5_RECOVERY_RECORDED_EVENT,
     RUNTIME_PUBLISH_VERIFIED_EVENT,
     Phase5CycleNotFoundError,
     attach_publish_verification,
     record_phase5_artifact,
     record_phase5_gate_readout,
+    record_phase5_projection_refreshed,
     record_phase5_recovery_ticket,
     start_phase5_cycle,
 )
 from ashare_evidence.research_artifact_store import (
+    read_frontend_projection_manifest_artifact,
     read_phase5_cycle_ledger_artifact,
     read_phase5_gate_readout_artifact,
     read_phase5_recovery_ticket_artifact,
@@ -133,6 +136,113 @@ class AutonomousFlowCyclePrimitiveTests(unittest.TestCase):
             self.assertIn(PHASE5_RECOVERY_RECORDED_EVENT, updated.event_refs)
             self.assertEqual(updated.status, "degraded")
 
+    def test_record_phase5_projection_refreshed_writes_manifest_and_appends_cycle_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            start_phase5_cycle(
+                cycle_id="phase5-20260520-am",
+                trigger="scheduled",
+                started_at="2026-05-20T09:00:00Z",
+                root=root,
+            )
+
+            updated, manifest = record_phase5_projection_refreshed(
+                cycle_id="phase5-20260520-am",
+                projection_id="projection-20260520-am",
+                projection_name="operations_summary",
+                projection_family="operations",
+                version="frontend-projection-v1",
+                generated_at="2026-05-20T09:12:00Z",
+                freshness_at="2026-05-20T09:10:00Z",
+                source_artifact_ids=["phase5_horizon_study:20260520", "phase5_horizon_study:20260520"],
+                row_count=4,
+                staleness_status="fresh",
+                event_refs=["frontend.projection.updated.v1", "frontend.projection.updated.v1"],
+                root=root,
+            )
+            stored = read_frontend_projection_manifest_artifact(manifest.projection_id, root=root)
+
+            self.assertEqual(stored.cycle_id, "phase5-20260520-am")
+            self.assertEqual(stored.source_artifact_ids, ["phase5_horizon_study:20260520"])
+            self.assertEqual(
+                stored.event_refs,
+                ["frontend.projection.updated.v1", PHASE5_PROJECTION_REFRESHED_EVENT],
+            )
+            self.assertEqual(updated.artifact_refs, ["frontend_projection_manifest:projection-20260520-am"])
+            self.assertIn(PHASE5_PROJECTION_REFRESHED_EVENT, updated.event_refs)
+            self.assertEqual(updated.status, "running")
+
+    def test_record_phase5_projection_refreshed_dedupes_repeated_cycle_refs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            start_phase5_cycle(
+                cycle_id="phase5-20260520-am",
+                trigger="scheduled",
+                started_at="2026-05-20T09:00:00Z",
+                root=root,
+            )
+
+            record_phase5_projection_refreshed(
+                cycle_id="phase5-20260520-am",
+                projection_id="projection-20260520-am",
+                projection_name="operations_summary",
+                projection_family="operations",
+                version="frontend-projection-v1",
+                generated_at="2026-05-20T09:12:00Z",
+                freshness_at="2026-05-20T09:10:00Z",
+                row_count=4,
+                staleness_status="fresh",
+                root=root,
+            )
+            updated, _manifest = record_phase5_projection_refreshed(
+                cycle_id="phase5-20260520-am",
+                projection_id="projection-20260520-am",
+                projection_name="operations_summary",
+                projection_family="operations",
+                version="frontend-projection-v1",
+                generated_at="2026-05-20T09:12:00Z",
+                freshness_at="2026-05-20T09:10:00Z",
+                row_count=4,
+                staleness_status="fresh",
+                root=root,
+            )
+
+            self.assertEqual(updated.artifact_refs, ["frontend_projection_manifest:projection-20260520-am"])
+            self.assertEqual(updated.event_refs.count(PHASE5_PROJECTION_REFRESHED_EVENT), 1)
+
+    def test_record_phase5_projection_refreshed_stores_no_full_payload_or_publish_details(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            start_phase5_cycle(
+                cycle_id="phase5-20260520-am",
+                trigger="manual",
+                started_at="2026-05-20T09:00:00Z",
+                root=root,
+            )
+
+            _updated, manifest = record_phase5_projection_refreshed(
+                cycle_id="phase5-20260520-am",
+                projection_id="projection-20260520-am",
+                projection_name="operations_summary",
+                projection_family="operations",
+                version="frontend-projection-v1",
+                generated_at="2026-05-20T09:12:00Z",
+                freshness_at="2026-05-20T09:10:00Z",
+                source_artifact_ids=["phase5_horizon_study:20260520"],
+                row_count=4,
+                staleness_status="degraded",
+                fallback_reason="projection source degraded",
+                root=root,
+            )
+            persisted = json.loads(
+                (root / "autonomous_flow" / "frontend_projection_manifest" / f"{manifest.projection_id}.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+
+            self.assertFalse({"payload", "frontend_payload", "release_manifest", "release_manifest_details", "screenshot"} & set(persisted))
+            self.assertEqual(persisted["fallback_reason"], "projection source degraded")
+
     def test_attach_publish_verification_stores_only_manifest_ref_digest_and_event_ref(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -194,6 +304,19 @@ class AutonomousFlowCyclePrimitiveTests(unittest.TestCase):
                     recovery_action="mark_blocked",
                     final_status="blocked",
                     claim_ceiling_effect="lowered",
+                    root=root,
+                )
+            with self.assertRaisesRegex(Phase5CycleNotFoundError, "does not exist: missing-cycle"):
+                record_phase5_projection_refreshed(
+                    cycle_id="missing-cycle",
+                    projection_id="projection-missing",
+                    projection_name="operations_summary",
+                    projection_family="operations",
+                    version="frontend-projection-v1",
+                    generated_at="2026-05-20T09:12:00Z",
+                    freshness_at="2026-05-20T09:10:00Z",
+                    row_count=0,
+                    staleness_status="stale",
                     root=root,
                 )
             with self.assertRaisesRegex(Phase5CycleNotFoundError, "does not exist: missing-cycle"):

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from ashare_evidence.autonomous_flow_artifacts import (
+    FrontendProjectionManifestArtifact,
     Phase5CycleLedgerArtifact,
     Phase5GateReadoutArtifact,
     Phase5RecoveryTicketArtifact,
@@ -12,6 +13,7 @@ from ashare_evidence.autonomous_flow_artifacts import (
 )
 from ashare_evidence.research_artifact_store import (
     read_phase5_cycle_ledger_artifact_if_exists,
+    write_frontend_projection_manifest_artifact,
     write_phase5_cycle_ledger_artifact,
     write_phase5_gate_readout_artifact,
     write_phase5_recovery_ticket_artifact,
@@ -20,6 +22,7 @@ from ashare_evidence.research_artifact_store import (
 PHASE5_CYCLE_STARTED_EVENT = "phase5.cycle.started.v1"
 PHASE5_ARTIFACT_PRODUCED_EVENT = "phase5.artifact.produced.v1"
 PHASE5_GATE_EVALUATED_EVENT = "phase5.gate.evaluated.v1"
+PHASE5_PROJECTION_REFRESHED_EVENT = "phase5.projection.refreshed.v1"
 PHASE5_RECOVERY_RECORDED_EVENT = "phase5.recovery.recorded.v1"
 RUNTIME_PUBLISH_VERIFIED_EVENT = "runtime.publish.verified.v1"
 
@@ -150,6 +153,48 @@ def record_phase5_recovery_ticket(
     return updated, ticket
 
 
+def record_phase5_projection_refreshed(
+    *,
+    cycle_id: str,
+    projection_id: str,
+    projection_name: str,
+    projection_family: str,
+    version: str,
+    generated_at: str,
+    freshness_at: str,
+    source_artifact_ids: list[str] | None = None,
+    row_count: int = 0,
+    staleness_status: str = "fresh",
+    fallback_reason: str | None = None,
+    event_refs: list[str] | None = None,
+    root: Path | None = None,
+) -> tuple[Phase5CycleLedgerArtifact, FrontendProjectionManifestArtifact]:
+    cycle = _require_cycle(cycle_id, root=root)
+    manifest = FrontendProjectionManifestArtifact(
+        projection_id=projection_id,
+        cycle_id=cycle_id,
+        projection_name=projection_name,
+        projection_family=projection_family,
+        version=version,
+        generated_at=generated_at,
+        freshness_at=freshness_at,
+        source_artifact_ids=_dedupe(source_artifact_ids or []),
+        row_count=row_count,
+        staleness_status=staleness_status,
+        fallback_reason=fallback_reason,
+        event_refs=_append_unique(_dedupe(event_refs or []), PHASE5_PROJECTION_REFRESHED_EVENT),
+    )
+    write_frontend_projection_manifest_artifact(manifest, root=root)
+    updated = cycle.model_copy(
+        update={
+            "event_refs": _append_unique(cycle.event_refs, PHASE5_PROJECTION_REFRESHED_EVENT),
+            "artifact_refs": _append_unique(cycle.artifact_refs, _frontend_projection_manifest_ref(projection_id)),
+        }
+    )
+    write_phase5_cycle_ledger_artifact(updated, root=root)
+    return updated, manifest
+
+
 def attach_publish_verification(
     *,
     cycle_id: str,
@@ -193,6 +238,10 @@ def _dedupe(values: list[str]) -> list[str]:
         if value not in result:
             result.append(value)
     return result
+
+
+def _frontend_projection_manifest_ref(projection_id: str) -> str:
+    return f"frontend_projection_manifest:{projection_id}"
 
 
 def _cycle_status_after_recovery(current_status: str, final_status: str) -> str:

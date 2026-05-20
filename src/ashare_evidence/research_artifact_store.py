@@ -9,6 +9,7 @@ from typing import TypeVar
 from pydantic import BaseModel
 
 from ashare_evidence.autonomous_flow_artifacts import (
+    FrontendProjectionManifestArtifact,
     Phase5CycleLedgerArtifact,
     Phase5GateReadoutArtifact,
     Phase5RecoveryTicketArtifact,
@@ -41,6 +42,7 @@ ARTIFACT_FOLDERS = {
     "phase5_cycle_ledger": "autonomous_flow/phase5_cycle_ledger",
     "phase5_recovery_ticket": "autonomous_flow/phase5_recovery_ticket",
     "phase5_gate_readout": "autonomous_flow/phase5_gate_readout",
+    "frontend_projection_manifest": "autonomous_flow/frontend_projection_manifest",
 }
 
 ArtifactModel = TypeVar("ArtifactModel", bound=BaseModel)
@@ -229,6 +231,30 @@ def read_phase5_gate_readout_artifact_if_exists(
     root: Path | None = None,
 ) -> Phase5GateReadoutArtifact | None:
     return _read_model_if_exists(Phase5GateReadoutArtifact, "phase5_gate_readout", gate_id, root=root)
+
+
+def write_frontend_projection_manifest_artifact(
+    artifact: FrontendProjectionManifestArtifact,
+    *,
+    root: Path | None = None,
+) -> Path:
+    return _write_model(artifact, "frontend_projection_manifest", artifact.projection_id, root=root)
+
+
+def read_frontend_projection_manifest_artifact(
+    projection_id: str,
+    *,
+    root: Path | None = None,
+) -> FrontendProjectionManifestArtifact:
+    return _read_model(FrontendProjectionManifestArtifact, "frontend_projection_manifest", projection_id, root=root)
+
+
+def read_frontend_projection_manifest_artifact_if_exists(
+    projection_id: str | None,
+    *,
+    root: Path | None = None,
+) -> FrontendProjectionManifestArtifact | None:
+    return _read_model_if_exists(FrontendProjectionManifestArtifact, "frontend_projection_manifest", projection_id, root=root)
 
 
 def write_manifest(manifest: ResearchArtifactManifestView, *, root: Path | None = None) -> Path:
