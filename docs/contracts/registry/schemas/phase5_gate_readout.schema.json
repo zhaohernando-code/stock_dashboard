@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "phase5_gate_readout.schema.json",
+  "title": "Phase 5 Gate Readout",
+  "type": "object",
+  "required": [
+    "artifact_family",
+    "schema_version",
+    "gate_id",
+    "cycle_id",
+    "gate_status",
+    "failing_gate_ids",
+    "incomplete_gate_ids",
+    "claim_ceiling",
+    "source_artifact_ids",
+    "blocking_reasons",
+    "next_action",
+    "evaluated_at"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "artifact_family": {
+      "const": "phase5_gate_readout"
+    },
+    "schema_version": {
+      "const": "v1"
+    },
+    "gate_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cycle_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "gate_status": {
+      "type": "string",
+      "enum": ["passed", "insufficient_evidence", "blocked", "degraded"]
+    },
+    "failing_gate_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "incomplete_gate_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "claim_ceiling": {
+      "type": "string",
+      "enum": ["blocked", "research_observation", "paper_tracking_candidate", "validated_readout"]
+    },
+    "source_artifact_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "blocking_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_action": {
+      "type": "string",
+      "enum": ["continue_tracking", "rebuild_projection", "redesign", "retry_failed_step", "blocked"]
+    },
+    "evaluated_at": {
+      "type": "string"
+    }
+  }
+}

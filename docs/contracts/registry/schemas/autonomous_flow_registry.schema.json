@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "autonomous_flow_registry.schema.json",
+  "title": "Autonomous Flow Registry",
+  "type": "object",
+  "required": [
+    "registry_version",
+    "generated_from",
+    "events",
+    "artifact_families",
+    "interfaces",
+    "deprecated_ids",
+    "maturity_domains",
+    "claim_ceiling_levels"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "registry_version": {
+      "type": "string",
+      "const": "autonomous_flow_registry.v1"
+    },
+    "generated_from": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/event"
+      }
+    },
+    "artifact_families": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifact_family"
+      }
+    },
+    "interfaces": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/interface"
+      }
+    },
+    "deprecated_ids": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/deprecated_id"
+      }
+    },
+    "maturity_domains": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/maturity_domain"
+      }
+    },
+    "claim_ceiling_levels": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/claim_ceiling_level"
+      }
+    }
+  },
+  "$defs": {
+    "status_registered": {
+      "type": "string",
+      "enum": ["registered"]
+    },
+    "maturity": {
+      "type": "string",
+      "enum": ["scaffold", "partial", "usable", "production"]
+    },
+    "event": {
+      "type": "object",
+      "required": ["id", "status", "provider", "consumers", "min_payload_fields", "maturity"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+\\.v[0-9]+$"
+        },
+        "status": {
+          "$ref": "#/$defs/status_registered"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "consumers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "min_payload_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "maturity": {
+          "$ref": "#/$defs/maturity"
+        }
+      }
+    },
+    "artifact_family": {
+      "type": "object",
+      "required": ["id", "status", "schema_ref", "provider", "consumers", "maturity"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "status": {
+          "$ref": "#/$defs/status_registered"
+        },
+        "schema_ref": {
+          "type": ["string", "null"]
+        },
+        "provider": {
+          "type": "string"
+        },
+        "consumers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "maturity": {
+          "$ref": "#/$defs/maturity"
+        }
+      }
+    },
+    "interface": {
+      "type": "object",
+      "required": ["id", "status", "provider", "consumer", "contract_objects", "maturity"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^iface\\.[a-z0-9-]+\\.[a-z0-9-]+\\.v[0-9]+$"
+        },
+        "status": {
+          "$ref": "#/$defs/status_registered"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "consumer": {
+          "type": "string"
+        },
+        "contract_objects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "maturity": {
+          "$ref": "#/$defs/maturity"
+        }
+      }
+    },
+    "deprecated_id": {
+      "type": "object",
+      "required": ["id", "replacement", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["deprecated"]
+        }
+      }
+    },
+    "maturity_domain": {
+      "type": "object",
+      "required": ["id", "status", "maturity"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/status_registered"
+        },
+        "maturity": {
+          "$ref": "#/$defs/maturity"
+        }
+      }
+    },
+    "claim_ceiling_level": {
+      "type": "object",
+      "required": ["id", "status", "rank"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "enum": ["blocked", "research_observation", "paper_tracking_candidate", "validated_readout"]
+        },
+        "status": {
+          "$ref": "#/$defs/status_registered"
+        },
+        "rank": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

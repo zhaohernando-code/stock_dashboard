@@ -1,0 +1,425 @@
+{
+  "registry_version": "autonomous_flow_registry.v1",
+  "generated_from": [
+    "docs/contracts/autonomous-flow-trial/TRIAL_B_GLOBAL_PROTOCOL_CN.md",
+    "docs/contracts/autonomous-flow-trial/TRIAL_C_LEDGER_AND_PUBLISH_DECISION_CN.md",
+    "docs/contracts/autonomous-flow-trial/TRIAL_C_REGISTRY_AND_CLAIM_GATE_DECISION_CN.md"
+  ],
+  "events": [
+    {
+      "id": "phase5.cycle.started.v1",
+      "status": "registered",
+      "provider": "phase5_scheduler_or_main_process",
+      "consumers": ["operations_workbench", "cycle_ledger", "reviewer"],
+      "min_payload_fields": ["cycle_id", "trigger", "scope", "input_contract_versions", "started_at"],
+      "maturity": "partial"
+    },
+    {
+      "id": "phase5.artifact.produced.v1",
+      "status": "registered",
+      "provider": "phase5_runner",
+      "consumers": ["projection_builder", "reviewer", "cycle_ledger"],
+      "min_payload_fields": ["cycle_id", "artifact_id", "artifact_family", "schema_version", "as_of_date", "lineage_ref"],
+      "maturity": "partial"
+    },
+    {
+      "id": "phase5.gate.evaluated.v1",
+      "status": "registered",
+      "provider": "gate_evaluator",
+      "consumers": ["scheduler", "frontend_projection", "reviewer"],
+      "min_payload_fields": ["cycle_id", "gate_id", "gate_status", "claim_ceiling", "next_action", "blocking_reasons"],
+      "maturity": "partial"
+    },
+    {
+      "id": "phase5.projection.refreshed.v1",
+      "status": "registered",
+      "provider": "projection_builder",
+      "consumers": ["publish_verifier", "api_spa", "operations_workbench"],
+      "min_payload_fields": ["cycle_id", "projection_id", "projection_family", "source_artifact_ids", "freshness_at", "staleness_status"],
+      "maturity": "partial"
+    },
+    {
+      "id": "phase5.recovery.recorded.v1",
+      "status": "registered",
+      "provider": "recovery_runner_or_main_process",
+      "consumers": ["scheduler", "reviewer", "trial_report"],
+      "min_payload_fields": ["cycle_id", "ticket_id", "failed_step", "failure_class", "recovery_action", "final_status"],
+      "maturity": "partial"
+    },
+    {
+      "id": "artifact.validation_manifest.created.v1",
+      "status": "registered",
+      "provider": "validation_runner",
+      "consumers": ["recommendation_projection", "phase5_gate", "research_review"],
+      "min_payload_fields": ["artifact_id", "experiment_version", "split_plan_id", "universe_definition", "generated_at"],
+      "maturity": "usable"
+    },
+    {
+      "id": "artifact.validation_metrics.created.v1",
+      "status": "registered",
+      "provider": "validation_runner",
+      "consumers": ["historical_validation", "claim_gate", "frontend_projection"],
+      "min_payload_fields": ["artifact_id", "manifest_id", "status", "sample_count", "coverage_ratio", "metrics_ref"],
+      "maturity": "usable"
+    },
+    {
+      "id": "artifact.portfolio_backtest.created.v1",
+      "status": "registered",
+      "provider": "portfolio_research_runner",
+      "consumers": ["simulation_policy_gate", "operations_workbench"],
+      "min_payload_fields": ["artifact_id", "manifest_id", "strategy_definition", "cost_definition", "gate_readout_ref"],
+      "maturity": "partial"
+    },
+    {
+      "id": "artifact.holding_policy_study.created.v1",
+      "status": "registered",
+      "provider": "phase5_policy_runner",
+      "consumers": ["policy_governance", "operations_workbench"],
+      "min_payload_fields": ["artifact_id", "policy_type", "gate_status", "governance_action", "redesign_focus_areas"],
+      "maturity": "partial"
+    },
+    {
+      "id": "recommendation.projected.v1",
+      "status": "registered",
+      "provider": "recommendation_projection",
+      "consumers": ["frontend", "manual_llm_context_pack"],
+      "min_payload_fields": ["recommendation_key", "core_quant", "evidence", "risk", "historical_validation", "claim_ceiling"],
+      "maturity": "usable"
+    },
+    {
+      "id": "manual_llm_review.requested.v1",
+      "status": "registered",
+      "provider": "frontend_or_user_action",
+      "consumers": ["manual_review_worker"],
+      "min_payload_fields": ["request_id", "target_login", "symbol", "context_packet_id", "requested_at"],
+      "maturity": "usable"
+    },
+    {
+      "id": "manual_llm_review.completed.v1",
+      "status": "registered",
+      "provider": "manual_review_worker",
+      "consumers": ["recommendation_projection", "frontend"],
+      "min_payload_fields": ["request_id", "model_label", "summary", "risks", "disagreements", "source_packet_ref"],
+      "maturity": "usable"
+    },
+    {
+      "id": "shortpick.run.completed.v1",
+      "status": "registered",
+      "provider": "shortpick_lab_runner",
+      "consumers": ["validation_queue", "topic_classifier", "feedback_projection"],
+      "min_payload_fields": ["run_id", "signal_available_at", "provider_set", "candidate_count", "source_packet_ref"],
+      "maturity": "partial"
+    },
+    {
+      "id": "shortpick.validation_snapshot.created.v1",
+      "status": "registered",
+      "provider": "shortpick_validation_worker",
+      "consumers": ["model_feedback", "history_replay", "frontend"],
+      "min_payload_fields": ["snapshot_id", "run_id", "symbol", "validation_mode", "tradeability_status", "benchmark_map"],
+      "maturity": "partial"
+    },
+    {
+      "id": "frontend.projection.updated.v1",
+      "status": "registered",
+      "provider": "projection_builder",
+      "consumers": ["api_spa"],
+      "min_payload_fields": ["projection_name", "version", "generated_at", "source_artifact_ids", "staleness_status"],
+      "maturity": "partial"
+    },
+    {
+      "id": "runtime.publish.verified.v1",
+      "status": "registered",
+      "provider": "main_process_closeout",
+      "consumers": ["project_status", "process_log", "phase5_cycle_ledger"],
+      "min_payload_fields": ["commit_id", "release_manifest", "localhost_result", "canonical_result"],
+      "maturity": "usable"
+    }
+  ],
+  "artifact_families": [
+    {
+      "id": "phase5_cycle_ledger",
+      "status": "registered",
+      "schema_ref": "schemas/phase5_cycle_ledger.schema.json",
+      "provider": "main_autonomous_process_or_scheduler",
+      "consumers": ["operations", "reviewer", "next_cycle_planner"],
+      "maturity": "partial"
+    },
+    {
+      "id": "phase5_recovery_ticket",
+      "status": "registered",
+      "schema_ref": "schemas/phase5_recovery_ticket.schema.json",
+      "provider": "recovery_runner",
+      "consumers": ["scheduler", "reviewer", "trial_report"],
+      "maturity": "partial"
+    },
+    {
+      "id": "phase5_gate_readout",
+      "status": "registered",
+      "schema_ref": "schemas/phase5_gate_readout.schema.json",
+      "provider": "gate_evaluator",
+      "consumers": ["projection_builder", "scheduler", "operations"],
+      "maturity": "partial"
+    },
+    {
+      "id": "rolling_validation_manifest",
+      "status": "registered",
+      "schema_ref": null,
+      "provider": "validation_runner",
+      "consumers": ["validation_metrics", "recommendation", "research_review"],
+      "maturity": "usable"
+    },
+    {
+      "id": "validation_metrics",
+      "status": "registered",
+      "schema_ref": null,
+      "provider": "validation_runner",
+      "consumers": ["historical_validation", "claim_gate"],
+      "maturity": "usable"
+    },
+    {
+      "id": "phase5_holding_policy_study",
+      "status": "registered",
+      "schema_ref": null,
+      "provider": "phase5_policy_runner",
+      "consumers": ["operations", "policy_redesign"],
+      "maturity": "partial"
+    },
+    {
+      "id": "portfolio_backtest",
+      "status": "registered",
+      "schema_ref": null,
+      "provider": "portfolio_runner",
+      "consumers": ["simulation_policy", "operations"],
+      "maturity": "partial"
+    },
+    {
+      "id": "replay_alignment",
+      "status": "registered",
+      "schema_ref": null,
+      "provider": "replay_runner",
+      "consumers": ["frontend_replay", "historical_validation"],
+      "maturity": "partial"
+    },
+    {
+      "id": "frontend_projection_manifest",
+      "status": "registered",
+      "schema_ref": null,
+      "provider": "projection_builder",
+      "consumers": ["api_spa"],
+      "maturity": "partial"
+    },
+    {
+      "id": "manual_llm_source_packet",
+      "status": "registered",
+      "schema_ref": null,
+      "provider": "context_pack_builder",
+      "consumers": ["manual_review_worker"],
+      "maturity": "usable"
+    },
+    {
+      "id": "shortpick_validation_snapshot",
+      "status": "registered",
+      "schema_ref": null,
+      "provider": "shortpick_validation_worker",
+      "consumers": ["shortpick_feedback", "history_replay"],
+      "maturity": "partial"
+    },
+    {
+      "id": "autonomous_flow_trial_report",
+      "status": "registered",
+      "schema_ref": null,
+      "provider": "main_autonomous_process",
+      "consumers": ["process_and_decision_synthesis"],
+      "maturity": "scaffold"
+    }
+  ],
+  "interfaces": [
+    {
+      "id": "iface.scheduler.phase5-cycle-ledger.v1",
+      "status": "registered",
+      "provider": "phase5_scheduler",
+      "consumer": "cycle_ledger_or_operations",
+      "contract_objects": ["phase5.cycle.started.v1", "phase5_cycle_ledger"],
+      "maturity": "partial"
+    },
+    {
+      "id": "iface.runner.phase5-artifact-ledger.v1",
+      "status": "registered",
+      "provider": "phase5_runners",
+      "consumer": "cycle_ledger_or_reviewer",
+      "contract_objects": ["phase5.artifact.produced.v1", "registered_artifact_families"],
+      "maturity": "partial"
+    },
+    {
+      "id": "iface.gate.phase5-scheduler.v1",
+      "status": "registered",
+      "provider": "gate_evaluator",
+      "consumer": "scheduler_or_projection_builder",
+      "contract_objects": ["phase5.gate.evaluated.v1", "phase5_gate_readout"],
+      "maturity": "partial"
+    },
+    {
+      "id": "iface.projection.publish-verifier.v1",
+      "status": "registered",
+      "provider": "projection_builder",
+      "consumer": "publish_verifier_or_frontend",
+      "contract_objects": ["phase5.projection.refreshed.v1", "frontend_projection_manifest"],
+      "maturity": "partial"
+    },
+    {
+      "id": "iface.recovery.scheduler-reviewer.v1",
+      "status": "registered",
+      "provider": "recovery_runner",
+      "consumer": "scheduler_or_reviewer",
+      "contract_objects": ["phase5.recovery.recorded.v1", "phase5_recovery_ticket"],
+      "maturity": "partial"
+    },
+    {
+      "id": "iface.validation.recommendation-projection.v1",
+      "status": "registered",
+      "provider": "validation_runner",
+      "consumer": "recommendation_projection",
+      "contract_objects": ["rolling_validation_manifest", "validation_metrics"],
+      "maturity": "usable"
+    },
+    {
+      "id": "iface.policy.operations-workbench.v1",
+      "status": "registered",
+      "provider": "phase5_policy_runner",
+      "consumer": "operations_workbench",
+      "contract_objects": ["phase5_holding_policy_study", "artifact.holding_policy_study.created.v1"],
+      "maturity": "partial"
+    },
+    {
+      "id": "iface.recommendation.manual-llm-context.v1",
+      "status": "registered",
+      "provider": "recommendation_projection",
+      "consumer": "manual_llm_context_builder",
+      "contract_objects": ["manual_llm_source_packet", "recommendation.projected.v1"],
+      "maturity": "usable"
+    },
+    {
+      "id": "iface.manual-llm.recommendation-projection.v1",
+      "status": "registered",
+      "provider": "manual_llm_worker",
+      "consumer": "recommendation_projection_or_frontend",
+      "contract_objects": ["manual_llm_review.completed.v1"],
+      "maturity": "usable"
+    },
+    {
+      "id": "iface.shortpick.validation-feedback.v1",
+      "status": "registered",
+      "provider": "shortpick_validation_worker",
+      "consumer": "feedback_projection_or_history_replay",
+      "contract_objects": ["shortpick_validation_snapshot", "shortpick.validation_snapshot.created.v1"],
+      "maturity": "partial"
+    },
+    {
+      "id": "iface.projection.api-spa.v1",
+      "status": "registered",
+      "provider": "projection_builder",
+      "consumer": "api_spa",
+      "contract_objects": ["frontend_projection_manifest", "frontend.projection.updated.v1"],
+      "maturity": "partial"
+    },
+    {
+      "id": "iface.main.subagent-contract.v1",
+      "status": "registered",
+      "provider": "main_autonomous_process",
+      "consumer": "subagents",
+      "contract_objects": ["context_pack", "owned_files", "maturity_matrix", "registered_ids"],
+      "maturity": "scaffold"
+    }
+  ],
+  "deprecated_ids": [
+    {
+      "id": "phase5.cycle.started",
+      "replacement": "phase5.cycle.started.v1",
+      "status": "deprecated"
+    },
+    {
+      "id": "phase5.artifact.produced",
+      "replacement": "phase5.artifact.produced.v1",
+      "status": "deprecated"
+    },
+    {
+      "id": "phase5.gate.evaluated",
+      "replacement": "phase5.gate.evaluated.v1",
+      "status": "deprecated"
+    },
+    {
+      "id": "phase5.projection.refreshed",
+      "replacement": "phase5.projection.refreshed.v1",
+      "status": "deprecated"
+    },
+    {
+      "id": "phase5.recovery.recorded",
+      "replacement": "phase5.recovery.recorded.v1",
+      "status": "deprecated"
+    }
+  ],
+  "maturity_domains": [
+    {
+      "id": "autonomous_flow_orchestration",
+      "status": "registered",
+      "maturity": "scaffold"
+    },
+    {
+      "id": "phase5_cycle_ledger",
+      "status": "registered",
+      "maturity": "partial"
+    },
+    {
+      "id": "phase5_research_validation",
+      "status": "registered",
+      "maturity": "usable"
+    },
+    {
+      "id": "phase5_policy_governance",
+      "status": "registered",
+      "maturity": "partial"
+    },
+    {
+      "id": "frontend_projection",
+      "status": "registered",
+      "maturity": "partial"
+    },
+    {
+      "id": "runtime_publish_verification",
+      "status": "registered",
+      "maturity": "usable"
+    },
+    {
+      "id": "manual_llm_review",
+      "status": "registered",
+      "maturity": "usable"
+    },
+    {
+      "id": "shortpick_lab_feedback",
+      "status": "registered",
+      "maturity": "partial"
+    }
+  ],
+  "claim_ceiling_levels": [
+    {
+      "id": "blocked",
+      "status": "registered",
+      "rank": 0
+    },
+    {
+      "id": "research_observation",
+      "status": "registered",
+      "rank": 1
+    },
+    {
+      "id": "paper_tracking_candidate",
+      "status": "registered",
+      "rank": 2
+    },
+    {
+      "id": "validated_readout",
+      "status": "registered",
+      "rank": 3
+    }
+  ]
+}

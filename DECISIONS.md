@@ -1,5 +1,16 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-05-20T00:30:00+08:00] Autonomous flow implementation starts with registry and claim gate before scheduler code:
+
+Trial C 收敛了 Trial B 留下的实现前置架构决策。后续自运行流程实现的顺序固定为：先建立机器 registry 与 checker，再实现公共 claim ceiling gate，之后才实现 Phase 5 cycle ledger、recovery ticket、gate readout 的写入路径，最后接入 scheduler、projection 和 publish verifier。
+
+补充说明
+- `phase5_cycle_ledger`、`phase5_recovery_ticket`、`phase5_gate_readout` 的权威事实先落 runtime artifact store；SQLite 或 frontend projection 只作为可重建查询层，不作为第一事实源。
+- `runtime.publish.verified.v1` 纳入 `phase5_cycle_ledger`，但 ledger 只保存 event envelope、`release_manifest_ref` 和 digest；release manifest 继续作为发布验收明细的权威源，避免双源冲突。
+- Registry 的实现阶段机器真值源采用 `JSON allowlist + JSON Schema`；Markdown appendix 继续保留为人工镜像，但如果二者冲突，JSON registry 胜出。
+- 暂不引入 DB registry，也暂不把 claim ceiling gate 做成 HTTP 服务。`claim_ceiling` 第一阶段实现为确定性纯函数库 / CLI / 内部模块，不读网络、不调用 LLM、不写库、不直接发布 runtime。
+- 后续 Context Pack 应由 JSON registry 派生 allowlist，子进程不得手写 registry 片段。
+
 [2026-05-20T00:00:00+08:00] Autonomous development flow trials must use registry-first design and bounded reruns:
 
 当前项目将作为自动化开发平台的流程试验田。新的流程不再把多 agent 并行产出本身视为成功，而是要求每轮都完成“流程设计 -> 试运行 -> 自动评估 -> 有条件重跑 -> 固化”的闭环。

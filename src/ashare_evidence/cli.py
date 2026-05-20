@@ -11,6 +11,11 @@ from typing import Any
 
 from ashare_evidence.benchmark import sync_benchmark_index_bars
 from ashare_evidence.cli_event import add_event_check_parser, handle_event_check, run_refresh_event_checks
+from ashare_evidence.cli_governance import (
+    add_governance_parsers,
+    handle_contract_registry_check_command,
+    handle_policy_audit_command,
+)
 from ashare_evidence.cli_research import add_research_parsers, handle_factor_observation, handle_weight_sweep
 from ashare_evidence.dashboard import get_glossary_entries, get_stock_dashboard, list_candidate_recommendations
 from ashare_evidence.db import init_database, preflight_database_writable, session_scope
@@ -32,7 +37,6 @@ from ashare_evidence.phase2.producer_contract_study import (
     build_phase5_producer_contract_study,
     build_phase5_producer_contract_study_artifact,
 )
-from ashare_evidence.policy_audit import assert_policy_audit, write_policy_audit_report
 from ashare_evidence.policy_config_loader import (
     activate_policy_config_version,
     build_policy_governance_summary,
@@ -395,13 +399,7 @@ def build_parser() -> argparse.ArgumentParser:
     glossary = subparsers.add_parser("glossary", help="Show the dashboard glossary entries.")
     glossary.add_argument("--database-url", default=None)
 
-    policy_audit = subparsers.add_parser("policy-audit", help="Run constants, formula, and tunable-policy governance checks.")
-    policy_audit.add_argument("--write-report", action="store_true")
-    policy_audit.add_argument("--report-path", default=None)
-    policy_audit.add_argument("--fail-on-new-unclassified", action="store_true")
-    policy_audit.add_argument("--fail-on-direct-config-read", action="store_true")
-    policy_audit.add_argument("--fail-on-formula-side-effects", action="store_true")
-    policy_audit.add_argument("--fail-on-missing-config-lineage", action="store_true")
+    add_governance_parsers(subparsers)
 
     policy_config = subparsers.add_parser("policy-configs", help="List active and historical governed policy configs.")
     policy_config.add_argument("--database-url", default=None)
@@ -739,28 +737,9 @@ def main(argv: list[str] | None = None) -> int:
         print("database initialized")
         return 0
     if args.command == "policy-audit":
-        try:
-            payload = assert_policy_audit(
-                fail_on_new_unclassified=args.fail_on_new_unclassified,
-                fail_on_direct_config_read=args.fail_on_direct_config_read,
-                fail_on_formula_side_effects=args.fail_on_formula_side_effects,
-                fail_on_missing_config_lineage=args.fail_on_missing_config_lineage,
-            )
-        except RuntimeError as exc:
-            payload = assert_policy_audit(
-                fail_on_new_unclassified=False,
-                fail_on_direct_config_read=False,
-                fail_on_formula_side_effects=False,
-                fail_on_missing_config_lineage=False,
-            )
-            _print_json(payload)
-            print(str(exc))
-            return 1
-        if args.write_report:
-            path = write_policy_audit_report(None if args.report_path is None else Path(args.report_path))
-            payload = {**payload, "report_path": str(path)}
-        _print_json(payload)
-        return 0
+        return handle_policy_audit_command(args)
+    if args.command == "contract-registry-check":
+        return handle_contract_registry_check_command(args)
     if _should_initialize_database(args.database_url):
         init_database(args.database_url)
     if args.command == "latest":

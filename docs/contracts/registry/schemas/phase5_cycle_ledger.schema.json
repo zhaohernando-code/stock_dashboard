@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "phase5_cycle_ledger.schema.json",
+  "title": "Phase 5 Cycle Ledger",
+  "type": "object",
+  "required": [
+    "artifact_family",
+    "schema_version",
+    "cycle_id",
+    "trigger",
+    "scope",
+    "status",
+    "started_at",
+    "finished_at",
+    "input_contract_versions",
+    "event_refs",
+    "artifact_refs",
+    "gate_readout_refs",
+    "recovery_ticket_refs",
+    "publish_verification_ref",
+    "next_action"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "artifact_family": {
+      "const": "phase5_cycle_ledger"
+    },
+    "schema_version": {
+      "const": "v1"
+    },
+    "cycle_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "trigger": {
+      "type": "string",
+      "enum": ["scheduled", "manual", "retry", "recovery_followup"]
+    },
+    "scope": {
+      "type": "object"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["planned", "running", "degraded", "blocked", "completed"]
+    },
+    "started_at": {
+      "type": "string"
+    },
+    "finished_at": {
+      "type": ["string", "null"]
+    },
+    "input_contract_versions": {
+      "type": "object"
+    },
+    "event_refs": {
+      "type": "array"
+    },
+    "artifact_refs": {
+      "type": "array"
+    },
+    "gate_readout_refs": {
+      "type": "array"
+    },
+    "recovery_ticket_refs": {
+      "type": "array"
+    },
+    "publish_verification_ref": {
+      "type": ["object", "null"]
+    },
+    "next_action": {
+      "type": "string",
+      "enum": ["continue_tracking", "rebuild_projection", "retry_failed_step", "redesign", "blocked", "none"]
+    }
+  }
+}
