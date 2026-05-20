@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from ashare_evidence.autonomous_flow_scheduler_action_executor import execute_phase5_scheduler_noop_action
+from ashare_evidence.autonomous_flow_scheduler_action_route_executor import apply_phase5_scheduler_action_route
 from ashare_evidence.autonomous_flow_scheduler_action_router import (
     preflight_phase5_scheduler_action_route,
     route_phase5_scheduler_action_result,
@@ -50,6 +51,7 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
             "execution",
             "action",
             "action-route",
+            "action-route-apply",
             "action-route-preflight",
             "full",
         ),
@@ -59,8 +61,9 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
             "plan emits a scheduler follow-up plan, dry-run emits a no-side-effect scheduler "
             "execution intent, diagnostic records scheduler diagnostics, execution records a safe "
             "scheduler execution ledger, action executes an observe-only contract action, "
-            "action-route routes that observe-only action result, action-route-preflight checks route "
-            "arguments, full emits the service result for debugging."
+            "action-route routes that observe-only action result, action-route-apply applies the "
+            "ready route through the core apply layer, action-route-preflight checks route arguments, "
+            "full emits the service result for debugging."
         ),
     )
 
@@ -77,6 +80,7 @@ def handle_phase5_local_cycle_step_command(args: argparse.Namespace) -> int:
             execute_scheduler_noop_action=execute_phase5_scheduler_noop_action,
             route_scheduler_action_result=route_phase5_scheduler_action_result,
             preflight_scheduler_action_route=preflight_phase5_scheduler_action_route,
+            apply_scheduler_action_route=apply_phase5_scheduler_action_route,
             run_service=run_phase5_local_cycle_service,
         ),
     )
