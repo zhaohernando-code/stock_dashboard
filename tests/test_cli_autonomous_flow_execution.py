@@ -20,7 +20,11 @@ from tests.helpers_cli_autonomous_flow import (
     _ok_tick_result,
     _plan_result,
 )
-from tests.helpers_cli_autonomous_flow_execution import _execution_result, _FakeExecutionResult
+from tests.helpers_cli_autonomous_flow_execution import (
+    _assert_execution_conflict_cli_returns_typed_json,
+    _execution_result,
+    _FakeExecutionResult,
+)
 
 
 def test_phase5_local_cycle_step_execution_missing_args_fail_before_tick(
@@ -43,6 +47,13 @@ def test_phase5_local_cycle_step_execution_missing_args_fail_before_tick(
         "message": "--execution-id, --idempotency-key and --created-at are required for execution output.",
         "missing_arguments": ["--execution-id", "--idempotency-key", "--created-at"],
     }
+
+
+def test_phase5_local_cycle_step_execution_conflict_returns_typed_json(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _assert_execution_conflict_cli_returns_typed_json(monkeypatch, capsys)
 
 
 def test_phase5_local_cycle_step_execution_calls_tick_plan_and_execution_recorder_only(
