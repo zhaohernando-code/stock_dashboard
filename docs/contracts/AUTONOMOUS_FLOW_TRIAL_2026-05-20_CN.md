@@ -84,7 +84,7 @@ Trial A 已完成两份产物：
 
 ### 6.2 自动重跑触发项
 
-- 纵向切片存在未注册事件：`phase5.cycle.started`、`phase5.artifact.produced`、`phase5.gate.evaluated`、`phase5.projection.refreshed`、`phase5.recovery.recorded`。
+- 纵向切片存在未注册的旧式无版本事件名，覆盖 cycle、artifact produced、gate evaluated、projection refreshed 和 recovery recorded 五类事件。
 - 全局协议缺少机器可校验的 registry appendix，后续无法用脚本稳定检查“未注册事件 / artifact / interface”。
 - Trial A 证明“让两个子进程并行分别产出全局协议和依赖全局协议的模块设计”仍然存在时序问题：模块设计可能先于全局协议完成，导致引用漂移。
 
@@ -126,7 +126,7 @@ Trial B 已完成两份产物：
 
 - `git diff --check` 通过。
 - Trial B 纵向切片中反引号引用的 event / artifact / interface id 均能在 Trial B 全局协议中找到。
-- Trial B 纵向切片中未发现 Trial A 无版本事件引用：`phase5.cycle.started`、`phase5.artifact.produced`、`phase5.gate.evaluated`、`phase5.projection.refreshed`、`phase5.recovery.recorded`。
+- Trial B 纵向切片中未发现 Trial A 的旧式无版本事件引用。
 - 必需章节覆盖完整。
 
 ### 8.3 本轮学到的流程约束
@@ -146,3 +146,37 @@ Trial B 已完成两份产物：
 - `runtime.publish.verified.v1` 是否纳入 cycle ledger。
 
 本轮完成了“流程设计 -> 试运行 -> 评估 -> 重跑 -> 固化”的最小闭环。它证明当前流程可以在没有用户继续干预的情况下发现 Trial A 的协议漂移，并通过 Trial B 自行收敛。
+
+## 9. AC-AF 实现试验补充结论
+
+后续 AC-AF 从文档设计进入代码实现后，暴露出新的流程约束。它们不是单个功能的 bug，而是无人开发平台必须内建的验收规则。
+
+### 9.1 文件规模治理
+
+- AC 的 CLI smoke fixture 拆分和 AE 的 298 行测试文件说明，文件规模不能只靠最终硬上限控制。
+- Context Pack 必须记录本轮会触碰文件的当前行数、目标上限和拆分触发线。
+- 子进程让测试文件达到 260 行时，应优先拆分 helper、fixture 或主题测试文件；接近 300 行时，即使所有门禁通过，主进程也要把它记为维护性劣化并在同轮处理。
+
+### 9.2 子进程门禁与主进程接受分离
+
+- 子进程通过 focused tests、ruff、registry check、policy audit、diff check 或 full regression，只代表局部执行完成。
+- 主进程接受前必须做语义 diff 审查，覆盖 legacy migration、旧数据兼容、crash replay、冲突分支、副作用边界、幂等和并发语义。
+- 如果主进程发现缺口，小范围局部问题可由主进程修正；如果缺口来自 Context Pack 方向错误或验收条件缺失，则必须重跑子进程。
+
+### 9.3 基座能力不能只靠扫描
+
+- AE 的 idempotency 先以 ledger-by-key 扫描实现，能通过基本测试，但不足以承载并发和 crash replay 语义。
+- AF 引入 reservation 后，流程结论升级为：调度、幂等、artifact 写入、状态机、claim gate 等基座能力需要硬状态和明确原子边界。
+- 如果原子性只依赖本地文件系统语义，评估文档必须把分布式锁或跨机器一致性列为残余风险，不能隐含宣称 production 级并发安全。
+
+### 9.4 Legacy migration 验收
+
+- 新机制接入既有 artifact family 时，必须测试“旧数据存在、新索引或 reservation 不存在”的迁移路径。
+- 新硬状态不得让旧 ledger 绕过冲突检测、claim gate、恢复写入或审计链路。
+- 迁移验收失败时，不应通过追加兼容分支掩盖问题；应先判断这是局部修复、数据迁移任务，还是需要重跑架构设计。
+
+### 9.5 评估文档记录要求
+
+- 每个实现 trial 的评估文档必须记录：子进程输出、子进程门禁、主进程语义审查、主进程修正、最终门禁、残余风险。
+- 如果主进程在子进程完成后修改了测试拆分、迁移边界、reservation 语义或文档规则，必须写明修正原因，并判断是否说明流程需要更新。
+- “门禁通过但主进程补修”的情况必须反哺下一轮 Context Pack，避免无人运行时重复依赖人工提醒。
