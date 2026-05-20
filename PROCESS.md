@@ -111,6 +111,7 @@
 ## API、脚本与工具陷阱
 
 - **API 错误响应统一用 `detail`**：前端只提取 `payload.detail` 展示中文错误；返回 `error` 会退化成裸 HTTP 状态码。
+- **不要覆盖仓库默认 pytest marker 策略**：跑完整默认门禁时使用 `PYTHONPATH=src python3 -m pytest -q`，让 `pyproject.toml` 的 `not slow_integration and not runtime_integration` 生效。临时 `-m "not integration"` 会覆盖默认排除，把刻意隔离的慢集成/runtime 用例纳入，导致与默认门禁不一致的失败信号。
 - **Prompt 文案改动要同步断言**：用户可见 prompt 或 follow-up copy 改词后，跑相关 view/prompt 测试，避免断言继续锁旧词。
 - **Pydantic 前向引用不要藏在 `TYPE_CHECKING`**：Pydantic v2 用模块命名空间解析注解；循环依赖时在模块加载完成后注入类型并 `model_rebuild()`。
 - **bash 命令拼接不要 `.join('; ')`**：多余分号会制造 `do;`、`then;` 语法错误。生成脚本后跑 `bash -n`。
