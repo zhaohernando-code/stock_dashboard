@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 SchemaVersion = Literal["v1"]
 PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT_ID = "phase5.scheduler.diagnostic.recorded.v1"
+PHASE5_SCHEDULER_EXECUTION_RECORDED_EVENT_ID = "phase5.scheduler.execution.recorded.v1"
 SENSITIVE_DIAGNOSTIC_TOKENS = ("input_bundle", "runner_result", "release-manifest:", "sha256:", "Traceback")
 
 
@@ -150,6 +151,65 @@ class Phase5SchedulerDiagnosticArtifact(BaseModel):
     def _sanitize_notes(cls, value: str) -> str:
         if _contains_sensitive_diagnostic_token(value):
             return "[redacted sensitive diagnostic detail]"
+        return value
+
+
+class Phase5SchedulerExecutionLedgerArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_family: Literal["phase5_scheduler_execution_ledger"] = "phase5_scheduler_execution_ledger"
+    schema_version: SchemaVersion = "v1"
+    execution_id: str = Field(min_length=1)
+    idempotency_key: str = Field(min_length=1)
+    cycle_id: str | None = None
+    source: Literal["phase5_scheduler"] = "phase5_scheduler"
+    created_at: str = Field(min_length=1)
+    plan_action: Literal[
+        "continue_tracking",
+        "rebuild_projection",
+        "retry_failed_step",
+        "open_recovery_ticket",
+        "block_cycle",
+        "redesign",
+        "none",
+    ]
+    execution_status: Literal["planned", "skipped", "blocked"]
+    would_execute: bool
+    diagnostic_refs: list[str] = Field(default_factory=list)
+    blocking_reasons: list[str] = Field(default_factory=list)
+    notes: str = ""
+    event_refs: list[str] = Field(default_factory=lambda: [PHASE5_SCHEDULER_EXECUTION_RECORDED_EVENT_ID])
+
+    @field_validator("execution_id", "idempotency_key", "created_at", "cycle_id")
+    @classmethod
+    def _reject_sensitive_identity_fields(cls, value: str | None) -> str | None:
+        if value is not None and _contains_sensitive_diagnostic_token(value):
+            raise ValueError("scheduler execution identity fields must not contain sensitive diagnostic detail")
+        return value
+
+    @field_validator("diagnostic_refs", "blocking_reasons")
+    @classmethod
+    def _dedupe_safe_refs(cls, values: list[str]) -> list[str]:
+        result: list[str] = []
+        for value in values:
+            if not _contains_sensitive_diagnostic_token(value) and value not in result:
+                result.append(value)
+        return result
+
+    @field_validator("event_refs")
+    @classmethod
+    def _dedupe_event_refs(cls, values: list[str]) -> list[str]:
+        result: list[str] = []
+        for value in [*values, PHASE5_SCHEDULER_EXECUTION_RECORDED_EVENT_ID]:
+            if value not in result:
+                result.append(value)
+        return result
+
+    @field_validator("notes")
+    @classmethod
+    def _sanitize_notes(cls, value: str) -> str:
+        if _contains_sensitive_diagnostic_token(value):
+            return "[redacted sensitive scheduler execution detail]"
         return value
 
 
