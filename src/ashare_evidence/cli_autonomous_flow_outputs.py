@@ -10,6 +10,7 @@ from ashare_evidence.autonomous_flow import Phase5SchedulerExecutionIdempotencyC
 from ashare_evidence.cli_autonomous_flow_action_outputs import (
     handle_action_output,
     handle_action_route_output,
+    handle_action_route_preflight_output,
 )
 from ashare_evidence.cli_autonomous_flow_diagnostic_outputs import handle_diagnostic_output
 
@@ -27,6 +28,7 @@ class Phase5LocalCycleStepHandlers:
     record_scheduler_plan_execution: Callable[..., Any]
     execute_scheduler_noop_action: Callable[..., Any]
     route_scheduler_action_result: Callable[..., Any]
+    preflight_scheduler_action_route: Callable[..., Any]
     run_service: Callable[..., Any]
 
 
@@ -63,6 +65,14 @@ def handle_phase5_local_cycle_step_output(
 
     if args.output == "action-route":
         return handle_action_route_output(
+            args,
+            handlers,
+            run_tick_from_args=_run_tick_from_args,
+            print_json=_print_json,
+        )
+
+    if args.output == "action-route-preflight":
+        return handle_action_route_preflight_output(
             args,
             handlers,
             run_tick_from_args=_run_tick_from_args,
