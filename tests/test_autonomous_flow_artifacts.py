@@ -6,6 +6,12 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from ashare_evidence.autonomous_flow_artifact_store import (
+    read_phase5_cycle_ledger_artifact as direct_read_phase5_cycle_ledger_artifact,
+)
+from ashare_evidence.autonomous_flow_artifact_store import (
+    write_phase5_cycle_ledger_artifact as direct_write_phase5_cycle_ledger_artifact,
+)
 from ashare_evidence.autonomous_flow_artifacts import (
     FrontendProjectionManifestArtifact,
     Phase5CycleLedgerArtifact,
@@ -35,6 +41,33 @@ from ashare_evidence.research_artifact_store import (
 
 
 class AutonomousFlowArtifactStoreTests(unittest.TestCase):
+    def test_autonomous_flow_store_direct_import_path_interops_with_compat_facade(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            cycle = Phase5CycleLedgerArtifact(
+                cycle_id="cycle-direct-import",
+                trigger="manual",
+                scope={"portfolio": "short_pick_lab"},
+                status="completed",
+                started_at="2026-05-20T09:00:00Z",
+                input_contract_versions={"registry": "autonomous_flow_registry.v1"},
+                event_refs=[],
+                artifact_refs=[],
+                gate_readout_refs=[],
+                recovery_ticket_refs=[],
+                next_action="none",
+            )
+
+            direct_write_phase5_cycle_ledger_artifact(cycle, root=root)
+            compat_cycle = cycle.model_copy(update={"cycle_id": "cycle-compat-import"})
+            write_phase5_cycle_ledger_artifact(compat_cycle, root=root)
+
+            self.assertEqual(read_phase5_cycle_ledger_artifact(cycle.cycle_id, root=root).status, "completed")
+            self.assertEqual(
+                direct_read_phase5_cycle_ledger_artifact(compat_cycle.cycle_id, root=root).status,
+                "completed",
+            )
+
     def test_phase5_autonomous_flow_artifacts_round_trip_in_runtime_root(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
