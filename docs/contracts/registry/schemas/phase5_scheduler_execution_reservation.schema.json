@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "phase5_scheduler_execution_reservation.schema.json",
+  "title": "Phase 5 Scheduler Execution Reservation",
+  "type": "object",
+  "required": [
+    "artifact_family",
+    "schema_version",
+    "reservation_id",
+    "idempotency_key",
+    "execution_id",
+    "cycle_id",
+    "created_at",
+    "source"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "artifact_family": {
+      "const": "phase5_scheduler_execution_reservation"
+    },
+    "schema_version": {
+      "const": "v1"
+    },
+    "reservation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "execution_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cycle_id": {
+      "type": ["string", "null"]
+    },
+    "created_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "const": "phase5_scheduler"
+    }
+  }
+}

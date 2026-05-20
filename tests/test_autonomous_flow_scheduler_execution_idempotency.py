@@ -12,9 +12,11 @@ from ashare_evidence.autonomous_flow import (
 )
 from ashare_evidence.research_artifact_store import read_phase5_cycle_ledger_artifact
 from ashare_evidence.scheduler_execution_artifact_store import (
+    create_phase5_scheduler_execution_reservation_artifact,
     find_phase5_scheduler_execution_ledger_by_idempotency_key,
     read_phase5_scheduler_execution_ledger_artifact,
     read_phase5_scheduler_execution_ledger_artifact_if_exists,
+    read_phase5_scheduler_execution_reservation_artifact,
     write_phase5_scheduler_execution_ledger_artifact,
 )
 from tests.helpers_autonomous_flow_scheduler_execution import _execution_ledger, _start_cycle
@@ -102,12 +104,11 @@ class Phase5SchedulerExecutionIdempotencyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             before = _start_cycle(root, "phase5-20260521-conflict")
-            write_phase5_scheduler_execution_ledger_artifact(
-                _execution_ledger(
-                    execution_id="execution-existing",
-                    idempotency_key="idempotency:conflict",
-                    cycle_id="phase5-20260521-conflict",
-                ),
+            create_phase5_scheduler_execution_reservation_artifact(
+                idempotency_key="idempotency:conflict",
+                execution_id="execution-existing",
+                cycle_id="phase5-20260521-conflict",
+                created_at="2026-05-21T09:00:00Z",
                 root=root,
             )
 
@@ -127,5 +128,38 @@ class Phase5SchedulerExecutionIdempotencyTests(unittest.TestCase):
             self.assertEqual(raised.exception.idempotency_key, "idempotency:conflict")
             self.assertEqual(raised.exception.existing_execution_id, "execution-existing")
             self.assertEqual(raised.exception.requested_execution_id, "execution-requested")
+            self.assertIsNone(read_phase5_scheduler_execution_ledger_artifact_if_exists("execution-requested", root=root))
+            self.assertEqual(stored_cycle, before)
+
+    def test_record_execution_ledger_rejects_legacy_ledger_conflict_before_new_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            before = _start_cycle(root, "phase5-20260521-legacy-conflict")
+            write_phase5_scheduler_execution_ledger_artifact(
+                _execution_ledger(
+                    execution_id="execution-existing",
+                    idempotency_key="idempotency:legacy-conflict",
+                    cycle_id="phase5-20260521-legacy-conflict",
+                ),
+                root=root,
+            )
+
+            with self.assertRaises(Phase5SchedulerExecutionIdempotencyConflictError) as raised:
+                record_phase5_scheduler_execution_ledger(
+                    execution_id="execution-requested",
+                    idempotency_key="idempotency:legacy-conflict",
+                    cycle_id="phase5-20260521-legacy-conflict",
+                    created_at="2026-05-21T09:01:00Z",
+                    plan_action="retry_failed_step",
+                    execution_status="planned",
+                    would_execute=False,
+                    root=root,
+                )
+            reservation = read_phase5_scheduler_execution_reservation_artifact("idempotency:legacy-conflict", root=root)
+            stored_cycle = read_phase5_cycle_ledger_artifact("phase5-20260521-legacy-conflict", root=root)
+
+            self.assertEqual(raised.exception.existing_execution_id, "execution-existing")
+            self.assertEqual(raised.exception.requested_execution_id, "execution-requested")
+            self.assertEqual(reservation.execution_id, "execution-existing")
             self.assertIsNone(read_phase5_scheduler_execution_ledger_artifact_if_exists("execution-requested", root=root))
             self.assertEqual(stored_cycle, before)

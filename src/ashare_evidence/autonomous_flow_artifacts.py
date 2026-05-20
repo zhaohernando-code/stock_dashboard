@@ -213,6 +213,26 @@ class Phase5SchedulerExecutionLedgerArtifact(BaseModel):
         return value
 
 
+class Phase5SchedulerExecutionReservationArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_family: Literal["phase5_scheduler_execution_reservation"] = "phase5_scheduler_execution_reservation"
+    schema_version: SchemaVersion = "v1"
+    reservation_id: str = Field(min_length=1)
+    idempotency_key: str = Field(min_length=1)
+    execution_id: str = Field(min_length=1)
+    cycle_id: str | None = None
+    created_at: str = Field(min_length=1)
+    source: Literal["phase5_scheduler"] = "phase5_scheduler"
+
+    @field_validator("reservation_id", "idempotency_key", "execution_id", "cycle_id", "created_at")
+    @classmethod
+    def _reject_sensitive_identity_fields(cls, value: str | None) -> str | None:
+        if value is not None and _contains_sensitive_diagnostic_token(value):
+            raise ValueError("scheduler execution reservation identity fields must not contain sensitive diagnostic detail")
+        return value
+
+
 class Phase5GateReadoutArtifact(BaseModel):
     artifact_family: Literal["phase5_gate_readout"] = "phase5_gate_readout"
     schema_version: SchemaVersion = "v1"
