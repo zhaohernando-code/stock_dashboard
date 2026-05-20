@@ -78,6 +78,7 @@
 - **先分清真串号和展示误导**：多账号问题先用 API 验证账号态和数据归属，再判断是后端隔离失败还是前端把全局候选池混进账号工作台。
 - **`act_as` 不跨刷新持久化**：root 代看是单页临时状态；刷新或重开标签默认回 actor 自己空间，避免用户误以为持仓消失。
 - **member 初始化顺序不能复用 root**：先取 `/auth/context`；root 可走 runtime settings，member 应走 overview/只读入口，避免 settings 403 白屏。
+- **个人模型 Key 必须按账号隔离**：人工研究和追问是所有账号的工作流，不应因为 member 不是 root 而隐藏；但外部模型 API key 必须按 `target_login` 读写、默认和 failover，root 代看时也只能维护被代看账号自己的 Key。全站数据源 token 仍按运维配置处理，不混入个人模型配置。
 - **关注池隔离不等于分析断流**：账号 follow 分开存；symbol 级分析资格按所有账号 active follows 并集判断。只有最后一个 follow 消失，才停止全局 tracking。
 - **空成员空间不能启动空模拟盘**：member 首登可以有 draft session，但 `can_start` 和 API 都必须拒绝空 watch symbols。
 
