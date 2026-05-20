@@ -1,6 +1,6 @@
 {
-  "annualized_excess_return": 0.1611,
-  "annualized_return": 0.2068,
+  "annualized_excess_return": 0.1592,
+  "annualized_return": 0.21,
   "artifact_id": "portfolio-backtest:portfolio-manual-sandbox",
   "artifact_type": "portfolio_backtest",
   "benchmark": {
@@ -17,7 +17,7 @@
   },
   "drawdown_series_ref": "phase2-drawdown:portfolio-manual-sandbox",
   "drawdown_stats": {
-    "current_drawdown": -0.0204,
+    "current_drawdown": -0.0179,
     "max_drawdown": -0.0775
   },
   "equity_curve": [
@@ -6212,12 +6212,44 @@
       "nav": 1086156.91,
       "observed_at": "2026-05-14T15:00:00",
       "trade_date": "2026-05-14"
+    },
+    {
+      "benchmark_nav": 888936.34,
+      "drawdown": -0.0335,
+      "exposure": 0.2011,
+      "nav": 1071683.91,
+      "observed_at": "2026-05-15T15:00:00",
+      "trade_date": "2026-05-15"
+    },
+    {
+      "benchmark_nav": 916556.81,
+      "drawdown": -0.0306,
+      "exposure": 0.2034,
+      "nav": 1074824.91,
+      "observed_at": "2026-05-18T15:00:00",
+      "trade_date": "2026-05-18"
+    },
+    {
+      "benchmark_nav": 928723.0,
+      "drawdown": -0.0281,
+      "exposure": 0.2055,
+      "nav": 1077579.91,
+      "observed_at": "2026-05-19T15:00:00",
+      "trade_date": "2026-05-19"
+    },
+    {
+      "benchmark_nav": 945654.2,
+      "drawdown": -0.0179,
+      "exposure": 0.2138,
+      "nav": 1088963.91,
+      "observed_at": "2026-05-20T15:00:00",
+      "trade_date": "2026-05-20"
     }
   ],
   "execution_assumptions": "daily_close_marking + paper_fills + T+1 + price_limit_checks",
   "exposure_summary": {
     "active_position_count": 3,
-    "invested_ratio": 0.2117
+    "invested_ratio": 0.2138
   },
   "manifest_id": "rolling-validation:phase2-portfolio-backtests",
   "max_drawdown": -0.0775,
@@ -6231,13 +6263,13 @@
     "active_position_count": 3,
     "rule_pass_rate": 0.75
   },
-  "sharpe_like_ratio": 2.07871,
+  "sharpe_like_ratio": 2.054194,
   "status": "research_candidate",
   "status_note": "组合回测已切到真实 daily 价格与 proxy benchmark；模型轨道的 simulation baseline 已升级为 constrained TopK，但仍处于 research candidate。",
   "strategy_definition": "研究员逐笔确认、单独记账，适合复盘“人是否正确理解建议”。",
   "stress_period_summary": [
     {
-      "excess_return": 0.1611,
+      "excess_return": 0.1592,
       "max_drawdown": -0.0775,
       "period": "phase2_fixture_window"
     }
@@ -6247,6 +6279,6 @@
   "turnover_stats": {
     "turnover": 0.75
   },
-  "win_rate": 0.979328,
+  "win_rate": 0.979434,
   "win_rate_definition": "positive_excess_nav_point_ratio_against_phase2_proxy"
 }

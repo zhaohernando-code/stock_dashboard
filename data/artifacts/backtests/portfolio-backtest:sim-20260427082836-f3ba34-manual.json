@@ -1,5 +1,5 @@
 {
-  "annualized_excess_return": -0.0458,
+  "annualized_excess_return": -0.0507,
   "annualized_return": 0.0,
   "artifact_id": "portfolio-backtest:sim-20260427082836-f3ba34-manual",
   "artifact_type": "portfolio_backtest",
@@ -6212,6 +6212,38 @@
       "nav": 200000.0,
       "observed_at": "2026-05-14T15:00:00",
       "trade_date": "2026-05-14"
+    },
+    {
+      "benchmark_nav": 197541.41,
+      "drawdown": 0.0,
+      "exposure": 0.0,
+      "nav": 200000.0,
+      "observed_at": "2026-05-15T15:00:00",
+      "trade_date": "2026-05-15"
+    },
+    {
+      "benchmark_nav": 203679.29,
+      "drawdown": 0.0,
+      "exposure": 0.0,
+      "nav": 200000.0,
+      "observed_at": "2026-05-18T15:00:00",
+      "trade_date": "2026-05-18"
+    },
+    {
+      "benchmark_nav": 206382.89,
+      "drawdown": 0.0,
+      "exposure": 0.0,
+      "nav": 200000.0,
+      "observed_at": "2026-05-19T15:00:00",
+      "trade_date": "2026-05-19"
+    },
+    {
+      "benchmark_nav": 210145.38,
+      "drawdown": 0.0,
+      "exposure": 0.0,
+      "nav": 200000.0,
+      "observed_at": "2026-05-20T15:00:00",
+      "trade_date": "2026-05-20"
     }
   ],
   "execution_assumptions": "daily_close_marking + paper_fills + T+1 + price_limit_checks",
@@ -6231,13 +6263,13 @@
     "active_position_count": 0,
     "rule_pass_rate": 1.0
   },
-  "sharpe_like_ratio": -4.58,
+  "sharpe_like_ratio": -5.07,
   "status": "research_candidate",
   "status_note": "组合回测已切到真实 daily 价格与 proxy benchmark；模型轨道的 simulation baseline 已升级为 constrained TopK，但仍处于 research candidate。",
   "strategy_definition": "研究员逐笔确认、单独记账，适合复盘“人是否正确理解建议”。",
   "stress_period_summary": [
     {
-      "excess_return": -0.0458,
+      "excess_return": -0.0507,
       "max_drawdown": 0.0,
       "period": "phase2_fixture_window"
     }
@@ -6247,6 +6279,6 @@
   "turnover_stats": {
     "turnover": 0.0
   },
-  "win_rate": 0.988372,
+  "win_rate": 0.984576,
   "win_rate_definition": "positive_excess_nav_point_ratio_against_phase2_proxy"
 }

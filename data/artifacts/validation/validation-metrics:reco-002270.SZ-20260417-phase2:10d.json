@@ -3,74 +3,74 @@
   "bucket_returns": [
     {
       "bucket": "bottom",
-      "mean_excess_return": -0.000397,
-      "sample_count": 31
+      "mean_excess_return": 0.004038,
+      "sample_count": 32
     },
     {
       "bucket": "middle",
-      "mean_excess_return": 0.067957,
-      "sample_count": 31
+      "mean_excess_return": 0.064995,
+      "sample_count": 32
     },
     {
       "bucket": "top",
-      "mean_excess_return": 0.00647,
-      "sample_count": 32
+      "mean_excess_return": 0.005029,
+      "sample_count": 34
     }
   ],
-  "bucket_spread_mean": 0.006867,
-  "bucket_spread_std": 0.143216,
+  "bucket_spread_mean": 0.000991,
+  "bucket_spread_std": 0.140378,
   "coverage": 1.0,
   "coverage_ratio": 1.0,
   "feature_drift_summary": {
     "coverage_status": "full_baseline",
-    "evaluation_observation_count": 94,
-    "feature_snapshot_count": 694,
+    "evaluation_observation_count": 98,
+    "feature_snapshot_count": 698,
     "horizon": 10,
     "status": "stable_fixture_snapshot"
   },
   "horizon": 10,
-  "ic_mean": -0.075175,
+  "ic_mean": -0.068699,
   "industry_slice_metrics": [],
   "manifest_id": "rolling-validation:reco-002270.SZ-20260417-phase2",
   "market_regime_metrics": [
     {
       "coverage_status": "full_baseline",
       "market_regime_tag": "phase5_active_watchlist_research_candidate",
-      "net_excess_return": 0.024337,
-      "rank_ic_mean": 0.074407
+      "net_excess_return": 0.024133,
+      "rank_ic_mean": 0.076271
     }
   ],
-  "net_excess_return": 0.024337,
+  "net_excess_return": 0.024133,
   "period_metrics": [
     {
       "horizon": 10,
-      "mean_excess_return": 0.024483,
-      "mean_return": 0.024483,
-      "sample_count": 94,
-      "walk_forward_window_count": 35
+      "mean_excess_return": 0.024286,
+      "mean_return": 0.024286,
+      "sample_count": 98,
+      "walk_forward_window_count": 39
     }
   ],
-  "positive_excess_rate": 0.617021,
-  "rank_ic_ir": 9.69536,
-  "rank_ic_mean": 0.074407,
-  "rank_ic_std": 0.007674,
-  "sample_count": 94,
+  "positive_excess_rate": 0.622449,
+  "rank_ic_ir": 9.899495,
+  "rank_ic_mean": 0.076271,
+  "rank_ic_std": 0.007705,
+  "sample_count": 98,
   "status": "research_candidate",
   "status_note": "已有滚动验证产物，当前仍处于观察阶段，尚未完成正式验证。",
   "subperiod_stats": [
     {
-      "positive_excess_rate": 0.851064,
-      "rank_ic_mean": -0.109621,
-      "sample_count": 47,
+      "positive_excess_rate": 0.857143,
+      "rank_ic_mean": -0.093878,
+      "sample_count": 49,
       "slice_label": "early"
     },
     {
-      "positive_excess_rate": 0.382979,
-      "rank_ic_mean": -0.142576,
-      "sample_count": 47,
+      "positive_excess_rate": 0.387755,
+      "rank_ic_mean": -0.234694,
+      "sample_count": 49,
       "slice_label": "late"
     }
   ],
-  "turnover": 0.041528,
-  "turnover_mean": 0.041528
+  "turnover": 0.043711,
+  "turnover_mean": 0.043711
 }
