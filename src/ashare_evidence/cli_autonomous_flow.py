@@ -5,7 +5,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ashare_evidence.autonomous_flow_scheduler_executor import dry_run_phase5_scheduler_plan
+from ashare_evidence.autonomous_flow_scheduler_executor import (
+    dry_run_phase5_scheduler_plan,
+    record_phase5_scheduler_plan_diagnostic,
+)
 from ashare_evidence.autonomous_flow_scheduler_plan import plan_phase5_scheduler_followup
 from ashare_evidence.autonomous_flow_service import run_phase5_local_cycle_service
 from ashare_evidence.autonomous_flow_tick import run_phase5_local_cycle_tick
@@ -45,16 +48,19 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
     phase5_local_cycle_step.add_argument("--recovery-ticket-id", default=None)
     phase5_local_cycle_step.add_argument("--projection-id", default=None)
     phase5_local_cycle_step.add_argument("--finished-at", default=None)
+    phase5_local_cycle_step.add_argument("--diagnostic-id", default=None)
+    phase5_local_cycle_step.add_argument("--observed-at", default=None)
     phase5_local_cycle_step.add_argument("--apply-closeout", action="store_true")
     phase5_local_cycle_step.add_argument("--require-publish-verification", action="store_true")
     phase5_local_cycle_step.add_argument(
         "--output",
-        choices=("status", "plan", "dry-run", "full"),
+        choices=("status", "plan", "dry-run", "diagnostic", "full"),
         default="status",
         help=(
             "Choose the JSON shape: status emits the default tick envelope, "
             "plan emits a scheduler follow-up plan, dry-run emits a no-side-effect scheduler "
-            "execution intent, full emits the service result for debugging."
+            "execution intent, diagnostic records scheduler diagnostics, full emits the service "
+            "result for debugging."
         ),
     )
 
@@ -76,6 +82,38 @@ def handle_phase5_local_cycle_step_command(args: argparse.Namespace) -> int:
         plan = plan_phase5_scheduler_followup(tick_result)
         dry_run_result = dry_run_phase5_scheduler_plan(plan)
         _print_json(dry_run_result.model_dump(mode="json"))
+        return 0
+
+    if args.output == "diagnostic":
+        missing_arguments = [
+            argument
+            for argument, value in (
+                ("--diagnostic-id", args.diagnostic_id),
+                ("--observed-at", args.observed_at),
+            )
+            if not value
+        ]
+        if missing_arguments:
+            _print_json(
+                {
+                    "status": "error",
+                    "command": "phase5-local-cycle-step",
+                    "error_type": "MissingRequiredDiagnosticArgument",
+                    "message": "--diagnostic-id and --observed-at are required for diagnostic output.",
+                    "missing_arguments": missing_arguments,
+                }
+            )
+            return 2
+
+        tick_result = _run_tick_from_args(args)
+        plan = plan_phase5_scheduler_followup(tick_result)
+        diagnostic_result = record_phase5_scheduler_plan_diagnostic(
+            plan,
+            diagnostic_id=args.diagnostic_id,
+            observed_at=args.observed_at,
+            root=args.artifact_root,
+        )
+        _print_json(diagnostic_result.model_dump(mode="json"))
         return 0
 
     try:
