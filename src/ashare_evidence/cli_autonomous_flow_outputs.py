@@ -11,6 +11,7 @@ from ashare_evidence.autonomous_flow import Phase5SchedulerExecutionIdempotencyC
 _EXECUTION_CONFLICT_RECOMMENDED_NEXT_ACTION = (
     "reuse_existing_execution_id_or_retry_with_new_idempotency_key"
 )
+_ACTION_BLOCKED_EXIT_CODE = 4
 
 
 @dataclass(frozen=True)
@@ -52,7 +53,7 @@ def handle_phase5_local_cycle_step_output(
         plan = handlers.plan_followup(tick_result)
         action_result = handlers.execute_scheduler_noop_action(plan)
         _print_json(action_result.model_dump(mode="json"))
-        return 0
+        return _action_exit_code(action_result)
 
     if args.output == "diagnostic":
         return _handle_diagnostic_output(args, handlers)
@@ -187,6 +188,15 @@ def _execution_conflict_payload(exc: Phase5SchedulerExecutionIdempotencyConflict
         "requested_execution_id": exc.requested_execution_id,
         "recommended_next_action": _EXECUTION_CONFLICT_RECOMMENDED_NEXT_ACTION,
     }
+
+
+def _action_exit_code(action_result: Any) -> int:
+    execution_status = getattr(action_result, "execution_status", None)
+    if execution_status is None and isinstance(getattr(action_result, "payload", None), dict):
+        execution_status = action_result.payload.get("execution_status")
+    if execution_status == "blocked":
+        return _ACTION_BLOCKED_EXIT_CODE
+    return 0
 
 
 def _print_json(payload: Any) -> None:
