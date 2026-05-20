@@ -23,7 +23,10 @@ from ashare_evidence.research_artifact_store import (
     write_phase5_recovery_ticket_artifact,
     write_phase5_scheduler_diagnostic_artifact,
 )
-from ashare_evidence.scheduler_execution_artifact_store import write_phase5_scheduler_execution_ledger_artifact
+from ashare_evidence.scheduler_execution_artifact_store import (
+    find_phase5_scheduler_execution_ledger_by_idempotency_key,
+    write_phase5_scheduler_execution_ledger_artifact,
+)
 
 PHASE5_CYCLE_STARTED_EVENT = "phase5.cycle.started.v1"
 PHASE5_ARTIFACT_PRODUCED_EVENT = "phase5.artifact.produced.v1"
@@ -39,6 +42,22 @@ PHASE5_NEXT_ACTIONS = {"continue_tracking", "rebuild_projection", "retry_failed_
 
 class Phase5CycleNotFoundError(LookupError):
     """Raised when an update targets a cycle ledger that has not been created."""
+
+
+class Phase5SchedulerExecutionIdempotencyConflictError(RuntimeError):
+    """Raised when an idempotency key is reused for a different scheduler execution."""
+
+    def __init__(
+        self,
+        *,
+        idempotency_key: str,
+        existing_execution_id: str,
+        requested_execution_id: str,
+    ) -> None:
+        self.idempotency_key = idempotency_key
+        self.existing_execution_id = existing_execution_id
+        self.requested_execution_id = requested_execution_id
+        super().__init__("phase5 scheduler execution idempotency conflict")
 
 
 def start_phase5_cycle(
@@ -219,6 +238,17 @@ def record_phase5_scheduler_execution_ledger(
     notes: str = "",
     root: Path | None = None,
 ) -> tuple[Phase5CycleLedgerArtifact | None, Phase5SchedulerExecutionLedgerArtifact]:
+    existing = find_phase5_scheduler_execution_ledger_by_idempotency_key(idempotency_key, root=root)
+    if existing is not None:
+        if existing.execution_id != execution_id:
+            raise Phase5SchedulerExecutionIdempotencyConflictError(
+                idempotency_key=idempotency_key,
+                existing_execution_id=existing.execution_id,
+                requested_execution_id=execution_id,
+            )
+        cycle = _append_scheduler_execution_event_if_cycle_exists(existing.cycle_id, root=root)
+        return cycle, existing
+
     ledger = Phase5SchedulerExecutionLedgerArtifact(
         execution_id=execution_id,
         idempotency_key=idempotency_key,
@@ -234,9 +264,23 @@ def record_phase5_scheduler_execution_ledger(
     )
     write_phase5_scheduler_execution_ledger_artifact(ledger, root=root)
 
+    cycle = _append_scheduler_execution_event_if_cycle_exists(cycle_id, root=root)
+    return cycle, ledger
+
+
+def _append_scheduler_execution_event_if_cycle_exists(
+    cycle_id: str | None,
+    *,
+    root: Path | None = None,
+) -> Phase5CycleLedgerArtifact | None:
+    if cycle_id is None:
+        return None
+
     cycle = read_phase5_cycle_ledger_artifact_if_exists(cycle_id, root=root)
     if cycle is None:
-        return None, ledger
+        return None
+    if PHASE5_SCHEDULER_EXECUTION_RECORDED_EVENT in cycle.event_refs:
+        return cycle
 
     updated = cycle.model_copy(
         update={
@@ -244,7 +288,7 @@ def record_phase5_scheduler_execution_ledger(
         }
     )
     write_phase5_cycle_ledger_artifact(updated, root=root)
-    return updated, ledger
+    return updated
 
 
 def record_phase5_projection_refreshed(

@@ -64,6 +64,24 @@ def read_phase5_scheduler_execution_ledger_artifact_if_exists(
     return Phase5SchedulerExecutionLedgerArtifact.model_validate(payload)
 
 
+def find_phase5_scheduler_execution_ledger_by_idempotency_key(
+    idempotency_key: str,
+    *,
+    root: Path | None = None,
+    _default_artifact_root: Path = DEFAULT_ARTIFACT_ROOT,
+) -> Phase5SchedulerExecutionLedgerArtifact | None:
+    artifact_root = Path(root) if root is not None else _default_artifact_root
+    ledger_dir = artifact_root / SCHEDULER_EXECUTION_LEDGER_FOLDER
+    if not ledger_dir.exists():
+        return None
+    for target in sorted(ledger_dir.glob("*.json")):
+        payload = json.loads(target.read_text(encoding="utf-8"))
+        ledger = Phase5SchedulerExecutionLedgerArtifact.model_validate(payload)
+        if ledger.idempotency_key == idempotency_key:
+            return ledger
+    return None
+
+
 def _scheduler_execution_ledger_path(
     execution_id: str,
     *,
