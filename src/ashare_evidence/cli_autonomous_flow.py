@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ashare_evidence.autonomous_flow_service import run_phase5_local_cycle_service
-from ashare_evidence.autonomous_flow_status import project_phase5_local_cycle_status
+from ashare_evidence.autonomous_flow_tick import run_phase5_local_cycle_tick
 
 
 def _print_json(payload: Any) -> None:
@@ -36,11 +36,25 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
         "--output",
         choices=("status", "full"),
         default="status",
-        help="Choose the success JSON shape: status projection by default, or full service result for debugging.",
+        help="Choose the JSON shape: tick status envelope by default, or full service result for debugging.",
     )
 
 
 def handle_phase5_local_cycle_step_command(args: argparse.Namespace) -> int:
+    if args.output == "status":
+        tick_result = run_phase5_local_cycle_tick(
+            cycle_id=args.cycle_id,
+            gate_id=args.gate_id,
+            recovery_ticket_id=args.recovery_ticket_id,
+            projection_id=args.projection_id,
+            finished_at=args.finished_at,
+            apply_closeout=args.apply_closeout,
+            require_publish_verification=args.require_publish_verification,
+            root=args.artifact_root,
+        )
+        _print_json(tick_result.model_dump(mode="json"))
+        return tick_result.exit_code
+
     try:
         result = run_phase5_local_cycle_service(
             cycle_id=args.cycle_id,
@@ -63,8 +77,5 @@ def handle_phase5_local_cycle_step_command(args: argparse.Namespace) -> int:
         )
         return 1
 
-    if args.output == "full":
-        _print_json(_jsonable_result(result))
-    else:
-        _print_json(project_phase5_local_cycle_status(result).model_dump(mode="json"))
+    _print_json(_jsonable_result(result))
     return 0
