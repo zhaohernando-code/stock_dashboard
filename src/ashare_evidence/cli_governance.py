@@ -6,6 +6,7 @@ from typing import Any
 
 from ashare_evidence.contract_registry import DEFAULT_REGISTRY_PATH, check_contract_registry
 from ashare_evidence.policy_audit import assert_policy_audit, write_policy_audit_report
+from ashare_evidence.process_hardening import parse_line_budget, run_process_hardening_check
 
 
 def add_governance_parsers(subparsers: Any) -> None:
@@ -25,6 +26,14 @@ def add_governance_parsers(subparsers: Any) -> None:
     contract_registry_check.add_argument("--docs", action="append", required=True)
     contract_registry_check.add_argument("--fail-on-unregistered", action="store_true")
     contract_registry_check.add_argument("--fail-on-deprecated", action="store_true")
+
+    process_hardening_check = subparsers.add_parser(
+        "process-hardening-check",
+        help="Check explicit autonomous-flow process docs and line budgets without runtime side effects.",
+    )
+    process_hardening_check.add_argument("--evaluation-doc", action="append", required=True)
+    process_hardening_check.add_argument("--line-budget", action="append", required=True)
+    process_hardening_check.add_argument("--fail-on-warning", action="store_true")
 
 
 def handle_policy_audit_command(args: Any) -> int:
@@ -58,6 +67,44 @@ def handle_contract_registry_check_command(args: Any) -> int:
         docs=args.docs,
         fail_on_unregistered=args.fail_on_unregistered,
         fail_on_deprecated=args.fail_on_deprecated,
+    )
+    _print_json(payload)
+    return 0 if payload["status"] == "pass" else 1
+
+
+def handle_governance_command(args: Any) -> int | None:
+    if args.command == "policy-audit":
+        return handle_policy_audit_command(args)
+    if args.command == "contract-registry-check":
+        return handle_contract_registry_check_command(args)
+    if args.command == "process-hardening-check":
+        return handle_process_hardening_check_command(args)
+    return None
+
+
+def handle_process_hardening_check_command(args: Any) -> int:
+    try:
+        line_budgets = [parse_line_budget(raw_value) for raw_value in args.line_budget]
+    except ValueError as exc:
+        payload = {
+            "status": "fail",
+            "issue_count": 1,
+            "issues": [
+                {
+                    "severity": "error",
+                    "code": "line_budget_parse_error",
+                    "message": str(exc),
+                }
+            ],
+            "checked_docs": [],
+            "line_budgets": [],
+        }
+        _print_json(payload)
+        return 1
+    payload = run_process_hardening_check(
+        evaluation_docs=args.evaluation_doc,
+        line_budgets=line_budgets,
+        fail_on_warning=args.fail_on_warning,
     )
     _print_json(payload)
     return 0 if payload["status"] == "pass" else 1
