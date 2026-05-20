@@ -5,10 +5,12 @@ from pathlib import Path
 from typing import Any
 
 from ashare_evidence.autonomous_flow_artifacts import (
+    PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT_ID,
     FrontendProjectionManifestArtifact,
     Phase5CycleLedgerArtifact,
     Phase5GateReadoutArtifact,
     Phase5RecoveryTicketArtifact,
+    Phase5SchedulerDiagnosticArtifact,
     PublishVerificationRef,
 )
 from ashare_evidence.research_artifact_store import (
@@ -17,6 +19,7 @@ from ashare_evidence.research_artifact_store import (
     write_phase5_cycle_ledger_artifact,
     write_phase5_gate_readout_artifact,
     write_phase5_recovery_ticket_artifact,
+    write_phase5_scheduler_diagnostic_artifact,
 )
 
 PHASE5_CYCLE_STARTED_EVENT = "phase5.cycle.started.v1"
@@ -24,6 +27,7 @@ PHASE5_ARTIFACT_PRODUCED_EVENT = "phase5.artifact.produced.v1"
 PHASE5_GATE_EVALUATED_EVENT = "phase5.gate.evaluated.v1"
 PHASE5_PROJECTION_REFRESHED_EVENT = "phase5.projection.refreshed.v1"
 PHASE5_RECOVERY_RECORDED_EVENT = "phase5.recovery.recorded.v1"
+PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT = PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT_ID
 RUNTIME_PUBLISH_VERIFIED_EVENT = "runtime.publish.verified.v1"
 PHASE5_CLOSEOUT_STATUSES = {"completed", "degraded", "blocked"}
 PHASE5_NEXT_ACTIONS = {"continue_tracking", "rebuild_projection", "retry_failed_step", "redesign", "blocked", "none"}
@@ -153,6 +157,48 @@ def record_phase5_recovery_ticket(
     )
     write_phase5_cycle_ledger_artifact(updated, root=root)
     return updated, ticket
+
+
+def record_phase5_scheduler_diagnostic(
+    *,
+    diagnostic_id: str,
+    observed_at: str,
+    scheduler_action: str,
+    severity: str,
+    failure_class: str,
+    recommended_recovery_action: str,
+    cycle_id: str | None = None,
+    blocking_reasons: list[str] | None = None,
+    evidence_refs: list[str] | None = None,
+    notes: str = "",
+    root: Path | None = None,
+) -> tuple[Phase5CycleLedgerArtifact | None, Phase5SchedulerDiagnosticArtifact]:
+    diagnostic = Phase5SchedulerDiagnosticArtifact(
+        diagnostic_id=diagnostic_id,
+        cycle_id=cycle_id,
+        observed_at=observed_at,
+        severity=severity,
+        scheduler_action=scheduler_action,
+        failure_class=failure_class,
+        recommended_recovery_action=recommended_recovery_action,
+        blocking_reasons=_dedupe(blocking_reasons or []),
+        evidence_refs=_dedupe(evidence_refs or []),
+        notes=notes,
+        event_refs=[PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT],
+    )
+    write_phase5_scheduler_diagnostic_artifact(diagnostic, root=root)
+
+    cycle = read_phase5_cycle_ledger_artifact_if_exists(cycle_id, root=root)
+    if cycle is None:
+        return None, diagnostic
+
+    updated = cycle.model_copy(
+        update={
+            "event_refs": _append_unique(cycle.event_refs, PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT),
+        }
+    )
+    write_phase5_cycle_ledger_artifact(updated, root=root)
+    return updated, diagnostic
 
 
 def record_phase5_projection_refreshed(

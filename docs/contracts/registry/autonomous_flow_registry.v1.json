@@ -47,6 +47,24 @@
       "maturity": "partial"
     },
     {
+      "id": "phase5.scheduler.diagnostic.recorded.v1",
+      "status": "registered",
+      "provider": "phase5_scheduler",
+      "consumers": ["scheduler", "reviewer", "operations"],
+      "min_payload_fields": [
+        "diagnostic_id",
+        "cycle_id",
+        "severity",
+        "scheduler_action",
+        "failure_class",
+        "recommended_recovery_action",
+        "blocking_reasons",
+        "evidence_refs",
+        "observed_at"
+      ],
+      "maturity": "partial"
+    },
+    {
       "id": "artifact.validation_manifest.created.v1",
       "status": "registered",
       "provider": "validation_runner",
@@ -150,6 +168,14 @@
       "schema_ref": "schemas/phase5_recovery_ticket.schema.json",
       "provider": "recovery_runner",
       "consumers": ["scheduler", "reviewer", "trial_report"],
+      "maturity": "partial"
+    },
+    {
+      "id": "phase5_scheduler_diagnostic",
+      "status": "registered",
+      "schema_ref": "schemas/phase5_scheduler_diagnostic.schema.json",
+      "provider": "phase5_scheduler",
+      "consumers": ["scheduler", "reviewer", "operations"],
       "maturity": "partial"
     },
     {
@@ -366,6 +392,11 @@
     },
     {
       "id": "phase5_cycle_ledger",
+      "status": "registered",
+      "maturity": "partial"
+    },
+    {
+      "id": "phase5_scheduler",
       "status": "registered",
       "maturity": "partial"
     },

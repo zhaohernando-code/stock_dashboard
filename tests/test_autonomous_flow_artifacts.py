@@ -11,6 +11,7 @@ from ashare_evidence.autonomous_flow_artifacts import (
     Phase5CycleLedgerArtifact,
     Phase5GateReadoutArtifact,
     Phase5RecoveryTicketArtifact,
+    Phase5SchedulerDiagnosticArtifact,
     PublishVerificationRef,
 )
 from ashare_evidence.research_artifact_store import (
@@ -23,10 +24,13 @@ from ashare_evidence.research_artifact_store import (
     read_phase5_gate_readout_artifact_if_exists,
     read_phase5_recovery_ticket_artifact,
     read_phase5_recovery_ticket_artifact_if_exists,
+    read_phase5_scheduler_diagnostic_artifact,
+    read_phase5_scheduler_diagnostic_artifact_if_exists,
     write_frontend_projection_manifest_artifact,
     write_phase5_cycle_ledger_artifact,
     write_phase5_gate_readout_artifact,
     write_phase5_recovery_ticket_artifact,
+    write_phase5_scheduler_diagnostic_artifact,
 )
 
 
@@ -92,11 +96,25 @@ class AutonomousFlowArtifactStoreTests(unittest.TestCase):
                 fallback_reason="runtime publish not verified",
                 event_refs=["phase5.projection.refreshed.v1"],
             )
+            diagnostic = Phase5SchedulerDiagnosticArtifact(
+                diagnostic_id="diagnostic-20260520-001",
+                cycle_id=cycle.cycle_id,
+                observed_at="2026-05-20T09:14:00Z",
+                severity="blocked",
+                scheduler_action="open_recovery_ticket",
+                failure_class="execution-precondition-failed",
+                recommended_recovery_action="open_recovery_ticket",
+                blocking_reasons=["cycle ledger missing"],
+                evidence_refs=["phase5_cycle_ledger:cycle-20260520-001"],
+                notes="scheduler precondition failed",
+                event_refs=["phase5.scheduler.diagnostic.recorded.v1"],
+            )
 
             cycle_path = write_phase5_cycle_ledger_artifact(cycle, root=root)
             ticket_path = write_phase5_recovery_ticket_artifact(ticket, root=root)
             readout_path = write_phase5_gate_readout_artifact(readout, root=root)
             projection_path = write_frontend_projection_manifest_artifact(projection, root=root)
+            diagnostic_path = write_phase5_scheduler_diagnostic_artifact(diagnostic, root=root)
 
             self.assertEqual(cycle_path, root / "autonomous_flow" / "phase5_cycle_ledger" / f"{cycle.cycle_id}.json")
             self.assertEqual(
@@ -108,12 +126,20 @@ class AutonomousFlowArtifactStoreTests(unittest.TestCase):
                 projection_path,
                 root / "autonomous_flow" / "frontend_projection_manifest" / f"{projection.projection_id}.json",
             )
+            self.assertEqual(
+                diagnostic_path,
+                root / "autonomous_flow" / "phase5_scheduler_diagnostic" / f"{diagnostic.diagnostic_id}.json",
+            )
             self.assertEqual(read_phase5_cycle_ledger_artifact(cycle.cycle_id, root=root).status, "completed")
             self.assertEqual(read_phase5_recovery_ticket_artifact(ticket.ticket_id, root=root).final_status, "degraded")
             self.assertEqual(read_phase5_gate_readout_artifact(readout.gate_id, root=root).claim_ceiling, "paper_tracking_candidate")
             self.assertEqual(
                 read_frontend_projection_manifest_artifact(projection.projection_id, root=root).row_count,
                 3,
+            )
+            self.assertEqual(
+                read_phase5_scheduler_diagnostic_artifact(diagnostic.diagnostic_id, root=root).scheduler_action,
+                "open_recovery_ticket",
             )
 
     def test_phase5_autonomous_flow_artifact_read_if_exists_returns_none_for_missing_ids(self) -> None:
@@ -128,6 +154,8 @@ class AutonomousFlowArtifactStoreTests(unittest.TestCase):
             self.assertIsNone(read_phase5_gate_readout_artifact_if_exists("missing-gate", root=root))
             self.assertIsNone(read_frontend_projection_manifest_artifact_if_exists(None, root=root))
             self.assertIsNone(read_frontend_projection_manifest_artifact_if_exists("missing-projection", root=root))
+            self.assertIsNone(read_phase5_scheduler_diagnostic_artifact_if_exists(None, root=root))
+            self.assertIsNone(read_phase5_scheduler_diagnostic_artifact_if_exists("missing-diagnostic", root=root))
 
     def test_phase5_autonomous_flow_artifact_writes_reject_repo_artifact_root_by_default(self) -> None:
         target_root = PROJECT_ROOT / "artifacts"
@@ -198,6 +226,50 @@ class AutonomousFlowArtifactStoreTests(unittest.TestCase):
                 row_count=1,
                 staleness_status="fresh",
                 payload={"rows": [{"symbol": "000001"}]},
+            )
+
+    def test_phase5_scheduler_diagnostic_dedupes_refs_and_rejects_payload_leaks(self) -> None:
+        diagnostic = Phase5SchedulerDiagnosticArtifact(
+            diagnostic_id="diagnostic-20260520-001",
+            cycle_id=None,
+            observed_at="2026-05-20T09:14:00Z",
+            severity="blocked",
+            scheduler_action="open_recovery_ticket",
+            failure_class="artifact-missing",
+            recommended_recovery_action="open_recovery_ticket",
+            blocking_reasons=[
+                "cycle ledger missing",
+                "cycle ledger missing",
+                "Traceback: full exception should not persist",
+            ],
+            evidence_refs=[
+                "phase5_cycle_ledger:missing-cycle",
+                "phase5_cycle_ledger:missing-cycle",
+                "release-manifest:phase5:20260520",
+                "sha256:abc123",
+            ],
+            notes="Traceback with runner_result should be redacted",
+            event_refs=["phase5.scheduler.diagnostic.recorded.v1", "phase5.scheduler.diagnostic.recorded.v1"],
+        )
+
+        payload_text = diagnostic.model_dump_json()
+        self.assertEqual(diagnostic.blocking_reasons, ["cycle ledger missing"])
+        self.assertEqual(diagnostic.evidence_refs, ["phase5_cycle_ledger:missing-cycle"])
+        self.assertEqual(diagnostic.notes, "[redacted sensitive diagnostic detail]")
+        self.assertEqual(diagnostic.event_refs, ["phase5.scheduler.diagnostic.recorded.v1"])
+        for forbidden in ("input_bundle", "runner_result", "release-manifest:", "sha256:", "Traceback"):
+            self.assertNotIn(forbidden, payload_text)
+
+        with self.assertRaises(ValidationError):
+            Phase5SchedulerDiagnosticArtifact(
+                diagnostic_id="diagnostic-20260520-payload",
+                cycle_id=None,
+                observed_at="2026-05-20T09:14:00Z",
+                severity="blocked",
+                scheduler_action="open_recovery_ticket",
+                failure_class="artifact-missing",
+                recommended_recovery_action="open_recovery_ticket",
+                input_bundle={"cycle_id": "missing-cycle"},
             )
 
 

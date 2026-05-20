@@ -13,6 +13,7 @@ from ashare_evidence.autonomous_flow_artifacts import (
     Phase5CycleLedgerArtifact,
     Phase5GateReadoutArtifact,
     Phase5RecoveryTicketArtifact,
+    Phase5SchedulerDiagnosticArtifact,
 )
 from ashare_evidence.research_artifacts import (
     BacktestArtifactView,
@@ -41,6 +42,7 @@ ARTIFACT_FOLDERS = {
     "shortpick_lab": "shortpick_lab",
     "phase5_cycle_ledger": "autonomous_flow/phase5_cycle_ledger",
     "phase5_recovery_ticket": "autonomous_flow/phase5_recovery_ticket",
+    "phase5_scheduler_diagnostic": "autonomous_flow/phase5_scheduler_diagnostic",
     "phase5_gate_readout": "autonomous_flow/phase5_gate_readout",
     "frontend_projection_manifest": "autonomous_flow/frontend_projection_manifest",
 }
@@ -207,6 +209,18 @@ def read_phase5_recovery_ticket_artifact_if_exists(
     root: Path | None = None,
 ) -> Phase5RecoveryTicketArtifact | None:
     return _read_model_if_exists(Phase5RecoveryTicketArtifact, "phase5_recovery_ticket", ticket_id, root=root)
+
+
+def write_phase5_scheduler_diagnostic_artifact(artifact: Phase5SchedulerDiagnosticArtifact, *, root: Path | None = None) -> Path:
+    return _write_model(artifact, "phase5_scheduler_diagnostic", artifact.diagnostic_id, root=root)
+
+
+def read_phase5_scheduler_diagnostic_artifact(diagnostic_id: str, *, root: Path | None = None) -> Phase5SchedulerDiagnosticArtifact:
+    return _read_model(Phase5SchedulerDiagnosticArtifact, "phase5_scheduler_diagnostic", diagnostic_id, root=root)
+
+
+def read_phase5_scheduler_diagnostic_artifact_if_exists(diagnostic_id: str | None, *, root: Path | None = None) -> Phase5SchedulerDiagnosticArtifact | None:
+    return _read_model_if_exists(Phase5SchedulerDiagnosticArtifact, "phase5_scheduler_diagnostic", diagnostic_id, root=root)
 
 
 def write_phase5_gate_readout_artifact(
