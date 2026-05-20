@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,18 +11,18 @@ from ashare_evidence.research_artifact_store import (
     artifact_root_from_database_url,
     portfolio_backtest_artifact_id,
     read_backtest_artifact,
+    read_manifest,
     read_phase5_holding_policy_experiment_artifact,
     read_phase5_holding_policy_study_artifact,
-    read_manifest,
     read_phase5_horizon_study_artifact,
     read_phase5_producer_contract_study_artifact,
     read_replay_alignment_artifact,
-    resolve_backtest_artifact,
     read_validation_metrics,
+    resolve_backtest_artifact,
     write_backtest_artifact,
+    write_manifest,
     write_phase5_holding_policy_experiment_artifact,
     write_phase5_holding_policy_study_artifact,
-    write_manifest,
     write_phase5_horizon_study_artifact,
     write_phase5_producer_contract_study_artifact,
     write_replay_alignment_artifact,
@@ -122,7 +122,7 @@ class ResearchArtifactStoreTests(unittest.TestCase):
     def test_artifact_store_uses_phase2_contract_layout(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            generated_at = datetime(2026, 4, 25, 12, 0, tzinfo=timezone.utc)
+            generated_at = datetime(2026, 4, 25, 12, 0, tzinfo=UTC)
             manifest = ResearchArtifactManifestView(
                 artifact_id="rolling-validation-fixture",
                 artifact_type="rolling_validation",
@@ -141,12 +141,12 @@ class ResearchArtifactStoreTests(unittest.TestCase):
                 split_plan=[
                     ArtifactSplitView(
                         slice_label="2024H1",
-                        train_start=datetime(2021, 1, 1, tzinfo=timezone.utc),
-                        train_end=datetime(2023, 12, 31, tzinfo=timezone.utc),
-                        validation_start=datetime(2024, 1, 1, tzinfo=timezone.utc),
-                        validation_end=datetime(2024, 3, 31, tzinfo=timezone.utc),
-                        test_start=datetime(2024, 4, 1, tzinfo=timezone.utc),
-                        test_end=datetime(2024, 6, 30, tzinfo=timezone.utc),
+                        train_start=datetime(2021, 1, 1, tzinfo=UTC),
+                        train_end=datetime(2023, 12, 31, tzinfo=UTC),
+                        validation_start=datetime(2024, 1, 1, tzinfo=UTC),
+                        validation_end=datetime(2024, 3, 31, tzinfo=UTC),
+                        test_start=datetime(2024, 4, 1, tzinfo=UTC),
+                        test_end=datetime(2024, 6, 30, tzinfo=UTC),
                         market_regime_tag="risk_on",
                     )
                 ],

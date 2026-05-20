@@ -1,20 +1,10 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from pathlib import Path
-from typing import TypeVar
 
-from pydantic import BaseModel
-
-from ashare_evidence.autonomous_flow_artifacts import (
-    FrontendProjectionManifestArtifact,
-    Phase5CycleLedgerArtifact,
-    Phase5GateReadoutArtifact,
-    Phase5RecoveryTicketArtifact,
-    Phase5SchedulerDiagnosticArtifact,
-)
+from ashare_evidence import artifact_store_core as _core
+from ashare_evidence import autonomous_flow_artifact_store as _autonomous_flow_store
 from ashare_evidence.research_artifacts import (
     BacktestArtifactView,
     ManualResearchArtifactView,
@@ -27,114 +17,71 @@ from ashare_evidence.research_artifacts import (
     ValidationMetricsArtifactView,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "artifacts"
-ARTIFACT_FOLDERS = {
-    "rolling_validation": "manifests",
-    "validation_metrics": "validation",
-    "portfolio_backtest": "backtests",
-    "replay_alignment": "replays",
-    "manual_review": "manual_reviews",
-    "phase5_horizon_study": "studies",
-    "phase5_holding_policy_study": "studies",
-    "phase5_holding_policy_experiment": "studies",
-    "phase5_producer_contract_study": "studies",
-    "shortpick_lab": "shortpick_lab",
-    "phase5_cycle_ledger": "autonomous_flow/phase5_cycle_ledger",
-    "phase5_recovery_ticket": "autonomous_flow/phase5_recovery_ticket",
-    "phase5_scheduler_diagnostic": "autonomous_flow/phase5_scheduler_diagnostic",
-    "phase5_gate_readout": "autonomous_flow/phase5_gate_readout",
-    "frontend_projection_manifest": "autonomous_flow/frontend_projection_manifest",
-}
+PROJECT_ROOT = _core.PROJECT_ROOT
+DEFAULT_ARTIFACT_ROOT = _core.DEFAULT_ARTIFACT_ROOT
 
-ArtifactModel = TypeVar("ArtifactModel", bound=BaseModel)
-
-
-def _source_artifact_roots() -> tuple[Path, ...]:
-    if not (PROJECT_ROOT / ".git").exists():
-        return ()
-    return (
-        PROJECT_ROOT / "artifacts",
-        PROJECT_ROOT / "data" / "artifacts",
-    )
-
-
-def _artifact_root(root: Path | None = None) -> Path:
-    if root is not None:
-        return Path(root)
-    configured = os.getenv("ASHARE_ARTIFACT_ROOT")
-    return Path(configured) if configured else DEFAULT_ARTIFACT_ROOT
+read_frontend_projection_manifest_artifact = _autonomous_flow_store.read_frontend_projection_manifest_artifact
+read_frontend_projection_manifest_artifact_if_exists = (
+    _autonomous_flow_store.read_frontend_projection_manifest_artifact_if_exists
+)
+read_phase5_cycle_ledger_artifact = _autonomous_flow_store.read_phase5_cycle_ledger_artifact
+read_phase5_cycle_ledger_artifact_if_exists = _autonomous_flow_store.read_phase5_cycle_ledger_artifact_if_exists
+read_phase5_gate_readout_artifact = _autonomous_flow_store.read_phase5_gate_readout_artifact
+read_phase5_gate_readout_artifact_if_exists = _autonomous_flow_store.read_phase5_gate_readout_artifact_if_exists
+read_phase5_recovery_ticket_artifact = _autonomous_flow_store.read_phase5_recovery_ticket_artifact
+read_phase5_recovery_ticket_artifact_if_exists = _autonomous_flow_store.read_phase5_recovery_ticket_artifact_if_exists
+read_phase5_scheduler_diagnostic_artifact = _autonomous_flow_store.read_phase5_scheduler_diagnostic_artifact
+read_phase5_scheduler_diagnostic_artifact_if_exists = (
+    _autonomous_flow_store.read_phase5_scheduler_diagnostic_artifact_if_exists
+)
+write_frontend_projection_manifest_artifact = _autonomous_flow_store.write_frontend_projection_manifest_artifact
+write_phase5_cycle_ledger_artifact = _autonomous_flow_store.write_phase5_cycle_ledger_artifact
+write_phase5_gate_readout_artifact = _autonomous_flow_store.write_phase5_gate_readout_artifact
+write_phase5_recovery_ticket_artifact = _autonomous_flow_store.write_phase5_recovery_ticket_artifact
+write_phase5_scheduler_diagnostic_artifact = _autonomous_flow_store.write_phase5_scheduler_diagnostic_artifact
 
 
 def artifact_root_from_database_url(database_url: str | None) -> Path:
-    configured = os.getenv("ASHARE_ARTIFACT_ROOT")
-    if configured:
-        return Path(configured)
-    if database_url == "sqlite:///:memory:":
-        return Path(tempfile.gettempdir()) / "ashare-evidence-artifacts" / f"memory-{os.getpid()}"
-    if database_url and database_url.startswith("sqlite:///") and database_url != "sqlite:///:memory:":
-        db_path = Path(database_url.removeprefix("sqlite:///")).resolve()
-        return db_path.parent / "artifacts"
-    return _artifact_root()
+    return _core.artifact_root_from_database_url(database_url, default_artifact_root=DEFAULT_ARTIFACT_ROOT)
 
 
 def artifact_path(artifact_type: str, artifact_id: str, *, root: Path | None = None) -> Path:
-    folder = ARTIFACT_FOLDERS[artifact_type]
-    return _artifact_root(root) / folder / f"{artifact_id}.json"
-
-
-def _write_model(model: BaseModel, artifact_type: str, artifact_id: str, *, root: Path | None = None) -> Path:
-    target = artifact_path(artifact_type, artifact_id, root=root)
-    _ensure_artifact_write_allowed(target)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    payload = model.model_dump(mode="json")
-    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return target
+    return _core.artifact_path(artifact_type, artifact_id, root=root, default_artifact_root=DEFAULT_ARTIFACT_ROOT)
 
 
 def _ensure_artifact_write_allowed(target: Path) -> None:
-    if os.getenv("ASHARE_ALLOW_REPO_ARTIFACT_WRITES") == "1":
-        return
-    resolved_target = target.resolve()
-    for repo_root in _source_artifact_roots():
-        resolved_root = repo_root.resolve()
-        try:
-            resolved_target.relative_to(resolved_root)
-        except ValueError:
-            continue
-        raise RuntimeError(
-            "Refusing to write generated research artifact into the source checkout. "
-            f"target={resolved_target}. Set ASHARE_ARTIFACT_ROOT to a runtime/output data directory, "
-            "or set ASHARE_ALLOW_REPO_ARTIFACT_WRITES=1 only for an intentional fixture refresh."
-        )
+    _core._ensure_artifact_write_allowed(target, project_root=PROJECT_ROOT)
 
 
-def _read_model(  # noqa: UP047 - keep Python 3.10-compatible generic syntax.
-    model_type: type[ArtifactModel],
-    artifact_type: str,
-    artifact_id: str,
-    *,
-    root: Path | None = None,
-) -> ArtifactModel:
-    target = artifact_path(artifact_type, artifact_id, root=root)
-    payload = json.loads(target.read_text(encoding="utf-8"))
-    return model_type.model_validate(payload)
+def _write_model(model, artifact_type: str, artifact_id: str, *, root: Path | None = None) -> Path:
+    return _core._write_model(
+        model,
+        artifact_type,
+        artifact_id,
+        root=root,
+        project_root=PROJECT_ROOT,
+        default_artifact_root=DEFAULT_ARTIFACT_ROOT,
+    )
 
 
-def _read_model_if_exists(  # noqa: UP047 - keep Python 3.10-compatible generic syntax.
-    model_type: type[ArtifactModel],
-    artifact_type: str,
-    artifact_id: str | None,
-    *,
-    root: Path | None = None,
-) -> ArtifactModel | None:
-    if not artifact_id:
-        return None
-    target = artifact_path(artifact_type, artifact_id, root=root)
-    if not target.exists():
-        return None
-    payload = json.loads(target.read_text(encoding="utf-8"))
-    return model_type.model_validate(payload)
+def _read_model(model_type, artifact_type: str, artifact_id: str, *, root: Path | None = None):
+    return _core._read_model(
+        model_type,
+        artifact_type,
+        artifact_id,
+        root=root,
+        default_artifact_root=DEFAULT_ARTIFACT_ROOT,
+    )
+
+
+def _read_model_if_exists(model_type, artifact_type: str, artifact_id: str | None, *, root: Path | None = None):
+    return _core._read_model_if_exists(
+        model_type,
+        artifact_type,
+        artifact_id,
+        root=root,
+        default_artifact_root=DEFAULT_ARTIFACT_ROOT,
+    )
 
 
 def write_shortpick_lab_artifact(
@@ -161,114 +108,6 @@ def read_shortpick_lab_artifact_if_exists(
     if not target.exists():
         return None
     return json.loads(target.read_text(encoding="utf-8"))
-
-
-def write_phase5_cycle_ledger_artifact(
-    artifact: Phase5CycleLedgerArtifact,
-    *,
-    root: Path | None = None,
-) -> Path:
-    return _write_model(artifact, "phase5_cycle_ledger", artifact.cycle_id, root=root)
-
-
-def read_phase5_cycle_ledger_artifact(
-    cycle_id: str,
-    *,
-    root: Path | None = None,
-) -> Phase5CycleLedgerArtifact:
-    return _read_model(Phase5CycleLedgerArtifact, "phase5_cycle_ledger", cycle_id, root=root)
-
-
-def read_phase5_cycle_ledger_artifact_if_exists(
-    cycle_id: str | None,
-    *,
-    root: Path | None = None,
-) -> Phase5CycleLedgerArtifact | None:
-    return _read_model_if_exists(Phase5CycleLedgerArtifact, "phase5_cycle_ledger", cycle_id, root=root)
-
-
-def write_phase5_recovery_ticket_artifact(
-    artifact: Phase5RecoveryTicketArtifact,
-    *,
-    root: Path | None = None,
-) -> Path:
-    return _write_model(artifact, "phase5_recovery_ticket", artifact.ticket_id, root=root)
-
-
-def read_phase5_recovery_ticket_artifact(
-    ticket_id: str,
-    *,
-    root: Path | None = None,
-) -> Phase5RecoveryTicketArtifact:
-    return _read_model(Phase5RecoveryTicketArtifact, "phase5_recovery_ticket", ticket_id, root=root)
-
-
-def read_phase5_recovery_ticket_artifact_if_exists(
-    ticket_id: str | None,
-    *,
-    root: Path | None = None,
-) -> Phase5RecoveryTicketArtifact | None:
-    return _read_model_if_exists(Phase5RecoveryTicketArtifact, "phase5_recovery_ticket", ticket_id, root=root)
-
-
-def write_phase5_scheduler_diagnostic_artifact(artifact: Phase5SchedulerDiagnosticArtifact, *, root: Path | None = None) -> Path:
-    return _write_model(artifact, "phase5_scheduler_diagnostic", artifact.diagnostic_id, root=root)
-
-
-def read_phase5_scheduler_diagnostic_artifact(diagnostic_id: str, *, root: Path | None = None) -> Phase5SchedulerDiagnosticArtifact:
-    return _read_model(Phase5SchedulerDiagnosticArtifact, "phase5_scheduler_diagnostic", diagnostic_id, root=root)
-
-
-def read_phase5_scheduler_diagnostic_artifact_if_exists(diagnostic_id: str | None, *, root: Path | None = None) -> Phase5SchedulerDiagnosticArtifact | None:
-    return _read_model_if_exists(Phase5SchedulerDiagnosticArtifact, "phase5_scheduler_diagnostic", diagnostic_id, root=root)
-
-
-def write_phase5_gate_readout_artifact(
-    artifact: Phase5GateReadoutArtifact,
-    *,
-    root: Path | None = None,
-) -> Path:
-    return _write_model(artifact, "phase5_gate_readout", artifact.gate_id, root=root)
-
-
-def read_phase5_gate_readout_artifact(
-    gate_id: str,
-    *,
-    root: Path | None = None,
-) -> Phase5GateReadoutArtifact:
-    return _read_model(Phase5GateReadoutArtifact, "phase5_gate_readout", gate_id, root=root)
-
-
-def read_phase5_gate_readout_artifact_if_exists(
-    gate_id: str | None,
-    *,
-    root: Path | None = None,
-) -> Phase5GateReadoutArtifact | None:
-    return _read_model_if_exists(Phase5GateReadoutArtifact, "phase5_gate_readout", gate_id, root=root)
-
-
-def write_frontend_projection_manifest_artifact(
-    artifact: FrontendProjectionManifestArtifact,
-    *,
-    root: Path | None = None,
-) -> Path:
-    return _write_model(artifact, "frontend_projection_manifest", artifact.projection_id, root=root)
-
-
-def read_frontend_projection_manifest_artifact(
-    projection_id: str,
-    *,
-    root: Path | None = None,
-) -> FrontendProjectionManifestArtifact:
-    return _read_model(FrontendProjectionManifestArtifact, "frontend_projection_manifest", projection_id, root=root)
-
-
-def read_frontend_projection_manifest_artifact_if_exists(
-    projection_id: str | None,
-    *,
-    root: Path | None = None,
-) -> FrontendProjectionManifestArtifact | None:
-    return _read_model_if_exists(FrontendProjectionManifestArtifact, "frontend_projection_manifest", projection_id, root=root)
 
 
 def write_manifest(manifest: ResearchArtifactManifestView, *, root: Path | None = None) -> Path:
