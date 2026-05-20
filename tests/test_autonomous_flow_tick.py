@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 import ashare_evidence.autonomous_flow_tick as tick_module
+from ashare_evidence.autonomous_flow_resolver import Phase5RunnerInputResolutionError
 from ashare_evidence.autonomous_flow_status import Phase5LocalCycleStatusProjection
 from ashare_evidence.autonomous_flow_tick import run_phase5_local_cycle_tick
 
@@ -113,6 +114,71 @@ def test_value_error_maps_to_blocked_contract_violation_without_raising(
     assert result.error.recommended_recovery_action == "block_cycle"
     assert "release-manifest:" not in result.error.message
     assert "sha256:" not in result.error.message
+
+
+def test_structured_missing_cycle_error_maps_to_degraded_artifact_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_service(**_kwargs: Any) -> object:
+        raise Phase5RunnerInputResolutionError(
+            "misleading contract wording should not drive classification",
+            failure_class="artifact-missing",
+            recommended_recovery_action="open_recovery_ticket",
+            summary_status="degraded",
+            recommended_next_action="retry_failed_step",
+        )
+
+    monkeypatch.setattr(tick_module, "run_phase5_local_cycle_service", fake_service)
+
+    result = run_phase5_local_cycle_tick(cycle_id="cycle-missing")
+
+    assert result.tick_status == "error"
+    assert result.exit_code == 1
+    assert result.summary_status == "degraded"
+    assert result.recommended_next_action == "retry_failed_step"
+    assert result.error is not None
+    assert result.error.error_type == "Phase5RunnerInputResolutionError"
+    assert result.error.failure_class == "artifact-missing"
+    assert result.error.recommended_recovery_action == "open_recovery_ticket"
+
+
+def test_real_missing_cycle_resolution_error_maps_to_degraded_artifact_missing(tmp_path: Path) -> None:
+    result = run_phase5_local_cycle_tick(cycle_id="cycle-missing", root=tmp_path / "artifacts")
+
+    assert result.tick_status == "error"
+    assert result.exit_code == 1
+    assert result.summary_status == "degraded"
+    assert result.recommended_next_action == "retry_failed_step"
+    assert result.error is not None
+    assert result.error.error_type == "Phase5RunnerInputResolutionError"
+    assert result.error.failure_class == "artifact-missing"
+    assert result.error.recommended_recovery_action == "open_recovery_ticket"
+
+
+def test_structured_cycle_mismatch_error_maps_to_blocked_contract_violation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_service(**_kwargs: Any) -> object:
+        raise Phase5RunnerInputResolutionError(
+            "missing artifact wording should not drive classification",
+            failure_class="contract-violation",
+            recommended_recovery_action="block_cycle",
+            summary_status="blocked",
+            recommended_next_action="blocked",
+        )
+
+    monkeypatch.setattr(tick_module, "run_phase5_local_cycle_service", fake_service)
+
+    result = run_phase5_local_cycle_tick(cycle_id="cycle-mismatch")
+
+    assert result.tick_status == "error"
+    assert result.exit_code == 1
+    assert result.summary_status == "blocked"
+    assert result.recommended_next_action == "blocked"
+    assert result.error is not None
+    assert result.error.error_type == "Phase5RunnerInputResolutionError"
+    assert result.error.failure_class == "contract-violation"
+    assert result.error.recommended_recovery_action == "block_cycle"
 
 
 def test_file_not_found_maps_to_degraded_artifact_missing_without_raising(

@@ -237,8 +237,14 @@ def test_refs_pointing_to_missing_artifacts_are_recorded_once(tmp_path: Path) ->
 def test_missing_cycle_fails_closed(tmp_path: Path) -> None:
     root = tmp_path / "artifacts"
 
-    with pytest.raises(Phase5RunnerInputResolutionError, match="cycle ledger artifact is missing"):
+    with pytest.raises(Phase5RunnerInputResolutionError, match="cycle ledger artifact is missing") as exc_info:
         resolve_phase5_runner_inputs(cycle_id="missing-cycle", root=root)
+
+    assert isinstance(exc_info.value, ValueError)
+    assert exc_info.value.failure_class == "artifact-missing"
+    assert exc_info.value.recommended_recovery_action == "open_recovery_ticket"
+    assert exc_info.value.summary_status == "degraded"
+    assert exc_info.value.recommended_next_action == "retry_failed_step"
 
 
 def test_mismatched_artifact_cycle_id_fails_closed(tmp_path: Path) -> None:
@@ -248,8 +254,16 @@ def test_mismatched_artifact_cycle_id_fails_closed(tmp_path: Path) -> None:
     write_phase5_gate_readout_artifact(_gate(cycle_id="other-cycle"), root=root)
     write_frontend_projection_manifest_artifact(_projection(), root=root)
 
-    with pytest.raises(Phase5RunnerInputResolutionError, match="phase5_gate_readout artifact cycle mismatch"):
+    with pytest.raises(
+        Phase5RunnerInputResolutionError,
+        match="phase5_gate_readout artifact cycle mismatch",
+    ) as exc_info:
         resolve_phase5_runner_inputs(cycle_id=cycle.cycle_id, root=root)
+
+    assert exc_info.value.failure_class == "contract-violation"
+    assert exc_info.value.recommended_recovery_action == "block_cycle"
+    assert exc_info.value.summary_status == "blocked"
+    assert exc_info.value.recommended_next_action == "blocked"
 
 
 def test_resolver_does_not_write_artifacts(tmp_path: Path) -> None:

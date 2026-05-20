@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from ashare_evidence.autonomous_flow_resolver import Phase5RunnerInputResolutionError
 from ashare_evidence.autonomous_flow_service import run_phase5_local_cycle_service
 from ashare_evidence.autonomous_flow_status import (
     Phase5LocalCycleStatusProjection,
@@ -71,6 +72,15 @@ def run_phase5_local_cycle_tick(
             root=root,
         )
         status = project_phase5_local_cycle_status(service_result)
+    except Phase5RunnerInputResolutionError as exc:
+        return _error_result(
+            cycle_id=cycle_id,
+            exc=exc,
+            failure_class=exc.failure_class,
+            recommended_recovery_action=exc.recommended_recovery_action,
+            recommended_next_action=exc.recommended_next_action,
+            summary_status=exc.summary_status,
+        )
     except FileNotFoundError as exc:
         return _error_result(
             cycle_id=cycle_id,
