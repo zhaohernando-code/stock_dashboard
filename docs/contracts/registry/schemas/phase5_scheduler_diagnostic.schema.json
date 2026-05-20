@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "phase5_scheduler_diagnostic.schema.json",
+  "title": "Phase 5 Scheduler Diagnostic",
+  "type": "object",
+  "required": [
+    "artifact_family",
+    "schema_version",
+    "diagnostic_id",
+    "cycle_id",
+    "source",
+    "observed_at",
+    "severity",
+    "scheduler_action",
+    "failure_class",
+    "recommended_recovery_action",
+    "blocking_reasons",
+    "evidence_refs",
+    "notes",
+    "event_refs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "artifact_family": {
+      "const": "phase5_scheduler_diagnostic"
+    },
+    "schema_version": {
+      "const": "v1"
+    },
+    "diagnostic_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cycle_id": {
+      "type": ["string", "null"]
+    },
+    "source": {
+      "const": "phase5_scheduler"
+    },
+    "observed_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["info", "warning", "error", "blocked"]
+    },
+    "scheduler_action": {
+      "type": "string",
+      "enum": [
+        "continue_tracking",
+        "rebuild_projection",
+        "retry_failed_step",
+        "open_recovery_ticket",
+        "block_cycle",
+        "redesign",
+        "none"
+      ]
+    },
+    "failure_class": {
+      "type": "string",
+      "enum": [
+        "artifact-missing",
+        "contract-violation",
+        "unexpected-error",
+        "blocked-plan",
+        "execution-precondition-failed",
+        "none"
+      ]
+    },
+    "recommended_recovery_action": {
+      "type": "string",
+      "enum": ["open_recovery_ticket", "retry_with_backoff", "block_cycle", "none"]
+    },
+    "blocking_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "notes": {
+      "type": "string"
+    },
+    "event_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "phase5.scheduler.diagnostic.recorded.v1"
+      },
+      "uniqueItems": true
+    }
+  }
+}

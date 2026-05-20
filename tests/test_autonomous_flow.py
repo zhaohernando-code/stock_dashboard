@@ -12,6 +12,7 @@ from ashare_evidence.autonomous_flow import (
     PHASE5_GATE_EVALUATED_EVENT,
     PHASE5_PROJECTION_REFRESHED_EVENT,
     PHASE5_RECOVERY_RECORDED_EVENT,
+    PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT,
     RUNTIME_PUBLISH_VERIFIED_EVENT,
     Phase5CycleNotFoundError,
     attach_publish_verification,
@@ -19,6 +20,7 @@ from ashare_evidence.autonomous_flow import (
     record_phase5_gate_readout,
     record_phase5_projection_refreshed,
     record_phase5_recovery_ticket,
+    record_phase5_scheduler_diagnostic,
     start_phase5_cycle,
 )
 from ashare_evidence.research_artifact_store import (
@@ -26,6 +28,7 @@ from ashare_evidence.research_artifact_store import (
     read_phase5_cycle_ledger_artifact,
     read_phase5_gate_readout_artifact,
     read_phase5_recovery_ticket_artifact,
+    read_phase5_scheduler_diagnostic_artifact,
 )
 
 
@@ -135,6 +138,100 @@ class AutonomousFlowCyclePrimitiveTests(unittest.TestCase):
             self.assertEqual(updated.recovery_ticket_refs, ["ticket-20260520-am"])
             self.assertIn(PHASE5_RECOVERY_RECORDED_EVENT, updated.event_refs)
             self.assertEqual(updated.status, "degraded")
+
+    def test_record_phase5_scheduler_diagnostic_writes_artifact_and_only_appends_event(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            before = start_phase5_cycle(
+                cycle_id="phase5-20260520-am",
+                trigger="scheduled",
+                started_at="2026-05-20T09:00:00Z",
+                status="running",
+                next_action="continue_tracking",
+                root=root,
+            )
+
+            updated, diagnostic = record_phase5_scheduler_diagnostic(
+                diagnostic_id="diagnostic-20260520-am",
+                cycle_id="phase5-20260520-am",
+                observed_at="2026-05-20T09:06:00Z",
+                scheduler_action="open_recovery_ticket",
+                severity="blocked",
+                failure_class="execution-precondition-failed",
+                recommended_recovery_action="open_recovery_ticket",
+                blocking_reasons=["cycle precondition failed", "cycle precondition failed"],
+                evidence_refs=["phase5_cycle_ledger:phase5-20260520-am"],
+                notes="scheduler could not execute recovery action",
+                root=root,
+            )
+            stored_cycle = read_phase5_cycle_ledger_artifact("phase5-20260520-am", root=root)
+            stored_diagnostic = read_phase5_scheduler_diagnostic_artifact(diagnostic.diagnostic_id, root=root)
+
+            self.assertIsNotNone(updated)
+            self.assertEqual(stored_diagnostic.cycle_id, "phase5-20260520-am")
+            self.assertEqual(stored_diagnostic.blocking_reasons, ["cycle precondition failed"])
+            self.assertIn(PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT, stored_cycle.event_refs)
+            self.assertEqual(stored_cycle.status, before.status)
+            self.assertEqual(stored_cycle.next_action, before.next_action)
+            self.assertEqual(stored_cycle.finished_at, before.finished_at)
+            self.assertEqual(stored_cycle.recovery_ticket_refs, [])
+
+    def test_record_phase5_scheduler_diagnostic_allows_missing_cycle(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+
+            cycle, diagnostic = record_phase5_scheduler_diagnostic(
+                diagnostic_id="diagnostic-missing-cycle",
+                cycle_id="missing-cycle",
+                observed_at="2026-05-20T09:06:00Z",
+                scheduler_action="open_recovery_ticket",
+                severity="blocked",
+                failure_class="artifact-missing",
+                recommended_recovery_action="open_recovery_ticket",
+                blocking_reasons=["cycle ledger missing"],
+                evidence_refs=["phase5_cycle_ledger:missing-cycle"],
+                notes="scheduler recorded the missing ledger before recovery ticket creation",
+                root=root,
+            )
+            stored = read_phase5_scheduler_diagnostic_artifact(diagnostic.diagnostic_id, root=root)
+
+            self.assertIsNone(cycle)
+            self.assertEqual(stored.cycle_id, "missing-cycle")
+            self.assertEqual(stored.scheduler_action, "open_recovery_ticket")
+            self.assertEqual(stored.failure_class, "artifact-missing")
+            self.assertIn(PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT, stored.event_refs)
+
+    def test_record_phase5_scheduler_diagnostic_redacts_sensitive_details(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+
+            _cycle, diagnostic = record_phase5_scheduler_diagnostic(
+                diagnostic_id="diagnostic-redacted",
+                cycle_id=None,
+                observed_at="2026-05-20T09:06:00Z",
+                scheduler_action="block_cycle",
+                severity="blocked",
+                failure_class="unexpected-error",
+                recommended_recovery_action="block_cycle",
+                blocking_reasons=["runner_result included raw exception", "safe summary"],
+                evidence_refs=["release-manifest:phase5:20260520", "phase5_gate_readout:gate-1", "sha256:abc123"],
+                notes="Traceback from input_bundle should not persist",
+                root=root,
+            )
+            persisted = json.loads(
+                (
+                    root
+                    / "autonomous_flow"
+                    / "phase5_scheduler_diagnostic"
+                    / f"{diagnostic.diagnostic_id}.json"
+                ).read_text(encoding="utf-8")
+            )
+            payload_text = json.dumps(persisted, ensure_ascii=False, sort_keys=True)
+
+            self.assertEqual(persisted["blocking_reasons"], ["safe summary"])
+            self.assertEqual(persisted["evidence_refs"], ["phase5_gate_readout:gate-1"])
+            for forbidden in ("input_bundle", "runner_result", "release-manifest:", "sha256:", "Traceback"):
+                self.assertNotIn(forbidden, payload_text)
 
     def test_record_phase5_projection_refreshed_writes_manifest_and_appends_cycle_ref(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

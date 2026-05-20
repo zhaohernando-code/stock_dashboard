@@ -5,6 +5,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 SchemaVersion = Literal["v1"]
+PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT_ID = "phase5.scheduler.diagnostic.recorded.v1"
+SENSITIVE_DIAGNOSTIC_TOKENS = ("input_bundle", "runner_result", "release-manifest:", "sha256:", "Traceback")
 
 
 class PublishVerificationRef(BaseModel):
@@ -92,6 +94,65 @@ class Phase5RecoveryTicketArtifact(BaseModel):
     notes: str = ""
 
 
+class Phase5SchedulerDiagnosticArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_family: Literal["phase5_scheduler_diagnostic"] = "phase5_scheduler_diagnostic"
+    schema_version: SchemaVersion = "v1"
+    diagnostic_id: str = Field(min_length=1)
+    cycle_id: str | None = None
+    source: Literal["phase5_scheduler"] = "phase5_scheduler"
+    observed_at: str = Field(min_length=1)
+    severity: Literal["info", "warning", "error", "blocked"]
+    scheduler_action: Literal[
+        "continue_tracking",
+        "rebuild_projection",
+        "retry_failed_step",
+        "open_recovery_ticket",
+        "block_cycle",
+        "redesign",
+        "none",
+    ]
+    failure_class: Literal[
+        "artifact-missing",
+        "contract-violation",
+        "unexpected-error",
+        "blocked-plan",
+        "execution-precondition-failed",
+        "none",
+    ]
+    recommended_recovery_action: Literal["open_recovery_ticket", "retry_with_backoff", "block_cycle", "none"]
+    blocking_reasons: list[str] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+    notes: str = ""
+    event_refs: list[str] = Field(default_factory=lambda: [PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT_ID])
+
+    @field_validator("blocking_reasons", "evidence_refs")
+    @classmethod
+    def _dedupe_sanitized_refs(cls, values: list[str]) -> list[str]:
+        result: list[str] = []
+        for value in values:
+            if not _contains_sensitive_diagnostic_token(value) and value not in result:
+                result.append(value)
+        return result
+
+    @field_validator("event_refs")
+    @classmethod
+    def _dedupe_event_refs(cls, values: list[str]) -> list[str]:
+        result: list[str] = []
+        for value in [*values, PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT_ID]:
+            if value not in result:
+                result.append(value)
+        return result
+
+    @field_validator("notes")
+    @classmethod
+    def _sanitize_notes(cls, value: str) -> str:
+        if _contains_sensitive_diagnostic_token(value):
+            return "[redacted sensitive diagnostic detail]"
+        return value
+
+
 class Phase5GateReadoutArtifact(BaseModel):
     artifact_family: Literal["phase5_gate_readout"] = "phase5_gate_readout"
     schema_version: SchemaVersion = "v1"
@@ -105,3 +166,7 @@ class Phase5GateReadoutArtifact(BaseModel):
     blocking_reasons: list[str] = Field(default_factory=list)
     next_action: Literal["continue_tracking", "rebuild_projection", "redesign", "retry_failed_step", "blocked"]
     evaluated_at: str
+
+
+def _contains_sensitive_diagnostic_token(value: str) -> bool:
+    return any(token in value for token in SENSITIVE_DIAGNOSTIC_TOKENS)
