@@ -7,7 +7,10 @@ from typing import Any
 import pytest
 
 import ashare_evidence.cli as cli_module
-from ashare_evidence.autonomous_flow import PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT
+from ashare_evidence.autonomous_flow import (
+    PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT,
+    PHASE5_SCHEDULER_EXECUTION_RECORDED_EVENT,
+)
 from ashare_evidence.autonomous_flow_artifacts import (
     FrontendProjectionManifestArtifact,
     Phase5CycleLedgerArtifact,
@@ -21,6 +24,7 @@ from ashare_evidence.research_artifact_store import (
     write_phase5_cycle_ledger_artifact,
     write_phase5_gate_readout_artifact,
 )
+from ashare_evidence.scheduler_execution_artifact_store import read_phase5_scheduler_execution_ledger_artifact
 
 
 def _cycle(**overrides: object) -> Phase5CycleLedgerArtifact:
@@ -119,6 +123,33 @@ def _run_cli_diagnostic(
     return cli_module.main(argv)
 
 
+def _run_cli_execution(
+    *,
+    artifact_root: Path,
+    cycle_id: str,
+    execution_id: str = "execution-20260520-smoke",
+    idempotency_key: str = "idempotency:execution-smoke",
+    created_at: str = "2026-05-20T10:02:00Z",
+    diagnostic_id: str | None = None,
+) -> int:
+    argv = ["phase5-local-cycle-step", "--cycle-id", cycle_id, "--artifact-root", str(artifact_root)]
+    argv.extend(
+        [
+            "--output",
+            "execution",
+            "--execution-id",
+            execution_id,
+            "--idempotency-key",
+            idempotency_key,
+            "--created-at",
+            created_at,
+        ]
+    )
+    if diagnostic_id is not None:
+        argv.extend(["--diagnostic-id", diagnostic_id])
+    return cli_module.main(argv)
+
+
 def _assert_diagnostic_smoke_recorded(
     *,
     payload: dict[str, Any],
@@ -139,6 +170,31 @@ def _assert_diagnostic_smoke_recorded(
     if expected_cycle_event_recorded:
         stored_cycle = read_phase5_cycle_ledger_artifact(payload["cycle_id"], root=artifact_root)
         assert PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT in stored_cycle.event_refs
+
+
+def _assert_execution_smoke_recorded(
+    *,
+    payload: dict[str, Any],
+    artifact_root: Path,
+    cycle_id: str,
+    expected_action: str,
+    expected_status: str,
+    expected_cycle_event_recorded: bool,
+) -> None:
+    stored = read_phase5_scheduler_execution_ledger_artifact(payload["execution_id"], root=artifact_root)
+    assert payload["execution_mode"] == "ledger_record"
+    assert payload["action"] == expected_action
+    assert payload["execution_status"] == expected_status
+    assert payload["would_execute"] is False
+    assert payload["ledger_recorded"] is True
+    assert payload["cycle_event_recorded"] is expected_cycle_event_recorded
+    assert stored.cycle_id == cycle_id
+    assert stored.created_at == "2026-05-20T10:02:00Z"
+    assert stored.plan_action == expected_action
+    assert stored.execution_status == expected_status
+    if expected_cycle_event_recorded:
+        stored_cycle = read_phase5_cycle_ledger_artifact(payload["cycle_id"], root=artifact_root)
+        assert PHASE5_SCHEDULER_EXECUTION_RECORDED_EVENT in stored_cycle.event_refs
 
 
 def _assert_no_sensitive_service_payload(payload: dict[str, Any]) -> None:

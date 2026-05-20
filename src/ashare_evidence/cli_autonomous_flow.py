@@ -8,6 +8,7 @@ from typing import Any
 from ashare_evidence.autonomous_flow_scheduler_executor import (
     dry_run_phase5_scheduler_plan,
     record_phase5_scheduler_plan_diagnostic,
+    record_phase5_scheduler_plan_execution,
 )
 from ashare_evidence.autonomous_flow_scheduler_plan import plan_phase5_scheduler_followup
 from ashare_evidence.autonomous_flow_service import run_phase5_local_cycle_service
@@ -50,17 +51,20 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
     phase5_local_cycle_step.add_argument("--finished-at", default=None)
     phase5_local_cycle_step.add_argument("--diagnostic-id", default=None)
     phase5_local_cycle_step.add_argument("--observed-at", default=None)
+    phase5_local_cycle_step.add_argument("--execution-id", default=None)
+    phase5_local_cycle_step.add_argument("--idempotency-key", default=None)
+    phase5_local_cycle_step.add_argument("--created-at", default=None)
     phase5_local_cycle_step.add_argument("--apply-closeout", action="store_true")
     phase5_local_cycle_step.add_argument("--require-publish-verification", action="store_true")
     phase5_local_cycle_step.add_argument(
         "--output",
-        choices=("status", "plan", "dry-run", "diagnostic", "full"),
+        choices=("status", "plan", "dry-run", "diagnostic", "execution", "full"),
         default="status",
         help=(
             "Choose the JSON shape: status emits the default tick envelope, "
             "plan emits a scheduler follow-up plan, dry-run emits a no-side-effect scheduler "
-            "execution intent, diagnostic records scheduler diagnostics, full emits the service "
-            "result for debugging."
+            "execution intent, diagnostic records scheduler diagnostics, execution records a safe "
+            "scheduler execution ledger, full emits the service result for debugging."
         ),
     )
 
@@ -114,6 +118,41 @@ def handle_phase5_local_cycle_step_command(args: argparse.Namespace) -> int:
             root=args.artifact_root,
         )
         _print_json(diagnostic_result.model_dump(mode="json"))
+        return 0
+
+    if args.output == "execution":
+        missing_arguments = [
+            argument
+            for argument, value in (
+                ("--execution-id", args.execution_id),
+                ("--idempotency-key", args.idempotency_key),
+                ("--created-at", args.created_at),
+            )
+            if not value
+        ]
+        if missing_arguments:
+            _print_json(
+                {
+                    "status": "error",
+                    "command": "phase5-local-cycle-step",
+                    "error_type": "MissingRequiredExecutionArgument",
+                    "message": "--execution-id, --idempotency-key and --created-at are required for execution output.",
+                    "missing_arguments": missing_arguments,
+                }
+            )
+            return 2
+
+        tick_result = _run_tick_from_args(args)
+        plan = plan_phase5_scheduler_followup(tick_result)
+        execution_result = record_phase5_scheduler_plan_execution(
+            plan,
+            execution_id=args.execution_id,
+            idempotency_key=args.idempotency_key,
+            created_at=args.created_at,
+            diagnostic_refs=[args.diagnostic_id] if args.diagnostic_id else [],
+            root=args.artifact_root,
+        )
+        _print_json(execution_result.model_dump(mode="json"))
         return 0
 
     try:
