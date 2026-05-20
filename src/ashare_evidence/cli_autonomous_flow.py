@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ashare_evidence.autonomous_flow_scheduler_plan import plan_phase5_scheduler_followup
 from ashare_evidence.autonomous_flow_service import run_phase5_local_cycle_service
 from ashare_evidence.autonomous_flow_tick import run_phase5_local_cycle_tick
 
@@ -34,9 +35,12 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
     phase5_local_cycle_step.add_argument("--require-publish-verification", action="store_true")
     phase5_local_cycle_step.add_argument(
         "--output",
-        choices=("status", "full"),
+        choices=("status", "plan", "full"),
         default="status",
-        help="Choose the JSON shape: tick status envelope by default, or full service result for debugging.",
+        help=(
+            "Choose the JSON shape: status emits the default tick envelope, "
+            "plan emits a scheduler follow-up plan, full emits the service result for debugging."
+        ),
     )
 
 
@@ -54,6 +58,21 @@ def handle_phase5_local_cycle_step_command(args: argparse.Namespace) -> int:
         )
         _print_json(tick_result.model_dump(mode="json"))
         return tick_result.exit_code
+
+    if args.output == "plan":
+        tick_result = run_phase5_local_cycle_tick(
+            cycle_id=args.cycle_id,
+            gate_id=args.gate_id,
+            recovery_ticket_id=args.recovery_ticket_id,
+            projection_id=args.projection_id,
+            finished_at=args.finished_at,
+            apply_closeout=args.apply_closeout,
+            require_publish_verification=args.require_publish_verification,
+            root=args.artifact_root,
+        )
+        plan = plan_phase5_scheduler_followup(tick_result)
+        _print_json(plan.model_dump(mode="json"))
+        return 0
 
     try:
         result = run_phase5_local_cycle_service(

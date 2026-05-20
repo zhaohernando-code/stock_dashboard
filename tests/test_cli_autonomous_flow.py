@@ -30,6 +30,15 @@ class _FakeTickResult:
         return self.payload
 
 
+class _FakePlanResult:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.payload = payload
+
+    def model_dump(self, *, mode: str) -> dict[str, Any]:
+        assert mode == "json"
+        return self.payload
+
+
 def _args(**overrides: Any) -> argparse.Namespace:
     payload = {
         "cycle_id": "cycle-1",
@@ -107,6 +116,26 @@ def _error_tick_result(cycle_id: str = "cycle-1") -> _FakeTickResult:
     )
 
 
+def _plan_result(
+    *,
+    cycle_id: str = "cycle-1",
+    source_tick_status: str = "ok",
+    action: str = "continue_tracking",
+) -> _FakePlanResult:
+    return _FakePlanResult(
+        {
+            "cycle_id": cycle_id,
+            "plan_status": "ready",
+            "action": action,
+            "reason": "planner selected follow-up action",
+            "source_tick_status": source_tick_status,
+            "summary_status": "completed" if source_tick_status == "ok" else "degraded",
+            "claim_ceiling": "paper_tracking_candidate" if source_tick_status == "ok" else None,
+            "blocking_reasons": [],
+        }
+    )
+
+
 def test_phase5_local_cycle_step_parser_is_registered() -> None:
     parser = cli_module.build_parser()
 
@@ -125,6 +154,15 @@ def test_phase5_local_cycle_step_parser_is_registered() -> None:
     assert args.artifact_root == Path("tmp/artifacts")
     assert args.apply_closeout is False
     assert args.output == "status"
+
+
+def test_phase5_local_cycle_step_parser_accepts_plan_output() -> None:
+    parser = cli_module.build_parser()
+
+    args = parser.parse_args(["phase5-local-cycle-step", "--cycle-id", "cycle-1", "--output", "plan"])
+
+    assert args.command == "phase5-local-cycle-step"
+    assert args.output == "plan"
 
 
 def test_phase5_local_cycle_step_default_calls_tick_without_service(
@@ -170,6 +208,126 @@ def test_phase5_local_cycle_step_default_calls_tick_without_service(
     assert "runner_result" not in serialized
     assert "release-manifest:" not in serialized
     assert "sha256:" not in serialized
+
+
+def test_phase5_local_cycle_step_plan_calls_tick_and_followup_planner_only(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tick_calls: list[dict[str, Any]] = []
+    planner_inputs: list[_FakeTickResult] = []
+
+    def fake_tick(**kwargs: Any) -> _FakeTickResult:
+        tick_calls.append(kwargs)
+        return _ok_tick_result(kwargs["cycle_id"])
+
+    def fake_plan(tick_result: _FakeTickResult) -> _FakePlanResult:
+        planner_inputs.append(tick_result)
+        return _plan_result(cycle_id=tick_result.payload["cycle_id"])
+
+    def fail_service(**_kwargs: Any) -> _FakeServiceResult:
+        raise AssertionError("plan output should call tick and planner, not service")
+
+    monkeypatch.setattr(cli_autonomous_flow, "run_phase5_local_cycle_tick", fake_tick)
+    monkeypatch.setattr(cli_autonomous_flow, "plan_phase5_scheduler_followup", fake_plan)
+    monkeypatch.setattr(cli_autonomous_flow, "run_phase5_local_cycle_service", fail_service)
+
+    exit_code = cli_autonomous_flow.handle_phase5_local_cycle_step_command(_args(output="plan"))
+
+    assert exit_code == 0
+    assert len(tick_calls) == 1
+    assert len(planner_inputs) == 1
+    assert planner_inputs[0].payload["tick_status"] == "ok"
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == _plan_result().payload
+    serialized = json.dumps(payload, ensure_ascii=False)
+    assert '"status":' not in serialized
+    assert '"error":' not in serialized
+    assert "input_bundle" not in serialized
+    assert "runner_result" not in serialized
+    assert "release-manifest:" not in serialized
+    assert "sha256:" not in serialized
+
+
+def test_phase5_local_cycle_step_plan_arguments_are_passed_to_tick(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, Any]] = []
+    artifact_root = Path("tmp/artifacts")
+
+    def fake_tick(**kwargs: Any) -> _FakeTickResult:
+        calls.append(kwargs)
+        return _ok_tick_result(kwargs["cycle_id"])
+
+    def fake_plan(tick_result: _FakeTickResult) -> _FakePlanResult:
+        return _plan_result(cycle_id=tick_result.payload["cycle_id"])
+
+    monkeypatch.setattr(cli_autonomous_flow, "run_phase5_local_cycle_tick", fake_tick)
+    monkeypatch.setattr(cli_autonomous_flow, "plan_phase5_scheduler_followup", fake_plan)
+
+    exit_code = cli_autonomous_flow.handle_phase5_local_cycle_step_command(
+        _args(
+            output="plan",
+            cycle_id="cycle-plan",
+            gate_id="gate-1",
+            recovery_ticket_id="ticket-1",
+            projection_id="projection-1",
+            finished_at="2026-05-20T10:00:00Z",
+            apply_closeout=True,
+            require_publish_verification=True,
+            artifact_root=artifact_root,
+        )
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        {
+            "cycle_id": "cycle-plan",
+            "gate_id": "gate-1",
+            "recovery_ticket_id": "ticket-1",
+            "projection_id": "projection-1",
+            "finished_at": "2026-05-20T10:00:00Z",
+            "apply_closeout": True,
+            "require_publish_verification": True,
+            "root": artifact_root,
+        }
+    ]
+
+
+def test_phase5_local_cycle_step_plan_error_tick_returns_zero_with_plan(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    planner_inputs: list[_FakeTickResult] = []
+
+    def fake_tick(**kwargs: Any) -> _FakeTickResult:
+        return _error_tick_result(kwargs["cycle_id"])
+
+    def fake_plan(tick_result: _FakeTickResult) -> _FakePlanResult:
+        planner_inputs.append(tick_result)
+        return _plan_result(
+            cycle_id=tick_result.payload["cycle_id"],
+            source_tick_status="error",
+            action="open_recovery_ticket",
+        )
+
+    def fail_service(**_kwargs: Any) -> _FakeServiceResult:
+        raise AssertionError("plan output should not call service for error ticks")
+
+    monkeypatch.setattr(cli_autonomous_flow, "run_phase5_local_cycle_tick", fake_tick)
+    monkeypatch.setattr(cli_autonomous_flow, "plan_phase5_scheduler_followup", fake_plan)
+    monkeypatch.setattr(cli_autonomous_flow, "run_phase5_local_cycle_service", fail_service)
+
+    exit_code = cli_autonomous_flow.handle_phase5_local_cycle_step_command(
+        _args(output="plan", apply_closeout=True)
+    )
+
+    assert exit_code == 0
+    assert planner_inputs[0].payload["tick_status"] == "error"
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["cycle_id"] == "cycle-1"
+    assert payload["source_tick_status"] == "error"
+    assert payload["action"] == "open_recovery_ticket"
 
 
 def test_phase5_local_cycle_step_default_arguments_are_passed_to_tick(
@@ -246,8 +404,12 @@ def test_phase5_local_cycle_step_full_output_preserves_service_result_without_ti
     def fail_tick(**_kwargs: Any) -> _FakeTickResult:
         raise AssertionError("full output should call service, not tick")
 
+    def fail_plan(_tick_result: _FakeTickResult) -> _FakePlanResult:
+        raise AssertionError("full output should not call follow-up planner")
+
     monkeypatch.setattr(cli_autonomous_flow, "run_phase5_local_cycle_service", fake_service)
     monkeypatch.setattr(cli_autonomous_flow, "run_phase5_local_cycle_tick", fail_tick)
+    monkeypatch.setattr(cli_autonomous_flow, "plan_phase5_scheduler_followup", fail_plan)
 
     exit_code = cli_autonomous_flow.handle_phase5_local_cycle_step_command(_args(output="full"))
 
@@ -271,8 +433,12 @@ def test_phase5_local_cycle_step_full_output_service_error_returns_cli_error_jso
     def fail_tick(**_kwargs: Any) -> _FakeTickResult:
         raise AssertionError("full output should not call tick")
 
+    def fail_plan(_tick_result: _FakeTickResult) -> _FakePlanResult:
+        raise AssertionError("full output should not call follow-up planner")
+
     monkeypatch.setattr(cli_autonomous_flow, "run_phase5_local_cycle_service", fake_service)
     monkeypatch.setattr(cli_autonomous_flow, "run_phase5_local_cycle_tick", fail_tick)
+    monkeypatch.setattr(cli_autonomous_flow, "plan_phase5_scheduler_followup", fail_plan)
 
     exit_code = cli_autonomous_flow.handle_phase5_local_cycle_step_command(
         _args(output="full", apply_closeout=True)
