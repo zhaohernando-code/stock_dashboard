@@ -24,7 +24,9 @@ from ashare_evidence.research_artifact_store import (
     write_phase5_scheduler_diagnostic_artifact,
 )
 from ashare_evidence.scheduler_execution_artifact_store import (
+    create_phase5_scheduler_execution_reservation_artifact,
     find_phase5_scheduler_execution_ledger_by_idempotency_key,
+    read_phase5_scheduler_execution_ledger_artifact_if_exists,
     write_phase5_scheduler_execution_ledger_artifact,
 )
 
@@ -238,14 +240,34 @@ def record_phase5_scheduler_execution_ledger(
     notes: str = "",
     root: Path | None = None,
 ) -> tuple[Phase5CycleLedgerArtifact | None, Phase5SchedulerExecutionLedgerArtifact]:
-    existing = find_phase5_scheduler_execution_ledger_by_idempotency_key(idempotency_key, root=root)
+    existing_by_key = find_phase5_scheduler_execution_ledger_by_idempotency_key(idempotency_key, root=root)
+    reservation_execution_id = existing_by_key.execution_id if existing_by_key is not None else execution_id
+    reservation_cycle_id = existing_by_key.cycle_id if existing_by_key is not None else cycle_id
+    reservation_created_at = existing_by_key.created_at if existing_by_key is not None else created_at
+    reservation = create_phase5_scheduler_execution_reservation_artifact(
+        idempotency_key=idempotency_key,
+        execution_id=reservation_execution_id,
+        cycle_id=reservation_cycle_id,
+        created_at=reservation_created_at,
+        root=root,
+    )
+    if existing_by_key is not None and existing_by_key.execution_id != execution_id:
+        raise Phase5SchedulerExecutionIdempotencyConflictError(
+            idempotency_key=idempotency_key,
+            existing_execution_id=existing_by_key.execution_id,
+            requested_execution_id=execution_id,
+        )
+    if reservation.execution_id != execution_id:
+        raise Phase5SchedulerExecutionIdempotencyConflictError(
+            idempotency_key=idempotency_key,
+            existing_execution_id=reservation.execution_id,
+            requested_execution_id=execution_id,
+        )
+
+    existing = read_phase5_scheduler_execution_ledger_artifact_if_exists(execution_id, root=root)
     if existing is not None:
-        if existing.execution_id != execution_id:
-            raise Phase5SchedulerExecutionIdempotencyConflictError(
-                idempotency_key=idempotency_key,
-                existing_execution_id=existing.execution_id,
-                requested_execution_id=execution_id,
-            )
+        if existing.idempotency_key != idempotency_key:
+            raise RuntimeError("phase5 scheduler execution ledger idempotency mismatch")
         cycle = _append_scheduler_execution_event_if_cycle_exists(existing.cycle_id, root=root)
         return cycle, existing
 

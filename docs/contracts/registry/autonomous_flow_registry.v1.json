@@ -205,6 +205,14 @@
       "maturity": "partial"
     },
     {
+      "id": "phase5_scheduler_execution_reservation",
+      "status": "registered",
+      "schema_ref": "schemas/phase5_scheduler_execution_reservation.schema.json",
+      "provider": "phase5_scheduler",
+      "consumers": ["scheduler", "reviewer", "operations"],
+      "maturity": "partial"
+    },
+    {
       "id": "phase5_gate_readout",
       "status": "registered",
       "schema_ref": "schemas/phase5_gate_readout.schema.json",
