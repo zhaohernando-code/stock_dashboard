@@ -6,6 +6,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from ashare_evidence.autonomous_flow import Phase5SchedulerExecutionIdempotencyConflictError
+
+_EXECUTION_CONFLICT_RECOMMENDED_NEXT_ACTION = (
+    "reuse_existing_execution_id_or_retry_with_new_idempotency_key"
+)
+
 
 @dataclass(frozen=True)
 class Phase5LocalCycleStepHandlers:
@@ -102,14 +108,18 @@ def _handle_execution_output(args: Namespace, handlers: Phase5LocalCycleStepHand
 
     tick_result = _run_tick_from_args(args, handlers)
     plan = handlers.plan_followup(tick_result)
-    execution_result = handlers.record_scheduler_plan_execution(
-        plan,
-        execution_id=args.execution_id,
-        idempotency_key=args.idempotency_key,
-        created_at=args.created_at,
-        diagnostic_refs=[args.diagnostic_id] if args.diagnostic_id else [],
-        root=args.artifact_root,
-    )
+    try:
+        execution_result = handlers.record_scheduler_plan_execution(
+            plan,
+            execution_id=args.execution_id,
+            idempotency_key=args.idempotency_key,
+            created_at=args.created_at,
+            diagnostic_refs=[args.diagnostic_id] if args.diagnostic_id else [],
+            root=args.artifact_root,
+        )
+    except Phase5SchedulerExecutionIdempotencyConflictError as exc:
+        _print_json(_execution_conflict_payload(exc))
+        return 3
     _print_json(execution_result.model_dump(mode="json"))
     return 0
 
@@ -156,6 +166,19 @@ def _run_tick_from_args(args: Namespace, handlers: Phase5LocalCycleStepHandlers)
 
 def _missing_arguments(arguments: tuple[tuple[str, Any], ...]) -> list[str]:
     return [argument for argument, value in arguments if not value]
+
+
+def _execution_conflict_payload(exc: Phase5SchedulerExecutionIdempotencyConflictError) -> dict[str, str]:
+    return {
+        "status": "error",
+        "command": "phase5-local-cycle-step",
+        "error_type": type(exc).__name__,
+        "message": str(exc),
+        "idempotency_key": exc.idempotency_key,
+        "existing_execution_id": exc.existing_execution_id,
+        "requested_execution_id": exc.requested_execution_id,
+        "recommended_next_action": _EXECUTION_CONFLICT_RECOMMENDED_NEXT_ACTION,
+    }
 
 
 def _print_json(payload: Any) -> None:
