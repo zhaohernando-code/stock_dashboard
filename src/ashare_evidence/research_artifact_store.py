@@ -8,6 +8,11 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
+from ashare_evidence.autonomous_flow_artifacts import (
+    Phase5CycleLedgerArtifact,
+    Phase5GateReadoutArtifact,
+    Phase5RecoveryTicketArtifact,
+)
 from ashare_evidence.research_artifacts import (
     BacktestArtifactView,
     ManualResearchArtifactView,
@@ -33,6 +38,9 @@ ARTIFACT_FOLDERS = {
     "phase5_holding_policy_experiment": "studies",
     "phase5_producer_contract_study": "studies",
     "shortpick_lab": "shortpick_lab",
+    "phase5_cycle_ledger": "autonomous_flow/phase5_cycle_ledger",
+    "phase5_recovery_ticket": "autonomous_flow/phase5_recovery_ticket",
+    "phase5_gate_readout": "autonomous_flow/phase5_gate_readout",
 }
 
 ArtifactModel = TypeVar("ArtifactModel", bound=BaseModel)
@@ -97,13 +105,19 @@ def _ensure_artifact_write_allowed(target: Path) -> None:
         )
 
 
-def _read_model(model_type: type[ArtifactModel], artifact_type: str, artifact_id: str, *, root: Path | None = None) -> ArtifactModel:
+def _read_model(  # noqa: UP047 - keep Python 3.10-compatible generic syntax.
+    model_type: type[ArtifactModel],
+    artifact_type: str,
+    artifact_id: str,
+    *,
+    root: Path | None = None,
+) -> ArtifactModel:
     target = artifact_path(artifact_type, artifact_id, root=root)
     payload = json.loads(target.read_text(encoding="utf-8"))
     return model_type.model_validate(payload)
 
 
-def _read_model_if_exists(
+def _read_model_if_exists(  # noqa: UP047 - keep Python 3.10-compatible generic syntax.
     model_type: type[ArtifactModel],
     artifact_type: str,
     artifact_id: str | None,
@@ -143,6 +157,78 @@ def read_shortpick_lab_artifact_if_exists(
     if not target.exists():
         return None
     return json.loads(target.read_text(encoding="utf-8"))
+
+
+def write_phase5_cycle_ledger_artifact(
+    artifact: Phase5CycleLedgerArtifact,
+    *,
+    root: Path | None = None,
+) -> Path:
+    return _write_model(artifact, "phase5_cycle_ledger", artifact.cycle_id, root=root)
+
+
+def read_phase5_cycle_ledger_artifact(
+    cycle_id: str,
+    *,
+    root: Path | None = None,
+) -> Phase5CycleLedgerArtifact:
+    return _read_model(Phase5CycleLedgerArtifact, "phase5_cycle_ledger", cycle_id, root=root)
+
+
+def read_phase5_cycle_ledger_artifact_if_exists(
+    cycle_id: str | None,
+    *,
+    root: Path | None = None,
+) -> Phase5CycleLedgerArtifact | None:
+    return _read_model_if_exists(Phase5CycleLedgerArtifact, "phase5_cycle_ledger", cycle_id, root=root)
+
+
+def write_phase5_recovery_ticket_artifact(
+    artifact: Phase5RecoveryTicketArtifact,
+    *,
+    root: Path | None = None,
+) -> Path:
+    return _write_model(artifact, "phase5_recovery_ticket", artifact.ticket_id, root=root)
+
+
+def read_phase5_recovery_ticket_artifact(
+    ticket_id: str,
+    *,
+    root: Path | None = None,
+) -> Phase5RecoveryTicketArtifact:
+    return _read_model(Phase5RecoveryTicketArtifact, "phase5_recovery_ticket", ticket_id, root=root)
+
+
+def read_phase5_recovery_ticket_artifact_if_exists(
+    ticket_id: str | None,
+    *,
+    root: Path | None = None,
+) -> Phase5RecoveryTicketArtifact | None:
+    return _read_model_if_exists(Phase5RecoveryTicketArtifact, "phase5_recovery_ticket", ticket_id, root=root)
+
+
+def write_phase5_gate_readout_artifact(
+    artifact: Phase5GateReadoutArtifact,
+    *,
+    root: Path | None = None,
+) -> Path:
+    return _write_model(artifact, "phase5_gate_readout", artifact.gate_id, root=root)
+
+
+def read_phase5_gate_readout_artifact(
+    gate_id: str,
+    *,
+    root: Path | None = None,
+) -> Phase5GateReadoutArtifact:
+    return _read_model(Phase5GateReadoutArtifact, "phase5_gate_readout", gate_id, root=root)
+
+
+def read_phase5_gate_readout_artifact_if_exists(
+    gate_id: str | None,
+    *,
+    root: Path | None = None,
+) -> Phase5GateReadoutArtifact | None:
+    return _read_model_if_exists(Phase5GateReadoutArtifact, "phase5_gate_readout", gate_id, root=root)
 
 
 def write_manifest(manifest: ResearchArtifactManifestView, *, root: Path | None = None) -> Path:

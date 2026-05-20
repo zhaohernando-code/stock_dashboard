@@ -1,0 +1,79 @@
+from __future__ import annotations
+
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+SchemaVersion = Literal["v1"]
+
+
+class PublishVerificationRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    release_manifest_ref: str
+    digest: str
+    event_ref: str | None = None
+
+
+class Phase5CycleLedgerArtifact(BaseModel):
+    artifact_family: Literal["phase5_cycle_ledger"] = "phase5_cycle_ledger"
+    schema_version: SchemaVersion = "v1"
+    cycle_id: str
+    trigger: Literal["scheduled", "manual", "retry", "recovery_followup"]
+    scope: dict[str, Any] = Field(default_factory=dict)
+    status: Literal["planned", "running", "degraded", "blocked", "completed"]
+    started_at: str
+    finished_at: str | None = None
+    input_contract_versions: dict[str, str] = Field(default_factory=dict)
+    event_refs: list[str] = Field(default_factory=list)
+    artifact_refs: list[str] = Field(default_factory=list)
+    gate_readout_refs: list[str] = Field(default_factory=list)
+    recovery_ticket_refs: list[str] = Field(default_factory=list)
+    publish_verification_ref: PublishVerificationRef | None = None
+    next_action: Literal["continue_tracking", "rebuild_projection", "retry_failed_step", "redesign", "blocked", "none"]
+
+
+class Phase5RecoveryTicketArtifact(BaseModel):
+    artifact_family: Literal["phase5_recovery_ticket"] = "phase5_recovery_ticket"
+    schema_version: SchemaVersion = "v1"
+    ticket_id: str
+    cycle_id: str
+    failed_step: Literal["artifact_build", "gate_eval", "projection_refresh", "publish_verify", "replay_schedule"]
+    failure_class: Literal[
+        "external_data_timeout",
+        "sqlite_write_lock",
+        "artifact_schema_unknown",
+        "stale_projection",
+        "publish_blocked",
+        "test_failed",
+        "contract_violation",
+    ]
+    failure_observed_at: str
+    evidence_refs: list[str] = Field(default_factory=list)
+    recovery_action: Literal[
+        "reuse_last_valid_artifact",
+        "retry_with_backoff",
+        "rebuild_projection",
+        "mark_degraded",
+        "open_followup_cycle",
+        "block_cycle",
+    ]
+    retry_count: int = 0
+    final_status: Literal["resolved", "degraded", "blocked"]
+    claim_ceiling_effect: Literal["unchanged", "lowered"]
+    notes: str = ""
+
+
+class Phase5GateReadoutArtifact(BaseModel):
+    artifact_family: Literal["phase5_gate_readout"] = "phase5_gate_readout"
+    schema_version: SchemaVersion = "v1"
+    gate_id: str
+    cycle_id: str
+    gate_status: Literal["passed", "insufficient_evidence", "blocked", "degraded"]
+    failing_gate_ids: list[str] = Field(default_factory=list)
+    incomplete_gate_ids: list[str] = Field(default_factory=list)
+    claim_ceiling: Literal["blocked", "research_observation", "paper_tracking_candidate", "validated_readout"]
+    source_artifact_ids: list[str] = Field(default_factory=list)
+    blocking_reasons: list[str] = Field(default_factory=list)
+    next_action: Literal["continue_tracking", "rebuild_projection", "redesign", "retry_failed_step", "blocked"]
+    evaluated_at: str
