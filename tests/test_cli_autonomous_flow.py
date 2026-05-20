@@ -46,6 +46,15 @@ def test_phase5_local_cycle_step_parser_accepts_plan_output() -> None:
     assert args.output == "plan"
 
 
+def test_phase5_local_cycle_step_parser_accepts_dry_run_output() -> None:
+    parser = cli_module.build_parser()
+
+    args = parser.parse_args(["phase5-local-cycle-step", "--cycle-id", "cycle-1", "--output", "dry-run"])
+
+    assert args.command == "phase5-local-cycle-step"
+    assert args.output == "dry-run"
+
+
 def test_phase5_local_cycle_step_default_calls_tick_without_service(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

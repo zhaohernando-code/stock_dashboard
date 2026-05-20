@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+from pathlib import Path
 from typing import Any
 
 
@@ -32,6 +34,15 @@ class _FakePlanResult:
         return self.payload
 
 
+class _FakeDryRunResult:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.payload = payload
+
+    def model_dump(self, *, mode: str) -> dict[str, Any]:
+        assert mode == "json"
+        return self.payload
+
+
 def _args(**overrides: Any) -> argparse.Namespace:
     payload = {
         "cycle_id": "cycle-1",
@@ -46,6 +57,50 @@ def _args(**overrides: Any) -> argparse.Namespace:
     }
     payload.update(overrides)
     return argparse.Namespace(**payload)
+
+
+def _expected_tick_args(**overrides: Any) -> dict[str, Any]:
+    payload = {
+        "cycle_id": "cycle-1",
+        "gate_id": None,
+        "recovery_ticket_id": None,
+        "projection_id": None,
+        "finished_at": None,
+        "apply_closeout": False,
+        "require_publish_verification": False,
+        "root": None,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _assert_no_nested_flow_payload(payload: dict[str, Any]) -> None:
+    serialized = json.dumps(payload, ensure_ascii=False)
+
+    assert '"plan_status":' not in serialized
+    assert '"source_tick_status":' not in serialized
+    assert '"status":' not in serialized
+    assert '"error":' not in serialized
+    assert "input_bundle" not in serialized
+    assert "runner_result" not in serialized
+    assert "release-manifest:" not in serialized
+    assert "sha256:" not in serialized
+    assert "Traceback" not in serialized
+
+
+def _assert_rich_tick_args(calls: list[dict[str, Any]], *, cycle_id: str, root: Path) -> None:
+    assert calls == [
+        _expected_tick_args(
+            cycle_id=cycle_id,
+            gate_id="gate-1",
+            recovery_ticket_id="ticket-1",
+            projection_id="projection-1",
+            finished_at="2026-05-20T10:00:00Z",
+            apply_closeout=True,
+            require_publish_verification=True,
+            root=root,
+        )
+    ]
 
 
 def _ok_service_result(cycle_id: str = "cycle-1") -> _FakeServiceResult:
@@ -124,6 +179,27 @@ def _plan_result(
             "source_tick_status": source_tick_status,
             "summary_status": "completed" if source_tick_status == "ok" else "degraded",
             "claim_ceiling": "paper_tracking_candidate" if source_tick_status == "ok" else None,
+            "blocking_reasons": [],
+        }
+    )
+
+
+def _dry_run_result(
+    *,
+    cycle_id: str = "cycle-1",
+    planned_action: str = "continue_tracking",
+    execution_status: str = "planned",
+    planned_effects: list[str] | None = None,
+) -> _FakeDryRunResult:
+    return _FakeDryRunResult(
+        {
+            "cycle_id": cycle_id,
+            "execution_mode": "dry_run",
+            "execution_status": execution_status,
+            "planned_action": planned_action,
+            "would_execute": False,
+            "planned_effects": planned_effects or ["keep_cycle_open_for_next_tick"],
+            "reason": "scheduler dry-run selected follow-up action",
             "blocking_reasons": [],
         }
     )

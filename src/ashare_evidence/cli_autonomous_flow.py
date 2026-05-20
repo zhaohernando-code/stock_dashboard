@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ashare_evidence.autonomous_flow_scheduler_executor import dry_run_phase5_scheduler_plan
 from ashare_evidence.autonomous_flow_scheduler_plan import plan_phase5_scheduler_followup
 from ashare_evidence.autonomous_flow_service import run_phase5_local_cycle_service
 from ashare_evidence.autonomous_flow_tick import run_phase5_local_cycle_tick
@@ -18,6 +19,19 @@ def _jsonable_result(result: Any) -> Any:
     if hasattr(result, "model_dump"):
         return result.model_dump(mode="json")
     return result
+
+
+def _run_tick_from_args(args: argparse.Namespace) -> Any:
+    return run_phase5_local_cycle_tick(
+        cycle_id=args.cycle_id,
+        gate_id=args.gate_id,
+        recovery_ticket_id=args.recovery_ticket_id,
+        projection_id=args.projection_id,
+        finished_at=args.finished_at,
+        apply_closeout=args.apply_closeout,
+        require_publish_verification=args.require_publish_verification,
+        root=args.artifact_root,
+    )
 
 
 def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
@@ -35,43 +49,33 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
     phase5_local_cycle_step.add_argument("--require-publish-verification", action="store_true")
     phase5_local_cycle_step.add_argument(
         "--output",
-        choices=("status", "plan", "full"),
+        choices=("status", "plan", "dry-run", "full"),
         default="status",
         help=(
             "Choose the JSON shape: status emits the default tick envelope, "
-            "plan emits a scheduler follow-up plan, full emits the service result for debugging."
+            "plan emits a scheduler follow-up plan, dry-run emits a no-side-effect scheduler "
+            "execution intent, full emits the service result for debugging."
         ),
     )
 
 
 def handle_phase5_local_cycle_step_command(args: argparse.Namespace) -> int:
     if args.output == "status":
-        tick_result = run_phase5_local_cycle_tick(
-            cycle_id=args.cycle_id,
-            gate_id=args.gate_id,
-            recovery_ticket_id=args.recovery_ticket_id,
-            projection_id=args.projection_id,
-            finished_at=args.finished_at,
-            apply_closeout=args.apply_closeout,
-            require_publish_verification=args.require_publish_verification,
-            root=args.artifact_root,
-        )
+        tick_result = _run_tick_from_args(args)
         _print_json(tick_result.model_dump(mode="json"))
         return tick_result.exit_code
 
     if args.output == "plan":
-        tick_result = run_phase5_local_cycle_tick(
-            cycle_id=args.cycle_id,
-            gate_id=args.gate_id,
-            recovery_ticket_id=args.recovery_ticket_id,
-            projection_id=args.projection_id,
-            finished_at=args.finished_at,
-            apply_closeout=args.apply_closeout,
-            require_publish_verification=args.require_publish_verification,
-            root=args.artifact_root,
-        )
+        tick_result = _run_tick_from_args(args)
         plan = plan_phase5_scheduler_followup(tick_result)
         _print_json(plan.model_dump(mode="json"))
+        return 0
+
+    if args.output == "dry-run":
+        tick_result = _run_tick_from_args(args)
+        plan = plan_phase5_scheduler_followup(tick_result)
+        dry_run_result = dry_run_phase5_scheduler_plan(plan)
+        _print_json(dry_run_result.model_dump(mode="json"))
         return 0
 
     try:
