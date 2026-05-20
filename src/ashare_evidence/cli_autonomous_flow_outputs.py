@@ -20,6 +20,7 @@ class Phase5LocalCycleStepHandlers:
     dry_run_scheduler_plan: Callable[..., Any]
     record_scheduler_plan_diagnostic: Callable[..., Any]
     record_scheduler_plan_execution: Callable[..., Any]
+    execute_scheduler_noop_action: Callable[..., Any]
     run_service: Callable[..., Any]
 
 
@@ -44,6 +45,13 @@ def handle_phase5_local_cycle_step_output(
         plan = handlers.plan_followup(tick_result)
         dry_run_result = handlers.dry_run_scheduler_plan(plan)
         _print_json(dry_run_result.model_dump(mode="json"))
+        return 0
+
+    if args.output == "action":
+        tick_result = _run_tick_from_args(args, handlers)
+        plan = handlers.plan_followup(tick_result)
+        action_result = handlers.execute_scheduler_noop_action(plan)
+        _print_json(action_result.model_dump(mode="json"))
         return 0
 
     if args.output == "diagnostic":
