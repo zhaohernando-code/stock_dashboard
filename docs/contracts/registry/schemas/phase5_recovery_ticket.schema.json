@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "phase5_recovery_ticket.schema.json",
+  "title": "Phase 5 Recovery Ticket",
+  "type": "object",
+  "required": [
+    "artifact_family",
+    "schema_version",
+    "ticket_id",
+    "cycle_id",
+    "failed_step",
+    "failure_class",
+    "failure_observed_at",
+    "evidence_refs",
+    "recovery_action",
+    "retry_count",
+    "final_status",
+    "claim_ceiling_effect",
+    "notes"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "artifact_family": {
+      "const": "phase5_recovery_ticket"
+    },
+    "schema_version": {
+      "const": "v1"
+    },
+    "ticket_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cycle_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "failed_step": {
+      "type": "string",
+      "enum": ["artifact_build", "gate_eval", "projection_refresh", "publish_verify", "replay_schedule"]
+    },
+    "failure_class": {
+      "type": "string",
+      "enum": [
+        "external_data_timeout",
+        "sqlite_write_lock",
+        "artifact_schema_unknown",
+        "stale_projection",
+        "publish_blocked",
+        "test_failed",
+        "contract_violation"
+      ]
+    },
+    "failure_observed_at": {
+      "type": "string"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "recovery_action": {
+      "type": "string",
+      "enum": [
+        "reuse_last_valid_artifact",
+        "retry_with_backoff",
+        "rebuild_projection",
+        "mark_degraded",
+        "open_followup_cycle",
+        "block_cycle"
+      ]
+    },
+    "retry_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "final_status": {
+      "type": "string",
+      "enum": ["resolved", "degraded", "blocked"]
+    },
+    "claim_ceiling_effect": {
+      "type": "string",
+      "enum": ["unchanged", "lowered"]
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}

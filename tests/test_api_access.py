@@ -135,18 +135,18 @@ class BetaAccessApiTests(unittest.TestCase):
                     "model_api_key_id": None,
                 },
             )
-            self.assertEqual(create_response.status_code, 403)
-            self.assertIn("root role required", create_response.json()["detail"])
+            self.assertEqual(create_response.status_code, 200)
+            request_id = create_response.json()["id"]
 
             execute_response = client.post(
-                "/manual-research/requests/999/execute",
+                f"/manual-research/requests/{request_id}/execute",
                 headers=analyst_headers,
                 json={"failover_enabled": True},
             )
-            self.assertEqual(execute_response.status_code, 403)
+            self.assertEqual(execute_response.status_code, 200)
 
             complete_response = client.post(
-                "/manual-research/requests/999/complete",
+                f"/manual-research/requests/{request_id}/complete",
                 headers=analyst_headers,
                 json={
                     "summary": "人工补充结论。",

@@ -25,6 +25,7 @@
 - **子进程输入要压缩成 Context Pack**：不要让每个子进程重复读取长状态文件和全部历史合同。主进程先冻结目标、非目标、owned files、registry allowlist、成熟度限制、必读文件和禁止动作，再派发短输入；需要长文档时只给路径和具体读取范围。
 - **重跑必须修复失败面而不是补解释**：评审发现未注册接口、成熟度越界、开放问题未分类或子进程越权时，进入下一轮重跑，把评审结论升级为硬约束；不能只在主进程总结里解释为什么问题“可以接受”。
 - **设计阶段也要有可机检门禁**：Markdown 合同可以作为早期草案，但至少要提供 registry appendix 或 allowlist，支持脚本检查未注册事件、artifact、interface 和废弃 id；进入代码实现前再决定是否升级为 JSON Schema、DB registry 或代码生成清单。
+- **实现阶段先跑 contract registry check**：当任务引用自运行流程事件、artifact family、interface、maturity 或 claim ceiling 时，先运行 `contract-registry-check` 验证 JSON registry；未注册、deprecated、`proposed_*` 冒充正式依赖时必须重跑设计或更新 registry，不能进入代码实现。
 
 ## 运行态与发布
 
