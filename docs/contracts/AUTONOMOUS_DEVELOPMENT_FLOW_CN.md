@@ -198,7 +198,9 @@
 closeout：
 - 文档任务至少通过 markdown 结构和 git diff 检查。
 - live-facing 任务必须发布到 runtime 并验证 localhost 与 canonical route。
-- 默认合并回 `main`，保持工作树干净。
+- 默认合并回 `main`，保持工作树干净；`git diff` / `git diff --stat` 只能证明 tracked 文件差异，不能证明没有 untracked 文件。
+- commit 后、merge 前或 merge 后，主进程必须在 closeout 执行 clean git status 门禁：`process-hardening-check --require-clean-git-status --git-root .`。
+- 若 clean git status 门禁发现 untracked、modified 或 staged 残留，主进程必须回到 P4/P5 判断它是漏提交、越权改动，还是需要拆成新任务；不得把最终 clean status closeout 责任下放给子进程。
 - 评估文档必须记录子进程输出、主进程语义审查、主进程修正、最终门禁和残余风险；若主进程修正了子进程遗漏，必须写明它是流程缺口还是局部实现缺口。
 
 ## 5. 子进程规则裁剪
@@ -274,3 +276,4 @@ closeout：
 - **基座能力必须有硬状态**：幂等、调度、artifact 写入、状态机、claim gate 这类基座能力不能只靠扫描已有 ledger 得出结论。需要唯一性或并发保护时，必须设计可审计的 artifact、reservation 或 ledger，并明确原子边界和残余风险。
 - **Legacy migration 是验收项**：任何新索引、新 reservation、新 artifact family 接入旧 ledger 时，测试必须覆盖旧数据存在但新硬状态缺失的路径，确认旧数据不会绕过冲突检测、claim gate 或恢复写入。
 - **主进程修正必须反哺流程**：如果主进程在子进程通过门禁后仍修正了文件拆分、迁移边界、schema 语义或文档验收，该修正必须写入评估文档，并判断是否需要重跑同类任务。
+- **Clean status closeout 是主进程门禁**：Trial AN 之后，主进程 closeout 必须运行 `process-hardening-check --require-clean-git-status --git-root .`，因为 diff/stat 检查无法覆盖 untracked 文件；命中残留时必须回到评审或重跑，而不是让子进程承担全局收尾。
