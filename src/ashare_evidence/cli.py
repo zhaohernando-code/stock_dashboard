@@ -15,11 +15,7 @@ from ashare_evidence.cli_autonomous_flow import (
     handle_phase5_local_cycle_step_command,
 )
 from ashare_evidence.cli_event import add_event_check_parser, handle_event_check, run_refresh_event_checks
-from ashare_evidence.cli_governance import (
-    add_governance_parsers,
-    handle_contract_registry_check_command,
-    handle_policy_audit_command,
-)
+from ashare_evidence.cli_governance import add_governance_parsers, handle_governance_command
 from ashare_evidence.cli_research import add_research_parsers, handle_factor_observation, handle_weight_sweep
 from ashare_evidence.dashboard import get_glossary_entries, get_stock_dashboard, list_candidate_recommendations
 from ashare_evidence.db import init_database, preflight_database_writable, session_scope
@@ -741,10 +737,9 @@ def main(argv: list[str] | None = None) -> int:
         init_database(args.database_url)
         print("database initialized")
         return 0
-    if args.command == "policy-audit":
-        return handle_policy_audit_command(args)
-    if args.command == "contract-registry-check":
-        return handle_contract_registry_check_command(args)
+    governance_exit_code = handle_governance_command(args)
+    if governance_exit_code is not None:
+        return governance_exit_code
     if args.command == "phase5-local-cycle-step":
         return handle_phase5_local_cycle_step_command(args)
     if _should_initialize_database(args.database_url):
