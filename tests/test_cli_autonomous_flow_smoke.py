@@ -113,13 +113,15 @@ def _assert_no_sensitive_service_payload(payload: dict[str, Any]) -> None:
     assert "sha256:" not in serialized
 
 
-def test_phase5_local_cycle_step_default_smoke_reads_real_artifact_root(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    artifact_root = tmp_path / "artifacts"
-    _write_happy_path_artifacts(artifact_root)
+def _assert_no_nested_scheduler_payload(payload: dict[str, Any]) -> None:
+    assert "plan_status" not in payload
+    assert "source_tick_status" not in payload
+    assert "status" not in payload
+    assert "error" not in payload
+    _assert_no_sensitive_service_payload(payload)
+
+
+def _guard_init_database(monkeypatch: pytest.MonkeyPatch) -> list[object]:
     init_database_calls: list[object] = []
 
     def fail_init_database(database_url: str | None = None) -> None:
@@ -127,6 +129,17 @@ def test_phase5_local_cycle_step_default_smoke_reads_real_artifact_root(
         raise AssertionError("phase5-local-cycle-step must not initialize the database")
 
     monkeypatch.setattr(cli_module, "init_database", fail_init_database)
+    return init_database_calls
+
+
+def test_phase5_local_cycle_step_default_smoke_reads_real_artifact_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    artifact_root = tmp_path / "artifacts"
+    _write_happy_path_artifacts(artifact_root)
+    init_database_calls = _guard_init_database(monkeypatch)
 
     exit_code = _run_cli_tick(artifact_root=artifact_root)
 
@@ -153,13 +166,7 @@ def test_phase5_local_cycle_step_default_smoke_missing_cycle_returns_tick_error(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     artifact_root = tmp_path / "artifacts"
-    init_database_calls: list[object] = []
-
-    def fail_init_database(database_url: str | None = None) -> None:
-        init_database_calls.append(database_url)
-        raise AssertionError("phase5-local-cycle-step must not initialize the database")
-
-    monkeypatch.setattr(cli_module, "init_database", fail_init_database)
+    init_database_calls = _guard_init_database(monkeypatch)
 
     exit_code = _run_cli_tick(artifact_root=artifact_root, cycle_id="cycle-missing-smoke")
 
@@ -185,13 +192,7 @@ def test_phase5_local_cycle_step_plan_smoke_reads_real_artifact_root(
 ) -> None:
     artifact_root = tmp_path / "artifacts"
     _write_happy_path_artifacts(artifact_root)
-    init_database_calls: list[object] = []
-
-    def fail_init_database(database_url: str | None = None) -> None:
-        init_database_calls.append(database_url)
-        raise AssertionError("phase5-local-cycle-step must not initialize the database")
-
-    monkeypatch.setattr(cli_module, "init_database", fail_init_database)
+    init_database_calls = _guard_init_database(monkeypatch)
 
     exit_code = _run_cli_tick(artifact_root=artifact_root, output="plan")
 
@@ -216,13 +217,7 @@ def test_phase5_local_cycle_step_plan_smoke_missing_cycle_returns_recovery_plan(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     artifact_root = tmp_path / "artifacts"
-    init_database_calls: list[object] = []
-
-    def fail_init_database(database_url: str | None = None) -> None:
-        init_database_calls.append(database_url)
-        raise AssertionError("phase5-local-cycle-step must not initialize the database")
-
-    monkeypatch.setattr(cli_module, "init_database", fail_init_database)
+    init_database_calls = _guard_init_database(monkeypatch)
 
     exit_code = _run_cli_tick(
         artifact_root=artifact_root,
@@ -243,3 +238,61 @@ def test_phase5_local_cycle_step_plan_smoke_missing_cycle_returns_recovery_plan(
     assert "status" not in payload
     assert "error" not in payload
     _assert_no_sensitive_service_payload(payload)
+
+
+@pytest.mark.parametrize(
+    (
+        "cycle_id",
+        "write_artifacts",
+        "planned_action",
+        "planned_effects",
+        "blocking_reasons",
+    ),
+    [
+        (
+            "cycle-20260520-smoke",
+            True,
+            "continue_tracking",
+            ["keep_cycle_open_for_next_tick"],
+            [],
+        ),
+        (
+            "cycle-missing-smoke",
+            False,
+            "open_recovery_ticket",
+            ["prepare_recovery_ticket"],
+            ["tick failure_class is artifact-missing"],
+        ),
+    ],
+)
+def test_phase5_local_cycle_step_dry_run_smoke_reads_real_artifact_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    cycle_id: str,
+    write_artifacts: bool,
+    planned_action: str,
+    planned_effects: list[str],
+    blocking_reasons: list[str],
+) -> None:
+    artifact_root = tmp_path / "artifacts"
+    if write_artifacts:
+        _write_happy_path_artifacts(artifact_root)
+    init_database_calls = _guard_init_database(monkeypatch)
+
+    exit_code = _run_cli_tick(
+        artifact_root=artifact_root,
+        cycle_id=cycle_id,
+        output="dry-run",
+    )
+
+    assert exit_code == 0
+    assert init_database_calls == []
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["cycle_id"] == cycle_id
+    assert payload["execution_mode"] == "dry_run"
+    assert payload["execution_status"] == "planned"
+    assert payload["planned_action"] == planned_action
+    assert payload["planned_effects"] == planned_effects
+    assert payload["blocking_reasons"] == blocking_reasons
+    _assert_no_nested_scheduler_payload(payload)
