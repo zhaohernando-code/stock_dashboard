@@ -380,12 +380,13 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     }
   }
 
-  async function loadRuntimeSettings(): Promise<void> {
+  async function loadRuntimeSettings(accountLogin?: string | null): Promise<void> {
     const payload = await api.getRuntimeSettings();
     setRuntimeSettings(payload);
     setRuntimeOverview(null);
     setAnalysisKeyId((current) => {
-      const storedPreference = readAnalysisModelPreference();
+      const preferenceAccount = accountLogin ?? authContext?.target_login ?? null;
+      const storedPreference = readAnalysisModelPreference(preferenceAccount);
       if (storedPreference === "builtin") {
         return undefined;
       }
@@ -424,7 +425,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   }
 
   async function loadRuntimeContext(_nextAuth?: AuthContextResponse | null): Promise<void> {
-    await loadRuntimeSettings();
+    await loadRuntimeSettings(_nextAuth?.target_login ?? authContext?.target_login ?? null);
   }
 
   function applySimulationWorkspace(workspace: SimulationWorkspaceResponse): void {
@@ -479,21 +480,26 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     }
   }
 
-  async function loadDetailData(symbol: string): Promise<void> {
+  async function loadDetailData(symbol: string, options?: { preserveAnalysisAnswer?: boolean }): Promise<void> {
     setLoadingDetail(true);
     setError(null);
     try {
+      const preserveAnalysisAnswer = options?.preserveAnalysisAnswer ?? false;
       const watchlistItem = candidateRows.find((item) => item.symbol === symbol) ?? null;
       if (watchlistItem?.analysis_status === "pending_real_data") {
         setDashboard(null);
         setQuestionDraft("");
-        setAnalysisAnswer(null);
+        if (!preserveAnalysisAnswer) {
+          setAnalysisAnswer(null);
+        }
         return;
       }
       const stockResult = await api.getStockDashboard(symbol);
       setDashboard(stockResult.data);
       setQuestionDraft(stockResult.data.follow_up.suggested_questions[0] ?? "");
-      setAnalysisAnswer(null);
+      if (!preserveAnalysisAnswer) {
+        setAnalysisAnswer(null);
+      }
       setSourceInfo(stockResult.source);
     } catch (loadError) {
       if (viewRef.current !== "shortpick") {
@@ -998,9 +1004,9 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       setWatchlistMutationSymbol(null);
     }
   }
-  async function refreshManualResearchContext(targetSymbol: string): Promise<void> {
+  async function refreshManualResearchContext(targetSymbol: string, options?: { preserveAnalysisAnswer?: boolean }): Promise<void> {
     if (selectedSymbol === targetSymbol) {
-      await loadDetailData(targetSymbol);
+      await loadDetailData(targetSymbol, { preserveAnalysisAnswer: options?.preserveAnalysisAnswer });
     }
     if ((view === "operations" || operations) && (selectedSymbol ?? targetSymbol)) {
       await loadOperationsData(selectedSymbol ?? targetSymbol);
@@ -1009,12 +1015,13 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
 
   async function handleSubmitManualResearch() {
     if (!dashboard || !selectedSymbol) return;
+    const targetSymbol = selectedSymbol;
     const normalizedQuestion = questionDraft.trim() || "请解释当前建议最容易失效的条件。";
     setAnalysisLoading(true);
     setError(null);
     try {
       const created = await api.createManualResearchRequest({
-        symbol: selectedSymbol,
+        symbol: targetSymbol,
         question: normalizedQuestion,
         trigger_source: "manual_research_ui",
         executor_kind: analysisKeyId ? "configured_api_key" : "builtin_gpt",
@@ -1023,10 +1030,11 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       const result = await api.executeManualResearchRequest(created.id, {
         failover_enabled: runtimeSettings?.llm_failover_enabled ?? true,
       });
-      await refreshManualResearchContext(selectedSymbol);
       setQuestionDraft(normalizedQuestion);
       setAnalysisAnswer(result);
       messageApi.success(manualResearchActionStatusMessage(result));
+      void refreshManualResearchContext(targetSymbol, { preserveAnalysisAnswer: true })
+        .catch((refreshError) => console.warn("刷新追问上下文失败", refreshError));
     } catch (analysisError) {
       const messageText = analysisError instanceof Error ? analysisError.message : "人工研究请求提交失败。";
       setError(messageText);
@@ -1038,7 +1046,13 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
 
   async function handleSelectAnalysisModel(keyId: number | undefined) {
     await selectMobileAnalysisModel({
-      keyId, setSavingConfig, setError, loadRuntimeSettings, setAnalysisKeyId, messageApi,
+      accountLogin: authContext?.target_login,
+      keyId,
+      setSavingConfig,
+      setError,
+      loadRuntimeSettings: () => loadRuntimeSettings(),
+      setAnalysisKeyId,
+      messageApi,
     });
   }
 
@@ -1049,11 +1063,12 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       const result = await api.executeManualResearchRequest(item.id, {
         failover_enabled: runtimeSettings?.llm_failover_enabled ?? true,
       });
-      await refreshManualResearchContext(item.symbol);
-      messageApi.success(manualResearchActionStatusMessage(result));
       if (item.symbol === selectedSymbol) {
         setAnalysisAnswer(result);
       }
+      messageApi.success(manualResearchActionStatusMessage(result));
+      void refreshManualResearchContext(item.symbol, { preserveAnalysisAnswer: true })
+        .catch((refreshError) => console.warn("刷新追问上下文失败", refreshError));
     } catch (actionError) {
       const messageText = actionError instanceof Error ? actionError.message : "执行人工研究请求失败。";
       setError(messageText);
@@ -1070,11 +1085,12 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       const created = await api.retryManualResearchRequest(item.id, {
         requested_by: "dashboard:operator",
       });
-      await refreshManualResearchContext(item.symbol);
-      messageApi.success("已创建新的人工研究请求。");
       if (item.symbol === selectedSymbol) {
         setAnalysisAnswer(created);
       }
+      messageApi.success("已创建新的人工研究请求。");
+      void refreshManualResearchContext(item.symbol, { preserveAnalysisAnswer: true })
+        .catch((refreshError) => console.warn("刷新追问上下文失败", refreshError));
     } catch (actionError) {
       const messageText = actionError instanceof Error ? actionError.message : "重试人工研究请求失败。";
       setError(messageText);
@@ -1126,12 +1142,13 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
         citations: parseMultilineItems(completeResearchCitations),
         answer: completeResearchAnswer.trim() || null,
       });
-      await refreshManualResearchContext(completeResearchTarget.symbol);
       if (completeResearchTarget.symbol === selectedSymbol) {
         setAnalysisAnswer(result);
       }
       closeCompleteManualResearchModal();
       messageApi.success(manualResearchActionStatusMessage(result));
+      void refreshManualResearchContext(completeResearchTarget.symbol, { preserveAnalysisAnswer: true })
+        .catch((refreshError) => console.warn("刷新追问上下文失败", refreshError));
     } catch (actionError) {
       const messageText = actionError instanceof Error ? actionError.message : "人工完成研究请求失败。";
       setError(messageText);
@@ -1164,12 +1181,13 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       const result = await api.failManualResearchRequest(failResearchTarget.id, {
         failure_reason: normalizedReason,
       });
-      await refreshManualResearchContext(failResearchTarget.symbol);
       if (failResearchTarget.symbol === selectedSymbol) {
         setAnalysisAnswer(result);
       }
       closeFailManualResearchModal();
       messageApi.success(manualResearchActionStatusMessage(result));
+      void refreshManualResearchContext(failResearchTarget.symbol, { preserveAnalysisAnswer: true })
+        .catch((refreshError) => console.warn("刷新追问上下文失败", refreshError));
     } catch (actionError) {
       const messageText = actionError instanceof Error ? actionError.message : "标记人工研究失败时出错。";
       setError(messageText);
@@ -2008,7 +2026,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     newKeyPriority, setNewKeyPriority,
     providerDrafts, setProviderDrafts,
     savingConfig, setSavingConfig,
-    messageApi, modalApi: modal, loadRuntimeSettings, setError,
+    messageApi, modalApi: modal, loadRuntimeSettings: () => loadRuntimeSettings(), setError,
     canManageProviderCredentials: isRootUser,
   }) : [];
   if (isMobile) {

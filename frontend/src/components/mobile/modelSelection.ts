@@ -2,9 +2,14 @@ import { api } from "../../api";
 
 const analysisModelPreferenceKey = "ashare-dashboard-analysis-model";
 
-export function readAnalysisModelPreference(): number | "builtin" | null {
+function accountPreferenceKey(accountLogin?: string | null): string {
+  const normalized = (accountLogin ?? "").trim();
+  return normalized ? `${analysisModelPreferenceKey}:${normalized}` : analysisModelPreferenceKey;
+}
+
+export function readAnalysisModelPreference(accountLogin?: string | null): number | "builtin" | null {
   if (typeof window === "undefined") return null;
-  const stored = window.localStorage.getItem(analysisModelPreferenceKey);
+  const stored = window.localStorage.getItem(accountPreferenceKey(accountLogin));
   if (!stored) return null;
   if (stored === "builtin") return "builtin";
   if (stored.startsWith("key:")) {
@@ -14,12 +19,13 @@ export function readAnalysisModelPreference(): number | "builtin" | null {
   return null;
 }
 
-function writeAnalysisModelPreference(keyId: number | undefined): void {
+function writeAnalysisModelPreference(accountLogin: string | null | undefined, keyId: number | undefined): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(analysisModelPreferenceKey, keyId ? `key:${keyId}` : "builtin");
+  window.localStorage.setItem(accountPreferenceKey(accountLogin), keyId ? `key:${keyId}` : "builtin");
 }
 
 export async function selectMobileAnalysisModel({
+  accountLogin,
   keyId,
   setSavingConfig,
   setError,
@@ -27,6 +33,7 @@ export async function selectMobileAnalysisModel({
   setAnalysisKeyId,
   messageApi,
 }: {
+  accountLogin?: string | null;
   keyId: number | undefined;
   setSavingConfig: (saving: boolean) => void;
   setError: (message: string | null) => void;
@@ -39,13 +46,13 @@ export async function selectMobileAnalysisModel({
   try {
     if (keyId) {
       await api.setDefaultModelApiKey(keyId);
-      writeAnalysisModelPreference(keyId);
+      writeAnalysisModelPreference(accountLogin, keyId);
       await loadRuntimeSettings();
       setAnalysisKeyId(keyId);
       messageApi.success("默认模型已切换。");
       return;
     }
-    writeAnalysisModelPreference(undefined);
+    writeAnalysisModelPreference(accountLogin, undefined);
     setAnalysisKeyId(undefined);
     messageApi.success("已切换为本机默认模型。");
   } catch (modelError) {
