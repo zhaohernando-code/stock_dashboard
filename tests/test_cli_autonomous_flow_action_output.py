@@ -152,7 +152,7 @@ def test_phase5_local_cycle_step_action_smoke_missing_cycle_blocks_without_write
         ]
     )
 
-    assert exit_code == 0
+    assert exit_code == 4
     assert init_database_calls == []
     assert _files_under(artifact_root) == ()
     payload = json.loads(capsys.readouterr().out)
