@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from ashare_evidence.autonomous_flow import record_phase5_scheduler_diagnostic
+from ashare_evidence.autonomous_flow_scheduler_action_contract import get_phase5_scheduler_action_contract
 from ashare_evidence.autonomous_flow_scheduler_execution_executor import (
     Phase5SchedulerExecutionRecordResult as Phase5SchedulerExecutionRecordResult,
 )
@@ -71,7 +72,7 @@ def dry_run_phase5_scheduler_plan(
         cycle_id=plan.cycle_id,
         execution_status="blocked" if plan.plan_status == "blocked" else "planned",
         planned_action=plan.action,
-        planned_effects=_dedupe(_planned_effects_for_action(plan.action)),
+        planned_effects=_dedupe(list(get_phase5_scheduler_action_contract(plan.action).planned_effects)),
         reason=_sanitize_reason(plan.reason),
         blocking_reasons=_dedupe([_sanitize_reason(reason) for reason in plan.blocking_reasons]),
     )
@@ -107,22 +108,6 @@ def record_phase5_scheduler_plan_diagnostic(
         reason=reason,
         blocking_reasons=blocking_reasons,
     )
-
-
-def _planned_effects_for_action(action: Phase5SchedulerAction) -> list[str]:
-    if action == "continue_tracking":
-        return ["keep_cycle_open_for_next_tick"]
-    if action == "rebuild_projection":
-        return ["schedule_projection_rebuild"]
-    if action == "retry_failed_step":
-        return ["schedule_retry"]
-    if action == "open_recovery_ticket":
-        return ["prepare_recovery_ticket"]
-    if action == "block_cycle":
-        return ["mark_cycle_blocked"]
-    if action == "redesign":
-        return ["schedule_redesign_review"]
-    return ["no_op"]
 
 
 def _diagnostic_severity_for_plan(plan: Phase5SchedulerFollowupPlan) -> Phase5SchedulerDiagnosticSeverity:
