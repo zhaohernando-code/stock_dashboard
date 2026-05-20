@@ -11,7 +11,6 @@ from ashare_evidence.autonomous_flow import (
     PHASE5_CYCLE_STARTED_EVENT,
     PHASE5_SCHEDULER_EXECUTION_RECORDED_EVENT,
     record_phase5_scheduler_execution_ledger,
-    start_phase5_cycle,
 )
 from ashare_evidence.autonomous_flow_artifacts import (
     PHASE5_SCHEDULER_EXECUTION_RECORDED_EVENT_ID,
@@ -23,6 +22,7 @@ from ashare_evidence.scheduler_execution_artifact_store import (
     read_phase5_scheduler_execution_ledger_artifact_if_exists,
     write_phase5_scheduler_execution_ledger_artifact,
 )
+from tests.helpers_autonomous_flow_scheduler_execution import _execution_ledger, _start_cycle
 
 
 class Phase5SchedulerExecutionLedgerTests(unittest.TestCase):
@@ -67,26 +67,12 @@ class Phase5SchedulerExecutionLedgerTests(unittest.TestCase):
             self.assertEqual(stored.execution_id, "execution-store")
             self.assertEqual(maybe_stored, stored)
             self.assertIsNone(missing)
-            self.assertTrue(
-                (
-                    root
-                    / "autonomous_flow"
-                    / "phase5_scheduler_execution_ledger"
-                    / "execution-store.json"
-                ).exists()
-            )
+            self.assertTrue((root / "autonomous_flow" / "phase5_scheduler_execution_ledger" / "execution-store.json").exists())
 
     def test_record_execution_ledger_writes_ledger_and_only_appends_cycle_event(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            before = start_phase5_cycle(
-                cycle_id="phase5-20260521-am",
-                trigger="scheduled",
-                started_at="2026-05-21T09:00:00Z",
-                status="running",
-                next_action="retry_failed_step",
-                root=root,
-            )
+            before = _start_cycle(root, "phase5-20260521-am")
 
             updated, ledger = record_phase5_scheduler_execution_ledger(
                 execution_id="execution-20260521-am",
@@ -170,17 +156,3 @@ class Phase5SchedulerExecutionLedgerTests(unittest.TestCase):
             self.assertEqual(persisted["notes"], "[redacted sensitive scheduler execution detail]")
             for forbidden in ("input_bundle", "runner_result", "release-manifest:", "sha256:", "Traceback"):
                 self.assertNotIn(forbidden, payload_text)
-
-
-def _execution_ledger(*, execution_id: str) -> Phase5SchedulerExecutionLedgerArtifact:
-    return Phase5SchedulerExecutionLedgerArtifact(
-        execution_id=execution_id,
-        idempotency_key=f"idempotency:{execution_id}",
-        cycle_id="phase5-20260521-am",
-        created_at="2026-05-21T09:00:00Z",
-        plan_action="retry_failed_step",
-        execution_status="planned",
-        would_execute=False,
-        diagnostic_refs=["diagnostic-1"],
-        blocking_reasons=[],
-    )
