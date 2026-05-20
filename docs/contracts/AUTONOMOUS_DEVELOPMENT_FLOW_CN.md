@@ -275,5 +275,8 @@ closeout：
 - **子进程门禁不是接受条件**：子进程可报告 focused tests、ruff、registry check、diff check 和 full regression，但主进程必须独立评估 diff 语义。只有主进程确认迁移、旧数据、crash replay、冲突分支和副作用边界后，产物才可进入合并。
 - **基座能力必须有硬状态**：幂等、调度、artifact 写入、状态机、claim gate 这类基座能力不能只靠扫描已有 ledger 得出结论。需要唯一性或并发保护时，必须设计可审计的 artifact、reservation 或 ledger，并明确原子边界和残余风险。
 - **Legacy migration 是验收项**：任何新索引、新 reservation、新 artifact family 接入旧 ledger 时，测试必须覆盖旧数据存在但新硬状态缺失的路径，确认旧数据不会绕过冲突检测、claim gate 或恢复写入。
+- **源码禁用要变成机器门禁**：当 Context Pack 或 closeout 禁止某类源码写法时，必须把禁令写成 `process-hardening-check --forbidden-source-token path:token`。例如 BG/BH 类任务可显式禁用 `src/.../autonomous_flow_scheduler_action_route_auto_apply.py:'route.reason =='`，避免依赖主进程记忆。
+- **基座流转不得解析 reason 改结构**：route/action/apply/output 等基座链路只能用结构化 route、action、output 或新增结构化字段决定分支；`route.reason` 等 reason 字段仍可作为解释、诊断和审计文本，但不得靠匹配自然语言文案来改写结构化 route、action 或 output。
+- **真实 smoke 验证当前 contract**：真实 artifact root / CLI smoke 的职责是证明当前 contract 下的端到端行为。若测试预设与真实 route contract 不一致，应修正 Context Pack、contract 或新增结构化字段，不得把测试预设反向压到核心 route。
 - **主进程修正必须反哺流程**：如果主进程在子进程通过门禁后仍修正了文件拆分、迁移边界、schema 语义或文档验收，该修正必须写入评估文档，并判断是否需要重跑同类任务。
 - **Clean status closeout 是主进程门禁**：Trial AN 之后，主进程 closeout 必须运行 `process-hardening-check --require-clean-git-status --git-root .`，因为 diff/stat 检查无法覆盖 untracked 文件；命中残留时必须回到评审或重跑，而不是让子进程承担全局收尾。
