@@ -65,6 +65,24 @@
       "maturity": "partial"
     },
     {
+      "id": "phase5.scheduler.execution.recorded.v1",
+      "status": "registered",
+      "provider": "phase5_scheduler",
+      "consumers": ["scheduler", "reviewer", "operations"],
+      "min_payload_fields": [
+        "execution_id",
+        "idempotency_key",
+        "cycle_id",
+        "plan_action",
+        "execution_status",
+        "would_execute",
+        "diagnostic_refs",
+        "blocking_reasons",
+        "created_at"
+      ],
+      "maturity": "partial"
+    },
+    {
       "id": "artifact.validation_manifest.created.v1",
       "status": "registered",
       "provider": "validation_runner",
@@ -174,6 +192,14 @@
       "id": "phase5_scheduler_diagnostic",
       "status": "registered",
       "schema_ref": "schemas/phase5_scheduler_diagnostic.schema.json",
+      "provider": "phase5_scheduler",
+      "consumers": ["scheduler", "reviewer", "operations"],
+      "maturity": "partial"
+    },
+    {
+      "id": "phase5_scheduler_execution_ledger",
+      "status": "registered",
+      "schema_ref": "schemas/phase5_scheduler_execution_ledger.schema.json",
       "provider": "phase5_scheduler",
       "consumers": ["scheduler", "reviewer", "operations"],
       "maturity": "partial"

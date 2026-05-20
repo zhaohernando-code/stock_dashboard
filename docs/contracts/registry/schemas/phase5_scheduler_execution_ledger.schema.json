@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "phase5_scheduler_execution_ledger.schema.json",
+  "title": "Phase 5 Scheduler Execution Ledger",
+  "type": "object",
+  "required": [
+    "artifact_family",
+    "schema_version",
+    "execution_id",
+    "idempotency_key",
+    "cycle_id",
+    "source",
+    "created_at",
+    "plan_action",
+    "execution_status",
+    "would_execute",
+    "diagnostic_refs",
+    "blocking_reasons",
+    "notes",
+    "event_refs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "artifact_family": {
+      "const": "phase5_scheduler_execution_ledger"
+    },
+    "schema_version": {
+      "const": "v1"
+    },
+    "execution_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cycle_id": {
+      "type": ["string", "null"]
+    },
+    "source": {
+      "const": "phase5_scheduler"
+    },
+    "created_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "plan_action": {
+      "type": "string",
+      "enum": [
+        "continue_tracking",
+        "rebuild_projection",
+        "retry_failed_step",
+        "open_recovery_ticket",
+        "block_cycle",
+        "redesign",
+        "none"
+      ]
+    },
+    "execution_status": {
+      "type": "string",
+      "enum": ["planned", "skipped", "blocked"]
+    },
+    "would_execute": {
+      "type": "boolean"
+    },
+    "diagnostic_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "blocking_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "notes": {
+      "type": "string"
+    },
+    "event_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "phase5.scheduler.execution.recorded.v1"
+      },
+      "uniqueItems": true
+    }
+  }
+}

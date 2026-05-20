@@ -6,11 +6,13 @@ from typing import Any
 
 from ashare_evidence.autonomous_flow_artifacts import (
     PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT_ID,
+    PHASE5_SCHEDULER_EXECUTION_RECORDED_EVENT_ID,
     FrontendProjectionManifestArtifact,
     Phase5CycleLedgerArtifact,
     Phase5GateReadoutArtifact,
     Phase5RecoveryTicketArtifact,
     Phase5SchedulerDiagnosticArtifact,
+    Phase5SchedulerExecutionLedgerArtifact,
     PublishVerificationRef,
 )
 from ashare_evidence.research_artifact_store import (
@@ -21,6 +23,7 @@ from ashare_evidence.research_artifact_store import (
     write_phase5_recovery_ticket_artifact,
     write_phase5_scheduler_diagnostic_artifact,
 )
+from ashare_evidence.scheduler_execution_artifact_store import write_phase5_scheduler_execution_ledger_artifact
 
 PHASE5_CYCLE_STARTED_EVENT = "phase5.cycle.started.v1"
 PHASE5_ARTIFACT_PRODUCED_EVENT = "phase5.artifact.produced.v1"
@@ -28,6 +31,7 @@ PHASE5_GATE_EVALUATED_EVENT = "phase5.gate.evaluated.v1"
 PHASE5_PROJECTION_REFRESHED_EVENT = "phase5.projection.refreshed.v1"
 PHASE5_RECOVERY_RECORDED_EVENT = "phase5.recovery.recorded.v1"
 PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT = PHASE5_SCHEDULER_DIAGNOSTIC_RECORDED_EVENT_ID
+PHASE5_SCHEDULER_EXECUTION_RECORDED_EVENT = PHASE5_SCHEDULER_EXECUTION_RECORDED_EVENT_ID
 RUNTIME_PUBLISH_VERIFIED_EVENT = "runtime.publish.verified.v1"
 PHASE5_CLOSEOUT_STATUSES = {"completed", "degraded", "blocked"}
 PHASE5_NEXT_ACTIONS = {"continue_tracking", "rebuild_projection", "retry_failed_step", "redesign", "blocked", "none"}
@@ -199,6 +203,48 @@ def record_phase5_scheduler_diagnostic(
     )
     write_phase5_cycle_ledger_artifact(updated, root=root)
     return updated, diagnostic
+
+
+def record_phase5_scheduler_execution_ledger(
+    *,
+    execution_id: str,
+    idempotency_key: str,
+    created_at: str,
+    plan_action: str,
+    execution_status: str,
+    would_execute: bool,
+    cycle_id: str | None = None,
+    diagnostic_refs: list[str] | None = None,
+    blocking_reasons: list[str] | None = None,
+    notes: str = "",
+    root: Path | None = None,
+) -> tuple[Phase5CycleLedgerArtifact | None, Phase5SchedulerExecutionLedgerArtifact]:
+    ledger = Phase5SchedulerExecutionLedgerArtifact(
+        execution_id=execution_id,
+        idempotency_key=idempotency_key,
+        cycle_id=cycle_id,
+        created_at=created_at,
+        plan_action=plan_action,
+        execution_status=execution_status,
+        would_execute=would_execute,
+        diagnostic_refs=_dedupe(diagnostic_refs or []),
+        blocking_reasons=_dedupe(blocking_reasons or []),
+        notes=notes,
+        event_refs=[PHASE5_SCHEDULER_EXECUTION_RECORDED_EVENT],
+    )
+    write_phase5_scheduler_execution_ledger_artifact(ledger, root=root)
+
+    cycle = read_phase5_cycle_ledger_artifact_if_exists(cycle_id, root=root)
+    if cycle is None:
+        return None, ledger
+
+    updated = cycle.model_copy(
+        update={
+            "event_refs": _append_unique(cycle.event_refs, PHASE5_SCHEDULER_EXECUTION_RECORDED_EVENT),
+        }
+    )
+    write_phase5_cycle_ledger_artifact(updated, root=root)
+    return updated, ledger
 
 
 def record_phase5_projection_refreshed(
