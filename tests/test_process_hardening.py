@@ -28,6 +28,7 @@ class ProcessHardeningTests(unittest.TestCase):
         self.assertEqual(0, payload["issue_count"])
         self.assertEqual(str(evaluation_doc), payload["checked_docs"][0]["path"])
         self.assertEqual(str(target), payload["line_budgets"][0]["path"])
+        self.assertEqual("skipped", payload["git_status"]["status"])
 
     def test_missing_evaluation_section_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

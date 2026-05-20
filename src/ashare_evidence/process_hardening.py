@@ -1,23 +1,12 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
-REQUIRED_EVALUATION_SECTIONS = (
-    "子任务",
-    "评分",
-    "结果",
-    "主进程验证",
-    "重跑记录",
-    "自评",
-)
-
-INCOMPLETE_MARKERS = (
-    "待执行",
-    "待补录",
-    "等待主进程",
-    "TODO",
-)
+REQUIRED_EVALUATION_SECTIONS = ("子任务", "评分", "结果", "主进程验证", "重跑记录", "自评")
+INCOMPLETE_MARKERS = ("待执行", "待补录", "等待主进程", "TODO")
 
 
 def parse_line_budget(raw_value: str) -> dict[str, Any]:
@@ -48,10 +37,13 @@ def run_process_hardening_check(
     evaluation_docs: list[str | Path],
     line_budgets: list[dict[str, Any]],
     fail_on_warning: bool = False,
+    require_clean_git_status: bool = False,
+    git_root: str | Path = ".",
 ) -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
     checked_docs: list[dict[str, Any]] = []
     checked_line_budgets: list[dict[str, Any]] = []
+    git_status = _skipped_git_status(git_root)
 
     for doc_path_value in evaluation_docs:
         doc_path = Path(doc_path_value)
@@ -138,6 +130,11 @@ def run_process_hardening_check(
                 }
             )
 
+    if require_clean_git_status:
+        git_status = _check_git_status(git_root)
+        if git_status["status"] in {"dirty", "unavailable"}:
+            issues.append(_git_status_issue(git_status))
+
     has_error = any(issue["severity"] == "error" for issue in issues)
     has_warning = any(issue["severity"] == "warning" for issue in issues)
     status = "fail" if has_error or (fail_on_warning and has_warning) else "pass"
@@ -147,6 +144,7 @@ def run_process_hardening_check(
         "issues": issues,
         "checked_docs": checked_docs,
         "line_budgets": checked_line_budgets,
+        "git_status": git_status,
     }
 
 
@@ -189,3 +187,47 @@ def _check_line_budget(budget: dict[str, Any]) -> dict[str, Any]:
         "status": "checked",
         "line_count": line_count,
     }
+
+
+def _skipped_git_status(git_root: str | Path) -> dict[str, Any]:
+    return {"required": False, "root": str(git_root), "status": "skipped", "entries": []}
+
+
+def _check_git_status(git_root: str | Path) -> dict[str, Any]:
+    root = Path(git_root)
+    if shutil.which("git") is None:
+        return _unavailable_git_status(root, "git executable not found")
+    command = ["git", "-C", str(root), "status", "--porcelain=v1", "--untracked-files=all"]
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    except OSError as exc:
+        return _unavailable_git_status(root, str(exc))
+    if completed.returncode != 0:
+        return _unavailable_git_status(root, (completed.stderr or completed.stdout).strip())
+    entries = [_parse_git_status_entry(line) for line in completed.stdout.splitlines() if line]
+    return {"required": True, "root": str(root), "status": "dirty" if entries else "clean", "entries": entries}
+
+
+def _unavailable_git_status(root: Path, detail: str) -> dict[str, Any]:
+    return {"required": True, "root": str(root), "status": "unavailable", "entries": [], "detail": detail}
+
+
+def _git_status_issue(git_status: dict[str, Any]) -> dict[str, Any]:
+    issue = {"severity": "error", "git_root": git_status["root"]}
+    if git_status["status"] == "dirty":
+        return {
+            **issue,
+            "code": "git_status_dirty",
+            "entries": git_status["entries"],
+            "message": "git status is not clean",
+        }
+    return {
+        **issue,
+        "code": "git_status_unavailable",
+        "message": "git status could not be checked",
+        "detail": git_status.get("detail", ""),
+    }
+
+
+def _parse_git_status_entry(line: str) -> dict[str, str]:
+    return {"raw": line, "status": line[:2], "path": line[3:] if len(line) > 3 else ""}

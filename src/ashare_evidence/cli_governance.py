@@ -36,6 +36,8 @@ def add_governance_parsers(subparsers: Any) -> None:
     process_hardening_check.add_argument("--line-budget", action="append", required=True)
     process_hardening_check.add_argument("--required-evidence", action="append", default=[])
     process_hardening_check.add_argument("--fail-on-warning", action="store_true")
+    process_hardening_check.add_argument("--require-clean-git-status", action="store_true")
+    process_hardening_check.add_argument("--git-root", default=".")
 
 
 def handle_policy_audit_command(args: Any) -> int:
@@ -88,45 +90,19 @@ def handle_process_hardening_check_command(args: Any) -> int:
     try:
         line_budgets = [parse_line_budget(raw_value) for raw_value in args.line_budget]
     except ValueError as exc:
-        payload = {
-            "status": "fail",
-            "issue_count": 1,
-            "issues": [
-                {
-                    "severity": "error",
-                    "code": "line_budget_parse_error",
-                    "message": str(exc),
-                }
-            ],
-            "checked_docs": [],
-            "line_budgets": [],
-            "required_evidence": [],
-        }
-        _print_json(payload)
+        _print_json(_parse_error_payload("line_budget_parse_error", exc))
         return 1
     try:
         required_evidence = [parse_required_evidence(raw_value) for raw_value in args.required_evidence]
     except ValueError as exc:
-        payload = {
-            "status": "fail",
-            "issue_count": 1,
-            "issues": [
-                {
-                    "severity": "error",
-                    "code": "required_evidence_parse_error",
-                    "message": str(exc),
-                }
-            ],
-            "checked_docs": [],
-            "line_budgets": [],
-            "required_evidence": [],
-        }
-        _print_json(payload)
+        _print_json(_parse_error_payload("required_evidence_parse_error", exc))
         return 1
     payload = run_process_hardening_check(
         evaluation_docs=args.evaluation_doc,
         line_budgets=line_budgets,
         fail_on_warning=args.fail_on_warning,
+        require_clean_git_status=args.require_clean_git_status,
+        git_root=args.git_root,
     )
     evidence_payload = check_required_evidence(required_evidence)
     issues = [*payload["issues"], *evidence_payload["issues"]]
@@ -145,3 +121,14 @@ def handle_process_hardening_check_command(args: Any) -> int:
 
 def _print_json(payload: Any) -> None:
     print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+
+
+def _parse_error_payload(code: str, exc: ValueError) -> dict[str, Any]:
+    return {
+        "status": "fail",
+        "issue_count": 1,
+        "issues": [{"severity": "error", "code": code, "message": str(exc)}],
+        "checked_docs": [],
+        "line_budgets": [],
+        "required_evidence": [],
+    }
