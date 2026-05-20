@@ -7,6 +7,7 @@ from typing import Any
 from ashare_evidence.contract_registry import DEFAULT_REGISTRY_PATH, check_contract_registry
 from ashare_evidence.policy_audit import assert_policy_audit, write_policy_audit_report
 from ashare_evidence.process_hardening import parse_line_budget, run_process_hardening_check
+from ashare_evidence.process_hardening_evidence import check_required_evidence, parse_required_evidence
 
 
 def add_governance_parsers(subparsers: Any) -> None:
@@ -33,6 +34,7 @@ def add_governance_parsers(subparsers: Any) -> None:
     )
     process_hardening_check.add_argument("--evaluation-doc", action="append", required=True)
     process_hardening_check.add_argument("--line-budget", action="append", required=True)
+    process_hardening_check.add_argument("--required-evidence", action="append", default=[])
     process_hardening_check.add_argument("--fail-on-warning", action="store_true")
 
 
@@ -98,6 +100,26 @@ def handle_process_hardening_check_command(args: Any) -> int:
             ],
             "checked_docs": [],
             "line_budgets": [],
+            "required_evidence": [],
+        }
+        _print_json(payload)
+        return 1
+    try:
+        required_evidence = [parse_required_evidence(raw_value) for raw_value in args.required_evidence]
+    except ValueError as exc:
+        payload = {
+            "status": "fail",
+            "issue_count": 1,
+            "issues": [
+                {
+                    "severity": "error",
+                    "code": "required_evidence_parse_error",
+                    "message": str(exc),
+                }
+            ],
+            "checked_docs": [],
+            "line_budgets": [],
+            "required_evidence": [],
         }
         _print_json(payload)
         return 1
@@ -106,6 +128,17 @@ def handle_process_hardening_check_command(args: Any) -> int:
         line_budgets=line_budgets,
         fail_on_warning=args.fail_on_warning,
     )
+    evidence_payload = check_required_evidence(required_evidence)
+    issues = [*payload["issues"], *evidence_payload["issues"]]
+    has_error = any(issue["severity"] == "error" for issue in issues)
+    has_warning = any(issue["severity"] == "warning" for issue in issues)
+    payload = {
+        **payload,
+        "status": "fail" if has_error or (args.fail_on_warning and has_warning) else "pass",
+        "issue_count": len(issues),
+        "issues": issues,
+        "required_evidence": evidence_payload["required_evidence"],
+    }
     _print_json(payload)
     return 0 if payload["status"] == "pass" else 1
 
