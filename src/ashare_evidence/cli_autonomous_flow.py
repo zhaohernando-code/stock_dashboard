@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ashare_evidence.autonomous_flow_service import run_phase5_local_cycle_service
+from ashare_evidence.autonomous_flow_status import project_phase5_local_cycle_status
 
 
 def _print_json(payload: Any) -> None:
@@ -31,6 +32,12 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
     phase5_local_cycle_step.add_argument("--finished-at", default=None)
     phase5_local_cycle_step.add_argument("--apply-closeout", action="store_true")
     phase5_local_cycle_step.add_argument("--require-publish-verification", action="store_true")
+    phase5_local_cycle_step.add_argument(
+        "--output",
+        choices=("status", "full"),
+        default="status",
+        help="Choose the success JSON shape: status projection by default, or full service result for debugging.",
+    )
 
 
 def handle_phase5_local_cycle_step_command(args: argparse.Namespace) -> int:
@@ -56,5 +63,8 @@ def handle_phase5_local_cycle_step_command(args: argparse.Namespace) -> int:
         )
         return 1
 
-    _print_json(_jsonable_result(result))
+    if args.output == "full":
+        _print_json(_jsonable_result(result))
+    else:
+        _print_json(project_phase5_local_cycle_status(result).model_dump(mode="json"))
     return 0
