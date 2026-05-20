@@ -4,6 +4,9 @@ import argparse
 from pathlib import Path
 
 from ashare_evidence.autonomous_flow_scheduler_action_executor import execute_phase5_scheduler_noop_action
+from ashare_evidence.autonomous_flow_scheduler_action_route_auto_apply import (
+    bind_and_apply_phase5_scheduler_action_route,
+)
 from ashare_evidence.autonomous_flow_scheduler_action_route_executor import apply_phase5_scheduler_action_route
 from ashare_evidence.autonomous_flow_scheduler_action_router import (
     preflight_phase5_scheduler_action_route,
@@ -39,6 +42,8 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
     phase5_local_cycle_step.add_argument("--execution-id", default=None)
     phase5_local_cycle_step.add_argument("--idempotency-key", default=None)
     phase5_local_cycle_step.add_argument("--created-at", default=None)
+    phase5_local_cycle_step.add_argument("--attempt-id", default=None)
+    phase5_local_cycle_step.add_argument("--issued-at", default=None)
     phase5_local_cycle_step.add_argument("--apply-closeout", action="store_true")
     phase5_local_cycle_step.add_argument("--require-publish-verification", action="store_true")
     phase5_local_cycle_step.add_argument(
@@ -52,6 +57,7 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
             "action",
             "action-route",
             "action-route-apply",
+            "action-route-auto-apply",
             "action-route-preflight",
             "full",
         ),
@@ -62,7 +68,8 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
             "execution intent, diagnostic records scheduler diagnostics, execution records a safe "
             "scheduler execution ledger, action executes an observe-only contract action, "
             "action-route routes that observe-only action result, action-route-apply applies the "
-            "ready route through the core apply layer, action-route-preflight checks route arguments, "
+            "ready route through the core apply layer, action-route-auto-apply binds scheduler "
+            "attempt arguments then applies the route, action-route-preflight checks route arguments, "
             "full emits the service result for debugging."
         ),
     )
@@ -81,6 +88,7 @@ def handle_phase5_local_cycle_step_command(args: argparse.Namespace) -> int:
             route_scheduler_action_result=route_phase5_scheduler_action_result,
             preflight_scheduler_action_route=preflight_phase5_scheduler_action_route,
             apply_scheduler_action_route=apply_phase5_scheduler_action_route,
+            bind_and_apply_scheduler_action_route=bind_and_apply_phase5_scheduler_action_route,
             run_service=run_phase5_local_cycle_service,
         ),
     )

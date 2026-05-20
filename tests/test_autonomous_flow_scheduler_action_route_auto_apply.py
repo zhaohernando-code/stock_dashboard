@@ -37,6 +37,36 @@ def test_bind_and_apply_blocks_without_issued_at_before_apply(monkeypatch, tmp_p
     assert _files_under(tmp_path) == ()
 
 
+def test_bind_and_apply_blocks_without_attempt_id_before_binding(monkeypatch, tmp_path: Path) -> None:
+    def fail_bind(*args, **kwargs):
+        raise AssertionError("argument binding must not be called without attempt_id")
+
+    def fail_apply(*args, **kwargs):
+        raise AssertionError("apply must not be called without attempt_id")
+
+    monkeypatch.setattr(auto_apply, "bind_phase5_scheduler_action_route_arguments", fail_bind)
+    monkeypatch.setattr(auto_apply, "apply_phase5_scheduler_action_route", fail_apply)
+
+    result = bind_and_apply_phase5_scheduler_action_route(
+        _plan(cycle_id="cycle-no-attempt", action="retry_failed_step"),
+        _route(
+            "execution_output",
+            ("execution_id", "idempotency_key", "created_at"),
+            cycle_id="cycle-no-attempt",
+            action="retry_failed_step",
+        ),
+        attempt_id=None,
+        issued_at="2026-05-21T10:00:00Z",
+        root=tmp_path / "artifacts",
+    )
+
+    assert (result.execution_status, result.preflight_status, result.applied_output) == ("blocked", "blocked", "none")
+    assert result.required_arguments == ("attempt_id",)
+    assert result.missing_arguments == ("attempt_id",)
+    assert "attempt_id is required" in result.reason
+    assert _files_under(tmp_path) == ()
+
+
 def test_bind_and_apply_records_diagnostic_with_bound_arguments(tmp_path: Path) -> None:
     root = tmp_path / "artifacts"
     _start_cycle(root, "cycle-diagnostic")

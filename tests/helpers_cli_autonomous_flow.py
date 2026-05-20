@@ -64,6 +64,8 @@ def _args(**overrides: Any) -> argparse.Namespace:
         "execution_id": None,
         "idempotency_key": None,
         "created_at": None,
+        "attempt_id": None,
+        "issued_at": None,
         "apply_closeout": False,
         "require_publish_verification": False,
         "artifact_root": None,

@@ -17,10 +17,22 @@ def bind_and_apply_phase5_scheduler_action_route(
     plan: Phase5SchedulerFollowupPlan,
     route: Phase5SchedulerActionRouteResult,
     *,
-    attempt_id: str,
+    attempt_id: str | None,
     issued_at: str | None = None,
     root: Path | None = None,
 ) -> Phase5SchedulerActionRouteApplyResult:
+    if not attempt_id:
+        return Phase5SchedulerActionRouteApplyResult(
+            cycle_id=route.cycle_id,
+            route_type=route.route_type,
+            execution_status="blocked",
+            preflight_status="blocked",
+            applied_output="none",
+            required_arguments=("attempt_id",),
+            missing_arguments=("attempt_id",),
+            reason="attempt_id is required to bind scheduler action route arguments",
+        )
+
     binding = bind_phase5_scheduler_action_route_arguments(
         route,
         attempt_id=attempt_id,
