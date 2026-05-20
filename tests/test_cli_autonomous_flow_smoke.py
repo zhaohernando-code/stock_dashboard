@@ -90,16 +90,18 @@ def _run_cli_tick(
     *,
     artifact_root: Path,
     cycle_id: str = "cycle-20260520-smoke",
+    output: str | None = None,
 ) -> int:
-    return cli_module.main(
-        [
-            "phase5-local-cycle-step",
-            "--cycle-id",
-            cycle_id,
-            "--artifact-root",
-            str(artifact_root),
-        ]
-    )
+    argv = [
+        "phase5-local-cycle-step",
+        "--cycle-id",
+        cycle_id,
+        "--artifact-root",
+        str(artifact_root),
+    ]
+    if output is not None:
+        argv.extend(["--output", output])
+    return cli_module.main(argv)
 
 
 def _assert_no_sensitive_service_payload(payload: dict[str, Any]) -> None:
@@ -173,4 +175,71 @@ def test_phase5_local_cycle_step_default_smoke_missing_cycle_returns_tick_error(
     assert payload["error"]["error_type"] == "Phase5RunnerInputResolutionError"
     assert payload["error"]["failure_class"] == "artifact-missing"
     assert payload["error"]["recommended_recovery_action"] == "open_recovery_ticket"
+    _assert_no_sensitive_service_payload(payload)
+
+
+def test_phase5_local_cycle_step_plan_smoke_reads_real_artifact_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    artifact_root = tmp_path / "artifacts"
+    _write_happy_path_artifacts(artifact_root)
+    init_database_calls: list[object] = []
+
+    def fail_init_database(database_url: str | None = None) -> None:
+        init_database_calls.append(database_url)
+        raise AssertionError("phase5-local-cycle-step must not initialize the database")
+
+    monkeypatch.setattr(cli_module, "init_database", fail_init_database)
+
+    exit_code = _run_cli_tick(artifact_root=artifact_root, output="plan")
+
+    assert exit_code == 0
+    assert init_database_calls == []
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["cycle_id"] == "cycle-20260520-smoke"
+    assert payload["plan_status"] == "ready"
+    assert payload["action"] == "continue_tracking"
+    assert payload["source_tick_status"] == "ok"
+    assert payload["summary_status"] == "completed"
+    assert payload["claim_ceiling"] == "paper_tracking_candidate"
+    assert payload["blocking_reasons"] == []
+    assert "status" not in payload
+    assert "error" not in payload
+    _assert_no_sensitive_service_payload(payload)
+
+
+def test_phase5_local_cycle_step_plan_smoke_missing_cycle_returns_recovery_plan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    artifact_root = tmp_path / "artifacts"
+    init_database_calls: list[object] = []
+
+    def fail_init_database(database_url: str | None = None) -> None:
+        init_database_calls.append(database_url)
+        raise AssertionError("phase5-local-cycle-step must not initialize the database")
+
+    monkeypatch.setattr(cli_module, "init_database", fail_init_database)
+
+    exit_code = _run_cli_tick(
+        artifact_root=artifact_root,
+        cycle_id="cycle-missing-smoke",
+        output="plan",
+    )
+
+    assert exit_code == 0
+    assert init_database_calls == []
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["cycle_id"] == "cycle-missing-smoke"
+    assert payload["plan_status"] == "ready"
+    assert payload["action"] == "open_recovery_ticket"
+    assert payload["source_tick_status"] == "error"
+    assert payload["summary_status"] == "degraded"
+    assert payload["claim_ceiling"] is None
+    assert payload["blocking_reasons"] == ["tick failure_class is artifact-missing"]
+    assert "status" not in payload
+    assert "error" not in payload
     _assert_no_sensitive_service_payload(payload)
