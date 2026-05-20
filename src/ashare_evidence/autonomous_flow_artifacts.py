@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 SchemaVersion = Literal["v1"]
 
@@ -13,6 +13,34 @@ class PublishVerificationRef(BaseModel):
     release_manifest_ref: str
     digest: str
     event_ref: str | None = None
+
+
+class FrontendProjectionManifestArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_family: Literal["frontend_projection_manifest"] = "frontend_projection_manifest"
+    schema_version: SchemaVersion = "v1"
+    projection_id: str
+    cycle_id: str
+    projection_name: str
+    projection_family: str
+    version: str
+    generated_at: str
+    freshness_at: str
+    source_artifact_ids: list[str] = Field(default_factory=list)
+    row_count: int = Field(ge=0)
+    staleness_status: Literal["fresh", "stale", "degraded"]
+    fallback_reason: str | None = None
+    event_refs: list[str] = Field(default_factory=list)
+
+    @field_validator("source_artifact_ids", "event_refs")
+    @classmethod
+    def _dedupe_refs(cls, values: list[str]) -> list[str]:
+        result: list[str] = []
+        for value in values:
+            if value not in result:
+                result.append(value)
+        return result
 
 
 class Phase5CycleLedgerArtifact(BaseModel):
