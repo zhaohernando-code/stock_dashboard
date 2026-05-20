@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -17,6 +18,7 @@ Phase5SchedulerActionRouteType = Literal[
     "diagnostic_output",
     "execution_output",
 ]
+Phase5SchedulerActionRoutePreflightStatus = Literal["ready", "blocked"]
 
 
 class Phase5SchedulerActionRouteResult(BaseModel):
@@ -29,6 +31,21 @@ class Phase5SchedulerActionRouteResult(BaseModel):
     route_type: Phase5SchedulerActionRouteType
     required_arguments: tuple[str, ...] = Field(default_factory=tuple)
     reason: str
+
+
+class Phase5SchedulerActionRoutePreflightResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    cycle_id: str
+    route_type: Phase5SchedulerActionRouteType
+    status: Phase5SchedulerActionRoutePreflightStatus
+    required_arguments: tuple[str, ...]
+    missing_arguments: tuple[str, ...]
+    reason: str
+
+    @property
+    def ready(self) -> bool:
+        return self.status == "ready"
 
 
 _ROUTES: dict[
@@ -59,3 +76,39 @@ def route_phase5_scheduler_action_result(
         required_arguments=required_arguments,
         reason=result.reason,
     )
+
+
+def preflight_phase5_scheduler_action_route(
+    route: Phase5SchedulerActionRouteResult,
+    provided_argument_names: Iterable[str],
+) -> Phase5SchedulerActionRoutePreflightResult:
+    required_arguments = route.required_arguments
+    provided_arguments = set(provided_argument_names)
+    missing_arguments = tuple(argument for argument in required_arguments if argument not in provided_arguments)
+    status: Phase5SchedulerActionRoutePreflightStatus = "blocked" if missing_arguments else "ready"
+
+    return Phase5SchedulerActionRoutePreflightResult(
+        cycle_id=route.cycle_id,
+        route_type=route.route_type,
+        status=status,
+        required_arguments=required_arguments,
+        missing_arguments=missing_arguments,
+        reason=_route_preflight_reason(
+            route_type=route.route_type,
+            required_arguments=required_arguments,
+            missing_arguments=missing_arguments,
+        ),
+    )
+
+
+def _route_preflight_reason(
+    *,
+    route_type: Phase5SchedulerActionRouteType,
+    required_arguments: tuple[str, ...],
+    missing_arguments: tuple[str, ...],
+) -> str:
+    if not required_arguments:
+        return f"{route_type} route does not require scheduler-provided arguments"
+    if missing_arguments:
+        return "missing required action route arguments: " + ", ".join(missing_arguments)
+    return "all required action route arguments are provided"
