@@ -44,6 +44,7 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
     phase5_local_cycle_step.add_argument("--created-at", default=None)
     phase5_local_cycle_step.add_argument("--attempt-id", default=None)
     phase5_local_cycle_step.add_argument("--issued-at", default=None)
+    phase5_local_cycle_step.add_argument("--runner-id", default=None)
     phase5_local_cycle_step.add_argument("--apply-closeout", action="store_true")
     phase5_local_cycle_step.add_argument("--require-publish-verification", action="store_true")
     phase5_local_cycle_step.add_argument(
@@ -59,6 +60,7 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
             "action-route-apply",
             "action-route-auto-apply",
             "action-route-preflight",
+            "attempt-context",
             "full",
         ),
         default="status",
@@ -70,7 +72,8 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
             "action-route routes that observe-only action result, action-route-apply applies the "
             "ready route through the core apply layer, action-route-auto-apply binds scheduler "
             "attempt arguments then applies the route, action-route-preflight checks route arguments, "
-            "full emits the service result for debugging."
+            "attempt-context builds an explicit scheduler attempt context, full emits the service "
+            "result for debugging."
         ),
     )
 

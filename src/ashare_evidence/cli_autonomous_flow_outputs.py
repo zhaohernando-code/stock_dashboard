@@ -13,6 +13,7 @@ from ashare_evidence.cli_autonomous_flow_action_outputs import (
     handle_action_route_output,
     handle_action_route_preflight_output,
 )
+from ashare_evidence.cli_autonomous_flow_attempt_outputs import handle_attempt_context_output
 from ashare_evidence.cli_autonomous_flow_diagnostic_outputs import handle_diagnostic_output
 from ashare_evidence.cli_autonomous_flow_execution_outputs import (
     handle_execution_output,
@@ -97,6 +98,9 @@ def handle_phase5_local_cycle_step_output(
             run_tick_from_args=_run_tick_from_args,
             print_json=_print_json,
         )
+
+    if args.output == "attempt-context":
+        return handle_attempt_context_output(args, print_json=_print_json)
 
     if args.output == "diagnostic":
         return handle_diagnostic_output(
