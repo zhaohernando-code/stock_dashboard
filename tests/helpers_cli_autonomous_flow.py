@@ -43,6 +43,15 @@ class _FakeDryRunResult:
         return self.payload
 
 
+class _FakeDiagnosticResult:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.payload = payload
+
+    def model_dump(self, *, mode: str) -> dict[str, Any]:
+        assert mode == "json"
+        return self.payload
+
+
 def _args(**overrides: Any) -> argparse.Namespace:
     payload = {
         "cycle_id": "cycle-1",
@@ -50,6 +59,8 @@ def _args(**overrides: Any) -> argparse.Namespace:
         "recovery_ticket_id": None,
         "projection_id": None,
         "finished_at": None,
+        "diagnostic_id": None,
+        "observed_at": None,
         "apply_closeout": False,
         "require_publish_verification": False,
         "artifact_root": None,
@@ -201,5 +212,30 @@ def _dry_run_result(
             "planned_effects": planned_effects or ["keep_cycle_open_for_next_tick"],
             "reason": "scheduler dry-run selected follow-up action",
             "blocking_reasons": [],
+        }
+    )
+
+
+def _diagnostic_result(
+    *,
+    cycle_id: str = "cycle-1",
+    diagnostic_id: str = "diagnostic-1",
+    action: str = "continue_tracking",
+    severity: str = "info",
+    cycle_event_recorded: bool = True,
+    blocking_reasons: list[str] | None = None,
+) -> _FakeDiagnosticResult:
+    return _FakeDiagnosticResult(
+        {
+            "cycle_id": cycle_id,
+            "diagnostic_id": diagnostic_id,
+            "execution_mode": "diagnostic_record",
+            "execution_status": "recorded",
+            "action": action,
+            "severity": severity,
+            "diagnostic_recorded": True,
+            "cycle_event_recorded": cycle_event_recorded,
+            "reason": "scheduler diagnostic recorded follow-up action",
+            "blocking_reasons": blocking_reasons or [],
         }
     )

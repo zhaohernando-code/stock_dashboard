@@ -55,6 +55,29 @@ def test_phase5_local_cycle_step_parser_accepts_dry_run_output() -> None:
     assert args.output == "dry-run"
 
 
+def test_phase5_local_cycle_step_parser_accepts_diagnostic_output() -> None:
+    parser = cli_module.build_parser()
+
+    args = parser.parse_args(
+        [
+            "phase5-local-cycle-step",
+            "--cycle-id",
+            "cycle-1",
+            "--output",
+            "diagnostic",
+            "--diagnostic-id",
+            "diagnostic-1",
+            "--observed-at",
+            "2026-05-20T10:00:00Z",
+        ]
+    )
+
+    assert args.command == "phase5-local-cycle-step"
+    assert args.output == "diagnostic"
+    assert args.diagnostic_id == "diagnostic-1"
+    assert args.observed_at == "2026-05-20T10:00:00Z"
+
+
 def test_phase5_local_cycle_step_default_calls_tick_without_service(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
