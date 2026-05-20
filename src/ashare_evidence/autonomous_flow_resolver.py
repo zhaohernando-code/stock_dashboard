@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -21,9 +22,29 @@ GATE_READOUT_FAMILY = "phase5_gate_readout"
 RECOVERY_TICKET_FAMILY = "phase5_recovery_ticket"
 PROJECTION_MANIFEST_FAMILY = "frontend_projection_manifest"
 
+Phase5RunnerInputFailureClass = Literal["artifact-missing", "contract-violation"]
+Phase5RunnerInputRecoveryAction = Literal["open_recovery_ticket", "block_cycle"]
+Phase5RunnerInputSummaryStatus = Literal["degraded", "blocked"]
+Phase5RunnerInputNextAction = Literal["retry_failed_step", "blocked"]
+
 
 class Phase5RunnerInputResolutionError(ValueError):
     """Raised when required runner input resolution must fail closed."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        failure_class: Phase5RunnerInputFailureClass = "contract-violation",
+        recommended_recovery_action: Phase5RunnerInputRecoveryAction = "block_cycle",
+        summary_status: Phase5RunnerInputSummaryStatus = "blocked",
+        recommended_next_action: Phase5RunnerInputNextAction = "blocked",
+    ) -> None:
+        super().__init__(message)
+        self.failure_class = failure_class
+        self.recommended_recovery_action = recommended_recovery_action
+        self.summary_status = summary_status
+        self.recommended_next_action = recommended_next_action
 
 
 class Phase5RunnerInputBundle(BaseModel):
@@ -46,7 +67,13 @@ def resolve_phase5_runner_inputs(
 ) -> Phase5RunnerInputBundle:
     cycle = read_phase5_cycle_ledger_artifact_if_exists(cycle_id, root=root)
     if cycle is None:
-        raise Phase5RunnerInputResolutionError(f"phase5 cycle ledger artifact is missing: {cycle_id}")
+        raise Phase5RunnerInputResolutionError(
+            f"phase5 cycle ledger artifact is missing: {cycle_id}",
+            failure_class="artifact-missing",
+            recommended_recovery_action="open_recovery_ticket",
+            summary_status="degraded",
+            recommended_next_action="retry_failed_step",
+        )
 
     missing_refs: list[str] = []
 
