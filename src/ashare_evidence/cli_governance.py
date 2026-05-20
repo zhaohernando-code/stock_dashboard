@@ -8,6 +8,7 @@ from ashare_evidence.contract_registry import DEFAULT_REGISTRY_PATH, check_contr
 from ashare_evidence.policy_audit import assert_policy_audit, write_policy_audit_report
 from ashare_evidence.process_hardening import parse_line_budget, run_process_hardening_check
 from ashare_evidence.process_hardening_evidence import check_required_evidence, parse_required_evidence
+from ashare_evidence.process_hardening_source import check_forbidden_source_tokens, parse_forbidden_source_token
 
 
 def add_governance_parsers(subparsers: Any) -> None:
@@ -35,6 +36,7 @@ def add_governance_parsers(subparsers: Any) -> None:
     process_hardening_check.add_argument("--evaluation-doc", action="append", required=True)
     process_hardening_check.add_argument("--line-budget", action="append", required=True)
     process_hardening_check.add_argument("--required-evidence", action="append", default=[])
+    process_hardening_check.add_argument("--forbidden-source-token", action="append", default=[])
     process_hardening_check.add_argument("--fail-on-warning", action="store_true")
     process_hardening_check.add_argument("--require-clean-git-status", action="store_true")
     process_hardening_check.add_argument("--git-root", default=".")
@@ -97,6 +99,13 @@ def handle_process_hardening_check_command(args: Any) -> int:
     except ValueError as exc:
         _print_json(_parse_error_payload("required_evidence_parse_error", exc))
         return 1
+    try:
+        forbidden_source_tokens = [
+            parse_forbidden_source_token(raw_value) for raw_value in args.forbidden_source_token
+        ]
+    except ValueError as exc:
+        _print_json(_parse_error_payload("forbidden_source_token_parse_error", exc))
+        return 1
     payload = run_process_hardening_check(
         evaluation_docs=args.evaluation_doc,
         line_budgets=line_budgets,
@@ -105,7 +114,8 @@ def handle_process_hardening_check_command(args: Any) -> int:
         git_root=args.git_root,
     )
     evidence_payload = check_required_evidence(required_evidence)
-    issues = [*payload["issues"], *evidence_payload["issues"]]
+    source_payload = check_forbidden_source_tokens(forbidden_source_tokens)
+    issues = [*payload["issues"], *evidence_payload["issues"], *source_payload["issues"]]
     has_error = any(issue["severity"] == "error" for issue in issues)
     has_warning = any(issue["severity"] == "warning" for issue in issues)
     payload = {
@@ -114,6 +124,7 @@ def handle_process_hardening_check_command(args: Any) -> int:
         "issue_count": len(issues),
         "issues": issues,
         "required_evidence": evidence_payload["required_evidence"],
+        "forbidden_source_tokens": source_payload["forbidden_source_tokens"],
     }
     _print_json(payload)
     return 0 if payload["status"] == "pass" else 1
@@ -131,4 +142,5 @@ def _parse_error_payload(code: str, exc: ValueError) -> dict[str, Any]:
         "checked_docs": [],
         "line_budgets": [],
         "required_evidence": [],
+        "forbidden_source_tokens": [],
     }
