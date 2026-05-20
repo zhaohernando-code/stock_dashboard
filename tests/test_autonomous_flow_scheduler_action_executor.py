@@ -23,6 +23,7 @@ def test_noop_action_executor_completes_continue_tracking_without_writes(
     assert result.execution_status == "completed"
     assert result.action == "continue_tracking"
     assert result.preflight_status == "ready"
+    assert result.recommended_next_action == "continue_scheduler_tracking"
     assert result.performed_effects == ("keep_cycle_open_for_next_tick",)
     assert result.skipped_reason is None
     assert result.durable_outputs == ()
@@ -39,6 +40,7 @@ def test_noop_action_executor_completes_none_without_writes(tmp_path: Path, monk
     assert result.execution_status == "completed"
     assert result.action == "none"
     assert result.preflight_status == "ready"
+    assert result.recommended_next_action == "finish_without_followup"
     assert result.performed_effects == ("no_op",)
     assert result.durable_outputs == ()
     assert result.may_close_cycle is False
@@ -87,6 +89,7 @@ def test_noop_action_executor_blocks_preflight_missing_input() -> None:
     assert result.execution_status == "blocked"
     assert result.action == "open_recovery_ticket"
     assert result.preflight_status == "blocked"
+    assert result.recommended_next_action == "record_scheduler_diagnostic"
     assert result.performed_effects == ()
     assert result.skipped_reason == "scheduler action preflight blocked by missing inputs"
     assert result.reason == "scheduler action preflight blocked by missing inputs"
@@ -108,6 +111,7 @@ def test_noop_action_executor_blocks_non_noop_action_even_when_preflight_ready(m
     assert result.execution_status == "blocked"
     assert result.action == "rebuild_projection"
     assert result.preflight_status == "ready"
+    assert result.recommended_next_action == "record_scheduler_execution_intent"
     assert result.performed_effects == ()
     assert result.skipped_reason == "scheduler action executor only supports no-op actions in this trial"
     assert result.durable_outputs == ("frontend_projection_manifest",)
