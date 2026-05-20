@@ -7,11 +7,15 @@ from dataclasses import dataclass
 from typing import Any
 
 from ashare_evidence.autonomous_flow import Phase5SchedulerExecutionIdempotencyConflictError
+from ashare_evidence.cli_autonomous_flow_action_outputs import (
+    handle_action_output,
+    handle_action_route_output,
+)
+from ashare_evidence.cli_autonomous_flow_diagnostic_outputs import handle_diagnostic_output
 
 _EXECUTION_CONFLICT_RECOMMENDED_NEXT_ACTION = (
     "reuse_existing_execution_id_or_retry_with_new_idempotency_key"
 )
-_ACTION_BLOCKED_EXIT_CODE = 4
 
 
 @dataclass(frozen=True)
@@ -50,58 +54,33 @@ def handle_phase5_local_cycle_step_output(
         return 0
 
     if args.output == "action":
-        tick_result = _run_tick_from_args(args, handlers)
-        plan = handlers.plan_followup(tick_result)
-        action_result = handlers.execute_scheduler_noop_action(plan)
-        _print_json(action_result.model_dump(mode="json"))
-        return _action_exit_code(action_result)
+        return handle_action_output(
+            args,
+            handlers,
+            run_tick_from_args=_run_tick_from_args,
+            print_json=_print_json,
+        )
 
     if args.output == "action-route":
-        tick_result = _run_tick_from_args(args, handlers)
-        plan = handlers.plan_followup(tick_result)
-        action_result = handlers.execute_scheduler_noop_action(plan)
-        route_result = handlers.route_scheduler_action_result(action_result)
-        _print_json(route_result.model_dump(mode="json"))
-        return 0
+        return handle_action_route_output(
+            args,
+            handlers,
+            run_tick_from_args=_run_tick_from_args,
+            print_json=_print_json,
+        )
 
     if args.output == "diagnostic":
-        return _handle_diagnostic_output(args, handlers)
+        return handle_diagnostic_output(
+            args,
+            handlers,
+            run_tick_from_args=_run_tick_from_args,
+            print_json=_print_json,
+        )
 
     if args.output == "execution":
         return _handle_execution_output(args, handlers)
 
     return _handle_full_output(args, handlers)
-
-
-def _handle_diagnostic_output(args: Namespace, handlers: Phase5LocalCycleStepHandlers) -> int:
-    missing_arguments = _missing_arguments(
-        (
-            ("--diagnostic-id", args.diagnostic_id),
-            ("--observed-at", args.observed_at),
-        )
-    )
-    if missing_arguments:
-        _print_json(
-            {
-                "status": "error",
-                "command": "phase5-local-cycle-step",
-                "error_type": "MissingRequiredDiagnosticArgument",
-                "message": "--diagnostic-id and --observed-at are required for diagnostic output.",
-                "missing_arguments": missing_arguments,
-            }
-        )
-        return 2
-
-    tick_result = _run_tick_from_args(args, handlers)
-    plan = handlers.plan_followup(tick_result)
-    diagnostic_result = handlers.record_scheduler_plan_diagnostic(
-        plan,
-        diagnostic_id=args.diagnostic_id,
-        observed_at=args.observed_at,
-        root=args.artifact_root,
-    )
-    _print_json(diagnostic_result.model_dump(mode="json"))
-    return 0
 
 
 def _handle_execution_output(args: Namespace, handlers: Phase5LocalCycleStepHandlers) -> int:
@@ -197,15 +176,6 @@ def _execution_conflict_payload(exc: Phase5SchedulerExecutionIdempotencyConflict
         "requested_execution_id": exc.requested_execution_id,
         "recommended_next_action": _EXECUTION_CONFLICT_RECOMMENDED_NEXT_ACTION,
     }
-
-
-def _action_exit_code(action_result: Any) -> int:
-    execution_status = getattr(action_result, "execution_status", None)
-    if execution_status is None and isinstance(getattr(action_result, "payload", None), dict):
-        execution_status = action_result.payload.get("execution_status")
-    if execution_status == "blocked":
-        return _ACTION_BLOCKED_EXIT_CODE
-    return 0
 
 
 def _print_json(payload: Any) -> None:
