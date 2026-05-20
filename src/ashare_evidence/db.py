@@ -217,6 +217,50 @@ def _run_schema_migrations(engine: Engine) -> None:
                     ")"
                 )
             )
+    if "model_api_keys" in existing_tables:
+        existing_columns = {item["name"] for item in inspector.get_columns("model_api_keys")}
+        if "account_login" not in existing_columns:
+            with engine.begin() as conn:
+                conn.execute(text("PRAGMA foreign_keys=OFF"))
+                conn.execute(text("ALTER TABLE model_api_keys RENAME TO model_api_keys_legacy_account_scope"))
+                conn.execute(
+                    text(
+                        "CREATE TABLE model_api_keys ("
+                        "id INTEGER NOT NULL PRIMARY KEY, "
+                        "account_login VARCHAR(128) NOT NULL DEFAULT 'root', "
+                        "name VARCHAR(64) NOT NULL, "
+                        "provider_name VARCHAR(32) NOT NULL, "
+                        "model_name VARCHAR(128) NOT NULL, "
+                        "base_url VARCHAR(255) NOT NULL, "
+                        "api_key TEXT NOT NULL, "
+                        "enabled BOOLEAN NOT NULL, "
+                        "is_default BOOLEAN NOT NULL, "
+                        "priority INTEGER NOT NULL, "
+                        "last_status VARCHAR(16) NOT NULL, "
+                        "last_error TEXT, "
+                        "last_checked_at DATETIME, "
+                        "metadata_payload JSON NOT NULL, "
+                        "created_at DATETIME NOT NULL, "
+                        "updated_at DATETIME NOT NULL, "
+                        "CONSTRAINT uq_model_api_key_account_name UNIQUE (account_login, name)"
+                        ")"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "INSERT INTO model_api_keys ("
+                        "id, account_login, name, provider_name, model_name, base_url, api_key, enabled, "
+                        "is_default, priority, last_status, last_error, last_checked_at, metadata_payload, "
+                        "created_at, updated_at"
+                        ") "
+                        "SELECT id, 'root', name, provider_name, model_name, base_url, api_key, enabled, "
+                        "is_default, priority, last_status, last_error, last_checked_at, metadata_payload, "
+                        "created_at, updated_at "
+                        "FROM model_api_keys_legacy_account_scope"
+                    )
+                )
+                conn.execute(text("DROP TABLE model_api_keys_legacy_account_scope"))
+                conn.execute(text("PRAGMA foreign_keys=ON"))
     column_specs = {
         "paper_portfolios": {
             "owner_login": "VARCHAR(128) NOT NULL DEFAULT 'root'",
@@ -244,6 +288,10 @@ def _run_schema_migrations(engine: Engine) -> None:
                 with engine.begin() as conn:
                     conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl}"))
     index_statements = [
+        "CREATE INDEX IF NOT EXISTS ix_model_api_keys_account_login ON model_api_keys(account_login)",
+        "CREATE INDEX IF NOT EXISTS ix_model_api_keys_name ON model_api_keys(name)",
+        "CREATE INDEX IF NOT EXISTS ix_model_api_keys_provider_name ON model_api_keys(provider_name)",
+        "CREATE INDEX IF NOT EXISTS ix_model_api_keys_priority ON model_api_keys(priority)",
         "CREATE INDEX IF NOT EXISTS idx_paper_portfolios_owner_login ON paper_portfolios(owner_login)",
         "CREATE INDEX IF NOT EXISTS idx_paper_orders_owner_login ON paper_orders(owner_login)",
         "CREATE INDEX IF NOT EXISTS idx_paper_orders_actor_login ON paper_orders(actor_login)",

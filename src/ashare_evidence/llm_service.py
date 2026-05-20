@@ -189,6 +189,7 @@ def run_follow_up_analysis(
     question: str,
     model_api_key_id: int | None = None,
     failover_enabled: bool = True,
+    account_login: str | None = None,
     transport: LLMTransport | None = None,
 ) -> dict[str, Any]:
     from ashare_evidence.manual_research_workflow import run_follow_up_analysis_compat
@@ -199,5 +200,6 @@ def run_follow_up_analysis(
         question=question,
         model_api_key_id=model_api_key_id,
         failover_enabled=failover_enabled,
+        account_login=account_login,
         transport=transport if transport is not None else OpenAICompatibleTransport(),
     )

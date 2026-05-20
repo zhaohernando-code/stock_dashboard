@@ -48,6 +48,7 @@ export interface ProviderCredentialView {
 
 export interface ModelApiKeyView {
   id: number;
+  account_login: string;
   name: string;
   provider_name: string;
   model_name: string;

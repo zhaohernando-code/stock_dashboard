@@ -1180,8 +1180,10 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_stock_root(access)
-        return get_runtime_settings(session)
+        payload = get_runtime_settings(session, account_login=access.target_login)
+        if access.actor_role != "root":
+            payload = {**payload, "provider_credentials": []}
+        return payload
 
     @app.get("/policy-governance/active")
     def policy_governance_active(
@@ -1235,10 +1237,10 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_stock_root(access)
         try:
             record = create_model_api_key(
                 session,
+                account_login=access.target_login,
                 name=payload.name,
                 provider_name=payload.provider_name,
                 model_name=payload.model_name,
@@ -1260,11 +1262,11 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_stock_root(access)
         try:
             record = update_model_api_key(
                 session,
                 key_id,
+                account_login=access.target_login,
                 name=payload.name,
                 provider_name=payload.provider_name,
                 model_name=payload.model_name,
@@ -1287,9 +1289,8 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_stock_root(access)
         try:
-            record = set_default_model_api_key(session, key_id)
+            record = set_default_model_api_key(session, key_id, account_login=access.target_login)
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         session.commit()
@@ -1301,9 +1302,8 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_stock_root(access)
         try:
-            payload = delete_model_api_key(session, key_id)
+            payload = delete_model_api_key(session, key_id, account_login=access.target_login)
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         session.commit()
@@ -1315,7 +1315,6 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_stock_root(access)
         try:
             return run_follow_up_analysis(
                 session,
@@ -1323,6 +1322,7 @@ def create_app(
                 question=payload.question,
                 model_api_key_id=payload.model_api_key_id,
                 failover_enabled=payload.failover_enabled,
+                account_login=access.target_login,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1337,7 +1337,6 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_stock_root(access)
         try:
             result = create_manual_research_request(
                 session,
@@ -1345,6 +1344,7 @@ def create_app(
                 question=payload.question,
                 trigger_source=payload.trigger_source,
                 requested_by=access.actor_login,
+                account_login=access.target_login,
                 executor_kind=payload.executor_kind,
                 model_api_key_id=payload.model_api_key_id,
             )
@@ -1364,7 +1364,6 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_stock_root(access)
         return list_manual_research_requests(
             session,
             symbol=symbol,
@@ -1379,7 +1378,6 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_stock_root(access)
         try:
             return get_manual_research_request(session, request_id)
         except LookupError as exc:
@@ -1392,7 +1390,6 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_stock_root(access)
         try:
             result = execute_manual_research_request(
                 session,
@@ -1461,7 +1458,6 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_stock_root(access)
         try:
             result = retry_manual_research_request(
                 session,
@@ -1904,7 +1900,6 @@ def create_app(
         sample_symbol: str = Query(default="600519.SH"),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_stock_root(access)
         run_operations_tick(session)
         return build_operations_dashboard(
             session,
@@ -1920,7 +1915,6 @@ def create_app(
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
         started_at = time.perf_counter()
-        require_stock_root(access)
         projection = get_ready_frontend_projection_payload(
             session,
             operations_summary_projection_key(target_login=access.target_login, sample_symbol=sample_symbol),
@@ -1944,7 +1938,6 @@ def create_app(
         sample_symbol: str = Query(default="600519.SH"),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        require_stock_root(access)
         if section == "simulation_workspace":
             projection = get_ready_frontend_projection_payload(
                 session,

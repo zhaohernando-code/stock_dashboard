@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ashare_evidence.account_space import ROOT_ACCOUNT_LOGIN
 from ashare_evidence.db import utcnow
 from ashare_evidence.intraday_market import get_intraday_market_status
 from ashare_evidence.models import AppSetting, ModelApiKey, ProviderCredential
@@ -278,6 +279,10 @@ def _mask_secret(value: str | None) -> str | None:
     return f"{stripped[:4]}...{stripped[-4:]}"
 
 
+def _normalize_account_login(account_login: str | None) -> str:
+    return (account_login or ROOT_ACCOUNT_LOGIN).strip() or ROOT_ACCOUNT_LOGIN
+
+
 def _serialize_provider_credential(record: ProviderCredential) -> dict[str, Any]:
     return {
         "id": record.id,
@@ -296,6 +301,7 @@ def _serialize_provider_credential(record: ProviderCredential) -> dict[str, Any]
 def _serialize_model_api_key(record: ModelApiKey) -> dict[str, Any]:
     return {
         "id": record.id,
+        "account_login": record.account_login,
         "name": record.name,
         "provider_name": record.provider_name,
         "model_name": record.model_name,
@@ -352,15 +358,21 @@ def upsert_provider_credential(
     return _serialize_provider_credential(record)
 
 
-def list_model_api_keys(session: Session) -> list[dict[str, Any]]:
+def list_model_api_keys(session: Session, *, account_login: str | None = None) -> list[dict[str, Any]]:
+    normalized_login = _normalize_account_login(account_login)
     records = session.scalars(
-        select(ModelApiKey).order_by(ModelApiKey.is_default.desc(), ModelApiKey.priority.asc(), ModelApiKey.id.asc())
+        select(ModelApiKey)
+        .where(ModelApiKey.account_login == normalized_login)
+        .order_by(ModelApiKey.is_default.desc(), ModelApiKey.priority.asc(), ModelApiKey.id.asc())
     ).all()
     return [_serialize_model_api_key(record) for record in records]
 
 
-def _ensure_single_default(session: Session, target_id: int) -> None:
-    for record in session.scalars(select(ModelApiKey)).all():
+def _ensure_single_default(session: Session, target_id: int, *, account_login: str) -> None:
+    normalized_login = _normalize_account_login(account_login)
+    for record in session.scalars(
+        select(ModelApiKey).where(ModelApiKey.account_login == normalized_login)
+    ).all():
         record.is_default = record.id == target_id
     session.flush()
 
@@ -368,6 +380,7 @@ def _ensure_single_default(session: Session, target_id: int) -> None:
 def create_model_api_key(
     session: Session,
     *,
+    account_login: str | None = None,
     name: str,
     provider_name: str,
     model_name: str,
@@ -377,11 +390,13 @@ def create_model_api_key(
     priority: int,
     make_default: bool,
 ) -> dict[str, Any]:
+    normalized_login = _normalize_account_login(account_login)
     if not name.strip():
         raise ValueError("Model API key name is required.")
     if not api_key.strip():
         raise ValueError("Model API key value is required.")
     record = ModelApiKey(
+        account_login=normalized_login,
         name=name.strip(),
         provider_name=provider_name.strip().lower(),
         model_name=model_name.strip(),
@@ -397,9 +412,14 @@ def create_model_api_key(
     )
     session.add(record)
     session.flush()
-    default_exists = session.scalar(select(ModelApiKey).where(ModelApiKey.is_default.is_(True)))
+    default_exists = session.scalar(
+        select(ModelApiKey).where(
+            ModelApiKey.account_login == normalized_login,
+            ModelApiKey.is_default.is_(True),
+        )
+    )
     if make_default or default_exists is None:
-        _ensure_single_default(session, record.id)
+        _ensure_single_default(session, record.id, account_login=normalized_login)
     return _serialize_model_api_key(record)
 
 
@@ -407,6 +427,7 @@ def update_model_api_key(
     session: Session,
     key_id: int,
     *,
+    account_login: str | None = None,
     name: str | None = None,
     provider_name: str | None = None,
     model_name: str | None = None,
@@ -416,8 +437,9 @@ def update_model_api_key(
     priority: int | None = None,
     make_default: bool | None = None,
 ) -> dict[str, Any]:
+    normalized_login = _normalize_account_login(account_login)
     record = session.get(ModelApiKey, key_id)
-    if record is None:
+    if record is None or record.account_login != normalized_login:
         raise LookupError(f"Model API key {key_id} not found.")
     if name is not None:
         record.name = name.strip()
@@ -440,30 +462,36 @@ def update_model_api_key(
         record.priority = priority
     session.flush()
     if make_default:
-        _ensure_single_default(session, record.id)
+        _ensure_single_default(session, record.id, account_login=normalized_login)
     elif record.is_default and not record.enabled:
         fallback = session.scalar(
             select(ModelApiKey)
-            .where(ModelApiKey.id != record.id, ModelApiKey.enabled.is_(True))
+            .where(
+                ModelApiKey.account_login == normalized_login,
+                ModelApiKey.id != record.id,
+                ModelApiKey.enabled.is_(True),
+            )
             .order_by(ModelApiKey.priority.asc(), ModelApiKey.id.asc())
         )
         if fallback is not None:
-            _ensure_single_default(session, fallback.id)
+            _ensure_single_default(session, fallback.id, account_login=normalized_login)
             record.is_default = False
     return _serialize_model_api_key(record)
 
 
-def set_default_model_api_key(session: Session, key_id: int) -> dict[str, Any]:
+def set_default_model_api_key(session: Session, key_id: int, *, account_login: str | None = None) -> dict[str, Any]:
+    normalized_login = _normalize_account_login(account_login)
     record = session.get(ModelApiKey, key_id)
-    if record is None:
+    if record is None or record.account_login != normalized_login:
         raise LookupError(f"Model API key {key_id} not found.")
-    _ensure_single_default(session, key_id)
+    _ensure_single_default(session, key_id, account_login=normalized_login)
     return _serialize_model_api_key(record)
 
 
-def delete_model_api_key(session: Session, key_id: int) -> dict[str, Any]:
+def delete_model_api_key(session: Session, key_id: int, *, account_login: str | None = None) -> dict[str, Any]:
+    normalized_login = _normalize_account_login(account_login)
     record = session.get(ModelApiKey, key_id)
-    if record is None:
+    if record is None or record.account_login != normalized_login:
         raise LookupError(f"Model API key {key_id} not found.")
     was_default = record.is_default
     name = record.name
@@ -471,10 +499,15 @@ def delete_model_api_key(session: Session, key_id: int) -> dict[str, Any]:
     session.flush()
     if was_default:
         fallback = session.scalar(
-            select(ModelApiKey).where(ModelApiKey.enabled.is_(True)).order_by(ModelApiKey.priority.asc(), ModelApiKey.id.asc())
+            select(ModelApiKey)
+            .where(
+                ModelApiKey.account_login == normalized_login,
+                ModelApiKey.enabled.is_(True),
+            )
+            .order_by(ModelApiKey.priority.asc(), ModelApiKey.id.asc())
         )
         if fallback is not None:
-            _ensure_single_default(session, fallback.id)
+            _ensure_single_default(session, fallback.id, account_login=normalized_login)
     return {
         "id": key_id,
         "name": name,
@@ -483,7 +516,8 @@ def delete_model_api_key(session: Session, key_id: int) -> dict[str, Any]:
     }
 
 
-def get_runtime_settings(session: Session) -> dict[str, Any]:
+def get_runtime_settings(session: Session, *, account_login: str | None = None) -> dict[str, Any]:
+    normalized_login = _normalize_account_login(account_login)
     ensure_runtime_defaults(session)
     deployment = _get_setting(session, "deployment_profile")
     provider_strategy = _get_setting(session, "provider_strategy")
@@ -492,7 +526,7 @@ def get_runtime_settings(session: Session) -> dict[str, Any]:
         item["provider_name"]: item
         for item in list_provider_credentials(session)
     }
-    key_records = list_model_api_keys(session)
+    key_records = list_model_api_keys(session, account_login=normalized_login)
     deployment_value = deployment.setting_value if deployment is not None else {}
     provider_value = provider_strategy.setting_value if provider_strategy is not None else {}
     cache_value = cache_policy.setting_value if cache_policy is not None else {}
@@ -600,9 +634,23 @@ def record_model_api_key_result(
     session.flush()
 
 
-def resolve_llm_key_candidates(session: Session, preferred_key_id: int | None = None) -> list[ModelApiKey]:
+def resolve_llm_key_candidates(
+    session: Session,
+    preferred_key_id: int | None = None,
+    *,
+    account_login: str | None = None,
+) -> list[ModelApiKey]:
+    preferred_record = session.get(ModelApiKey, preferred_key_id) if preferred_key_id is not None else None
+    normalized_login = _normalize_account_login(
+        account_login or (preferred_record.account_login if preferred_record is not None else None)
+    )
     enabled_keys = session.scalars(
-        select(ModelApiKey).where(ModelApiKey.enabled.is_(True)).order_by(ModelApiKey.is_default.desc(), ModelApiKey.priority.asc(), ModelApiKey.id.asc())
+        select(ModelApiKey)
+        .where(
+            ModelApiKey.account_login == normalized_login,
+            ModelApiKey.enabled.is_(True),
+        )
+        .order_by(ModelApiKey.is_default.desc(), ModelApiKey.priority.asc(), ModelApiKey.id.asc())
     ).all()
     if preferred_key_id is None:
         return enabled_keys

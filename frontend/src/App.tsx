@@ -264,9 +264,9 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   const viewRef = useRef<ViewMode>(view);
   const canMutateWatchlist = true;
   const isRootUser = authContext?.actor_role === "root";
-  const canUseOperations = isRootUser;
-  const canUseSettings = isRootUser;
-  const canUseManualResearch = isRootUser;
+  const canUseOperations = true;
+  const canUseSettings = true;
+  const canUseManualResearch = true;
   const runtimeView = runtimeSettings ?? runtimeOverview;
 
   const candidateRows = useMemo(
@@ -423,17 +423,8 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     });
   }
 
-  async function loadRuntimeContext(nextAuth?: AuthContextResponse | null): Promise<void> {
-    const access = nextAuth ?? authContext;
-    if (access?.actor_role === "root") {
-      await loadRuntimeSettings();
-      return;
-    }
-    const payload = await api.getRuntimeOverview();
-    setRuntimeOverview(payload);
-    setRuntimeSettings(null);
-    setProviderDrafts({});
-    setAnalysisKeyId(undefined);
+  async function loadRuntimeContext(_nextAuth?: AuthContextResponse | null): Promise<void> {
+    await loadRuntimeSettings();
   }
 
   function applySimulationWorkspace(workspace: SimulationWorkspaceResponse): void {
@@ -783,7 +774,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     const resolvedSymbol = preferredSymbol ?? initialSymbol ?? selectedSymbol;
     if (resolvedSymbol) {
       await loadDetailData(resolvedSymbol);
-      if (access.actor_role === "root" && view === "operations") {
+      if (view === "operations") {
         await loadOperationsData(resolvedSymbol);
       }
     }
@@ -1514,9 +1505,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                                 </Text>
                               </>
                             ) : (
-                              <Text type="secondary">
-                                人工研究与追问工作流仅对 root 账号开放。
-                              </Text>
+                              <Text type="secondary">请先选择标的后发起追问。</Text>
                             )}
                           </div>
                           {dashboard.recommendation.manual_llm_review.decision_note ? (
@@ -2020,6 +2009,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     providerDrafts, setProviderDrafts,
     savingConfig, setSavingConfig,
     messageApi, modalApi: modal, loadRuntimeSettings, setError,
+    canManageProviderCredentials: isRootUser,
   }) : [];
   if (isMobile) {
     return (

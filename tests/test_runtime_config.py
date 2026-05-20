@@ -194,6 +194,44 @@ class RuntimeConfigTests(unittest.TestCase):
             self.assertEqual(artifact.question, "请解释当前建议的主要风险。")
             self.assertEqual(artifact.request_key, result["request_key"])
 
+    def test_model_api_keys_are_scoped_per_account(self) -> None:
+        with session_scope(self.database_url) as session:
+            root_key = create_model_api_key(
+                session,
+                account_login="root",
+                name="deepseek-v4-pro",
+                provider_name="deepseek",
+                model_name="deepseek-v4-pro",
+                base_url="https://api.deepseek.com",
+                api_key="root-secret",
+                enabled=True,
+                priority=100,
+                make_default=True,
+            )
+            amoeba_key = create_model_api_key(
+                session,
+                account_login="amoeba",
+                name="deepseek-v4-pro",
+                provider_name="deepseek",
+                model_name="deepseek-v4-pro",
+                base_url="https://api.deepseek.com",
+                api_key="amoeba-secret",
+                enabled=True,
+                priority=100,
+                make_default=True,
+            )
+
+        with session_scope(self.database_url) as session:
+            root_settings = get_runtime_settings(session, account_login="root")
+            amoeba_settings = get_runtime_settings(session, account_login="amoeba")
+
+        self.assertEqual(root_settings["default_model_api_key_id"], root_key["id"])
+        self.assertEqual(amoeba_settings["default_model_api_key_id"], amoeba_key["id"])
+        self.assertEqual([item["account_login"] for item in root_settings["model_api_keys"]], ["root"])
+        self.assertEqual([item["account_login"] for item in amoeba_settings["model_api_keys"]], ["amoeba"])
+        self.assertEqual(root_settings["model_api_keys"][0]["masked_key"], "root...cret")
+        self.assertEqual(amoeba_settings["model_api_keys"][0]["masked_key"], "amoe...cret")
+
     def test_openai_compatible_transport_uses_extended_timeout(self) -> None:
         captured: dict[str, object] = {}
 

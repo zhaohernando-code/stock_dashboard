@@ -235,12 +235,20 @@ def create_manual_research_request(
     trigger_source: str,
     requested_by: str | None,
     executor_kind: str,
+    account_login: str | None = None,
     model_api_key_id: int | None = None,
 ) -> dict[str, Any]:
     normalized_question = question.strip() or "请解释当前建议最容易失效的条件。"
     if executor_kind == EXECUTOR_KIND_CONFIGURED_API_KEY and model_api_key_id is None:
         raise ValueError("configured_api_key executor requires model_api_key_id.")
-    if model_api_key_id is not None and session.get(ModelApiKey, model_api_key_id) is None:
+    key_owner = None
+    if model_api_key_id is not None:
+        model_key = session.get(ModelApiKey, model_api_key_id)
+        if model_key is None:
+            raise LookupError(f"Model API key {model_api_key_id} not found.")
+        key_owner = model_key.account_login
+    normalized_account_login = (account_login or key_owner or "root").strip() or "root"
+    if model_api_key_id is not None and key_owner != normalized_account_login:
         raise LookupError(f"Model API key {model_api_key_id} not found.")
 
     summary = get_stock_dashboard(session, symbol)
@@ -277,6 +285,7 @@ def create_manual_research_request(
         validation_artifact_id=historical_validation.get("artifact_id"),
         validation_manifest_id=historical_validation.get("manifest_id"),
         request_payload={
+            "config_account_login": normalized_account_login,
             "source_packet": source_packet,
             "target_horizon_label": summary["recommendation"]["core_quant"]["target_horizon_label"],
             "stock_name": summary["stock"]["name"],
@@ -452,7 +461,11 @@ def execute_manual_research_request(
                 "base_url": key.base_url,
                 "api_key": key.api_key,
             }
-            for key in resolve_llm_key_candidates(session, request.model_api_key_id)
+            for key in resolve_llm_key_candidates(
+                session,
+                request.model_api_key_id,
+                account_login=str(request.request_payload.get("config_account_login") or ""),
+            )
         ]
         if request.model_api_key_id is None:
             raise ValueError("configured_api_key executor requires model_api_key_id.")
@@ -600,6 +613,7 @@ def retry_manual_research_request(
         question=original.question,
         trigger_source=f"{original.trigger_source}:retry",
         requested_by=requested_by,
+        account_login=str(original.request_payload.get("config_account_login") or ""),
         executor_kind=original.executor_kind,
         model_api_key_id=original.model_api_key_id,
     )
@@ -617,6 +631,7 @@ def run_follow_up_analysis_compat(
     model_api_key_id: int | None = None,
     failover_enabled: bool = True,
     requested_by: str | None = None,
+    account_login: str | None = None,
     transport: OpenAICompatibleTransport | None = None,
 ) -> dict[str, Any]:
     executor_kind = (
@@ -630,6 +645,7 @@ def run_follow_up_analysis_compat(
         question=question,
         trigger_source="analysis_follow_up_compat",
         requested_by=requested_by,
+        account_login=account_login,
         executor_kind=executor_kind,
         model_api_key_id=model_api_key_id,
     )

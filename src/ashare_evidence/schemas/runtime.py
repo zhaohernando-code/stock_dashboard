@@ -54,6 +54,7 @@ class ProviderCredentialView(BaseModel):
 
 class ModelApiKeyView(BaseModel):
     id: int
+    account_login: str
     name: str
     provider_name: str
     model_name: str
@@ -160,4 +161,3 @@ class ModelApiKeyDeleteResponse(BaseModel):
     name: str
     deleted: bool
     deleted_at: datetime
-

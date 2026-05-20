@@ -544,9 +544,10 @@ class ProviderCredential(TimestampedMixin, Base):
 
 class ModelApiKey(TimestampedMixin, Base):
     __tablename__ = "model_api_keys"
-    __table_args__ = (UniqueConstraint("name", name="uq_model_api_key_name"),)
+    __table_args__ = (UniqueConstraint("account_login", "name", name="uq_model_api_key_account_name"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_login: Mapped[str] = mapped_column(String(128), default="root", nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     provider_name: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     model_name: Mapped[str] = mapped_column(String(128), nullable=False)

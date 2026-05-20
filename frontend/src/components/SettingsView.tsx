@@ -50,6 +50,7 @@ export interface BuildSettingsTabsInput {
   modalApi: ModalApi;
   loadRuntimeSettings: () => Promise<void>;
   setError: (err: string | null) => void;
+  canManageProviderCredentials: boolean;
 }
 
 export function buildSettingsTabs(input: BuildSettingsTabsInput) {
@@ -68,6 +69,7 @@ export function buildSettingsTabs(input: BuildSettingsTabsInput) {
     providerDrafts, setProviderDrafts,
     savingConfig, setSavingConfig,
     messageApi, modalApi, loadRuntimeSettings, setError,
+    canManageProviderCredentials,
   } = input;
 
   async function handleCreateModelApiKey() {
@@ -181,7 +183,7 @@ export function buildSettingsTabs(input: BuildSettingsTabsInput) {
     }
   }
 
-  return [
+  const tabs = [
     {
       key: "overview",
       label: "说明",
@@ -369,7 +371,7 @@ export function buildSettingsTabs(input: BuildSettingsTabsInput) {
         </Row>
       ),
     },
-    {
+    ...(canManageProviderCredentials ? [{
       key: "providers",
       label: "数据源",
       children: (
@@ -458,7 +460,7 @@ export function buildSettingsTabs(input: BuildSettingsTabsInput) {
           })}
         </Row>
       ),
-    },
+    }] : []),
   ];
-;
+  return tabs;
 }
