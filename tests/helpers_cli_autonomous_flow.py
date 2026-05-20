@@ -1,0 +1,129 @@
+from __future__ import annotations
+
+import argparse
+from typing import Any
+
+
+class _FakeServiceResult:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.payload = payload
+
+    def model_dump(self, *, mode: str) -> dict[str, Any]:
+        assert mode == "json"
+        return self.payload
+
+
+class _FakeTickResult:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.payload = payload
+        self.exit_code = int(payload["exit_code"])
+
+    def model_dump(self, *, mode: str) -> dict[str, Any]:
+        assert mode == "json"
+        return self.payload
+
+
+class _FakePlanResult:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.payload = payload
+
+    def model_dump(self, *, mode: str) -> dict[str, Any]:
+        assert mode == "json"
+        return self.payload
+
+
+def _args(**overrides: Any) -> argparse.Namespace:
+    payload = {
+        "cycle_id": "cycle-1",
+        "gate_id": None,
+        "recovery_ticket_id": None,
+        "projection_id": None,
+        "finished_at": None,
+        "apply_closeout": False,
+        "require_publish_verification": False,
+        "artifact_root": None,
+        "output": "status",
+    }
+    payload.update(overrides)
+    return argparse.Namespace(**payload)
+
+
+def _ok_service_result(cycle_id: str = "cycle-1") -> _FakeServiceResult:
+    return _FakeServiceResult(
+        {
+            "cycle_id": cycle_id,
+            "input_bundle": {"cycle": {"cycle_id": cycle_id}},
+            "runner_result": {"status": "dry_run"},
+            "release_manifest_ref": "release-manifest:phase5:20260520",
+            "digest": "sha256:abc123",
+            "missing_refs": [],
+        }
+    )
+
+
+def _ok_tick_result(cycle_id: str = "cycle-1") -> _FakeTickResult:
+    return _FakeTickResult(
+        {
+            "cycle_id": cycle_id,
+            "tick_status": "ok",
+            "exit_code": 0,
+            "status": {
+                "cycle_id": cycle_id,
+                "cycle_status": "running",
+                "decision_status": "completed",
+                "next_action": "continue_tracking",
+                "claim_ceiling": "paper_tracking_candidate",
+                "decision_reason": "all planner inputs are fresh and unblocked",
+                "missing_refs": [],
+                "blocking_reasons": [],
+                "source_refs": [cycle_id],
+                "closeout_applied": False,
+                "finished_at": None,
+                "publish_verification_status": "not_required",
+                "staleness_status": "fresh",
+                "summary_status": "completed",
+            },
+            "error": None,
+            "recommended_next_action": "continue_tracking",
+            "summary_status": "completed",
+        }
+    )
+
+
+def _error_tick_result(cycle_id: str = "cycle-1") -> _FakeTickResult:
+    return _FakeTickResult(
+        {
+            "cycle_id": cycle_id,
+            "tick_status": "error",
+            "exit_code": 1,
+            "status": None,
+            "error": {
+                "error_type": "ValueError",
+                "message": "phase5 local cycle service apply_closeout requires finished_at",
+                "failure_class": "contract-violation",
+                "recommended_recovery_action": "block_cycle",
+            },
+            "recommended_next_action": "blocked",
+            "summary_status": "blocked",
+        }
+    )
+
+
+def _plan_result(
+    *,
+    cycle_id: str = "cycle-1",
+    source_tick_status: str = "ok",
+    action: str = "continue_tracking",
+) -> _FakePlanResult:
+    return _FakePlanResult(
+        {
+            "cycle_id": cycle_id,
+            "plan_status": "ready",
+            "action": action,
+            "reason": "planner selected follow-up action",
+            "source_tick_status": source_tick_status,
+            "summary_status": "completed" if source_tick_status == "ok" else "degraded",
+            "claim_ceiling": "paper_tracking_candidate" if source_tick_status == "ok" else None,
+            "blocking_reasons": [],
+        }
+    )
