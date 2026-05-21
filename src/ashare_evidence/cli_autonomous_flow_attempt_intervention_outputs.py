@@ -18,6 +18,9 @@ from ashare_evidence.scheduler_attempt_run_intervention_recorder import (
     record_phase5_scheduler_attempt_intervention_run_artifact,
 )
 from ashare_evidence.scheduler_attempt_run_readout import read_phase5_scheduler_attempt_run_readout
+from ashare_evidence.scheduler_attempt_run_recovery_ticket_executor import (
+    apply_phase5_scheduler_recovery_ticket_intent,
+)
 from ashare_evidence.scheduler_attempt_run_recovery_ticket_intent import (
     build_phase5_scheduler_recovery_ticket_intent,
 )
@@ -57,15 +60,30 @@ def handle_attempt_recovery_ticket_intent_output(
     *,
     print_json: Any,
 ) -> int:
+    intent = _build_attempt_recovery_ticket_intent(args)
+    print_json(intent.model_dump(mode="json"))
+    return 4 if intent.intent_status == "blocked" else 0
+
+
+def handle_attempt_recovery_ticket_apply_output(
+    args: Namespace,
+    *,
+    print_json: Any,
+) -> int:
+    intent = _build_attempt_recovery_ticket_intent(args)
+    result = apply_phase5_scheduler_recovery_ticket_intent(intent, root=args.artifact_root)
+    print_json(result.model_dump(mode="json"))
+    return 4 if result.apply_status == "blocked" else 0
+
+
+def _build_attempt_recovery_ticket_intent(args: Namespace):
     readout = read_phase5_scheduler_attempt_intervention_run_readout(
         cycle_id=args.cycle_id,
         runner_id=args.runner_id,
         root=args.artifact_root,
     )
     decision = decide_phase5_scheduler_attempt_intervention_followup(readout)
-    intent = build_phase5_scheduler_recovery_ticket_intent(readout, decision)
-    print_json(intent.model_dump(mode="json"))
-    return 4 if intent.intent_status == "blocked" else 0
+    return build_phase5_scheduler_recovery_ticket_intent(readout, decision)
 
 
 def handle_attempt_run_intervention_plan_output(

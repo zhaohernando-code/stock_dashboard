@@ -13,6 +13,7 @@ from ashare_evidence.cli_autonomous_flow_action_outputs import (
 from ashare_evidence.cli_autonomous_flow_attempt_intervention_outputs import (
     handle_attempt_intervention_followup_decision_output,
     handle_attempt_intervention_run_readout_output,
+    handle_attempt_recovery_ticket_apply_output,
     handle_attempt_recovery_ticket_intent_output,
     handle_attempt_run_intervention_apply_output,
     handle_attempt_run_intervention_plan_output,
@@ -64,6 +65,7 @@ _ATTEMPT_OUTPUTS = {
     "attempt-run-intervention-readout",
     "attempt-run-intervention-apply",
     "attempt-run-intervention-plan",
+    "attempt-run-recovery-ticket-apply",
     "attempt-run-recovery-ticket-intent",
     "attempt-run-followup-decision",
     "attempt-run-readout",
@@ -100,6 +102,8 @@ def _handle_attempt_family_output(
         return handle_attempt_intervention_followup_decision_output(args, print_json=print_json)
     if args.output == "attempt-run-intervention-readout":
         return handle_attempt_intervention_run_readout_output(args, print_json=print_json)
+    if args.output == "attempt-run-recovery-ticket-apply":
+        return handle_attempt_recovery_ticket_apply_output(args, print_json=print_json)
     if args.output == "attempt-run-recovery-ticket-intent":
         return handle_attempt_recovery_ticket_intent_output(args, print_json=print_json)
     if args.output == "attempt-route-auto-apply":

@@ -72,6 +72,7 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
             "attempt-run-intervention-followup-decision",
             "attempt-run-intervention-plan",
             "attempt-run-intervention-readout",
+            "attempt-run-recovery-ticket-apply",
             "attempt-run-recovery-ticket-intent",
             "attempt-run-readout",
             "action-route-preflight",
@@ -91,6 +92,7 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
             "attempt context then applies the route, attempt-run-followup-decision reads attempt runs and "
             "emits a policy decision, attempt-run-intervention-apply applies a safe intervention plan, "
             "attempt-run-intervention-followup-decision emits the next intervention decision, "
+            "attempt-run-recovery-ticket-apply writes a ready recovery ticket intent, "
             "attempt-run-recovery-ticket-intent emits a no-side-effect recovery ticket intent, "
             "attempt-run-intervention-plan emits a no-side-effect intervention plan, "
             "attempt-run-readout reads recorded attempt runs, action-route-preflight "
