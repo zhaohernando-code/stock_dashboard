@@ -8,6 +8,10 @@ from ashare_evidence.contract_registry import DEFAULT_REGISTRY_PATH, check_contr
 from ashare_evidence.policy_audit import assert_policy_audit, write_policy_audit_report
 from ashare_evidence.process_hardening import parse_line_budget, run_process_hardening_check
 from ashare_evidence.process_hardening_evidence import check_required_evidence, parse_required_evidence
+from ashare_evidence.process_hardening_line_margin import (
+    check_line_budget_warning_margins,
+    parse_line_budget_warning_margin,
+)
 from ashare_evidence.process_hardening_source import check_forbidden_source_tokens, parse_forbidden_source_token
 
 
@@ -35,6 +39,7 @@ def add_governance_parsers(subparsers: Any) -> None:
     )
     process_hardening_check.add_argument("--evaluation-doc", action="append", required=True)
     process_hardening_check.add_argument("--line-budget", action="append", required=True)
+    process_hardening_check.add_argument("--line-budget-warning-margin", action="append", default=[])
     process_hardening_check.add_argument("--required-evidence", action="append", default=[])
     process_hardening_check.add_argument("--forbidden-source-token", action="append", default=[])
     process_hardening_check.add_argument("--fail-on-warning", action="store_true")
@@ -100,6 +105,13 @@ def handle_process_hardening_check_command(args: Any) -> int:
         _print_json(_parse_error_payload("required_evidence_parse_error", exc))
         return 1
     try:
+        warning_margins = [
+            parse_line_budget_warning_margin(raw_value) for raw_value in args.line_budget_warning_margin
+        ]
+    except ValueError as exc:
+        _print_json(_parse_error_payload("line_budget_warning_margin_parse_error", exc))
+        return 1
+    try:
         forbidden_source_tokens = [
             parse_forbidden_source_token(raw_value) for raw_value in args.forbidden_source_token
         ]
@@ -114,8 +126,14 @@ def handle_process_hardening_check_command(args: Any) -> int:
         git_root=args.git_root,
     )
     evidence_payload = check_required_evidence(required_evidence)
+    margin_payload = check_line_budget_warning_margins(payload["line_budgets"], warning_margins)
     source_payload = check_forbidden_source_tokens(forbidden_source_tokens)
-    issues = [*payload["issues"], *evidence_payload["issues"], *source_payload["issues"]]
+    issues = [
+        *payload["issues"],
+        *evidence_payload["issues"],
+        *margin_payload["issues"],
+        *source_payload["issues"],
+    ]
     has_error = any(issue["severity"] == "error" for issue in issues)
     has_warning = any(issue["severity"] == "warning" for issue in issues)
     payload = {
@@ -124,6 +142,7 @@ def handle_process_hardening_check_command(args: Any) -> int:
         "issue_count": len(issues),
         "issues": issues,
         "required_evidence": evidence_payload["required_evidence"],
+        "line_budget_warning_margins": margin_payload["line_budget_warning_margins"],
         "forbidden_source_tokens": source_payload["forbidden_source_tokens"],
     }
     _print_json(payload)
@@ -142,5 +161,6 @@ def _parse_error_payload(code: str, exc: ValueError) -> dict[str, Any]:
         "checked_docs": [],
         "line_budgets": [],
         "required_evidence": [],
+        "line_budget_warning_margins": [],
         "forbidden_source_tokens": [],
     }
