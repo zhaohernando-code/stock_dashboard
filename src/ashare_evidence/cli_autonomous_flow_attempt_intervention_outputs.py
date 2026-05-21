@@ -7,6 +7,9 @@ from ashare_evidence.scheduler_attempt_run_followup_policy import decide_phase5_
 from ashare_evidence.scheduler_attempt_run_intervention_executor import (
     apply_phase5_scheduler_attempt_run_intervention,
 )
+from ashare_evidence.scheduler_attempt_run_intervention_followup_policy import (
+    decide_phase5_scheduler_attempt_intervention_followup,
+)
 from ashare_evidence.scheduler_attempt_run_intervention_plan import plan_phase5_scheduler_attempt_run_intervention
 from ashare_evidence.scheduler_attempt_run_intervention_readout import (
     read_phase5_scheduler_attempt_intervention_run_readout,
@@ -28,6 +31,21 @@ def handle_attempt_intervention_run_readout_output(
         root=args.artifact_root,
     )
     print_json(readout.model_dump(mode="json"))
+    return 0
+
+
+def handle_attempt_intervention_followup_decision_output(
+    args: Namespace,
+    *,
+    print_json: Any,
+) -> int:
+    readout = read_phase5_scheduler_attempt_intervention_run_readout(
+        cycle_id=args.cycle_id,
+        runner_id=args.runner_id,
+        root=args.artifact_root,
+    )
+    decision = decide_phase5_scheduler_attempt_intervention_followup(readout)
+    print_json(decision.model_dump(mode="json"))
     return 0
 
 
