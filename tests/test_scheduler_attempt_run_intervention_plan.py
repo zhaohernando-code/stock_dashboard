@@ -31,6 +31,7 @@ def test_intervention_plan_records_recovery_diagnostic_for_blocked_latest() -> N
     assert plan.planned_side_effect == "scheduler_diagnostic"
     assert plan.reason_code == "latest_attempt_blocked"
     assert plan.source_latest_run_id == "run-blocked"
+    assert plan.source_latest_issued_at == "2026-05-21T12:00:00Z"
     assert plan.required_arguments == ("cycle_id", "diagnostic_id", "observed_at")
     assert plan.missing_arguments == ()
     assert plan.blocking_reasons == ["latest attempt run is blocked: run-blocked"]

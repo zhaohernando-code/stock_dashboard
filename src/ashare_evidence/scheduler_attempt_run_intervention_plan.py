@@ -34,6 +34,7 @@ class Phase5SchedulerAttemptRunInterventionPlan(BaseModel):
     planned_side_effect: AttemptRunPlannedSideEffect
     reason_code: AttemptRunFollowupReasonCode
     source_latest_run_id: str | None = None
+    source_latest_issued_at: str | None = None
     source_total_runs: int = Field(ge=0)
     required_arguments: tuple[str, ...] = Field(default_factory=tuple)
     missing_arguments: tuple[str, ...] = Field(default_factory=tuple)
@@ -104,6 +105,7 @@ def _plan(
         planned_side_effect=planned_side_effect,
         reason_code=decision.reason_code,
         source_latest_run_id=decision.source_latest_run_id,
+        source_latest_issued_at=readout.latest_issued_at,
         source_total_runs=decision.source_total_runs,
         required_arguments=required_arguments,
         missing_arguments=missing_arguments,

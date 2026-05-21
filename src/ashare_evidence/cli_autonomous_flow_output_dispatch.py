@@ -16,6 +16,7 @@ from ashare_evidence.cli_autonomous_flow_attempt_outputs import (
 )
 from ashare_evidence.cli_autonomous_flow_attempt_readout_outputs import (
     handle_attempt_run_followup_decision_output,
+    handle_attempt_run_intervention_apply_output,
     handle_attempt_run_intervention_plan_output,
     handle_attempt_run_readout_output,
 )
@@ -54,6 +55,7 @@ _ACTION_OUTPUTS = {
 _ATTEMPT_OUTPUTS = {
     "attempt-context",
     "attempt-route-auto-apply",
+    "attempt-run-intervention-apply",
     "attempt-run-intervention-plan",
     "attempt-run-followup-decision",
     "attempt-run-readout",
@@ -95,6 +97,8 @@ def _handle_attempt_family_output(
         )
     if args.output == "attempt-run-readout":
         return handle_attempt_run_readout_output(args, print_json=print_json)
+    if args.output == "attempt-run-intervention-apply":
+        return handle_attempt_run_intervention_apply_output(args, print_json=print_json)
     if args.output == "attempt-run-intervention-plan":
         return handle_attempt_run_intervention_plan_output(args, print_json=print_json)
     return handle_attempt_run_followup_decision_output(args, print_json=print_json)
