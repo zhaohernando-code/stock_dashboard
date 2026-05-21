@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "phase5_scheduler_attempt_run.schema.json",
+  "title": "Phase 5 Scheduler Attempt Run",
+  "type": "object",
+  "required": [
+    "artifact_family",
+    "schema_version",
+    "run_id",
+    "attempt_id",
+    "cycle_id",
+    "runner_id",
+    "issued_at",
+    "attempt_status",
+    "route_type",
+    "preflight_status",
+    "apply_status",
+    "applied_output",
+    "required_arguments",
+    "missing_arguments",
+    "diagnostic_id",
+    "execution_id",
+    "idempotency_key",
+    "cycle_event_recorded",
+    "reason",
+    "error_type",
+    "blocking_reasons",
+    "event_refs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "artifact_family": {
+      "const": "phase5_scheduler_attempt_run"
+    },
+    "schema_version": {
+      "const": "v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "attempt_id": {
+      "type": ["string", "null"]
+    },
+    "cycle_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "runner_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "issued_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "attempt_status": {
+      "type": "string",
+      "enum": ["ready", "blocked"]
+    },
+    "route_type": {
+      "type": "string",
+      "enum": ["wait_for_next_tick", "terminal", "diagnostic_output", "execution_output"]
+    },
+    "preflight_status": {
+      "type": "string",
+      "enum": ["ready", "blocked"]
+    },
+    "apply_status": {
+      "type": "string",
+      "enum": ["applied", "blocked", "skipped"]
+    },
+    "applied_output": {
+      "type": "string",
+      "enum": ["none", "diagnostic", "execution"]
+    },
+    "required_arguments": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "missing_arguments": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "diagnostic_id": {
+      "type": ["string", "null"]
+    },
+    "execution_id": {
+      "type": ["string", "null"]
+    },
+    "idempotency_key": {
+      "type": ["string", "null"]
+    },
+    "cycle_event_recorded": {
+      "type": "boolean"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "blocking_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "event_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "phase5.scheduler.attempt_run.recorded.v1"
+      },
+      "uniqueItems": true
+    }
+  }
+}
