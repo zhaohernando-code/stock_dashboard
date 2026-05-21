@@ -26,7 +26,10 @@ from ashare_evidence.cli_autonomous_flow_attempt_readout_outputs import (
     handle_attempt_run_followup_decision_output,
     handle_attempt_run_readout_output,
 )
-from ashare_evidence.cli_autonomous_flow_auto_progress_outputs import handle_attempt_run_auto_progress_plan_output
+from ashare_evidence.cli_autonomous_flow_auto_progress_outputs import (
+    handle_attempt_run_auto_progress_apply_output,
+    handle_attempt_run_auto_progress_plan_output,
+)
 from ashare_evidence.cli_autonomous_flow_diagnostic_outputs import handle_diagnostic_output
 from ashare_evidence.cli_autonomous_flow_execution_outputs import (
     handle_execution_output,
@@ -66,6 +69,7 @@ _ACTION_OUTPUTS = {
 _ATTEMPT_OUTPUTS = {
     "attempt-context",
     "attempt-route-auto-apply",
+    "attempt-run-auto-progress-apply",
     "attempt-run-auto-progress-plan",
     "attempt-run-intervention-followup-decision",
     "attempt-run-intervention-readout",
@@ -106,6 +110,8 @@ def _handle_attempt_family_output(
 ) -> int:
     if args.output == "attempt-context":
         return handle_attempt_context_output(args, print_json=print_json)
+    if args.output == "attempt-run-auto-progress-apply":
+        return handle_attempt_run_auto_progress_apply_output(args, print_json=print_json)
     if args.output == "attempt-run-auto-progress-plan":
         return handle_attempt_run_auto_progress_plan_output(args, print_json=print_json)
     if args.output == "attempt-run-intervention-followup-decision":
