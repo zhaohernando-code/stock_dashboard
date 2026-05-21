@@ -56,7 +56,6 @@ import type {
   ModelApiKeyView,
   ManualSimulationOrderRequest,
   OperationsDashboardResponse,
-  Phase5WorkbenchProjectionManifest,
   OperationsLaunchReadinessView,
   OperationsResearchValidationView,
   PortfolioNavPointView,
@@ -91,7 +90,6 @@ import { buildCandidateColumns } from "./components/CandidateColumns";
 import { buildReplayColumns } from "./components/ReplayColumns";
 import { buildAddWatchlistOverlay } from "./components/AddWatchlistOverlay";
 import { buildOperationsTabs } from "./components/OperationsTabs";
-import { WorkbenchProjectionPanel } from "./components/WorkbenchProjectionPanel";
 import { MobileAppShell } from "./components/mobile/MobileAppShell";
 import { MobileManualOrderModal } from "./components/mobile/MobileManualOrderModal";
 import { readAnalysisModelPreference, selectMobileAnalysisModel } from "./components/mobile/modelSelection";
@@ -206,9 +204,6 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   const [stockActiveTab, setStockActiveTab] = useState("signals");
   const [dashboard, setDashboard] = useState<StockDashboardResponse | null>(null);
   const [operations, setOperations] = useState<OperationsDashboardResponse | null>(null);
-  const [workbenchProjection, setWorkbenchProjection] = useState<Phase5WorkbenchProjectionManifest | null>(null);
-  const [workbenchProjectionLoading, setWorkbenchProjectionLoading] = useState(false);
-  const [workbenchProjectionError, setWorkbenchProjectionError] = useState<string | null>(null);
   const [simulation, setSimulation] = useState<SimulationWorkspaceResponse | null>(null);
   const [simulationConfigDraft, setSimulationConfigDraft] = useState<SimulationConfigRequest | null>(null);
   const [operationsDetailSectionsLoaded, setOperationsDetailSectionsLoaded] = useState<string[]>([]);
@@ -519,13 +514,11 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     if (!canUseOperations) {
       setOperations(null);
       setSimulation(null);
-      setWorkbenchProjection(null);
       setOperationsError("当前账号无运营复盘权限。");
       return;
     }
     setOperationsLoading(true);
     setOperationsError(null);
-    void loadWorkbenchProjection();
 
     const maxRetries = 2;
     let lastError: unknown;
@@ -564,20 +557,6 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     const fallbackMessage = lastError instanceof Error ? lastError.message : "加载运营复盘工作区失败。";
     setOperationsError(fallbackMessage);
     setOperationsLoading(false);
-  }
-
-  async function loadWorkbenchProjection(refresh = false): Promise<void> {
-    setWorkbenchProjectionLoading(true);
-    setWorkbenchProjectionError(null);
-    try {
-      const result = await api.getOperationsWorkbenchProjection({ refresh });
-      setWorkbenchProjection(result.data);
-      setSourceInfo((current) => mergeSourceInfo(current, result.source));
-    } catch (loadError) {
-      setWorkbenchProjectionError(loadError instanceof Error ? loadError.message : "加载运行工作台状态失败。");
-    } finally {
-      setWorkbenchProjectionLoading(false);
-    }
   }
 
   async function loadScheduledRefreshStatus(): Promise<void> {
@@ -758,7 +737,6 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       setImprovementSuggestionFilter(null);
       setOperationsFocusSymbol(null);
       setOperationsError(null);
-      setWorkbenchProjectionError(null);
       return;
     }
     let cancelled = false;
@@ -767,7 +745,6 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     setOperationsDetailSectionsLoaded([]);
     setImprovementSuggestionFilter(null);
     setOperationsError(null);
-    setWorkbenchProjectionError(null);
     void (async () => {
       await loadDetailData(selectedSymbol);
       if (cancelled) {
@@ -2063,9 +2040,6 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
           operationsLoading={operationsLoading}
           error={error}
           operationsError={operationsError}
-          workbenchProjection={workbenchProjection}
-          workbenchProjectionLoading={workbenchProjectionLoading}
-          workbenchProjectionError={workbenchProjectionError}
           candidateRows={candidateRows}
           activeRow={activeRow}
           selectedSymbol={selectedSymbol}
@@ -2112,7 +2086,6 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
               void loadOperationsData(selectedSymbol);
             }
           }}
-          onRefreshWorkbenchProjection={() => void loadWorkbenchProjection(true)}
         />
         <MobileManualOrderModal
           open={Boolean(orderModalSymbol && simulation)}
@@ -2636,13 +2609,6 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                     action={selectedSymbol ? <Button size="small" onClick={() => void loadOperationsData(selectedSymbol)}>重试</Button> : undefined}
                   />
                 ) : null}
-
-                <WorkbenchProjectionPanel
-                  projection={workbenchProjection}
-                  loading={workbenchProjectionLoading}
-                  error={workbenchProjectionError}
-                  onRefresh={() => void loadWorkbenchProjection(true)}
-                />
 
                 <Row gutter={[16, 16]}>
                   <Col xs={24} md={12} xl={6}>

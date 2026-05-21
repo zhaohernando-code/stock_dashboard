@@ -12,7 +12,6 @@ import {
   valueTone,
 } from "../../utils/format";
 import { sanitizeDisplayText } from "../../utils/labels";
-import { WorkbenchProjectionPanel } from "../WorkbenchProjectionPanel";
 import type { MobileAppShellProps } from "./types";
 
 type TrackKey = "manual" | "model";
@@ -106,14 +105,6 @@ export function MobileOperations(props: MobileAppShellProps) {
           action={<Button size="small" onClick={() => void props.onLoadOperations()}>重试</Button>}
         />
       ) : null}
-
-      <WorkbenchProjectionPanel
-        projection={props.workbenchProjection}
-        loading={props.workbenchProjectionLoading}
-        error={props.workbenchProjectionError}
-        isMobile
-        onRefresh={props.onRefreshWorkbenchProjection}
-      />
 
       {simulation && activeTrack ? (
         <>

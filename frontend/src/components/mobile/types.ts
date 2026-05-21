@@ -5,7 +5,6 @@ import type {
   DataSourceInfo,
   ModelApiKeyView,
   OperationsDashboardResponse,
-  Phase5WorkbenchProjectionManifest,
   RuntimeOverviewResponse,
   RuntimeSettingsResponse,
   ScheduledRefreshStatusView,
@@ -35,9 +34,6 @@ export interface MobileAppShellProps {
   selectedSymbol: string | null;
   dashboard: StockDashboardResponse | null;
   operations: OperationsDashboardResponse | null;
-  workbenchProjection: Phase5WorkbenchProjectionManifest | null;
-  workbenchProjectionLoading: boolean;
-  workbenchProjectionError: string | null;
   simulation: SimulationWorkspaceResponse | null;
   sourceInfo: DataSourceInfo;
   runtimeSettings: RuntimeSettingsResponse | null;
@@ -70,7 +66,6 @@ export interface MobileAppShellProps {
   onCopyPrompt: () => void | Promise<void>;
   onSwitchAccount?: (targetLogin: string) => void | Promise<void>;
   onLoadOperations: () => void | Promise<void>;
-  onRefreshWorkbenchProjection: () => void | Promise<void>;
   stockPanel?: MobileStockPanelKey;
   setStockPanel?: (panel: MobileStockPanelKey) => void;
 }
