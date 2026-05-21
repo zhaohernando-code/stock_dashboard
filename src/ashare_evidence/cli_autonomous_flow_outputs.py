@@ -13,7 +13,10 @@ from ashare_evidence.cli_autonomous_flow_action_outputs import (
     handle_action_route_output,
     handle_action_route_preflight_output,
 )
-from ashare_evidence.cli_autonomous_flow_attempt_outputs import handle_attempt_context_output
+from ashare_evidence.cli_autonomous_flow_attempt_outputs import (
+    handle_attempt_context_output,
+    handle_attempt_route_auto_apply_output,
+)
 from ashare_evidence.cli_autonomous_flow_diagnostic_outputs import handle_diagnostic_output
 from ashare_evidence.cli_autonomous_flow_execution_outputs import (
     handle_execution_output,
@@ -33,6 +36,7 @@ class Phase5LocalCycleStepHandlers:
     preflight_scheduler_action_route: Callable[..., Any]
     apply_scheduler_action_route: Callable[..., Any]
     bind_and_apply_scheduler_action_route: Callable[..., Any]
+    build_attempt_context_and_apply_scheduler_action_route: Callable[..., Any]
     run_service: Callable[..., Any]
 
 
@@ -85,6 +89,14 @@ def handle_phase5_local_cycle_step_output(
 
     if args.output == "action-route-auto-apply":
         return handle_action_route_auto_apply_output(
+            args,
+            handlers,
+            run_tick_from_args=_run_tick_from_args,
+            print_json=_print_json,
+        )
+
+    if args.output == "attempt-route-auto-apply":
+        return handle_attempt_route_auto_apply_output(
             args,
             handlers,
             run_tick_from_args=_run_tick_from_args,

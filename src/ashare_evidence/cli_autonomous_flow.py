@@ -4,6 +4,9 @@ import argparse
 from pathlib import Path
 
 from ashare_evidence.autonomous_flow_scheduler_action_executor import execute_phase5_scheduler_noop_action
+from ashare_evidence.autonomous_flow_scheduler_action_route_attempt_auto_apply import (
+    build_attempt_context_and_apply_phase5_scheduler_action_route,
+)
 from ashare_evidence.autonomous_flow_scheduler_action_route_auto_apply import (
     bind_and_apply_phase5_scheduler_action_route,
 )
@@ -59,6 +62,7 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
             "action-route",
             "action-route-apply",
             "action-route-auto-apply",
+            "attempt-route-auto-apply",
             "action-route-preflight",
             "attempt-context",
             "full",
@@ -71,9 +75,10 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
             "scheduler execution ledger, action executes an observe-only contract action, "
             "action-route routes that observe-only action result, action-route-apply applies the "
             "ready route through the core apply layer, action-route-auto-apply binds scheduler "
-            "attempt arguments then applies the route, action-route-preflight checks route arguments, "
-            "attempt-context builds an explicit scheduler attempt context, full emits the service "
-            "result for debugging."
+            "attempt arguments then applies the route, attempt-route-auto-apply builds an explicit "
+            "attempt context then applies the route, action-route-preflight checks route arguments, "
+            "attempt-context builds an explicit scheduler attempt context, full emits the service result "
+            "for debugging."
         ),
     )
 
@@ -92,6 +97,9 @@ def handle_phase5_local_cycle_step_command(args: argparse.Namespace) -> int:
             preflight_scheduler_action_route=preflight_phase5_scheduler_action_route,
             apply_scheduler_action_route=apply_phase5_scheduler_action_route,
             bind_and_apply_scheduler_action_route=bind_and_apply_phase5_scheduler_action_route,
+            build_attempt_context_and_apply_scheduler_action_route=(
+                build_attempt_context_and_apply_phase5_scheduler_action_route
+            ),
             run_service=run_phase5_local_cycle_service,
         ),
     )
