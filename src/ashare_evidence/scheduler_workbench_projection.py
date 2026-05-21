@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ashare_evidence.artifact_store_core import DEFAULT_ARTIFACT_ROOT, artifact_path
-from ashare_evidence.autonomous_flow_artifacts import Phase5CycleLedgerArtifact
 from ashare_evidence.research_artifact_store import (
     read_phase5_cycle_ledger_artifact_if_exists,
     read_phase5_recovery_ticket_artifact_if_exists,
@@ -76,26 +73,10 @@ class Phase5WorkbenchProjectionManifest(BaseModel):
 
 def read_phase5_workbench_projection_manifest(
     *,
-    cycle_id: str | None = None,
+    cycle_id: str,
     runner_id: str | None = None,
     root: Path | None = None,
 ) -> Phase5WorkbenchProjectionManifest:
-    cycle_id = cycle_id or resolve_latest_phase5_workbench_cycle_id(root=root)
-    if cycle_id is None:
-        auto_progress = read_phase5_scheduler_auto_progress_run_readout(
-            runner_id=runner_id,
-            root=root,
-        )
-        return _manifest(
-            projection_status="blocked",
-            cycle=Phase5WorkbenchCycleSummary(),
-            recovery=Phase5WorkbenchRecoverySummary(),
-            auto_progress=_auto_progress_summary(auto_progress),
-            missing_refs=["phase5_cycle_ledger:<latest>"],
-            blocking_reasons=["cycle ledger not found: latest"],
-            recommended_next_action="blocked",
-        )
-
     cycle = read_phase5_cycle_ledger_artifact_if_exists(cycle_id, root=root)
     auto_progress = read_phase5_scheduler_auto_progress_run_readout(
         cycle_id=cycle_id,
@@ -145,40 +126,6 @@ def read_phase5_workbench_projection_manifest(
         blocking_reasons=blocking_reasons,
         recommended_next_action=_recommended_next_action(cycle.next_action, projection_status, auto_progress),
     )
-
-
-def resolve_latest_phase5_workbench_cycle_id(*, root: Path | None = None) -> str | None:
-    latest = find_latest_phase5_cycle_ledger_artifact(root=root)
-    return latest.cycle_id if latest else None
-
-
-def find_latest_phase5_cycle_ledger_artifact(
-    *,
-    root: Path | None = None,
-    _default_artifact_root: Path = DEFAULT_ARTIFACT_ROOT,
-) -> Phase5CycleLedgerArtifact | None:
-    artifacts = list_phase5_cycle_ledger_artifacts(root=root, _default_artifact_root=_default_artifact_root)
-    return artifacts[0] if artifacts else None
-
-
-def list_phase5_cycle_ledger_artifacts(
-    *,
-    root: Path | None = None,
-    _default_artifact_root: Path = DEFAULT_ARTIFACT_ROOT,
-) -> list[Phase5CycleLedgerArtifact]:
-    directory = artifact_path(
-        "phase5_cycle_ledger",
-        "_",
-        root=root,
-        default_artifact_root=_default_artifact_root,
-    ).parent
-    if not directory.exists():
-        return []
-    artifacts: list[Phase5CycleLedgerArtifact] = []
-    for path in directory.glob("*.json"):
-        if path.is_file():
-            artifacts.append(Phase5CycleLedgerArtifact.model_validate(json.loads(path.read_text(encoding="utf-8"))))
-    return sorted(artifacts, key=lambda artifact: (artifact.started_at, artifact.cycle_id), reverse=True)
 
 
 def _manifest(

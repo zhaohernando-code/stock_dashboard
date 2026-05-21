@@ -96,26 +96,6 @@ def test_phase5_workbench_projection_api_returns_fallback_and_refresh_cache(
     ]
 
 
-def test_phase5_workbench_projection_api_defaults_to_latest_cycle(tmp_path: Path, monkeypatch) -> None:
-    database_url = f"sqlite:///{tmp_path / 'api-latest.db'}"
-    start_phase5_cycle(
-        cycle_id="cycle-older",
-        trigger="manual",
-        started_at="2026-05-21T09:00:00Z",
-        root=tmp_path,
-    )
-    _seed_workbench_inputs(tmp_path)
-    monkeypatch.setenv("ASHARE_ARTIFACT_ROOT", str(tmp_path))
-
-    client = TestClient(create_app(database_url, enable_background_ops_tick=False))
-    response = client.get("/dashboard/operations/workbench-projection", params={"runner_id": "runner-cp1"})
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["cycle"]["cycle_id"] == "cycle-cp1"
-    assert payload["auto_progress"]["latest_run_id"] == "auto-progress-run-cp1"
-
-
 def test_phase5_workbench_projection_api_blocks_missing_cycle(tmp_path: Path, monkeypatch) -> None:
     database_url = f"sqlite:///{tmp_path / 'api-missing.db'}"
     monkeypatch.setenv("ASHARE_ARTIFACT_ROOT", str(tmp_path))

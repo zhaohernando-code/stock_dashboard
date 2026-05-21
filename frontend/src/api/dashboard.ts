@@ -13,7 +13,7 @@ import type {
 } from "../types";
 
 export interface OperationsWorkbenchProjectionRequest {
-  cycleId?: string | null;
+  cycleId: string;
   runnerId?: string | null;
   refresh?: boolean;
 }
@@ -93,14 +93,12 @@ export function getOperationsDetails(section: string, sampleSymbol: string) {
 }
 
 export function getOperationsWorkbenchProjection(input: OperationsWorkbenchProjectionRequest) {
-  const params = new URLSearchParams();
-  if (input.cycleId) params.set("cycle_id", input.cycleId);
+  const params = new URLSearchParams({ cycle_id: input.cycleId });
   if (input.runnerId) params.set("runner_id", input.runnerId);
   if (input.refresh) params.set("refresh", "true");
-  const query = params.toString();
   return (async () => ({
     data: await request<Phase5WorkbenchProjectionManifest>(
-      `/dashboard/operations/workbench-projection${query ? `?${query}` : ""}`,
+      `/dashboard/operations/workbench-projection?${params.toString()}`,
       undefined,
       operationsDashboardRequestBehavior,
     ),

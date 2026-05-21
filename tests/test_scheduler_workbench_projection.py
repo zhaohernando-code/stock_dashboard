@@ -62,30 +62,6 @@ def test_workbench_projection_degrades_empty_auto_progress_history(tmp_path: Pat
     assert projection.recommended_next_action == "run_auto_progress_plan"
 
 
-def test_workbench_projection_defaults_to_latest_cycle(tmp_path: Path) -> None:
-    start_phase5_cycle(
-        cycle_id="cycle-older",
-        trigger="manual",
-        started_at="2026-05-21T09:00:00Z",
-        root=tmp_path,
-    )
-    _record_cycle_and_ticket(tmp_path)
-    write_phase5_scheduler_auto_progress_run_artifact(_run(), root=tmp_path)
-
-    projection = read_phase5_workbench_projection_manifest(runner_id="runner-co1", root=tmp_path)
-
-    assert projection.cycle.cycle_id == "cycle-co1"
-    assert projection.auto_progress.latest_run_id == "auto-progress-run-co1"
-
-
-def test_workbench_projection_blocks_when_latest_cycle_missing(tmp_path: Path) -> None:
-    projection = read_phase5_workbench_projection_manifest(root=tmp_path)
-
-    assert projection.projection_status == "blocked"
-    assert projection.missing_refs == ["phase5_cycle_ledger:<latest>"]
-    assert projection.recommended_next_action == "blocked"
-
-
 def test_workbench_projection_blocks_missing_ticket_ref(tmp_path: Path) -> None:
     cycle = start_phase5_cycle(
         cycle_id="cycle-co1",
