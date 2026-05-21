@@ -3,10 +3,10 @@
   "reviewed_at": "2026-04-28",
   "files": {
     "frontend/src/App.tsx": {
-      "lines": 3096,
-      "reason": "Main app shell: event-analysis, operations audit, multi-view state, per-section loading skeleton tracking, and scoped cross-view error handling so background stock-detail failures do not bleed into the Short Pick Lab surface. It also reads Short Pick Lab paper-tracking status for the global daily-refresh banner so LLM control batches are not confused with the frozen paper strategy. Mobile UI JSX in dedicated components/mobile/*. Planned refactor deferred. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, paper-tracking/backtest comparison surfaces, and syncing the mobile shell tab from the canonical view so Short Pick Lab deep links render on phones; split remains deferred until the experiment contract stops changing.",
+      "lines": 3138,
+      "reason": "Main app shell: event-analysis, operations audit, multi-view state, per-section loading skeleton tracking, and scoped cross-view error handling so background stock-detail failures do not bleed into the Short Pick Lab surface. It also reads Short Pick Lab paper-tracking status for the global daily-refresh banner so LLM control batches are not confused with the frozen paper strategy. Mobile UI JSX in dedicated components/mobile/*. Planned refactor deferred. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, paper-tracking/backtest comparison surfaces, and syncing the mobile shell tab from the canonical view so Short Pick Lab deep links render on phones; split remains deferred until the experiment contract stops changing. 2026-05-21 review: small growth wires shared WorkbenchProjectionPanel state into PC/mobile operations surfaces while keeping rendering and styles in dedicated files.",
       "status": "planned_refactor",
-      "reviewed_at": "2026-05-11"
+      "reviewed_at": "2026-05-21"
     },
     "frontend/src/styles.css": {
       "lines": 1581,
