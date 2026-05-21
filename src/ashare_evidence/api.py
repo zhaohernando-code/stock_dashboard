@@ -19,7 +19,6 @@ from sqlalchemy.orm import Session
 
 from ashare_evidence.account_space import visible_account_spaces
 from ashare_evidence.api_event import register_event_routes
-from ashare_evidence.api_workbench_projection import register_workbench_projection_routes
 from ashare_evidence.dashboard import (
     get_glossary_entries,
     get_stock_dashboard,
@@ -1144,7 +1143,6 @@ def create_app(
         allow_headers=["*"],
     )
     register_event_routes(app, get_session, require_stock_access, StockAccessContext)
-    register_workbench_projection_routes(app, get_session, require_stock_access)
 
     @app.get("/health")
     def health() -> dict[str, str]:

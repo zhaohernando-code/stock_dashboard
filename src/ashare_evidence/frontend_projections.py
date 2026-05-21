@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
@@ -18,7 +17,6 @@ SHORTPICK_MODEL_FEEDBACK_PROJECTION_KEY = "shortpick_model_feedback:v1"
 OPERATIONS_SUMMARY_PROJECTION_PREFIX = "operations_summary:v1"
 HOME_SHELL_PROJECTION_PREFIX = "home_shell:v1"
 SIMULATION_WORKSPACE_SUMMARY_PROJECTION_PREFIX = "simulation_workspace_summary:v1"
-PHASE5_WORKBENCH_PROJECTION_PREFIX = "phase5_workbench:v1"
 
 
 def operations_summary_projection_key(*, target_login: str, sample_symbol: str) -> str:
@@ -31,10 +29,6 @@ def home_shell_projection_key(*, target_login: str) -> str:
 
 def simulation_workspace_summary_projection_key(*, target_login: str) -> str:
     return f"{SIMULATION_WORKSPACE_SUMMARY_PROJECTION_PREFIX}:{target_login}"
-
-
-def phase5_workbench_projection_key(*, cycle_id: str) -> str:
-    return f"{PHASE5_WORKBENCH_PROJECTION_PREFIX}:{cycle_id}"
 
 
 def stable_payload_fingerprint(payload: Any) -> str:
@@ -324,65 +318,12 @@ def refresh_simulation_workspace_summary_frontend_projection(
     }
 
 
-def build_phase5_workbench_projection_payload(
-    *,
-    cycle_id: str,
-    runner_id: str | None = None,
-    artifact_root: Path | str | None = None,
-) -> dict[str, Any]:
-    from ashare_evidence.scheduler_workbench_projection import read_phase5_workbench_projection_manifest
-
-    manifest = read_phase5_workbench_projection_manifest(
-        cycle_id=cycle_id,
-        runner_id=runner_id,
-        root=Path(artifact_root) if artifact_root is not None else None,
-    )
-    return manifest.model_dump(mode="json")
-
-
-def refresh_phase5_workbench_frontend_projection(
-    session: Session,
-    *,
-    cycle_id: str,
-    runner_id: str | None = None,
-    artifact_root: Path | str | None = None,
-) -> dict[str, Any]:
-    payload = build_phase5_workbench_projection_payload(
-        cycle_id=cycle_id,
-        runner_id=runner_id,
-        artifact_root=artifact_root,
-    )
-    projection = upsert_frontend_projection(
-        session,
-        phase5_workbench_projection_key(cycle_id=cycle_id),
-        projection_group="phase5_workbench",
-        payload=payload,
-        metadata_payload={
-            "source": "read_phase5_workbench_projection_manifest",
-            "usage": "GET /dashboard/operations/workbench-projection",
-            "cycle_id": cycle_id,
-            "runner_id": runner_id,
-        },
-    )
-    return {
-        "projection_key": projection.projection_key,
-        "projection_group": projection.projection_group,
-        "status": projection.status,
-        "generated_at": projection.generated_at.isoformat(),
-        "source_fingerprint": projection.source_fingerprint,
-        "payload_size_bytes": len(json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")),
-    }
-
-
 def refresh_frontend_projections(
     session: Session,
     *,
     projection: str = "all",
     target_login: str = "root",
     sample_symbols: list[str] | None = None,
-    cycle_id: str | None = None,
-    runner_id: str | None = None,
-    artifact_root: Path | str | None = None,
 ) -> dict[str, Any]:
     refreshed: list[dict[str, Any]] = []
     if projection in {"all", "home_shell"}:
@@ -399,17 +340,6 @@ def refresh_frontend_projections(
                 session,
                 target_login=target_login,
                 sample_symbols=sample_symbols,
-            )
-        )
-    if projection == "phase5_workbench":
-        if not cycle_id:
-            raise ValueError("cycle_id is required for phase5_workbench frontend projection")
-        refreshed.append(
-            refresh_phase5_workbench_frontend_projection(
-                session,
-                cycle_id=cycle_id,
-                runner_id=runner_id,
-                artifact_root=artifact_root,
             )
         )
     if not refreshed:
