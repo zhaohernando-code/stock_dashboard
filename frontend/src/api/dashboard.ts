@@ -1,5 +1,22 @@
 import { request, buildSourceInfo, longRunningRequestBehavior, operationsDashboardRequestBehavior } from "./core";
-import type { DashboardShellPayload, WatchlistResponse, CandidateListResponse, GlossaryEntryView, ImprovementSuggestionView, ImprovementSuggestionsPayload, OperationsDashboardResponse, ScheduledRefreshStatusView, StockDashboardResponse } from "../types";
+import type {
+  CandidateListResponse,
+  DashboardShellPayload,
+  GlossaryEntryView,
+  ImprovementSuggestionView,
+  ImprovementSuggestionsPayload,
+  OperationsDashboardResponse,
+  Phase5WorkbenchProjectionManifest,
+  ScheduledRefreshStatusView,
+  StockDashboardResponse,
+  WatchlistResponse,
+} from "../types";
+
+export interface OperationsWorkbenchProjectionRequest {
+  cycleId: string;
+  runnerId?: string | null;
+  refresh?: boolean;
+}
 
 export function loadShellData(): Promise<{ data: DashboardShellPayload; source: ReturnType<typeof buildSourceInfo> }> {
   return (async () => {
@@ -68,6 +85,20 @@ export function getOperationsDetails(section: string, sampleSymbol: string) {
     data: await request<Record<string, any>>(
       '/dashboard/operations/details?section=' + encodeURIComponent(section) +
         '&sample_symbol=' + encodeURIComponent(sampleSymbol),
+      undefined,
+      operationsDashboardRequestBehavior,
+    ),
+    source: buildSourceInfo(),
+  }))();
+}
+
+export function getOperationsWorkbenchProjection(input: OperationsWorkbenchProjectionRequest) {
+  const params = new URLSearchParams({ cycle_id: input.cycleId });
+  if (input.runnerId) params.set("runner_id", input.runnerId);
+  if (input.refresh) params.set("refresh", "true");
+  return (async () => ({
+    data: await request<Phase5WorkbenchProjectionManifest>(
+      `/dashboard/operations/workbench-projection?${params.toString()}`,
       undefined,
       operationsDashboardRequestBehavior,
     ),
