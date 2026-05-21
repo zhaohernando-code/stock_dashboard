@@ -70,6 +70,7 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
             "attempt-run-followup-decision",
             "attempt-run-intervention-apply",
             "attempt-run-intervention-plan",
+            "attempt-run-intervention-readout",
             "attempt-run-readout",
             "action-route-preflight",
             "attempt-context",
@@ -83,7 +84,8 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
             "scheduler execution ledger, action executes an observe-only contract action, "
             "action-route routes that observe-only action result, action-route-apply applies the "
             "ready route through the core apply layer, action-route-auto-apply binds scheduler "
-            "attempt arguments then applies the route, attempt-route-auto-apply builds an explicit "
+            "attempt arguments then applies the route, attempt-run-intervention-readout reads intervention runs, "
+            "attempt-route-auto-apply builds an explicit "
             "attempt context then applies the route, attempt-run-followup-decision reads attempt runs and "
             "emits a policy decision, attempt-run-intervention-apply applies a safe intervention plan, "
             "attempt-run-intervention-plan emits a no-side-effect intervention plan, "
