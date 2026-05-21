@@ -48,6 +48,8 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
     phase5_local_cycle_step.add_argument("--attempt-id", default=None)
     phase5_local_cycle_step.add_argument("--issued-at", default=None)
     phase5_local_cycle_step.add_argument("--runner-id", default=None)
+    phase5_local_cycle_step.add_argument("--record-attempt-run", action="store_true")
+    phase5_local_cycle_step.add_argument("--attempt-run-id", default=None)
     phase5_local_cycle_step.add_argument("--apply-closeout", action="store_true")
     phase5_local_cycle_step.add_argument("--require-publish-verification", action="store_true")
     phase5_local_cycle_step.add_argument(

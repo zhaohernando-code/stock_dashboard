@@ -8,87 +8,37 @@ import pytest
 
 import ashare_evidence.autonomous_flow_scheduler_action_route_attempt_auto_apply as attempt_auto_apply
 import ashare_evidence.cli as cli_module
-import ashare_evidence.cli_autonomous_flow as cli_autonomous_flow
+import ashare_evidence.cli_autonomous_flow_attempt_outputs as attempt_outputs
 from tests.helpers_cli_autonomous_flow import (
     _args,
     _assert_rich_tick_args,
-    _FakePlanResult,
-    _FakeTickResult,
     _ok_tick_result,
     _plan_result,
 )
-from tests.helpers_cli_autonomous_flow_attempt_route import _apply_result, _FakeResult, _files_under, _result
+from tests.helpers_cli_autonomous_flow_attempt_recording import (
+    _attempt_record_handlers,
+    _real_apply_result,
+    _run_default_attempt_route_auto_apply,
+)
+from tests.helpers_cli_autonomous_flow_attempt_route import _files_under, _result
 from tests.helpers_cli_autonomous_flow_smoke import _guard_init_database
 
 
 @pytest.mark.parametrize(("status", "exit_code"), [("applied", 0), ("skipped", 0), ("blocked", 4)])
-def test_attempt_route_auto_apply_output_builds_context_then_applies(
+def test_attempt_route_auto_apply_output_default_does_not_record_attempt_run(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     status: str,
     exit_code: int,
 ) -> None:
-    calls: list[str] = []
-    tick_calls: list[dict[str, Any]] = []
-    apply_inputs: list[dict[str, Any]] = []
-    artifact_root = Path("tmp/artifacts")
+    artifact_root = tmp_path / "artifacts"
+    run = _run_default_attempt_route_auto_apply(monkeypatch, artifact_root, status=status)
 
-    def fake_tick(**kwargs: Any) -> _FakeTickResult:
-        calls.append("tick")
-        tick_calls.append(kwargs)
-        return _ok_tick_result(kwargs["cycle_id"])
-
-    def fake_plan(tick_result: _FakeTickResult) -> _FakePlanResult:
-        calls.append("plan")
-        return _plan_result(cycle_id=tick_result.payload["cycle_id"], action="retry_failed_step")
-
-    def fake_action(plan: _FakePlanResult) -> _FakeResult:
-        calls.append("action")
-        return _result(cycle_id=plan.payload["cycle_id"], action=plan.payload["action"])
-
-    def fake_route(action_result: _FakeResult) -> _FakeResult:
-        calls.append("route")
-        return _result(cycle_id=action_result.payload["cycle_id"], route_type="execution_output")
-
-    def fake_attempt_apply(plan: _FakePlanResult, route: _FakeResult, **kwargs: Any) -> _FakeResult:
-        calls.append("attempt-apply")
-        apply_inputs.append({"plan": plan.payload, "route": route.payload, **kwargs})
-        return _apply_result(cycle_id=route.payload["cycle_id"], status=status)
-
-    def fail_unexpected(*_args: Any, **_kwargs: Any) -> object:
-        raise AssertionError("attempt-route-auto-apply output called an unexpected handler")
-
-    monkeypatch.setattr(cli_autonomous_flow, "run_phase5_local_cycle_tick", fake_tick)
-    monkeypatch.setattr(cli_autonomous_flow, "plan_phase5_scheduler_followup", fake_plan)
-    monkeypatch.setattr(cli_autonomous_flow, "execute_phase5_scheduler_noop_action", fake_action)
-    monkeypatch.setattr(cli_autonomous_flow, "route_phase5_scheduler_action_result", fake_route)
-    monkeypatch.setattr(
-        cli_autonomous_flow,
-        "build_attempt_context_and_apply_phase5_scheduler_action_route",
-        fake_attempt_apply,
-    )
-    monkeypatch.setattr(cli_autonomous_flow, "bind_and_apply_phase5_scheduler_action_route", fail_unexpected)
-
-    result = cli_autonomous_flow.handle_phase5_local_cycle_step_command(
-        _args(
-            output="attempt-route-auto-apply",
-            cycle_id="cycle-attempt-apply",
-            gate_id="gate-1",
-            recovery_ticket_id="ticket-1",
-            projection_id="projection-1",
-            finished_at="2026-05-20T10:00:00Z",
-            issued_at="2026-05-21T10:00:00Z",
-            runner_id="runner-bm1",
-            apply_closeout=True,
-            require_publish_verification=True,
-            artifact_root=artifact_root,
-        )
-    )
-
-    assert result == exit_code
-    assert calls == ["tick", "plan", "action", "route", "attempt-apply"]
-    _assert_rich_tick_args(tick_calls, cycle_id="cycle-attempt-apply", root=artifact_root)
-    assert apply_inputs == [
+    assert run["result"] == exit_code
+    assert run["calls"] == ["tick", "plan", "action", "route", "attempt-apply"]
+    _assert_rich_tick_args(run["tick_calls"], cycle_id="cycle-attempt-apply", root=artifact_root)
+    assert run["apply_inputs"] == [
         {
             "plan": _plan_result(cycle_id="cycle-attempt-apply", action="retry_failed_step").payload,
             "route": _result(cycle_id="cycle-attempt-apply", route_type="execution_output").payload,
@@ -98,6 +48,7 @@ def test_attempt_route_auto_apply_output_builds_context_then_applies(
         }
     ]
     assert json.loads(capsys.readouterr().out)["execution_status"] == status
+    assert _files_under(artifact_root) == ()
 
 
 def test_attempt_route_auto_apply_output_blocks_missing_context_before_core_apply(
@@ -136,3 +87,58 @@ def test_attempt_route_auto_apply_output_blocks_missing_context_before_core_appl
     assert payload["preflight_status"] == "blocked"
     assert payload["attempt_id"] is None
     assert payload["missing_arguments"] == ["issued_at"]
+
+
+def test_attempt_route_auto_apply_output_records_attempt_run_when_enabled(tmp_path: Path) -> None:
+    printed: list[dict[str, Any]] = []
+    apply_result = _real_apply_result(cycle_id="cycle-record-enabled")
+
+    exit_code = attempt_outputs.handle_attempt_route_auto_apply_output(
+        _args(
+            output="attempt-route-auto-apply",
+            artifact_root=tmp_path,
+            issued_at="2026-05-21T10:00:00Z",
+            runner_id="runner-bs1",
+            record_attempt_run=True,
+            attempt_run_id="run-bs1-explicit",
+        ),
+        _attempt_record_handlers(apply_result),
+        run_tick_from_args=lambda args, _handlers: _ok_tick_result(args.cycle_id),
+        print_json=printed.append,
+    )
+
+    artifact_path = tmp_path / "autonomous_flow" / "phase5_scheduler_attempt_run" / "run-bs1-explicit.json"
+    assert exit_code == 0
+    assert len(printed) == 1
+    assert printed[0]["apply_result"] == apply_result.model_dump(mode="json")
+    assert printed[0]["attempt_run_record_status"] == "recorded"
+    assert printed[0]["attempt_run_artifact"]["run_id"] == "run-bs1-explicit"
+    assert printed[0]["attempt_run_artifact_path"] == str(artifact_path)
+    assert json.loads(artifact_path.read_text(encoding="utf-8"))["run_id"] == "run-bs1-explicit"
+
+
+def test_attempt_route_auto_apply_output_record_blocks_missing_precondition(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    printed: list[dict[str, Any]] = []
+    apply_result = _real_apply_result(cycle_id="cycle-record-blocked", status="blocked")
+
+    def fail_record(*_args: Any, **_kwargs: Any) -> object:
+        raise AssertionError("recorder must not run without required context")
+
+    monkeypatch.setattr(attempt_outputs, "record_phase5_scheduler_attempt_run_artifact", fail_record)
+
+    exit_code = attempt_outputs.handle_attempt_route_auto_apply_output(
+        _args(output="attempt-route-auto-apply", artifact_root=tmp_path, record_attempt_run=True),
+        _attempt_record_handlers(apply_result),
+        run_tick_from_args=lambda args, _handlers: _ok_tick_result(args.cycle_id),
+        print_json=printed.append,
+    )
+
+    assert exit_code == 4
+    assert printed[0]["attempt_run_record_status"] == "blocked"
+    assert printed[0]["attempt_run_artifact"] is None
+    assert printed[0]["attempt_run_artifact_path"] is None
+    assert printed[0]["attempt_run_record_missing_arguments"] == ["issued_at", "runner_id"]
+    assert _files_under(tmp_path) == ()
