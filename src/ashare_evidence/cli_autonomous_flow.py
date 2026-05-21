@@ -71,6 +71,7 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
             "attempt-route-auto-apply",
             "attempt-run-auto-progress-apply",
             "attempt-run-auto-progress-plan",
+            "attempt-run-auto-progress-readout",
             "attempt-run-followup-decision",
             "attempt-run-intervention-apply",
             "attempt-run-intervention-followup-decision",
@@ -97,7 +98,8 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
             "attempt-route-auto-apply builds an explicit "
             "attempt context then applies the route, attempt-run-auto-progress-apply executes one recommended "
             "auto-progress step, attempt-run-auto-progress-plan reads durable state and "
-            "recommends the next CLI, attempt-run-followup-decision reads attempt runs and "
+            "recommends the next CLI, attempt-run-auto-progress-readout reads auto-progress run history, "
+            "attempt-run-followup-decision reads attempt runs and "
             "emits a policy decision, attempt-run-intervention-apply applies a safe intervention plan, "
             "attempt-run-intervention-followup-decision emits the next intervention decision, "
             "attempt-run-recovery-followup-apply starts a ready recovery follow-up cycle, "

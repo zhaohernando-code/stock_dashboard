@@ -5,6 +5,7 @@ from typing import Any
 
 from ashare_evidence.scheduler_auto_progress_executor import apply_phase5_scheduler_auto_progress_step
 from ashare_evidence.scheduler_auto_progress_plan import read_phase5_scheduler_auto_progress_plan
+from ashare_evidence.scheduler_auto_progress_readout import read_phase5_scheduler_auto_progress_run_readout
 from ashare_evidence.scheduler_auto_progress_recorder import (
     record_phase5_scheduler_auto_progress_run_artifact,
 )
@@ -24,6 +25,20 @@ def handle_attempt_run_auto_progress_plan_output(
     )
     print_json(plan.model_dump(mode="json"))
     return 4 if plan.plan_status == "blocked" else 0
+
+
+def handle_attempt_run_auto_progress_readout_output(
+    args: Namespace,
+    *,
+    print_json: Any,
+) -> int:
+    readout = read_phase5_scheduler_auto_progress_run_readout(
+        cycle_id=args.cycle_id,
+        runner_id=args.runner_id,
+        root=args.artifact_root,
+    )
+    print_json(readout.model_dump(mode="json"))
+    return 0
 
 
 def handle_attempt_run_auto_progress_apply_output(

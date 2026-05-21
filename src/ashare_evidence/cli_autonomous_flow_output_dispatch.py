@@ -29,6 +29,7 @@ from ashare_evidence.cli_autonomous_flow_attempt_readout_outputs import (
 from ashare_evidence.cli_autonomous_flow_auto_progress_outputs import (
     handle_attempt_run_auto_progress_apply_output,
     handle_attempt_run_auto_progress_plan_output,
+    handle_attempt_run_auto_progress_readout_output,
 )
 from ashare_evidence.cli_autonomous_flow_diagnostic_outputs import handle_diagnostic_output
 from ashare_evidence.cli_autonomous_flow_execution_outputs import (
@@ -71,6 +72,7 @@ _ATTEMPT_OUTPUTS = {
     "attempt-route-auto-apply",
     "attempt-run-auto-progress-apply",
     "attempt-run-auto-progress-plan",
+    "attempt-run-auto-progress-readout",
     "attempt-run-intervention-followup-decision",
     "attempt-run-intervention-readout",
     "attempt-run-intervention-apply",
@@ -114,6 +116,8 @@ def _handle_attempt_family_output(
         return handle_attempt_run_auto_progress_apply_output(args, print_json=print_json)
     if args.output == "attempt-run-auto-progress-plan":
         return handle_attempt_run_auto_progress_plan_output(args, print_json=print_json)
+    if args.output == "attempt-run-auto-progress-readout":
+        return handle_attempt_run_auto_progress_readout_output(args, print_json=print_json)
     if args.output == "attempt-run-intervention-followup-decision":
         return handle_attempt_intervention_followup_decision_output(args, print_json=print_json)
     if args.output == "attempt-run-intervention-readout":
