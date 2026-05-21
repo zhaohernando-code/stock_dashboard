@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Phase5SchedulerAttemptInterventionRunArtifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_family",
+    "schema_version",
+    "intervention_run_id",
+    "runner_id",
+    "issued_at",
+    "execution_status",
+    "applied_output",
+    "action",
+    "required_arguments",
+    "missing_arguments",
+    "cycle_event_recorded",
+    "reason",
+    "event_refs"
+  ],
+  "properties": {
+    "artifact_family": { "const": "phase5_scheduler_attempt_intervention_run" },
+    "schema_version": { "const": "v1" },
+    "intervention_run_id": { "type": "string", "minLength": 1 },
+    "cycle_id": { "type": ["string", "null"] },
+    "runner_id": { "type": "string", "minLength": 1 },
+    "issued_at": { "type": "string", "minLength": 1 },
+    "execution_status": { "enum": ["applied", "blocked", "skipped"] },
+    "applied_output": { "enum": ["none", "diagnostic"] },
+    "action": {
+      "enum": [
+        "continue_tracking",
+        "rebuild_projection",
+        "retry_failed_step",
+        "open_recovery_ticket",
+        "block_cycle",
+        "redesign",
+        "none"
+      ]
+    },
+    "diagnostic_id": { "type": ["string", "null"] },
+    "observed_at": { "type": ["string", "null"] },
+    "required_arguments": { "type": "array", "items": { "type": "string" } },
+    "missing_arguments": { "type": "array", "items": { "type": "string" } },
+    "cycle_event_recorded": { "type": "boolean" },
+    "source_latest_run_id": { "type": ["string", "null"] },
+    "reason": { "type": "string" },
+    "error_type": { "type": ["string", "null"] },
+    "event_refs": { "type": "array", "items": { "type": "string" } }
+  }
+}

@@ -85,6 +85,79 @@ def test_attempt_intervention_apply_output_skips_empty_store_without_writing(
     assert not artifact_root.exists()
 
 
+def test_attempt_intervention_apply_output_records_intervention_run_when_enabled(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    artifact_root = tmp_path / "artifacts"
+    _start_cycle(artifact_root, "cycle-intervention")
+    _guard_init_database(monkeypatch)
+    _install_scheduler_handler_guards(monkeypatch)
+    write_phase5_scheduler_attempt_run_artifact(
+        _attempt_run(run_id="run-blocked", attempt_status="blocked", apply_status="blocked"),
+        root=artifact_root,
+    )
+
+    exit_code = cli_module.main(
+        [
+            "phase5-local-cycle-step",
+            "--cycle-id",
+            "cycle-intervention",
+            "--runner-id",
+            "runner-cc1",
+            "--issued-at",
+            "2026-05-21T12:05:00Z",
+            "--artifact-root",
+            str(artifact_root),
+            "--output",
+            "attempt-run-intervention-apply",
+            "--record-intervention-run",
+            "--intervention-run-id",
+            "intervention-run-cli",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    artifact = payload["intervention_run_artifact"]
+    assert exit_code == 0
+    assert payload["intervention_run_record_status"] == "recorded"
+    assert payload["apply_result"]["execution_status"] == "applied"
+    assert artifact["intervention_run_id"] == "intervention-run-cli"
+    assert artifact["runner_id"] == "runner-cc1"
+    assert artifact["issued_at"] == "2026-05-21T12:05:00Z"
+
+
+def test_attempt_intervention_apply_output_record_blocks_missing_context(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    artifact_root = tmp_path / "artifacts"
+    _guard_init_database(monkeypatch)
+    _install_scheduler_handler_guards(monkeypatch)
+
+    exit_code = cli_module.main(
+        [
+            "phase5-local-cycle-step",
+            "--cycle-id",
+            "cycle-empty",
+            "--artifact-root",
+            str(artifact_root),
+            "--output",
+            "attempt-run-intervention-apply",
+            "--record-intervention-run",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["intervention_run_record_status"] == "blocked"
+    assert payload["intervention_run_artifact"] is None
+    assert payload["intervention_run_record_missing_arguments"] == ["issued_at", "runner_id"]
+    assert not artifact_root.exists()
+
+
 def _install_scheduler_handler_guards(monkeypatch) -> None:
     def fail(*_args: Any, **_kwargs: Any) -> object:
         raise AssertionError("attempt-run-intervention-apply must not run scheduler handlers")

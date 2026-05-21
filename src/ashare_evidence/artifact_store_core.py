@@ -25,6 +25,7 @@ ARTIFACT_FOLDERS = {
     "phase5_recovery_ticket": "autonomous_flow/phase5_recovery_ticket",
     "phase5_scheduler_diagnostic": "autonomous_flow/phase5_scheduler_diagnostic",
     "phase5_scheduler_attempt_run": "autonomous_flow/phase5_scheduler_attempt_run",
+    "phase5_scheduler_attempt_intervention_run": "autonomous_flow/phase5_scheduler_attempt_intervention_run",
     "phase5_gate_readout": "autonomous_flow/phase5_gate_readout",
     "frontend_projection_manifest": "autonomous_flow/frontend_projection_manifest",
 }
