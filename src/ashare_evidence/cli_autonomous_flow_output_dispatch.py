@@ -41,6 +41,7 @@ from ashare_evidence.cli_autonomous_flow_recovery_outputs import (
     handle_attempt_recovery_followup_apply_output,
     handle_attempt_recovery_followup_intent_output,
 )
+from ashare_evidence.cli_autonomous_flow_workbench_outputs import handle_attempt_run_workbench_projection_output
 
 
 def handle_secondary_phase5_local_cycle_step_output(
@@ -73,6 +74,7 @@ _ATTEMPT_OUTPUTS = {
     "attempt-run-auto-progress-apply",
     "attempt-run-auto-progress-plan",
     "attempt-run-auto-progress-readout",
+    "attempt-run-workbench-projection",
     "attempt-run-intervention-followup-decision",
     "attempt-run-intervention-readout",
     "attempt-run-intervention-apply",
@@ -118,6 +120,8 @@ def _handle_attempt_family_output(
         return handle_attempt_run_auto_progress_plan_output(args, print_json=print_json)
     if args.output == "attempt-run-auto-progress-readout":
         return handle_attempt_run_auto_progress_readout_output(args, print_json=print_json)
+    if args.output == "attempt-run-workbench-projection":
+        return handle_attempt_run_workbench_projection_output(args, print_json=print_json)
     if args.output == "attempt-run-intervention-followup-decision":
         return handle_attempt_intervention_followup_decision_output(args, print_json=print_json)
     if args.output == "attempt-run-intervention-readout":
