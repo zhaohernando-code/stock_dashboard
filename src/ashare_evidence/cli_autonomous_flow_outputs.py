@@ -12,6 +12,7 @@ from ashare_evidence.cli_autonomous_flow_action_outputs import (
 from ashare_evidence.cli_autonomous_flow_attempt_outputs import (
     handle_attempt_context_output,
     handle_attempt_route_auto_apply_output,
+    handle_attempt_run_readout_output,
 )
 from ashare_evidence.cli_autonomous_flow_diagnostic_outputs import handle_diagnostic_output
 from ashare_evidence.cli_autonomous_flow_execution_outputs import (
@@ -87,6 +88,9 @@ def handle_phase5_local_cycle_step_output(
             run_tick_from_args=run_tick_from_args,
             print_json=print_json,
         )
+
+    if args.output == "attempt-run-readout":
+        return handle_attempt_run_readout_output(args, print_json=print_json)
 
     if args.output == "action-route-preflight":
         return handle_action_route_preflight_output(

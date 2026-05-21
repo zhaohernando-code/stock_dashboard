@@ -65,6 +65,7 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
             "action-route-apply",
             "action-route-auto-apply",
             "attempt-route-auto-apply",
+            "attempt-run-readout",
             "action-route-preflight",
             "attempt-context",
             "full",
@@ -78,9 +79,9 @@ def add_autonomous_flow_parsers(subparsers: argparse._SubParsersAction) -> None:
             "action-route routes that observe-only action result, action-route-apply applies the "
             "ready route through the core apply layer, action-route-auto-apply binds scheduler "
             "attempt arguments then applies the route, attempt-route-auto-apply builds an explicit "
-            "attempt context then applies the route, action-route-preflight checks route arguments, "
-            "attempt-context builds an explicit scheduler attempt context, full emits the service result "
-            "for debugging."
+            "attempt context then applies the route, attempt-run-readout reads recorded attempt runs, "
+            "action-route-preflight checks route arguments, attempt-context builds an explicit scheduler "
+            "attempt context, full emits the service result for debugging."
         ),
     )
 
