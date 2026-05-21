@@ -326,7 +326,7 @@ def refresh_simulation_workspace_summary_frontend_projection(
 
 def build_phase5_workbench_projection_payload(
     *,
-    cycle_id: str,
+    cycle_id: str | None = None,
     runner_id: str | None = None,
     artifact_root: Path | str | None = None,
 ) -> dict[str, Any]:
