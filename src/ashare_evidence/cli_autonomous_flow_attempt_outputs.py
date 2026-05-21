@@ -5,7 +5,6 @@ from collections.abc import Callable
 from typing import Any
 
 from ashare_evidence.autonomous_flow_scheduler_attempt import build_phase5_scheduler_attempt_context
-from ashare_evidence.scheduler_attempt_run_readout import read_phase5_scheduler_attempt_run_readout
 from ashare_evidence.scheduler_attempt_run_recorder import record_phase5_scheduler_attempt_run_artifact
 
 _ACTION_BLOCKED_EXIT_CODE = 4
@@ -24,20 +23,6 @@ def handle_attempt_context_output(
     print_json(result.model_dump(mode="json"))
     if result.status == "blocked":
         return _ACTION_BLOCKED_EXIT_CODE
-    return 0
-
-
-def handle_attempt_run_readout_output(
-    args: Namespace,
-    *,
-    print_json: Any,
-) -> int:
-    readout = read_phase5_scheduler_attempt_run_readout(
-        cycle_id=args.cycle_id,
-        runner_id=args.runner_id,
-        root=args.artifact_root,
-    )
-    print_json(readout.model_dump(mode="json"))
     return 0
 
 
