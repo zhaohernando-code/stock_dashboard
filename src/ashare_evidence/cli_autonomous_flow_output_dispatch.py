@@ -33,6 +33,7 @@ from ashare_evidence.cli_autonomous_flow_execution_outputs import (
 )
 from ashare_evidence.cli_autonomous_flow_output_context import Phase5LocalCycleStepHandlers, run_tick_from_args
 from ashare_evidence.cli_autonomous_flow_recovery_outputs import (
+    handle_attempt_recovery_followup_apply_output,
     handle_attempt_recovery_followup_intent_output,
 )
 
@@ -68,6 +69,7 @@ _ATTEMPT_OUTPUTS = {
     "attempt-run-intervention-readout",
     "attempt-run-intervention-apply",
     "attempt-run-intervention-plan",
+    "attempt-run-recovery-followup-apply",
     "attempt-run-recovery-followup-intent",
     "attempt-run-recovery-ticket-apply",
     "attempt-run-recovery-ticket-intent",
@@ -106,6 +108,8 @@ def _handle_attempt_family_output(
         return handle_attempt_intervention_followup_decision_output(args, print_json=print_json)
     if args.output == "attempt-run-intervention-readout":
         return handle_attempt_intervention_run_readout_output(args, print_json=print_json)
+    if args.output == "attempt-run-recovery-followup-apply":
+        return handle_attempt_recovery_followup_apply_output(args, print_json=print_json)
     if args.output == "attempt-run-recovery-followup-intent":
         return handle_attempt_recovery_followup_intent_output(args, print_json=print_json)
     if args.output == "attempt-run-recovery-ticket-apply":
