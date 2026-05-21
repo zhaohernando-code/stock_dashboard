@@ -1274,6 +1274,20 @@ canonical checkout 中的 `data/artifacts` 改动经抽样确认是正常 phase2
 - 已发布到 runtime，并更新 `output/releases/latest-successful.json`；deploy verifier `19 passed, 0 failed`；localhost 浏览器验证首页实际服务正常。canonical 入口未登录会话返回登录跳转，本轮未越过登录态复验业务页。
 - canonical 中现有 dirty artifact 文件暂未清理或回滚，等待明确批准后再从源码 checkout 移除这些生成产物改动。
 
+[2026-05-21T14:20:00+08:00] Automation-platform host boundary correction:
+本项目被重新确认成“被纳管业务项目”，不是新自动化中台/平台本体的宿主。上一轮把 auto-progress readout 继续推进成 workbench projection、API 和前端工作台，属于把“用 stock_dashboard 做流程试验田”误读成“把平台能力嵌入 stock_dashboard”。这条路线已经停止，并通过非破坏性 revert 撤回相关产品代码。
+
+原因判断
+- 路由惯性：长任务 heartbeat 和本地上下文持续指向 `stock_dashboard`，主进程没有在每轮开始前重新判定目标宿主。
+- 试验田边界不清：流程验证本应输出流程合同、评估和平台接口约束，却被推进成业务项目 runtime 功能。
+- 缺少硬门禁：Context Pack 没有强制写明 `platform_core / managed_project / integration_adapter`，评审也没有把宿主越界当成重跑条件。
+- 主进程责任缺失：子进程执行与评估循环存在，但主进程没有在每轮收口后判断“这是否还在原始目标内”。
+
+固化决策
+- 平台工作台、平台 scheduler 编排、LLM reviewer、CI/CD 门禁、跨项目巡检和多 agent 流程治理必须进入独立平台系统/仓库。
+- `stock_dashboard` 后续只允许保留业务域能力、作为平台流程的 fixture/验收对象，或提供明确的集成适配点；不得承载平台本体 UI/API/状态机。
+- 已撤回的相关提交为 `2c2034b`、`816adeb`、`e0c28e6`、`186c3de`、`c4c6d18`；后续若需要平台 workbench projection，应先创建/切换到平台宿主后重新设计。
+
 [2026-05-18T20:05:00+08:00] Shortpick open-entry line is promoted as frozen candidate v2, not a silent replacement:
 历史回放和首批 live 纸面跟踪都显示，当前低换手上升趋势策略在“次日开盘买入”口径下优于“次日收盘买入”。该差异属于入场价格源变更，不是文案改名，因此不能覆盖现有冻结 v1 的历史连续性。
 

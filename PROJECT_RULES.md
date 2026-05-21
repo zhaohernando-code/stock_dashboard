@@ -4,6 +4,8 @@
 - Keep the canonical project entry docs aligned: `PROJECT_STATUS.json`, `README.md`, `PROJECT_RULES.md`, `DECISIONS.md`, `PROCESS.md`, and `PROJECT_PLAN.md`.
 - Keep the project GitHub-ready and record important changes in `PROCESS.md` with commit IDs.
 - Preserve interoperability with other projects under `~/codex`.
+- This repository is a managed business project, not the automation-platform or middle-office host. Platform workbench, scheduler orchestration, multi-agent reviewer, CI/CD gate, cross-project risk scan, and process-control UI must not be implemented here unless the task is explicitly a stock-dashboard integration adapter.
+- When a task mentions the automation platform, middle office, control plane, multi-agent workflow, or process governance, first classify the target as `platform_core`, `managed_project`, or `integration_adapter`. If the result is `platform_core`, route to the platform system/repository before editing code in this repo.
 - If the project includes a UI, implement it as a TypeScript + React app with a formal framework/toolchain by default.
 - The live deployment model is server entrypoint plus local backend/database/tunnel; do not reintroduce GitHub Pages or browser-side backend configuration as the primary path.
 - The editable repo under `~/codex/projects/stock_dashboard` is not the live runtime. Public service must run from `~/codex/runtime/projects/ashare-dashboard`, and `.codex.deploy.json` plus LaunchAgent paths must stay aligned with that runtime split.

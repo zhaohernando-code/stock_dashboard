@@ -50,6 +50,6 @@
 
 ## 6. 自评
 
-- 本轮完成了 auto-progress 历史的只读 projection 输入，直接服务工作台“状态一览”需求。
-- 读取链路没有执行 apply 或写 artifact，适合作为前端刷新数据源。
-- 下一步建议进入 Trial CO：把 auto-progress readout 与 cycle/recovery 状态组合成 workbench projection manifest，面向 PC/mobile 工作台使用。
+- 本轮完成了 auto-progress 历史的只读 readout，可以作为平台侧工作台“状态一览”的输入候选。
+- 读取链路没有执行 apply 或写 artifact，适合作为后续平台系统读取的只读证据源。
+- 后续不得在 `stock_dashboard` 内继续推进 workbench projection manifest、工作台 API 或前端平台总览；这些属于独立自动化平台本体。若要继续 Trial CO，必须先切换到平台宿主，并只把本项目作为被纳管样本或 fixture。

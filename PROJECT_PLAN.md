@@ -40,6 +40,7 @@
 ## Current Transformation Status
 
 - 为避免把已完成旧步骤误读成当前执行计划，本文件不再保留 legacy delivery snapshot 与已完成 execution checklist；历史收口细节以 `PROCESS.md` 和 `DECISIONS.md` 为准。
+- 本仓库当前只承载 A 股看板业务系统。自动化中台/平台本体的工作台、任务编排、LLM reviewer、CI/CD 门禁和跨项目治理不属于本项目产品范围；本项目最多作为被纳管项目、流程试验 fixture 或明确的集成适配对象。
 - `Phase 0` 研究重置、`Phase 1` contract cleanup 与 `Phase 2 - Research Artifact Producer and Quant Core Rebuild` 已完成；`signal_engine` 已重构为分模块 Phase 2 quant core，manual follow-up 也已落成 durable `manual_review` artifact 流。
 - `Phase 3 - Product Rewrite and User-facing Evidence/Risk Presentation` 已完成：单票、候选、治理与 replay/portfolio 主界面现已以 `core_quant / evidence / risk / historical_validation / manual_llm_review` 和对应的 artifact-backed operations contract 作为主展示语义，legacy compat 字段退回到统一派生壳。
 - `Phase 4 - Manual Research Workflow Hardening and Stable manual_llm_review Contract` 已完成；当前默认活动 phase 已由 operator 批准切换为 `Phase 5 - Real Validation Rebuild and Model Portfolio Policy Research`。
