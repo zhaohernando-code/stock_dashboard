@@ -6,6 +6,8 @@ import pytest
 from pydantic import ValidationError
 
 from ashare_evidence.scheduler_attempt_run_artifact_store import (
+    find_latest_phase5_scheduler_attempt_run_artifact,
+    list_phase5_scheduler_attempt_run_artifacts,
     read_phase5_scheduler_attempt_run_artifact,
     read_phase5_scheduler_attempt_run_artifact_if_exists,
     write_phase5_scheduler_attempt_run_artifact,
@@ -66,6 +68,57 @@ def test_scheduler_attempt_run_cleans_sensitive_reason_and_refs(tmp_path) -> Non
     assert payload["event_refs"] == ["custom.event.v1", PHASE5_SCHEDULER_ATTEMPT_RUN_RECORDED_EVENT_ID]
     for forbidden in ("input_bundle", "runner_result", "release-manifest:", "sha256:", "Traceback"):
         assert forbidden not in payload_text
+
+
+def test_list_attempt_run_artifacts_filters_and_sorts(tmp_path) -> None:
+    for artifact in [
+        _attempt_run(run_id="run-1", issued_at="2026-05-21T08:00:00Z", runner_id="runner-a"),
+        _attempt_run(run_id="run-3", issued_at="2026-05-21T10:00:00Z", apply_status="blocked"),
+        _attempt_run(run_id="run-2", issued_at="2026-05-21T10:00:00Z", runner_id="runner-b"),
+        _attempt_run(run_id="run-4", cycle_id="cycle-other", issued_at="2026-05-21T11:00:00Z"),
+        _attempt_run(run_id="run-0", attempt_status="blocked", issued_at="2026-05-21T07:00:00Z"),
+    ]:
+        write_phase5_scheduler_attempt_run_artifact(artifact, root=tmp_path)
+
+    assert [
+        artifact.run_id for artifact in list_phase5_scheduler_attempt_run_artifacts(cycle_id="cycle-20260521-am", root=tmp_path)
+    ] == ["run-3", "run-2", "run-1", "run-0"]
+    assert [
+        artifact.run_id
+        for artifact in list_phase5_scheduler_attempt_run_artifacts(
+            runner_id="runner-b",
+            attempt_status="ready",
+            root=tmp_path,
+        )
+    ] == ["run-2"]
+    assert [
+        artifact.run_id
+        for artifact in list_phase5_scheduler_attempt_run_artifacts(apply_status="blocked", root=tmp_path)
+    ] == ["run-3"]
+
+
+def test_find_latest_attempt_run_artifact_returns_none_for_empty_store(tmp_path) -> None:
+    assert list_phase5_scheduler_attempt_run_artifacts(root=tmp_path) == []
+    assert find_latest_phase5_scheduler_attempt_run_artifact(root=tmp_path) is None
+
+
+def test_find_latest_attempt_run_artifact_returns_latest_filtered_run(tmp_path) -> None:
+    write_phase5_scheduler_attempt_run_artifact(
+        _attempt_run(run_id="older-blocked", issued_at="2026-05-21T08:00:00Z", apply_status="blocked"),
+        root=tmp_path,
+    )
+    write_phase5_scheduler_attempt_run_artifact(
+        _attempt_run(run_id="latest-applied", issued_at="2026-05-21T10:00:00Z"),
+        root=tmp_path,
+    )
+
+    latest_blocked = find_latest_phase5_scheduler_attempt_run_artifact(apply_status="blocked", root=tmp_path)
+    latest_any = find_latest_phase5_scheduler_attempt_run_artifact(root=tmp_path)
+
+    assert latest_blocked is not None
+    assert latest_blocked.run_id == "older-blocked"
+    assert latest_any is not None
+    assert latest_any.run_id == "latest-applied"
 
 
 def _attempt_run(**overrides) -> Phase5SchedulerAttemptRunArtifact:
