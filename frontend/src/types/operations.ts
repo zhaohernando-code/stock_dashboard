@@ -207,54 +207,6 @@ export interface ImprovementSuggestionsPayload {
   suggestions?: ImprovementSuggestionView[];
 }
 
-export type Phase5WorkbenchProjectionStatus = "current" | "degraded" | "blocked";
-
-export interface Phase5WorkbenchCycleSummary {
-  cycle_id?: string | null;
-  cycle_status?: string | null;
-  trigger?: string | null;
-  started_at?: string | null;
-  finished_at?: string | null;
-  next_action?: string | null;
-}
-
-export interface Phase5WorkbenchRecoverySummary {
-  latest_ticket_id?: string | null;
-  final_status?: string | null;
-  recovery_action?: string | null;
-  failure_class?: string | null;
-  failure_observed_at?: string | null;
-  claim_ceiling_effect?: string | null;
-}
-
-export interface Phase5WorkbenchAutoProgressSummary {
-  total_runs: number;
-  readout_status: string;
-  latest_run_id?: string | null;
-  latest_phase?: string | null;
-  latest_apply_status?: string | null;
-  latest_applied_output?: string | null;
-  latest_issued_at?: string | null;
-  latest_recommended_output?: string | null;
-  applied_count: number;
-  blocked_count: number;
-  idle_count: number;
-  result_refs: string[];
-}
-
-export interface Phase5WorkbenchProjectionManifest {
-  projection_name: "phase5_operations_workbench";
-  projection_version: "workbench-projection-v1";
-  projection_status: Phase5WorkbenchProjectionStatus;
-  cycle: Phase5WorkbenchCycleSummary;
-  recovery: Phase5WorkbenchRecoverySummary;
-  auto_progress: Phase5WorkbenchAutoProgressSummary;
-  source_refs: string[];
-  missing_refs: string[];
-  blocking_reasons: string[];
-  recommended_next_action: string;
-}
-
 export interface OperationsDashboardResponse {
   overview: OperationsOverviewView;
   market_data_timeframe: string;
