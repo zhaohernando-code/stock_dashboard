@@ -612,6 +612,7 @@ def build_parser() -> argparse.ArgumentParser:
             "shortpick_replay_feedback",
             "operations_summary",
             "simulation_workspace_summary",
+            "phase5_workbench",
         ],
         default="all",
     )
@@ -622,6 +623,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Sample symbol to precompute for operations_summary. May be provided multiple times.",
     )
+    frontend_projections_refresh.add_argument("--cycle-id", default=None)
+    frontend_projections_refresh.add_argument("--runner-id", default=None)
 
     shortpick_market_factor_study = subparsers.add_parser(
         "shortpick-market-factor-study",
@@ -1080,6 +1083,8 @@ def main(argv: list[str] | None = None) -> int:
                 projection=args.projection,
                 target_login=args.target_login,
                 sample_symbols=args.sample_symbol,
+                cycle_id=args.cycle_id,
+                runner_id=args.runner_id,
             )
         _print_json(payload)
         return 0
