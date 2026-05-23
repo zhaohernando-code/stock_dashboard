@@ -1296,3 +1296,12 @@ canonical checkout 中的 `data/artifacts` 改动经抽样确认是正常 phase2
 - `market_factor_control_low_turnover_uptrend_next_open_entry` 在纸面跟踪 API/前端中提升为 `frozen_strategy_v2`：冻结候选 v2，次一交易日开盘买入。
 - v2 复用现有候选生成、可成交性检查、验证快照和四轨退出计算；本轮只调整分组、标签、汇总和前端展示，不改变交易计算流程。
 - 正式主线切换仍需更多 live 批次确认；当前产品显示应让 v1/v2 并排，而不是把 v2 包装成已经替代 v1。
+
+[2026-05-23T15:51:00+08:00] Scheduled Short Pick Lab retries must be idempotent after candidate write succeeds:
+5 月 14 日短投试验田盘后调度出现两次 completed run，导致同一 `2026-05-14` 信号、`2026-05-15` 买入、`2026-05-22` 5 日卖出的确定性纸面/对照候选在纸面跟踪看板重复出现。根因不是验证计算重复，而是第一次 scheduled run 已写入候选后，后续维护链路失败使 slot 未被视为成功，调度补跑再次写入同一日期的 market-factor overlay。
+
+补充说明
+- scheduled CLI 触发的 `run_shortpick_experiment` 和 14:00 同日控制现在会先复用同日期、同信息模式、同触发源的 completed run，避免调度 retry 再创建语义相同批次；手工/API 试验仍可新建 run。
+- 纸面跟踪 API 增加展示层语义去重键：跟踪分组、角色、股票、信号日、有效买入日、买入口径、策略族和源排名相同的候选只展示一条；这层是防御性读模型，不替代写入侧幂等。
+- live runtime DB 已先备份到 `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/backups/ashare_dashboard.before-shortpick-dedupe-cleanup-20260523T075110Z.db`，再删除 run 138 中 19 条重复 `shortpick-market-factor` 候选及 95 条验证快照；LLM 候选保留，因为它们不是造成纸面卖出重复的确定性覆盖层。
+- 同时把 134-137 四个悬挂 `running` 重试 run 标记为 failed cleanup 归档，避免运行状态页继续把历史补跑误读为正在执行。

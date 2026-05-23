@@ -1345,6 +1345,20 @@ def run_shortpick_experiment(
 ) -> dict[str, Any]:
     target_date = run_date or datetime.now(UTC).date()
     normalized_rounds = max(1, min(int(rounds_per_model), 10))
+    if trigger_source == "scheduled_cli":
+        existing_run = session.scalar(
+            select(ShortpickExperimentRun)
+            .where(
+                ShortpickExperimentRun.run_date == target_date,
+                ShortpickExperimentRun.information_mode == SHORTPICK_INFORMATION_MODE,
+                ShortpickExperimentRun.trigger_source == trigger_source,
+                ShortpickExperimentRun.status == "completed",
+            )
+            .order_by(ShortpickExperimentRun.completed_at.asc(), ShortpickExperimentRun.id.asc())
+            .limit(1)
+        )
+        if existing_run is not None:
+            return serialize_shortpick_run(session, existing_run, include_raw=True)
     started_at = utcnow()
     run = ShortpickExperimentRun(
         run_key=f"shortpick:{target_date.isoformat()}:{started_at:%Y%m%d%H%M%S%f}",
@@ -1460,6 +1474,20 @@ def run_shortpick_intraday_same_day_control(
     """
 
     target_date = run_date or datetime.now(UTC).date()
+    if trigger_source == "scheduled_intraday_cli":
+        existing_run = session.scalar(
+            select(ShortpickExperimentRun)
+            .where(
+                ShortpickExperimentRun.run_date == target_date,
+                ShortpickExperimentRun.information_mode == SHORTPICK_INFORMATION_MODE,
+                ShortpickExperimentRun.trigger_source == trigger_source,
+                ShortpickExperimentRun.status == "completed",
+            )
+            .order_by(ShortpickExperimentRun.completed_at.asc(), ShortpickExperimentRun.id.asc())
+            .limit(1)
+        )
+        if existing_run is not None:
+            return serialize_shortpick_run(session, existing_run, include_raw=True)
     started_at = utcnow()
     run = ShortpickExperimentRun(
         run_key=f"shortpick-intraday-same-day:{target_date.isoformat()}:{started_at:%Y%m%d%H%M%S%f}",

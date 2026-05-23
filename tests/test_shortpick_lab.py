@@ -1919,6 +1919,128 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(payload["summary"]["tracked_signal_count"], 1)
         self.assertEqual(payload["summary"]["frozen_v2_signal_count"], 1)
 
+    def test_paper_tracking_dedupes_repeated_scheduled_runs(self) -> None:
+        now = datetime(2026, 5, 14, 12, 0, tzinfo=UTC)
+        with session_scope(self.database_url) as session:
+            runs = [
+                ShortpickExperimentRun(
+                    run_key=f"shortpick:2026-05-14:test-duplicate-{index}",
+                    run_date=date(2026, 5, 14),
+                    prompt_version="test",
+                    information_mode=SHORTPICK_INFORMATION_MODE,
+                    status="completed",
+                    trigger_source="scheduled_cli",
+                    triggered_by="scheduled_cli",
+                    started_at=now + timedelta(minutes=index),
+                    completed_at=now + timedelta(minutes=index + 1),
+                    model_config={},
+                    summary_payload={"market_factor_overlay": {"frozen_paper_strategy": {"inserted": True, "gate_pass": True}}},
+                )
+                for index in range(2)
+            ]
+            session.add_all(runs)
+            session.flush()
+            for run in runs:
+                candidate = ShortpickCandidate(
+                    run_id=run.id,
+                    candidate_key=f"shortpick-market-factor:{run.id}:frozen_paper_low_turnover_uptrend_v4:1",
+                    symbol="600183.SH",
+                    name="生益科技",
+                    normalized_theme="低换手上升趋势",
+                    horizon_trading_days=10,
+                    confidence=1.0,
+                    thesis="同一交易日重复调度产生的同义冻结纸面策略候选。",
+                    catalysts=[],
+                    invalidation=[],
+                    risks=[],
+                    sources_payload=[],
+                    novelty_note=None,
+                    limitations=[],
+                    convergence_group="market_factor",
+                    research_priority="market_factor_frozen_paper",
+                    parse_status="parsed",
+                    is_system_external=False,
+                    candidate_payload={
+                        "tracking_role": "frozen_paper_primary",
+                        "baseline_family": "frozen_paper_low_turnover_uptrend_v4",
+                        "market_factor_overlay": {
+                            "family": "frozen_paper_low_turnover_uptrend_v4",
+                            "source_rank": 1,
+                            "entry_price_source": "next_close",
+                        },
+                    },
+                )
+                session.add(candidate)
+                session.flush()
+                session.add(
+                    ShortpickValidationSnapshot(
+                        candidate_id=candidate.id,
+                        horizon_days=5,
+                        status="completed",
+                        entry_at=datetime(2026, 5, 15, 7, 0, tzinfo=UTC),
+                        exit_at=datetime(2026, 5, 22, 7, 0, tzinfo=UTC),
+                        entry_close=89.95,
+                        exit_close=108.01,
+                        stock_return=0.200778,
+                        benchmark_return=0.01,
+                        excess_return=0.190778,
+                        max_favorable_return=0.21,
+                        max_drawdown=0.0,
+                        validation_payload={
+                            "paper_tracking_exit_tracks": [
+                                {
+                                    "key": "mechanical_5d",
+                                    "entry_trade_day": "2026-05-15",
+                                    "exit_trade_day": "2026-05-22",
+                                }
+                            ]
+                        },
+                    )
+                )
+
+        client = TestClient(create_app(self.database_url, enable_background_ops_tick=False))
+        payload = client.get("/shortpick-lab/paper-tracking").json()
+        matching = [
+            item
+            for item in payload["items"]
+            if item["signal_date"] == "2026-05-14"
+            and item["symbol"] == "600183.SH"
+            and item["tracking_role"] == "frozen_paper_primary"
+        ]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(payload["summary"]["tracked_signal_count"], 1)
+
+    def test_scheduled_shortpick_run_reuses_completed_same_day_run(self) -> None:
+        now = datetime(2026, 5, 14, 12, 0, tzinfo=UTC)
+        with session_scope(self.database_url) as session:
+            existing = ShortpickExperimentRun(
+                run_key="shortpick:2026-05-14:already-completed",
+                run_date=date(2026, 5, 14),
+                prompt_version="test",
+                information_mode=SHORTPICK_INFORMATION_MODE,
+                status="completed",
+                trigger_source="scheduled_cli",
+                triggered_by="scheduled_cli",
+                started_at=now,
+                completed_at=now,
+                model_config={},
+                summary_payload={"completed_round_count": 1},
+            )
+            session.add(existing)
+            session.flush()
+            payload = run_shortpick_experiment(
+                session,
+                run_date=date(2026, 5, 14),
+                rounds_per_model=1,
+                triggered_by="scheduled_cli",
+                trigger_source="scheduled_cli",
+                executors=[StaticShortpickExecutor("openai", "gpt-test", "fake", "not-json")],
+            )
+            runs = session.scalars(select(ShortpickExperimentRun)).all()
+
+        self.assertEqual(payload["id"], existing.id)
+        self.assertEqual(len(runs), 1)
+
     def test_run_list_supports_pagination_filters_and_retryable_summary(self) -> None:
         self._seed_daily_bars()
         executors = [

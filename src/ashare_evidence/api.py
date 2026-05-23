@@ -875,6 +875,12 @@ def _paper_tracking_validation_snapshot(session: Session, candidate_id: int) -> 
     }
 
 
+def _paper_tracking_date_part(value: object) -> str:
+    if not isinstance(value, str) or not value:
+        return ""
+    return value.split("T", 1)[0].split(" ", 1)[0]
+
+
 def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object]:
     contract = shortpick_frozen_paper_strategy_contract()
     llm_contract = shortpick_llm_paper_control_contract()
@@ -916,6 +922,7 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
     ).all()
 
     items: list[dict[str, object]] = []
+    seen_semantic_keys: set[tuple[str, ...]] = set()
     for run, candidate in raw_rows:
         candidate_payload = dict(candidate.candidate_payload or {})
         tracking_role = str(candidate_payload.get("tracking_role") or "")
@@ -993,6 +1000,20 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
             "updated_at": _iso_or_none(candidate.updated_at),
         }
         item.update(_paper_tracking_validation_snapshot(session, candidate.id))
+        effective_entry_date = entry_date or _paper_tracking_date_part(item.get("entry_at"))
+        semantic_key = (
+            str(item["tracking_group"]),
+            str(item["tracking_role"]),
+            str(candidate.symbol),
+            signal_date,
+            effective_entry_date,
+            entry_price_source,
+            str(overlay.get("family") or candidate_payload.get("baseline_family") or ""),
+            str(overlay.get("source_rank") or llm_control.get("selection_rank") or ""),
+        )
+        if semantic_key in seen_semantic_keys:
+            continue
+        seen_semantic_keys.add(semantic_key)
         items.append(item)
         if len(items) >= 160:
             break
