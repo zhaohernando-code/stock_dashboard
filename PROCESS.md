@@ -37,6 +37,7 @@
 - **artifact 写入保护要识别项目级 `.git`**：开发仓里的 `data/artifacts` 仍属于源码污染风险，必须拒绝刷新脚本直接写入；同步后的 runtime 目录没有项目级 `.git`，其中的 `data/artifacts` 是 live 数据目录，不能被同一保护误判为 source checkout。
 - **scheduled run 成功写候选后必须幂等**：短投试验田这类先写候选、后跑维护/验证的调度任务，retry 不能只依赖外层 slot 文件。写入侧要按业务日期、信息模式和触发源复用已完成 run；展示侧仍要保留语义去重，避免历史重复写入继续污染纸面跟踪。
 - **runtime DB 数据手术必须先备份再做可审计最小删除**：清理 live 重复候选时，先复制完整 sqlite 库到 `data/backups`，再用可复查的候选范围删除验证快照和候选；不要为了消除看板重复而删除仍可能有独立研究含义的 LLM run 内容。
+- **2026-05-23 shortpick 重复清理对应代码提交**：本轮写入侧幂等、读侧去重和专项回归落在 `698d4e8`；运行库清理事实见 `DECISIONS.md` 同日记录。
 - **canonical 不可用先分层排查**：先查 localhost 5173/8000 健康，再查 canonical 是否 302 到登录页，再查 tunnel/remote port ownership；不要先误判为代码失效。
 - **canonical stale 多半是路由或隧道问题**：页面旧、接口新、资源健康时，优先检查 tunnel、远端端口和缓存态，再决定是否重新发布。
 - **LaunchAgent 要区分任务和服务**：定时任务用 `RunAtLoad` + `StartCalendarInterval` 或 `StartInterval`；服务进程用 `RunAtLoad` + `KeepAlive`。需要精确时钟触发时不能只靠 `StartInterval=300`；关键时点应配置显式 calendar trigger，并让任务用 slot state 保证多次唤醒不重复写入。
