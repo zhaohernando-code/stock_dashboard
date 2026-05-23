@@ -1191,7 +1191,7 @@ function nextPendingEntryDate(rows: ShortpickPaperTrackingItem[]): string {
 type PaperTrackingGroupFilter = "" | "frozen_strategy" | "frozen_strategy_v2" | "llm_paper_control" | "market_factor_control" | "market_random_control";
 type PaperTrackingEntryStateFilter = "entered" | "pending" | "";
 type PaperTrackingEntryRuleFilter = "" | "next_close" | "next_open" | "same_day_intraday_current";
-type PaperTrackingExitStateFilter = "" | "mechanical_5d_done" | "waiting_exit";
+type PaperTrackingExitStateFilter = "" | "mechanical_5d_done" | "mechanical_10d_done" | "take_profit_stop_loss_done" | "waiting_exit";
 
 function paperTrackingEntryRuleKey(item: ShortpickPaperTrackingItem): PaperTrackingEntryRuleFilter {
   const entryRule = item.entry_rule ?? "";
@@ -1248,6 +1248,22 @@ function paperTrackingMechanical5dExitTrack(item: ShortpickPaperTrackingItem): R
 
 function hasPaperTrackingMechanical5dExit(item: ShortpickPaperTrackingItem): boolean {
   return paperTrackingMechanical5dExitTrack(item) !== null;
+}
+
+function paperTrackingMechanical10dExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
+  return paperTrackingExitTracks(item).find((track) => track.key === "mechanical_10d") ?? null;
+}
+
+function hasPaperTrackingMechanical10dExit(item: ShortpickPaperTrackingItem): boolean {
+  return paperTrackingMechanical10dExitTrack(item) !== null;
+}
+
+function paperTrackingRiskExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
+  return paperTrackingExitTracks(item).find((track) => track.key === "take_profit_stop_loss") ?? null;
+}
+
+function hasPaperTrackingRiskExit(item: ShortpickPaperTrackingItem): boolean {
+  return paperTrackingRiskExitTrack(item) !== null;
 }
 
 function paperTrackingExitDay(item: ShortpickPaperTrackingItem): string {
@@ -2185,10 +2201,14 @@ function PaperTrackingTab({
   const displayRows = rows.filter((item) => {
     const entered = hasPaperTrackingEntered(item);
     const hasMechanical5dExit = hasPaperTrackingMechanical5dExit(item);
+    const hasMechanical10dExit = hasPaperTrackingMechanical10dExit(item);
+    const hasRiskExit = hasPaperTrackingRiskExit(item);
     if (ledgerEntryStateFilter === "entered" && !entered) return false;
     if (ledgerEntryStateFilter === "pending" && entered) return false;
     if (ledgerExitStateFilter === "mechanical_5d_done" && !hasMechanical5dExit) return false;
-    if (ledgerExitStateFilter === "waiting_exit" && (!entered || hasMechanical5dExit)) return false;
+    if (ledgerExitStateFilter === "mechanical_10d_done" && !hasMechanical10dExit) return false;
+    if (ledgerExitStateFilter === "take_profit_stop_loss_done" && !hasRiskExit) return false;
+    if (ledgerExitStateFilter === "waiting_exit" && (!entered || hasMechanical5dExit || hasMechanical10dExit || hasRiskExit)) return false;
     if (ledgerGroupFilter && item.tracking_group !== ledgerGroupFilter) return false;
     if (ledgerEntryRuleFilter && paperTrackingEntryRuleKey(item) !== ledgerEntryRuleFilter) return false;
     if (normalizedLedgerSearch && !paperTrackingSearchText(item).includes(normalizedLedgerSearch)) return false;
@@ -2531,7 +2551,9 @@ function PaperTrackingTab({
             allowClear
             options={[
               { value: "mechanical_5d_done", label: "机械5日已退出" },
-              { value: "waiting_exit", label: "等待5日窗口" },
+              { value: "mechanical_10d_done", label: "机械10日已退出" },
+              { value: "take_profit_stop_loss_done", label: "止盈止损已退出" },
+              { value: "waiting_exit", label: "等待退出结果" },
             ]}
             onChange={(value) => setLedgerExitStateFilter((value ?? "") as PaperTrackingExitStateFilter)}
           />
