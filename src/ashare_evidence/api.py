@@ -952,13 +952,13 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
             is_llm_control_item=is_llm_control_item,
         )
         if tracking_group == "frozen_strategy_v2":
-            exit_rule = "与 v1 使用同一组选股和四轨退出；入场价格源为次一交易日开盘。"
+            exit_rule = "与 v1 使用同一组选股和三轨退出；入场价格源为次一交易日开盘。"
         else:
             exit_rule = str(
                 item_contract.get("risk_rule")
                 or item_contract.get("monitoring_rule")
                 or item_contract.get("selection_rule")
-                or "四轨退出监测"
+                or "三轨退出监测"
             )
         item = {
             "run_id": run.id,

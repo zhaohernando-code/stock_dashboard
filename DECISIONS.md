@@ -1305,3 +1305,13 @@ canonical checkout 中的 `data/artifacts` 改动经抽样确认是正常 phase2
 - 纸面跟踪 API 增加展示层语义去重键：跟踪分组、角色、股票、信号日、有效买入日、买入口径、策略族和源排名相同的候选只展示一条；这层是防御性读模型，不替代写入侧幂等。
 - live runtime DB 已先备份到 `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/backups/ashare_dashboard.before-shortpick-dedupe-cleanup-20260523T075110Z.db`，再删除 run 138 中 19 条重复 `shortpick-market-factor` 候选及 95 条验证快照；LLM 候选保留，因为它们不是造成纸面卖出重复的确定性覆盖层。
 - 同时把 134-137 四个悬挂 `running` 重试 run 标记为 failed cleanup 归档，避免运行状态页继续把历史补跑误读为正在执行。
+
+[2026-05-24T00:00:00+08:00] Frozen paper exits are three tracks: mechanical 5d, mechanical 10d, and take-profit/stop-loss:
+冻结策略和冻结候选 v2 的退出监测不再把“5日后条件检查”和“10%触达止盈”拆成两条独立轨道。正确口径是：选股逻辑保持不变，同一入场信号并行记录机械5日、机械10日，以及一个 10 个交易日内随时触发的“止盈止损”退出策略。
+
+补充说明
+- `take_profit_stop_loss` 轨道从买入后的第 1 个交易日开始检查，不等待第 5 天；日内最低价触达买入价下方 8% 时按 -8% 退出，日内最高价触达买入价上方 10% 时按 +10% 退出。
+- 由于当前只有日线高低价，没有逐笔先后顺序；同一交易日同时触达止盈和止损时，纸面跟踪按止损优先的保守口径处理。
+- 前端纸面跟踪表不再只展示机械5日主结果，而是在“退出结果”列同时列出已形成的机械5日、机械10日和止盈止损结果；止盈止损在 10 日窗口未完成且尚未触发时不会伪造成已退出。
+- 本次只改变退出方式和已有候选的验证 payload，不改变冻结策略、v2 或对照组的股票选择逻辑。
+- live runtime DB 已先备份到 `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/backups/ashare_dashboard.before-shortpick-exit-risk-tracks-20260523T163049Z.db`，再用已有行情数据重算最近 40 天、55 个 shortpick run 的 1/3/5/10/20 日验证快照。`2026-05-14` 生益科技 v1 现在同时显示止盈止损轨道 `2026-05-18` 触达 +10% 和机械5日 `2026-05-22`，不再缺少止盈线。

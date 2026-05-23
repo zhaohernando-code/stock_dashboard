@@ -1093,7 +1093,7 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertFalse(first_validation["official_validation"])
         self.assertIsNone(first_validation["stock_return"])
 
-    def test_frozen_paper_contract_tracks_four_trading_day_exit_windows(self) -> None:
+    def test_frozen_paper_contract_tracks_three_trading_day_exit_windows(self) -> None:
         contract = shortpick_frozen_paper_strategy_contract()
         tracks = contract["monitoring_tracks"]
         paper_tracking_config = SHORTPICK_FROZEN_STRATEGY_CONFIG["paper_tracking"]
@@ -1101,8 +1101,7 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual([item["key"] for item in tracks], [
             "mechanical_5d",
             "mechanical_10d",
-            "conditional_5_to_10d",
-            "take_profit_10pct",
+            "take_profit_stop_loss",
         ])
         self.assertTrue(all(item["uses_trading_days"] for item in tracks))
         self.assertIn("交易日", contract["mode"])
@@ -1110,8 +1109,9 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertIn("成交额和换手率", contract["pool_rule"])
         self.assertIn("20日趋势向上", contract["selection_rule"])
         self.assertNotIn("第2名", contract["selection_rule"])
-        conditional_track = next(item for item in tracks if item["key"] == "conditional_5_to_10d")
-        self.assertEqual(conditional_track["peak_giveback_pct"], paper_tracking_config["peak_giveback_pct"])
+        risk_track = next(item for item in tracks if item["key"] == "take_profit_stop_loss")
+        self.assertEqual(risk_track["stop_loss_pct"], paper_tracking_config["stop_loss_pct"])
+        self.assertEqual(risk_track["take_profit_pct"], paper_tracking_config["take_profit_pct"])
         self.assertEqual(contract["version"], SHORTPICK_FROZEN_STRATEGY_CONFIG["version"])
 
     def test_frozen_exit_tracks_are_computed_on_ten_trading_day_window(self) -> None:
@@ -1160,12 +1160,52 @@ class ShortpickLabTests(unittest.TestCase):
         )
         by_key = {item["key"]: item for item in tracks}
 
-        self.assertEqual(set(by_key), {"mechanical_5d", "mechanical_10d", "conditional_5_to_10d", "take_profit_10pct"})
+        self.assertEqual(set(by_key), {"mechanical_5d", "mechanical_10d", "take_profit_stop_loss"})
         self.assertEqual(by_key["mechanical_5d"]["holding_trading_days"], 5)
         self.assertEqual(by_key["mechanical_10d"]["holding_trading_days"], 10)
-        self.assertEqual(by_key["conditional_5_to_10d"]["exit_reason"], "trend_check_failed_after_day5")
-        self.assertEqual(by_key["take_profit_10pct"]["exit_reason"], "take_profit_10pct_touched")
-        self.assertAlmostEqual(by_key["take_profit_10pct"]["stock_return"], 0.10)
+        self.assertEqual(by_key["take_profit_stop_loss"]["exit_reason"], "take_profit_10pct_touched")
+        self.assertEqual(by_key["take_profit_stop_loss"]["exit_trade_day"], "2026-05-11")
+        self.assertAlmostEqual(by_key["take_profit_stop_loss"]["stock_return"], 0.10)
+
+    def test_frozen_stop_loss_can_trigger_before_five_day_window(self) -> None:
+        candidate = ShortpickCandidate(
+            run_id=1,
+            candidate_key="shortpick-market-factor:1:frozen:early-stop",
+            symbol="000001.SZ",
+            name="测试银行",
+            research_priority="market_factor_frozen_paper",
+            candidate_payload={"tracking_role": "frozen_paper_primary", "frozen_paper_strategy": {}},
+        )
+        start = datetime(2026, 5, 6, 7, 0, tzinfo=UTC)
+        bars = [
+            MarketBar(
+                bar_key=f"early-stop-{index}",
+                stock_id=1,
+                timeframe="1d",
+                observed_at=start + timedelta(days=index),
+                open_price=100,
+                high_price=101,
+                low_price=91 if index == 2 else 99,
+                close_price=99,
+                volume=1000,
+                amount=99000,
+                raw_payload={},
+                license_tag="test",
+                usage_scope="internal-test",
+                redistribution_scope="none",
+                source_uri=f"test://early-stop/{index}",
+                lineage_hash=compute_lineage_hash({"index": index}),
+            )
+            for index in range(4)
+        ]
+
+        tracks = _shortpick_frozen_exit_track_results(candidate=candidate, window=bars, benchmark_maps={})
+        by_key = {item["key"]: item for item in tracks}
+
+        self.assertEqual(set(by_key), {"take_profit_stop_loss"})
+        self.assertEqual(by_key["take_profit_stop_loss"]["exit_reason"], "stop_loss_8pct_touched")
+        self.assertEqual(by_key["take_profit_stop_loss"]["exit_trade_day"], "2026-05-08")
+        self.assertAlmostEqual(by_key["take_profit_stop_loss"]["stock_return"], -0.08)
 
     def test_frozen_exit_tracks_include_mechanical_5d_before_ten_day_window(self) -> None:
         candidate = ShortpickCandidate(
@@ -1243,7 +1283,7 @@ class ShortpickLabTests(unittest.TestCase):
             benchmark_maps={},
         )
 
-        self.assertEqual([item["key"] for item in tracks], ["mechanical_5d", "mechanical_10d", "conditional_5_to_10d", "take_profit_10pct"])
+        self.assertEqual([item["key"] for item in tracks], ["mechanical_5d", "mechanical_10d", "take_profit_stop_loss"])
 
     def test_market_factor_paper_controls_get_same_exit_tracks(self) -> None:
         contract = shortpick_market_factor_paper_control_contracts()
@@ -1313,7 +1353,7 @@ class ShortpickLabTests(unittest.TestCase):
 
             self.assertEqual(
                 [item["key"] for item in tracks],
-                ["mechanical_5d", "mechanical_10d", "conditional_5_to_10d", "take_profit_10pct"],
+                ["mechanical_5d", "mechanical_10d", "take_profit_stop_loss"],
             )
 
     def test_intraday_same_day_control_uses_captured_entry_price(self) -> None:
@@ -1915,7 +1955,7 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(by_symbol["601138.SH"]["paper_tracking_exit_tracks"][0]["key"], "mechanical_5d")
         self.assertEqual(by_symbol["600000.SH"]["tracking_group"], "frozen_strategy_v2")
         self.assertEqual(by_symbol["600000.SH"]["selection_label"], "冻结候选 v2：次日开盘买入")
-        self.assertEqual(by_symbol["600000.SH"]["exit_rule"], "与 v1 使用同一组选股和四轨退出；入场价格源为次一交易日开盘。")
+        self.assertEqual(by_symbol["600000.SH"]["exit_rule"], "与 v1 使用同一组选股和三轨退出；入场价格源为次一交易日开盘。")
         self.assertEqual(payload["summary"]["tracked_signal_count"], 1)
         self.assertEqual(payload["summary"]["frozen_v2_signal_count"], 1)
 

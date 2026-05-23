@@ -241,11 +241,11 @@ def shortpick_frozen_paper_strategy_contract() -> dict[str, Any]:
         "status": "frozen_paper_tracking",
         "version": SHORTPICK_FROZEN_PAPER_VERSION,
         "family": SHORTPICK_FROZEN_PAPER_FAMILY,
-        "label": "冻结纸面策略：低换手上升趋势四轨监测",
+        "label": "冻结纸面策略：低换手上升趋势三轨监测",
         "mode": "每日滚动 5x1万，次一交易日收盘买入；所有持有天数均按交易日计算",
         "pool_rule": f"先按成交额和换手率取流动性靠前的 {SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_POOL_LIMIT} 只候选",
         "selection_rule": "当全市场10日上涨占比不低于45%时，选择20日趋势向上、成交额较高且换手率相对不拥挤的第1名",
-        "risk_rule": "同一入场信号并行监测机械5日、机械10日、5-10日条件检查、10%触达止盈四条退出轨道",
+        "risk_rule": "同一入场信号并行监测机械5日、机械10日、10日内止盈止损三条退出轨道",
         "monitoring_tracks": [
             {
                 "key": "mechanical_5d",
@@ -262,22 +262,13 @@ def shortpick_frozen_paper_strategy_contract() -> dict[str, Any]:
                 "uses_trading_days": True,
             },
             {
-                "key": "conditional_5_to_10d",
-                "label": "5日后条件检查",
-                "description": "至少持有5个交易日；第5日至第10日每日收盘检查趋势转弱、从高点回撤扩大或8%收盘止损，触发则退出，否则第10日退出。",
-                "check_start_day": SHORTPICK_FROZEN_PAPER_CHECK_START_DAY,
+                "key": "take_profit_stop_loss",
+                "label": "止盈止损",
+                "description": "买入后10个交易日内，日内最低价触达买入价下方8%时按-8%止损退出；日内最高价触达买入价上方10%时按+10%止盈退出；同日两者均触达时按止损优先的保守口径处理；未触发则第10日收盘退出。",
                 "max_holding_days": SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS,
-                "close_stop_loss_pct": SHORTPICK_FROZEN_PAPER_STOP_LOSS_PCT,
-                "peak_giveback_pct": SHORTPICK_FROZEN_PAPER_PEAK_GIVEBACK_PCT,
-                "uses_trading_days": True,
-            },
-            {
-                "key": "take_profit_10pct",
-                "label": "10%触达止盈",
-                "description": "买入后10个交易日内，若日内最高价触达买入价上方10%，按+10%止盈价退出；未触达则第10日收盘退出。",
+                "stop_loss_pct": SHORTPICK_FROZEN_PAPER_STOP_LOSS_PCT,
                 "take_profit_pct": SHORTPICK_FROZEN_PAPER_TAKE_PROFIT_PCT,
-                "max_holding_days": SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS,
-                "execution_assumption": "daily_high_touch_price",
+                "execution_assumption": "daily_high_low_touch_price",
                 "uses_trading_days": True,
             },
         ],
@@ -301,7 +292,7 @@ def shortpick_llm_paper_control_contract() -> dict[str, Any]:
         "account_profile": ACCOUNT_PROFILE_NEW_RETAIL_CASH,
         "account_filter_rule": "仅允许沪深主板普通A股；排除科创板、创业板、北交所、ST/退市风险类标的。",
         "selection_rule": "先过滤到新开户普通现金账户可买范围；再优先跨模型同票，其次同模型重复、跨模型同题材、单模型高置信、系统外新视角；再按来源质量、置信度、来源数量、股票代码和候选ID稳定排序。",
-        "monitoring_rule": "和冻结策略使用同一入场口径与四条退出轨道，避免从LLM推荐池中事后挑选。",
+        "monitoring_rule": "和冻结策略使用同一入场口径与三条退出轨道，避免从LLM推荐池中事后挑选。",
         "monitoring_tracks": shortpick_frozen_paper_strategy_contract()["monitoring_tracks"],
         "required_forward_trading_days": SHORTPICK_FROZEN_PAPER_REQUIRED_FORWARD_DAYS,
         "frozen_at": "2026-05-09",
@@ -315,7 +306,7 @@ def shortpick_market_factor_paper_control_contracts() -> dict[str, Any]:
         "version": str(_SHORTPICK_CONTROL_CONFIG["market_factor_control_version"]),
         "label": "市场因子纸面对照：同池简单选法",
         "mode": "和冻结策略使用同一个动量成交量Top40候选池，每个规则每天最多提前固定1只；所有持有天数均按交易日计算。",
-        "monitoring_rule": "和冻结策略使用同一入场口径与四条退出轨道，用于判断冻结策略是否强过同池简单选法。",
+        "monitoring_rule": "和冻结策略使用同一入场口径与三条退出轨道，用于判断冻结策略是否强过同池简单选法。",
         "monitoring_tracks": shortpick_frozen_paper_strategy_contract()["monitoring_tracks"],
         "controls": [
             {
@@ -337,7 +328,7 @@ def shortpick_market_factor_paper_control_contracts() -> dict[str, Any]:
                 "role": SHORTPICK_MARKET_FACTOR_TOP3_EQUAL_WEIGHT_CONTROL_ROLE,
                 "label": "前三名等权组合",
                 "selection_rule": "市场转正且候选池不过热时，按10日动量与换手排序取前3名；每日纸面资金在3只之间等权分配。",
-                "allocation_rule": "同一信号日等权观察；每只候选仍按同一入场口径和四条退出轨道记录。",
+                "allocation_rule": "同一信号日等权观察；每只候选仍按同一入场口径和三条退出轨道记录。",
             },
             {
                 "role": SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE,
@@ -346,7 +337,7 @@ def shortpick_market_factor_paper_control_contracts() -> dict[str, Any]:
             },
             {
                 "role": SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
-                "label": "旧主线：第二候选四轨",
+                "label": "旧主线：第二候选三轨",
                 "selection_rule": "保留原冻结主线作为对照：在市场转正且候选池不过热时，取10日动量与换手排序的第2名。",
             },
             {
@@ -3498,7 +3489,7 @@ def _upsert_shortpick_market_factor_candidate(
     if is_frozen_paper:
         thesis = (
             f"{family_label}：先按成交额和换手率取流动性靠前的 {SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_POOL_LIMIT} 只候选，"
-            "再选择20日趋势向上、成交额较高且换手率相对不拥挤的第1名；同一入场信号并行监测机械5日、机械10日、条件检查和10%止盈四条退出轨道。"
+            "再选择20日趋势向上、成交额较高且换手率相对不拥挤的第1名；同一入场信号并行监测机械5日、机械10日、止盈止损三条退出轨道。"
         )
     elif tracking_role == SHORTPICK_MARKET_FACTOR_TOP3_EQUAL_WEIGHT_CONTROL_ROLE:
         thesis = (
@@ -3646,13 +3637,13 @@ def _upsert_shortpick_market_factor_candidate(
             f"换手率 {float(item['turnover_rate']):.2f}",
         ],
         invalidation=[
-            "条件检查轨道中收盘亏损达到8%触发纸面止损" if is_frozen_paper else "放量后次日承接不足",
+            "止盈止损轨道中日内触达8%亏损触发纸面止损" if is_frozen_paper else "放量后次日承接不足",
             "短线趋势转弱或跌破前一交易日收盘",
         ],
         risks=[
             "冻结纸面策略候选，不代表生产级证明" if is_frozen_paper else "纯市场因子候选，不包含新闻语义核验",
             "高动量标的可能面临追高回撤",
-            "10%触达止盈轨道使用日线最高价近似盘中触达，不等于真实逐笔成交" if is_frozen_paper else "作为对照组，不替代冻结纸面策略",
+            "止盈止损轨道使用日线最高/最低价近似盘中触达，不等于真实逐笔成交" if is_frozen_paper else "作为对照组，不替代冻结纸面策略",
         ],
         sources_payload=[],
         novelty_note=(
@@ -4805,10 +4796,10 @@ def _upsert_validation_snapshot(
         exit_day=exit_bar.observed_at.date(),
         include_sector_benchmark=include_sector_benchmark,
     )
-    frozen_exit_tracks = (
-        _shortpick_frozen_exit_track_results(candidate=candidate, window=window, benchmark_maps=benchmark_maps)
-        if horizon >= SHORTPICK_FROZEN_PAPER_CHECK_START_DAY
-        else []
+    frozen_exit_tracks = _shortpick_frozen_exit_track_results(
+        candidate=candidate,
+        window=window,
+        benchmark_maps=benchmark_maps,
     )
     if primary_return is None:
         existing.status = "pending_benchmark_data"
@@ -4842,7 +4833,7 @@ def _upsert_validation_snapshot(
         "entry_price_source": entry_price_source,
         "paper_tracking_exit_tracks": frozen_exit_tracks,
         "paper_tracking_exit_track_note": (
-            "All holding windows are counted in trading days; 10% take-profit uses daily high touch as a paper-tracking approximation."
+            "All holding windows are counted in trading days; take-profit/stop-loss uses daily high/low touch as a paper-tracking approximation."
             if frozen_exit_tracks
             else None
         ),
@@ -5068,29 +5059,31 @@ def _shortpick_exit_track_payload(
     }
 
 
-def _shortpick_conditional_exit_index(window: list[MarketBar], *, entry_price: float | None = None) -> tuple[int, str]:
+def _shortpick_take_profit_stop_loss_exit(
+    window: list[MarketBar],
+    *,
+    entry_price: float | None = None,
+) -> tuple[int, float | None, str, str] | None:
     max_index = min(SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS, len(window) - 1)
-    start_index = min(SHORTPICK_FROZEN_PAPER_CHECK_START_DAY, max_index)
-    for index in range(start_index, max_index + 1):
-        current = window[index]
-        if not entry_price or current.close_price is None:
-            continue
-        stock_return = (current.close_price / entry_price) - 1
-        if stock_return <= -SHORTPICK_FROZEN_PAPER_STOP_LOSS_PCT:
-            return index, "close_stop_loss_8pct"
-        recent = [bar.close_price for bar in window[max(0, index - 2) : index + 1] if bar.close_price is not None]
-        recent_avg = sum(recent) / len(recent) if recent else None
-        previous_close = window[index - 1].close_price if index > 0 else None
-        if recent_avg is not None and previous_close is not None and current.close_price < recent_avg and current.close_price < previous_close:
-            return index, "trend_check_failed_after_day5"
-        peak_close = max((bar.close_price for bar in window[: index + 1] if bar.close_price is not None), default=None)
-        if (
-            peak_close
-            and (current.close_price / peak_close) - 1 <= -SHORTPICK_FROZEN_PAPER_PEAK_GIVEBACK_PCT
-            and stock_return < SHORTPICK_FROZEN_PAPER_WEAK_REBOUND_RETURN_PCT
-        ):
-            return index, "peak_giveback_or_weak_rebound"
-    return max_index, "max_10d_reached"
+    if max_index < 1 or not entry_price:
+        return None
+    stop_loss_price = entry_price * (1 - SHORTPICK_FROZEN_PAPER_STOP_LOSS_PCT)
+    take_profit_price = entry_price * (1 + SHORTPICK_FROZEN_PAPER_TAKE_PROFIT_PCT)
+    for index, bar in enumerate(window[1 : max_index + 1], start=1):
+        low_price = bar.low_price if bar.low_price is not None else bar.close_price
+        high_price = bar.high_price if bar.high_price is not None else bar.close_price
+        stop_loss_touched = low_price is not None and low_price <= stop_loss_price
+        take_profit_touched = high_price is not None and high_price >= take_profit_price
+        if stop_loss_touched:
+            reason = "stop_loss_8pct_touched"
+            if take_profit_touched:
+                reason = "stop_loss_8pct_touched_same_day_conservative"
+            return index, stop_loss_price, reason, "daily_low_touch_price"
+        if take_profit_touched:
+            return index, take_profit_price, "take_profit_10pct_touched", "daily_high_touch_price"
+    if max_index >= SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS:
+        return max_index, window[max_index].close_price, "max_10d_no_take_profit_stop_loss", "close_price"
+    return None
 
 
 def _shortpick_frozen_exit_track_results(
@@ -5101,29 +5094,50 @@ def _shortpick_frozen_exit_track_results(
 ) -> list[dict[str, Any]]:
     if not _is_paper_tracking_exit_track_candidate(candidate):
         return []
-    if len(window) <= SHORTPICK_FROZEN_PAPER_CHECK_START_DAY:
+    if len(window) <= 1:
         return []
     entry = window[0]
     entry_price = _shortpick_entry_execution_price(candidate=candidate, entry=entry)
     entry_price_source = _shortpick_entry_price_source(candidate)
     max_index = min(SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS, len(window) - 1)
-    tracks = [
-        _shortpick_exit_track_payload(
-            key="mechanical_5d",
-            label="机械5日",
-            entry=entry,
-            entry_price=entry_price,
-            entry_price_source=entry_price_source,
-            window=window,
-            exit_index=SHORTPICK_FROZEN_PAPER_CHECK_START_DAY,
-            exit_price=window[SHORTPICK_FROZEN_PAPER_CHECK_START_DAY].close_price,
-            exit_reason="mechanical_5d_close",
-            benchmark_maps=benchmark_maps,
-        ),
-    ]
+    tracks = []
+    if max_index >= SHORTPICK_FROZEN_PAPER_CHECK_START_DAY:
+        tracks.append(
+            _shortpick_exit_track_payload(
+                key="mechanical_5d",
+                label="机械5日",
+                entry=entry,
+                entry_price=entry_price,
+                entry_price_source=entry_price_source,
+                window=window,
+                exit_index=SHORTPICK_FROZEN_PAPER_CHECK_START_DAY,
+                exit_price=window[SHORTPICK_FROZEN_PAPER_CHECK_START_DAY].close_price,
+                exit_reason="mechanical_5d_close",
+                benchmark_maps=benchmark_maps,
+            )
+        )
+    take_profit_stop_loss = _shortpick_take_profit_stop_loss_exit(window[: max_index + 1], entry_price=entry_price)
+    if take_profit_stop_loss is not None:
+        risk_exit_index, risk_exit_price, risk_exit_reason, risk_execution_assumption = take_profit_stop_loss
+        tracks.append(
+            _shortpick_exit_track_payload(
+                key="take_profit_stop_loss",
+                label="止盈止损",
+                entry=entry,
+                entry_price=entry_price,
+                entry_price_source=entry_price_source,
+                window=window,
+                exit_index=risk_exit_index,
+                exit_price=risk_exit_price,
+                exit_reason=risk_exit_reason,
+                benchmark_maps=benchmark_maps,
+                execution_assumption=risk_execution_assumption,
+            )
+        )
     if max_index < SHORTPICK_FROZEN_PAPER_MAX_HOLDING_DAYS:
         return tracks
-    tracks.append(
+    tracks.insert(
+        1,
         _shortpick_exit_track_payload(
             key="mechanical_10d",
             label="机械10日",
@@ -5135,51 +5149,7 @@ def _shortpick_frozen_exit_track_results(
             exit_price=window[max_index].close_price,
             exit_reason="mechanical_10d_close",
             benchmark_maps=benchmark_maps,
-        )
-    )
-    conditional_index, conditional_reason = _shortpick_conditional_exit_index(
-        window[: max_index + 1],
-        entry_price=entry_price,
-    )
-    tracks.append(
-        _shortpick_exit_track_payload(
-            key="conditional_5_to_10d",
-            label="5日后条件检查",
-            entry=entry,
-            entry_price=entry_price,
-            entry_price_source=entry_price_source,
-            window=window,
-            exit_index=conditional_index,
-            exit_price=window[conditional_index].close_price,
-            exit_reason=conditional_reason,
-            benchmark_maps=benchmark_maps,
-        )
-    )
-    take_profit_price = entry_price * (1 + SHORTPICK_FROZEN_PAPER_TAKE_PROFIT_PCT) if entry_price else None
-    take_profit_index = max_index
-    take_profit_reason = "max_10d_reached"
-    take_profit_exit_price = window[max_index].close_price
-    if take_profit_price is not None:
-        for index, bar in enumerate(window[1 : max_index + 1], start=1):
-            if bar.high_price is not None and bar.high_price >= take_profit_price:
-                take_profit_index = index
-                take_profit_reason = "take_profit_10pct_touched"
-                take_profit_exit_price = take_profit_price
-                break
-    tracks.append(
-        _shortpick_exit_track_payload(
-            key="take_profit_10pct",
-            label="10%触达止盈",
-            entry=entry,
-            entry_price=entry_price,
-            entry_price_source=entry_price_source,
-            window=window,
-            exit_index=take_profit_index,
-            exit_price=take_profit_exit_price,
-            exit_reason=take_profit_reason,
-            benchmark_maps=benchmark_maps,
-            execution_assumption="daily_high_touch_price" if take_profit_reason == "take_profit_10pct_touched" else "close_price",
-        )
+        ),
     )
     return tracks
 

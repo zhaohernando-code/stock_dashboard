@@ -1226,6 +1226,22 @@ function paperTrackingPrimaryExitTrack(item: ShortpickPaperTrackingItem): Record
   return tracks.find((track) => track.key === "mechanical_5d") ?? tracks[0] ?? null;
 }
 
+function paperTrackingExitTrackSortValue(track: Record<string, unknown>): number {
+  const key = String(track.key ?? "");
+  if (key === "mechanical_5d") return 0;
+  if (key === "mechanical_10d") return 1;
+  if (key === "take_profit_stop_loss") return 2;
+  if (key === "conditional_5_to_10d") return 3;
+  if (key === "take_profit_10pct") return 4;
+  return 5;
+}
+
+function paperTrackingDisplayExitTracks(item: ShortpickPaperTrackingItem): Record<string, unknown>[] {
+  return [...paperTrackingExitTracks(item)]
+    .filter((track) => track.exit_trade_day || typeof track.stock_return === "number")
+    .sort((left, right) => paperTrackingExitTrackSortValue(left) - paperTrackingExitTrackSortValue(right));
+}
+
 function paperTrackingMechanical5dExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
   return paperTrackingExitTracks(item).find((track) => track.key === "mechanical_5d") ?? null;
 }
@@ -1251,6 +1267,12 @@ function paperTrackingExitText(item: ShortpickPaperTrackingItem): string {
   }
   if (item.validation_status && item.validation_status !== "not_started") return statusLabel(item.validation_status);
   return "等待窗口";
+}
+
+function paperTrackingTrackExitText(track: Record<string, unknown>, fallback: ShortpickPaperTrackingItem): string {
+  const label = String(track.label ?? "退出");
+  const exitDay = String(track.exit_trade_day ?? fallback.exit_at ?? "");
+  return `${label}${exitDay ? ` ${exitDay}` : ""}`;
 }
 
 function paperTrackingExitReturn(item: ShortpickPaperTrackingItem): number | null {
@@ -1964,7 +1986,7 @@ function TodayRunTab({
           <Descriptions size="small" column={{ xs: 1, md: 3 }}>
             <Descriptions.Item label="纸面对照">{llmControlCandidate.name} · {llmControlCandidate.symbol}</Descriptions.Item>
             <Descriptions.Item label="原始优先级">{priorityLabel(llmControlCandidate.research_priority)}</Descriptions.Item>
-            <Descriptions.Item label="验证口径">同一入场，四轨退出</Descriptions.Item>
+            <Descriptions.Item label="验证口径">同一入场，三轨退出</Descriptions.Item>
             <Descriptions.Item label="账户过滤" span={3}>
               {llmAccountFilterRule}
             </Descriptions.Item>
@@ -2099,7 +2121,7 @@ function FrozenRunStatus({
     frozen.selection_rule ?? "当全市场10日上涨占比不低于45%时，选择20日趋势向上、成交额较高且换手率相对不拥挤的第1名",
   );
   const frozenRiskRule = String(
-    frozen.risk_rule ?? "同一入场信号并行记录机械5日、机械10日、条件检查和10%止盈四条退出轨道。",
+    frozen.risk_rule ?? "同一入场信号并行记录机械5日、机械10日、止盈止损三条退出轨道。",
   );
   const alertDescription = isWaitingFirstFrozenRun
     ? "当前最新 LLM 对照批次生成于规则冻结前；下一次盘后批次会按冻结规则写入正式纸面跟踪或记录未触发原因。"
@@ -2216,7 +2238,7 @@ function PaperTrackingTab({
       render: (_, item) => (
         <Space direction="vertical" size={0}>
           <Text>{item.entry_rule || "次一交易日收盘买入"}</Text>
-          <Text type="secondary">{item.exit_rule || "机械5日、机械10日、条件检查、10%触达止盈四轨监测"}</Text>
+          <Text type="secondary">{item.exit_rule || "机械5日、机械10日、止盈止损三轨监测"}</Text>
         </Space>
       ),
     },
@@ -2240,11 +2262,19 @@ function PaperTrackingTab({
       title: "退出结果",
       key: "exit",
       render: (_, item) => {
-        const exitReturn = paperTrackingExitReturn(item);
+        const displayTracks = paperTrackingDisplayExitTracks(item);
         return (
           <Space direction="vertical" size={0}>
-            <Text>{paperTrackingExitText(item)}</Text>
-            <Text type="secondary">收益 {formatPercent(exitReturn)}</Text>
+            {displayTracks.length ? displayTracks.map((track) => (
+              <Text key={String(track.key ?? paperTrackingTrackExitText(track, item))} type={track.key === "take_profit_stop_loss" ? undefined : "secondary"}>
+                {paperTrackingTrackExitText(track, item)} · 收益 {formatPercent(typeof track.stock_return === "number" ? track.stock_return : null)}
+              </Text>
+            )) : (
+              <>
+                <Text>{paperTrackingExitText(item)}</Text>
+                <Text type="secondary">收益 {formatPercent(paperTrackingExitReturn(item))}</Text>
+              </>
+            )}
           </Space>
         );
       },
@@ -2372,12 +2402,12 @@ function PaperTrackingTab({
 
       <Card className="panel-card" title="冻结规则">
         <Descriptions size="small" column={{ xs: 1, md: 2 }}>
-          <Descriptions.Item label="策略名称" span={2}>{String(contract.label ?? "冻结纸面策略：低换手上升趋势四轨监测")}</Descriptions.Item>
+          <Descriptions.Item label="策略名称" span={2}>{String(contract.label ?? "冻结纸面策略：低换手上升趋势三轨监测")}</Descriptions.Item>
           <Descriptions.Item label="版本定位">v1 收盘买入主线</Descriptions.Item>
           <Descriptions.Item label="运行方式">{String(contract.mode ?? "每日滚动 5x1万；持有天数按交易日计算")}</Descriptions.Item>
           <Descriptions.Item label="候选池">{String(contract.pool_rule ?? "先扩大动量成交量候选池")}</Descriptions.Item>
           <Descriptions.Item label="选择规则">{String(contract.selection_rule ?? "当全市场10日上涨占比不低于45%时，选择20日趋势向上、成交额较高且换手率相对不拥挤的第1名")}</Descriptions.Item>
-          <Descriptions.Item label="监测规则">{String(contract.risk_rule ?? "机械5日、机械10日、条件检查、10%触达止盈四轨监测")}</Descriptions.Item>
+          <Descriptions.Item label="监测规则">{String(contract.risk_rule ?? "机械5日、机械10日、止盈止损三轨监测")}</Descriptions.Item>
           <Descriptions.Item label="边界说明" span={2}>{String(summary.scope_note ?? contract.scope_note ?? "LLM自由选股保留为对照组。")}</Descriptions.Item>
         </Descriptions>
         {monitoringTracks.length ? (
@@ -2404,7 +2434,7 @@ function PaperTrackingTab({
           <Descriptions.Item label="运行方式">沿用 v1 选股，入场改为次一交易日开盘价</Descriptions.Item>
           <Descriptions.Item label="选择规则" span={2}>{String(frozenV2Control.selection_rule ?? "沿用冻结 v1 的低换手上升趋势第1名，只改变入场价源。")}</Descriptions.Item>
           <Descriptions.Item label="可执行性" span={2}>{String(frozenV2Control.entry_rule ?? "次一交易日开盘买入；开盘直接接近涨停时标记为不可假设成交。")}</Descriptions.Item>
-          <Descriptions.Item label="监测规则" span={2}>与 v1 使用同一组机械5日、机械10日、条件检查和10%触达止盈退出轨道。</Descriptions.Item>
+          <Descriptions.Item label="监测规则" span={2}>与 v1 使用同一组机械5日、机械10日、止盈止损退出轨道。</Descriptions.Item>
         </Descriptions>
       </Card>
 
@@ -2413,7 +2443,7 @@ function PaperTrackingTab({
           <Descriptions.Item label="对照名称" span={2}>{String(llmControlContract.label ?? "LLM纸面对照：每日固定规则选1只")}</Descriptions.Item>
           <Descriptions.Item label="运行方式">{String(llmControlContract.mode ?? "从当日LLM自由推荐池中提前选1只")}</Descriptions.Item>
           <Descriptions.Item label="选择规则" span={2}>{String(llmControlContract.selection_rule ?? "跨模型同票优先，再按来源质量、置信度和稳定排序。")}</Descriptions.Item>
-          <Descriptions.Item label="监测规则" span={2}>{String(llmControlContract.monitoring_rule ?? "和冻结策略使用同一入场口径与四条退出轨道。")}</Descriptions.Item>
+          <Descriptions.Item label="监测规则" span={2}>{String(llmControlContract.monitoring_rule ?? "和冻结策略使用同一入场口径与三条退出轨道。")}</Descriptions.Item>
           <Descriptions.Item label="边界说明" span={2}>{String(summary.llm_control_scope_note ?? llmControlContract.scope_note ?? "全量LLM推荐池继续保留为研究样本。")}</Descriptions.Item>
           <Descriptions.Item label="最近批次">{String(latestRun?.run_date ?? "--")}</Descriptions.Item>
           <Descriptions.Item label="批次状态">{latestRun?.has_frozen_overlay ? "已包含冻结覆盖层" : "等待冻结后批次"}</Descriptions.Item>
@@ -2424,7 +2454,7 @@ function PaperTrackingTab({
         <Descriptions size="small" column={{ xs: 1, md: 2 }}>
           <Descriptions.Item label="对照名称" span={2}>{String(marketControlContract.label ?? "市场因子纸面对照：同池简单选法")}</Descriptions.Item>
           <Descriptions.Item label="运行方式" span={2}>{String(marketControlContract.mode ?? "和冻结策略使用同一个动量成交量Top40候选池，每个规则每天最多提前固定1只。")}</Descriptions.Item>
-          <Descriptions.Item label="监测规则" span={2}>{String(marketControlContract.monitoring_rule ?? "和冻结策略使用同一入场口径与四条退出轨道。")}</Descriptions.Item>
+          <Descriptions.Item label="监测规则" span={2}>{String(marketControlContract.monitoring_rule ?? "和冻结策略使用同一入场口径与三条退出轨道。")}</Descriptions.Item>
           <Descriptions.Item label="边界说明" span={2}>{String(summary.market_control_scope_note ?? marketControlContract.scope_note ?? "单票分析暂不升入冻结真实跟踪。")}</Descriptions.Item>
         </Descriptions>
         {marketControlRows.length ? (
@@ -2546,9 +2576,15 @@ function PaperTrackingTab({
                       <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
                     </div>
                     <Text type="secondary">信号 {paperTrackingSignalDate(item)} · 买入 {paperTrackingEntryDate(item)} · {item.selection_label || "纸面对照"}</Text>
-                    <Text type="secondary">{paperTrackingExitText(item)} · 收益 {formatPercent(paperTrackingExitReturn(item))}</Text>
+                    <Space direction="vertical" size={0}>
+                      {(paperTrackingDisplayExitTracks(item).length ? paperTrackingDisplayExitTracks(item) : [paperTrackingPrimaryExitTrack(item)].filter(Boolean) as Record<string, unknown>[]).map((track) => (
+                        <Text key={String(track.key ?? paperTrackingTrackExitText(track, item))} type="secondary">
+                          {paperTrackingTrackExitText(track, item)} · 收益 {formatPercent(typeof track.stock_return === "number" ? track.stock_return : null)}
+                        </Text>
+                      ))}
+                    </Space>
                     <Text>{item.entry_rule || "次一交易日收盘买入"}</Text>
-                    <Text type="secondary">{item.exit_rule || "机械5日、机械10日、条件检查、10%触达止盈四轨监测"}</Text>
+                    <Text type="secondary">{item.exit_rule || "机械5日、机械10日、止盈止损三轨监测"}</Text>
                     {item.thesis ? <Paragraph className="shortpick-paper-mobile-thesis">{item.thesis}</Paragraph> : null}
                   </div>
                 </List.Item>
@@ -3845,13 +3881,13 @@ function ReplayStrategyCloseout({
         showIcon
         type="warning"
         message="冻结纸面策略：账户可执行性复核未通过"
-        description={`${String(frozen.mode ?? "每日滚动 5x1万；持有天数按交易日计算")}；当前新开户普通账户口径长样本超额 ${formatPercent(Number(frozenSummary.excess_total_return ?? 0))}。${sampleNote} 正式前向仍会记录机械5日、机械10日、条件检查和10%触达止盈四条退出轨道；当前仍处于真实前向观察阶段，尚未形成生产级证明。`}
+        description={`${String(frozen.mode ?? "每日滚动 5x1万；持有天数按交易日计算")}；当前新开户普通账户口径长样本超额 ${formatPercent(Number(frozenSummary.excess_total_return ?? 0))}。${sampleNote} 正式前向仍会记录机械5日、机械10日、止盈止损三条退出轨道；当前仍处于真实前向观察阶段，尚未形成生产级证明。`}
       />
       <Row gutter={[12, 12]}>
         <Col xs={24} md={12} xl={6}>
           <div className="shortpick-replay-family-summary">
             <span>纸面主策略</span>
-            <strong>{String(frozen.label ?? "低换手上升趋势四轨监测").replace("冻结纸面策略：", "")}</strong>
+            <strong>{String(frozen.label ?? "低换手上升趋势三轨监测").replace("冻结纸面策略：", "")}</strong>
             <Text className={`value-${valueTone(Number(frozenSummary.excess_total_return ?? 0))}`}>长样本超额 {formatPercent(Number(frozenSummary.excess_total_return ?? 0))}</Text>
             <Text type="secondary">交易 {formatNumber(Number(frozenSummary.trade_count ?? 0))} 次 · 最大回撤 {formatPercent(Number(frozenSummary.max_drawdown ?? 0))}</Text>
             <Text type="secondary">100bp成本压力 {formatPercent(Number(costStress["100"]?.excess_total_return ?? 0))}</Text>
@@ -3860,7 +3896,7 @@ function ReplayStrategyCloseout({
         <Col xs={24} md={12} xl={6}>
           <div className="shortpick-replay-family-summary">
             <span>旧主线对照</span>
-            <strong>第二候选四轨退出监测</strong>
+            <strong>第二候选三轨退出监测</strong>
             <Text className={`value-${valueTone(Number(legacySecondSummary.excess_total_return ?? 0))}`}>长样本超额 {formatPercent(Number(legacySecondSummary.excess_total_return ?? 0))}</Text>
             <Text type="secondary">交易 {formatNumber(Number(legacySecondSummary.trade_count ?? 0))} 次 · 最大回撤 {formatPercent(Number(legacySecondSummary.max_drawdown ?? 0))}</Text>
             <Text type="secondary">用于和新冻结主线做真实纸面对比。</Text>
