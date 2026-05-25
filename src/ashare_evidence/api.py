@@ -70,6 +70,7 @@ from ashare_evidence.runtime_config import (
     update_model_api_key,
     upsert_provider_credential,
 )
+from ashare_evidence.runtime_locks import scheduled_refresh_lock_active
 from ashare_evidence.runtime_ops import run_operations_tick
 from ashare_evidence.scheduled_refresh_status import get_scheduled_refresh_status
 from ashare_evidence.schemas import (
@@ -1119,8 +1120,11 @@ def create_app(
     async def background_operations_loop(stop_event: asyncio.Event) -> None:
         while not stop_event.is_set():
             try:
-                with session_factory() as session:
-                    run_operations_tick(session)
+                if scheduled_refresh_lock_active():
+                    LOGGER.info("background operations tick skipped while scheduled refresh lock is active")
+                else:
+                    with session_factory() as session:
+                        run_operations_tick(session)
             except Exception:
                 LOGGER.exception("background operations tick failed")
             try:
