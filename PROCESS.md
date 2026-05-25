@@ -38,7 +38,7 @@
 - **artifact 写入保护要识别项目级 `.git`**：开发仓里的 `data/artifacts` 仍属于源码污染风险，必须拒绝刷新脚本直接写入；同步后的 runtime 目录没有项目级 `.git`，其中的 `data/artifacts` 是 live 数据目录，不能被同一保护误判为 source checkout。
 - **scheduled run 成功写候选后必须幂等**：短投试验田这类先写候选、后跑维护/验证的调度任务，retry 不能只依赖外层 slot 文件。写入侧要按业务日期、信息模式和触发源复用已完成 run；展示侧仍要保留语义去重，避免历史重复写入继续污染纸面跟踪。
 - **runtime DB 数据手术必须先备份再做可审计最小删除**：清理 live 重复候选时，先复制完整 sqlite 库到 `data/backups`，再用可复查的候选范围删除验证快照和候选；不要为了消除看板重复而删除仍可能有独立研究含义的 LLM run 内容。
-- **2026-05-23 shortpick 重复清理对应代码提交**：本轮写入侧幂等、读侧去重和专项回归落在 `698d4e8`；运行库清理事实见 `DECISIONS.md` 同日记录。
+- **短投重复清理要同时修写入和读取**：重复候选不能只做一次性 runtime 清理；写入侧要幂等，读取侧要语义去重，并补专项回归。运行库清理事实属于 `DECISIONS.md` 或 release evidence，不进入 PROCESS。
 - **纸面退出轨道要按真实触发时点建模**：止盈/止损类轨道不能被机械持有窗口约束。若策略定义为 10 日内随时触发，就应从买入后第 1 个交易日开始用可用的高低价检查；前端也要展示所有退出轨道，不能只把机械5日当成唯一结果。
 - **canonical 不可用先分层排查**：先查 localhost 5173/8000 健康，再查 canonical 是否 302 到登录页，再查 tunnel/remote port ownership；不要先误判为代码失效。
 - **canonical stale 多半是路由或隧道问题**：页面旧、接口新、资源健康时，优先检查 tunnel、远端端口和缓存态，再决定是否重新发布。
@@ -130,6 +130,6 @@
 - **自动化浏览器清理要精准**：清理 Playwright daemon 和临时 profile，不要 `pkill Chrome` 误伤用户会话。
 - **文件批量替换要保留行结构**：用脚本改文件时新内容必须按行插入，避免把函数体压成一行；复杂编辑优先用小 patch 或格式化工具验证。
 
-## 当前已归档的流水来源
+## 已归档流水来源
 
-2026-05-12 之前的详细发布流水、commit、截图、测试输出已经从本文件压缩为以上原则。需要追溯单次事实时查 git 历史、`PROJECT_STATUS.json`、release manifest 或对应 `output/` artifact，不再把这些细节追加回 PROCESS。
+历史详细发布流水、提交、截图、测试输出已经从本文件压缩为以上原则。需要追溯单次事实时查 git 历史、`PROJECT_STATUS.json`、release manifest 或对应 `output/` artifact，不再把这些细节追加回 PROCESS。
