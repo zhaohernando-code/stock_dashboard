@@ -67,6 +67,7 @@
 ## Short Pick Lab
 
 - **纸面跟踪 API 必须只读**：打开试验田、纸面跟踪或历史回放不能触发行情同步、模型调用、DB 写入或全量市场研究。
+- **固定日期测试要隔离当前日期漂移**：短投验证测试如果使用固定行情窗口和固定 run_date，`validate_recent_*` 的 lookback 必须动态覆盖该 fixture 日期，或显式冻结当前时间；不要让真实日期推进导致回归测试从“刷新失败”变成“没有 recent run”。
 - **历史回放页面只能读预计算统计**：feedback、策略收口和组合回测摘要必须由离线脚本或已完成 artifact 生成；页面请求不能临时扫 validation 表或跑 market-factor study。
 - **当前/下轮语义必须看 signal date 和 entry date**：已入场记录、下轮选择、当前交易中选择要分开展示。不要用最新 run 覆盖已入场 ledger。
 - **历史 seed 要显式写 signal/entry date**：冻结前已有人工盯盘名单时，回填必须带原信号日和实际入场日，避免页面显示“没有纸面追踪”。

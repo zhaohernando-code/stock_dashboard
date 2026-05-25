@@ -508,6 +508,8 @@ class ShortpickLabTests(unittest.TestCase):
 
     def test_validate_recent_shortpick_runs_refreshes_completed_runs(self) -> None:
         self._seed_daily_bars()
+        fixture_run_date = date(2026, 5, 5)
+        lookback_days = max(10, (datetime.now(UTC).date() - fixture_run_date).days + 1)
         executors = [
             StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("688981.SH", "中芯国际", "半导体国产替代", "https://a.example/news")),
         ]
@@ -517,12 +519,12 @@ class ShortpickLabTests(unittest.TestCase):
                 with session_scope(self.database_url) as session:
                     run_shortpick_experiment(
                         session,
-                        run_date=date(2026, 5, 5),
+                        run_date=fixture_run_date,
                         rounds_per_model=1,
                         triggered_by="root",
                         executors=executors,
                     )
-                    payload = validate_recent_shortpick_runs(session, days=10, limit=5, horizons=[1])
+                    payload = validate_recent_shortpick_runs(session, days=lookback_days, limit=5, horizons=[1])
 
         self.assertEqual(payload["refreshed_run_count"], 1)
         self.assertEqual(payload["runs"][0]["updated_validation_count"], 1)
@@ -530,6 +532,8 @@ class ShortpickLabTests(unittest.TestCase):
 
     def test_validate_recent_can_use_existing_market_data_only(self) -> None:
         self._seed_daily_bars()
+        fixture_run_date = date(2026, 5, 5)
+        lookback_days = max(30, (datetime.now(UTC).date() - fixture_run_date).days + 1)
         executors = [
             StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("688981.SH", "中芯国际", "半导体国产替代", "https://a.example/news")),
         ]
@@ -539,7 +543,7 @@ class ShortpickLabTests(unittest.TestCase):
                 with session_scope(self.database_url) as session:
                     run_shortpick_experiment(
                         session,
-                        run_date=date(2026, 5, 5),
+                        run_date=fixture_run_date,
                         rounds_per_model=1,
                         triggered_by="root",
                         executors=executors,
@@ -550,7 +554,7 @@ class ShortpickLabTests(unittest.TestCase):
                 with session_scope(self.database_url) as session:
                     payload = validate_recent_shortpick_runs(
                         session,
-                        days=30,
+                        days=lookback_days,
                         limit=5,
                         horizons=[1],
                         sync_market_data=False,

@@ -93,8 +93,8 @@ SHORTPICK_TOPIC_ROLLUP_ALIASES: dict[str, tuple[str, str]] = {
     "semiconductor_mask_localization": ("semiconductor_localization", "半导体国产替代"),
     "semiconductor_fab_engineering_orders": ("semiconductor_localization", "半导体国产替代"),
     "semiconductor_localization": ("semiconductor_localization", "半导体国产替代"),
-    "ai_computing_optical_communication": ("ai_compute_hardware", "AI算力硬件"),
-    "ai_compute_hardware": ("ai_compute_hardware", "AI算力硬件"),
+    "ai_computing_optical_communication": ("ai_compute_hardware", "AI 算力硬件"),
+    "ai_compute_hardware": ("ai_compute_hardware", "AI 算力硬件"),
 }
 SHORTPICK_INDUSTRY_LABEL_OVERRIDES_BY_SYMBOL = {
     "300207.SZ": "电池",
