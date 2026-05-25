@@ -36,7 +36,11 @@ export function getScheduledRefreshStatus() {
 
 export function getStockDashboard(symbol: string) {
   return (async () => ({
-    data: await request<StockDashboardResponse>('/stocks/' + encodeURIComponent(symbol) + '/dashboard'),
+    data: await request<StockDashboardResponse>(
+      '/stocks/' + encodeURIComponent(symbol) + '/dashboard',
+      undefined,
+      operationsDashboardRequestBehavior,
+    ),
     source: buildSourceInfo(),
   }))();
 }

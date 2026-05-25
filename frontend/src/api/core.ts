@@ -127,6 +127,21 @@ function isLocalPreviewOrigin(): boolean {
   );
 }
 
+function isSameOriginMountedBase(base: string): boolean {
+  try {
+    const parsed = new URL(base, window.location.origin);
+    const normalizedPath = normalizeApiBase(parsed.pathname);
+    return (
+      parsed.origin === window.location.origin
+      && Boolean(normalizedPath)
+      && normalizedPath !== "/"
+      && !normalizedPath.endsWith("/api")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function prefersPlainApiPath(base: string): boolean {
   try {
     const parsed = new URL(base, window.location.origin);
@@ -169,6 +184,8 @@ function getApiBases(): string[] {
   const mountedBase = inferAssetMountedBase();
   const locationBase = inferLocationBasedBase();
   const prefersMountedToolApi = Boolean(mountedBase) && mountedBase.startsWith("/tools/");
+  const mountedDeploymentBase = !isLocalPreviewOrigin()
+    && [mountedBase, locationBase].some((base) => base && isSameOriginMountedBase(base));
   const localBackendBase = inferLocalBackendBase();
   return dedupe([
     inferApiBaseFromQuery(),
@@ -177,8 +194,8 @@ function getApiBases(): string[] {
     readApiBaseFromStorage(),
     ...(prefersMountedToolApi ? [] : [mountedBase, locationBase]),
     localBackendBase,
-    ...(isLocalPreviewOrigin() ? [] : [inferOriginBase()]),
-    inferSiblingPortBackendBase(),
+    ...(isLocalPreviewOrigin() || mountedDeploymentBase ? [] : [inferOriginBase()]),
+    ...(mountedDeploymentBase ? [] : [inferSiblingPortBackendBase()]),
   ]).filter(Boolean);
 }
 
@@ -213,6 +230,8 @@ function buildRequestUrls(path: string, explicitBase = hasExplicitApiBase()): st
       } else {
         if (prefersPlainApiPath(base)) {
           urls.push(`${base}${normalizedPath}`);
+        } else if (isSameOriginMountedBase(base)) {
+          urls.push(`${base}/api${normalizedPath}`);
         } else {
           urls.push(`${base}/api${normalizedPath}`);
           urls.push(`${base}${normalizedPath}`);

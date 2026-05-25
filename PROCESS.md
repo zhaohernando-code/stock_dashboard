@@ -41,6 +41,7 @@
 - **纸面退出轨道要按真实触发时点建模**：止盈/止损类轨道不能被机械持有窗口约束。若策略定义为 10 日内随时触发，就应从买入后第 1 个交易日开始用可用的高低价检查；前端也要展示所有退出轨道，不能只把机械5日当成唯一结果。
 - **canonical 不可用先分层排查**：先查 localhost 5173/8000 健康，再查 canonical 是否 302 到登录页，再查 tunnel/remote port ownership；不要先误判为代码失效。
 - **canonical stale 多半是路由或隧道问题**：页面旧、接口新、资源健康时，优先检查 tunnel、远端端口和缓存态，再决定是否重新发布。
+- **mounted app API fallback 不能越过挂载前缀**：canonical 路由挂在 `/projects/ashare-dashboard/` 时，前端请求只能优先走同前缀 `/projects/ashare-dashboard/api/...`。不要把超时或 HTML fallback 降级到站点根 `/api/...` 或无 `/api` 的 SPA 路径，否则会制造 404、误报面板失败，并掩盖真实 API 慢查询。
 - **LaunchAgent 要区分任务和服务**：定时任务用 `RunAtLoad` + `StartCalendarInterval` 或 `StartInterval`；服务进程用 `RunAtLoad` + `KeepAlive`。需要精确时钟触发时不能只靠 `StartInterval=300`；关键时点应配置显式 calendar trigger，并让任务用 slot state 保证多次唤醒不重复写入。
 - **SSH 隧道要自愈且能清旧占用**：重连失败先查远端旧 sshd 是否占端口；清理脚本改动后跑语法检查；隧道进程遇错应退避重试。
 - **SQLite 写锁要按工作流避让**：批量短投验证、历史回放、盘后刷新和页面验收不要无脑并发；遇到等待时先判断锁持有者，不要把慢写误判为 Python 崩溃。
