@@ -63,6 +63,12 @@ from ashare_evidence.stock_master import DEFAULT_AKSHARE_TIMEOUT_SECONDS, akshar
 SHORTPICK_PROMPT_VERSION = "native_web_open_discovery_v1"
 SHORTPICK_INFORMATION_MODE = "native_web_open_discovery"
 SHORTPICK_DEFAULT_HORIZONS = [1, 3, 5, 10, 20]
+SHORTPICK_PENDING_VALIDATION_REFRESH_STATUSES = {
+    "pending_benchmark_data",
+    "pending_entry_bar",
+    "pending_forward_window",
+    "pending_market_data",
+}
 SHORTPICK_OFFICIAL_VALIDATION_MODE = "after_close_t_plus_1_close_entry_v1"
 SHORTPICK_LEGACY_VALIDATION_MODE = "legacy_previous_close_entry"
 SHORTPICK_SIGNAL_REACTION_MODE = "signal_reaction_close_to_close"
@@ -4407,7 +4413,7 @@ def validate_recent_shortpick_runs(
     target_horizons = horizons or SHORTPICK_DEFAULT_HORIZONS
     cutoff = datetime.now(UTC).date() - timedelta(days=max(1, int(days)))
     run_limit = max(1, min(int(limit), 100))
-    runs = session.scalars(
+    latest_runs = session.scalars(
         select(ShortpickExperimentRun)
         .where(
             ShortpickExperimentRun.status == "completed",
@@ -4416,6 +4422,25 @@ def validate_recent_shortpick_runs(
         .order_by(ShortpickExperimentRun.run_date.desc(), ShortpickExperimentRun.id.desc())
         .limit(run_limit)
     ).all()
+    pending_runs = session.scalars(
+        select(ShortpickExperimentRun)
+        .join(ShortpickCandidate, ShortpickCandidate.run_id == ShortpickExperimentRun.id)
+        .join(ShortpickValidationSnapshot, ShortpickValidationSnapshot.candidate_id == ShortpickCandidate.id)
+        .where(
+            ShortpickExperimentRun.status == "completed",
+            ShortpickExperimentRun.information_mode == SHORTPICK_INFORMATION_MODE,
+            ShortpickExperimentRun.run_date >= cutoff,
+            ShortpickValidationSnapshot.horizon_days.in_(target_horizons),
+            ShortpickValidationSnapshot.status.in_(SHORTPICK_PENDING_VALIDATION_REFRESH_STATUSES),
+        )
+        .distinct()
+        .order_by(ShortpickExperimentRun.run_date.asc(), ShortpickExperimentRun.id.asc())
+        .limit(run_limit)
+    ).all()
+    runs_by_id: dict[int, ShortpickExperimentRun] = {}
+    for run in [*pending_runs, *latest_runs]:
+        runs_by_id.setdefault(run.id, run)
+    runs = list(runs_by_id.values())
     refreshed: list[dict[str, Any]] = []
     for run in runs:
         result = validate_shortpick_run(

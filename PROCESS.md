@@ -83,6 +83,7 @@
 - **长窗口策略证据要和 LLM replay 分名**：当 LLM 历史 replay 时间窗过短时，可以用 full-window staged portfolio artifact 扩充确定性策略族的跨时段和分行情证据，但页面必须明确它回答的是组合路径稳定性，不等同于扩充了 LLM 自由选股样本。
 - **非 LLM 高级分析也要声明数据粒度**：组合级置信区间、稳定性和归因可以从 staged portfolio 月度/季度/行情桶产物投影；股票/行业归因必须等全量逐笔 artifact，不能用 `trades_sample` 外推。
 - **纸面退出结果要默认浮出**：机械 5 日这类已完成退出不能只藏在搜索和翻页里；试验田应有退出数量、等待窗口、最新退出和退出状态筛选。落实见 `8ef154e Surface shortpick paper tracking exits`。
+- **纸面验证补算要覆盖到期旧批次**：机械 10 日、20 日这类长窗口到期时，旧 run 可能已被每日新 run 挤出“最新 N 个批次”。定时补算必须额外纳入近窗口内仍有 pending validation 的批次，否则页面会长期只显示 5 日退出。
 
 ## 历史回放与证据隔离
 

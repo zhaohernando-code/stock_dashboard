@@ -124,6 +124,7 @@
     "scheduled_refresh_2026_05_11_catchup": "published_runtime_verified_completed_postmarket_shortpick_and_full_simulation_launchagent_bootstrap_tree_timeout_db_wait_validation_nonblocking_deepseek_round_soft_timeout",
     "shortpick_frozen_paper_tracking_ui": "published_runtime_verified_waiting_first_frozen_run",
     "shortpick_frozen_paper_four_exit_tracks": "published_runtime_verified_waiting_first_frozen_run",
+    "shortpick_paper_long_exit_refresh_window": "task_branch_validated_pending_publish",
     "shortpick_llm_one_stock_paper_control": "published_runtime_verified_waiting_first_post_change_run",
     "shortpick_final_same_pool_paper_controls": "published_runtime_verified_waiting_first_post_change_run",
     "shortpick_no_limit_chase_paper_control": "published_runtime_verified_run_121_backfilled_002384",

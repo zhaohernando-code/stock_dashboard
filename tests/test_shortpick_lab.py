@@ -530,6 +530,71 @@ class ShortpickLabTests(unittest.TestCase):
         self.assertEqual(payload["runs"][0]["updated_validation_count"], 1)
         self.assertEqual(payload["runs"][0]["summary"]["completed_validation_count"], 3)
 
+    def test_validate_recent_includes_pending_paper_windows_outside_latest_limit(self) -> None:
+        now = datetime(2026, 5, 26, 8, 0, tzinfo=UTC)
+
+        def add_run(session, run_date: date, index: int, *, pending: bool = False) -> int:
+            run = ShortpickExperimentRun(
+                run_key=f"shortpick:test:pending-refresh:{index}",
+                run_date=run_date,
+                prompt_version="test",
+                information_mode=SHORTPICK_INFORMATION_MODE,
+                status="completed",
+                trigger_source="test",
+                triggered_by="root",
+                started_at=now,
+                completed_at=now,
+                model_config={},
+                summary_payload={},
+            )
+            session.add(run)
+            session.flush()
+            candidate = ShortpickCandidate(
+                run_id=run.id,
+                candidate_key=f"shortpick:test:pending-refresh:{index}:candidate",
+                symbol=f"600{index:03d}.SH",
+                name=f"测试{index}",
+                research_priority="market_factor_frozen_paper",
+                parse_status="parsed",
+                candidate_payload={"tracking_role": "frozen_paper_primary"},
+            )
+            session.add(candidate)
+            session.flush()
+            if pending:
+                session.add(
+                    ShortpickValidationSnapshot(
+                        candidate_id=candidate.id,
+                        horizon_days=10,
+                        status="pending_forward_window",
+                        validation_payload={"required_forward_bars": 10},
+                    )
+                )
+                session.flush()
+            return run.id
+
+        with session_scope(self.database_url) as session:
+            old_pending_id = add_run(session, date(2026, 5, 8), 8, pending=True)
+            add_run(session, date(2026, 5, 20), 20)
+            add_run(session, date(2026, 5, 21), 21)
+            latest_ids = [
+                add_run(session, date(2026, 5, 22), 22),
+                add_run(session, date(2026, 5, 25), 25),
+            ]
+
+            seen_run_ids: list[int] = []
+
+            def fake_validate(_session, run_id: int, **_kwargs):
+                seen_run_ids.append(run_id)
+                return {"updated_validation_count": 0, "summary": {"run_id": run_id}}
+
+            with patch("ashare_evidence.shortpick_lab.validate_shortpick_run", side_effect=fake_validate):
+                payload = validate_recent_shortpick_runs(session, days=30, limit=2, horizons=[10])
+
+        self.assertIn(old_pending_id, seen_run_ids)
+        self.assertEqual(seen_run_ids[0], old_pending_id)
+        self.assertEqual(set(latest_ids), set(seen_run_ids[-2:]))
+        self.assertEqual(payload["refreshed_run_count"], 3)
+
     def test_validate_recent_can_use_existing_market_data_only(self) -> None:
         self._seed_daily_bars()
         fixture_run_date = date(2026, 5, 5)
