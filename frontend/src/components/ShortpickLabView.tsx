@@ -1266,9 +1266,22 @@ function hasPaperTrackingRiskExit(item: ShortpickPaperTrackingItem): boolean {
   return paperTrackingRiskExitTrack(item) !== null;
 }
 
+function paperTrackingTrackExitDay(track: Record<string, unknown> | null | undefined, fallback: ShortpickPaperTrackingItem): string {
+  return String(track?.exit_trade_day ?? fallback.exit_at ?? "");
+}
+
+function paperTrackingTrackReturn(track: Record<string, unknown> | null | undefined, fallback: ShortpickPaperTrackingItem): number | null {
+  if (track && typeof track.stock_return === "number") return track.stock_return;
+  return typeof fallback.stock_return === "number" ? fallback.stock_return : null;
+}
+
+function paperTrackingPriorityExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
+  return paperTrackingMechanical10dExitTrack(item) ?? paperTrackingMechanical5dExitTrack(item) ?? paperTrackingPrimaryExitTrack(item);
+}
+
 function paperTrackingExitDay(item: ShortpickPaperTrackingItem): string {
   const track = paperTrackingPrimaryExitTrack(item);
-  return String(track?.exit_trade_day ?? item.exit_at ?? "");
+  return paperTrackingTrackExitDay(track, item);
 }
 
 function paperTrackingExitText(item: ShortpickPaperTrackingItem): string {
@@ -1287,22 +1300,21 @@ function paperTrackingExitText(item: ShortpickPaperTrackingItem): string {
 
 function paperTrackingTrackExitText(track: Record<string, unknown>, fallback: ShortpickPaperTrackingItem): string {
   const label = String(track.label ?? "退出");
-  const exitDay = String(track.exit_trade_day ?? fallback.exit_at ?? "");
+  const exitDay = paperTrackingTrackExitDay(track, fallback);
   return `${label}${exitDay ? ` ${exitDay}` : ""}`;
 }
 
 function paperTrackingExitReturn(item: ShortpickPaperTrackingItem): number | null {
   const track = paperTrackingPrimaryExitTrack(item);
-  if (track && typeof track.stock_return === "number") return track.stock_return;
-  return typeof item.stock_return === "number" ? item.stock_return : null;
+  return paperTrackingTrackReturn(track, item);
 }
 
 function comparePaperTrackingRows(left: ShortpickPaperTrackingItem, right: ShortpickPaperTrackingItem): number {
   const leftExitPriority = hasPaperTrackingMechanical10dExit(left) ? 2 : hasPaperTrackingMechanical5dExit(left) ? 1 : 0;
   const rightExitPriority = hasPaperTrackingMechanical10dExit(right) ? 2 : hasPaperTrackingMechanical5dExit(right) ? 1 : 0;
   if (leftExitPriority !== rightExitPriority) return rightExitPriority - leftExitPriority;
-  const leftExitDay = paperTrackingExitDay(left);
-  const rightExitDay = paperTrackingExitDay(right);
+  const leftExitDay = paperTrackingTrackExitDay(paperTrackingPriorityExitTrack(left), left);
+  const rightExitDay = paperTrackingTrackExitDay(paperTrackingPriorityExitTrack(right), right);
   if (leftExitDay !== rightExitDay) return rightExitDay.localeCompare(leftExitDay);
   const leftSignal = paperTrackingSignalDate(left);
   const rightSignal = paperTrackingSignalDate(right);
@@ -2380,10 +2392,16 @@ function PaperTrackingTab({
           <Col xs={24} md={6}>
             <div className="shortpick-metric">
               <span>最新10日退出</span>
-              <strong>{latestMechanical10d ? paperTrackingExitDay(latestMechanical10d) : latestMechanical5d ? paperTrackingExitDay(latestMechanical5d) : "--"}</strong>
+              <strong>
+                {latestMechanical10d
+                  ? paperTrackingTrackExitDay(paperTrackingMechanical10dExitTrack(latestMechanical10d), latestMechanical10d)
+                  : latestMechanical5d
+                    ? paperTrackingExitDay(latestMechanical5d)
+                    : "--"}
+              </strong>
               <Text type="secondary">
                 {latestMechanical10d
-                  ? `${latestMechanical10d.name} ${formatPercent(paperTrackingExitReturn(latestMechanical10d))}`
+                  ? `${latestMechanical10d.name} ${formatPercent(paperTrackingTrackReturn(paperTrackingMechanical10dExitTrack(latestMechanical10d), latestMechanical10d))}`
                   : latestMechanical5d
                     ? `暂无10日；5日 ${latestMechanical5d.name} ${formatPercent(paperTrackingExitReturn(latestMechanical5d))}`
                     : "暂无完成记录"}
