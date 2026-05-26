@@ -1298,9 +1298,9 @@ function paperTrackingExitReturn(item: ShortpickPaperTrackingItem): number | nul
 }
 
 function comparePaperTrackingRows(left: ShortpickPaperTrackingItem, right: ShortpickPaperTrackingItem): number {
-  const leftExit = hasPaperTrackingMechanical5dExit(left) ? 1 : 0;
-  const rightExit = hasPaperTrackingMechanical5dExit(right) ? 1 : 0;
-  if (leftExit !== rightExit) return rightExit - leftExit;
+  const leftExitPriority = hasPaperTrackingMechanical10dExit(left) ? 2 : hasPaperTrackingMechanical5dExit(left) ? 1 : 0;
+  const rightExitPriority = hasPaperTrackingMechanical10dExit(right) ? 2 : hasPaperTrackingMechanical5dExit(right) ? 1 : 0;
+  if (leftExitPriority !== rightExitPriority) return rightExitPriority - leftExitPriority;
   const leftExitDay = paperTrackingExitDay(left);
   const rightExitDay = paperTrackingExitDay(right);
   if (leftExitDay !== rightExitDay) return rightExitDay.localeCompare(leftExitDay);
@@ -2225,8 +2225,10 @@ function PaperTrackingTab({
   const marketControlRows = marketControls.filter((control) => control.role !== "market_factor_control_low_turnover_uptrend_next_open_entry");
   const enteredRows = rows.filter((item) => hasPaperTrackingEntered(item));
   const mechanical5dRows = rows.filter(hasPaperTrackingMechanical5dExit).sort(comparePaperTrackingRows);
+  const mechanical10dRows = rows.filter(hasPaperTrackingMechanical10dExit).sort(comparePaperTrackingRows);
   const latestMechanical5d = mechanical5dRows[0] ?? null;
-  const waitingExitRows = enteredRows.filter((item) => !hasPaperTrackingMechanical5dExit(item));
+  const latestMechanical10d = mechanical10dRows[0] ?? null;
+  const waiting10dRows = enteredRows.filter((item) => !hasPaperTrackingMechanical10dExit(item));
   const columns: ColumnsType<ShortpickPaperTrackingItem> = [
     {
       title: "信号 / 买入",
@@ -2354,26 +2356,37 @@ function PaperTrackingTab({
           </Col>
         </Row>
         <Row gutter={[12, 12]} className="shortpick-frozen-metrics">
-          <Col xs={24} md={8}>
+          <Col xs={24} md={6}>
             <div className="shortpick-metric">
               <span>机械5日已退出</span>
               <strong>{mechanical5dRows.length}</strong>
               <Text type="secondary">正式策略与对照组</Text>
             </div>
           </Col>
-          <Col xs={24} md={8}>
+          <Col xs={24} md={6}>
             <div className="shortpick-metric">
-              <span>等待5日窗口</span>
-              <strong>{waitingExitRows.length}</strong>
-              <Text type="secondary">已入场但尚未触发机械5日</Text>
+              <span>机械10日已退出</span>
+              <strong>{mechanical10dRows.length}</strong>
+              <Text type="secondary">长窗口到期批次</Text>
             </div>
           </Col>
-          <Col xs={24} md={8}>
+          <Col xs={24} md={6}>
             <div className="shortpick-metric">
-              <span>最新5日退出</span>
-              <strong>{latestMechanical5d ? paperTrackingExitDay(latestMechanical5d) : "--"}</strong>
+              <span>等待10日窗口</span>
+              <strong>{waiting10dRows.length}</strong>
+              <Text type="secondary">已入场但尚未触发机械10日</Text>
+            </div>
+          </Col>
+          <Col xs={24} md={6}>
+            <div className="shortpick-metric">
+              <span>最新10日退出</span>
+              <strong>{latestMechanical10d ? paperTrackingExitDay(latestMechanical10d) : latestMechanical5d ? paperTrackingExitDay(latestMechanical5d) : "--"}</strong>
               <Text type="secondary">
-                {latestMechanical5d ? `${latestMechanical5d.name} ${formatPercent(paperTrackingExitReturn(latestMechanical5d))}` : "暂无完成记录"}
+                {latestMechanical10d
+                  ? `${latestMechanical10d.name} ${formatPercent(paperTrackingExitReturn(latestMechanical10d))}`
+                  : latestMechanical5d
+                    ? `暂无10日；5日 ${latestMechanical5d.name} ${formatPercent(paperTrackingExitReturn(latestMechanical5d))}`
+                    : "暂无完成记录"}
               </Text>
             </div>
           </Col>

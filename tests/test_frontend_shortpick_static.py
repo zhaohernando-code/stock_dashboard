@@ -36,6 +36,8 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("买入口径", component_source)
         self.assertIn("机械5日已退出", component_source)
         self.assertIn("机械10日已退出", component_source)
+        self.assertIn("等待10日窗口", component_source)
+        self.assertIn("最新10日退出", component_source)
         self.assertIn("止盈止损已退出", component_source)
         self.assertIn("等待退出结果", component_source)
         self.assertIn("没有符合当前筛选条件的纸面跟踪记录。", component_source)
