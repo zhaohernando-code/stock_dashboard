@@ -20,7 +20,14 @@ def test_live_shortpick_strategy_overlay_is_explicit_and_lock_aware() -> None:
 
 
 def test_frontend_labels_live_strategy_groups_with_readable_text() -> None:
-    source = (REPO_ROOT / "frontend" / "src" / "components" / "ShortpickLabView.tsx").read_text(encoding="utf-8")
+    components_root = REPO_ROOT / "frontend" / "src" / "components"
+    source = "\n".join(
+        (components_root / filename).read_text(encoding="utf-8")
+        for filename in [
+            "ShortpickLabView.tsx",
+            "shortpickLabLabels.ts",
+        ]
+    )
 
     assert "策略默认" in source
     assert "进攻对照" in source

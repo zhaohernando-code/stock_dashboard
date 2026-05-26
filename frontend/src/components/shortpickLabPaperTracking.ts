@@ -1,0 +1,282 @@
+import type { ShortpickPaperTrackingItem } from "../types";
+import { formatDate } from "../utils/format";
+import { statusLabel } from "./shortpickLabLabels";
+
+export type PaperTrackingGroupFilter = "" | "frozen_strategy" | "frozen_strategy_v2" | "llm_paper_control" | "market_factor_control" | "market_random_control";
+export type PaperTrackingEntryStateFilter = "entered" | "pending" | "";
+export type PaperTrackingEntryRuleFilter = "" | "next_close" | "next_open" | "same_day_intraday_current";
+export type PaperTrackingExitStateFilter = "" | "mechanical_5d_done" | "mechanical_10d_done" | "take_profit_stop_loss_done" | "waiting_exit";
+
+export function paperTrackingStatusLabel(value?: string | null): string {
+  if (value === "tracking_active") return "已有正式标的";
+  if (value === "waiting_first_frozen_run") return "等待首批";
+  if (value === "no_signal") return "本批次未触发";
+  if (value === "waiting_signal") return "等待信号";
+  return "等待跟踪";
+}
+
+export function paperTrackingAlertType(value?: string | null): "success" | "info" | "warning" {
+  if (value === "tracking_active") return "success";
+  if (value === "waiting_first_frozen_run") return "warning";
+  return "info";
+}
+
+export function paperTrackingGroupLabel(value?: string | null): string {
+  if (value === "llm_paper_control") return "LLM纸面对照";
+  if (value === "market_factor_control") return "市场因子对照";
+  if (value === "market_random_control") return "同池随机基线";
+  if (value === "frozen_strategy_v2") return "冻结候选 v2";
+  if (value === "frozen_strategy") return "冻结策略";
+  return "纸面跟踪";
+}
+
+export function paperTrackingGroupColor(value?: string | null): string {
+  if (value === "llm_paper_control") return "blue";
+  if (value === "market_factor_control") return "cyan";
+  if (value === "market_random_control") return "default";
+  if (value === "frozen_strategy_v2") return "geekblue";
+  if (value === "frozen_strategy") return "purple";
+  return "default";
+}
+
+function paperTrackingDisplayRank(item: ShortpickPaperTrackingItem): number {
+  if (item.tracking_group === "frozen_strategy") return 0;
+  if (item.tracking_group === "frozen_strategy_v2") return 1;
+  if (item.tracking_group === "llm_paper_control") return 2;
+  if (item.tracking_group === "market_factor_control") return 3;
+  if (item.tracking_group === "market_random_control") return 4;
+  return 5;
+}
+
+export function paperTrackingChoiceLabel(latestRun?: Record<string, unknown> | null): "当前" | "下轮" {
+  const now = new Date();
+  const day = now.getDay();
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const isTradingDaytime = day >= 1 && day <= 5 && minutes >= 9 * 60 + 30 && minutes <= 15 * 60;
+  if (isTradingDaytime) return "当前";
+  const runDate = typeof latestRun?.run_date === "string" ? latestRun.run_date : "";
+  const today = localDateString(now);
+  const isAfterClose = day >= 1 && day <= 5 && minutes > 15 * 60;
+  if (isAfterClose && runDate !== today) return "当前";
+  return "下轮";
+}
+
+function localDateString(value = new Date()): string {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}
+
+function nextWeekdayAfter(runDate: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(runDate);
+  if (!match) return "下一交易日";
+  const next = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + 1);
+  while (next.getDay() === 0 || next.getDay() === 6) {
+    next.setDate(next.getDate() + 1);
+  }
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+}
+
+export function paperTrackingSignalDate(item: ShortpickPaperTrackingItem): string {
+  return item.signal_date || item.run_date;
+}
+
+export function paperTrackingEntryDate(item: ShortpickPaperTrackingItem): string {
+  return item.entry_date || nextWeekdayAfter(paperTrackingSignalDate(item));
+}
+
+export function paperTrackingExpectedEntryText(item: ShortpickPaperTrackingItem): string {
+  const isIntraday = Boolean(item.entry_rule?.includes("盘中") || item.entry_rule?.includes("当前价"));
+  const session = isIntraday ? "盘中" : item.entry_rule?.includes("开盘") ? "开盘" : "收盘";
+  return `预计买入 ${paperTrackingEntryDate(item)} ${session}`;
+}
+
+export function hasPaperTrackingEntered(item: ShortpickPaperTrackingItem, today = localDateString()): boolean {
+  const entryDate = paperTrackingEntryDate(item);
+  return /^\d{4}-\d{2}-\d{2}$/.test(entryDate) && entryDate <= today;
+}
+
+export function paperTrackingChoiceTimingText(
+  choiceLabel: "当前" | "下轮",
+  choiceRows: ShortpickPaperTrackingItem[],
+  latestRun?: Record<string, unknown> | null,
+): string {
+  const runDate = typeof latestRun?.run_date === "string" ? latestRun.run_date : "";
+  const signalDate = choiceRows[0] ? paperTrackingSignalDate(choiceRows[0]) : runDate;
+  const entryDate = choiceRows[0] ? paperTrackingEntryDate(choiceRows[0]) : runDate ? nextWeekdayAfter(runDate) : "";
+  const hasOpenEntry = choiceRows.some((item) => item.entry_rule?.includes("开盘"));
+  const hasIntradayEntry = choiceRows.some((item) => item.entry_rule?.includes("盘中") || item.entry_rule?.includes("当前价"));
+  if (!signalDate) return choiceLabel === "下轮" ? "信号日待确认 · 次一交易日收盘买入" : "当前跟踪信号待确认";
+  if (hasIntradayEntry) {
+    return `信号日 ${signalDate} · 含同日盘中当前价买入对照`;
+  }
+  if (hasOpenEntry) {
+    return `信号日 ${signalDate} · 预计买入日 ${entryDate}，不同对照按各自入场规则执行`;
+  }
+  if (choiceLabel === "下轮") {
+    return `信号日 ${signalDate} · 预计买入 ${entryDate} 收盘`;
+  }
+  return `当前跟踪 · 信号日 ${signalDate} · 入场口径为次一交易日收盘买入`;
+}
+
+export function latestPaperTrackingChoices(rows: ShortpickPaperTrackingItem[], latestRun?: Record<string, unknown> | null): ShortpickPaperTrackingItem[] {
+  const latestRunId = Number(latestRun?.id ?? 0);
+  const latestRunDate = typeof latestRun?.run_date === "string" ? latestRun.run_date : "";
+  const scoped = rows.filter((item) => (
+    latestRunId ? Number(item.run_id) === latestRunId : latestRunDate ? item.run_date === latestRunDate : false
+  ));
+  const source = scoped.length ? scoped : rows;
+  const latestDate = source.reduce((value, item) => (paperTrackingSignalDate(item) > value ? paperTrackingSignalDate(item) : value), "");
+  return source
+    .filter((item) => paperTrackingSignalDate(item) === latestDate)
+    .sort((left, right) => (
+      paperTrackingDisplayRank(left) - paperTrackingDisplayRank(right)
+      || Number(left.source_rank ?? 99) - Number(right.source_rank ?? 99)
+      || left.name.localeCompare(right.name, "zh-Hans-CN")
+    ));
+}
+
+export function nextPendingEntryDate(rows: ShortpickPaperTrackingItem[]): string {
+  const today = localDateString();
+  return rows
+    .map((item) => paperTrackingEntryDate(item))
+    .filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && value > today)
+    .sort()[0] ?? "";
+}
+
+export function paperTrackingEntryRuleKey(item: ShortpickPaperTrackingItem): PaperTrackingEntryRuleFilter {
+  const entryRule = item.entry_rule ?? "";
+  if (entryRule.includes("开盘")) return "next_open";
+  if (entryRule.includes("盘中") || entryRule.includes("当前价")) return "same_day_intraday_current";
+  return "next_close";
+}
+
+export function paperTrackingSearchText(item: ShortpickPaperTrackingItem): string {
+  return [
+    item.symbol,
+    item.name,
+    paperTrackingSignalDate(item),
+    paperTrackingEntryDate(item),
+    paperTrackingGroupLabel(item.tracking_group),
+    item.selection_label,
+    item.entry_rule,
+    item.exit_rule,
+    item.thesis,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function paperTrackingExitTracks(item: ShortpickPaperTrackingItem): Record<string, unknown>[] {
+  return Array.isArray(item.paper_tracking_exit_tracks) ? item.paper_tracking_exit_tracks : [];
+}
+
+export function paperTrackingPrimaryExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
+  const tracks = paperTrackingExitTracks(item);
+  return tracks.find((track) => track.key === "mechanical_5d") ?? tracks[0] ?? null;
+}
+
+function paperTrackingExitTrackSortValue(track: Record<string, unknown>): number {
+  const key = String(track.key ?? "");
+  if (key === "mechanical_5d") return 0;
+  if (key === "mechanical_10d") return 1;
+  if (key === "take_profit_stop_loss") return 2;
+  if (key === "conditional_5_to_10d") return 3;
+  if (key === "take_profit_10pct") return 4;
+  return 5;
+}
+
+export function paperTrackingDisplayExitTracks(item: ShortpickPaperTrackingItem): Record<string, unknown>[] {
+  return [...paperTrackingExitTracks(item)]
+    .filter((track) => track.exit_trade_day || typeof track.stock_return === "number")
+    .sort((left, right) => paperTrackingExitTrackSortValue(left) - paperTrackingExitTrackSortValue(right));
+}
+
+function paperTrackingMechanical5dExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
+  return paperTrackingExitTracks(item).find((track) => track.key === "mechanical_5d") ?? null;
+}
+
+export function hasPaperTrackingMechanical5dExit(item: ShortpickPaperTrackingItem): boolean {
+  return paperTrackingMechanical5dExitTrack(item) !== null;
+}
+
+export function paperTrackingMechanical10dExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
+  return paperTrackingExitTracks(item).find((track) => track.key === "mechanical_10d") ?? null;
+}
+
+export function hasPaperTrackingMechanical10dExit(item: ShortpickPaperTrackingItem): boolean {
+  return paperTrackingMechanical10dExitTrack(item) !== null;
+}
+
+function paperTrackingRiskExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
+  return paperTrackingExitTracks(item).find((track) => track.key === "take_profit_stop_loss") ?? null;
+}
+
+export function hasPaperTrackingRiskExit(item: ShortpickPaperTrackingItem): boolean {
+  return paperTrackingRiskExitTrack(item) !== null;
+}
+
+export function paperTrackingTrackExitDay(track: Record<string, unknown> | null | undefined, fallback: ShortpickPaperTrackingItem): string {
+  return String(track?.exit_trade_day ?? fallback.exit_at ?? "");
+}
+
+export function paperTrackingTrackReturn(track: Record<string, unknown> | null | undefined, fallback: ShortpickPaperTrackingItem): number | null {
+  if (track && typeof track.stock_return === "number") return track.stock_return;
+  return typeof fallback.stock_return === "number" ? fallback.stock_return : null;
+}
+
+function paperTrackingPriorityExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
+  return paperTrackingMechanical10dExitTrack(item) ?? paperTrackingMechanical5dExitTrack(item) ?? paperTrackingPrimaryExitTrack(item);
+}
+
+export function paperTrackingExitDay(item: ShortpickPaperTrackingItem): string {
+  const track = paperTrackingPrimaryExitTrack(item);
+  return paperTrackingTrackExitDay(track, item);
+}
+
+export function paperTrackingExitText(item: ShortpickPaperTrackingItem): string {
+  const track = paperTrackingPrimaryExitTrack(item);
+  if (track) {
+    const label = String(track.label ?? "退出");
+    const exitDay = String(track.exit_trade_day ?? item.exit_at ?? "");
+    return `${label}${exitDay ? ` ${exitDay}` : ""}`;
+  }
+  if (item.validation_status === "completed" && item.exit_at) {
+    return `${Number(item.validation_horizon_days ?? 0) || "--"}日 ${formatDate(item.exit_at)}`;
+  }
+  if (item.validation_status && item.validation_status !== "not_started") return statusLabel(item.validation_status);
+  return "等待窗口";
+}
+
+export function paperTrackingTrackExitText(track: Record<string, unknown>, fallback: ShortpickPaperTrackingItem): string {
+  const label = String(track.label ?? "退出");
+  const exitDay = paperTrackingTrackExitDay(track, fallback);
+  return `${label}${exitDay ? ` ${exitDay}` : ""}`;
+}
+
+export function paperTrackingExitReturn(item: ShortpickPaperTrackingItem): number | null {
+  const track = paperTrackingPrimaryExitTrack(item);
+  return paperTrackingTrackReturn(track, item);
+}
+
+export function comparePaperTrackingRows(left: ShortpickPaperTrackingItem, right: ShortpickPaperTrackingItem): number {
+  const leftExitPriority = hasPaperTrackingMechanical10dExit(left) ? 2 : hasPaperTrackingMechanical5dExit(left) ? 1 : 0;
+  const rightExitPriority = hasPaperTrackingMechanical10dExit(right) ? 2 : hasPaperTrackingMechanical5dExit(right) ? 1 : 0;
+  if (leftExitPriority !== rightExitPriority) return rightExitPriority - leftExitPriority;
+  const leftExitDay = paperTrackingTrackExitDay(paperTrackingPriorityExitTrack(left), left);
+  const rightExitDay = paperTrackingTrackExitDay(paperTrackingPriorityExitTrack(right), right);
+  if (leftExitDay !== rightExitDay) return rightExitDay.localeCompare(leftExitDay);
+  const leftSignal = paperTrackingSignalDate(left);
+  const rightSignal = paperTrackingSignalDate(right);
+  if (leftSignal !== rightSignal) return rightSignal.localeCompare(leftSignal);
+  return paperTrackingDisplayRank(left) - paperTrackingDisplayRank(right);
+}
+
+export function comparePaperTrackingSignalEntryRows(left: ShortpickPaperTrackingItem, right: ShortpickPaperTrackingItem): number {
+  const leftSignal = paperTrackingSignalDate(left);
+  const rightSignal = paperTrackingSignalDate(right);
+  if (leftSignal !== rightSignal) return leftSignal.localeCompare(rightSignal);
+  const leftEntry = paperTrackingEntryDate(left);
+  const rightEntry = paperTrackingEntryDate(right);
+  if (leftEntry !== rightEntry) return leftEntry.localeCompare(rightEntry);
+  return paperTrackingDisplayRank(left) - paperTrackingDisplayRank(right);
+}

@@ -27,7 +27,6 @@ import type {
   ShortpickCandidateView,
   ShortpickFeedbackGroup,
   ShortpickMarketFactorStudyResponse,
-  ShortpickMarketPortfolioMetric,
   ShortpickModelFeedbackItem,
   ShortpickModelFeedbackResponse,
   ShortpickPaperTrackingItem,
@@ -45,364 +44,118 @@ import type {
   ShortpickValidationView,
 } from "../types";
 import { formatDate, formatNumber, formatPercent, valueTone } from "../utils/format";
+import {
+  BENCHMARK_OPTIONS,
+  HORIZON_ORDER,
+  SHORTPICK_WORKSPACE_TABS,
+  type ShortpickWorkspaceTab,
+  auditReasonLabel,
+  auditStatusColor,
+  auditStatusLabel,
+  baselineFamilyLabel,
+  benchmarkLabel,
+  benchmarkMetric,
+  benchmarkPendingText,
+  channelDisplayLabel,
+  entryPriceSourceLabel,
+  factorDiagnosticStatusLabel,
+  failureCategoryLabel,
+  feedbackGroupDisplayLabel,
+  funnelBasisLabel,
+  initialShortpickWorkspaceTab,
+  isRecognizedMarketRegimeRow,
+  marketRegimeDisplayLabel,
+  modelFeedbackDisplayName,
+  modelFeedbackSubLabel,
+  operationalStatus,
+  periodKindLabel,
+  priorityColor,
+  priorityLabel,
+  projectionDecisionLabel,
+  projectionStatusLabel,
+  regimeSampleCaution,
+  replayDecisionStatusColor,
+  replayDecisionStatusLabel,
+  replayGateAlertType,
+  replayGateLabel,
+  replayGateReasonText,
+  roundModelLabel,
+  sampleScopeLabel,
+  sourceAuthorityLabel,
+  sourceCredibilityColor,
+  sourceCredibilityLabel,
+  sourceSupportLabel,
+  statusColor,
+  statusLabel,
+  topicLabel,
+  validationSummary,
+  validationWindowNote,
+} from "./shortpickLabLabels";
+import {
+  type PaperTrackingEntryRuleFilter,
+  type PaperTrackingEntryStateFilter,
+  type PaperTrackingExitStateFilter,
+  type PaperTrackingGroupFilter,
+  comparePaperTrackingRows,
+  comparePaperTrackingSignalEntryRows,
+  hasPaperTrackingEntered,
+  hasPaperTrackingMechanical10dExit,
+  hasPaperTrackingMechanical5dExit,
+  hasPaperTrackingRiskExit,
+  latestPaperTrackingChoices,
+  nextPendingEntryDate,
+  paperTrackingAlertType,
+  paperTrackingChoiceLabel,
+  paperTrackingChoiceTimingText,
+  paperTrackingDisplayExitTracks,
+  paperTrackingEntryDate,
+  paperTrackingEntryRuleKey,
+  paperTrackingExitDay,
+  paperTrackingExitReturn,
+  paperTrackingExitText,
+  paperTrackingExpectedEntryText,
+  paperTrackingGroupColor,
+  paperTrackingGroupLabel,
+  paperTrackingMechanical10dExitTrack,
+  paperTrackingPrimaryExitTrack,
+  paperTrackingSearchText,
+  paperTrackingSignalDate,
+  paperTrackingStatusLabel,
+  paperTrackingTrackExitDay,
+  paperTrackingTrackExitText,
+  paperTrackingTrackReturn,
+} from "./shortpickLabPaperTracking";
+import {
+  STRATEGY_DUAL_TEST_CONFIGS,
+  type StrategyMetricDisplay,
+  concentrationText,
+  frozenBenchmarkReferences,
+  frozenStrategy,
+  frozenStrategyDataScope,
+  frozenStrategyPaperControls,
+  frozenStrategyProductionEvidence,
+  frozenStrategySummary,
+  indexBenchmarkReferenceText,
+  marketPortfolioMetric,
+  marketStudyPeriodMetric,
+  marketStudyPortfolioMetricDisplay,
+  primaryBenchmarkLabel,
+  recordValue,
+  replayCandidateMetricDisplay,
+  replayFamilyDisplayRows,
+  replayFamilyMetric,
+  replayPortfolioControlFamilyRows,
+  rollingPortfolioMetricDisplay,
+  selectedBenchmarkGroupMetric,
+  shortHash,
+  sortHorizonGroups,
+  sortHorizons,
+  statusCountText,
+  validationCoverage,
+} from "./shortpickLabReplayMetrics";
 
 const { Paragraph, Text, Title } = Typography;
 const DEFAULT_VALIDATION_PAGE_SIZE = 50;
-const HORIZON_ORDER = [1, 3, 5, 10, 20];
-type ShortpickWorkspaceTab = "today" | "paper-tracking" | "validation" | "feedback" | "replay";
-const SHORTPICK_WORKSPACE_TABS = new Set<ShortpickWorkspaceTab>(["today", "paper-tracking", "validation", "feedback", "replay"]);
-const BENCHMARK_OPTIONS = [
-  { label: "沪深300", value: "hs300" },
-  { label: "中证1000", value: "csi1000" },
-  { label: "同板块", value: "sector_equal_weight" },
-];
-
-function priorityLabel(value: string): string {
-  if (value === "cross_model_same_symbol") return "跨模型同票";
-  if (value === "same_model_repeat_symbol") return "同模型重复";
-  if (value === "cross_model_same_topic") return "跨模型同题材";
-  if (value === "single_model_high_conviction") return "单模型高置信";
-  if (value === "market_factor_default") return "策略默认";
-  if (value === "market_factor_offensive") return "进攻对照";
-  if (value === "market_factor_frozen_paper") return "冻结纸面策略";
-  if (value === "market_factor_no_limit_chase") return "不追涨停控制";
-  if (value === "market_factor_next_open_entry") return "次日开盘入场控制";
-  if (value === "market_factor_top3_equal_weight") return "前三名等权组合";
-  if (value === "market_factor_intraday_same_day_low_turnover_uptrend") return "14点同日低换手上升趋势";
-  if (value === "momentum_10d_turnover_top3_equal_weight") return "10日动量换手 Top3 等权";
-  if (value === "baseline_control") return "基线对照";
-  if (value === "pending_consensus") return "等待共识";
-  if (value === "tradeability_blocked") return "账户不可执行";
-  if (value === "high_convergence") return "高收敛";
-  if (value === "theme_convergence") return "题材收敛";
-  if (value === "divergent_novel") return "发散新颖";
-  if (value === "watch_only") return "观察";
-  if (value === "failed_or_unusable") return "不可用";
-  return "其他实验分组";
-}
-
-function priorityColor(value: string): string {
-  if (value === "cross_model_same_symbol" || value === "high_convergence") return "red";
-  if (value === "cross_model_same_topic" || value === "theme_convergence") return "gold";
-  if (value === "same_model_repeat_symbol" || value === "single_model_high_conviction") return "orange";
-  if (value === "market_factor_default") return "green";
-  if (value === "market_factor_offensive") return "cyan";
-  if (value === "market_factor_frozen_paper") return "purple";
-  if (value === "market_factor_no_limit_chase") return "green";
-  if (value === "market_factor_next_open_entry") return "cyan";
-  if (value === "market_factor_top3_equal_weight") return "geekblue";
-  if (value === "market_factor_intraday_same_day_low_turnover_uptrend") return "blue";
-  if (value === "momentum_10d_turnover_top3_equal_weight") return "geekblue";
-  if (value === "baseline_control") return "default";
-  if (value === "pending_consensus") return "gold";
-  if (value === "tradeability_blocked") return "red";
-  if (value === "divergent_novel") return "blue";
-  if (value === "watch_only") return "default";
-  if (value === "failed_or_unusable") return "red";
-  return "default";
-}
-
-function looksLikeInternalKey(value?: string | null): boolean {
-  return Boolean(value && /^[a-z0-9_:-]+$/i.test(value) && value.includes("_"));
-}
-
-function modelFeedbackDisplayName(item: ShortpickModelFeedbackItem): string {
-  if (item.display_model_label && !looksLikeInternalKey(item.display_model_label)) return item.display_model_label;
-  if (item.model_group_key === "deepseek_v4_pro_1m" || item.provider_name === "deepseek") return "DeepSeek V4 Pro 1M";
-  if (item.model_group_key === "chatgpt_5_5" || item.provider_name === "openai") return "ChatGPT 5.5";
-  return "历史占位 / 不可归因样本";
-}
-
-function channelDisplayLabel(value?: string | null): string {
-  if (value === "deepseek_tool_search_lobechat_searxng_v1") return "今日联网自由选股";
-  if (value === "isolated_codex_cli") return "今日 ChatGPT 自由选股";
-  if (value === "historical_replay_sealed_packet_llm") return "历史密封包回放";
-  if (value === "historical_replay_llm_self_distiller") return "历史自蒸馏";
-  if (value === "historical_replay_momentum_pool_distiller") return "动量池蒸馏";
-  if (value === "historical_replay_momentum_pool_hard_veto") return "动量池 hard-veto 控制";
-  if (value === "historical_replay_momentum_pool_rejector") return "动量池 rejector 控制";
-  if (!value || looksLikeInternalKey(value)) return "实验通道";
-  return value;
-}
-
-function modelFeedbackSubLabel(item: ShortpickModelFeedbackItem): string {
-  if (item.executor_kind === "model_group") {
-    const channelCount = item.channels?.length ?? 0;
-    return channelCount > 0 ? `${channelCount} 个实验通道` : "按真实模型聚合";
-  }
-  return channelDisplayLabel(item.channel_label ?? item.executor_kind);
-}
-
-function feedbackGroupDisplayLabel(title: string, group: ShortpickFeedbackGroup): string {
-  if (title === "优先级表现") return priorityLabel(group.group_key);
-  if (group.label && !looksLikeInternalKey(group.label)) return group.label;
-  return "其他分组";
-}
-
-function entryPriceSourceLabel(value?: string | null): string {
-  if (value === "next_close") return "次日收盘买入";
-  if (value === "next_open") return "次日开盘买入";
-  if (value === "same_close_proxy") return "同日收盘代理";
-  if (value === "same_day_intraday_current") return "14点盘中买入";
-  if (!value) return "待补入场口径";
-  return "其他入场口径";
-}
-
-function trendRegimeLabel(value?: string | null): string {
-  if (value === "uptrend") return "上行行情";
-  if (value === "downtrend") return "下行行情";
-  if (value === "range_bound") return "震荡行情";
-  if (value === "missing" || value === "missing_regime") return "行情待识别";
-  if (!value) return "行情待补";
-  return "其他行情";
-}
-
-function volatilityRegimeLabel(value?: string | null): string {
-  if (value === "low_volatility") return "低波动";
-  if (value === "normal_volatility") return "常规波动";
-  if (value === "high_volatility") return "高波动";
-  if (value === "missing") return "波动待识别";
-  return "";
-}
-
-function sizeStyleRegimeLabel(value?: string | null): string {
-  if (value === "balanced_size") return "大小盘均衡";
-  if (value === "large_cap_lead") return "大盘占优";
-  if (value === "small_cap_lead") return "小盘占优";
-  if (value === "missing") return "风格待识别";
-  return "";
-}
-
-function marketRegimeDisplayLabel(item: Record<string, unknown> | string | null | undefined): string {
-  if (typeof item === "string") {
-    const parts = item.split(":");
-    if (parts.length >= 3) {
-      return [trendRegimeLabel(parts[0]), volatilityRegimeLabel(parts[1]), sizeStyleRegimeLabel(parts[2])]
-        .filter(Boolean)
-        .join(" · ");
-    }
-    return trendRegimeLabel(item);
-  }
-  const rawTag = String(item?.market_regime_tag ?? item?.regime_group_key ?? "");
-  const rawParts = rawTag.includes(":") ? rawTag.split(":") : [];
-  const trend = String(item?.trend_regime ?? rawParts[0] ?? item?.regime_group_key ?? item?.market_regime_tag ?? "");
-  const volatility = String(item?.volatility_regime ?? rawParts[1] ?? "");
-  const sizeStyle = String(item?.size_style_regime ?? rawParts[2] ?? "");
-  const isTrendOnly = String(item?.regime_granularity ?? "") === "trend_regime" || (!rawTag.includes(":") && !volatility && !sizeStyle);
-  if (isTrendOnly) return trendRegimeLabel(trend);
-  return [trendRegimeLabel(trend), volatilityRegimeLabel(volatility), sizeStyleRegimeLabel(sizeStyle)]
-    .filter(Boolean)
-    .join(" · ") || "行情待补";
-}
-
-function isRecognizedMarketRegimeRow(item: Record<string, unknown>): boolean {
-  const value = String(item.market_regime_tag ?? item.regime_group_key ?? item.trend_regime ?? "");
-  return Boolean(value) && value !== "missing" && value !== "missing_regime" && !value.includes("missing");
-}
-
-function periodKindLabel(value?: string | null): string {
-  if (value === "month") return "月度";
-  if (value === "quarter") return "季度";
-  if (value === "year") return "年度";
-  return "周期待补";
-}
-
-function regimeSampleCaution(sampleCount: number): string {
-  if (sampleCount < 6) return "低样本";
-  if (sampleCount < 12) return "观察样本";
-  return "样本尚可";
-}
-
-function statusColor(value: string): string {
-  if (value === "completed" || value === "success") return "green";
-  if (value === "running") return "blue";
-  if (value === "failed" || value === "parse_failed" || value === "retryable_failures") return "red";
-  if (value === "partial_completed" || value.startsWith("pending")) return "gold";
-  return "default";
-}
-
-function statusLabel(value: string): string {
-  const labels: Record<string, string> = {
-    completed: "已完成",
-    running: "运行中",
-    failed: "失败",
-    partial_completed: "部分完成",
-    retryable_failures: "失败待重跑",
-    parsed: "已解析",
-    parse_failed: "解析失败",
-    pending_market_data: "待行情",
-    pending_forward_window: "待窗口",
-    pending_entry_bar: "待入场价",
-    pending_benchmark_data: "待基准",
-    pending_sector_mapping: "缺板块映射",
-    pending_sector_peer_baseline: "待板块样本",
-    suspended_or_no_current_bar: "停牌/缺行情",
-    entry_unfillable_limit_up: "入场涨停不可成交",
-    tradeability_uncertain: "可交易性待确认",
-  };
-  return labels[value] ?? "待确认";
-}
-
-function failureCategoryLabel(value?: string | null): string {
-  if (value === "retryable_search_failure") return "搜索失败，可重跑";
-  if (value === "retryable_parse_failure") return "解析失败，可重跑";
-  if (value === "configuration_failure") return "配置失败";
-  if (value === "round_execution_failure") return "执行失败";
-  return "未分类失败";
-}
-
-function roundModelLabel(round: ShortpickRoundView): string {
-  return `${round.provider_name}:${round.model_name} #${round.round_index}`;
-}
-
-function benchmarkLabel(value: string): string {
-  return BENCHMARK_OPTIONS.find((item) => item.value === value)?.label ?? "沪深300";
-}
-
-function benchmarkMetric(
-  item: ShortpickValidationView | ShortpickValidationQueueItem,
-  selectedBenchmark: string,
-) {
-  const dimension = item.benchmark_dimensions?.[selectedBenchmark];
-  if (dimension) return dimension;
-  if (selectedBenchmark === "hs300") {
-    return {
-      benchmark_label: item.benchmark_label || "沪深300",
-      benchmark_return: item.benchmark_return,
-      excess_return: item.excess_return,
-      status: item.benchmark_return == null ? "pending_benchmark_data" : "available",
-      reason: item.pending_reason,
-    };
-  }
-  return {
-    benchmark_label: benchmarkLabel(selectedBenchmark),
-    benchmark_return: null,
-    excess_return: null,
-    status: selectedBenchmark === "sector_equal_weight" ? "pending_sector_peer_baseline" : "pending_benchmark_data",
-    reason: selectedBenchmark === "sector_equal_weight" ? "待板块样本" : "待基准数据",
-  };
-}
-
-function benchmarkPendingText(status?: string | null, reason?: string | null): string {
-  if (reason) return reason;
-  if (status === "pending_sector_mapping") return "缺板块映射";
-  if (status === "pending_sector_peer_baseline") return "待板块样本";
-  if (status === "pending_benchmark_data") return "待基准数据";
-  return "待基准数据";
-}
-
-function validationSummary(candidate: ShortpickCandidateView, selectedBenchmark: string): string {
-  const completed = candidate.validations.filter((item) => item.status === "completed");
-  if (!completed.length) {
-    const pending = candidate.validations[0];
-    return pending ? statusLabel(pending.status) : "待验证";
-  }
-  const shortest = completed[0];
-  const metric = benchmarkMetric(shortest, selectedBenchmark);
-  if (metric.status !== "available") {
-    return `${shortest.horizon_days}日 个股 ${formatPercent(shortest.stock_return)} / ${benchmarkPendingText(metric.status, metric.reason)}`;
-  }
-  return `${shortest.horizon_days}日 个股 ${formatPercent(shortest.stock_return)} / ${metric.benchmark_label || benchmarkLabel(selectedBenchmark)}超额 ${formatPercent(metric.excess_return)}`;
-}
-
-function validationWindowNote(item: ShortpickValidationView | ShortpickValidationQueueItem): string | null {
-  if (item.status !== "pending_forward_window") return null;
-  const available = item.available_forward_bars ?? 0;
-  const required = item.required_forward_bars ?? item.horizon_days;
-  const entry = item.entry_at ? formatDate(item.entry_at) : "入场收盘";
-  return `前向K线 ${available}/${required}；入场为 ${entry}，等待第 ${required} 个后续交易日收盘。`;
-}
-
-function recordValue<T>(record: Record<string, unknown> | undefined, key: string): T | undefined {
-  return record?.[key] as T | undefined;
-}
-
-function horizonSortValue(value: string | number): number {
-  const horizon = Number(value);
-  if (!Number.isFinite(horizon)) return Number.MAX_SAFE_INTEGER;
-  const index = HORIZON_ORDER.indexOf(horizon);
-  return index >= 0 ? index : HORIZON_ORDER.length + horizon;
-}
-
-function sortHorizonGroups<T extends { group_key: string | number }>(groups: T[]): T[] {
-  return [...groups].sort((left, right) => horizonSortValue(left.group_key) - horizonSortValue(right.group_key));
-}
-
-function sortHorizons(values: number[]): number[] {
-  return [...values].sort((left, right) => horizonSortValue(left) - horizonSortValue(right));
-}
-
-function validationCoverage(run: ShortpickRunView): string {
-  const completed = Number(run.summary.validation_completed_count ?? run.summary.completed_validation_count ?? 0);
-  const total = Number(run.summary.validation_total_count ?? 0);
-  if (total) return `${completed} / ${total}`;
-  const counts = recordValue<Record<string, number>>(run.summary, "validation_status_counts") ?? {};
-  const derivedTotal = Object.values(counts).reduce((sum, value) => sum + Number(value || 0), 0);
-  return `${completed} / ${derivedTotal}`;
-}
-
-function primaryBenchmarkLabel(run: ShortpickRunView): string {
-  const primary = recordValue<Record<string, string>>(run.summary, "primary_benchmark");
-  return primary?.label || "沪深300";
-}
-
-function replayGateLabel(value?: string | null): string {
-  if (value === "ready") return "可做初步统计比较";
-  if (value === "exploratory") return "探索样本";
-  if (value === "not_ready") return "样本不足";
-  return "样本不足";
-}
-
-function replayGateAlertType(value?: string | null): "success" | "warning" {
-  return value === "ready" ? "success" : "warning";
-}
-
-function replayGateReasonText(value?: unknown): string {
-  const reason = String(value ?? "").trim();
-  if (!reason) return "";
-  if (reason === "Replay sample is broad enough for aggregate readout.") {
-    return "样本覆盖已足够做聚合比较。";
-  }
-  return reason;
-}
-
-function replayDecisionStatusColor(value?: string | null): string {
-  if (!value) return "default";
-  if (value.includes("ready") || value.includes("aligned") || value.includes("tracking")) return "green";
-  if (value.includes("missing") || value.includes("blocker") || value.includes("gap") || value.includes("failed") || value.includes("no_verified")) return "red";
-  if (value.includes("observe") || value.includes("waiting") || value.includes("insufficient")) return "gold";
-  return "blue";
-}
-
-function replayDecisionStatusLabel(value?: string | null): string {
-  if (value === "observe_only") return "只观察";
-  if (value === "no_verified_advantage") return "优势不足";
-  if (value === "insufficient_sample") return "样本不足";
-  if (value === "paper_tracking_only") return "纸面跟踪";
-  if (value === "forward_observation") return "前向观察";
-  if (value === "waiting_forward_sample") return "待前向";
-  if (value === "directionally_aligned") return "方向一致";
-  if (value === "execution_gap") return "执行落差";
-  if (value === "selection_gap") return "选股待改善";
-  if (value === "production_gate_blocker") return "门槛未过";
-  if (value === "drawdown_blocker") return "回撤约束";
-  if (value === "sample_blocker") return "样本不足";
-  if (value === "forward_sample_blocker") return "前向样本";
-  if (value === "entry_assumption_blocker") return "入场假设";
-  if (value === "missing_artifact") return "待产物";
-  if (value === "forward_tracking_only") return "仅前向";
-  if (value === "diagnostic_proxy") return "代理诊断";
-  if (value === "research_backtest") return "历史研究";
-  if (value === "live_forward_paper") return "纸面前向";
-  return value || "待判断";
-}
-
-function funnelBasisLabel(value?: string | null): string {
-  if (value === "stock_series") return "股票池";
-  if (value === "candidate_horizon_rows") return "候选-周期";
-  if (value === "blocked_candidate_horizon_rows") return "不可买行";
-  return value || "待补";
-}
 
 function loadingAwareText(loading: boolean, value: string | number | null | undefined, emptyText = "暂无数据") {
   if (loading) return <Text type="secondary">加载中</Text>;
@@ -414,515 +167,6 @@ function loadingAwareStrong(loading: boolean, value: string | number | null | un
   if (loading) return <strong className="shortpick-loading-value">加载中</strong>;
   if (value === null || value === undefined || value === "") return <strong className="shortpick-empty-value">{emptyText}</strong>;
   return <strong>{value}</strong>;
-}
-
-function selectedBenchmarkGroupMetric(group: ShortpickFeedbackGroup, selectedBenchmark: string) {
-  const metric = group.benchmark_metrics?.[selectedBenchmark];
-  return {
-    meanExcessReturn: metric?.mean_excess_return ?? (selectedBenchmark === "hs300" ? group.mean_excess_return : null),
-    positiveExcessRate: metric?.positive_excess_rate ?? (selectedBenchmark === "hs300" ? group.positive_excess_rate : null),
-    tradableMeanExcessReturn: selectedBenchmark === "hs300" ? group.tradable_mean_excess_return : null,
-    tradablePositiveExcessRate: selectedBenchmark === "hs300" ? group.tradable_positive_excess_rate : null,
-    availableCount: metric?.available_count ?? group.completed_official_sample_count ?? group.completed_validation_count,
-    tradableAvailableCount: group.completed_tradable_sample_count ?? group.completed_validation_count,
-    pendingReasons: metric?.pending_reasons ? Object.keys(metric.pending_reasons) : [],
-  };
-}
-
-function operationalStatus(run: ShortpickRunView): string {
-  return String(run.summary.operational_status ?? run.status);
-}
-
-function sourceCredibilityLabel(value?: string | null): string {
-  if (value === "verified") return "来源可达";
-  if (value === "reachable_restricted") return "来源受限";
-  if (value === "suspicious") return "疑似占位";
-  if (value === "unreachable") return "不可达";
-  if (value === "missing_url") return "缺 URL";
-  return "未校验";
-}
-
-function sourceCredibilityColor(value?: string | null): string {
-  if (value === "verified") return "green";
-  if (value === "reachable_restricted") return "gold";
-  if (value === "suspicious" || value === "unreachable" || value === "missing_url") return "red";
-  return "default";
-}
-
-function sourceAuthorityLabel(value?: string | null): string {
-  const labels: Record<string, string> = {
-    exchange_or_company_disclosure: "公告/交易所",
-    designated_disclosure_media: "指定披露媒体",
-    mainstream_financial_media: "主流财经",
-    vertical_industry_media: "行业媒体",
-    broker_research_or_pdf: "券商/PDF",
-    community_or_forum: "社区论坛",
-    aggregator_or_unknown: "聚合/未知",
-  };
-  return labels[value || ""] ?? "聚合/未知";
-}
-
-function sourceSupportLabel(value?: string | null): string {
-  if (value === "supported_by_source_text") return "文本支持";
-  if (value === "weak_or_unverified_source_support") return "弱支持";
-  return "未检查";
-}
-
-function topicLabel(candidate: ShortpickCandidateView): string {
-  const topic = candidate.topic_normalization ?? {};
-  const label = typeof topic.label_zh === "string" ? topic.label_zh.trim() : "";
-  if (label) return label;
-  return candidate.normalized_theme || "未归类题材";
-}
-
-function baselineFamilyLabel(value?: string | null): string {
-  if (!value) return "LLM自由选股";
-  if (value === "llm") return "LLM原选";
-  if (value === "llm_self_distilled") return "LLM自选蒸馏";
-  if (value === "llm_momentum_distilled") return "LLM动量池蒸馏";
-  if (value === "diagnostic_proxy_llm") return "诊断代理";
-  if (value === "random_same_tradeable_universe") return "随机";
-  if (value === "random_same_market_cap_bucket") return "同市值随机";
-  if (value === "momentum_volume_baseline") return "动量成交量";
-  if (value === "momentum_volume_expanded_pool") return "扩大动量池";
-  if (value === "llm_reject_only") return "LLM只剔除保留池";
-  if (value === "llm_reject_then_momentum_rank") return "LLM剔除后动量排序";
-  if (value === "random_reject_then_momentum_rank") return "随机剔除后动量排序";
-  if (value === "llm_hard_veto_then_momentum_rank") return "LLM硬否决后动量排序";
-  if (value === "random_hard_veto_then_momentum_rank") return "随机硬否决后动量排序";
-  if (value === "llm_strict_veto_then_momentum_rank") return "LLM严格否决后动量排序";
-  if (value === "random_strict_veto_then_momentum_rank") return "随机严格否决后动量排序";
-  if (value === "momentum_turnover_rank") return "换手优先动量排序";
-  if (value === "momentum_10d_rank") return "10日持续动量排序";
-  if (value === "momentum_10d_turnover_rank") return "10日动量换手排序";
-  if (value === "momentum_10d_turnover_cooldown_rank") return "10日动量换手降追高排序";
-  if (value === "frozen_paper_low_turnover_uptrend_v4") return "低换手上升趋势";
-  if (value === "momentum_10d_turnover_legacy_second_candidate") return "旧主线第二候选";
-  if (value === "momentum_10d_amount_turnover_strong_breadth_rank2") return "强广度低追高二候选";
-  if (value === "momentum_10d_turnover_top3_equal_weight") return "前三名等权组合";
-  if (value === "momentum_volume_golden_cross_10_200") return "10/200日金叉过滤";
-  if (value === "momentum_10d_turnover_cooldown_diversified_rank") return "分散后的动量换手";
-  if (value === "momentum_continuity_turnover_rank") return "持续动量换手复合排序";
-  return "其他策略";
-}
-
-function factorDiagnosticStatusLabel(value?: string | null): string {
-  if (value === "eligible") return "可用于诊断";
-  if (value === "ready") return "可观察";
-  if (value === "pass") return "通过";
-  if (value === "fail") return "未通过";
-  if (value === "not_ready") return "样本不足";
-  return "样本不足";
-}
-
-function auditStatusLabel(value?: string | null): string {
-  if (value === "pass") return "通过";
-  if (value === "fail") return "失败";
-  if (value === "diagnostic") return "诊断";
-  return "待审计";
-}
-
-function auditStatusColor(value?: string | null): string {
-  if (value === "pass") return "green";
-  if (value === "fail") return "red";
-  if (value === "diagnostic") return "gold";
-  return "default";
-}
-
-function auditReasonLabel(value: string): string {
-  const labels: Record<string, string> = {
-    future_leakage_suspected: "疑似未来信息",
-    source_after_cutoff: "来源晚于截点",
-    source_not_in_packet: "引用包外来源",
-    unsupported_claim: "关键事实缺来源支持",
-    unverified_source_time: "来源时间未验证",
-    symbol_not_in_universe: "不在当日股票池",
-    not_tradeable: "当日不可交易",
-  };
-  return labels[value] ?? "其他审计原因";
-}
-
-function sampleScopeLabel(selectedBenchmark: string): string {
-  if (selectedBenchmark === "sector_equal_weight") return "以同板块等权为超额收益口径";
-  if (selectedBenchmark === "csi1000") return "以中证1000为超额收益口径";
-  return "以沪深300为超额收益口径";
-}
-
-function marketPortfolioMetric(
-  study: ShortpickMarketFactorStudyResponse | null,
-  period: "train" | "holdout" | "replay_window" | "all",
-  strategy: string,
-): ShortpickMarketPortfolioMetric | null {
-  return study?.portfolio_summary?.[period]?.[strategy] ?? null;
-}
-
-function frozenStrategy(study: ShortpickMarketFactorStudyResponse | null): Record<string, unknown> {
-  return recordValue<Record<string, unknown>>(study ? (study as unknown as Record<string, unknown>) : undefined, "frozen_paper_strategy") ?? {};
-}
-
-function frozenStrategyEvidence(study: ShortpickMarketFactorStudyResponse | null): Record<string, unknown> {
-  return recordValue<Record<string, unknown>>(frozenStrategy(study), "evidence") ?? {};
-}
-
-function frozenStrategySummary(study: ShortpickMarketFactorStudyResponse | null): Record<string, unknown> {
-  return recordValue<Record<string, unknown>>(frozenStrategyEvidence(study), "summary") ?? {};
-}
-
-function frozenStrategyDataScope(study: ShortpickMarketFactorStudyResponse | null): Record<string, unknown> {
-  return recordValue<Record<string, unknown>>(frozenStrategyEvidence(study), "data_scope") ?? {};
-}
-
-function frozenStrategyProductionEvidence(study: ShortpickMarketFactorStudyResponse | null): Record<string, unknown> {
-  return recordValue<Record<string, unknown>>(frozenStrategyEvidence(study), "production_evidence") ?? {};
-}
-
-function frozenStrategyPaperControls(study: ShortpickMarketFactorStudyResponse | null): Record<string, Record<string, unknown>> {
-  return recordValue<Record<string, Record<string, unknown>>>(frozenStrategyEvidence(study), "paper_control_summaries") ?? {};
-}
-
-function frozenBenchmarkReferences(study: ShortpickMarketFactorStudyResponse | null): Record<string, Record<string, unknown>> {
-  return recordValue<Record<string, Record<string, unknown>>>(frozenStrategyEvidence(study), "benchmark_references") ?? {};
-}
-
-function indexBenchmarkReferenceText(indexRefs: Record<string, Record<string, unknown>>): string {
-  const labels: Array<[string, string]> = [
-    ["000300.SH", "沪深300"],
-    ["000905.SH", "中证500"],
-    ["000852.SH", "中证1000"],
-  ];
-  const available = labels
-    .filter(([symbol]) => Boolean(indexRefs[symbol]?.available))
-    .map(([symbol, label]) => `${label} ${formatPercent(Number(indexRefs[symbol]?.total_return ?? 0))}`);
-  return available.length ? available.join(" · ") : "指数序列未纳入本次主板样本库，不展示为0。";
-}
-
-type ReplayFamilyDisplayRow = ShortpickReplayFeedbackFamily & {
-  display_source?: "candidate_replay" | "portfolio_backtest";
-  display_key?: string;
-  display_label?: string;
-  display_metric_label?: string;
-  display_value?: number | null;
-  display_note?: string;
-  display_trade_count?: number | null;
-  display_total_return?: number | null;
-  display_max_drawdown?: number | null;
-};
-
-function replayPortfolioControlFamilyRows(study: ShortpickMarketFactorStudyResponse | null): ReplayFamilyDisplayRow[] {
-  const controls = frozenStrategyPaperControls(study);
-  const controlConfigs = [
-    {
-      strategy: "low_turnover_20d_uptrend_liquid_top120",
-      family: "frozen_paper_low_turnover_uptrend_v4",
-      label: "低换手上升趋势",
-      note: "组合回测：当前冻结纸面主策略",
-    },
-    {
-      strategy: "ret10_turnover_second_market_positive_cooldown",
-      family: "momentum_10d_turnover_legacy_second_candidate",
-      label: "旧主线第二候选",
-      note: "组合回测：旧冻结主线，保留为真实纸面对照",
-    },
-    {
-      strategy: "ret10_turnover_second_market_positive_cooldown_stop8",
-      family: "momentum_10d_turnover_legacy_second_candidate_stop8",
-      label: "旧主线第二候选加止损",
-      note: "组合回测：旧冻结主线加8%收盘止损",
-    },
-    {
-      strategy: "ret10_amount_turnover_strong_breadth_rank2_stop12",
-      family: "momentum_10d_amount_turnover_strong_breadth_rank2",
-      label: "强广度低追高二候选",
-      note: "组合回测：市场强广度时取低追高二候选",
-    },
-    {
-      strategy: "ret10_turnover_top3_market_positive_cooldown_equal_weight",
-      family: "momentum_10d_turnover_top3_equal_weight",
-      label: "前三名等权组合",
-      note: "组合回测：每日1万元在前三名等权",
-    },
-    {
-      strategy: "momentum_volume_golden_cross_10_200",
-      family: "momentum_volume_golden_cross_10_200",
-      label: "10/200日金叉过滤",
-      note: "组合回测：只选当日金叉标的",
-    },
-    {
-      strategy: "ret10_turnover",
-      family: "momentum_10d_turnover_rank",
-      label: "10日动量换手首位",
-      note: "组合回测：原始进攻动量换手首位",
-    },
-    {
-      strategy: "ret10_turnover_cooldown",
-      family: "momentum_10d_turnover_cooldown_rank",
-      label: "10日动量换手降追高",
-      note: "组合回测：动量换手叠加当日追高惩罚",
-    },
-  ];
-  return controlConfigs.flatMap((config) => {
-    const summary = recordValue<Record<string, unknown>>(controls[config.strategy], "summary") ?? {};
-    if (!Object.keys(summary).length) return [];
-    const tradeCount = Number(summary.trade_count ?? 0);
-    const excessReturn = recordValue<number>(summary, "excess_total_return");
-    const totalReturn = recordValue<number>(summary, "total_return");
-    const maxDrawdown = recordValue<number>(summary, "max_drawdown");
-    return [{
-      baseline_family: config.family,
-      label: config.label,
-      candidate_count: tradeCount,
-      official_sample_count: tradeCount,
-      completed_official_sample_count: tradeCount,
-      validation_by_horizon: [{
-        group_key: "long_sample",
-        label: "长样本",
-        sample_count: tradeCount,
-        official_sample_count: tradeCount,
-        completed_validation_count: tradeCount,
-        completed_official_sample_count: tradeCount,
-        mean_stock_return: totalReturn,
-        mean_excess_return: excessReturn,
-        trimmed_mean_excess_return: null,
-        positive_excess_rate: null,
-        max_drawdown: maxDrawdown,
-        max_favorable_return: null,
-        status_counts: { completed: tradeCount },
-      }],
-      robustness_metrics: {},
-      display_source: "portfolio_backtest",
-      display_key: `portfolio:${config.strategy}`,
-      display_label: config.label,
-      display_metric_label: "长样本超额",
-      display_value: excessReturn,
-      display_note: config.note,
-      display_trade_count: tradeCount,
-      display_total_return: totalReturn,
-      display_max_drawdown: maxDrawdown,
-    }];
-  });
-}
-
-function replayFamilyDisplayRows(
-  feedback: ShortpickReplayFeedbackResponse | null,
-  study: ShortpickMarketFactorStudyResponse | null,
-): ReplayFamilyDisplayRow[] {
-  const replayRows = (feedback?.families ?? []).map((family) => ({
-    ...family,
-    display_source: "candidate_replay" as const,
-  }));
-  const portfolioRows = replayPortfolioControlFamilyRows(study);
-  return [...replayRows, ...portfolioRows];
-}
-
-function replayFamilyMetric(
-  family: ReplayFamilyDisplayRow,
-  selectedBenchmark: string,
-): {
-  value?: number | null;
-  tradableValue?: number | null;
-  label: string;
-  sampleCount: number;
-  tradableSampleCount: number;
-  note?: string;
-} {
-  if (family.display_source === "portfolio_backtest") {
-    return {
-      value: family.display_value,
-      tradableValue: family.display_value,
-      label: family.display_metric_label ?? "长样本超额",
-      sampleCount: Number(family.display_trade_count ?? family.completed_official_sample_count ?? 0),
-      tradableSampleCount: Number(family.display_trade_count ?? family.completed_tradable_sample_count ?? 0),
-      note: family.display_note,
-    };
-  }
-  const horizon5 = family.validation_by_horizon.find((group) => String(group.group_key) === "5");
-  const metric = horizon5?.benchmark_metrics?.[selectedBenchmark];
-  return {
-    value: metric?.mean_excess_return ?? horizon5?.mean_excess_return,
-    tradableValue: selectedBenchmark === "hs300" ? horizon5?.tradable_mean_excess_return : null,
-    label: "5日平均超额",
-    sampleCount: Number(horizon5?.completed_official_sample_count ?? 0),
-    tradableSampleCount: Number(horizon5?.completed_tradable_sample_count ?? 0),
-  };
-}
-
-type StrategyDualTestConfig = {
-  key: string;
-  label: string;
-  replayFamily?: string;
-  marketStrategy?: string;
-  portfolioStrategy?: string;
-  note: string;
-};
-
-const STRATEGY_DUAL_TEST_CONFIGS: StrategyDualTestConfig[] = [
-  {
-    key: "low_turnover_uptrend",
-    label: "低换手上升趋势",
-    marketStrategy: "low_turnover_20d_uptrend_liquid_top120",
-    portfolioStrategy: "low_turnover_20d_uptrend_liquid_top120",
-    note: "主策略；候选侧看同公式逐条收益，组合侧看5万滚动资金曲线。",
-  },
-  {
-    key: "momentum_volume",
-    label: "动量成交量",
-    replayFamily: "momentum_volume_baseline",
-    marketStrategy: "base",
-    note: "原始动量成交额池；候选回放有封闭来源窗口，组合侧用市场因子同日组合。",
-  },
-  {
-    key: "ret10_turnover",
-    label: "10日动量换手复合排序",
-    replayFamily: "momentum_10d_turnover_rank",
-    marketStrategy: "ret10_turnover",
-    portfolioStrategy: "ret10_turnover",
-    note: "进攻动量口径；候选平均和账户资金曲线分别回答不同问题。",
-  },
-  {
-    key: "ret10_turnover_cooldown",
-    label: "10日动量换手降追高",
-    replayFamily: "momentum_10d_turnover_cooldown_rank",
-    marketStrategy: "ret10_turnover_cooldown",
-    portfolioStrategy: "ret10_turnover_cooldown",
-    note: "在10日动量换手基础上惩罚当日过热。",
-  },
-  {
-    key: "ret10_amount_turnover_rank2",
-    label: "强广度低追高二候选",
-    marketStrategy: "ret10_amount_turnover_cooldown",
-    portfolioStrategy: "ret10_amount_turnover_strong_breadth_rank2_stop12",
-    note: "组合侧包含市场强度条件、第二候选和12%止损；候选侧只展示基础排序逐条验证。",
-  },
-  {
-    key: "top3_equal_weight",
-    label: "前三名等权组合",
-    marketStrategy: "ret10_turnover",
-    portfolioStrategy: "ret10_turnover_top3_market_positive_cooldown_equal_weight",
-    note: "组合专属分散变体；候选侧用基础10日动量换手逐条验证作参照。",
-  },
-  {
-    key: "golden_cross",
-    label: "10/200日金叉过滤",
-    marketStrategy: "momentum_volume_golden_cross_10_200",
-    portfolioStrategy: "momentum_volume_golden_cross_10_200",
-    note: "信号触发次数少，适合作为低频过滤参考。",
-  },
-  {
-    key: "legacy_second",
-    label: "旧主线第二候选",
-    marketStrategy: "ret10_turnover",
-    portfolioStrategy: "ret10_turnover_second_market_positive_cooldown_stop8",
-    note: "组合侧包含市场转正、不过热、第二候选和8%止损；候选侧用基础排序作参照。",
-  },
-];
-
-type StrategyMetricDisplay = {
-  value?: number | null;
-  secondaryValue?: number | null;
-  secondaryLabel?: string;
-  sampleCount?: number | null;
-  secondarySampleCount?: number | null;
-  label: string;
-  detail?: string;
-  source: string;
-  exact: boolean;
-};
-
-function marketStudyPeriodMetric(
-  study: ShortpickMarketFactorStudyResponse | null,
-  strategy: string | undefined,
-  period: string,
-  horizon = "5",
-): StrategyMetricDisplay | null {
-  if (!study || !strategy) return null;
-  const summary = study.period_summary?.[period]?.[strategy];
-  if (!summary) return null;
-  const byHorizon = recordValue<Record<string, Record<string, unknown>>>(summary, "by_horizon") ?? {};
-  const block = byHorizon[horizon] ?? {};
-  const value = recordValue<number>(block, "mean_net_excess_return") ?? recordValue<number>(summary, "mean_net_excess_return");
-  const trimmed = recordValue<number>(block, "trimmed_mean_net_excess_return") ?? recordValue<number>(summary, "trimmed_mean_net_excess_return");
-  const completed = recordValue<number>(block, "completed_count") ?? recordValue<number>(summary, "completed_count");
-  const selected = recordValue<number>(summary, "selected_symbol_day_count");
-  return {
-    value,
-    secondaryValue: trimmed,
-    secondaryLabel: "去极值均值",
-    sampleCount: completed,
-    secondarySampleCount: selected,
-    label: `短窗口${horizon}日逐候选平均超额`,
-    detail: `候选 ${formatNumber(Number(completed ?? 0))} · 入选股票日 ${formatNumber(Number(selected ?? 0))}`,
-    source: period === "replay_window" ? "短窗口候选统计" : "样本外候选统计",
-    exact: true,
-  };
-}
-
-function marketStudyPortfolioMetricDisplay(
-  study: ShortpickMarketFactorStudyResponse | null,
-  strategy: string | undefined,
-  period: string,
-  horizon = "5",
-): StrategyMetricDisplay | null {
-  if (!study || !strategy) return null;
-  const summary = study.portfolio_summary?.[period]?.[strategy];
-  if (!summary) return null;
-  const block = summary.by_horizon?.[horizon] ?? {};
-  const value = recordValue<number>(block, "mean_net_excess_return") ?? summary.mean_net_excess_return;
-  const trimmed = recordValue<number>(block, "trimmed_mean_net_excess_return") ?? summary.trimmed_mean_net_excess_return;
-  const portfolioCount = recordValue<number>(block, "portfolio_count") ?? summary.portfolio_count;
-  return {
-    value,
-    secondaryValue: trimmed,
-    secondaryLabel: "去极值均值",
-    sampleCount: portfolioCount,
-    secondarySampleCount: summary.completed_member_count,
-    label: `短窗口${horizon}日同日组合平均超额`,
-    detail: `组合 ${formatNumber(Number(portfolioCount ?? 0))} · 成员 ${formatNumber(Number(summary.completed_member_count ?? 0))}`,
-    source: period === "replay_window" ? "短窗口同日组合统计" : "样本外同日组合统计",
-    exact: true,
-  };
-}
-
-function replayCandidateMetricDisplay(
-  feedback: ShortpickReplayFeedbackResponse | null,
-  familyKey: string | undefined,
-  selectedBenchmark: string,
-): StrategyMetricDisplay | null {
-  if (!feedback || !familyKey) return null;
-  const family = feedback.families.find((item) => item.baseline_family === familyKey);
-  if (!family) return null;
-  const metric = replayFamilyMetric({ ...family, display_source: "candidate_replay" }, selectedBenchmark);
-  return {
-    value: metric.value,
-    secondaryValue: metric.tradableValue,
-    secondaryLabel: "可交易口径",
-    sampleCount: metric.sampleCount,
-    secondarySampleCount: metric.tradableSampleCount,
-    label: `封闭回放${metric.label}`,
-    detail: `严格来源 ${formatNumber(metric.sampleCount)} · 可交易 ${formatNumber(metric.tradableSampleCount)}`,
-    source: "短窗口逐候选统计",
-    exact: true,
-  };
-}
-
-function rollingPortfolioMetricDisplay(
-  study: ShortpickMarketFactorStudyResponse | null,
-  strategy: string | undefined,
-): StrategyMetricDisplay | null {
-  if (!study || !strategy) return null;
-  const control = frozenStrategyPaperControls(study)[strategy];
-  const summary = recordValue<Record<string, unknown>>(control, "summary") ?? {};
-  if (!Object.keys(summary).length) return null;
-  return {
-    value: recordValue<number>(summary, "excess_total_return"),
-    secondaryValue: recordValue<number>(summary, "total_return"),
-    secondaryLabel: "组合总收益",
-    sampleCount: recordValue<number>(summary, "trade_count"),
-    secondarySampleCount: recordValue<number>(summary, "day_count"),
-    label: "长样本5万元滚动资金曲线超额",
-    detail: `交易 ${formatNumber(Number(summary.trade_count ?? 0))} · 覆盖 ${formatNumber(Number(summary.day_count ?? 0))} 个交易日 · 最大回撤 ${formatPercent(recordValue<number>(summary, "max_drawdown"))}`,
-    source: "长样本账户路径回测",
-    exact: true,
-  };
 }
 
 function StrategyMetricCell({ metric }: { metric: StrategyMetricDisplay | null }) {
@@ -1029,307 +273,6 @@ function ReplayDualTestMatrix({
       />
     </div>
   );
-}
-
-function statusCountText(counts?: Record<string, number> | null): string {
-  const entries = Object.entries(counts ?? {}).filter(([, value]) => Number(value) > 0);
-  return entries.length ? entries.map(([key, value]) => `${statusLabel(key)} ${value}`).join(" · ") : "--";
-}
-
-function concentrationText(metric?: ShortpickMarketPortfolioMetric | null): string {
-  const concentration = metric?.concentration;
-  const share = recordValue<number>(concentration, "top_industry_share");
-  return `最高行业占比 ${formatPercent(share)}`;
-}
-
-function shortHash(value?: string | null): string {
-  return value ? value.slice(0, 12) : "--";
-}
-
-function paperTrackingStatusLabel(value?: string | null): string {
-  if (value === "tracking_active") return "已有正式标的";
-  if (value === "waiting_first_frozen_run") return "等待首批";
-  if (value === "no_signal") return "本批次未触发";
-  if (value === "waiting_signal") return "等待信号";
-  return "等待跟踪";
-}
-
-function paperTrackingAlertType(value?: string | null): "success" | "info" | "warning" {
-  if (value === "tracking_active") return "success";
-  if (value === "waiting_first_frozen_run") return "warning";
-  return "info";
-}
-
-function paperTrackingGroupLabel(value?: string | null): string {
-  if (value === "llm_paper_control") return "LLM纸面对照";
-  if (value === "market_factor_control") return "市场因子对照";
-  if (value === "market_random_control") return "同池随机基线";
-  if (value === "frozen_strategy_v2") return "冻结候选 v2";
-  if (value === "frozen_strategy") return "冻结策略";
-  return "纸面跟踪";
-}
-
-function paperTrackingGroupColor(value?: string | null): string {
-  if (value === "llm_paper_control") return "blue";
-  if (value === "market_factor_control") return "cyan";
-  if (value === "market_random_control") return "default";
-  if (value === "frozen_strategy_v2") return "geekblue";
-  if (value === "frozen_strategy") return "purple";
-  return "default";
-}
-
-function initialShortpickWorkspaceTab(): ShortpickWorkspaceTab {
-  const rawTab = new URLSearchParams(window.location.search).get("shortpickTab");
-  return rawTab && SHORTPICK_WORKSPACE_TABS.has(rawTab as ShortpickWorkspaceTab)
-    ? rawTab as ShortpickWorkspaceTab
-    : "today";
-}
-
-function paperTrackingDisplayRank(item: ShortpickPaperTrackingItem): number {
-  if (item.tracking_group === "frozen_strategy") return 0;
-  if (item.tracking_group === "frozen_strategy_v2") return 1;
-  if (item.tracking_group === "llm_paper_control") return 2;
-  if (item.tracking_group === "market_factor_control") return 3;
-  if (item.tracking_group === "market_random_control") return 4;
-  return 5;
-}
-
-function paperTrackingChoiceLabel(latestRun?: Record<string, unknown> | null): "当前" | "下轮" {
-  const now = new Date();
-  const day = now.getDay();
-  const minutes = now.getHours() * 60 + now.getMinutes();
-  const isTradingDaytime = day >= 1 && day <= 5 && minutes >= 9 * 60 + 30 && minutes <= 15 * 60;
-  if (isTradingDaytime) return "当前";
-  const runDate = typeof latestRun?.run_date === "string" ? latestRun.run_date : "";
-  const today = localDateString(now);
-  const isAfterClose = day >= 1 && day <= 5 && minutes > 15 * 60;
-  if (isAfterClose && runDate !== today) return "当前";
-  return "下轮";
-}
-
-function localDateString(value = new Date()): string {
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
-}
-
-function nextWeekdayAfter(runDate: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(runDate);
-  if (!match) return "下一交易日";
-  const next = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + 1);
-  while (next.getDay() === 0 || next.getDay() === 6) {
-    next.setDate(next.getDate() + 1);
-  }
-  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
-}
-
-function paperTrackingSignalDate(item: ShortpickPaperTrackingItem): string {
-  return item.signal_date || item.run_date;
-}
-
-function paperTrackingEntryDate(item: ShortpickPaperTrackingItem): string {
-  return item.entry_date || nextWeekdayAfter(paperTrackingSignalDate(item));
-}
-
-function paperTrackingExpectedEntryText(item: ShortpickPaperTrackingItem): string {
-  const isIntraday = Boolean(item.entry_rule?.includes("盘中") || item.entry_rule?.includes("当前价"));
-  const session = isIntraday ? "盘中" : item.entry_rule?.includes("开盘") ? "开盘" : "收盘";
-  return `预计买入 ${paperTrackingEntryDate(item)} ${session}`;
-}
-
-function hasPaperTrackingEntered(item: ShortpickPaperTrackingItem, today = localDateString()): boolean {
-  const entryDate = paperTrackingEntryDate(item);
-  return /^\d{4}-\d{2}-\d{2}$/.test(entryDate) && entryDate <= today;
-}
-
-function paperTrackingChoiceTimingText(
-  choiceLabel: "当前" | "下轮",
-  choiceRows: ShortpickPaperTrackingItem[],
-  latestRun?: Record<string, unknown> | null,
-): string {
-  const runDate = typeof latestRun?.run_date === "string" ? latestRun.run_date : "";
-  const signalDate = choiceRows[0] ? paperTrackingSignalDate(choiceRows[0]) : runDate;
-  const entryDate = choiceRows[0] ? paperTrackingEntryDate(choiceRows[0]) : runDate ? nextWeekdayAfter(runDate) : "";
-  const hasOpenEntry = choiceRows.some((item) => item.entry_rule?.includes("开盘"));
-  const hasIntradayEntry = choiceRows.some((item) => item.entry_rule?.includes("盘中") || item.entry_rule?.includes("当前价"));
-  if (!signalDate) return choiceLabel === "下轮" ? "信号日待确认 · 次一交易日收盘买入" : "当前跟踪信号待确认";
-  if (hasIntradayEntry) {
-    return `信号日 ${signalDate} · 含同日盘中当前价买入对照`;
-  }
-  if (hasOpenEntry) {
-    return `信号日 ${signalDate} · 预计买入日 ${entryDate}，不同对照按各自入场规则执行`;
-  }
-  if (choiceLabel === "下轮") {
-    return `信号日 ${signalDate} · 预计买入 ${entryDate} 收盘`;
-  }
-  return `当前跟踪 · 信号日 ${signalDate} · 入场口径为次一交易日收盘买入`;
-}
-
-function latestPaperTrackingChoices(rows: ShortpickPaperTrackingItem[], latestRun?: Record<string, unknown> | null): ShortpickPaperTrackingItem[] {
-  const latestRunId = Number(latestRun?.id ?? 0);
-  const latestRunDate = typeof latestRun?.run_date === "string" ? latestRun.run_date : "";
-  const scoped = rows.filter((item) => (
-    latestRunId ? Number(item.run_id) === latestRunId : latestRunDate ? item.run_date === latestRunDate : false
-  ));
-  const source = scoped.length ? scoped : rows;
-  const latestDate = source.reduce((value, item) => (paperTrackingSignalDate(item) > value ? paperTrackingSignalDate(item) : value), "");
-  return source
-    .filter((item) => paperTrackingSignalDate(item) === latestDate)
-    .sort((left, right) => (
-      paperTrackingDisplayRank(left) - paperTrackingDisplayRank(right)
-      || Number(left.source_rank ?? 99) - Number(right.source_rank ?? 99)
-      || left.name.localeCompare(right.name, "zh-Hans-CN")
-    ));
-}
-
-function nextPendingEntryDate(rows: ShortpickPaperTrackingItem[]): string {
-  const today = localDateString();
-  return rows
-    .map((item) => paperTrackingEntryDate(item))
-    .filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && value > today)
-    .sort()[0] ?? "";
-}
-
-type PaperTrackingGroupFilter = "" | "frozen_strategy" | "frozen_strategy_v2" | "llm_paper_control" | "market_factor_control" | "market_random_control";
-type PaperTrackingEntryStateFilter = "entered" | "pending" | "";
-type PaperTrackingEntryRuleFilter = "" | "next_close" | "next_open" | "same_day_intraday_current";
-type PaperTrackingExitStateFilter = "" | "mechanical_5d_done" | "mechanical_10d_done" | "take_profit_stop_loss_done" | "waiting_exit";
-
-function paperTrackingEntryRuleKey(item: ShortpickPaperTrackingItem): PaperTrackingEntryRuleFilter {
-  const entryRule = item.entry_rule ?? "";
-  if (entryRule.includes("开盘")) return "next_open";
-  if (entryRule.includes("盘中") || entryRule.includes("当前价")) return "same_day_intraday_current";
-  return "next_close";
-}
-
-function paperTrackingSearchText(item: ShortpickPaperTrackingItem): string {
-  return [
-    item.symbol,
-    item.name,
-    paperTrackingSignalDate(item),
-    paperTrackingEntryDate(item),
-    paperTrackingGroupLabel(item.tracking_group),
-    item.selection_label,
-    item.entry_rule,
-    item.exit_rule,
-    item.thesis,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
-function paperTrackingExitTracks(item: ShortpickPaperTrackingItem): Record<string, unknown>[] {
-  return Array.isArray(item.paper_tracking_exit_tracks) ? item.paper_tracking_exit_tracks : [];
-}
-
-function paperTrackingPrimaryExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
-  const tracks = paperTrackingExitTracks(item);
-  return tracks.find((track) => track.key === "mechanical_5d") ?? tracks[0] ?? null;
-}
-
-function paperTrackingExitTrackSortValue(track: Record<string, unknown>): number {
-  const key = String(track.key ?? "");
-  if (key === "mechanical_5d") return 0;
-  if (key === "mechanical_10d") return 1;
-  if (key === "take_profit_stop_loss") return 2;
-  if (key === "conditional_5_to_10d") return 3;
-  if (key === "take_profit_10pct") return 4;
-  return 5;
-}
-
-function paperTrackingDisplayExitTracks(item: ShortpickPaperTrackingItem): Record<string, unknown>[] {
-  return [...paperTrackingExitTracks(item)]
-    .filter((track) => track.exit_trade_day || typeof track.stock_return === "number")
-    .sort((left, right) => paperTrackingExitTrackSortValue(left) - paperTrackingExitTrackSortValue(right));
-}
-
-function paperTrackingMechanical5dExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
-  return paperTrackingExitTracks(item).find((track) => track.key === "mechanical_5d") ?? null;
-}
-
-function hasPaperTrackingMechanical5dExit(item: ShortpickPaperTrackingItem): boolean {
-  return paperTrackingMechanical5dExitTrack(item) !== null;
-}
-
-function paperTrackingMechanical10dExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
-  return paperTrackingExitTracks(item).find((track) => track.key === "mechanical_10d") ?? null;
-}
-
-function hasPaperTrackingMechanical10dExit(item: ShortpickPaperTrackingItem): boolean {
-  return paperTrackingMechanical10dExitTrack(item) !== null;
-}
-
-function paperTrackingRiskExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
-  return paperTrackingExitTracks(item).find((track) => track.key === "take_profit_stop_loss") ?? null;
-}
-
-function hasPaperTrackingRiskExit(item: ShortpickPaperTrackingItem): boolean {
-  return paperTrackingRiskExitTrack(item) !== null;
-}
-
-function paperTrackingTrackExitDay(track: Record<string, unknown> | null | undefined, fallback: ShortpickPaperTrackingItem): string {
-  return String(track?.exit_trade_day ?? fallback.exit_at ?? "");
-}
-
-function paperTrackingTrackReturn(track: Record<string, unknown> | null | undefined, fallback: ShortpickPaperTrackingItem): number | null {
-  if (track && typeof track.stock_return === "number") return track.stock_return;
-  return typeof fallback.stock_return === "number" ? fallback.stock_return : null;
-}
-
-function paperTrackingPriorityExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
-  return paperTrackingMechanical10dExitTrack(item) ?? paperTrackingMechanical5dExitTrack(item) ?? paperTrackingPrimaryExitTrack(item);
-}
-
-function paperTrackingExitDay(item: ShortpickPaperTrackingItem): string {
-  const track = paperTrackingPrimaryExitTrack(item);
-  return paperTrackingTrackExitDay(track, item);
-}
-
-function paperTrackingExitText(item: ShortpickPaperTrackingItem): string {
-  const track = paperTrackingPrimaryExitTrack(item);
-  if (track) {
-    const label = String(track.label ?? "退出");
-    const exitDay = String(track.exit_trade_day ?? item.exit_at ?? "");
-    return `${label}${exitDay ? ` ${exitDay}` : ""}`;
-  }
-  if (item.validation_status === "completed" && item.exit_at) {
-    return `${Number(item.validation_horizon_days ?? 0) || "--"}日 ${formatDate(item.exit_at)}`;
-  }
-  if (item.validation_status && item.validation_status !== "not_started") return statusLabel(item.validation_status);
-  return "等待窗口";
-}
-
-function paperTrackingTrackExitText(track: Record<string, unknown>, fallback: ShortpickPaperTrackingItem): string {
-  const label = String(track.label ?? "退出");
-  const exitDay = paperTrackingTrackExitDay(track, fallback);
-  return `${label}${exitDay ? ` ${exitDay}` : ""}`;
-}
-
-function paperTrackingExitReturn(item: ShortpickPaperTrackingItem): number | null {
-  const track = paperTrackingPrimaryExitTrack(item);
-  return paperTrackingTrackReturn(track, item);
-}
-
-function comparePaperTrackingRows(left: ShortpickPaperTrackingItem, right: ShortpickPaperTrackingItem): number {
-  const leftExitPriority = hasPaperTrackingMechanical10dExit(left) ? 2 : hasPaperTrackingMechanical5dExit(left) ? 1 : 0;
-  const rightExitPriority = hasPaperTrackingMechanical10dExit(right) ? 2 : hasPaperTrackingMechanical5dExit(right) ? 1 : 0;
-  if (leftExitPriority !== rightExitPriority) return rightExitPriority - leftExitPriority;
-  const leftExitDay = paperTrackingTrackExitDay(paperTrackingPriorityExitTrack(left), left);
-  const rightExitDay = paperTrackingTrackExitDay(paperTrackingPriorityExitTrack(right), right);
-  if (leftExitDay !== rightExitDay) return rightExitDay.localeCompare(leftExitDay);
-  const leftSignal = paperTrackingSignalDate(left);
-  const rightSignal = paperTrackingSignalDate(right);
-  if (leftSignal !== rightSignal) return rightSignal.localeCompare(leftSignal);
-  return paperTrackingDisplayRank(left) - paperTrackingDisplayRank(right);
-}
-
-function comparePaperTrackingSignalEntryRows(left: ShortpickPaperTrackingItem, right: ShortpickPaperTrackingItem): number {
-  const leftSignal = paperTrackingSignalDate(left);
-  const rightSignal = paperTrackingSignalDate(right);
-  if (leftSignal !== rightSignal) return leftSignal.localeCompare(rightSignal);
-  const leftEntry = paperTrackingEntryDate(left);
-  const rightEntry = paperTrackingEntryDate(right);
-  if (leftEntry !== rightEntry) return leftEntry.localeCompare(rightEntry);
-  return paperTrackingDisplayRank(left) - paperTrackingDisplayRank(right);
 }
 
 export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
@@ -3859,23 +2802,6 @@ function ReplayDecisionReadout({
       </div>
     </Card>
   );
-}
-
-function projectionStatusLabel(value: string): string {
-  if (value === "ready") return "已就绪";
-  if (value === "partial_ready") return "部分就绪";
-  if (value === "insufficient_forward_sample") return "继续观察";
-  if (value === "ready_for_alignment") return "可对齐";
-  if (value === "missing_artifact") return "待产物";
-  return value || "待判断";
-}
-
-function projectionDecisionLabel(value: string): string {
-  if (value === "eligible_by_ci_lower_bound") return "下沿为正";
-  if (value === "blocked_by_ci_lower_bound") return "下沿未过";
-  if (value === "continue_observation") return "继续观察";
-  if (value === "review_alignment") return "检查偏离";
-  return value || "待判断";
 }
 
 function ReplayStrategyCloseout({

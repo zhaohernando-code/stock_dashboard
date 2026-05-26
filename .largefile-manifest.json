@@ -1,9 +1,9 @@
 {
   "threshold": 500,
-  "reviewed_at": "2026-04-28",
+  "reviewed_at": "2026-05-26",
   "files": {
     "frontend/src/App.tsx": {
-      "lines": 3096,
+      "lines": 3104,
       "reason": "Main app shell: event-analysis, operations audit, multi-view state, per-section loading skeleton tracking, and scoped cross-view error handling so background stock-detail failures do not bleed into the Short Pick Lab surface. It also reads Short Pick Lab paper-tracking status for the global daily-refresh banner so LLM control batches are not confused with the frozen paper strategy. Mobile UI JSX in dedicated components/mobile/*. Planned refactor deferred. 2026-05-11 review: growth comes from frozen paper-strategy closeout, explicit loading-state contracts, market-rule filtering, paper-tracking/backtest comparison surfaces, and syncing the mobile shell tab from the canonical view so Short Pick Lab deep links render on phones; split remains deferred until the experiment contract stops changing.",
       "status": "planned_refactor",
       "reviewed_at": "2026-05-11"
@@ -21,7 +21,7 @@
       "reviewed_at": "2026-05-26"
     },
     "src/ashare_evidence/analysis_pipeline.py": {
-      "lines": 927,
+      "lines": 1031,
       "reason": "Analysis pipeline: announcement body fetching, LLM enrichment, financial trends. Cohesive pipeline definition.",
       "status": "accepted",
       "reviewed_at": "2026-04-30"
@@ -33,7 +33,7 @@
       "reviewed_at": "2026-05-25"
     },
     "src/ashare_evidence/cli.py": {
-      "lines": 1250,
+      "lines": 1243,
       "reason": "CLI command group: data refresh, cache management, admin operations, event/improvement audit triggers, database write preflight (db.py), benchmark index bar sync, and shortpick replay/distillation/rejector/hard-veto/factor-rank/market-factor-study/portfolio-backtest experiment commands, including benchmark-mode selection for market factor studies and long-sample shortpick capital-deployment backtests. 2026-05-14 review: growth extends `frontend-projections-refresh` to include home shell, shortpick model feedback, operations summary, simulation workspace summary projections, and an offline trade-level shortpick strategy slice artifact builder; command extraction remains deferred until the projection contract stabilizes. 2026-05-14 late review: added explicit-date replay CLI so stratified LLM expansion can run selected market regimes without abusing continuous date ranges.",
       "status": "accepted",
       "reviewed_at": "2026-05-14"
@@ -45,19 +45,19 @@
       "reviewed_at": "2026-05-14"
     },
     "src/ashare_evidence/intraday_market.py": {
-      "lines": 528,
+      "lines": 533,
       "reason": "Intraday market data: fetching, caching, status tracking, and runtime freshness helpers. Single responsibility.",
       "status": "accepted",
       "reviewed_at": "2026-05-01"
     },
     "src/ashare_evidence/manual_research_workflow.py": {
-      "lines": 656,
+      "lines": 673,
       "reason": "Manual research workflow: request creation, execution, completion, retry. Single workflow.",
       "status": "accepted",
       "reviewed_at": "2026-04-28"
     },
     "src/ashare_evidence/models.py": {
-      "lines": 535,
+      "lines": 725,
       "reason": "SQLAlchemy ORM models: Stock, Recommendation, PaperOrder, PaperPortfolio. Naturally cohesive.",
       "status": "accepted",
       "reviewed_at": "2026-04-28"
@@ -75,7 +75,7 @@
       "reviewed_at": "2026-04-28"
     },
     "src/ashare_evidence/phase2/holding_policy_study.py": {
-      "lines": 804,
+      "lines": 827,
       "reason": "Phase 2 holding policy study definition: parameters, backtest config, analysis, and graduation gate accounting. Still a cohesive study artifact.",
       "status": "accepted",
       "reviewed_at": "2026-05-01"
@@ -87,14 +87,8 @@
       "reviewed_at": "2026-05-12"
     },
     "src/ashare_evidence/runtime_config.py": {
-      "lines": 602,
+      "lines": 659,
       "reason": "Runtime configuration management: settings resolution, defaults, validation. Single responsibility.",
-      "status": "accepted",
-      "reviewed_at": "2026-04-28"
-    },
-    "src/ashare_evidence/schemas.py": {
-      "lines": 1128,
-      "reason": "60+ Pydantic models with cross-references (StockDashboardResponse, OperationsDashboardResponse aggregate types from all domains). Domain split carries medium risk due to model inheritance chains and runtime validation dependencies. Planned but deferred for test coverage.",
       "status": "accepted",
       "reviewed_at": "2026-04-28"
     },
@@ -105,7 +99,7 @@
       "reviewed_at": "2026-05-01"
     },
     "src/ashare_evidence/signal_engine_parts/recommendation.py": {
-      "lines": 551,
+      "lines": 585,
       "reason": "Fusion engine with dynamic weights, conflict resolution, recommendation payload assembly, and richer factor contribution metadata. Still cohesive around final recommendation generation.",
       "status": "accepted",
       "reviewed_at": "2026-05-01"
@@ -117,7 +111,7 @@
       "reviewed_at": "2026-05-14"
     },
     "src/ashare_evidence/improvement_suggestions.py": {
-      "lines": 1138,
+      "lines": 1186,
       "reason": "Suggestion audit workflow: ledger extraction, data-quality degraded-source grouping, legacy snapshot projection, dual-model review orchestration, confidence aggregation, snapshot persistence, and control-plane plan handoff. The file is large because the artifact-driven workflow is still cohesive and shares one contract surface; further split can happen later around reviewer transport and snapshot rendering.",
       "status": "accepted",
       "reviewed_at": "2026-05-03"
@@ -129,13 +123,13 @@
       "reviewed_at": "2026-04-28"
     },
     "tests/test_analysis_pipeline.py": {
-      "lines": 785,
+      "lines": 826,
       "reason": "Large file pending review.",
       "status": "accepted",
       "reviewed_at": "2026-04-28"
     },
     "tests/test_dashboard_views.py": {
-      "lines": 948,
+      "lines": 1084,
       "reason": "Dashboard view contract tests now also lock event-analysis, professionalization, and suggestion-audit UI contracts. The file is broad, but that breadth is deliberate because these are cross-surface user-visible contracts.",
       "status": "accepted",
       "reviewed_at": "2026-05-01"
@@ -147,28 +141,16 @@
       "reviewed_at": "2026-05-11"
     },
     "frontend/src/types/shortpick.ts": {
-      "lines": 501,
+      "lines": 511,
       "reason": "Short Pick Lab frontend API contract types for live batches, paper tracking, model feedback, replay feedback, and decision readouts. It crossed the manifest threshold by adding the explicit industry-performance group beside rolled-up topic performance; keeping the contract in one file preserves import stability while the Short Pick Lab API surface is still evolving.",
       "status": "accepted",
       "reviewed_at": "2026-05-14"
     },
     "frontend/src/components/ShortpickLabView.tsx": {
-      "lines": 4512,
-      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, historical replay workbench state, and the strategy closeout readout in one Ant Design surface. Historical replay now includes a reduced non-expert default readout, aggregate statistical readouts, per-run drilldown, readable replay family labels, explicit loading states for slow replay feedback tables, and the frozen paper strategy summary with market-factor controls, multi-index references, cost stress, and paper-tracking status. Heavy replay aggregate/per-run feedback and strategy closeout data now load in the background instead of blocking initial lab or replay navigation. Live runs now surface the frozen paper strategy separately from LLM and market-factor control groups; the paper-tracking tab explains the four trading-day exit tracks, the strict daily LLM paper-control stock selected from the LLM recommendation pool, and same-pool market controls including offensive Top1, cooldown Top1, deterministic random baseline, next-open entry timing, and intraday same-day entry timing. 2026-05-14 review: growth is limited to readable historical replay labels and sample guardrails: entry/regime/period keys are displayed in Chinese, object market-regime tags are parsed into trend/volatility/size labels, unidentified regime rows are hidden from the default conclusion table, execution assumptions and detailed statistical tables are collapsed by default, supplemented trade-level regime rows are preferred when the offline artifact exists, and model-feedback now separates rolled-up topic performance from stock industry performance. 2026-05-14 late review: collapsed attribution details now show full trade-level stock and industry contribution tables when the offline artifact is ready. 2026-05-16 review: paper tracking ledger gained local search plus group, entry-state, and entry-rule filters shared by desktop table and mobile list. 2026-05-26 review: paper tracking gained explicit mechanical 10-day exit summary handling and the latest-10d metric now reads the mechanical_10d track directly instead of the legacy 5-day primary exit track; component split remains planned but outside this live defect fix. 2026-05-26 second review: paper tracking ledger default order now follows signal/buy date and the desktop table uses Ant Design's native sorter on the signal/buy column.",
+      "lines": 3438,
+      "reason": "Short Pick Lab workspace component currently owns live run, validation queue, model feedback, historical replay workbench state, and the strategy closeout readout in one Ant Design surface. Historical replay now includes a reduced non-expert default readout, aggregate statistical readouts, per-run drilldown, readable replay family labels, explicit loading states for slow replay feedback tables, and the frozen paper strategy summary with market-factor controls, multi-index references, cost stress, and paper-tracking status. Heavy replay aggregate/per-run feedback and strategy closeout data now load in the background instead of blocking initial lab or replay navigation. Live runs now surface the frozen paper strategy separately from LLM and market-factor control groups; the paper-tracking tab explains the four trading-day exit tracks, the strict daily LLM paper-control stock selected from the LLM recommendation pool, and same-pool market controls including offensive Top1, cooldown Top1, deterministic random baseline, next-open entry timing, and intraday same-day entry timing. 2026-05-14 review: growth is limited to readable historical replay labels and sample guardrails: entry/regime/period keys are displayed in Chinese, object market-regime tags are parsed into trend/volatility/size labels, unidentified regime rows are hidden from the default conclusion table, execution assumptions and detailed statistical tables are collapsed by default, supplemented trade-level regime rows are preferred when the offline artifact exists, and model-feedback now separates rolled-up topic performance from stock industry performance. 2026-05-14 late review: collapsed attribution details now show full trade-level stock and industry contribution tables when the offline artifact is ready. 2026-05-16 review: paper tracking ledger gained local search plus group, entry-state, and entry-rule filters shared by desktop table and mobile list. 2026-05-26 governance pass: label/format helpers, paper-tracking sort/exit helpers, and replay metric adapters were extracted into three sub-500-line modules, reducing this component from 4512 to 3438 lines; remaining size is still planned refactor, not a permanent acceptance.",
       "status": "planned_refactor",
       "reviewed_at": "2026-05-26"
-    },
-    "src/ashare_evidence/event_analyzer.py": {
-      "lines": 526,
-      "reason": "Event-driven analysis pipeline: external data fetching (5 AKShare sources), internal data gathering, prompt construction, LLM execution, and JSON artifact persistence. Single cohesive workflow.",
-      "reviewed_at": "2026-04-30",
-      "status": "accepted"
-    },
-    "src/ashare_evidence/signal_engine_parts/factors.py": {
-      "lines": 562,
-      "reason": "Multi-factor computation module: price, news, fundamental, size, reversal, liquidity factors with cross-sectional normalization. Cohesive factor definition.",
-      "reviewed_at": "2026-04-30",
-      "status": "accepted"
     },
     "src/ashare_evidence/shortpick_replay.py": {
       "lines": 5290,
@@ -200,17 +182,11 @@
       "status": "accepted",
       "reviewed_at": "2026-05-11"
     },
-    "tests/test_shortpick_lab.py": {
-      "lines": 1921,
-      "reason": "Short Pick Lab integration/regression tests spanning candidate parsing, paper controls, validation, and intraday same-day entry failure handling. 2026-05-14 review: growth locks model-feedback display aggregation, readable priority/channel labels, nonzero tradable-sample projection fields, and the split between rolled-up topic performance and stock industry performance while preserving existing API compatibility.",
-      "status": "accepted",
-      "reviewed_at": "2026-05-14"
-    },
     "src/ashare_evidence/shortpick_lab.py": {
-      "lines": 7262,
-      "reason": "Short Pick Lab experiment runner, market-factor overlays, paper-tracking validation, and intraday same-day entry control. 2026-05-14 review: growth is the read-only model-feedback projection layer that groups executor channels under the two real model labels, maps research-priority keys to user-facing labels, carries real tradable-sample counters so missing fields do not render as 0/0, separates normalized topic rollups from stock industry buckets, and overrides known overly coarse `C 制造业` profile labels with more informative sector labels; split remains deferred because this runner still owns the live paper ledger contract. 2026-05-14 late review: intraday same-day entry now persists the captured quote snapshot artifact so future 14:00 evidence can distinguish real intraday quotes from day-line proxies.",
-      "status": "accepted",
-      "reviewed_at": "2026-05-14"
+      "lines": 7134,
+      "reason": "Short Pick Lab experiment runner, market-factor overlays, paper-tracking validation, and intraday same-day entry control. 2026-05-14 review: growth is the read-only model-feedback projection layer that groups executor channels under the two real model labels, maps research-priority keys to user-facing labels, carries real tradable-sample counters so missing fields do not render as 0/0, separates normalized topic rollups from stock industry buckets, and overrides known overly coarse `C 制造业` profile labels with more informative sector labels. 2026-05-14 late review: intraday same-day entry now persists the captured quote snapshot artifact so future 14:00 evidence can distinguish real intraday quotes from day-line proxies. 2026-05-26 governance pass: source credibility/audit helpers were extracted to shortpick_source_audit.py, reducing this file from 7307 to 7135 lines; remaining size is too large for permanent acceptance and must continue through staged splits around paper ledger, market-factor overlays, and executor/audit boundaries.",
+      "status": "planned_refactor",
+      "reviewed_at": "2026-05-26"
     }
   }
 }

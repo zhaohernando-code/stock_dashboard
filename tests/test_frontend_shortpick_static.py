@@ -6,7 +6,13 @@ class FrontendShortpickStaticTests(unittest.TestCase):
     def test_shortpick_lab_is_independent_research_surface(self) -> None:
         frontend_root = Path(__file__).resolve().parents[1] / "frontend" / "src"
         app_source = (frontend_root / "App.tsx").read_text(encoding="utf-8")
-        component_source = (frontend_root / "components" / "ShortpickLabView.tsx").read_text(encoding="utf-8")
+        component_paths = [
+            frontend_root / "components" / "ShortpickLabView.tsx",
+            frontend_root / "components" / "shortpickLabLabels.ts",
+            frontend_root / "components" / "shortpickLabPaperTracking.ts",
+            frontend_root / "components" / "shortpickLabReplayMetrics.ts",
+        ]
+        component_source = "\n".join(path.read_text(encoding="utf-8") for path in component_paths)
         api_source = (frontend_root / "api" / "shortpick.ts").read_text(encoding="utf-8")
 
         self.assertIn('label: "试验田"', app_source)
