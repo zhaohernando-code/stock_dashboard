@@ -11,6 +11,7 @@ class FrontendShortpickStaticTests(unittest.TestCase):
             frontend_root / "components" / "shortpickLabLabels.ts",
             frontend_root / "components" / "shortpickLabPaperTracking.ts",
             frontend_root / "components" / "shortpickLabReplayMetrics.ts",
+            frontend_root / "components" / "shortpickLabToday.tsx",
         ]
         component_source = "\n".join(path.read_text(encoding="utf-8") for path in component_paths)
         api_source = (frontend_root / "api" / "shortpick.ts").read_text(encoding="utf-8")
