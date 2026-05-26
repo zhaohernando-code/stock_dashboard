@@ -184,8 +184,7 @@ function getApiBases(): string[] {
   const mountedBase = inferAssetMountedBase();
   const locationBase = inferLocationBasedBase();
   const prefersMountedToolApi = Boolean(mountedBase) && mountedBase.startsWith("/tools/");
-  const mountedDeploymentBase = !isLocalPreviewOrigin()
-    && [mountedBase, locationBase].some((base) => base && isSameOriginMountedBase(base));
+  const mountedDeploymentBase = hasMountedDeploymentBase(mountedBase, locationBase);
   const localBackendBase = inferLocalBackendBase();
   return dedupe([
     inferApiBaseFromQuery(),
@@ -197,6 +196,11 @@ function getApiBases(): string[] {
     ...(isLocalPreviewOrigin() || mountedDeploymentBase ? [] : [inferOriginBase()]),
     ...(mountedDeploymentBase ? [] : [inferSiblingPortBackendBase()]),
   ]).filter(Boolean);
+}
+
+function hasMountedDeploymentBase(mountedBase = inferAssetMountedBase(), locationBase = inferLocationBasedBase()): boolean {
+  return !isLocalPreviewOrigin()
+    && [mountedBase, locationBase].some((base) => base && isSameOriginMountedBase(base));
 }
 
 function hasExplicitApiBase(): boolean {
@@ -213,7 +217,8 @@ function buildRequestUrls(path: string, explicitBase = hasExplicitApiBase()): st
   const bases = getApiBases();
   const urls: string[] = [];
   const basesToUse = [...bases];
-  if (!explicitBase && !inferLocalBackendBase() && !basesToUse.includes("")) {
+  const mountedDeploymentBase = hasMountedDeploymentBase();
+  if (!explicitBase && !inferLocalBackendBase() && !mountedDeploymentBase && !basesToUse.includes("")) {
     basesToUse.push("");
   }
 

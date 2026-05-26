@@ -141,7 +141,7 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("function isLocalPreviewOrigin()", core_source)
         self.assertIn("window.location.port !== \"8000\"", core_source)
         self.assertIn("isLocalPreviewOrigin() || mountedDeploymentBase ? [] : [inferOriginBase()]", core_source)
-        self.assertIn("!inferLocalBackendBase() && !basesToUse.includes(\"\")", core_source)
+        self.assertIn("!inferLocalBackendBase() && !mountedDeploymentBase && !basesToUse.includes(\"\")", core_source)
 
     def test_canonical_mounted_route_does_not_probe_root_api_fallbacks(self) -> None:
         frontend_root = Path(__file__).resolve().parents[1] / "frontend" / "src"
@@ -149,9 +149,12 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         dashboard_api_source = (frontend_root / "api" / "dashboard.ts").read_text(encoding="utf-8")
 
         self.assertIn("function isSameOriginMountedBase(base: string): boolean", core_source)
-        self.assertIn("const mountedDeploymentBase = !isLocalPreviewOrigin()", core_source)
+        self.assertIn("function hasMountedDeploymentBase(", core_source)
+        self.assertIn("const mountedDeploymentBase = hasMountedDeploymentBase(mountedBase, locationBase);", core_source)
+        self.assertIn("return !isLocalPreviewOrigin()", core_source)
         self.assertIn("isLocalPreviewOrigin() || mountedDeploymentBase ? [] : [inferOriginBase()]", core_source)
         self.assertIn("mountedDeploymentBase ? [] : [inferSiblingPortBackendBase()]", core_source)
+        self.assertIn("!mountedDeploymentBase && !basesToUse.includes(\"\")", core_source)
         self.assertIn("} else if (isSameOriginMountedBase(base)) {", core_source)
         self.assertIn("urls.push(`${base}/api${normalizedPath}`);", core_source)
         self.assertIn("operationsDashboardRequestBehavior", dashboard_api_source)

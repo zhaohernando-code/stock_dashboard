@@ -14,6 +14,12 @@
       "status": "accepted",
       "reviewed_at": "2026-05-11"
     },
+    "frontend/src/api/core.ts": {
+      "lines": 534,
+      "reason": "Frontend API core: shared base inference, mounted-route fallback handling, request timeout behavior, JSON/HTML response guards, beta/access headers, and runtime source metadata. 2026-05-26 review: growth is limited to preventing canonical mounted deployments from retrying root `/api/...` fallbacks after a mounted API path is known; splitting this client while fixing a live route regression would broaden risk.",
+      "status": "planned_refactor",
+      "reviewed_at": "2026-05-26"
+    },
     "src/ashare_evidence/analysis_pipeline.py": {
       "lines": 927,
       "reason": "Analysis pipeline: announcement body fetching, LLM enrichment, financial trends. Cohesive pipeline definition.",
