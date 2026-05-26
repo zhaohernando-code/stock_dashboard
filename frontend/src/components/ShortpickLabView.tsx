@@ -1322,6 +1322,16 @@ function comparePaperTrackingRows(left: ShortpickPaperTrackingItem, right: Short
   return paperTrackingDisplayRank(left) - paperTrackingDisplayRank(right);
 }
 
+function comparePaperTrackingSignalEntryRows(left: ShortpickPaperTrackingItem, right: ShortpickPaperTrackingItem): number {
+  const leftSignal = paperTrackingSignalDate(left);
+  const rightSignal = paperTrackingSignalDate(right);
+  if (leftSignal !== rightSignal) return leftSignal.localeCompare(rightSignal);
+  const leftEntry = paperTrackingEntryDate(left);
+  const rightEntry = paperTrackingEntryDate(right);
+  if (leftEntry !== rightEntry) return leftEntry.localeCompare(rightEntry);
+  return paperTrackingDisplayRank(left) - paperTrackingDisplayRank(right);
+}
+
 export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
   const [runs, setRuns] = useState<ShortpickRunView[]>([]);
   const [selectedRun, setSelectedRun] = useState<ShortpickRunView | null>(null);
@@ -2225,7 +2235,7 @@ function PaperTrackingTab({
     if (ledgerEntryRuleFilter && paperTrackingEntryRuleKey(item) !== ledgerEntryRuleFilter) return false;
     if (normalizedLedgerSearch && !paperTrackingSearchText(item).includes(normalizedLedgerSearch)) return false;
     return true;
-  }).sort(comparePaperTrackingRows);
+  }).sort((left, right) => comparePaperTrackingSignalEntryRows(right, left));
   const filteredOutCount = Math.max(rows.length - displayRows.length, 0);
   const choiceLabel = paperTrackingChoiceLabel(latestRun);
   const choiceRows = latestPaperTrackingChoices(rows, latestRun);
@@ -2246,6 +2256,9 @@ function PaperTrackingTab({
       title: "信号 / 买入",
       dataIndex: "run_date",
       key: "run_date",
+      sorter: comparePaperTrackingSignalEntryRows,
+      defaultSortOrder: "descend",
+      sortDirections: ["descend", "ascend"],
       render: (value: string, item) => (
         <Space direction="vertical" size={0}>
           <Text strong>{paperTrackingSignalDate(item)}</Text>
