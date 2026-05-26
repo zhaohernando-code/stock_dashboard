@@ -1,6 +1,6 @@
 {
-  "annualized_excess_return": 0.2069,
-  "annualized_return": 0.2013,
+  "annualized_excess_return": 0.2145,
+  "annualized_return": 0.1955,
   "artifact_id": "portfolio-backtest:portfolio-auto-wave",
   "artifact_type": "portfolio_backtest",
   "benchmark": {
@@ -17,7 +17,7 @@
   },
   "drawdown_series_ref": "phase2-drawdown:portfolio-auto-wave",
   "drawdown_stats": {
-    "current_drawdown": -0.0247,
+    "current_drawdown": -0.0295,
     "max_drawdown": -0.0775
   },
   "equity_curve": [
@@ -6252,12 +6252,36 @@
       "nav": 2162409.89,
       "observed_at": "2026-05-21T15:00:00",
       "trade_date": "2026-05-21"
+    },
+    {
+      "benchmark_nav": 1813143.44,
+      "drawdown": -0.0262,
+      "exposure": 0.2071,
+      "nav": 2159103.89,
+      "observed_at": "2026-05-22T15:00:00",
+      "trade_date": "2026-05-22"
+    },
+    {
+      "benchmark_nav": 1844941.27,
+      "drawdown": -0.02,
+      "exposure": 0.2121,
+      "nav": 2172795.89,
+      "observed_at": "2026-05-25T15:00:00",
+      "trade_date": "2026-05-25"
+    },
+    {
+      "benchmark_nav": 1765663.81,
+      "drawdown": -0.0295,
+      "exposure": 0.2044,
+      "nav": 2151811.89,
+      "observed_at": "2026-05-26T15:00:00",
+      "trade_date": "2026-05-26"
     }
   ],
   "execution_assumptions": "daily_close_marking + paper_fills + T+1 + price_limit_checks",
   "exposure_summary": {
     "active_position_count": 3,
-    "invested_ratio": 0.2083
+    "invested_ratio": 0.2044
   },
   "manifest_id": "rolling-validation:phase2-portfolio-backtests",
   "max_drawdown": -0.0775,
@@ -6271,13 +6295,13 @@
     "active_position_count": 3,
     "rule_pass_rate": 1.0
   },
-  "sharpe_like_ratio": 2.669677,
+  "sharpe_like_ratio": 2.767742,
   "status": "research_candidate",
   "status_note": "组合回测已切到真实 daily 价格与 proxy benchmark；模型轨道的 simulation baseline 已升级为 constrained TopK，但仍处于 research candidate。",
   "strategy_definition": "模型按目标权重自动调仓、独立资金池运行，适合验证组合纪律与执行损耗。",
   "stress_period_summary": [
     {
-      "excess_return": 0.2069,
+      "excess_return": 0.2145,
       "max_drawdown": -0.0775,
       "period": "phase2_fixture_window"
     }
@@ -6287,6 +6311,6 @@
   "turnover_stats": {
     "turnover": 0.75
   },
-  "win_rate": 0.979461,
+  "win_rate": 0.97954,
   "win_rate_definition": "positive_excess_nav_point_ratio_against_phase2_proxy"
 }
