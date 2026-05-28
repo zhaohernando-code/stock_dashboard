@@ -14,6 +14,7 @@ RSYNC_BIN="${RSYNC_BIN:-rsync}"
 MAX_WAIT_SECONDS="${ASHARE_PUBLISH_MAX_WAIT_SECONDS:-30}"
 REFRESH_MODE="${ASHARE_PUBLISH_REFRESH_MODE:-sync}"
 REFRESH_TIMEOUT_SECONDS="${ASHARE_PUBLISH_REFRESH_TIMEOUT_SECONDS:-900}"
+BACKUP_MODE="${ASHARE_PUBLISH_BACKUP_MODE:-skip}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 FRONTEND_DIR="$REPO_ROOT/frontend"
 
@@ -152,22 +153,37 @@ mkdir -p "$RUNTIME_ROOT"
 
 echo "[publish] Release source commit: $COMMIT_SHA"
 
-# Snapshot current runtime before overwriting (AI rollback path)
-echo "[publish] Backing up runtime to $BACKUP_DIR"
-mkdir -p "$BACKUP_DIR"
-if [ -d "$RUNTIME_ROOT/frontend/dist" ] || [ -d "$RUNTIME_ROOT/src" ]; then
-  rsync -a --exclude ".git" --exclude "data" "$RUNTIME_ROOT/" "$BACKUP_DIR/"
-  echo "[publish] Backup saved: $BACKUP_DIR"
-  echo "[publish] Rollback: rsync -a --delete $BACKUP_DIR/ $RUNTIME_ROOT/"
-else
-  echo "[publish] Runtime empty — skipping backup (first publish?)"
-fi
+if [[ "$BACKUP_MODE" == "skip" ]]; then
+  echo "[publish] Runtime backup skipped (ASHARE_PUBLISH_BACKUP_MODE=skip)"
+elif [[ "$BACKUP_MODE" == "source" ]]; then
+  echo "[publish] Backing up runtime source files to $BACKUP_DIR"
+  mkdir -p "$BACKUP_DIR"
+  if [ -d "$RUNTIME_ROOT/frontend/dist" ] || [ -d "$RUNTIME_ROOT/src" ]; then
+    rsync -a \
+      --exclude ".git" \
+      --exclude "data" \
+      --exclude "output" \
+      --exclude ".venv" \
+      --exclude ".venv-mac" \
+      --exclude "venv" \
+      --exclude "node_modules" \
+      --exclude "frontend/node_modules" \
+      "$RUNTIME_ROOT/" "$BACKUP_DIR/"
+    echo "[publish] Backup saved: $BACKUP_DIR"
+    echo "[publish] Rollback: rsync -a --delete $BACKUP_DIR/ $RUNTIME_ROOT/"
+  else
+    echo "[publish] Runtime empty — skipping backup (first publish?)"
+  fi
 
-# Rotate old backups
-backup_count=$(ls -d "$BACKUP_ROOT"/*/ 2>/dev/null | wc -l | tr -d ' ')
-if [ "$backup_count" -gt "$MAX_BACKUPS" ]; then
-  ls -dt "$BACKUP_ROOT"/*/ | tail -n +$((MAX_BACKUPS + 1)) | xargs rm -rf
-  echo "[publish] Rotated backups, keeping last $MAX_BACKUPS"
+  backup_count=$(ls -d "$BACKUP_ROOT"/*/ 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$backup_count" -gt "$MAX_BACKUPS" ]; then
+    ls -dt "$BACKUP_ROOT"/*/ | tail -n +$((MAX_BACKUPS + 1)) | xargs rm -rf
+    echo "[publish] Rotated backups, keeping last $MAX_BACKUPS"
+  fi
+else
+  echo "Unsupported ASHARE_PUBLISH_BACKUP_MODE: $BACKUP_MODE" >&2
+  echo "Use 'skip' for normal deploys or 'source' for a small source-only rollback snapshot." >&2
+  exit 1
 fi
 echo "[publish] Building repo frontend"
 ensure_frontend_dependencies
