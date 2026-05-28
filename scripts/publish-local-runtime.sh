@@ -15,6 +15,7 @@ MAX_WAIT_SECONDS="${ASHARE_PUBLISH_MAX_WAIT_SECONDS:-30}"
 REFRESH_MODE="${ASHARE_PUBLISH_REFRESH_MODE:-sync}"
 REFRESH_TIMEOUT_SECONDS="${ASHARE_PUBLISH_REFRESH_TIMEOUT_SECONDS:-900}"
 BACKUP_MODE="${ASHARE_PUBLISH_BACKUP_MODE:-skip}"
+VERIFY_MODE="${ASHARE_PUBLISH_VERIFY_MODE:-canonical}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 FRONTEND_DIR="$REPO_ROOT/frontend"
 
@@ -253,23 +254,6 @@ if [[ "$repo_assets" != "$served_assets" ]]; then
   exit 1
 fi
 
-echo "[publish] Verifying repo/runtime/canonical parity"
-mkdir -p "$RUNTIME_ROOT/output/releases"
-MANIFEST_PATH="$(
-  cd "$REPO_ROOT"
-  PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.release_verifier \
-    --repo-root "$REPO_ROOT" \
-    --runtime-root "$RUNTIME_ROOT" \
-    --local-frontend-url "$FRONTEND_URL" \
-    --local-api-base-url "$LOCAL_API_BASE_URL" \
-    --canonical-base-url "$CANONICAL_BASE_URL" \
-    --expected-commit-sha "$COMMIT_SHA" \
-    --release-output-root "$RUNTIME_ROOT/output/releases"
-)"
-
-cp "$MANIFEST_PATH" "$RUNTIME_ROOT/output/releases/latest-successful.json"
-printf '%s\n' "$COMMIT_SHA" > "$RUNTIME_ROOT/output/releases/latest-successful.commit"
-
 echo "[publish] Resuming scheduled-refresh"
 if [[ ! -f "$SCHEDULED_PLIST" ]]; then
   echo "Scheduled refresh plist missing: $SCHEDULED_PLIST" >&2
@@ -279,6 +263,43 @@ ensure_scheduled_refresh_calendar
 launchctl bootout "gui/$(id -u)" "$SCHEDULED_PLIST" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"
 launchctl kickstart -k "gui/$(id -u)/$SCHEDULED_LABEL"
+
+mkdir -p "$RUNTIME_ROOT/output/releases"
+if [[ "$VERIFY_MODE" == "canonical" ]]; then
+  echo "[publish] Verifying repo/runtime/canonical parity"
+  MANIFEST_PATH="$(
+    cd "$REPO_ROOT"
+    PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.release_verifier \
+      --repo-root "$REPO_ROOT" \
+      --runtime-root "$RUNTIME_ROOT" \
+      --local-frontend-url "$FRONTEND_URL" \
+      --local-api-base-url "$LOCAL_API_BASE_URL" \
+      --canonical-base-url "$CANONICAL_BASE_URL" \
+      --expected-commit-sha "$COMMIT_SHA" \
+      --release-output-root "$RUNTIME_ROOT/output/releases"
+  )"
+elif [[ "$VERIFY_MODE" == "local" ]]; then
+  echo "[publish] Canonical release verifier skipped (ASHARE_PUBLISH_VERIFY_MODE=local)"
+  MANIFEST_PATH="$RUNTIME_ROOT/output/releases/local-$(date -u +%Y%m%dT%H%M%SZ)-${COMMIT_SHA:0:7}.json"
+  cat > "$MANIFEST_PATH" <<JSON
+{
+  "schema_version": 1,
+  "verification_mode": "local",
+  "commit_sha": "$COMMIT_SHA",
+  "runtime_root": "$RUNTIME_ROOT",
+  "local_frontend_url": "$FRONTEND_URL",
+  "local_api_base_url": "$LOCAL_API_BASE_URL",
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+JSON
+else
+  echo "Unsupported ASHARE_PUBLISH_VERIFY_MODE: $VERIFY_MODE" >&2
+  echo "Use 'canonical' for full release verification or 'local' for auto deploys." >&2
+  exit 1
+fi
+
+cp "$MANIFEST_PATH" "$RUNTIME_ROOT/output/releases/latest-successful.json"
+printf '%s\n' "$COMMIT_SHA" > "$RUNTIME_ROOT/output/releases/latest-successful.commit"
 
 echo "[publish] Triggering post-deploy data refresh"
 if [[ -f "$BACKEND_ENV_FILE" ]]; then
@@ -328,7 +349,9 @@ echo "[publish] Frontend healthy at $FRONTEND_URL"
 echo "[publish] Release parity manifest: $MANIFEST_PATH"
 
 echo "[publish] Running deploy verification..."
-if bash "$REPO_ROOT/scripts/verify-deploy.sh"; then
+if [[ "$VERIFY_MODE" == "local" ]]; then
+    echo "[publish] Full deploy verification skipped by ASHARE_PUBLISH_VERIFY_MODE=local"
+elif bash "$REPO_ROOT/scripts/verify-deploy.sh"; then
     echo "[publish] VERIFICATION PASSED"
 else
     echo "[publish] VERIFICATION FAILED — check output above"
