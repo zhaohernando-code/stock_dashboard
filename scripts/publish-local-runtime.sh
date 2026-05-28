@@ -194,6 +194,7 @@ rm -rf "$RUNTIME_ROOT/.git"
 "$RSYNC_BIN" -a --delete \
   --exclude ".git" \
   --exclude "data" \
+  --exclude "output" \
   --exclude ".venv" \
   --exclude ".venv-mac" \
   --exclude "venv" \
