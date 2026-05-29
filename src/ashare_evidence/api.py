@@ -13,6 +13,7 @@ from datetime import date
 from pathlib import Path
 
 from fastapi import Body, Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -1167,6 +1168,7 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
     register_event_routes(app, get_session, require_stock_access, StockAccessContext)
 
     @app.get("/health")
