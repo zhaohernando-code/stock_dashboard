@@ -1017,8 +1017,9 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
             continue
         seen_semantic_keys.add(semantic_key)
         items.append(item)
-        if len(items) >= 160:
-            break
+        # Paper-tracking items are small (~40 frozen+LLM total, ~18 daily controls);
+        # the 1000-row SQL limit is the safety valve. Do not silently truncate
+        # historical frozen-strategy data with a memory-side cap.
 
     latest_summary = dict(latest_run.summary_payload or {}) if latest_run else {}
     latest_overlay = dict(latest_summary.get("market_factor_overlay") or {})
