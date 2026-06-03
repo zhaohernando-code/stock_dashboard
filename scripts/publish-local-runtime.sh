@@ -144,6 +144,11 @@ payload["StartCalendarInterval"] = sorted(
     intervals,
     key=lambda item: (int(item.get("Hour", 0)), int(item.get("Minute", 0))),
 )
+# RunAtLoad must stay false: launchctl bootstrap (below, and any reload during
+# governance work) would otherwise fire a full ~50min phase5-daily-refresh on
+# every publish/reload. The StartCalendarInterval/StartInterval ticks plus the
+# .ok slot guard already trigger exactly one refresh per trading day.
+payload["RunAtLoad"] = False
 with path.open("wb") as handle:
     plistlib.dump(payload, handle)
 PY
@@ -297,7 +302,11 @@ fi
 ensure_scheduled_refresh_calendar
 launchctl bootout "gui/$(id -u)" "$SCHEDULED_PLIST" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"
-launchctl kickstart -k "gui/$(id -u)/$SCHEDULED_LABEL"
+# Do NOT kickstart here. The agent is loaded with RunAtLoad=false; its
+# StartCalendarInterval/StartInterval ticks plus the .ok slot guard fire
+# exactly one phase5-daily-refresh per trading day. Force-starting on every
+# publish would launch a ~50min full refresh that holds the DB lock and times
+# out the dashboard (the original outage).
 
 mkdir -p "$RUNTIME_ROOT/output/releases"
 if [[ "$VERIFY_MODE" == "canonical" ]]; then

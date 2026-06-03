@@ -43,7 +43,7 @@ def test_local_frontend_uses_managed_static_dist_server() -> None:
     script = (REPO_ROOT / "scripts" / "start-local-frontend.sh").read_text(encoding="utf-8")
     server = (REPO_ROOT / "scripts" / "serve-frontend-dist.mjs").read_text(encoding="utf-8")
 
-    assert 'exec node "$REPO_ROOT/scripts/serve-frontend-dist.mjs"' in script
+    assert 'exec "$NODE_RUNNER" "$REPO_ROOT/scripts/serve-frontend-dist.mjs"' in script
     assert '--root "$FRONTEND_DIR/dist" --host 127.0.0.1 --port "$PORT"' in script
     assert "npx vite preview" not in script
     assert "vite preview" not in script
@@ -66,4 +66,15 @@ def test_publish_bootstraps_scheduled_refresh_when_launchagent_is_unloaded() -> 
     assert 'ensure_scheduled_refresh_calendar' in script
     assert 'launchctl bootout "gui/$(id -u)" "$SCHEDULED_PLIST"' in script
     assert 'launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"' in script
-    assert 'launchctl kickstart -k "gui/$(id -u)/$SCHEDULED_LABEL"' in script
+    # Publish must NOT force-start the refresh: kickstart -k would launch a
+    # full ~50min phase5-daily-refresh on every publish, holding the DB lock.
+    assert 'kickstart -k "gui/$(id -u)/$SCHEDULED_LABEL"' not in script
+
+
+def test_publish_forces_scheduled_refresh_runatload_false() -> None:
+    # RunAtLoad=true would fire a full ~50min phase5-daily-refresh on every
+    # publish/reload (launchctl bootstrap), which holds the DB lock and times
+    # out the dashboard. ensure_scheduled_refresh_calendar must pin it false.
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert 'payload["RunAtLoad"] = False' in script
