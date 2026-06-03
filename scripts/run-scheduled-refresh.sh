@@ -14,15 +14,19 @@ fi
 
 VENV_PATH="${ASHARE_LOCAL_VENV_PATH:-$REPO_ROOT/.venv-mac}"
 PYTHON_BIN="$VENV_PATH/bin/python"
+ARTIFACT_ROOT_HELPER="$REPO_ROOT/scripts/ashare-artifact-root.sh"
 
 if [[ ! -x "$PYTHON_BIN" ]]; then
   echo "Missing Python virtualenv at $VENV_PATH" >&2
   exit 1
 fi
 
+# shellcheck source=scripts/ashare-artifact-root.sh
+source "$ARTIFACT_ROOT_HELPER"
+
 export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 export ASHARE_DATABASE_URL="${ASHARE_DATABASE_URL:-sqlite:///$REPO_ROOT/data/ashare_dashboard.db}"
-export ASHARE_ARTIFACT_ROOT="${ASHARE_ARTIFACT_ROOT:-$REPO_ROOT/data/artifacts}"
+ashare_resolve_local_artifact_root "$REPO_ROOT"
 
 TIMEZONE="${ASHARE_REFRESH_TIMEZONE:-Asia/Shanghai}"
 NOW_HHMM="${ASHARE_SCHEDULED_REFRESH_AT:-$(TZ="$TIMEZONE" date '+%H:%M')}"

@@ -53,10 +53,13 @@ forbid_text .github/workflows/ci.yml "pytest tests/ -v"
 require_text scripts/hooks/pre-push-stock-dashboard.sh "bash scripts/check-agent-constraints.sh"
 require_text scripts/hooks/pre-push-stock-dashboard.sh "python3 -m pytest -q"
 require_text scripts/hooks/pre-push-stock-dashboard.sh "policy-audit"
+python3 scripts/check-artifact-git-governance.py
 require_text scripts/install-git-hooks.sh "../../.githooks"
 require_text scripts/install-git-hooks.sh "pre-push"
 
 require_executable scripts/check-agent-constraints.sh
+require_executable scripts/check-artifact-git-governance.py
+require_executable scripts/ashare-artifact-root.sh
 require_executable scripts/test-runtime-integration.sh
 require_executable scripts/hooks/pre-push-stock-dashboard.sh
 require_executable scripts/install-git-hooks.sh

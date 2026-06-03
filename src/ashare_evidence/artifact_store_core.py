@@ -9,7 +9,7 @@ from typing import TypeVar
 from pydantic import BaseModel
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "artifacts"
+DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "data" / "runtime-artifacts"
 ARTIFACT_FOLDERS = {
     "rolling_validation": "manifests",
     "validation_metrics": "validation",
@@ -81,6 +81,31 @@ def artifact_path(
     return _artifact_root(root, default_artifact_root=default_artifact_root) / folder / f"{artifact_id}.json"
 
 
+def _read_paths(
+    artifact_type: str,
+    artifact_id: str,
+    *,
+    root: Path | None = None,
+    default_artifact_root: Path = DEFAULT_ARTIFACT_ROOT,
+    project_root: Path = PROJECT_ROOT,
+) -> tuple[Path, ...]:
+    primary = artifact_path(artifact_type, artifact_id, root=root, default_artifact_root=default_artifact_root)
+    if root is not None or os.getenv("ASHARE_ARTIFACT_ROOT"):
+        return (primary,)
+    if default_artifact_root.resolve() != DEFAULT_ARTIFACT_ROOT.resolve():
+        return (primary,)
+
+    legacy = artifact_path(
+        artifact_type,
+        artifact_id,
+        root=project_root / "data" / "artifacts",
+        default_artifact_root=default_artifact_root,
+    )
+    if legacy == primary:
+        return (primary,)
+    return (primary, legacy)
+
+
 def _ensure_artifact_write_allowed(
     target: Path,
     *,
@@ -129,8 +154,16 @@ def _read_model(  # noqa: UP047 - keep Python 3.10-compatible generic syntax.
     *,
     root: Path | None = None,
     default_artifact_root: Path = DEFAULT_ARTIFACT_ROOT,
+    project_root: Path = PROJECT_ROOT,
 ) -> ArtifactModel:
-    target = artifact_path(artifact_type, artifact_id, root=root, default_artifact_root=default_artifact_root)
+    paths = _read_paths(
+        artifact_type,
+        artifact_id,
+        root=root,
+        default_artifact_root=default_artifact_root,
+        project_root=project_root,
+    )
+    target = next((path for path in paths if path.exists()), paths[0])
     payload = json.loads(target.read_text(encoding="utf-8"))
     return model_type.model_validate(payload)
 
@@ -142,10 +175,18 @@ def _read_model_if_exists(  # noqa: UP047 - keep Python 3.10-compatible generic 
     *,
     root: Path | None = None,
     default_artifact_root: Path = DEFAULT_ARTIFACT_ROOT,
+    project_root: Path = PROJECT_ROOT,
 ) -> ArtifactModel | None:
     if not artifact_id:
         return None
-    target = artifact_path(artifact_type, artifact_id, root=root, default_artifact_root=default_artifact_root)
+    paths = _read_paths(
+        artifact_type,
+        artifact_id,
+        root=root,
+        default_artifact_root=default_artifact_root,
+        project_root=project_root,
+    )
+    target = next((path for path in paths if path.exists()), paths[0])
     if not target.exists():
         return None
     payload = json.loads(target.read_text(encoding="utf-8"))

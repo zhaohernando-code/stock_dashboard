@@ -25,7 +25,9 @@ def test_daily_refresh_has_catchup_guards() -> None:
     script = SCRIPT_PATH.read_text(encoding="utf-8")
 
     assert "REFRESH_STATE_DIR" in script
-    assert 'export ASHARE_ARTIFACT_ROOT="${ASHARE_ARTIFACT_ROOT:-$REPO_ROOT/data/artifacts}"' in script
+    assert 'ARTIFACT_ROOT_HELPER="$REPO_ROOT/scripts/ashare-artifact-root.sh"' in script
+    assert 'source "$ARTIFACT_ROOT_HELPER"' in script
+    assert 'ashare_resolve_local_artifact_root "$REPO_ROOT"' in script
     assert "slot_completed" in script
     assert "mark_slot_completed" in script
     assert "network_available" in script
