@@ -55,8 +55,23 @@ def get_engine(database_url: str | None = None) -> Engine:
         engine = create_engine(resolved, future=True, connect_args=connect_args)
         if resolved.startswith("sqlite"):
             @event.listens_for(engine, "connect")
-            def _set_sqlite_busy_timeout(dbapi_connection, _connection_record):  # type: ignore[no-untyped-def]
-                dbapi_connection.execute("PRAGMA busy_timeout=30000")
+            def _set_sqlite_pragmas(dbapi_connection, _connection_record):  # type: ignore[no-untyped-def]
+                # WAL lets readers (the FastAPI backend) keep reading a snapshot
+                # while a writer (the daily refresh) holds the write lock. Under
+                # the default rollback journal a long refresh blocks every read
+                # with "database is locked", which times out all dashboard tabs.
+                # synchronous=NORMAL is durable under WAL (only loses the last
+                # unsynced transaction on power loss, never corrupts the file).
+                # wal_autocheckpoint bounds the -wal file size between explicit
+                # checkpoints.
+                cursor = dbapi_connection.cursor()
+                try:
+                    cursor.execute("PRAGMA journal_mode=WAL")
+                    cursor.execute("PRAGMA synchronous=NORMAL")
+                    cursor.execute("PRAGMA busy_timeout=30000")
+                    cursor.execute("PRAGMA wal_autocheckpoint=1000")
+                finally:
+                    cursor.close()
 
         _ENGINE_CACHE[resolved] = engine
     return engine
