@@ -210,32 +210,37 @@ rm -rf "$RUNTIME_ROOT/.git"
 
 echo "[publish] Restarting LaunchAgents"
 
-stop_service_wait_port() {
-  local label="$1"
+restart_agent() {
+  local plist_path="$1"
   local port="$2"
   local display_name="$3"
 
-  echo "[publish] Stopping $display_name ($label, port $port)"
-  launchctl stop "gui/$(id -u)/$label" 2>/dev/null || true
+  echo "[publish] Restarting $display_name (port $port)"
 
-  # Wait up to 5s for old process to release the port.
-  # Without this, kickstart can EADDRINUSE because SIGTERM hasn't
-  # taken effect yet (KeepAlive restart races the port bind).
+  # Unload the job from launchd to prevent KeepAlive from restarting
+  # the process while we wait for the port to be released.
+  launchctl unload "$plist_path" 2>/dev/null || true
+
+  # Wait up to 5s for the old process to release the port.
   for _i in $(seq 1 50); do
     lsof -ti ":$port" >/dev/null 2>&1 || break
     sleep 0.1
   done
 
-  # Hard-kill if something is still holding the port.
+  # Hard-kill if something (e.g. a process launched outside launchd)
+  # still holds the port.
   lsof -ti ":$port" | xargs kill -KILL 2>/dev/null || true
-  sleep 0.1
+  sleep 0.2
+
+  # Re-add the job to launchd. RunAtLoad will trigger the start.
+  launchctl load "$plist_path" 2>/dev/null || true
 }
 
-stop_service_wait_port "com.codex.ashare-dashboard.backend" 8000 "backend"
-launchctl kickstart "gui/$(id -u)/com.codex.ashare-dashboard.backend"
+BACKEND_PLIST="$HOME/Library/LaunchAgents/com.codex.ashare-dashboard.backend.plist"
+FRONTEND_PLIST="$HOME/Library/LaunchAgents/com.codex.ashare-dashboard.frontend.plist"
 
-stop_service_wait_port "com.codex.ashare-dashboard.frontend" 5173 "frontend"
-launchctl kickstart "gui/$(id -u)/com.codex.ashare-dashboard.frontend"
+restart_agent "$BACKEND_PLIST" 8000 "backend"
+restart_agent "$FRONTEND_PLIST" 5173 "frontend"
 
 wait_for_health() {
   local url="$1"
