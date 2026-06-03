@@ -1224,6 +1224,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "phase5-daily-refresh":
         _assert_postmarket_daily_slot_allowed()
+        # Each step gets its own session_scope so the DB connection (and any
+        # write lock) is released between steps instead of being held across
+        # the whole ~50min pipeline. The steps are independent: each reads what
+        # it needs and returns a plain dict, with no cross-step session object
+        # or uncommitted-write dependency.
         with _refresh_socket_timeout():
             with session_scope(args.database_url) as session:
                 refresh_payload = _refresh_runtime_data_output(
@@ -1232,18 +1237,21 @@ def main(argv: list[str] | None = None) -> int:
                     ops_only=args.ops_only,
                     skip_simulation=args.skip_simulation,
                 )
+            with session_scope(args.database_url) as session:
                 latest_study = _phase5_horizon_study_output(
                     session,
                     database_url=args.database_url,
                     include_history=False,
                     write_artifact=True,
                 )
+            with session_scope(args.database_url) as session:
                 history_study = _phase5_horizon_study_output(
                     session,
                     database_url=args.database_url,
                     include_history=True,
                     write_artifact=True,
                 )
+            with session_scope(args.database_url) as session:
                 holding_policy_study = _phase5_holding_policy_study_output(
                     session,
                     database_url=args.database_url,
