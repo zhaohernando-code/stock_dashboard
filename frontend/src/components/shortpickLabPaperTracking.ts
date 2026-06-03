@@ -6,6 +6,7 @@ export type PaperTrackingGroupFilter = "" | "frozen_strategy" | "frozen_strategy
 export type PaperTrackingEntryStateFilter = "entered" | "pending" | "";
 export type PaperTrackingEntryRuleFilter = "" | "next_close" | "next_open" | "same_day_intraday_current";
 export type PaperTrackingExitStateFilter = "" | "mechanical_5d_done" | "mechanical_10d_done" | "take_profit_stop_loss_done" | "waiting_exit";
+export type FrozenPaperTrackingGroup = "frozen_strategy" | "frozen_strategy_v2";
 
 export function paperTrackingStatusLabel(value?: string | null): string {
   if (value === "tracking_active") return "已有正式标的";
@@ -48,17 +49,17 @@ function paperTrackingDisplayRank(item: ShortpickPaperTrackingItem): number {
   return 5;
 }
 
-export function paperTrackingChoiceLabel(latestRun?: Record<string, unknown> | null): "当前" | "下轮" {
+export function paperTrackingChoiceLabel(latestRun?: Record<string, unknown> | null): "跟踪中" | "待入场" {
   const now = new Date();
   const day = now.getDay();
   const minutes = now.getHours() * 60 + now.getMinutes();
   const isTradingDaytime = day >= 1 && day <= 5 && minutes >= 9 * 60 + 30 && minutes <= 15 * 60;
-  if (isTradingDaytime) return "当前";
+  if (isTradingDaytime) return "跟踪中";
   const runDate = typeof latestRun?.run_date === "string" ? latestRun.run_date : "";
   const today = localDateString(now);
   const isAfterClose = day >= 1 && day <= 5 && minutes > 15 * 60;
-  if (isAfterClose && runDate !== today) return "当前";
-  return "下轮";
+  if (isAfterClose && runDate !== today) return "跟踪中";
+  return "待入场";
 }
 
 function localDateString(value = new Date()): string {
@@ -95,7 +96,7 @@ export function hasPaperTrackingEntered(item: ShortpickPaperTrackingItem, today 
 }
 
 export function paperTrackingChoiceTimingText(
-  choiceLabel: "当前" | "下轮",
+  choiceLabel: "跟踪中" | "待入场",
   choiceRows: ShortpickPaperTrackingItem[],
   latestRun?: Record<string, unknown> | null,
 ): string {
@@ -104,14 +105,14 @@ export function paperTrackingChoiceTimingText(
   const entryDate = choiceRows[0] ? paperTrackingEntryDate(choiceRows[0]) : runDate ? nextWeekdayAfter(runDate) : "";
   const hasOpenEntry = choiceRows.some((item) => item.entry_rule?.includes("开盘"));
   const hasIntradayEntry = choiceRows.some((item) => item.entry_rule?.includes("盘中") || item.entry_rule?.includes("当前价"));
-  if (!signalDate) return choiceLabel === "下轮" ? "信号日待确认 · 次一交易日收盘买入" : "当前跟踪信号待确认";
+  if (!signalDate) return choiceLabel === "待入场" ? "信号日待确认 · 次一交易日收盘买入" : "当前跟踪信号待确认";
   if (hasIntradayEntry) {
     return `信号日 ${signalDate} · 含同日盘中当前价买入对照`;
   }
   if (hasOpenEntry) {
     return `信号日 ${signalDate} · 预计买入日 ${entryDate}，不同对照按各自入场规则执行`;
   }
-  if (choiceLabel === "下轮") {
+  if (choiceLabel === "待入场") {
     return `信号日 ${signalDate} · 预计买入 ${entryDate} 收盘`;
   }
   return `当前跟踪 · 信号日 ${signalDate} · 入场口径为次一交易日收盘买入`;
@@ -132,6 +133,32 @@ export function latestPaperTrackingChoices(rows: ShortpickPaperTrackingItem[], l
       || Number(left.source_rank ?? 99) - Number(right.source_rank ?? 99)
       || left.name.localeCompare(right.name, "zh-Hans-CN")
     ));
+}
+
+export function latestPaperTrackingChoiceForGroup(
+  rows: ShortpickPaperTrackingItem[],
+  group: FrozenPaperTrackingGroup,
+): ShortpickPaperTrackingItem | null {
+  return rows
+    .filter((item) => item.tracking_group === group)
+    .sort((left, right) => (
+      paperTrackingSignalDate(right).localeCompare(paperTrackingSignalDate(left))
+      || paperTrackingEntryDate(right).localeCompare(paperTrackingEntryDate(left))
+      || Number(left.source_rank ?? 99) - Number(right.source_rank ?? 99)
+      || left.name.localeCompare(right.name, "zh-Hans-CN")
+    ))[0] ?? null;
+}
+
+export function latestFrozenPaperTrackingChoices(rows: ShortpickPaperTrackingItem[]): ShortpickPaperTrackingItem[] {
+  return [
+    latestPaperTrackingChoiceForGroup(rows, "frozen_strategy"),
+    latestPaperTrackingChoiceForGroup(rows, "frozen_strategy_v2"),
+  ].filter((item): item is ShortpickPaperTrackingItem => Boolean(item));
+}
+
+export function latestPaperTrackingSignalDate(rows: ShortpickPaperTrackingItem[], latestRun?: Record<string, unknown> | null): string {
+  const choices = latestPaperTrackingChoices(rows, latestRun);
+  return choices[0] ? paperTrackingSignalDate(choices[0]) : typeof latestRun?.run_date === "string" ? latestRun.run_date : "";
 }
 
 export function nextPendingEntryDate(rows: ShortpickPaperTrackingItem[]): string {

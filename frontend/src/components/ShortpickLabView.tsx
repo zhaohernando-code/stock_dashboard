@@ -95,7 +95,9 @@ import {
   hasPaperTrackingMechanical10dExit,
   hasPaperTrackingMechanical5dExit,
   hasPaperTrackingRiskExit,
+  latestFrozenPaperTrackingChoices,
   latestPaperTrackingChoices,
+  latestPaperTrackingSignalDate,
   nextPendingEntryDate,
   paperTrackingAlertType,
   paperTrackingChoiceLabel,
@@ -806,23 +808,24 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
           items={[
             {
               key: "today",
-              label: "今日批次",
+              label: "最新模拟交易",
               children: latestRun ? (
-                <TodayRunTab
-                  run={latestRun}
-                  paperTracking={paperTracking}
-                  paperTrackingLoading={paperTrackingLoading}
-                  normalCandidates={normalCandidates}
-                  failedCandidates={failedCandidates}
-                  failedRounds={failedRounds}
-                  loading={loading}
-                  candidateColumns={candidateColumns}
-                  selectedBenchmark={selectedBenchmark}
-                />
+                <>
+                  <LatestSimulationTradeCard tracking={paperTracking} loading={paperTrackingLoading} />
+                  <TodayRunTab
+                    run={latestRun}
+                    paperTracking={paperTracking}
+                    paperTrackingLoading={paperTrackingLoading}
+                    normalCandidates={normalCandidates}
+                    failedCandidates={failedCandidates}
+                    failedRounds={failedRounds}
+                    loading={loading}
+                    candidateColumns={candidateColumns}
+                    selectedBenchmark={selectedBenchmark}
+                  />
+                </>
               ) : (
-                <Card className="panel-card">
-                  <Empty description="暂无LLM对照批次；可先查看纸面跟踪或历史回放。" />
-                </Card>
+                <LatestSimulationTradeCard tracking={paperTracking} loading={paperTrackingLoading} />
               ),
             },
             {
@@ -926,9 +929,6 @@ function PaperTrackingTab({
     return true;
   }).sort((left, right) => comparePaperTrackingSignalEntryRows(right, left));
   const filteredOutCount = Math.max(rows.length - displayRows.length, 0);
-  const choiceLabel = paperTrackingChoiceLabel(latestRun);
-  const choiceRows = latestPaperTrackingChoices(rows, latestRun);
-  const choiceTimingText = paperTrackingChoiceTimingText(choiceLabel, choiceRows, latestRun);
   const pendingEntryDate = nextPendingEntryDate(rows);
   const monitoringTracks = (Array.isArray(contract.monitoring_tracks) ? contract.monitoring_tracks : []) as Record<string, unknown>[];
   const marketControls = (Array.isArray(marketControlContract.controls) ? marketControlContract.controls : []) as Record<string, unknown>[];
@@ -1025,6 +1025,8 @@ function PaperTrackingTab({
 
   return (
     <>
+      <LatestSimulationTradeCard tracking={tracking} loading={loading} />
+
       <Card className="panel-card shortpick-frozen-status" title="冻结策略纸面跟踪">
         <Alert
           showIcon
@@ -1111,46 +1113,6 @@ function PaperTrackingTab({
             </div>
           </Col>
         </Row>
-      </Card>
-
-      <Card
-        className="panel-card shortpick-choice-card"
-        title={`${choiceLabel}股票选择`}
-        extra={<Tag color={choiceLabel === "下轮" ? "purple" : "blue"}>{choiceLabel}</Tag>}
-      >
-        <Paragraph className="shortpick-choice-timing">
-          <Text strong>{choiceTimingText}</Text>
-        </Paragraph>
-        <Paragraph className="panel-description">
-          {choiceLabel === "下轮"
-            ? "这里展示的是最新盘后批次生成的下一交易日纸面买入观察清单，不是下一交易日开盘后重新计算的新批次；冻结规则固定排在第一。"
-            : "交易时段或下一轮结果未生成前，以下为当前正在跟踪的纸面选择；冻结规则固定排在第一。"}
-        </Paragraph>
-        {choiceRows.length ? (
-          <List
-            className="shortpick-choice-list"
-            dataSource={choiceRows}
-            renderItem={(item, index) => (
-              <List.Item>
-                <div className="shortpick-choice-item">
-                  <div className="shortpick-choice-rank">{index + 1}</div>
-                  <div className="shortpick-choice-copy">
-                    <Space wrap size={6}>
-                      <Text strong>{item.name} · {item.symbol}</Text>
-                      <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
-                      {index === 0 && item.tracking_group === "frozen_strategy" ? <Tag color="purple">冻结规则优先</Tag> : null}
-                      {item.tracking_group === "frozen_strategy_v2" ? <Tag color="geekblue">开盘买候选</Tag> : null}
-                    </Space>
-                    <Text type="secondary">{item.selection_label || "纸面对照"} · {paperTrackingExpectedEntryText(item)}</Text>
-                    <Text type="secondary">{item.entry_rule || "次一交易日收盘买入"}</Text>
-                  </div>
-                </div>
-              </List.Item>
-            )}
-          />
-        ) : (
-          <Empty description={loading ? "股票选择加载中" : "暂无可展示的纸面选择。"} image={Empty.PRESENTED_IMAGE_SIMPLE} />
-        )}
       </Card>
 
       <Card className="panel-card" title="冻结规则">
@@ -1361,6 +1323,102 @@ function PaperTrackingTab({
         )}
       </Card>
     </>
+  );
+}
+
+function LatestSimulationTradeCard({
+  tracking,
+  loading,
+}: {
+  tracking: ShortpickPaperTrackingResponse | null;
+  loading: boolean;
+}) {
+  const latestRun = tracking?.latest_run ?? null;
+  const rows = tracking?.items ?? [];
+  const choiceLabel = paperTrackingChoiceLabel(latestRun);
+  const frozenRows = latestFrozenPaperTrackingChoices(rows);
+  const fallbackRows = latestPaperTrackingChoices(rows, latestRun);
+  const choiceRows = frozenRows.length ? frozenRows : fallbackRows;
+  const choiceSignalDate = choiceRows[0] ? paperTrackingSignalDate(choiceRows[0]) : latestPaperTrackingSignalDate(rows, latestRun);
+  const choiceTimingText = paperTrackingChoiceTimingText(choiceLabel, choiceRows, latestRun);
+  const frozenMetricItems = [
+    {
+      key: "frozen_strategy",
+      label: "冻结策略 v1",
+      color: "purple",
+      row: frozenRows.find((item) => item.tracking_group === "frozen_strategy") ?? null,
+    },
+    {
+      key: "frozen_strategy_v2",
+      label: "冻结候选 v2",
+      color: "geekblue",
+      row: frozenRows.find((item) => item.tracking_group === "frozen_strategy_v2") ?? null,
+    },
+  ];
+
+  return (
+    <Card
+      className="panel-card shortpick-choice-card"
+      title="最新模拟交易"
+      extra={<Tag color={choiceLabel === "待入场" ? "purple" : "blue"}>{choiceLabel}</Tag>}
+    >
+      <Paragraph className="shortpick-choice-timing">
+        <Text strong>{choiceTimingText}</Text>
+      </Paragraph>
+      <Paragraph className="panel-description">
+        {choiceLabel === "待入场"
+          ? `这里展示的是最新分析批次${choiceSignalDate ? `（信号日 ${choiceSignalDate}）` : ""}生成的下一交易日纸面买入观察清单；它会持续展示到下一次分析生成新的模拟交易为止。`
+          : `这里展示的是最新分析批次${choiceSignalDate ? `（信号日 ${choiceSignalDate}）` : ""}对应的当前纸面跟踪选择；不是按自然日“今天”临时清空或重算。`}
+        顶部必须优先展示两个冻结策略指标。
+      </Paragraph>
+      <Row gutter={[12, 12]} className="shortpick-frozen-metrics">
+        {frozenMetricItems.map((metric) => (
+          <Col xs={24} md={12} key={metric.key}>
+            <div className="shortpick-frozen-metric">
+              <Space wrap size={6}>
+                <Tag color={metric.color}>{metric.label}</Tag>
+                {metric.row ? <Tag color="green">已固定</Tag> : <Tag color="gold">待写入</Tag>}
+              </Space>
+              <div>
+                <Text strong>{metric.row ? `${metric.row.name} · ${metric.row.symbol}` : "暂无信号"}</Text>
+              </div>
+              <div>
+                <Text type="secondary">
+                  {metric.row
+                    ? `${paperTrackingSignalDate(metric.row)} · ${paperTrackingExpectedEntryText(metric.row)}`
+                    : "等待最新分析批次写入"}
+                </Text>
+              </div>
+            </div>
+          </Col>
+        ))}
+      </Row>
+      {choiceRows.length ? (
+        <List
+          className="shortpick-choice-list"
+          dataSource={choiceRows}
+          renderItem={(item, index) => (
+            <List.Item>
+              <div className="shortpick-choice-item">
+                <div className="shortpick-choice-rank">{index + 1}</div>
+                <div className="shortpick-choice-copy">
+                  <Space wrap size={6}>
+                    <Text strong>{item.name} · {item.symbol}</Text>
+                    <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
+                    {index === 0 && item.tracking_group === "frozen_strategy" ? <Tag color="purple">冻结规则优先</Tag> : null}
+                    {item.tracking_group === "frozen_strategy_v2" ? <Tag color="geekblue">开盘买候选</Tag> : null}
+                  </Space>
+                  <Text type="secondary">{item.selection_label || "纸面对照"} · {paperTrackingExpectedEntryText(item)}</Text>
+                  <Text type="secondary">{item.entry_rule || "次一交易日收盘买入"}</Text>
+                </div>
+              </div>
+            </List.Item>
+          )}
+        />
+      ) : (
+        <Empty description={loading ? "股票选择加载中" : "暂无可展示的纸面选择。"} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      )}
+    </Card>
   );
 }
 
