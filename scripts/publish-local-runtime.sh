@@ -46,6 +46,11 @@ if ! command -v curl >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! command -v lsof >/dev/null 2>&1; then
+  echo "Missing required command: lsof" >&2
+  exit 1
+fi
+
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   echo "Missing required command: $PYTHON_BIN" >&2
   exit 1
@@ -204,8 +209,33 @@ rm -rf "$RUNTIME_ROOT/.git"
   "$REPO_ROOT/" "$RUNTIME_ROOT/"
 
 echo "[publish] Restarting LaunchAgents"
-launchctl kickstart -k "gui/$(id -u)/com.codex.ashare-dashboard.backend"
-launchctl kickstart -k "gui/$(id -u)/com.codex.ashare-dashboard.frontend"
+
+stop_service_wait_port() {
+  local label="$1"
+  local port="$2"
+  local display_name="$3"
+
+  echo "[publish] Stopping $display_name ($label, port $port)"
+  launchctl stop "gui/$(id -u)/$label" 2>/dev/null || true
+
+  # Wait up to 5s for old process to release the port.
+  # Without this, kickstart can EADDRINUSE because SIGTERM hasn't
+  # taken effect yet (KeepAlive restart races the port bind).
+  for _i in $(seq 1 50); do
+    lsof -ti ":$port" >/dev/null 2>&1 || break
+    sleep 0.1
+  done
+
+  # Hard-kill if something is still holding the port.
+  lsof -ti ":$port" | xargs kill -KILL 2>/dev/null || true
+  sleep 0.1
+}
+
+stop_service_wait_port "com.codex.ashare-dashboard.backend" 8000 "backend"
+launchctl kickstart "gui/$(id -u)/com.codex.ashare-dashboard.backend"
+
+stop_service_wait_port "com.codex.ashare-dashboard.frontend" 5173 "frontend"
+launchctl kickstart "gui/$(id -u)/com.codex.ashare-dashboard.frontend"
 
 wait_for_health() {
   local url="$1"
