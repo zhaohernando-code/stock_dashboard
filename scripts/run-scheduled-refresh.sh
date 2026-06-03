@@ -48,7 +48,12 @@ SHORTPICK_RETRY_FAILED_AFTER_RUN="${ASHARE_SHORTPICK_RETRY_FAILED_AFTER_RUN:-0}"
 DATABASE_LOCK_WAIT_SECONDS="${ASHARE_DATABASE_LOCK_WAIT_SECONDS:-60}"
 NETWORK_CHECK_ENABLED="${ASHARE_REFRESH_NETWORK_CHECK:-1}"
 NETWORK_PROBES="${ASHARE_REFRESH_NETWORK_PROBES:-https://www.baidu.com/ https://push2.eastmoney.com/}"
-SLOT_RETRY_INTERVAL_SECONDS="${ASHARE_SLOT_RETRY_INTERVAL_SECONDS:-1800}"
+# 7200s (2h) so an interrupted/failed daily-refresh slot is not re-attempted
+# within the same long window. The refresh itself can run ~50min; a short
+# (30min) retry let a killed run relaunch while the previous attempt's effects
+# were still settling, stacking heavy DB writers. The .ok slot guard still
+# allows the next trading day's run normally.
+SLOT_RETRY_INTERVAL_SECONDS="${ASHARE_SLOT_RETRY_INTERVAL_SECONDS:-7200}"
 SHORTPICK_INTRADAY_RETRY_INTERVAL_SECONDS="${ASHARE_SHORTPICK_INTRADAY_RETRY_INTERVAL_SECONDS:-60}"
 
 run_runtime_refresh() {

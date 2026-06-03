@@ -41,6 +41,16 @@ def test_daily_refresh_has_catchup_guards() -> None:
     assert "run_with_timeout \"$DAILY_REFRESH_TIMEOUT_SECONDS\" run_phase5_daily_refresh --analysis-only\n  local exit_code=$?" in script
 
 
+def test_slot_retry_interval_is_at_least_daily_refresh_duration() -> None:
+    # The daily refresh can run ~50min; a short (30min) retry let an
+    # interrupted slot relaunch while the prior attempt was still settling,
+    # stacking heavy DB writers. Default must be >= 2h.
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert 'SLOT_RETRY_INTERVAL_SECONDS="${ASHARE_SLOT_RETRY_INTERVAL_SECONDS:-7200}"' in script
+    assert ':-1800}' not in script
+
+
 def test_shortpick_lab_is_part_of_postmarket_daily_cycle() -> None:
     script = SCRIPT_PATH.read_text(encoding="utf-8")
 

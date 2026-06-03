@@ -12,7 +12,7 @@ worktree：`worker-workspaces/stock_dashboard/20260604-fix-refresh-db-lock-conte
 | P1-A db.py 开 WAL | ✅ 已完成并合入 main | commit ff66447；发布后 runtime DB 已 journal_mode=wal；**实测写锁持有 8s 期间 backend 读 3 次全部 HTTP 200（0.3-0.6s），不再被阻塞** |
 | P1-C plist RunAtLoad=0 | ✅ 已完成并合入 main | publish `ensure_scheduled_refresh_calendar` 固定 `RunAtLoad=False` + 删除结尾强制 `kickstart -k`；live plist 已改并 reload 验证不触发日刷（8s 内无 phase5-daily-refresh 启动）；静态测试通过。**发现并修复第二个触发源：publish 结尾的 `kickstart -k`。** |
 | P2-B1 四步各自 session_scope | ✅ 已完成并合入 main | cli.py phase5-daily-refresh 拆成 4 个独立 session_scope；端到端在 runtime DB 副本上跑通（exit 0，4 段输出+artifact 正常）；fast pytest 645 passed + 6 个 runtime_integration daily-refresh 测试过 + policy-audit/ruff pass。 |
-| P3-D SLOT_RETRY_INTERVAL 1800→7200 | ⬜ 未开始 | — |
+| P3-D SLOT_RETRY_INTERVAL 1800→7200 | ✅ 已完成并合入 main | run-scheduled-refresh.sh 默认 1800→7200（≥ 日刷超时 7200），避免被打断的 slot 30min 内重试叠加写者；静态测试通过。 |
 | 归档 | ⬜ 未开始 | 全部完成后 docs/contracts→docs/archive |
 
 状态图例：⬜ 未开始 / ⏳ 进行中 / ✅ 已完成并合入 main。
