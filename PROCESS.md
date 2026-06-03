@@ -131,6 +131,9 @@
 - **bash 命令拼接不要 `.join('; ')`**：多余分号会制造 `do;`、`then;` 语法错误。生成脚本后跑 `bash -n`。
 - **自动化浏览器清理要精准**：清理 Playwright daemon 和临时 profile，不要 `pkill Chrome` 误伤用户会话。
 - **文件批量替换要保留行结构**：用脚本改文件时新内容必须按行插入，避免把函数体压成一行；复杂编辑优先用小 patch 或格式化工具验证。
+- **运行时 SQLite 必须 WAL，长写任务不能阻塞看板读**：触发场景——后端与盘后日刷两进程同连一个 db 文件，日刷是 ~50min 全量写。原则——`db.py` 连接级固定 `journal_mode=WAL + synchronous=NORMAL`，否则默认 rollback journal 写者排他会让所有读 30s 超时（“网页能开、所有 tab 超时”的典型症状）。必做——切 WAL 前备份 db，切换后重启 backend 让旧连接统一到 WAL；长流水线按步骤拆分 `session_scope`，写锁只在实际落库时短暂持有。
+- **LaunchAgent 不能让 reload/publish 触发重型任务**：触发场景——调度类 agent（如盘后日刷）跑重型长任务。原则——这类 agent `RunAtLoad` 必须为 false，发布脚本不得在 bootstrap 后 `kickstart -k` 强制启动；让 StartCalendarInterval/StartInterval + 幂等 `.ok` slot 守卫决定何时跑。否则治理期间反复 reload/publish 会叠起多个重型写任务，连锁触发上一条的锁竞争。排查顺序——面板超时先查后端是否 `database is locked`，再查是否有 `phase5-daily-refresh` 在跑、它的触发源（RunAtLoad / kickstart / tick）。
+- **打断重型 slot 的重试退避要 ≥ 任务时长**：被 kill 的长任务若退避窗口短于其运行时间，会在上次影响未沉淀时重试叠加。`SLOT_RETRY_INTERVAL_SECONDS` 等退避默认值应 ≥ 对应超时上限。
 
 ## 已归档流水来源
 

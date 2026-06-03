@@ -1,8 +1,9 @@
 # 治理方案：日刷 DB 锁竞争导致面板全量超时
 
-状态：定稿（已通过 DeepSeek 审核，并入 6 条补充）
+状态：✅ 全部完成并归档（A/C/B1/D 均合入 main 并发布验证）
 日期：2026-06-04
-worktree：`worker-workspaces/stock_dashboard/20260604-fix-refresh-db-lock-contention-074716`
+归档：本文件已从 `docs/contracts/` 移到 `docs/archive/`
+原始 worktree：`worker-workspaces/stock_dashboard/20260604-fix-refresh-db-lock-contention-074716`
 
 ## 0. 阶段落地状态
 
@@ -13,7 +14,7 @@ worktree：`worker-workspaces/stock_dashboard/20260604-fix-refresh-db-lock-conte
 | P1-C plist RunAtLoad=0 | ✅ 已完成并合入 main | publish `ensure_scheduled_refresh_calendar` 固定 `RunAtLoad=False` + 删除结尾强制 `kickstart -k`；live plist 已改并 reload 验证不触发日刷（8s 内无 phase5-daily-refresh 启动）；静态测试通过。**发现并修复第二个触发源：publish 结尾的 `kickstart -k`。** |
 | P2-B1 四步各自 session_scope | ✅ 已完成并合入 main | cli.py phase5-daily-refresh 拆成 4 个独立 session_scope；端到端在 runtime DB 副本上跑通（exit 0，4 段输出+artifact 正常）；fast pytest 645 passed + 6 个 runtime_integration daily-refresh 测试过 + policy-audit/ruff pass。 |
 | P3-D SLOT_RETRY_INTERVAL 1800→7200 | ✅ 已完成并合入 main | run-scheduled-refresh.sh 默认 1800→7200（≥ 日刷超时 7200），避免被打断的 slot 30min 内重试叠加写者；静态测试通过。 |
-| 归档 | ⬜ 未开始 | 全部完成后 docs/contracts→docs/archive |
+| 归档 | ✅ 已完成 | 全部 P 完成；本文件移入 `docs/archive/`；DECISIONS.md 记录耐久决策，PROCESS.md 记录反回归教训 |
 
 状态图例：⬜ 未开始 / ⏳ 进行中 / ✅ 已完成并合入 main。
 

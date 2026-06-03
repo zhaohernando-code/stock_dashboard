@@ -1315,3 +1315,13 @@ canonical checkout 中的 `data/artifacts` 改动经抽样确认是正常 phase2
 - 前端纸面跟踪表不再只展示机械5日主结果，而是在“退出结果”列同时列出已形成的机械5日、机械10日和止盈止损结果；止盈止损在 10 日窗口未完成且尚未触发时不会伪造成已退出。
 - 本次只改变退出方式和已有候选的验证 payload，不改变冻结策略、v2 或对照组的股票选择逻辑。
 - live runtime DB 已先备份到 `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/backups/ashare_dashboard.before-shortpick-exit-risk-tracks-20260523T163049Z.db`，再用已有行情数据重算最近 40 天、55 个 shortpick run 的 1/3/5/10/20 日验证快照。`2026-05-14` 生益科技 v1 现在同时显示止盈止损轨道 `2026-05-18` 触达 +10% 和机械5日 `2026-05-22`，不再缺少止盈线。
+
+[2026-06-04T01:30:00+08:00] 运行时 SQLite 固定为 WAL，盘后日刷不得在写期间阻塞看板读：
+盘后 `phase5-daily-refresh`（~50min 全量分析+落库）曾在 `journal_mode=delete`（写者排他）下持锁，后端所有读查询撞 `database is locked` 30s 超时，导致 `https://hernando-zhao.cn/projects/ashare-dashboard/` 网页可打开但所有 tab 数据超时。固定决策：运行时 SQLite 一律 WAL + synchronous=NORMAL，读写并发，刷新写库期间看板继续读快照。完整方案见归档 `docs/archive/REFRESH_DB_LOCK_REMEDIATION_PLAN.md`。
+
+补充说明
+- `db.py:get_engine` 每个 sqlite 连接设 `journal_mode=WAL / synchronous=NORMAL / busy_timeout=30000 / wal_autocheckpoint=1000`；切 WAL 前已备份 `data/backups/ashare_dashboard.before-wal-migration-20260604T005059Z.db`，切换后重启 backend 让所有连接统一到 WAL。实测写锁持有 8s 期间 backend 读全部 HTTP 200。
+- scheduled-refresh LaunchAgent 固定 `RunAtLoad=False`，且 `publish-local-runtime.sh` 不再在 bootstrap 后强制 `kickstart -k`：reload/publish 不得触发一次重型全量日刷；当天唯一一次刷新由 StartCalendarInterval/StartInterval + `.ok` slot 守卫决定。
+- `phase5-daily-refresh` 四步（runtime refresh / horizon latest / horizon history / holding policy）各自独立 `session_scope`，写锁只在各步实际落库时短暂持有，不跨网络抓取与重计算。
+- slot 重试退避 `SLOT_RETRY_INTERVAL_SECONDS` 默认 1800→7200（≥ 日刷超时），避免被打断的 slot 在上次影响未沉淀时重试叠加写者。
+- 这些 PRAGMA/调度参数属基础设施配置（`stable_rule`），不是业务阈值；改动已过 policy-audit。
