@@ -8,8 +8,8 @@ worktree：`worker-workspaces/stock_dashboard/20260604-fix-refresh-db-lock-conte
 
 | 步骤 | 状态 | 说明 |
 |------|------|------|
-| P0 备份 ashare_dashboard.db | ⏳ 进行中 | 发布前执行（见 §5） |
-| P1-A db.py 开 WAL | ⏳ 代码+测试完成，待审核/合入 | db.py PRAGMA + 3 个单测（含并发读写不阻塞）通过；policy-audit 通过 |
+| P0 备份 ashare_dashboard.db | ✅ 已完成 | `data/backups/ashare_dashboard.before-wal-migration-20260604T005059Z.db` |
+| P1-A db.py 开 WAL | ✅ 已完成并合入 main | commit ff66447；发布后 runtime DB 已 journal_mode=wal；**实测写锁持有 8s 期间 backend 读 3 次全部 HTTP 200（0.3-0.6s），不再被阻塞** |
 | P1-C plist RunAtLoad=0 | ⬜ 未开始 | 依赖 A 完成 |
 | P2-B1 四步各自 session_scope | ⬜ 未开始 | — |
 | P3-D SLOT_RETRY_INTERVAL 1800→7200 | ⬜ 未开始 | — |
