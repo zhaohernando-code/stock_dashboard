@@ -20,6 +20,7 @@ export function getShortpickRuns(params?: {
   status?: string;
   dateFrom?: string;
   dateTo?: string;
+  includeRunning?: boolean;
 }) {
   const query = new URLSearchParams();
   query.set("limit", String(params?.limit ?? 20));
@@ -27,6 +28,7 @@ export function getShortpickRuns(params?: {
   if (params?.status) query.set("status", params.status);
   if (params?.dateFrom) query.set("date_from", params.dateFrom);
   if (params?.dateTo) query.set("date_to", params.dateTo);
+  if (params?.includeRunning) query.set("include_running", "true");
   return (async () => ({
     data: await request<ShortpickRunListResponse>(
       `/shortpick-lab/runs?${query.toString()}`,

@@ -55,13 +55,71 @@ def test_scheduled_refresh_status_prefers_running_lock(tmp_path, monkeypatch) ->
         encoding="utf-8",
     )
 
-    payload = get_scheduled_refresh_status(datetime(2026, 5, 6, 20, 0, tzinfo=ZoneInfo("Asia/Shanghai")))
+    payload = get_scheduled_refresh_status(datetime(2026, 5, 6, 17, 0, tzinfo=ZoneInfo("Asia/Shanghai")))
 
     assert payload["status"] == "running"
     assert payload["label"] == "正在跑"
     assert payload["pid"] == os.getpid()
     assert payload["started_at"] == "2026-05-06T16:20:05+0800"
     assert payload["components"][0]["status"] == "running"
+
+
+def test_scheduled_refresh_status_ignores_today_postmarket_lock_before_slot(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("ASHARE_SCHEDULED_REFRESH_STATE_DIR", str(tmp_path))
+    lock = tmp_path / "run.lock"
+    lock.mkdir()
+    (lock / "context").write_text(
+        f"pid={os.getpid()}\ntarget_date=2026-06-03\nslot=shortpick_lab\nstarted_at=2026-06-03T11:20:00+0800\n",
+        encoding="utf-8",
+    )
+
+    payload = get_scheduled_refresh_status(datetime(2026, 6, 3, 11, 35, tzinfo=ZoneInfo("Asia/Shanghai")))
+
+    assert payload["status"] == "scheduled"
+    assert payload["label"] == "等待 16:20"
+    assert all(item["status"] == "scheduled" for item in payload["components"])
+
+
+def test_scheduled_refresh_status_ignores_stale_running_lock(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("ASHARE_SCHEDULED_REFRESH_STATE_DIR", str(tmp_path))
+    lock = tmp_path / "run.lock"
+    lock.mkdir()
+    (lock / "context").write_text(
+        f"pid={os.getpid()}\ntarget_date=2026-05-06\nslot=postmarket\nstarted_at=2026-05-06T16:20:00+0800\n",
+        encoding="utf-8",
+    )
+
+    payload = get_scheduled_refresh_status(datetime(2026, 5, 7, 9, 0, tzinfo=ZoneInfo("Asia/Shanghai")))
+
+    assert payload["status"] != "running"
+
+
+def test_scheduled_refresh_status_ignores_same_day_timeout_stale_lock(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("ASHARE_SCHEDULED_REFRESH_STATE_DIR", str(tmp_path))
+    lock = tmp_path / "run.lock"
+    lock.mkdir()
+    (lock / "context").write_text(
+        f"pid={os.getpid()}\ntarget_date=2026-06-03\nslot=postmarket\nstarted_at=2026-06-03T16:20:00+0800\n",
+        encoding="utf-8",
+    )
+
+    payload = get_scheduled_refresh_status(datetime(2026, 6, 3, 18, 30, tzinfo=ZoneInfo("Asia/Shanghai")))
+
+    assert payload["status"] != "running"
+
+
+def test_scheduled_refresh_status_ignores_dead_pid_lock(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("ASHARE_SCHEDULED_REFRESH_STATE_DIR", str(tmp_path))
+    lock = tmp_path / "run.lock"
+    lock.mkdir()
+    (lock / "context").write_text(
+        "pid=999999\ntarget_date=2026-06-03\nslot=postmarket\nstarted_at=2026-06-03T16:20:00+0800\n",
+        encoding="utf-8",
+    )
+
+    payload = get_scheduled_refresh_status(datetime(2026, 6, 3, 17, 0, tzinfo=ZoneInfo("Asia/Shanghai")))
+
+    assert payload["status"] != "running"
 
 
 def test_scheduled_refresh_status_reports_failed_marker(tmp_path, monkeypatch) -> None:

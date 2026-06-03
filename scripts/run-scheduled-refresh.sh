@@ -306,6 +306,18 @@ slot_completed() {
   [[ -f "$(slot_state_file "$target_date" "$slot_name")" ]]
 }
 
+postmarket_slot_due() {
+  local target_date="$1"
+  local slot_name="$2"
+  if [[ "$target_date" == "$TODAY_STR" ]] \
+    && [[ "$slot_name" == "postmarket" || "$slot_name" == "shortpick_lab" ]] \
+    && time_lt "$NOW_HHMM" "$POSTMARKET_REFRESH_AT"; then
+    echo "Skipping ${slot_name} for ${target_date}; current time ${NOW_HHMM} is before postmarket slot ${POSTMARKET_REFRESH_AT}." >&2
+    return 1
+  fi
+  return 0
+}
+
 slot_recently_failed() {
   local target_date="$1"
   local slot_name="$2"
@@ -411,6 +423,9 @@ mark_slot_failed() {
 run_daily_refresh_slot() {
   local target_date="$1"
   local slot_name="$2"
+  if ! postmarket_slot_due "$target_date" "$slot_name"; then
+    return 0
+  fi
   if slot_completed "$target_date" "$slot_name"; then
     return 0
   fi
@@ -453,6 +468,9 @@ run_shortpick_lab_slot() {
   local target_date="$1"
   local slot_name="shortpick_lab"
   if [[ "${ASHARE_ENABLE_SHORTPICK_LAB:-1}" != "1" ]]; then
+    return 0
+  fi
+  if ! postmarket_slot_due "$target_date" "$slot_name"; then
     return 0
   fi
   if slot_completed "$target_date" "$slot_name"; then
@@ -608,6 +626,11 @@ run_due_daily_refreshes() {
 
   local previous_date=""
   if network_available && previous_date="$(previous_trading_date)"; then
+    # Defensive guard: a bad calendar/date helper must not turn catch-up into today's pre-postmarket run.
+    if [[ "$previous_date" == "$TODAY_STR" ]] && time_lt "$NOW_HHMM" "$POSTMARKET_REFRESH_AT"; then
+      echo "Skipping previous trading day refresh; resolved ${previous_date} equals today before postmarket slot ${POSTMARKET_REFRESH_AT}." >&2
+      return 0
+    fi
     run_daily_refresh_slot "$previous_date" "postmarket"
     run_shortpick_lab_slot "$previous_date"
   fi

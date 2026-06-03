@@ -1505,6 +1505,7 @@ def create_app(
         status: str | None = Query(default=None),
         date_from: date | None = Query(default=None),
         date_to: date | None = Query(default=None),
+        include_running: bool = Query(default=False),
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
@@ -1513,6 +1514,7 @@ def create_app(
             status=status,
             date_from=date_from,
             date_to=date_to,
+            include_running=include_running,
             limit=limit,
             offset=offset,
             information_mode=SHORTPICK_INFORMATION_MODE,

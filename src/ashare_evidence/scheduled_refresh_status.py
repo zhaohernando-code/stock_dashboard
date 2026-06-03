@@ -12,6 +12,7 @@ DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_POSTMARKET_REFRESH_AT = "16:20"
 POSTMARKET_SLOT = "postmarket"
 SHORTPICK_SLOT = "shortpick_lab"
+RUNNING_LOCK_MAX_AGE = timedelta(hours=2)
 SLOT_LABELS = {
     POSTMARKET_SLOT: "主分析",
     SHORTPICK_SLOT: "LLM对照批次",
@@ -94,6 +95,28 @@ def _state_time(values: dict[str, str]) -> str | None:
         or values.get("deferred_at")
         or values.get("started_at")
     )
+
+
+def _parse_state_datetime(value: str | None, tz: ZoneInfo) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=tz)
+    return parsed.astimezone(tz)
+
+
+def _postmarket_slot_due(now: datetime, target_date: str, slot: str) -> bool:
+    if slot not in {POSTMARKET_SLOT, SHORTPICK_SLOT}:
+        return True
+    if target_date != now.date().isoformat():
+        return True
+    if now.isoweekday() > 5:
+        return True
+    return now.strftime("%H:%M") >= _postmarket_time()
 
 
 def _slot_component(target_date: str, slot: str, *, missing_status: str = "pending_catchup") -> dict[str, Any]:
@@ -182,6 +205,11 @@ def _running_payload(now: datetime) -> dict[str, Any] | None:
     target_date = context.get("target_date") or now.date().isoformat()
     started_at = context.get("started_at")
     running_slot = context.get("slot") or POSTMARKET_SLOT
+    if not _postmarket_slot_due(now, target_date, running_slot):
+        return None
+    started_at_dt = _parse_state_datetime(started_at, now.tzinfo if isinstance(now.tzinfo, ZoneInfo) else _timezone())
+    if started_at_dt is None or now - started_at_dt > RUNNING_LOCK_MAX_AGE:
+        return None
     components = [
         (
             {

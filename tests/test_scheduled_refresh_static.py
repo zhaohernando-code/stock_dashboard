@@ -29,6 +29,8 @@ def test_daily_refresh_has_catchup_guards() -> None:
     assert 'source "$ARTIFACT_ROOT_HELPER"' in script
     assert 'ashare_resolve_local_artifact_root "$REPO_ROOT"' in script
     assert "slot_completed" in script
+    assert "postmarket_slot_due" in script
+    assert 'time_lt "$NOW_HHMM" "$POSTMARKET_REFRESH_AT"' in script
     assert "mark_slot_completed" in script
     assert "network_available" in script
     assert "acquire_run_lock" in script
@@ -78,6 +80,13 @@ def test_intraday_same_day_shortpick_control_has_timeboxed_slot() -> None:
     assert 'slot_recently_failed "$target_date" "$slot_name" "$SHORTPICK_INTRADAY_RETRY_INTERVAL_SECONDS"' in script
     assert 'time_lt "$NOW_HHMM" "$POSTMARKET_REFRESH_AT"' in script
     assert 'run_with_timeout "$SHORTPICK_INTRADAY_TIMEOUT_SECONDS" run_shortpick_intraday_same_day "$target_date"' in script
+
+
+def test_previous_trading_day_catchup_never_runs_today_before_postmarket() -> None:
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert '[[ "$previous_date" == "$TODAY_STR" ]] && time_lt "$NOW_HHMM" "$POSTMARKET_REFRESH_AT"' in script
+    assert "Skipping previous trading day refresh; resolved ${previous_date} equals today before postmarket slot" in script
 
 
 def test_publish_reloads_scheduled_refresh_calendar_slots() -> None:

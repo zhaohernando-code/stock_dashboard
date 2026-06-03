@@ -6053,12 +6053,21 @@ def serialize_shortpick_run(
     rounds = session.scalars(
         select(ShortpickModelRound).where(ShortpickModelRound.run_id == run.id).order_by(ShortpickModelRound.id.asc())
     ).all()
-    candidates = session.scalars(
-        select(ShortpickCandidate).where(ShortpickCandidate.run_id == run.id).order_by(ShortpickCandidate.id.asc())
-    ).all()
+    candidates = (
+        session.scalars(
+            select(ShortpickCandidate).where(ShortpickCandidate.run_id == run.id).order_by(ShortpickCandidate.id.asc())
+        ).all()
+        if include_candidates
+        else []
+    )
+    operational_summary = (
+        _run_operational_summary(session, run, rounds=rounds, candidates=candidates)
+        if include_candidates
+        else _run_operational_summary_lightweight(session, run, rounds=rounds)
+    )
     summary = {
         **dict(run.summary_payload or {}),
-        **_run_operational_summary(session, run, rounds=rounds, candidates=candidates),
+        **operational_summary,
     }
     return {
         "id": run.id,
@@ -6145,6 +6154,89 @@ def _run_operational_summary(
         "normal_candidate_count": len(normal_candidates),
         "diagnostic_candidate_count": len(diagnostic_candidates),
         "failed_candidate_count": len(candidates) - len(parsed_candidates),
+        "retryable_failed_round_count": len(retryable_failed),
+        "has_retryable_failed_rounds": bool(retryable_failed),
+        "validation_total_count": len(validations),
+        "validation_completed_count": completed_validation_count,
+        "official_validation_total_count": len(official_validations),
+        "official_validation_completed_count": completed_official_validation_count,
+        "validation_completion_rate": round(completed_validation_count / len(validations), 6) if validations else None,
+        "official_validation_completion_rate": (
+            round(completed_official_validation_count / len(official_validations), 6)
+            if official_validations
+            else None
+        ),
+        "failed_rounds": [
+            {
+                "id": round_record.id,
+                "provider_name": round_record.provider_name,
+                "model_name": round_record.model_name,
+                "round_index": round_record.round_index,
+                "failure_category": _shortpick_failure_category(round_record.error_message),
+                "retryable": _round_retryable(round_record),
+                "error_message": round_record.error_message,
+            }
+            for round_record in failed_rounds
+        ],
+    }
+
+
+def _run_operational_summary_lightweight(
+    session: Session,
+    run: ShortpickExperimentRun,
+    *,
+    rounds: list[ShortpickModelRound],
+) -> dict[str, Any]:
+    failed_rounds = [round_record for round_record in rounds if round_record.status == "failed"]
+    retryable_failed = [round_record for round_record in failed_rounds if _round_retryable(round_record)]
+    candidate_count = int(
+        session.scalar(
+            select(func.count(ShortpickCandidate.id)).where(ShortpickCandidate.run_id == run.id)
+        )
+        or 0
+    )
+    parsed_candidate_ids = [
+        int(candidate_id)
+        for candidate_id in session.scalars(
+            select(ShortpickCandidate.id).where(
+                ShortpickCandidate.run_id == run.id,
+                ShortpickCandidate.parse_status == "parsed",
+                ShortpickCandidate.symbol != "PARSE_FAILED",
+            )
+        ).all()
+    ]
+    validations = (
+        session.scalars(
+            select(ShortpickValidationSnapshot).where(
+                ShortpickValidationSnapshot.candidate_id.in_(parsed_candidate_ids)
+            )
+        ).all()
+        if parsed_candidate_ids
+        else []
+    )
+    validations_by_candidate: dict[int, list[ShortpickValidationSnapshot]] = defaultdict(list)
+    for validation in validations:
+        validations_by_candidate[int(validation.candidate_id)].append(validation)
+    normal_candidate_count = sum(
+        1
+        for candidate_id in parsed_candidate_ids
+        if _candidate_display_bucket(validations_by_candidate.get(candidate_id, [])) == SHORTPICK_NORMAL_CANDIDATE_BUCKET
+    )
+    diagnostic_candidate_count = len(parsed_candidate_ids) - normal_candidate_count
+    completed_validation_count = sum(1 for validation in validations if validation.status == "completed")
+    official_validations = [validation for validation in validations if _validation_is_official(validation)]
+    completed_official_validation_count = sum(1 for validation in official_validations if validation.status == "completed")
+    operational_status = run.status
+    if run.status == "completed" and failed_rounds:
+        operational_status = "partial_completed"
+    if run.status == "completed" and retryable_failed:
+        operational_status = "retryable_failures"
+    return {
+        "operational_status": operational_status,
+        "parsed_candidate_count": len(parsed_candidate_ids),
+        "normal_candidate_count": normal_candidate_count,
+        "diagnostic_candidate_count": diagnostic_candidate_count,
+        "failed_candidate_count": candidate_count - len(parsed_candidate_ids),
         "retryable_failed_round_count": len(retryable_failed),
         "has_retryable_failed_rounds": bool(retryable_failed),
         "validation_total_count": len(validations),
@@ -6264,6 +6356,7 @@ def list_shortpick_runs(
     date_from: date | None = None,
     date_to: date | None = None,
     information_mode: str | None = None,
+    include_running: bool = False,
     limit: int = 20,
     offset: int = 0,
     include_raw: bool = False,
@@ -6277,13 +6370,15 @@ def list_shortpick_runs(
         query = query.where(ShortpickExperimentRun.information_mode == information_mode)
     if status:
         query = query.where(ShortpickExperimentRun.status == status)
+    elif not include_running:
+        query = query.where(ShortpickExperimentRun.status != "running")
     if date_from is not None:
         query = query.where(ShortpickExperimentRun.run_date >= date_from)
     if date_to is not None:
         query = query.where(ShortpickExperimentRun.run_date <= date_to)
     total = session.scalar(select(func.count()).select_from(query.subquery())) or 0
     runs = session.scalars(
-        query.order_by(ShortpickExperimentRun.started_at.desc(), ShortpickExperimentRun.id.desc())
+        query.order_by(ShortpickExperimentRun.run_date.desc(), ShortpickExperimentRun.started_at.desc(), ShortpickExperimentRun.id.desc())
         .limit(normalized_limit)
         .offset(normalized_offset)
     ).all()

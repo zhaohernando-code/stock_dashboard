@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socket
 import urllib.request
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from ashare_evidence.benchmark import sync_benchmark_index_bars
 from ashare_evidence.cli_autonomous_flow import (
@@ -86,6 +88,56 @@ from ashare_evidence.watchlist import active_watchlist_symbols, refresh_watchlis
 
 def _print_json(payload: Any) -> None:
     print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+
+
+def _scheduled_refresh_now() -> datetime:
+    return datetime.now(ZoneInfo(os.environ.get("ASHARE_REFRESH_TIMEZONE", "Asia/Shanghai")))
+
+
+def _scheduled_time_value(name: str, default: str) -> str:
+    return os.environ.get(name, default)
+
+
+def _assert_postmarket_daily_slot_allowed(target_date: date | None = None) -> None:
+    if os.environ.get("ASHARE_ALLOW_EARLY_DAILY_REFRESH") == "1":
+        return
+    now = _scheduled_refresh_now()
+    effective_date = target_date or now.date()
+    if effective_date > now.date():
+        raise RuntimeError(
+            f"scheduled daily analysis for future date {effective_date.isoformat()} is blocked; "
+            "set ASHARE_ALLOW_EARLY_DAILY_REFRESH=1 only for an explicit manual override."
+        )
+    if effective_date != now.date() or now.isoweekday() > 5:
+        return
+    postmarket_at = _scheduled_time_value("ASHARE_POSTMARKET_DAILY_REFRESH_AT", "16:20")
+    if now.strftime("%H:%M") < postmarket_at:
+        raise RuntimeError(
+            f"scheduled daily analysis for {effective_date.isoformat()} is blocked before {postmarket_at}; "
+            "set ASHARE_ALLOW_EARLY_DAILY_REFRESH=1 only for an explicit manual override."
+        )
+
+
+def _assert_intraday_same_day_slot_allowed(target_date: date | None = None) -> None:
+    if os.environ.get("ASHARE_ALLOW_EARLY_DAILY_REFRESH") == "1":
+        return
+    now = _scheduled_refresh_now()
+    effective_date = target_date or now.date()
+    if effective_date > now.date():
+        raise RuntimeError(
+            f"scheduled intraday same-day shortpick for future date {effective_date.isoformat()} is blocked; "
+            "set ASHARE_ALLOW_EARLY_DAILY_REFRESH=1 only for an explicit manual override."
+        )
+    if effective_date != now.date() or now.isoweekday() > 5:
+        return
+    now_hhmm = now.strftime("%H:%M")
+    intraday_at = _scheduled_time_value("ASHARE_INTRADAY_SAME_DAY_REFRESH_AT", "13:55")
+    postmarket_at = _scheduled_time_value("ASHARE_POSTMARKET_DAILY_REFRESH_AT", "16:20")
+    if now_hhmm < intraday_at or now_hhmm >= postmarket_at:
+        raise RuntimeError(
+            f"scheduled intraday same-day shortpick for {effective_date.isoformat()} is blocked outside "
+            f"{intraday_at}-{postmarket_at}."
+        )
 
 
 def _parse_shortpick_replay_dates(date_values: list[str], dates_file: str | None) -> list[date]:
@@ -904,10 +956,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "shortpick-lab-run":
+        target_date = None if args.run_date is None else date.fromisoformat(args.run_date)
+        _assert_postmarket_daily_slot_allowed(target_date)
         with session_scope(args.database_url) as session:
             payload = run_shortpick_experiment(
                 session,
-                run_date=None if args.run_date is None else date.fromisoformat(args.run_date),
+                run_date=target_date,
                 rounds_per_model=args.rounds_per_model,
                 triggered_by="scheduled_cli",
                 trigger_source="scheduled_cli",
@@ -916,10 +970,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "shortpick-lab-intraday-same-day":
+        target_date = None if args.run_date is None else date.fromisoformat(args.run_date)
+        _assert_intraday_same_day_slot_allowed(target_date)
         with session_scope(args.database_url) as session:
             payload = run_shortpick_intraday_same_day_control(
                 session,
-                run_date=None if args.run_date is None else date.fromisoformat(args.run_date),
+                run_date=target_date,
                 triggered_by="scheduled_cli",
                 trigger_source="scheduled_intraday_cli",
             )
@@ -1167,6 +1223,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "phase5-daily-refresh":
+        _assert_postmarket_daily_slot_allowed()
         with _refresh_socket_timeout():
             with session_scope(args.database_url) as session:
                 refresh_payload = _refresh_runtime_data_output(

@@ -456,6 +456,137 @@ class ShortpickLabTests(ShortpickLabTestCase):
         self.assertEqual(payload["items"][0]["run_date"], date(2026, 5, 5))
         self.assertIn("validation_completion_rate", payload["items"][0]["summary"])
 
+    def test_run_list_hides_running_runs_by_default(self) -> None:
+        now = datetime(2026, 6, 3, 3, 0, tzinfo=UTC)
+        with session_scope(self.database_url) as session:
+            completed = ShortpickExperimentRun(
+                run_key="shortpick:2026-06-02:completed",
+                run_date=date(2026, 6, 2),
+                prompt_version="test",
+                information_mode=SHORTPICK_INFORMATION_MODE,
+                status="completed",
+                trigger_source="scheduled_cli",
+                triggered_by="scheduled_cli",
+                started_at=now,
+                completed_at=now,
+                model_config={},
+                summary_payload={},
+            )
+            running = ShortpickExperimentRun(
+                run_key="shortpick:2026-06-03:running",
+                run_date=date(2026, 6, 3),
+                prompt_version="test",
+                information_mode=SHORTPICK_INFORMATION_MODE,
+                status="running",
+                trigger_source="scheduled_cli",
+                triggered_by="scheduled_cli",
+                started_at=now,
+                model_config={},
+                summary_payload={},
+            )
+            session.add_all([completed, running])
+            session.flush()
+
+            payload = list_shortpick_runs(session, information_mode=SHORTPICK_INFORMATION_MODE, limit=10)
+            running_payload = list_shortpick_runs(
+                session,
+                information_mode=SHORTPICK_INFORMATION_MODE,
+                status="running",
+                limit=10,
+            )
+
+        self.assertEqual([item["id"] for item in payload["items"]], [completed.id])
+        self.assertEqual([item["id"] for item in running_payload["items"]], [running.id])
+
+    def test_run_list_without_candidates_uses_lightweight_summary(self) -> None:
+        now = datetime(2026, 6, 2, 8, 30, tzinfo=UTC)
+        with session_scope(self.database_url) as session:
+            run = ShortpickExperimentRun(
+                run_key="shortpick:2026-06-02:lightweight",
+                run_date=date(2026, 6, 2),
+                prompt_version="test",
+                information_mode=SHORTPICK_INFORMATION_MODE,
+                status="completed",
+                trigger_source="scheduled_cli",
+                triggered_by="scheduled_cli",
+                started_at=now,
+                completed_at=now,
+                model_config={},
+                summary_payload={},
+            )
+            session.add(run)
+            session.flush()
+            round_record = ShortpickModelRound(
+                run_id=run.id,
+                round_key="shortpick-round:2026-06-02:lightweight",
+                provider_name="openai",
+                model_name="gpt-test",
+                executor_kind="fake",
+                round_index=1,
+                status="completed",
+                raw_answer="large raw answer must not be required by list mode",
+                parsed_payload={"primary_pick": {"symbol": "688981.SH", "name": "中芯国际"}},
+                sources_payload=[],
+                started_at=now,
+                completed_at=now,
+            )
+            session.add(round_record)
+            session.flush()
+            candidate = ShortpickCandidate(
+                run_id=run.id,
+                round_id=round_record.id,
+                candidate_key="shortpick-candidate:lightweight",
+                symbol="688981.SH",
+                name="中芯国际",
+                normalized_theme="半导体",
+                confidence=0.7,
+                thesis="large candidate text must not be required by list mode",
+                catalysts=[],
+                invalidation=[],
+                risks=[],
+                sources_payload=[],
+                limitations=[],
+                research_priority="cross_model_same_symbol",
+                parse_status="parsed",
+                is_system_external=False,
+                candidate_payload={"large": "x" * 1024},
+            )
+            session.add(candidate)
+            session.flush()
+            session.add(
+                ShortpickValidationSnapshot(
+                    candidate_id=candidate.id,
+                    horizon_days=1,
+                    status="completed",
+                    validation_payload={
+                        "validation_mode": SHORTPICK_OFFICIAL_VALIDATION_MODE,
+                        "official_validation": True,
+                        "tradeability_status": SHORTPICK_OFFICIAL_TRADEABILITY_STATUS,
+                    },
+                )
+            )
+            session.flush()
+
+            with patch(
+                "ashare_evidence.shortpick_lab._run_operational_summary",
+                side_effect=AssertionError("heavy summary must not be used for run lists"),
+            ):
+                payload = list_shortpick_runs(
+                    session,
+                    information_mode=SHORTPICK_INFORMATION_MODE,
+                    limit=10,
+                    include_candidates=False,
+                    compact_summary=True,
+                )
+
+        self.assertEqual(payload["total"], 1)
+        item = payload["items"][0]
+        self.assertEqual(item["candidates"], [])
+        self.assertEqual(item["summary"]["parsed_candidate_count"], 1)
+        self.assertEqual(item["summary"]["normal_candidate_count"], 1)
+        self.assertEqual(item["summary"]["validation_total_count"], 1)
+        self.assertEqual(item["summary"]["official_validation_completed_count"], 1)
+
     def test_retry_failed_rounds_replaces_only_retryable_rounds_and_keeps_failure_history(self) -> None:
         self._seed_daily_bars()
         failing_executor = StaticShortpickExecutor("openai", "gpt-test", "fake", "not-json")

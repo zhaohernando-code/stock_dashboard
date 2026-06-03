@@ -272,6 +272,8 @@ function ReplayDualTestMatrix({
 export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
   const [runs, setRuns] = useState<ShortpickRunView[]>([]);
   const [selectedRun, setSelectedRun] = useState<ShortpickRunView | null>(null);
+  const [runDateFrom, setRunDateFrom] = useState("");
+  const [runDateTo, setRunDateTo] = useState("");
   const [candidates, setCandidates] = useState<ShortpickCandidateView[]>([]);
   const [validationQueue, setValidationQueue] = useState<ShortpickValidationQueueResponse | null>(null);
   const [feedback, setFeedback] = useState<ShortpickModelFeedbackResponse | null>(null);
@@ -324,7 +326,11 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
     setLoading(true);
     setError(null);
     try {
-      const runList = await api.getShortpickRuns({ limit: 20 });
+      const runList = await api.getShortpickRuns({
+        limit: 100,
+        dateFrom: runDateFrom || undefined,
+        dateTo: runDateTo || undefined,
+      });
       const targetRunId = runId ?? selectedRun?.id ?? runList.data.items[0]?.id;
       const target = runList.data.items.find((item) => item.id === targetRunId) ?? runList.data.items[0] ?? null;
       setRuns(runList.data.items);
@@ -743,8 +749,22 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
               }))}
               onChange={(runId) => void loadLab(Number(runId))}
             />
+            <Input
+              className="shortpick-date-filter"
+              type="date"
+              value={runDateFrom}
+              onChange={(event) => setRunDateFrom(event.target.value)}
+              onPressEnter={() => void loadLab()}
+            />
+            <Input
+              className="shortpick-date-filter"
+              type="date"
+              value={runDateTo}
+              onChange={(event) => setRunDateTo(event.target.value)}
+              onPressEnter={() => void loadLab()}
+            />
             <Button icon={<ReloadOutlined />} onClick={() => {
-              void loadLab(latestRun?.id);
+              void loadLab();
               void loadPaperTracking();
               void loadValidationQueue(validationPage.current, validationPage.pageSize);
               void loadFeedback();

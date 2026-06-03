@@ -298,6 +298,10 @@ body[data-theme="dark"] {
   min-width: 220px;
 }
 
+.shortpick-date-filter {
+  width: 150px;
+}
+
 .shortpick-workspace-tabs .ant-tabs-nav {
   margin-bottom: 16px;
 }
@@ -1475,6 +1479,7 @@ body[data-theme="dark"] .chart-shell,
   }
 
   .shortpick-run-select,
+  .shortpick-date-filter,
   .shortpick-filter-input,
   .shortpick-paper-ledger-search,
   .shortpick-paper-ledger-select {
