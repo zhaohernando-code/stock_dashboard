@@ -39,6 +39,14 @@ def test_publish_installs_frontend_dependencies_before_build() -> None:
     assert 'ensure_frontend_dependencies\nnpm --prefix "$FRONTEND_DIR" run build' in script
 
 
+def test_local_frontend_uses_managed_vite_and_strict_port() -> None:
+    script = (REPO_ROOT / "scripts" / "start-local-frontend.sh").read_text(encoding="utf-8")
+
+    assert 'exec "$FRONTEND_DIR/node_modules/.bin/vite" preview' in script
+    assert '--port "$PORT" --strictPort' in script
+    assert "npx vite preview" not in script
+
+
 def test_publish_build_uses_same_frontend_env_as_runtime() -> None:
     script = SCRIPT_PATH.read_text(encoding="utf-8")
 

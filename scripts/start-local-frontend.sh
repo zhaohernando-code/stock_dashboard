@@ -38,4 +38,4 @@ if [[ "$BOOT_BUILD" == "1" || "$BOOT_BUILD" == "true" || ! -f "$FRONTEND_DIR/dis
 else
   echo "[frontend] Reusing existing dist; set ASHARE_FRONTEND_BOOT_BUILD=1 to force a boot-time rebuild"
 fi
-exec npx vite preview --host 127.0.0.1 --port "$PORT"
+exec "$FRONTEND_DIR/node_modules/.bin/vite" preview --host 127.0.0.1 --port "$PORT" --strictPort
