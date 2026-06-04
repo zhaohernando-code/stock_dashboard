@@ -835,6 +835,10 @@ def _paper_tracking_validation_snapshot(session: Session, candidate_id: int) -> 
         .where(ShortpickValidationSnapshot.candidate_id == candidate_id)
         .order_by(ShortpickValidationSnapshot.horizon_days.asc())
     ).all()
+    return _paper_tracking_validation_snapshot_from_rows(validations)
+
+
+def _paper_tracking_validation_snapshot_from_rows(validations: list[ShortpickValidationSnapshot]) -> dict[str, object]:
     if not validations:
         return {
             "validation_status": "not_started",
@@ -883,6 +887,23 @@ def _paper_tracking_date_part(value: object) -> str:
     return value.split("T", 1)[0].split(" ", 1)[0]
 
 
+def _paper_tracking_validation_snapshots_for_candidates(session: Session, candidate_ids: list[int]) -> dict[int, dict[str, object]]:
+    if not candidate_ids:
+        return {}
+    rows = session.scalars(
+        select(ShortpickValidationSnapshot)
+        .where(ShortpickValidationSnapshot.candidate_id.in_(candidate_ids))
+        .order_by(ShortpickValidationSnapshot.candidate_id.asc(), ShortpickValidationSnapshot.horizon_days.asc())
+    ).all()
+    grouped: dict[int, list[ShortpickValidationSnapshot]] = {}
+    for row in rows:
+        grouped.setdefault(int(row.candidate_id), []).append(row)
+    return {
+        candidate_id: _paper_tracking_validation_snapshot_from_rows(grouped.get(candidate_id, []))
+        for candidate_id in candidate_ids
+    }
+
+
 def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object]:
     contract = shortpick_frozen_paper_strategy_contract()
     llm_contract = shortpick_llm_paper_control_contract()
@@ -902,7 +923,7 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
     )
     tracking_role_expr = func.coalesce(func.json_extract(ShortpickCandidate.candidate_payload, "$.tracking_role"), "")
     raw_rows = session.execute(
-        select(ShortpickExperimentRun, ShortpickCandidate)
+        select(ShortpickExperimentRun.id, ShortpickExperimentRun.run_date, ShortpickCandidate)
         .join(ShortpickCandidate, ShortpickCandidate.run_id == ShortpickExperimentRun.id)
         .where(
             ShortpickExperimentRun.information_mode == SHORTPICK_INFORMATION_MODE,
@@ -922,10 +943,14 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
         .order_by(ShortpickExperimentRun.run_date.desc(), ShortpickCandidate.id.desc())
         .limit(1000)
     ).all()
+    validation_snapshots = _paper_tracking_validation_snapshots_for_candidates(
+        session,
+        [int(candidate.id) for _, _, candidate in raw_rows],
+    )
 
     items: list[dict[str, object]] = []
     seen_semantic_keys: set[tuple[str, ...]] = set()
-    for run, candidate in raw_rows:
+    for run_id, run_date, candidate in raw_rows:
         candidate_payload = dict(candidate.candidate_payload or {})
         tracking_role = str(candidate_payload.get("tracking_role") or "")
         is_frozen_item = candidate.research_priority == "market_factor_frozen_paper"
@@ -936,10 +961,9 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
         overlay = dict(candidate_payload.get("market_factor_overlay") or {})
         llm_control = dict(candidate_payload.get("llm_paper_control") or {})
         entry_price_source = str(candidate_payload.get("paper_tracking_entry_price_source") or overlay.get("entry_price_source") or "next_close")
-        summary_overlay = dict((run.summary_payload or {}).get("market_factor_overlay") or {})
-        frozen = dict(summary_overlay.get("frozen_paper_strategy") or {})
-        regime = dict(summary_overlay.get("regime") or overlay.get("regime") or {})
-        signal_date = str(candidate_payload.get("paper_tracking_signal_date") or run.run_date.isoformat())
+        frozen = dict(candidate_payload.get("frozen_paper_strategy") or {})
+        regime = dict(overlay.get("regime") or candidate_payload.get("regime") or {})
+        signal_date = str(candidate_payload.get("paper_tracking_signal_date") or run_date.isoformat())
         entry_date = str(candidate_payload.get("paper_tracking_entry_date") or "")
         market_control = _shortpick_market_control_contract_by_role(market_control_contract, tracking_role)
         if is_frozen_item:
@@ -963,9 +987,9 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
                 or "三轨退出监测"
             )
         item = {
-            "run_id": run.id,
+            "run_id": run_id,
             "candidate_id": candidate.id,
-            "run_date": run.run_date.isoformat(),
+            "run_date": run_date.isoformat(),
             "signal_date": signal_date,
             "entry_date": entry_date,
             "symbol": candidate.symbol,
@@ -1001,7 +1025,7 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
             "created_at": _iso_or_none(candidate.created_at),
             "updated_at": _iso_or_none(candidate.updated_at),
         }
-        item.update(_paper_tracking_validation_snapshot(session, candidate.id))
+        item.update(validation_snapshots.get(int(candidate.id), _paper_tracking_validation_snapshot_from_rows([])))
         effective_entry_date = entry_date or _paper_tracking_date_part(item.get("entry_at"))
         semantic_key = (
             str(item["tracking_group"]),
