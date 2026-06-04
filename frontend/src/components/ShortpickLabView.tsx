@@ -727,6 +727,37 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
     },
   ];
 
+  // 历史批次选择 + 起止日期：只驱动 loadLab()（最新模拟交易 tab）。放在该 tab 内部，
+  // 使筛选器作用域与位置一致；其余 tab（纸面跟踪/历史验证/反馈/回放）各自独立加载，不受其影响。
+  const shortpickRunFilterBar = (
+    <Space wrap className="shortpick-filter-bar shortpick-run-filter-bar">
+      <Select
+        className="shortpick-run-select"
+        value={latestRun?.id}
+        placeholder="选择历史批次"
+        options={runs.map((run) => ({
+          value: run.id,
+          label: `${run.run_date} · ${statusLabel(operationalStatus(run))}`,
+        }))}
+        onChange={(runId) => void loadLab(Number(runId))}
+      />
+      <Input
+        className="shortpick-date-filter"
+        type="date"
+        value={runDateFrom}
+        onChange={(event) => setRunDateFrom(event.target.value)}
+        onPressEnter={() => void loadLab()}
+      />
+      <Input
+        className="shortpick-date-filter"
+        type="date"
+        value={runDateTo}
+        onChange={(event) => setRunDateTo(event.target.value)}
+        onPressEnter={() => void loadLab()}
+      />
+    </Space>
+  );
+
   return (
     <section className="shortpick-lab">
       <Card className="panel-card shortpick-lab-header">
@@ -739,30 +770,8 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
             </Paragraph>
           </div>
           <Space wrap>
-            <Select
-              className="shortpick-run-select"
-              value={latestRun?.id}
-              placeholder="选择历史批次"
-              options={runs.map((run) => ({
-                value: run.id,
-                label: `${run.run_date} · ${statusLabel(operationalStatus(run))}`,
-              }))}
-              onChange={(runId) => void loadLab(Number(runId))}
-            />
-            <Input
-              className="shortpick-date-filter"
-              type="date"
-              value={runDateFrom}
-              onChange={(event) => setRunDateFrom(event.target.value)}
-              onPressEnter={() => void loadLab()}
-            />
-            <Input
-              className="shortpick-date-filter"
-              type="date"
-              value={runDateTo}
-              onChange={(event) => setRunDateTo(event.target.value)}
-              onPressEnter={() => void loadLab()}
-            />
+            {/* 历史批次选择与起止日期只驱动 loadLab()（最新模拟交易 tab），
+                已移入该 tab 内部的 ShortpickRunFilterBar，避免“全局筛选只影响一个 tab”的误解。 */}
             <Button icon={<ReloadOutlined />} onClick={() => {
               void loadLab();
               void loadPaperTracking();
@@ -831,6 +840,7 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
               label: "最新模拟交易",
               children: latestRun ? (
                 <>
+                  {shortpickRunFilterBar}
                   <LatestSimulationTradeCard tracking={paperTracking} loading={paperTrackingLoading} />
                   <TodayRunTab
                     run={latestRun}
@@ -845,7 +855,10 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
                   />
                 </>
               ) : (
-                <LatestSimulationTradeCard tracking={paperTracking} loading={paperTrackingLoading} />
+                <>
+                  {shortpickRunFilterBar}
+                  <LatestSimulationTradeCard tracking={paperTracking} loading={paperTrackingLoading} />
+                </>
               ),
             },
             {
