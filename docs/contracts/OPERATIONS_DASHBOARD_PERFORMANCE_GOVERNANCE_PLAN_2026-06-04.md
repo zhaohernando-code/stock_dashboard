@@ -27,6 +27,7 @@ In-process profiling with the runtime DB shows `build_operations_dashboard(..., 
 5. The initial worktree measurement used the repo-local 35MB SQLite database; the live runtime database is 2.5GB with 2.27M `market_bars` rows. The runtime-sized DB exposed a second hot path: FastAPI's default response serialization/jsonable encoding of operations payloads added several seconds even after payload compaction.
 6. Cached operations projections can contain legacy Python-style datetime strings (`YYYY-MM-DD HH:MM:SS...`), so the fast JSON response path must normalize both live `date`/`datetime` objects and existing cached date strings to ISO-style strings.
 7. After publishing the serialization/index fix, the LaunchAgent HTTP path still showed unstable `details?section=portfolios` latency (`12s+`) while the same runtime code and DB were `~1.9s` in-process. The paper-tracking hot path therefore needs a short in-process response cache plus startup prewarm, not only faster serialization.
+8. Legacy `/dashboard/operations` still included `simulation_workspace`, whose builder can write account presence and wait on SQLite locks. The compatibility endpoint must stay read-only/lightweight; simulation workspace belongs to `/dashboard/operations/details?section=simulation_workspace`.
 
 ## Targets
 
@@ -48,7 +49,8 @@ In-process profiling with the runtime DB shows `build_operations_dashboard(..., 
 | 5 | completed | Make `/dashboard/operations` a compatibility read endpoint: no `run_operations_tick` inside GET and bounded payload by default. | Direct curl returns within target/default timeout. |
 | 6 | in_progress | Run local tests/build, DeepSeek code review, then merge, push, publish, browser-verify, and remove task worktree. | DeepSeek code review passed after required fixes; merge/publish still pending. |
 | 7 | completed | Add an operations-only fast JSON response path with ISO date normalization and a runtime DB covering index for `market_bars(timeframe, stock_id, observed_at)`. | Runtime-sized temporary API: summary `0.0085s`, portfolios `1.79s`, legacy full `2.33s`; DeepSeek P1 follow-up reported no blocker. |
-| 8 | completed | Add a 60s operations response cache and startup prewarm for `details=portfolios`, keyed by target login and shared across sample symbols for that sample-independent payload. | Runtime-sized temporary API first portfolios request `0.0025s`; DeepSeek cache review reported no blocker. |
+| 8 | completed | Add a 60s operations response cache and startup prewarm for `details=portfolios` plus lightweight legacy operations, keyed by target login and shared across sample symbols for sample-independent compatibility payloads. | Runtime-sized temporary API first portfolios request `0.0025s`; DeepSeek cache review reported no blocker. |
+| 9 | completed | Keep legacy `/dashboard/operations` read-only by excluding inline simulation workspace; load simulation workspace only through its dedicated details/projection path. | Test asserts legacy response has `simulation_workspace: null`; avoids account-presence writes in legacy GET/prewarm. |
 
 ## DeepSeek Plan Review
 
@@ -69,7 +71,7 @@ DeepSeek code review:
 - Follow-up DeepSeek review reported no blocker.
 - Later runtime-sized testing found HTTP serialization still too slow on the live 2.5GB SQLite database. A second DeepSeek code review accepted the fast-response/index approach but raised one P1: `default=str` could return Python-style datetime strings instead of ISO 8601.
 - The P1 was fixed with explicit date/datetime `.isoformat()` handling plus recursive normalization of cached datetime strings. DeepSeek follow-up reported: `P1 已解决，无阻塞合入问题。`
-- A final DeepSeek review of the response cache/prewarm design found no blockers: the cache is target-login scoped, `portfolios` intentionally ignores `sample_symbol`, TTL is 60s, startup prewarm is disableable through `ASHARE_DISABLE_OPERATIONS_RESPONSE_PREWARM`, and the new TestClient lifespan test verifies the prewarmed cache path.
+- A final DeepSeek review of the response cache/prewarm design found no blockers: the cache is target-login scoped, hot compatibility payloads intentionally ignore `sample_symbol`, TTL is 60s, startup prewarm is disableable through `ASHARE_DISABLE_OPERATIONS_RESPONSE_PREWARM`, and the new TestClient lifespan tests verify the prewarmed cache path.
 
 ## Implementation Notes
 

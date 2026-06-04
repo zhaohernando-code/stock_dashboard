@@ -1176,7 +1176,7 @@ def create_app(
             session.close()
 
     def operations_cache_key(*, kind: str, target_login: str, sample_symbol: str | None = None, section: str | None = None) -> str:
-        normalized_symbol = "*" if section == "portfolios" else (sample_symbol or "").upper()
+        normalized_symbol = "*" if section == "portfolios" or kind == "legacy" else (sample_symbol or "").upper()
         return f"{kind}:{target_login}:{section or '-'}:{normalized_symbol}"
 
     def get_cached_operations_response(cache_key: str) -> Response | None:
@@ -1201,13 +1201,24 @@ def create_app(
             return
         try:
             with session_factory() as session:
-                cache_key = operations_cache_key(kind="details", target_login="root", section="portfolios")
+                sample_symbol = os.getenv("ASHARE_OPERATIONS_PREWARM_SAMPLE_SYMBOL", "600519.SH")
+                portfolio_cache_key = operations_cache_key(kind="details", target_login="root", section="portfolios")
                 store_operations_response(
-                    cache_key,
+                    portfolio_cache_key,
                     build_operations_detail(
                         session,
                         section="portfolios",
-                        sample_symbol=os.getenv("ASHARE_OPERATIONS_PREWARM_SAMPLE_SYMBOL", "600519.SH"),
+                        sample_symbol=sample_symbol,
+                        target_login="root",
+                    ),
+                )
+                legacy_cache_key = operations_cache_key(kind="legacy", target_login="root", sample_symbol=sample_symbol)
+                store_operations_response(
+                    legacy_cache_key,
+                    build_operations_dashboard(
+                        session,
+                        sample_symbol,
+                        include_simulation_workspace=False,
                         target_login="root",
                     ),
                 )
@@ -2052,7 +2063,7 @@ def create_app(
             build_operations_dashboard(
                 session,
                 sample_symbol,
-                include_simulation_workspace=True,
+                include_simulation_workspace=False,
                 target_login=access.target_login,
             )
         )
