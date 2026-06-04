@@ -25,6 +25,7 @@ from ashare_evidence.shortpick_lab import (
     _shortpick_entry_execution_price,
     _shortpick_entry_tradeability,
     _shortpick_frozen_exit_track_results,
+    _sync_shortpick_tushare_stock_master,
     _upsert_shortpick_market_factor_candidate,
 )
 from ashare_evidence.shortpick_policy import SHORTPICK_FROZEN_STRATEGY_CONFIG

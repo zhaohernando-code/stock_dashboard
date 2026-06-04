@@ -236,6 +236,7 @@ SHORTPICK_MARKET_FACTOR_FULL_SYNC_MIN_TRADE_DAYS = int(os.getenv("SHORTPICK_MARK
 SHORTPICK_MARKET_FACTOR_COARSE_SCREEN_SIZE = int(os.getenv("SHORTPICK_MARKET_FACTOR_COARSE_SCREEN_SIZE", "800"))
 SHORTPICK_MARKET_FACTOR_HOT_INDUSTRY_LIMIT = int(os.getenv("SHORTPICK_MARKET_FACTOR_HOT_INDUSTRY_LIMIT", "12"))
 SHORTPICK_MARKET_FACTOR_HOT_INDUSTRY_MIN_SYMBOLS = int(os.getenv("SHORTPICK_MARKET_FACTOR_HOT_INDUSTRY_MIN_SYMBOLS", "5"))
+SHORTPICK_TUSHARE_STOCK_BASIC_ATTEMPTS = int(os.getenv("SHORTPICK_TUSHARE_STOCK_BASIC_ATTEMPTS", "2"))
 RETRYABLE_FAILURE_CATEGORIES = {"retryable_search_failure", "retryable_parse_failure"}
 
 
@@ -2851,16 +2852,81 @@ def _upsert_shortpick_tushare_stock(session: Session, row: dict[str, Any], *, ru
     return existing
 
 
+def _shortpick_unique_eligible_stocks(stocks: Iterable[Stock], *, run_date: date) -> list[Stock]:
+    unique: dict[str, Stock] = {}
+    for stock in stocks:
+        if _stock_eligible_for_shortpick_market_factor(stock, run_date=run_date):
+            unique[stock.symbol] = stock
+    return [unique[symbol] for symbol in sorted(unique)]
+
+
+def _shortpick_cached_eligible_stock_master(session: Session, run_date: date) -> tuple[list[Stock], dict[str, Any]]:
+    stocks = session.scalars(select(Stock).order_by(Stock.symbol)).all()
+    eligible = _shortpick_unique_eligible_stocks(stocks, run_date=run_date)
+    return eligible, {
+        "local_stock_cache_rows": len(stocks),
+        "account_eligible_symbol_count": len(eligible),
+        "excluded_symbol_count": max(0, len(stocks) - len(eligible)),
+    }
+
+
+def _shortpick_tushare_stock_basic_rows(session: Session) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    attempts = max(1, SHORTPICK_TUSHARE_STOCK_BASIC_ATTEMPTS)
+    errors: list[str] = []
+    for attempt in range(1, attempts + 1):
+        try:
+            rows = _tushare_rows(
+                session,
+                api_name="stock_basic",
+                params={"list_status": "L"},
+                fields="ts_code,symbol,name,industry,list_date,exchange,market,list_status",
+            )
+        except Exception as exc:
+            errors.append(f"{exc.__class__.__name__}: {str(exc)[:200]}")
+            rows = []
+        if rows:
+            return rows, {
+                "tushare_stock_basic_attempt_count": attempt,
+                "tushare_stock_basic_errors": errors,
+            }
+    return [], {
+        "tushare_stock_basic_attempt_count": attempts,
+        "tushare_stock_basic_errors": errors,
+    }
+
+
+def _shortpick_stock_master_cache_fallback(
+    session: Session,
+    run_date: date,
+    *,
+    reason: str,
+    tushare_summary: dict[str, Any],
+) -> tuple[list[Stock], dict[str, Any]]:
+    eligible, cache_summary = _shortpick_cached_eligible_stock_master(session, run_date)
+    if len(eligible) < SHORTPICK_MARKET_FACTOR_MIN_FULL_UNIVERSE_SIZE:
+        raise ShortpickMarketFactorUniverseError(
+            "Tushare stock_basic could not provide a full eligible universe and local cache is too small: "
+            f"{len(eligible)} < {SHORTPICK_MARKET_FACTOR_MIN_FULL_UNIVERSE_SIZE}."
+        )
+    return eligible, {
+        "stock_master_source": f"local_stock_cache_after_{reason}",
+        "tushare_stock_basic_rows": 0,
+        "tushare_stock_basic_fallback_reason": reason,
+        **tushare_summary,
+        **cache_summary,
+    }
+
+
 def _sync_shortpick_tushare_stock_master(session: Session, run_date: date) -> tuple[list[Stock], dict[str, Any]]:
     _require_shortpick_tushare_credential(session)
-    rows = _tushare_rows(
-        session,
-        api_name="stock_basic",
-        params={"list_status": "L"},
-        fields="ts_code,symbol,name,industry,list_date,exchange,market,list_status",
-    )
+    rows, tushare_summary = _shortpick_tushare_stock_basic_rows(session)
     if not rows:
-        raise ShortpickMarketFactorUniverseError("Tushare stock_basic returned no rows for full eligible universe.")
+        return _shortpick_stock_master_cache_fallback(
+            session,
+            run_date,
+            reason="empty_tushare_stock_basic",
+            tushare_summary=tushare_summary,
+        )
 
     eligible: list[Stock] = []
     excluded_count = 0
@@ -2872,14 +2938,22 @@ def _sync_shortpick_tushare_stock_master(session: Session, run_date: date) -> tu
         else:
             excluded_count += 1
     session.flush()
-    unique = {stock.symbol: stock for stock in eligible}
-    eligible = [unique[symbol] for symbol in sorted(unique)]
+    eligible = _shortpick_unique_eligible_stocks(eligible, run_date=run_date)
     if len(eligible) < SHORTPICK_MARKET_FACTOR_MIN_FULL_UNIVERSE_SIZE:
-        raise ShortpickMarketFactorUniverseError(
-            "Full eligible shortpick universe is unexpectedly small: "
-            f"{len(eligible)} < {SHORTPICK_MARKET_FACTOR_MIN_FULL_UNIVERSE_SIZE}."
+        return _shortpick_stock_master_cache_fallback(
+            session,
+            run_date,
+            reason="small_tushare_stock_basic_universe",
+            tushare_summary={
+                **tushare_summary,
+                "tushare_stock_basic_rows": len(rows),
+                "tushare_account_eligible_symbol_count": len(eligible),
+                "tushare_excluded_symbol_count": excluded_count,
+            },
         )
     return eligible, {
+        "stock_master_source": "tushare_stock_basic",
+        **tushare_summary,
         "tushare_stock_basic_rows": len(rows),
         "account_eligible_symbol_count": len(eligible),
         "excluded_symbol_count": excluded_count,

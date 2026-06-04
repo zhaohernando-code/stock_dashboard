@@ -66,6 +66,36 @@ class ShortpickLabTests(ShortpickLabTestCase):
         self.assertEqual(payload["runs"][0]["updated_validation_count"], 1)
         self.assertEqual(payload["runs"][0]["summary"]["completed_validation_count"], 3)
 
+    def test_tushare_stock_basic_empty_response_uses_full_local_stock_cache(self) -> None:
+        self._seed_stock_bars("600001.SH", "测试主板A", [10 + index for index in range(8)])
+        self._seed_stock_bars("000001.SZ", "测试主板B", [12 + index for index in range(8)])
+        self._seed_stock_bars("688001.SH", "测试科创", [14 + index for index in range(8)])
+        with session_scope(self.database_url) as session:
+            session.add(
+                ProviderCredential(
+                    provider_name="tushare",
+                    display_name="Tushare",
+                    access_token="test-token",
+                    base_url="http://api.tushare.pro",
+                    enabled=True,
+                    notes=None,
+                    config_payload={},
+                )
+            )
+            session.commit()
+
+        with patch("ashare_evidence.shortpick_lab.SHORTPICK_MARKET_FACTOR_MIN_FULL_UNIVERSE_SIZE", 2):
+            with patch("ashare_evidence.shortpick_lab._tushare_rows", return_value=[]) as rows_call:
+                with session_scope(self.database_url) as session:
+                    eligible, summary = _sync_shortpick_tushare_stock_master(session, date(2026, 5, 12))
+
+        self.assertEqual(rows_call.call_count, 2)
+        self.assertEqual([stock.symbol for stock in eligible], ["000001.SZ", "600001.SH"])
+        self.assertEqual(summary["stock_master_source"], "local_stock_cache_after_empty_tushare_stock_basic")
+        self.assertEqual(summary["tushare_stock_basic_rows"], 0)
+        self.assertEqual(summary["local_stock_cache_rows"], 3)
+        self.assertEqual(summary["account_eligible_symbol_count"], 2)
+
     def test_parse_failure_keeps_research_lab_artifact_and_candidate_boundary(self) -> None:
         executors = [StaticShortpickExecutor("openai", "gpt-test", "fake", "not-json")]
 

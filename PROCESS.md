@@ -117,6 +117,7 @@
 ## 数据与分析流水线
 
 - **外部数据 fail-open**：AKShare、公告、实时信息流等外部接口可能超时、空表或异常；刷新 pipeline 中这类失败应降级为空数据/告警，不应中断 intraday sync、simulation step 或其他主流程。
+- **基础主数据空表要走缓存兜底**：短投全市场 universe 依赖 `stock_basic` 这类低频主数据时，外部接口短时空返回不能直接阻断当日纸面跟踪。先按同一账户可买规则使用本地 `stocks` 缓存继续生成 universe；只有缓存规模低于完整 universe 下限时才 fail closed，并把 fallback 来源写入刷新 summary。
 - **事件分析接入不能阻断主刷新**：新增事件检测、LLM 分析、资料抓取时必须包裹异常，避免一个新模块拖垮盘后全流程。
 - **simulation 刷新顺序固定**：不能只 restart session；需要 `restart → step → rebuild`。持续运行用交易时段后台 tick + 单次 anchored step，不复用研究刷新链路。
 - **Phase 5 artifact 查找要容忍 legacy 字段漂移**：payload 中 `backtest_artifact_id` 等旧字段可能不稳定，优先解析真实存在 artifact。
