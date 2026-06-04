@@ -460,3 +460,102 @@ class ShortpickLabValidationTests(ShortpickLabTestCase):
         self.assertEqual(item["horizon_days"], 1)
         self.assertEqual(item["status"], "completed")
         self.assertIn("excess_return", item)
+
+    def _seed_pending_run(self, session, run_date: date, index: int) -> int:
+        now = datetime(2026, 6, 4, 8, 0, tzinfo=UTC)
+        run = ShortpickExperimentRun(
+            run_key=f"shortpick:test:revalidate-loop:{index}",
+            run_date=run_date,
+            prompt_version="test",
+            information_mode=SHORTPICK_INFORMATION_MODE,
+            status="completed",
+            trigger_source="test",
+            triggered_by="root",
+            started_at=now,
+            completed_at=now,
+            model_config={},
+            summary_payload={},
+        )
+        session.add(run)
+        session.flush()
+        candidate = ShortpickCandidate(
+            run_id=run.id,
+            candidate_key=f"shortpick:test:revalidate-loop:{index}:candidate",
+            symbol=f"600{index:03d}.SH",
+            name=f"测试{index}",
+            research_priority="market_factor_frozen_paper",
+            parse_status="parsed",
+            candidate_payload={"tracking_role": "frozen_paper_primary"},
+        )
+        session.add(candidate)
+        session.flush()
+        snapshot = ShortpickValidationSnapshot(
+            candidate_id=candidate.id,
+            horizon_days=5,
+            status="pending_forward_window",
+            validation_payload={"required_forward_bars": 5},
+        )
+        session.add(snapshot)
+        session.flush()
+        return snapshot.id
+
+    def test_revalidation_loop_completes_pending_when_data_arrives(self) -> None:
+        # Once forward-window data is available, the bounded loop must flip a
+        # stranded pending_forward_window snapshot to completed.
+        with session_scope(self.database_url) as session:
+            snapshot_id = self._seed_pending_run(session, date(2026, 5, 26), 26)
+
+            def fake_validate(inner_session, run_id: int, **_kwargs):
+                snap = inner_session.get(ShortpickValidationSnapshot, snapshot_id)
+                updated = 0
+                if snap is not None and snap.status != "completed":
+                    snap.status = "completed"
+                    inner_session.flush()
+                    updated = 1
+                return {"updated_validation_count": updated, "summary": {"run_id": run_id}}
+
+            with patch("ashare_evidence.shortpick_lab.validate_shortpick_run", side_effect=fake_validate):
+                payload = validate_recent_shortpick_runs(session, days=30, limit=20, horizons=[5])
+
+            self.assertGreaterEqual(payload["refreshed_run_count"], 1)
+            snap = session.get(ShortpickValidationSnapshot, snapshot_id)
+            assert snap is not None
+            self.assertEqual(snap.status, "completed")
+
+    def test_revalidation_loop_terminates_when_no_data(self) -> None:
+        # A snapshot the source cannot complete must not loop or re-fetch
+        # forever: bounded by max_iter and the "no new completed" guard, each
+        # run is processed at most once.
+        call_count = {"n": 0}
+        with session_scope(self.database_url) as session:
+            self._seed_pending_run(session, date(2026, 6, 2), 2)
+            self._seed_pending_run(session, date(2026, 6, 3), 3)
+
+            def fake_validate(_session, run_id: int, **_kwargs):
+                call_count["n"] += 1
+                # Never completes anything (no data available).
+                return {"updated_validation_count": 0, "summary": {"run_id": run_id}}
+
+            with patch("ashare_evidence.shortpick_lab.validate_shortpick_run", side_effect=fake_validate):
+                payload = validate_recent_shortpick_runs(session, days=30, limit=20, horizons=[5])
+
+        # Two runs, each processed exactly once (no infinite loop, no re-process).
+        self.assertEqual(call_count["n"], 2)
+        self.assertEqual(payload["refreshed_run_count"], 2)
+
+    def test_analysis_only_refresh_syncs_benchmark_bars(self) -> None:
+        # The daily refresh runs --analysis-only; benchmarks must still sync so
+        # validation excess-return is not stranded at pending_benchmark_data.
+        from ashare_evidence.cli import _refresh_runtime_data_output
+
+        with patch("ashare_evidence.cli.sync_benchmark_index_bars", return_value={"status": "ok"}) as sync_bench:
+            with patch("ashare_evidence.cli.active_watchlist_symbols", return_value=[]):
+                with session_scope(self.database_url) as session:
+                    _refresh_runtime_data_output(
+                        session,
+                        analysis_only=True,
+                        ops_only=False,
+                        skip_simulation=True,
+                    )
+        sync_bench.assert_called_once()
+

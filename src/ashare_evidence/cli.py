@@ -339,7 +339,12 @@ def _refresh_runtime_data_output(
     refreshed = [refresh_watchlist_symbol(session, symbol) for symbol in symbols] if run_analysis_refresh else []
     event_results = run_refresh_event_checks(session, [item["symbol"] for item in refreshed]) if run_analysis_refresh and refreshed else []
     intraday = sync_intraday_market(session, symbols) if run_ops_refresh else None
-    benchmark_bars = sync_benchmark_index_bars(session) if run_ops_refresh else None
+    # Benchmark index bars feed shortpick validation excess-return. The daily
+    # refresh runs --analysis-only (run_ops_refresh=False); gating benchmarks on
+    # ops-only left individual stocks advancing to the latest trading day while
+    # benchmarks lagged a day, stranding 5d/10d exits at pending_benchmark_data.
+    # Sync benchmarks whenever any refresh runs so they stay on the same day.
+    benchmark_bars = sync_benchmark_index_bars(session) if (run_ops_refresh or run_analysis_refresh) else None
     simulation = None
     if not skip_simulation and run_analysis_refresh:
         restart_simulation_session(session)
