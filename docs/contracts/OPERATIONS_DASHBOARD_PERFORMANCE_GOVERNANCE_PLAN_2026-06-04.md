@@ -2,7 +2,7 @@
 
 ## Status
 
-`bounded_details_ds_reviewed_pending_merge_publish`
+`startup_prewarm_backgrounding_in_progress`
 
 ## Problem
 
@@ -29,6 +29,7 @@ In-process profiling with the runtime DB shows `build_operations_dashboard(..., 
 7. After publishing the serialization/index fix, the LaunchAgent HTTP path still showed unstable `details?section=portfolios` latency (`12s+`) while the same runtime code and DB were `~1.9s` in-process. The paper-tracking hot path therefore needs a short in-process response cache plus startup prewarm, not only faster serialization.
 8. Legacy `/dashboard/operations` still included `simulation_workspace`, whose builder can write account presence and wait on SQLite locks. The compatibility endpoint must stay read-only/lightweight; simulation workspace belongs to `/dashboard/operations/details?section=simulation_workspace`.
 9. After publishing `dbc3dc1`, the actual user runtime made the priority paths fast (`summary 0.016s`, `portfolios 0.019s`, legacy `0.021s` with `simulation_workspace=null`), but release verification still timed out because non-priority bounded detail sections reused `build_operations_dashboard()` and paid the full dashboard rebuild cost for tiny section payloads.
+10. After publishing `dd1d6b3`, backend reached ASGI startup but did not bind `/health` before the publish health deadline. The remaining blocker is synchronous operations response prewarm inside FastAPI lifespan: cache warmup should be best-effort and must not block service startup.
 
 ## Targets
 
@@ -53,6 +54,7 @@ In-process profiling with the runtime DB shows `build_operations_dashboard(..., 
 | 8 | completed | Add a 60s operations response cache and startup prewarm for `details=portfolios` plus lightweight legacy operations, keyed by target login and shared across sample symbols for sample-independent compatibility payloads. | Runtime-sized temporary API first portfolios request `0.0025s`; DeepSeek cache review reported no blocker. |
 | 9 | completed | Keep legacy `/dashboard/operations` read-only by excluding inline simulation workspace; load simulation workspace only through its dedicated details/projection path. | Test asserts legacy response has `simulation_workspace: null`; avoids account-presence writes in legacy GET/prewarm. |
 | 10 | completed | Split `build_operations_detail()` into section-specific builders for `replay`, `manual_queue`, `factor_observation`, `sector_exposure`, `policy_governance`, and `simulation_workspace`, so small bounded detail endpoints do not rebuild portfolios, stock dashboard measurements, data quality, and unrelated sections. | Runtime-sized temporary API: replay `0.787s`, manual_queue `0.088s`, factor `0.034s`, sector `0.055s`, policy `0.024s`; DeepSeek plan and code reviews found no blockers. |
+| 11 | in_progress | Move operations response prewarm out of the blocking ASGI startup path. Default prewarm mode becomes background best-effort; tests can opt into `ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE=sync` to keep deterministic cache assertions. | Backend `/health` becomes available before prewarm completion; publish health check no longer times out. |
 
 ## DeepSeek Plan Review
 
@@ -159,3 +161,10 @@ Worktree Step 10 temporary API with live runtime DB, prewarm disabled:
 - Tests:
   - `PYTHONPATH=src python3 -m pytest tests/test_operations.py tests/test_frontend_projections.py tests/test_release_verifier.py` (`25 passed`)
   - `PYTHONPATH=src python3 -m ruff check src/ashare_evidence/operations.py tests/test_operations.py`
+
+Published-runtime follow-up after `dd1d6b3`:
+
+- `scripts/publish-local-runtime.sh` built and synced the runtime, but timed out waiting for `http://127.0.0.1:8000/health`.
+- Backend log reached `Started server process` and `Waiting for application startup`; it had not reached `Application startup complete`.
+- Runtime DB checkpoint was not blocked (`PRAGMA wal_checkpoint(PASSIVE)` returned `0|30|30`).
+- Fix: schedule `prewarm_operations_response_cache()` on a daemon thread from lifespan startup, while keeping `ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE=sync` available for deterministic TestClient cache tests.

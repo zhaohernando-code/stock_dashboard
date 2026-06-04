@@ -1225,6 +1225,17 @@ def create_app(
         except Exception:
             LOGGER.exception("operations response cache prewarm failed")
 
+    def start_operations_response_cache_prewarm() -> None:
+        prewarm_mode = os.getenv("ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE", "background").strip().lower()
+        if prewarm_mode == "sync":
+            prewarm_operations_response_cache()
+            return
+        threading.Thread(
+            target=prewarm_operations_response_cache,
+            name="operations-response-cache-prewarm",
+            daemon=True,
+        ).start()
+
     tick_interval_seconds = max(int(os.getenv("ASHARE_BACKGROUND_OPS_TICK_SECONDS", "60")), 15)
     background_ops_enabled = (
         enable_background_ops_tick
@@ -1249,7 +1260,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        prewarm_operations_response_cache()
+        start_operations_response_cache_prewarm()
         if not background_ops_enabled:
             yield
             return

@@ -168,7 +168,7 @@ def test_operations_portfolios_detail_uses_prewarmed_response_cache(tmp_path) ->
         seed_watchlist_fixture(session, symbols=("600519.SH", "300750.SZ"))
 
     client = TestClient(create_app(database_url, enable_background_ops_tick=False))
-    with client:
+    with patch.dict("os.environ", {"ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE": "sync"}), client:
         with patch("ashare_evidence.api.build_operations_detail", side_effect=AssertionError("cache should satisfy request")):
             response = client.get(
                 "/dashboard/operations/details?section=portfolios&sample_symbol=300750.SZ",
@@ -186,7 +186,7 @@ def test_operations_legacy_get_uses_prewarmed_response_cache(tmp_path) -> None:
         seed_watchlist_fixture(session, symbols=("600519.SH", "300750.SZ"))
 
     client = TestClient(create_app(database_url, enable_background_ops_tick=False))
-    with client:
+    with patch.dict("os.environ", {"ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE": "sync"}), client:
         with patch("ashare_evidence.api.build_operations_dashboard", side_effect=AssertionError("cache should satisfy legacy request")):
             response = client.get(
                 "/dashboard/operations?sample_symbol=300750.SZ",

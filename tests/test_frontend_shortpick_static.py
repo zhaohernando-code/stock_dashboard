@@ -224,6 +224,7 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertNotIn("api.getOperationsDashboard(", app_source)
         self.assertIn("export function getOperationsDashboard(sampleSymbol: string)", dashboard_api_source)
         self.assertIn("prewarm_operations_response_cache()", api_source)
+        self.assertIn("start_operations_response_cache_prewarm()", api_source)
         self.assertGreaterEqual(api_source.count("store_operations_response("), 5)
 
 
