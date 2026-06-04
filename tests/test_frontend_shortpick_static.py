@@ -223,7 +223,8 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn('void loadOperationsDetailSections(["simulation_workspace", "portfolios"], selectedSymbol);', app_source)
         self.assertNotIn("api.getOperationsDashboard(", app_source)
         self.assertIn("export function getOperationsDashboard(sampleSymbol: string)", dashboard_api_source)
-        self.assertGreaterEqual(api_source.count("_operations_json_response("), 5)
+        self.assertIn("prewarm_operations_response_cache()", api_source)
+        self.assertGreaterEqual(api_source.count("store_operations_response("), 5)
 
 
 if __name__ == "__main__":

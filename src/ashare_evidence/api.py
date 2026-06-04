@@ -177,6 +177,7 @@ SHORTPICK_MARKET_FACTOR_STUDY_ARTIFACT = Path("output/shortpick-market-factor-st
 SHORTPICK_REPLAY_FEEDBACK_CACHE_ARTIFACT = Path("output/shortpick-replay-feedback-cache.json")
 SHORTPICK_STRATEGY_SLICE_EVIDENCE_ARTIFACT = Path("output/shortpick-strategy-slice-evidence.json")
 SHORTPICK_TRADE_REGIME_EVIDENCE_ARTIFACT = Path("output/shortpick-strategy-trade-regime-evidence.json")
+OPERATIONS_RESPONSE_CACHE_TTL_SECONDS = 60.0
 
 
 def _operations_json_default(value: object) -> str:
@@ -200,8 +201,16 @@ def _operations_json_ready(value: object) -> object:
 
 
 def _operations_json_response(payload: object) -> Response:
+    return _operations_json_content_response(_operations_json_content(payload))
+
+
+def _operations_json_content(payload: object) -> str:
+    return json.dumps(_operations_json_ready(payload), ensure_ascii=False, default=_operations_json_default)
+
+
+def _operations_json_content_response(content: str) -> Response:
     return Response(
-        content=json.dumps(_operations_json_ready(payload), ensure_ascii=False, default=_operations_json_default),
+        content=content,
         media_type="application/json",
     )
 
@@ -1153,6 +1162,8 @@ def create_app(
     market_factor_study_cache: dict[str, tuple[float, dict[str, object]]] = {}
     market_factor_study_lock = threading.Lock()
     market_factor_study_ttl_seconds = 3600.0
+    operations_response_cache: dict[str, tuple[float, str]] = {}
+    operations_response_cache_lock = threading.Lock()
     with session_factory() as session:
         ensure_runtime_defaults(session)
         session.commit()
@@ -1163,6 +1174,45 @@ def create_app(
             yield session
         finally:
             session.close()
+
+    def operations_cache_key(*, kind: str, target_login: str, sample_symbol: str | None = None, section: str | None = None) -> str:
+        normalized_symbol = "*" if section == "portfolios" else (sample_symbol or "").upper()
+        return f"{kind}:{target_login}:{section or '-'}:{normalized_symbol}"
+
+    def get_cached_operations_response(cache_key: str) -> Response | None:
+        with operations_response_cache_lock:
+            cached = operations_response_cache.get(cache_key)
+            if cached is None:
+                return None
+            cached_at, content = cached
+            if time.perf_counter() - cached_at > OPERATIONS_RESPONSE_CACHE_TTL_SECONDS:
+                operations_response_cache.pop(cache_key, None)
+                return None
+        return _operations_json_content_response(content)
+
+    def store_operations_response(cache_key: str, payload: object) -> Response:
+        content = _operations_json_content(payload)
+        with operations_response_cache_lock:
+            operations_response_cache[cache_key] = (time.perf_counter(), content)
+        return _operations_json_content_response(content)
+
+    def prewarm_operations_response_cache() -> None:
+        if os.getenv("ASHARE_DISABLE_OPERATIONS_RESPONSE_PREWARM", "").strip().lower() in {"1", "true", "yes", "on"}:
+            return
+        try:
+            with session_factory() as session:
+                cache_key = operations_cache_key(kind="details", target_login="root", section="portfolios")
+                store_operations_response(
+                    cache_key,
+                    build_operations_detail(
+                        session,
+                        section="portfolios",
+                        sample_symbol=os.getenv("ASHARE_OPERATIONS_PREWARM_SAMPLE_SYMBOL", "600519.SH"),
+                        target_login="root",
+                    ),
+                )
+        except Exception:
+            LOGGER.exception("operations response cache prewarm failed")
 
     tick_interval_seconds = max(int(os.getenv("ASHARE_BACKGROUND_OPS_TICK_SECONDS", "60")), 15)
     background_ops_enabled = (
@@ -1188,6 +1238,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        prewarm_operations_response_cache()
         if not background_ops_enabled:
             yield
             return
@@ -1992,7 +2043,12 @@ def create_app(
         sample_symbol: str = Query(default="600519.SH"),
         session: Session = Depends(get_session),
     ) -> Response:
-        return _operations_json_response(
+        cache_key = operations_cache_key(kind="legacy", target_login=access.target_login, sample_symbol=sample_symbol)
+        cached = get_cached_operations_response(cache_key)
+        if cached is not None:
+            return cached
+        return store_operations_response(
+            cache_key,
             build_operations_dashboard(
                 session,
                 sample_symbol,
@@ -2007,6 +2063,10 @@ def create_app(
         sample_symbol: str = Query(default="600519.SH"),
         session: Session = Depends(get_session),
     ) -> Response:
+        cache_key = operations_cache_key(kind="summary", target_login=access.target_login, sample_symbol=sample_symbol)
+        cached = get_cached_operations_response(cache_key)
+        if cached is not None:
+            return cached
         started_at = time.perf_counter()
         projection = get_ready_frontend_projection_payload(
             session,
@@ -2014,7 +2074,10 @@ def create_app(
             target_login=access.target_login,
         )
         if projection is not None:
-            return _operations_json_response(annotate_operations_summary_endpoint_metrics(projection, started_at=started_at))
+            return store_operations_response(
+                cache_key,
+                annotate_operations_summary_endpoint_metrics(projection, started_at=started_at),
+            )
         payload = build_operations_summary(
             session,
             sample_symbol,
@@ -2035,7 +2098,7 @@ def create_app(
             },
         )
         session.commit()
-        return _operations_json_response(annotate_operations_summary_endpoint_metrics(payload, started_at=started_at))
+        return store_operations_response(cache_key, annotate_operations_summary_endpoint_metrics(payload, started_at=started_at))
 
     @app.get("/dashboard/operations/details")
     def dashboard_operations_details(
@@ -2044,6 +2107,15 @@ def create_app(
         sample_symbol: str = Query(default="600519.SH"),
         session: Session = Depends(get_session),
     ) -> Response:
+        cache_key = operations_cache_key(
+            kind="details",
+            target_login=access.target_login,
+            sample_symbol=sample_symbol,
+            section=section,
+        )
+        cached = get_cached_operations_response(cache_key)
+        if cached is not None:
+            return cached
         if section == "simulation_workspace":
             projection = get_ready_frontend_projection_payload(
                 session,
@@ -2051,9 +2123,10 @@ def create_app(
                 target_login=access.target_login,
             )
             if projection is not None:
-                return _operations_json_response(projection)
+                return store_operations_response(cache_key, projection)
         try:
-            return _operations_json_response(
+            return store_operations_response(
+                cache_key,
                 build_operations_detail(
                     session,
                     section=section,

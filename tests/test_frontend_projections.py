@@ -160,6 +160,24 @@ def test_operations_legacy_get_does_not_run_operations_tick(tmp_path) -> None:
     assert "portfolios" in response.json()
 
 
+def test_operations_portfolios_detail_uses_prewarmed_response_cache(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'operations-detail-cache.db'}"
+    init_database(database_url)
+    with session_scope(database_url) as session:
+        seed_watchlist_fixture(session, symbols=("600519.SH", "300750.SZ"))
+
+    client = TestClient(create_app(database_url, enable_background_ops_tick=False))
+    with client:
+        with patch("ashare_evidence.api.build_operations_detail", side_effect=AssertionError("cache should satisfy request")):
+            response = client.get(
+                "/dashboard/operations/details?section=portfolios&sample_symbol=300750.SZ",
+                headers={"X-HZ-User-Login": "root", "X-HZ-User-Role": "root"},
+            )
+
+    assert response.status_code == 200
+    assert response.json()["section"] == "portfolios"
+
+
 def test_home_shell_projection_materializes_account_shell_payload() -> None:
     database_url = "sqlite:///:memory:"
     init_database(database_url)
