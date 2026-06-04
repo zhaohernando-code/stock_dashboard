@@ -214,6 +214,7 @@ class FrontendShortpickStaticTests(unittest.TestCase):
 
     def test_operations_hot_paths_use_summary_and_details_not_full_dashboard(self) -> None:
         frontend_root = Path(__file__).resolve().parents[1] / "frontend" / "src"
+        api_source = (Path(__file__).resolve().parents[1] / "src" / "ashare_evidence" / "api.py").read_text(encoding="utf-8")
         app_source = (frontend_root / "App.tsx").read_text(encoding="utf-8")
         dashboard_api_source = (frontend_root / "api" / "dashboard.ts").read_text(encoding="utf-8")
 
@@ -222,6 +223,7 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn('void loadOperationsDetailSections(["simulation_workspace", "portfolios"], selectedSymbol);', app_source)
         self.assertNotIn("api.getOperationsDashboard(", app_source)
         self.assertIn("export function getOperationsDashboard(sampleSymbol: string)", dashboard_api_source)
+        self.assertGreaterEqual(api_source.count("_operations_json_response("), 5)
 
 
 if __name__ == "__main__":

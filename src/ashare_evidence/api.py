@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 
-from fastapi import Body, Depends, FastAPI, HTTPException, Query
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy import func, or_, select
@@ -177,6 +177,33 @@ SHORTPICK_MARKET_FACTOR_STUDY_ARTIFACT = Path("output/shortpick-market-factor-st
 SHORTPICK_REPLAY_FEEDBACK_CACHE_ARTIFACT = Path("output/shortpick-replay-feedback-cache.json")
 SHORTPICK_STRATEGY_SLICE_EVIDENCE_ARTIFACT = Path("output/shortpick-strategy-slice-evidence.json")
 SHORTPICK_TRADE_REGIME_EVIDENCE_ARTIFACT = Path("output/shortpick-strategy-trade-regime-evidence.json")
+
+
+def _operations_json_default(value: object) -> str:
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value)
+
+
+def _operations_json_ready(value: object) -> object:
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, str) and len(value) >= 19 and value[4] == "-" and value[7] == "-" and value[10] == " ":
+        return value.replace(" ", "T", 1)
+    if isinstance(value, list):
+        return [_operations_json_ready(item) for item in value]
+    if isinstance(value, tuple):
+        return [_operations_json_ready(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _operations_json_ready(item) for key, item in value.items()}
+    return value
+
+
+def _operations_json_response(payload: object) -> Response:
+    return Response(
+        content=json.dumps(_operations_json_ready(payload), ensure_ascii=False, default=_operations_json_default),
+        media_type="application/json",
+    )
 
 
 def _existing_project_artifact_path(relative_path: Path, *, env_var: str | None = None) -> Path:
@@ -1964,12 +1991,14 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         sample_symbol: str = Query(default="600519.SH"),
         session: Session = Depends(get_session),
-    ) -> dict[str, object]:
-        return build_operations_dashboard(
-            session,
-            sample_symbol,
-            include_simulation_workspace=True,
-            target_login=access.target_login,
+    ) -> Response:
+        return _operations_json_response(
+            build_operations_dashboard(
+                session,
+                sample_symbol,
+                include_simulation_workspace=True,
+                target_login=access.target_login,
+            )
         )
 
     @app.get("/dashboard/operations/summary", response_model=OperationsDashboardResponse)
@@ -1977,7 +2006,7 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         sample_symbol: str = Query(default="600519.SH"),
         session: Session = Depends(get_session),
-    ) -> dict[str, object]:
+    ) -> Response:
         started_at = time.perf_counter()
         projection = get_ready_frontend_projection_payload(
             session,
@@ -1985,7 +2014,7 @@ def create_app(
             target_login=access.target_login,
         )
         if projection is not None:
-            return annotate_operations_summary_endpoint_metrics(projection, started_at=started_at)
+            return _operations_json_response(annotate_operations_summary_endpoint_metrics(projection, started_at=started_at))
         payload = build_operations_summary(
             session,
             sample_symbol,
@@ -2006,7 +2035,7 @@ def create_app(
             },
         )
         session.commit()
-        return annotate_operations_summary_endpoint_metrics(payload, started_at=started_at)
+        return _operations_json_response(annotate_operations_summary_endpoint_metrics(payload, started_at=started_at))
 
     @app.get("/dashboard/operations/details")
     def dashboard_operations_details(
@@ -2014,7 +2043,7 @@ def create_app(
         section: str = Query(default="portfolios"),
         sample_symbol: str = Query(default="600519.SH"),
         session: Session = Depends(get_session),
-    ) -> dict[str, object]:
+    ) -> Response:
         if section == "simulation_workspace":
             projection = get_ready_frontend_projection_payload(
                 session,
@@ -2022,13 +2051,15 @@ def create_app(
                 target_login=access.target_login,
             )
             if projection is not None:
-                return projection
+                return _operations_json_response(projection)
         try:
-            return build_operations_detail(
-                session,
-                section=section,
-                sample_symbol=sample_symbol,
-                target_login=access.target_login,
+            return _operations_json_response(
+                build_operations_detail(
+                    session,
+                    section=section,
+                    sample_symbol=sample_symbol,
+                    target_login=access.target_login,
+                )
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

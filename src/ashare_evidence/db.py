@@ -315,6 +315,7 @@ def _run_schema_migrations(engine: Engine) -> None:
         "CREATE INDEX IF NOT EXISTS idx_simulation_sessions_owner_login ON simulation_sessions(owner_login)",
         "CREATE INDEX IF NOT EXISTS idx_simulation_events_owner_login ON simulation_events(owner_login)",
         "CREATE INDEX IF NOT EXISTS idx_simulation_events_actor_login ON simulation_events(actor_login)",
+        "CREATE INDEX IF NOT EXISTS idx_market_bars_timeframe_stock_observed ON market_bars(timeframe, stock_id, observed_at)",
         "CREATE INDEX IF NOT EXISTS idx_frontend_projections_projection_key ON frontend_projections(projection_key)",
         "CREATE INDEX IF NOT EXISTS idx_frontend_projections_projection_group ON frontend_projections(projection_group)",
         "CREATE INDEX IF NOT EXISTS idx_frontend_projections_target_login ON frontend_projections(target_login)",

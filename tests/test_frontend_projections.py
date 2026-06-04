@@ -5,9 +5,10 @@ from time import perf_counter
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from ashare_evidence.api import create_app
-from ashare_evidence.db import init_database, session_scope, utcnow
+from ashare_evidence.db import get_engine, init_database, session_scope, utcnow
 from ashare_evidence.frontend_projections import (
     SHORTPICK_MODEL_FEEDBACK_PROJECTION_KEY,
     get_ready_frontend_projection_payload,
@@ -45,6 +46,16 @@ def test_frontend_projection_upsert_and_ready_read() -> None:
         stored = session.query(FrontendProjection).filter_by(projection_key="test_projection:v1").one()
         assert stored.projection_group == "test"
         assert stored.metadata_payload == {"source": "unit_test"}
+
+
+def test_database_init_adds_operations_market_bar_covering_index() -> None:
+    database_url = "sqlite:///:memory:"
+    init_database(database_url)
+
+    with get_engine(database_url).connect() as connection:
+        rows = connection.execute(text("PRAGMA index_list('market_bars')")).mappings().all()
+
+    assert any(row["name"] == "idx_market_bars_timeframe_stock_observed" for row in rows)
 
 
 def test_expired_projection_is_not_returned() -> None:
@@ -116,6 +127,7 @@ def test_operations_summary_api_caches_fallback_projection(tmp_path) -> None:
     )
 
     assert response.status_code == 200
+    assert "T" in response.json()["overview"]["generated_at"]
     with session_scope(database_url) as session:
         payload = get_ready_frontend_projection_payload(
             session,
