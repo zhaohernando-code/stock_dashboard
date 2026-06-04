@@ -1349,3 +1349,5 @@ canonical checkout 中的 `data/artifacts` 改动经抽样确认是正常 phase2
 - **GET `/dashboard/operations` 必须只读**：不得在用户读请求里执行 `run_operations_tick(session)` 或其他维护写任务；tick 留给后台循环或显式维护命令。
 - **组合净值曲线必须限量传输**：operations portfolio 响应的 `nav_history` 固定上限 90 点，采样必须保留首尾、净值/基准峰谷、最大回撤和最大暴露，再等距补齐；不要把每组合 1000+ 点全历史塞进 tab 请求。
 - **模拟操作后的运营刷新走 summary + details**：前端成功执行 simulation action 后只刷新 `getOperationsSummary`，再按需补拉 `simulation_workspace` 和 `portfolios` 明细，不回退到 full dashboard API。
+- **bounded details 必须真有界，不得复用全量 dashboard 构建**：`replay`、`manual_queue`、`factor_observation`、`sector_exposure`、`policy_governance`、`simulation_workspace` 这类小 section 只能调用对应领域 builder。发布验证里的 `19.6s` 残余慢路径证明“URL 是 details”不等于“实现已 details 化”。
+- **服务启动不能同步等待 operations 预热**：operations response cache 可以后台 best-effort 预热，测试可用 `ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE=sync` 保持确定性；生产 lifespan 不得因为预热阻塞 `/health` 和发布健康检查。

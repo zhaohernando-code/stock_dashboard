@@ -160,3 +160,12 @@
 - operations portfolio 响应对 `nav_history` 固定限量 90 点，同时保留首尾、净值/基准峰谷、最大回撤和最大暴露，再等距补点，避免趋势图丢关键锚点。
 - release verifier 不再请求全量 `/dashboard/operations`，改为 summary + all bounded operation details，并把所有 section 合并后做用户可见文本审计。
 - worktree HTTP 实测：summary `0.009s/41KB`，portfolios detail `1.44-1.61s/449KB`，legacy `/dashboard/operations` `1.96-2.17s/946KB`。
+
+[2026-06-04T21:47:23+08:00] 运营复盘 `19.6s` 发布阻塞已按治理流程收口：
+用户明确拒绝接受发布验证中 legacy operations 约 `19.6s` 的残余慢路径后，本轮继续按 `worktree -> 改进方案 -> DeepSeek 方案审核 -> 落地 -> DeepSeek 代码审核 -> 推送合入 -> 删除 worktree` 流程治理。追加根因是非组合 bounded details 仍复用完整 dashboard 构建，以及 operations cache prewarm 曾同步阻塞 ASGI startup。已拆分 section-specific details builder，并把 operations response prewarm 改成后台 best-effort。
+
+补充说明
+- DeepSeek 已复核追加方案、Step 10 代码和 Step 11 后台 prewarm 代码，结论均为无阻塞合入问题。
+- `origin/main` 已包含运行时代码提交，发布 manifest 为 `output/releases/20260604T134157Z-2cd4b24213b4/manifest.json`，deploy verifier `19 passed, 0 failed`。
+- runtime 验收：portfolios detail `0.007s/476KB`，summary `0.034s/43KB`，legacy `/dashboard/operations` `0.011s/556KB` 且 `simulation_workspace=null`。首次 post-publish replay 曾因启动/后台预热竞争抖到 `18.578s`，连续复测恢复为 `0.287s`、`0.194s`、`0.119s`。
+- 浏览器验收：本地裸入口和显式 `?view=shortpick&shortpickTab=paper-tracking` 均进入 `试验田 -> 纸面跟踪`，刷新后不退回首页，控制台无错误。

@@ -2,7 +2,7 @@
 
 ## Status
 
-`startup_prewarm_backgrounding_in_progress`
+`published_runtime_verified`
 
 ## Problem
 
@@ -49,12 +49,12 @@ In-process profiling with the runtime DB shows `build_operations_dashboard(..., 
 | 3 | completed | Remove full-dashboard refresh from the frontend simulation action path; use summary plus affected details. | Static test prevents `getOperationsDashboard` hot-path usage. |
 | 4 | completed | Change release verifier API endpoint set from full operations to `/dashboard/operations/summary` and bounded detail endpoints. | Verifier no longer requests `/dashboard/operations`. |
 | 5 | completed | Make `/dashboard/operations` a compatibility read endpoint: no `run_operations_tick` inside GET and bounded payload by default. | Direct curl returns within target/default timeout. |
-| 6 | in_progress | Run local tests/build, DeepSeek code review, then merge, push, publish, browser-verify, and remove task worktree. | DeepSeek code review passed after required fixes; merge/publish still pending. |
+| 6 | completed | Run local tests/build, DeepSeek code review, then merge, push, publish, browser-verify, and remove task worktree. | DeepSeek code review passed after required fixes; code was merged to `origin/main`, published to runtime, and browser/API verification completed. |
 | 7 | completed | Add an operations-only fast JSON response path with ISO date normalization and a runtime DB covering index for `market_bars(timeframe, stock_id, observed_at)`. | Runtime-sized temporary API: summary `0.0085s`, portfolios `1.79s`, legacy full `2.33s`; DeepSeek P1 follow-up reported no blocker. |
 | 8 | completed | Add a 60s operations response cache and startup prewarm for `details=portfolios` plus lightweight legacy operations, keyed by target login and shared across sample symbols for sample-independent compatibility payloads. | Runtime-sized temporary API first portfolios request `0.0025s`; DeepSeek cache review reported no blocker. |
 | 9 | completed | Keep legacy `/dashboard/operations` read-only by excluding inline simulation workspace; load simulation workspace only through its dedicated details/projection path. | Test asserts legacy response has `simulation_workspace: null`; avoids account-presence writes in legacy GET/prewarm. |
 | 10 | completed | Split `build_operations_detail()` into section-specific builders for `replay`, `manual_queue`, `factor_observation`, `sector_exposure`, `policy_governance`, and `simulation_workspace`, so small bounded detail endpoints do not rebuild portfolios, stock dashboard measurements, data quality, and unrelated sections. | Runtime-sized temporary API: replay `0.787s`, manual_queue `0.088s`, factor `0.034s`, sector `0.055s`, policy `0.024s`; DeepSeek plan and code reviews found no blockers. |
-| 11 | in_progress | Move operations response prewarm out of the blocking ASGI startup path. Default prewarm mode becomes background best-effort; tests can opt into `ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE=sync` to keep deterministic cache assertions. | Backend `/health` becomes available before prewarm completion; publish health check no longer times out. |
+| 11 | completed | Move operations response prewarm out of the blocking ASGI startup path. Default prewarm mode becomes background best-effort; tests can opt into `ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE=sync` to keep deterministic cache assertions. | Backend `/health` became available before prewarm completion; publish health check and release verifier passed. |
 
 ## DeepSeek Plan Review
 
@@ -79,6 +79,7 @@ DeepSeek code review:
 - A follow-up is now required because the first publish of `dbc3dc1` proved the priority user paths are fast, but release verifier still exercises other bounded details sections. Those sections must become true bounded section builders before the release can be considered published.
 - DeepSeek plan review for Step 10 found no blocking issue: response wrappers and data keys remain compatible, release verifier fingerprints ignore `generated_at`, text audit still merges the same bounded data keys, and endpoint URLs do not change. It called out one implementation detail: `manual_queue` can use a simpler fallback symbol when the requested sample is not active.
 - DeepSeek code review for Step 10 found no blocking issue: non-portfolio sections do not call `build_operations_dashboard()`, each section only calls its own domain builder, response keys remain compatible, and there is no eager execution risk. It noted a non-blocking defensive dead-code check in the portfolios branch.
+- DeepSeek code review for Step 11 found no blocking issue: background prewarm avoids blocking ASGI startup, deterministic sync mode remains available for tests, the cache remains guarded by a lock, and the disable flag still works.
 
 ## Implementation Notes
 
@@ -168,3 +169,29 @@ Published-runtime follow-up after `dd1d6b3`:
 - Backend log reached `Started server process` and `Waiting for application startup`; it had not reached `Application startup complete`.
 - Runtime DB checkpoint was not blocked (`PRAGMA wal_checkpoint(PASSIVE)` returned `0|30|30`).
 - Fix: schedule `prewarm_operations_response_cache()` on a daemon thread from lifespan startup, while keeping `ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE=sync` available for deterministic TestClient cache tests.
+
+Final published-runtime verification after `2cd4b24`:
+
+- Publish command: `ASHARE_PUBLISH_MAX_WAIT_SECONDS=180 ASHARE_PUBLISH_REFRESH_MODE=skip scripts/publish-local-runtime.sh`.
+- Release source commit: `2cd4b24213b44d31e5b24a26146961072e661b83`.
+- Release parity manifest: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260604T134157Z-2cd4b24213b4/manifest.json`.
+- Deploy verifier: `19 passed, 0 failed`; `latest-successful` points to commit `2cd4b24213b44d31e5b24a26146961072e661b83`.
+- Canonical `origin/main` matched the release commit before final documentation closeout.
+- Runtime API timings:
+  - `/dashboard/operations/details?section=portfolios&sample_symbol=002475.SZ`: `0.007s`, `476KB`.
+  - `/dashboard/operations/summary?sample_symbol=002475.SZ`: `0.034s`, `43KB`.
+  - `/dashboard/operations?sample_symbol=002475.SZ`: `0.011s`, `556KB`, `simulation_workspace=null`.
+  - `/dashboard/operations/details?section=manual_queue&sample_symbol=002475.SZ`: `1.167s`, `29KB`.
+  - `/dashboard/operations/details?section=factor_observation&sample_symbol=002475.SZ`: `0.868s`, `2KB`.
+  - `/dashboard/operations/details?section=sector_exposure&sample_symbol=002475.SZ`: `0.664s`, `714B`.
+  - `/dashboard/operations/details?section=policy_governance&sample_symbol=002475.SZ`: `0.304s`, `5KB`.
+  - `/dashboard/operations/details?section=simulation_workspace&sample_symbol=002475.SZ`: `0.139s`, `418KB`.
+- One immediate post-publish replay request still spiked to `18.578s`, consistent with startup/background warmup contention. Repeated replay checks then returned `0.287s`, `0.194s`, and `0.119s`; this keeps the user-default and release-verifier paths healthy, with replay cold-start contention kept as an explicit residual observation.
+- Browser verification on `http://127.0.0.1:5173/`:
+  - Bare entry redirected to `?view=shortpick&shortpickTab=paper-tracking&symbol=002028.SZ`.
+  - Reload preserved `试验田 -> 纸面跟踪`.
+  - Explicit `?view=shortpick&shortpickTab=paper-tracking` entry and reload also preserved the route.
+  - Browser console had no captured errors.
+- Final tests:
+  - `PYTHONPATH=src python3 -m pytest tests/test_frontend_projections.py tests/test_frontend_shortpick_static.py tests/test_operations.py tests/test_release_verifier.py` (`30 passed`).
+  - `PYTHONPATH=src python3 -m ruff check src/ashare_evidence/api.py src/ashare_evidence/operations.py tests/test_frontend_projections.py tests/test_frontend_shortpick_static.py tests/test_operations.py`.
