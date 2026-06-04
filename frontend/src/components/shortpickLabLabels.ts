@@ -472,5 +472,5 @@ export function initialShortpickWorkspaceTab(): ShortpickWorkspaceTab {
   const rawTab = new URLSearchParams(window.location.search).get("shortpickTab");
   return rawTab && SHORTPICK_WORKSPACE_TABS.has(rawTab as ShortpickWorkspaceTab)
     ? rawTab as ShortpickWorkspaceTab
-    : "today";
+    : "paper-tracking";
 }

@@ -1333,3 +1333,12 @@ canonical checkout 中的 `data/artifacts` 改动经抽样确认是正常 phase2
 - 后端：`_refresh_runtime_data_output` 在 analysis 路径也同步基准 bar（不再只 ops 刷新）；`validate_recent_shortpick_runs` 改有界重验证循环（`max_iter=10` + 已处理 run 去重 + 「本轮无新 completed 即停」），数据到位的 pending 一次补齐，真缺数据不死循环。live 实测 signal 05-26 冻结 5 日退出由 pending→completed（stock_return 0.0708、excess 0.0646）。
 - 前端：试验田顶部的历史批次/起止日期筛选器移入"最新模拟交易"tab（只驱动 loadLab，作用域与位置一致）；"最新模拟交易"卡冻结策略默认展示，底部新增默认折叠 Collapse 展示**本轮全量候选（按 `latestRun.id` 限定，含全部对照组）**；纸面跟踪 4 张规则卡明细默认折叠（标题可见、一键展开）。
 - DeepSeek 两轮审核：方案首轮采纳 3 条修正（补算循环上限、基准同步层根治、本轮按 run.id），各步实现均审为可合入。
+
+[2026-06-04T11:45:00+08:00] 股票工作台位置状态必须进入 URL，试验田首屏接口必须按 tab 读取：
+股票工作台不再允许只用 React local state 表示主 view / 子 tab / symbol / stock tab。刷新、复制链接、浏览器前进后退都必须恢复用户位置；默认工作入口是 `试验田 -> 纸面跟踪`，不是 `关注池`。
+
+补充说明
+- `ShortpickLabView` 首屏只能加载当前 tab 需要的数据；打开纸面跟踪不得同时请求 run list、validation queue、model feedback、replay runs、replay feedback 或 market study。
+- 首页或其他页展示纸面跟踪徽章只能用 compact summary；完整 `/shortpick-lab/paper-tracking` 账本只服务纸面页本体。
+- `/shortpick-lab/runs` 是导航列表接口，不能嵌 full rounds、sources、consensus、candidates 或 raw answer；详情数据走 `/shortpick-lab/runs/{run_id}` 和候选下钻接口。
+- `operations/summary` projection miss 时允许在请求内做一次确定性 fallback 构建，但必须写回同 key projection；同一 symbol 的下一次刷新必须命中 projection。

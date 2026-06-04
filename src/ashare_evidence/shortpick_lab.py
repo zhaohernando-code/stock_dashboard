@@ -6166,6 +6166,8 @@ def serialize_shortpick_run(
     include_raw: bool,
     include_candidates: bool = True,
     compact_summary: bool = False,
+    include_round_details: bool = True,
+    include_consensus: bool = True,
 ) -> dict[str, Any]:
     rounds = session.scalars(
         select(ShortpickModelRound).where(ShortpickModelRound.run_id == run.id).order_by(ShortpickModelRound.id.asc())
@@ -6186,6 +6188,12 @@ def serialize_shortpick_run(
         **dict(run.summary_payload or {}),
         **operational_summary,
     }
+    rounds_for_response = rounds
+    if not include_round_details:
+        rounds_for_response = [item for item in rounds if item.status == "failed"]
+    model_config = dict(run.model_config or {})
+    if compact_summary:
+        model_config = _compact_run_model_config(model_config)
     return {
         "id": run.id,
         "run_key": run.run_key,
@@ -6198,18 +6206,22 @@ def serialize_shortpick_run(
         "started_at": run.started_at,
         "completed_at": run.completed_at,
         "failed_at": run.failed_at,
-        "model_config": dict(run.model_config or {}),
+        "model_config": model_config,
         "summary": _compact_run_summary(summary) if compact_summary else summary,
         "rounds": [
             serialize_shortpick_round(item, include_raw=include_raw)
-            for item in rounds
+            for item in rounds_for_response
         ],
-        "consensus": _serialize_consensus(
-            session.scalar(
-                select(ShortpickConsensusSnapshot)
-                .where(ShortpickConsensusSnapshot.run_id == run.id)
-                .order_by(ShortpickConsensusSnapshot.id.desc())
+        "consensus": (
+            _serialize_consensus(
+                session.scalar(
+                    select(ShortpickConsensusSnapshot)
+                    .where(ShortpickConsensusSnapshot.run_id == run.id)
+                    .order_by(ShortpickConsensusSnapshot.id.desc())
+                )
             )
+            if include_consensus
+            else None
         ),
         "candidates": [
             serialize_shortpick_candidate(session, item, include_raw=include_raw)
@@ -6219,7 +6231,38 @@ def serialize_shortpick_run(
 
 
 def _compact_run_summary(summary: dict[str, Any]) -> dict[str, Any]:
-    output = dict(summary)
+    keep_keys = {
+        "baseline_candidate_count",
+        "candidate_count",
+        "completed_official_sample_count",
+        "completed_round_count",
+        "completed_validation_count",
+        "diagnostic_candidate_count",
+        "diagnostic_or_pending_sample_count",
+        "failed_candidate_count",
+        "failed_round_count",
+        "failed_rounds",
+        "has_retryable_failed_rounds",
+        "leakage_failed_count",
+        "measured_candidate_count",
+        "measured_official_candidate_count",
+        "model_family",
+        "normal_candidate_count",
+        "official_sample_count",
+        "official_validation_completed_count",
+        "official_validation_completion_rate",
+        "official_validation_total_count",
+        "operational_status",
+        "parse_failed_count",
+        "parsed_candidate_count",
+        "retryable_failed_round_count",
+        "source_packet",
+        "validation_completed_count",
+        "validation_completion_rate",
+        "validation_status_counts",
+        "validation_total_count",
+    }
+    output = {key: value for key, value in summary.items() if key in keep_keys}
     source_packet = output.get("source_packet")
     if isinstance(source_packet, dict):
         packet = dict(source_packet)
@@ -6227,8 +6270,18 @@ def _compact_run_summary(summary: dict[str, Any]) -> dict[str, Any]:
         packet.pop("diagnostic_sources", None)
         packet.pop("rejected_sources", None)
         output["source_packet"] = packet
-    output.pop("replay_feedback", None)
     return output
+
+
+def _compact_run_model_config(model_config: dict[str, Any]) -> dict[str, Any]:
+    keep_keys = {
+        "controlled_search",
+        "model_family",
+        "native_web_search",
+        "rounds",
+        "rounds_per_model",
+    }
+    return {key: value for key, value in model_config.items() if key in keep_keys}
 
 
 def _run_operational_summary(
@@ -6479,6 +6532,8 @@ def list_shortpick_runs(
     include_raw: bool = False,
     include_candidates: bool = True,
     compact_summary: bool = False,
+    include_round_details: bool = True,
+    include_consensus: bool = True,
 ) -> dict[str, Any]:
     normalized_limit = max(1, min(int(limit), 100))
     normalized_offset = max(0, int(offset))
@@ -6508,6 +6563,8 @@ def list_shortpick_runs(
                 include_raw=include_raw,
                 include_candidates=include_candidates,
                 compact_summary=compact_summary,
+                include_round_details=include_round_details,
+                include_consensus=include_consensus,
             )
             for run in runs
         ],

@@ -99,15 +99,29 @@ import { buildCandidateWorkspaceRows, buildInitialSourceInfo, mergeSourceInfo, r
 import { directionColor, formatDate, formatNumber, formatPercent, formatSignedNumber, simulationAdviceActionLabel, simulationAdvicePolicyLabel, statusColor, valueTone } from "./utils/format";
 import { buildPendingDetailMessage, canCompleteManualResearch, canExecuteManualResearch, canFailManualResearch, canRetryManualResearch, candidateValidationSummary, claimGateAlertType, claimGateDescription, claimGateStatusLabel, dataSourceStatusColor, deploymentModeLabel, displayBenchmarkLabel, displayLabelDefinition, displayWindowLabel, eventDirectionLabel, eventDirectionStatus, eventEvidenceText, eventTriggerLabel, fieldMappingLabel, formatMarketFreshness, horizonLabel, manualResearchActionStatusMessage, manualReviewModelLabel, manualReviewStatusLabel, operationsValidationDescription, operationsValidationMessage, parseMultilineItems, portfolioTrackLabel, providerSelectionModeLabel, publicValidationSummary, sanitizeDisplayText, validationStatusLabel, watchlistScopeLabel } from "./utils/labels";
 import { directionLabels, factorLabels, manualResearchVerdictOptions } from "./utils/constants";
+import { readRouteParam, writeWorkbenchRoute, type RouteWriteMode } from "./utils/route";
 const { Paragraph, Text, Title } = Typography;
 const { TextArea } = Input;
 type ViewMode = "candidates" | "stock" | "operations" | "shortpick" | "settings";
+type StockTabKey = "signals" | "evidence" | "followup";
 
 const VIEW_MODES = new Set<ViewMode>(["candidates", "stock", "operations", "shortpick", "settings"]);
+const STOCK_TAB_KEYS = new Set<StockTabKey>(["signals", "evidence", "followup"]);
+const DEFAULT_VIEW: ViewMode = "shortpick";
 
 function initialViewFromUrl(): ViewMode {
-  const rawView = new URLSearchParams(window.location.search).get("view");
-  return rawView && VIEW_MODES.has(rawView as ViewMode) ? (rawView as ViewMode) : "candidates";
+  const rawView = readRouteParam("view");
+  return rawView && VIEW_MODES.has(rawView as ViewMode) ? (rawView as ViewMode) : DEFAULT_VIEW;
+}
+
+function initialStockTabFromUrl(): StockTabKey {
+  const rawTab = readRouteParam("stockTab");
+  return rawTab && STOCK_TAB_KEYS.has(rawTab as StockTabKey) ? (rawTab as StockTabKey) : "signals";
+}
+
+function initialSymbolFromUrl(): string | null {
+  const rawSymbol = readRouteParam("symbol");
+  return rawSymbol ? rawSymbol.trim().toUpperCase() : null;
 }
 type ThemeMode = "light" | "dark";
 type ImprovementSuggestionReviewNotice = {
@@ -200,8 +214,8 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     () => window.localStorage.getItem("ashare-dismissed-scheduled-refresh") ?? "",
   );
   const [glossary, setGlossary] = useState<GlossaryEntryView[]>([]);
-  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
-  const [stockActiveTab, setStockActiveTab] = useState("signals");
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(() => initialSymbolFromUrl());
+  const [stockActiveTab, setStockActiveTab] = useState<StockTabKey>(() => initialStockTabFromUrl());
   const [dashboard, setDashboard] = useState<StockDashboardResponse | null>(null);
   const [operations, setOperations] = useState<OperationsDashboardResponse | null>(null);
   const [simulation, setSimulation] = useState<SimulationWorkspaceResponse | null>(null);
@@ -358,9 +372,20 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     return true;
   });
 
-  function handleViewChange(nextView: ViewMode): void {
+  function routeView(nextView: ViewMode, mode: RouteWriteMode = "push"): void {
+    writeWorkbenchRoute({ view: nextView }, mode);
     setView(nextView);
     setError(null);
+  }
+
+  function handleViewChange(nextView: ViewMode): void {
+    routeView(nextView);
+  }
+
+  function routeStockTab(nextTab: string, mode: RouteWriteMode = "push"): void {
+    const tab = STOCK_TAB_KEYS.has(nextTab as StockTabKey) ? (nextTab as StockTabKey) : "signals";
+    writeWorkbenchRoute({ view: "stock", stockTab: tab }, mode);
+    setStockActiveTab(tab);
   }
 
   async function loadAuthContext(retryWithoutActAs = true): Promise<AuthContextResponse> {
@@ -456,11 +481,15 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       setCandidates(data.candidates.items);
       setGeneratedAt(data.candidates.generated_at);
       setScheduledRefreshStatus(data.scheduled_refresh_status ?? null);
-      setShortpickPaperTrackingLoading(true);
-      void api.getShortpickPaperTracking()
-        .then((result) => setShortpickPaperTracking(result.data as unknown as Record<string, unknown>))
-        .catch(() => setShortpickPaperTracking(null))
-        .finally(() => setShortpickPaperTrackingLoading(false));
+      if (viewRef.current !== "shortpick") {
+        setShortpickPaperTrackingLoading(true);
+        void api.getShortpickPaperTrackingSummary()
+          .then((result) => setShortpickPaperTracking(result.data as unknown as Record<string, unknown>))
+          .catch(() => setShortpickPaperTracking(null))
+          .finally(() => setShortpickPaperTrackingLoading(false));
+      } else {
+        setShortpickPaperTrackingLoading(false);
+      }
       setGlossary(data.glossary);
       setSourceInfo(source);
       const nextSymbol = data.watchlist.items.find((item) => item.symbol === preferredSymbol)?.symbol
@@ -695,6 +724,27 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   }, [view]);
 
   useEffect(() => {
+    writeWorkbenchRoute({
+      view,
+      symbol: selectedSymbol,
+      stockTab: view === "stock" ? stockActiveTab : null,
+    }, "replace");
+  }, [selectedSymbol, stockActiveTab, view]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setView(initialViewFromUrl());
+      const routeSymbol = initialSymbolFromUrl();
+      if (routeSymbol) {
+        setSelectedSymbol(routeSymbol);
+      }
+      setStockActiveTab(initialStockTabFromUrl());
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
     void (async () => {
       try {
         const access = await loadAuthContext();
@@ -715,16 +765,16 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
 
   useEffect(() => {
     if (!canUseOperations && view === "operations") {
-      setView("candidates");
+      routeView(DEFAULT_VIEW, "replace");
     }
     if (!canUseSettings && view === "settings") {
-      setView("candidates");
+      routeView(DEFAULT_VIEW, "replace");
     }
   }, [canUseOperations, canUseSettings, view]);
 
   useEffect(() => {
     if (!canUseManualResearch && stockActiveTab === "followup") {
-      setStockActiveTab("signals");
+      routeStockTab("signals", "replace");
     }
   }, [canUseManualResearch, stockActiveTab]);
 
@@ -952,7 +1002,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       setAddPopoverOpen(false);
       messageApi.success(response.message);
       await reloadEverything(response.item.symbol);
-      setView("candidates");
+      routeView("candidates", "replace");
     } catch (mutationError) {
       const messageText = mutationError instanceof Error ? mutationError.message : "加入自选池失败。";
       setError(messageText);
@@ -1201,22 +1251,25 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     startTransition(() => {
       setSelectedSymbol(symbol);
       if (nextView) {
+        writeWorkbenchRoute({ symbol, view: nextView }, "push");
         setView(nextView);
+      } else {
+        writeWorkbenchRoute({ symbol }, "push");
       }
     });
   }
 
   function handleMobileTabChange(tab: MobileTabKey) {
     if (tab === "home") {
-      setView("candidates");
+      routeView("candidates");
     } else if (tab === "stock") {
-      setView("stock");
+      routeView("stock");
     } else if (tab === "operations") {
-      setView(canUseOperations ? "operations" : "candidates");
+      routeView(canUseOperations ? "operations" : "candidates");
     } else if (tab === "shortpick") {
-      setView("shortpick");
+      routeView("shortpick");
     } else {
-      setView(canUseSettings ? "settings" : "candidates");
+      routeView(canUseSettings ? "settings" : "candidates");
     }
   }
 
@@ -1231,6 +1284,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     if (!canUseManualResearch) {
       return;
     }
+    writeWorkbenchRoute({ view: "stock", stockTab: "followup" }, "push");
     setView("stock");
     setStockActiveTab("followup");
   }
@@ -1994,7 +2048,9 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     simulationAction, setSimulationAction,
     operationsFocusSymbol, setOperationsFocusSymbol,
     loadingDetail, setLoadingDetail,
-    setSelectedSymbol, setStockActiveTab, setView,
+    setSelectedSymbol,
+    setStockActiveTab: (nextTab: string) => routeStockTab(nextTab),
+    setView: (nextView: ViewMode) => routeView(nextView),
     setOperations, setOperationsLoading, setOperationsError,
     manualResearchAction, setManualResearchAction,
     handleRunImprovementSuggestionReview,
@@ -2586,7 +2642,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
                 </Row>
 
                 <Card className="panel-card">
-                  <Tabs activeKey={stockActiveTab} onChange={setStockActiveTab} items={visibleStockTabItems} />
+                  <Tabs activeKey={stockActiveTab} onChange={(key) => routeStockTab(key)} items={visibleStockTabItems} />
                 </Card>
               </div>
             )

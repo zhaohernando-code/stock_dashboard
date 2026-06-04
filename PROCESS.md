@@ -141,3 +141,12 @@
 ## 已归档流水来源
 
 历史详细发布流水、提交、截图、测试输出已经从本文件压缩为以上原则。需要追溯单次事实时查 git 历史、`PROJECT_STATUS.json`、release manifest 或对应 `output/` artifact，不再把这些细节追加回 PROCESS。
+
+[2026-06-04T11:45:00+08:00] 股票工作台刷新位置和试验田首屏接口治理：
+本轮为股票工作台补 URL-backed route 状态，默认进入 `试验田 -> 纸面跟踪`，并把试验田首屏从“加载所有 tab”改为“只加载当前 tab”。纸面跟踪完整账本仍由纸面页读取；首页徽章改用 `/shortpick-lab/paper-tracking/summary`。短投 run 列表只返回列表必要字段和失败轮次提示，完整 rounds/candidates/consensus 走详情接口。
+
+补充说明
+- 根因文档与状态表见 `docs/contracts/STOCK_WORKBENCH_ROUTER_API_GOVERNANCE_PLAN_2026-06-04.md`。
+- 本地 worktree API 实测：`/shortpick-lab/paper-tracking` 从 `3.855s` 降至约 `0.298s`；`/shortpick-lab/runs?limit=100` 从约 `1.9MB/4.338s` 降至 `113KB/0.132s`；并发试验田读路径墙钟约 `0.475s`。
+- `operations/summary` 的 `27s` 症状被定位为 projection key miss：已有 projection 不覆盖当前 active symbol；fallback 构建后现在会写回对应 `operations_summary` projection。`002475.SZ` 首次 miss 约 `1.630s`，第二次同 key projection hit 约 `0.003s`。
+- 本轮已发布并完成 runtime/canonical 验证：`54c9fd7374cd` 已同步到 runtime，release verifier 使用 75s timeout 通过 local/canonical parity，latest-successful 指向 `output/releases/20260604T115622Z-54c9fd7374cd/manifest.json`；本地 `5173` 和 authenticated canonical 浏览器均确认裸入口进入 `试验田 -> 纸面跟踪`，刷新不退回首页。

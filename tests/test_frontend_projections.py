@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import timedelta
 from time import perf_counter
 
+from fastapi.testclient import TestClient
+
+from ashare_evidence.api import create_app
 from ashare_evidence.db import init_database, session_scope, utcnow
 from ashare_evidence.frontend_projections import (
     SHORTPICK_MODEL_FEEDBACK_PROJECTION_KEY,
@@ -97,6 +100,34 @@ def test_operations_summary_projection_materializes_per_symbol_payload() -> None
     assert "data_quality_summary" in payload
     assert payload["portfolios"] == []
     assert payload["recommendation_replay"] == []
+
+
+def test_operations_summary_api_caches_fallback_projection(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'projection-api.db'}"
+    init_database(database_url)
+    with session_scope(database_url) as session:
+        seed_watchlist_fixture(session, symbols=("600519.SH", "300750.SZ"))
+
+    client = TestClient(create_app(database_url, enable_background_ops_tick=False))
+    response = client.get(
+        "/dashboard/operations/summary?sample_symbol=300750.SZ",
+        headers={"X-HZ-User-Login": "root", "X-HZ-User-Role": "root"},
+    )
+
+    assert response.status_code == 200
+    with session_scope(database_url) as session:
+        payload = get_ready_frontend_projection_payload(
+            session,
+            operations_summary_projection_key(target_login="root", sample_symbol="300750.SZ"),
+            target_login="root",
+        )
+        stored = session.query(FrontendProjection).filter_by(
+            projection_key=operations_summary_projection_key(target_login="root", sample_symbol="300750.SZ"),
+            target_login="root",
+        ).one()
+
+    assert payload is not None
+    assert stored.metadata_payload["source"] == "dashboard_operations_summary_fallback"
 
 
 def test_home_shell_projection_materializes_account_shell_payload() -> None:

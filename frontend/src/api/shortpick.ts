@@ -251,3 +251,14 @@ export function getShortpickPaperTracking() {
     source: buildSourceInfo(),
   }))();
 }
+
+export function getShortpickPaperTrackingSummary() {
+  return (async () => ({
+    data: await request<ShortpickPaperTrackingResponse>(
+      "/shortpick-lab/paper-tracking/summary",
+      undefined,
+      operationsDashboardRequestBehavior,
+    ),
+    source: buildSourceInfo(),
+  }))();
+}

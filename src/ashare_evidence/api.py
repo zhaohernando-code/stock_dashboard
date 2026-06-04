@@ -13,8 +13,8 @@ from datetime import date
 from pathlib import Path
 
 from fastapi import Body, Depends, FastAPI, HTTPException, Query
-from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -34,6 +34,7 @@ from ashare_evidence.frontend_projections import (
     home_shell_projection_key,
     operations_summary_projection_key,
     simulation_workspace_summary_projection_key,
+    upsert_frontend_projection,
 )
 from ashare_evidence.improvement_suggestions import (
     accept_suggestion_for_plan,
@@ -1546,6 +1547,8 @@ def create_app(
             include_raw=False,
             include_candidates=False,
             compact_summary=True,
+            include_round_details=False,
+            include_consensus=False,
         )
 
     @app.get("/shortpick-lab/runs/{run_id}", response_model=ShortpickRunView)
@@ -1660,6 +1663,14 @@ def create_app(
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
         return _build_shortpick_paper_tracking_ledger(session)
+
+    @app.get("/shortpick-lab/paper-tracking/summary")
+    def shortpick_paper_tracking_summary(
+        access: StockAccessContext = Depends(require_stock_access),
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        payload = _build_shortpick_paper_tracking_ledger(session)
+        return {key: value for key, value in payload.items() if key != "items"} | {"items": []}
 
     @app.get("/shortpick-lab/replay-runs", response_model=ShortpickRunListResponse)
     def shortpick_replay_run_list(
@@ -1976,14 +1987,27 @@ def create_app(
         )
         if projection is not None:
             return annotate_operations_summary_endpoint_metrics(projection, started_at=started_at)
-        return annotate_operations_summary_endpoint_metrics(
-            build_operations_summary(
-                session,
-                sample_symbol,
-                target_login=access.target_login,
-            ),
-            started_at=started_at,
+        payload = build_operations_summary(
+            session,
+            sample_symbol,
+            target_login=access.target_login,
         )
+        normalized_symbol = sample_symbol.upper()
+        upsert_frontend_projection(
+            session,
+            operations_summary_projection_key(target_login=access.target_login, sample_symbol=normalized_symbol),
+            projection_group="operations",
+            target_login=access.target_login,
+            payload=payload,
+            metadata_payload={
+                "source": "dashboard_operations_summary_fallback",
+                "usage": "GET /dashboard/operations/summary",
+                "sample_symbol": normalized_symbol,
+                "target_login": access.target_login,
+            },
+        )
+        session.commit()
+        return annotate_operations_summary_endpoint_metrics(payload, started_at=started_at)
 
     @app.get("/dashboard/operations/details")
     def dashboard_operations_details(

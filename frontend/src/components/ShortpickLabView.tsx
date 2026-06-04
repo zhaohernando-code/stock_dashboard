@@ -41,6 +41,7 @@ import type {
   ShortpickValidationQueueResponse,
 } from "../types";
 import { formatDate, formatNumber, formatPercent, valueTone } from "../utils/format";
+import { writeWorkbenchRoute } from "../utils/route";
 import {
   BENCHMARK_OPTIONS,
   HORIZON_ORDER,
@@ -559,15 +560,36 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
     }
   }
 
-  useEffect(() => {
-    void loadLab();
-    void loadPaperTracking();
-    void loadValidationQueue(1, DEFAULT_VALIDATION_PAGE_SIZE);
-    void loadFeedback();
-    if (activeWorkspaceTab === "replay") {
+  function loadWorkspaceTab(tab: ShortpickWorkspaceTab): void {
+    if (tab === "today") {
+      void loadLab();
+      void loadPaperTracking();
+      return;
+    }
+    if (tab === "paper-tracking") {
+      void loadPaperTracking();
+      return;
+    }
+    if (tab === "validation") {
+      void loadValidationQueue(1, DEFAULT_VALIDATION_PAGE_SIZE);
+      return;
+    }
+    if (tab === "feedback") {
+      void loadFeedback();
+      return;
+    }
+    if (tab === "replay") {
       void loadReplay(undefined, { includeMarketStudy: true });
     }
+  }
+
+  useEffect(() => {
+    loadWorkspaceTab(activeWorkspaceTab);
   }, []);
+
+  useEffect(() => {
+    writeWorkbenchRoute({ view: "shortpick", shortpickTab: visibleWorkspaceTab }, "replace");
+  }, [visibleWorkspaceTab]);
 
   const benchmarkSwitcher = (
     <Space size={8} className="shortpick-benchmark-switcher">
@@ -817,22 +839,22 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
         {error ? <Alert type="error" showIcon message={error} /> : null}
       </Card>
 
-      {!latestRun && !loading && !replayRuns.length && !paperTracking ? (
+      {!latestRun && !loading && !replayRuns.length && !paperTracking && !paperTrackingLoading ? (
         <Card className="panel-card">
           <Empty description="暂无短投推荐实验批次" />
         </Card>
       ) : null}
 
-      {latestRun || replayRuns.length || paperTracking ? (
+      {latestRun || replayRuns.length || paperTracking || paperTrackingLoading ? (
         <Tabs
           className="shortpick-workspace-tabs"
           activeKey={visibleWorkspaceTab}
           onChange={(key) => {
             if (SHORTPICK_WORKSPACE_TABS.has(key as ShortpickWorkspaceTab)) {
-              setActiveWorkspaceTab(key as ShortpickWorkspaceTab);
-            }
-            if (key === "replay") {
-              void loadReplay(selectedReplayRun?.id, { includeMarketStudy: true });
+              writeWorkbenchRoute({ view: "shortpick", shortpickTab: key }, "push");
+              const nextTab = key as ShortpickWorkspaceTab;
+              setActiveWorkspaceTab(nextTab);
+              loadWorkspaceTab(nextTab);
             }
           }}
           items={[

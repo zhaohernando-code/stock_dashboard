@@ -405,7 +405,13 @@ class ShortpickLabTests(ShortpickLabTestCase):
         member_headers = {"X-HZ-User-Login": "member-a", "X-HZ-User-Role": "member"}
         list_response = client.get("/shortpick-lab/runs", headers=member_headers)
         self.assertEqual(list_response.status_code, 200)
-        first_round = list_response.json()["items"][0]["rounds"][0]
+        list_item = list_response.json()["items"][0]
+        self.assertEqual(list_item["rounds"], [])
+        self.assertEqual(list_item["consensus"], None)
+
+        detail_response = client.get(f"/shortpick-lab/runs/{list_item['id']}", headers=member_headers)
+        self.assertEqual(detail_response.status_code, 200)
+        first_round = detail_response.json()["rounds"][0]
         self.assertIsNone(first_round["raw_answer"])
 
         create_response = client.post(
@@ -607,11 +613,14 @@ class ShortpickLabTests(ShortpickLabTestCase):
                     limit=10,
                     include_candidates=False,
                     compact_summary=True,
+                    include_round_details=False,
+                    include_consensus=False,
                 )
 
         self.assertEqual(payload["total"], 1)
         item = payload["items"][0]
         self.assertEqual(item["candidates"], [])
+        self.assertEqual(item["consensus"], None)
         self.assertEqual(item["summary"]["parsed_candidate_count"], 1)
         self.assertEqual(item["summary"]["normal_candidate_count"], 1)
         self.assertEqual(item["summary"]["validation_total_count"], 1)

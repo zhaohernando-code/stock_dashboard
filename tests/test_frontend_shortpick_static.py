@@ -183,6 +183,35 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("operationsDashboardRequestBehavior", dashboard_api_source)
         self.assertIn("'/stocks/' + encodeURIComponent(symbol) + '/dashboard',", dashboard_api_source)
 
+    def test_workbench_route_defaults_to_shortpick_paper_tracking(self) -> None:
+        frontend_root = Path(__file__).resolve().parents[1] / "frontend" / "src"
+        app_source = (frontend_root / "App.tsx").read_text(encoding="utf-8")
+        shortpick_source = (frontend_root / "components" / "ShortpickLabView.tsx").read_text(encoding="utf-8")
+        labels_source = (frontend_root / "components" / "shortpickLabLabels.ts").read_text(encoding="utf-8")
+        route_source = (frontend_root / "utils" / "route.ts").read_text(encoding="utf-8")
+
+        self.assertIn('const DEFAULT_VIEW: ViewMode = "shortpick";', app_source)
+        self.assertIn('return rawView && VIEW_MODES.has(rawView as ViewMode) ? (rawView as ViewMode) : DEFAULT_VIEW;', app_source)
+        self.assertIn('writeWorkbenchRoute({', app_source)
+        self.assertIn('view,', app_source)
+        self.assertIn('symbol: selectedSymbol,', app_source)
+        self.assertIn('stockTab: view === "stock" ? stockActiveTab : null,', app_source)
+        self.assertIn('window.addEventListener("popstate", handlePopState);', app_source)
+        self.assertIn('writeWorkbenchRoute({ view: "shortpick", shortpickTab: visibleWorkspaceTab }, "replace");', shortpick_source)
+        self.assertIn('writeWorkbenchRoute({ view: "shortpick", shortpickTab: key }, "push");', shortpick_source)
+        self.assertIn('function loadWorkspaceTab(tab: ShortpickWorkspaceTab): void {', shortpick_source)
+        self.assertIn('if (tab === "paper-tracking")', shortpick_source)
+        self.assertIn('void loadPaperTracking();', shortpick_source)
+        self.assertIn('loadWorkspaceTab(activeWorkspaceTab);', shortpick_source)
+        self.assertNotIn('void loadLab();\n    void loadPaperTracking();\n    void loadValidationQueue(1, DEFAULT_VALIDATION_PAGE_SIZE);\n    void loadFeedback();', shortpick_source)
+        self.assertIn('if (viewRef.current !== "shortpick")', app_source)
+        self.assertIn("getShortpickPaperTrackingSummary", app_source)
+        self.assertNotIn("void api.getShortpickPaperTracking()", app_source)
+        self.assertIn("/shortpick-lab/paper-tracking/summary", (frontend_root / "api" / "shortpick.ts").read_text(encoding="utf-8"))
+        self.assertIn(': "paper-tracking";', labels_source)
+        self.assertIn('export function writeWorkbenchRoute(', route_source)
+        self.assertIn('window.history[mode === "push" ? "pushState" : "replaceState"]', route_source)
+
 
 if __name__ == "__main__":
     unittest.main()
