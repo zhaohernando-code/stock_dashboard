@@ -40,7 +40,7 @@ export function paperTrackingGroupColor(value?: string | null): string {
   return "default";
 }
 
-function paperTrackingDisplayRank(item: ShortpickPaperTrackingItem): number {
+export function paperTrackingDisplayRank(item: ShortpickPaperTrackingItem): number {
   if (item.tracking_group === "frozen_strategy") return 0;
   if (item.tracking_group === "frozen_strategy_v2") return 1;
   if (item.tracking_group === "llm_paper_control") return 2;

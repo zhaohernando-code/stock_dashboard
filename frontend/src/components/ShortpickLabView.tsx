@@ -103,6 +103,7 @@ import {
   paperTrackingChoiceLabel,
   paperTrackingChoiceTimingText,
   paperTrackingDisplayExitTracks,
+  paperTrackingDisplayRank,
   paperTrackingEntryDate,
   paperTrackingEntryRuleKey,
   paperTrackingExitDay,
@@ -1371,7 +1372,21 @@ function LatestSimulationTradeCard({
   const choiceLabel = paperTrackingChoiceLabel(latestRun);
   const frozenRows = latestFrozenPaperTrackingChoices(rows);
   const fallbackRows = latestPaperTrackingChoices(rows, latestRun);
+  // Default visible list is the frozen strategies (the formal tracking line).
   const choiceRows = frozenRows.length ? frozenRows : fallbackRows;
+  // "This round" full candidate set (all groups, incl. LLM/market/random
+  // controls): scope by latestRun.id so candidates from other runs that share
+  // a signal date are not mixed in. Fall back to the latest-signal-date set
+  // only when there is no latestRun.id.
+  const latestRunId = Number(latestRun?.id ?? 0);
+  const fullRoundRows = (latestRunId
+    ? rows.filter((item) => Number(item.run_id) === latestRunId)
+    : fallbackRows
+  ).slice().sort((left, right) => (
+    paperTrackingDisplayRank(left) - paperTrackingDisplayRank(right)
+    || Number(left.source_rank ?? 99) - Number(right.source_rank ?? 99)
+    || left.name.localeCompare(right.name, "zh-Hans-CN")
+  ));
   const choiceSignalDate = choiceRows[0] ? paperTrackingSignalDate(choiceRows[0]) : latestPaperTrackingSignalDate(rows, latestRun);
   const choiceTimingText = paperTrackingChoiceTimingText(choiceLabel, choiceRows, latestRun);
   const frozenMetricItems = [
@@ -1451,6 +1466,40 @@ function LatestSimulationTradeCard({
       ) : (
         <Empty description={loading ? "股票选择加载中" : "暂无可展示的纸面选择。"} image={Empty.PRESENTED_IMAGE_SIMPLE} />
       )}
+      {fullRoundRows.length ? (
+        <Collapse
+          className="shortpick-choice-fullround"
+          ghost
+          defaultActiveKey={[]}
+          items={[
+            {
+              key: "full-round",
+              label: `本轮全部候选（${fullRoundRows.length} 条，含对照组）`,
+              children: (
+                <List
+                  className="shortpick-choice-list"
+                  dataSource={fullRoundRows}
+                  renderItem={(item, index) => (
+                    <List.Item>
+                      <div className="shortpick-choice-item">
+                        <div className="shortpick-choice-rank">{index + 1}</div>
+                        <div className="shortpick-choice-copy">
+                          <Space wrap size={6}>
+                            <Text strong>{item.name} · {item.symbol}</Text>
+                            <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
+                          </Space>
+                          <Text type="secondary">{item.selection_label || "纸面对照"} · {paperTrackingExpectedEntryText(item)}</Text>
+                          <Text type="secondary">{item.entry_rule || "次一交易日收盘买入"}</Text>
+                        </div>
+                      </div>
+                    </List.Item>
+                  )}
+                />
+              ),
+            },
+          ]}
+        />
+      ) : null}
     </Card>
   );
 }
