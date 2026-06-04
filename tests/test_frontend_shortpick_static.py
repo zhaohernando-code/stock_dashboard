@@ -212,6 +212,17 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn('export function writeWorkbenchRoute(', route_source)
         self.assertIn('window.history[mode === "push" ? "pushState" : "replaceState"]', route_source)
 
+    def test_operations_hot_paths_use_summary_and_details_not_full_dashboard(self) -> None:
+        frontend_root = Path(__file__).resolve().parents[1] / "frontend" / "src"
+        app_source = (frontend_root / "App.tsx").read_text(encoding="utf-8")
+        dashboard_api_source = (frontend_root / "api" / "dashboard.ts").read_text(encoding="utf-8")
+
+        self.assertIn("const operationsResult = await api.getOperationsSummary(symbol);", app_source)
+        self.assertIn("const operationsResult = await api.getOperationsSummary(selectedSymbol);", app_source)
+        self.assertIn('void loadOperationsDetailSections(["simulation_workspace", "portfolios"], selectedSymbol);', app_source)
+        self.assertNotIn("api.getOperationsDashboard(", app_source)
+        self.assertIn("export function getOperationsDashboard(sampleSymbol: string)", dashboard_api_source)
+
 
 if __name__ == "__main__":
     unittest.main()

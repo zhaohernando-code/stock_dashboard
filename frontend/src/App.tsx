@@ -852,9 +852,12 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       setOperationsError(null);
       if (selectedSymbol && canUseOperations) {
         try {
-          const operationsResult = await api.getOperationsDashboard(selectedSymbol);
+          const operationsResult = await api.getOperationsSummary(selectedSymbol);
           setOperations(operationsResult.data);
           setSourceInfo((current) => mergeSourceInfo(current, operationsResult.source));
+          setOperationsDetailSectionsLoaded([]);
+          setLoadingSections(new Set());
+          void loadOperationsDetailSections(["simulation_workspace", "portfolios"], selectedSymbol);
         } catch (operationsLoadError) {
           setOperationsError(
             operationsLoadError instanceof Error ? operationsLoadError.message : "刷新运营复盘概览失败。",

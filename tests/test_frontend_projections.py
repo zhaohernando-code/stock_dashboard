@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from time import perf_counter
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -128,6 +129,23 @@ def test_operations_summary_api_caches_fallback_projection(tmp_path) -> None:
 
     assert payload is not None
     assert stored.metadata_payload["source"] == "dashboard_operations_summary_fallback"
+
+
+def test_operations_legacy_get_does_not_run_operations_tick(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'operations-legacy.db'}"
+    init_database(database_url)
+    with session_scope(database_url) as session:
+        seed_watchlist_fixture(session, symbols=("600519.SH", "300750.SZ"))
+
+    client = TestClient(create_app(database_url, enable_background_ops_tick=False))
+    with patch("ashare_evidence.api.run_operations_tick", side_effect=AssertionError("GET must stay read-only")):
+        response = client.get(
+            "/dashboard/operations?sample_symbol=300750.SZ",
+            headers={"X-HZ-User-Login": "root", "X-HZ-User-Role": "root"},
+        )
+
+    assert response.status_code == 200
+    assert "portfolios" in response.json()
 
 
 def test_home_shell_projection_materializes_account_shell_payload() -> None:

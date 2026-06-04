@@ -150,3 +150,13 @@
 - 本地 worktree API 实测：`/shortpick-lab/paper-tracking` 从 `3.855s` 降至约 `0.298s`；`/shortpick-lab/runs?limit=100` 从约 `1.9MB/4.338s` 降至 `113KB/0.132s`；并发试验田读路径墙钟约 `0.475s`。
 - `operations/summary` 的 `27s` 症状被定位为 projection key miss：已有 projection 不覆盖当前 active symbol；fallback 构建后现在会写回对应 `operations_summary` projection。`002475.SZ` 首次 miss 约 `1.630s`，第二次同 key projection hit 约 `0.003s`。
 - 本轮已发布并完成 runtime/canonical 验证：`54c9fd7374cd` 已同步到 runtime，release verifier 使用 75s timeout 通过 local/canonical parity，latest-successful 指向 `output/releases/20260604T115622Z-54c9fd7374cd/manifest.json`；本地 `5173` 和 authenticated canonical 浏览器均确认裸入口进入 `试验田 -> 纸面跟踪`，刷新不退回首页。
+
+[2026-06-04T20:31:48+08:00] 运营复盘全量端点不能作为用户或发布验证热路径：
+本轮专项治理 `GET /dashboard/operations` 的 `82.21s / 4.7MB` 超时问题。根因不是单一 SQL 慢，而是读请求混合维护 tick、完整 dashboard 聚合、深层响应校验/序列化和每组合 1250 点 `nav_history` 的大 payload。方案和代码均已由 DeepSeek 复核，必须修复项已处理。
+
+补充说明
+- 方案与状态文档见 `docs/contracts/OPERATIONS_DASHBOARD_PERFORMANCE_GOVERNANCE_PLAN_2026-06-04.md`。
+- `/dashboard/operations` 兼容端点改为只读，不再在 GET 中执行 `run_operations_tick(session)`，并关闭全量 response model 校验。
+- operations portfolio 响应对 `nav_history` 固定限量 90 点，同时保留首尾、净值/基准峰谷、最大回撤和最大暴露，再等距补点，避免趋势图丢关键锚点。
+- release verifier 不再请求全量 `/dashboard/operations`，改为 summary + all bounded operation details，并把所有 section 合并后做用户可见文本审计。
+- worktree HTTP 实测：summary `0.009s/41KB`，portfolios detail `1.44-1.61s/449KB`，legacy `/dashboard/operations` `1.96-2.17s/946KB`。

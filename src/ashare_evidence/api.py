@@ -1959,13 +1959,12 @@ def create_app(
     ) -> dict[str, object]:
         return get_scheduled_refresh_status()
 
-    @app.get("/dashboard/operations", response_model=OperationsDashboardResponse)
+    @app.get("/dashboard/operations", response_model=None)
     def dashboard_operations(
         access: StockAccessContext = Depends(require_stock_access),
         sample_symbol: str = Query(default="600519.SH"),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        run_operations_tick(session)
         return build_operations_dashboard(
             session,
             sample_symbol,

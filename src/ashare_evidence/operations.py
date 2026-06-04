@@ -112,6 +112,7 @@ REFRESH_SCHEDULE = [
         "trigger": "工作日 21:15 补全龙虎榜、大宗交易、质押等夜间数据，并做日终归档。",
     },
 ]
+OPERATIONS_NAV_HISTORY_POINT_LIMIT = 90
 
 @dataclass
 class PositionState:
@@ -1273,6 +1274,54 @@ def _summary_payload_from_dashboard(payload: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
+def _sample_nav_history(points: list[dict[str, Any]], *, limit: int = OPERATIONS_NAV_HISTORY_POINT_LIMIT) -> list[dict[str, Any]]:
+    if len(points) <= limit:
+        return list(points)
+    if limit <= 0:
+        return []
+    if limit == 1:
+        return [points[-1]]
+
+    def numeric_value(index: int, key: str, *, default: float) -> float:
+        value = points[index].get(key)
+        return float(value) if isinstance(value, (int, float)) else default
+
+    last_index = len(points) - 1
+    priority_indexes: list[int] = [0, last_index]
+    extrema_specs = [
+        ("nav", min, float("inf")),
+        ("nav", max, float("-inf")),
+        ("benchmark_nav", min, float("inf")),
+        ("benchmark_nav", max, float("-inf")),
+        ("drawdown", min, float("inf")),
+        ("exposure", max, float("-inf")),
+    ]
+    for key, picker, default in extrema_specs:
+        candidate = picker(range(len(points)), key=lambda index: numeric_value(index, key, default=default))
+        if candidate not in priority_indexes:
+            priority_indexes.append(candidate)
+        if len(priority_indexes) >= limit:
+            return [points[index] for index in sorted(priority_indexes[:limit])]
+
+    sampled_indexes = set(priority_indexes)
+    remaining_budget = limit - len(sampled_indexes)
+    for index in range(remaining_budget):
+        sampled_indexes.add(round(index * last_index / max(remaining_budget - 1, 1)))
+    return [points[index] for index in sorted(sampled_indexes)]
+
+
+def _compact_operations_portfolio_payload(portfolio: dict[str, Any]) -> dict[str, Any]:
+    compact = dict(portfolio)
+    nav_history = compact.get("nav_history")
+    if isinstance(nav_history, list):
+        compact["nav_history"] = _sample_nav_history(nav_history)
+    return compact
+
+
+def _compact_operations_portfolios(portfolios: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [_compact_operations_portfolio_payload(portfolio) for portfolio in portfolios]
+
+
 def annotate_operations_summary_endpoint_metrics(
     payload: dict[str, Any],
     *,
@@ -1455,7 +1504,7 @@ def build_operations_detail(
         target_login=target_login,
     )
     section_map = {
-        "portfolios": {"portfolios": payload.get("portfolios", [])},
+        "portfolios": {"portfolios": _compact_operations_portfolios(payload.get("portfolios", []))},
         "replay": {"recommendation_replay": payload.get("recommendation_replay", [])},
         "factor_observation": {"factor_observation_summary": payload.get("factor_observation_summary", {})},
         "sector_exposure": {"sector_exposure": payload.get("sector_exposure", {})},
@@ -2015,13 +2064,14 @@ def build_operations_dashboard(
         replay_items=replay_items,
         active_symbols=active_symbols,
     )
+    response_portfolio_payloads = _compact_operations_portfolios(portfolio_payloads)
     payload_for_measurement = {
         "overview": overview,
         "market_data_timeframe": market_data_timeframe,
         "last_market_data_at": timeline_points[-1] if timeline_points else None,
         "data_latency_seconds": intraday_status["data_latency_seconds"],
         "intraday_source_status": intraday_status,
-        "portfolios": portfolio_payloads,
+        "portfolios": response_portfolio_payloads,
         "recommendation_replay": replay_items,
         "access_control": access_control,
         "refresh_policy": refresh_policy,
@@ -2069,7 +2119,7 @@ def build_operations_dashboard(
         "last_market_data_at": timeline_points[-1] if timeline_points else None,
         "data_latency_seconds": intraday_status["data_latency_seconds"],
         "intraday_source_status": intraday_status,
-        "portfolios": portfolio_payloads,
+        "portfolios": response_portfolio_payloads,
         "recommendation_replay": replay_items,
         "access_control": access_control,
         "refresh_policy": refresh_policy,

@@ -4,12 +4,14 @@ import unittest
 from pathlib import Path
 
 from ashare_evidence.release_verifier import (
+    API_ENDPOINTS,
     BANNED_USER_VISIBLE_TERMS,
     REQUIRED_TRACK_TERMS,
     audit_user_visible_operations_text,
     build_release_manifest,
     extract_asset_references,
     fingerprint_payload,
+    merge_operations_audit_payload,
     normalize_payload_for_fingerprint,
 )
 
@@ -206,6 +208,42 @@ class ReleaseVerifierTests(unittest.TestCase):
         self.assertIn("Phase 5 baseline", bad_audit["banned_hits"])
         self.assertIn("manifest", BANNED_USER_VISIBLE_TERMS)
 
+    def test_release_verifier_uses_bounded_operations_endpoints(self) -> None:
+        self.assertNotIn("/dashboard/operations", API_ENDPOINTS.values())
+        self.assertIn("/dashboard/operations/summary", API_ENDPOINTS.values())
+        self.assertIn("/dashboard/operations/details?section=portfolios", API_ENDPOINTS.values())
+        self.assertIn("/dashboard/operations/details?section=replay", API_ENDPOINTS.values())
+        self.assertIn("/dashboard/operations/details?section=manual_queue", API_ENDPOINTS.values())
+        self.assertIn("/dashboard/operations/details?section=factor_observation", API_ENDPOINTS.values())
+        self.assertIn("/dashboard/operations/details?section=sector_exposure", API_ENDPOINTS.values())
+        self.assertIn("/dashboard/operations/details?section=policy_governance", API_ENDPOINTS.values())
+        self.assertIn("/dashboard/operations/details?section=simulation_workspace", API_ENDPOINTS.values())
+
+    def test_operations_text_audit_payload_merge_preserves_required_and_banned_terms(self) -> None:
+        summary = {
+            "overview": {
+                "run_health": {"note": "运营复盘概要。"},
+                "launch_readiness": {"note": "当前只读概要。"},
+            },
+            "portfolios": [],
+        }
+        portfolios = {
+            "section": "portfolios",
+            "generated_at": "2026-06-04T00:00:00+00:00",
+            "portfolios": [
+                {"mode_label": "用户轨道", "strategy_summary": "人工确认后进入模拟复盘。"},
+                {"mode_label": "模型轨道", "strategy_summary": "manifest 不能出现在用户可见文本。"},
+            ],
+        }
+
+        merged = merge_operations_audit_payload(None, summary)
+        merged = merge_operations_audit_payload(merged, portfolios)
+        audit = audit_user_visible_operations_text(merged)
+
+        self.assertFalse(audit["passed"])
+        self.assertEqual(audit["missing_required_terms"], [])
+        self.assertIn("manifest", audit["banned_hits"])
+
     def test_build_release_manifest_records_previous_successful_manifest(self) -> None:
         manifest = build_release_manifest(
             release_id="20260426T123000Z-abcdef123456",
@@ -222,7 +260,7 @@ class ReleaseVerifierTests(unittest.TestCase):
                 "commit_sha": "oldercommit",
             },
             asset_sets={"all_match": True},
-            api_fingerprints={"/dashboard/operations": {"match": True}},
+            api_fingerprints={"/dashboard/operations/summary": {"match": True}},
             operations_text_audit={"match": True},
             artifact_paths={"local_dashboard_operations": "/tmp/local-dashboard-operations.json"},
         )

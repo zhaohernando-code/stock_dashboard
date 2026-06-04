@@ -50,9 +50,11 @@ TEXT_LIKE_KEYS = {
     "label",
     "latest_reason",
     "message",
+    "mode_label",
     "note",
     "status_label",
     "step_trigger_label",
+    "strategy_summary",
     "summary",
     "title",
 }
@@ -108,7 +110,14 @@ NOISY_LAUNCH_GATE_CURRENT_VALUE_LABELS = {
     "刷新与性能预算",
 }
 API_ENDPOINTS = {
-    "dashboard-operations": "/dashboard/operations",
+    "dashboard-operations-summary": "/dashboard/operations/summary",
+    "dashboard-operations-portfolios": "/dashboard/operations/details?section=portfolios",
+    "dashboard-operations-replay": "/dashboard/operations/details?section=replay",
+    "dashboard-operations-manual-queue": "/dashboard/operations/details?section=manual_queue",
+    "dashboard-operations-factor-observation": "/dashboard/operations/details?section=factor_observation",
+    "dashboard-operations-sector-exposure": "/dashboard/operations/details?section=sector_exposure",
+    "dashboard-operations-policy-governance": "/dashboard/operations/details?section=policy_governance",
+    "dashboard-operations-simulation-workspace": "/dashboard/operations/details?section=simulation_workspace",
     "settings-runtime": "/settings/runtime",
     "dashboard-candidates": "/dashboard/candidates",
 }
@@ -384,6 +393,20 @@ def audit_user_visible_operations_text(
     }
 
 
+def merge_operations_audit_payload(
+    existing: dict[str, Any] | None,
+    addition: dict[str, Any],
+) -> dict[str, Any]:
+    if existing is None:
+        existing = {}
+    merged = dict(existing)
+    for key, value in addition.items():
+        if key in {"section", "generated_at"}:
+            continue
+        merged[key] = value
+    return merged
+
+
 def build_release_manifest(
     *,
     release_id: str,
@@ -632,9 +655,9 @@ def verify_release_parity(args: argparse.Namespace) -> Path:
         }
         if local_fingerprint != canonical_fingerprint:
             raise ReleaseVerificationError(f"API fingerprint mismatch for {endpoint}")
-        if slug == "dashboard-operations":
-            local_operations_payload = local_payload
-            canonical_operations_payload = canonical_payload
+        if slug.startswith("dashboard-operations-"):
+            local_operations_payload = merge_operations_audit_payload(local_operations_payload, local_payload)
+            canonical_operations_payload = merge_operations_audit_payload(canonical_operations_payload, canonical_payload)
 
     if local_operations_payload is None or canonical_operations_payload is None:
         raise ReleaseVerificationError("Operations payload was not captured during release verification")

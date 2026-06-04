@@ -1342,3 +1342,10 @@ canonical checkout 中的 `data/artifacts` 改动经抽样确认是正常 phase2
 - 首页或其他页展示纸面跟踪徽章只能用 compact summary；完整 `/shortpick-lab/paper-tracking` 账本只服务纸面页本体。
 - `/shortpick-lab/runs` 是导航列表接口，不能嵌 full rounds、sources、consensus、candidates 或 raw answer；详情数据走 `/shortpick-lab/runs/{run_id}` 和候选下钻接口。
 - `operations/summary` projection miss 时允许在请求内做一次确定性 fallback 构建，但必须写回同 key projection；同一 symbol 的下一次刷新必须命中 projection。
+
+## 运营复盘性能治理
+
+- **全量 `/dashboard/operations` 不得作为热路径或发布验证指纹端点**：发布验证必须使用 `/dashboard/operations/summary` 加 bounded `/dashboard/operations/details?...` sections，并把这些 payload 合并后做用户可见文本审计。
+- **GET `/dashboard/operations` 必须只读**：不得在用户读请求里执行 `run_operations_tick(session)` 或其他维护写任务；tick 留给后台循环或显式维护命令。
+- **组合净值曲线必须限量传输**：operations portfolio 响应的 `nav_history` 固定上限 90 点，采样必须保留首尾、净值/基准峰谷、最大回撤和最大暴露，再等距补齐；不要把每组合 1000+ 点全历史塞进 tab 请求。
+- **模拟操作后的运营刷新走 summary + details**：前端成功执行 simulation action 后只刷新 `getOperationsSummary`，再按需补拉 `simulation_workspace` 和 `portfolios` 明细，不回退到 full dashboard API。
