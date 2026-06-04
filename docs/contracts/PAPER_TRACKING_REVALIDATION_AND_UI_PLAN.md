@@ -11,7 +11,7 @@ worktree：`worker-workspaces/stock_dashboard/20260604-fix-paper-tracking-ui-and
 | P1 验证补跑（含无数据自动补跑） | ✅ 已完成并合入 main | commit c68ea66；validate_recent 有界重验证循环(max_iter=10+去重+无新completed退出) + 日刷 analysis-only 也同步基准 bar；3 新测试通过；646 fast pytest + policy-audit pass；已发布 runtime |
 | P2 顶部筛选器移入对应 tab | ✅ 已完成并合入 main | run-select+起止日期从全局头部移入"最新模拟交易"tab(shortpickRunFilterBar)；tsc+vite build 通过；DeepSeek 可合入 |
 | P3 最新模拟交易：冻结默认展示 + 本轮全量默认折叠 | ✅ 已完成并合入 main | 冻结指标+冻结选股默认展示；底部加默认折叠 Collapse "本轮全部候选(N条,含对照组)"，按 latestRun.id 限定全分组；tsc+vite+647 pytest+static test 通过；DeepSeek 可合入 |
-| P3b 规则模块内容默认折叠（新增需求） | ⬜ 未开始 | 前端 |
+| P3b 规则模块内容默认折叠（新增需求） | ✅ 已完成并合入 main | 4 张规则卡(冻结/v2/LLM对照/市场因子对照)内容包入默认折叠 Collapse(ghost,defaultActiveKey=[])，标题可见、一键展开；tsc+vite+static test 通过；DeepSeek 可合入 |
 | 归档 | ⬜ 未开始 | 全部完成后 docs/contracts→docs/archive |
 
 状态图例：⬜ 未开始 / ⏳ 进行中 / ✅ 已完成并合入 main。

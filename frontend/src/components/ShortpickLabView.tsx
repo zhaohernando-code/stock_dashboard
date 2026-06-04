@@ -1149,78 +1149,106 @@ function PaperTrackingTab({
         </Row>
       </Card>
 
-      <Card className="panel-card" title="冻结规则">
-        <Descriptions size="small" column={{ xs: 1, md: 2 }}>
-          <Descriptions.Item label="策略名称" span={2}>{String(contract.label ?? "冻结纸面策略：低换手上升趋势三轨监测")}</Descriptions.Item>
-          <Descriptions.Item label="版本定位">v1 收盘买入主线</Descriptions.Item>
-          <Descriptions.Item label="运行方式">{String(contract.mode ?? "每日滚动 5x1万；持有天数按交易日计算")}</Descriptions.Item>
-          <Descriptions.Item label="候选池">{String(contract.pool_rule ?? "先扩大动量成交量候选池")}</Descriptions.Item>
-          <Descriptions.Item label="选择规则">{String(contract.selection_rule ?? "当全市场10日上涨占比不低于45%时，选择20日趋势向上、成交额较高且换手率相对不拥挤的第1名")}</Descriptions.Item>
-          <Descriptions.Item label="监测规则">{String(contract.risk_rule ?? "机械5日、机械10日、止盈止损三轨监测")}</Descriptions.Item>
-          <Descriptions.Item label="边界说明" span={2}>{String(summary.scope_note ?? contract.scope_note ?? "LLM自由选股保留为对照组。")}</Descriptions.Item>
-        </Descriptions>
-        {monitoringTracks.length ? (
-          <List
-            className="shortpick-track-list"
-            size="small"
-            dataSource={monitoringTracks}
-            renderItem={(track) => (
-              <List.Item>
-                <Space direction="vertical" size={0}>
-                  <Text strong>{String(track.label ?? track.key ?? "退出轨道")}</Text>
-                  <Text type="secondary">{String(track.description ?? "")}</Text>
-                </Space>
-              </List.Item>
-            )}
-          />
-        ) : null}
+      <Card className="panel-card shortpick-rule-card" title="冻结规则">
+        <Collapse className="shortpick-rule-collapse" ghost defaultActiveKey={[]} items={[{
+          key: "frozen-rule",
+          label: String(contract.label ?? "冻结纸面策略：低换手上升趋势三轨监测"),
+          children: (
+            <>
+              <Descriptions size="small" column={{ xs: 1, md: 2 }}>
+                <Descriptions.Item label="策略名称" span={2}>{String(contract.label ?? "冻结纸面策略：低换手上升趋势三轨监测")}</Descriptions.Item>
+                <Descriptions.Item label="版本定位">v1 收盘买入主线</Descriptions.Item>
+                <Descriptions.Item label="运行方式">{String(contract.mode ?? "每日滚动 5x1万；持有天数按交易日计算")}</Descriptions.Item>
+                <Descriptions.Item label="候选池">{String(contract.pool_rule ?? "先扩大动量成交量候选池")}</Descriptions.Item>
+                <Descriptions.Item label="选择规则">{String(contract.selection_rule ?? "当全市场10日上涨占比不低于45%时，选择20日趋势向上、成交额较高且换手率相对不拥挤的第1名")}</Descriptions.Item>
+                <Descriptions.Item label="监测规则">{String(contract.risk_rule ?? "机械5日、机械10日、止盈止损三轨监测")}</Descriptions.Item>
+                <Descriptions.Item label="边界说明" span={2}>{String(summary.scope_note ?? contract.scope_note ?? "LLM自由选股保留为对照组。")}</Descriptions.Item>
+              </Descriptions>
+              {monitoringTracks.length ? (
+                <List
+                  className="shortpick-track-list"
+                  size="small"
+                  dataSource={monitoringTracks}
+                  renderItem={(track) => (
+                    <List.Item>
+                      <Space direction="vertical" size={0}>
+                        <Text strong>{String(track.label ?? track.key ?? "退出轨道")}</Text>
+                        <Text type="secondary">{String(track.description ?? "")}</Text>
+                      </Space>
+                    </List.Item>
+                  )}
+                />
+              ) : null}
+            </>
+          ),
+        }]} />
       </Card>
 
-      <Card className="panel-card" title="冻结候选 v2 规则">
-        <Descriptions size="small" column={{ xs: 1, md: 2 }}>
-          <Descriptions.Item label="策略名称" span={2}>{String(frozenV2Control.label ?? "冻结候选 v2：次日开盘买入")}</Descriptions.Item>
-          <Descriptions.Item label="版本定位">v2 开盘买入候选线</Descriptions.Item>
-          <Descriptions.Item label="运行方式">沿用 v1 选股，入场改为次一交易日开盘价</Descriptions.Item>
-          <Descriptions.Item label="选择规则" span={2}>{String(frozenV2Control.selection_rule ?? "沿用冻结 v1 的低换手上升趋势第1名，只改变入场价源。")}</Descriptions.Item>
-          <Descriptions.Item label="可执行性" span={2}>{String(frozenV2Control.entry_rule ?? "次一交易日开盘买入；开盘直接接近涨停时标记为不可假设成交。")}</Descriptions.Item>
-          <Descriptions.Item label="监测规则" span={2}>与 v1 使用同一组机械5日、机械10日、止盈止损退出轨道。</Descriptions.Item>
-        </Descriptions>
+      <Card className="panel-card shortpick-rule-card" title="冻结候选 v2 规则">
+        <Collapse className="shortpick-rule-collapse" ghost defaultActiveKey={[]} items={[{
+          key: "frozen-v2-rule",
+          label: String(frozenV2Control.label ?? "冻结候选 v2：次日开盘买入"),
+          children: (
+            <Descriptions size="small" column={{ xs: 1, md: 2 }}>
+              <Descriptions.Item label="策略名称" span={2}>{String(frozenV2Control.label ?? "冻结候选 v2：次日开盘买入")}</Descriptions.Item>
+              <Descriptions.Item label="版本定位">v2 开盘买入候选线</Descriptions.Item>
+              <Descriptions.Item label="运行方式">沿用 v1 选股，入场改为次一交易日开盘价</Descriptions.Item>
+              <Descriptions.Item label="选择规则" span={2}>{String(frozenV2Control.selection_rule ?? "沿用冻结 v1 的低换手上升趋势第1名，只改变入场价源。")}</Descriptions.Item>
+              <Descriptions.Item label="可执行性" span={2}>{String(frozenV2Control.entry_rule ?? "次一交易日开盘买入；开盘直接接近涨停时标记为不可假设成交。")}</Descriptions.Item>
+              <Descriptions.Item label="监测规则" span={2}>与 v1 使用同一组机械5日、机械10日、止盈止损退出轨道。</Descriptions.Item>
+            </Descriptions>
+          ),
+        }]} />
       </Card>
 
-      <Card className="panel-card" title="LLM纸面对照规则">
-        <Descriptions size="small" column={{ xs: 1, md: 2 }}>
-          <Descriptions.Item label="对照名称" span={2}>{String(llmControlContract.label ?? "LLM纸面对照：每日固定规则选1只")}</Descriptions.Item>
-          <Descriptions.Item label="运行方式">{String(llmControlContract.mode ?? "从当日LLM自由推荐池中提前选1只")}</Descriptions.Item>
-          <Descriptions.Item label="选择规则" span={2}>{String(llmControlContract.selection_rule ?? "跨模型同票优先，再按来源质量、置信度和稳定排序。")}</Descriptions.Item>
-          <Descriptions.Item label="监测规则" span={2}>{String(llmControlContract.monitoring_rule ?? "和冻结策略使用同一入场口径与三条退出轨道。")}</Descriptions.Item>
-          <Descriptions.Item label="边界说明" span={2}>{String(summary.llm_control_scope_note ?? llmControlContract.scope_note ?? "全量LLM推荐池继续保留为研究样本。")}</Descriptions.Item>
-          <Descriptions.Item label="最近批次">{String(latestRun?.run_date ?? "--")}</Descriptions.Item>
-          <Descriptions.Item label="批次状态">{latestRun?.has_frozen_overlay ? "已包含冻结覆盖层" : "等待冻结后批次"}</Descriptions.Item>
-        </Descriptions>
+      <Card className="panel-card shortpick-rule-card" title="LLM纸面对照规则">
+        <Collapse className="shortpick-rule-collapse" ghost defaultActiveKey={[]} items={[{
+          key: "llm-control-rule",
+          label: String(llmControlContract.label ?? "LLM纸面对照：每日固定规则选1只"),
+          children: (
+            <Descriptions size="small" column={{ xs: 1, md: 2 }}>
+              <Descriptions.Item label="对照名称" span={2}>{String(llmControlContract.label ?? "LLM纸面对照：每日固定规则选1只")}</Descriptions.Item>
+              <Descriptions.Item label="运行方式">{String(llmControlContract.mode ?? "从当日LLM自由推荐池中提前选1只")}</Descriptions.Item>
+              <Descriptions.Item label="选择规则" span={2}>{String(llmControlContract.selection_rule ?? "跨模型同票优先，再按来源质量、置信度和稳定排序。")}</Descriptions.Item>
+              <Descriptions.Item label="监测规则" span={2}>{String(llmControlContract.monitoring_rule ?? "和冻结策略使用同一入场口径与三条退出轨道。")}</Descriptions.Item>
+              <Descriptions.Item label="边界说明" span={2}>{String(summary.llm_control_scope_note ?? llmControlContract.scope_note ?? "全量LLM推荐池继续保留为研究样本。")}</Descriptions.Item>
+              <Descriptions.Item label="最近批次">{String(latestRun?.run_date ?? "--")}</Descriptions.Item>
+              <Descriptions.Item label="批次状态">{latestRun?.has_frozen_overlay ? "已包含冻结覆盖层" : "等待冻结后批次"}</Descriptions.Item>
+            </Descriptions>
+          ),
+        }]} />
       </Card>
 
-      <Card className="panel-card" title="市场因子对照规则">
-        <Descriptions size="small" column={{ xs: 1, md: 2 }}>
-          <Descriptions.Item label="对照名称" span={2}>{String(marketControlContract.label ?? "市场因子纸面对照：同池简单选法")}</Descriptions.Item>
-          <Descriptions.Item label="运行方式" span={2}>{String(marketControlContract.mode ?? "和冻结策略使用同一个动量成交量Top40候选池，每个规则每天最多提前固定1只。")}</Descriptions.Item>
-          <Descriptions.Item label="监测规则" span={2}>{String(marketControlContract.monitoring_rule ?? "和冻结策略使用同一入场口径与三条退出轨道。")}</Descriptions.Item>
-          <Descriptions.Item label="边界说明" span={2}>{String(summary.market_control_scope_note ?? marketControlContract.scope_note ?? "单票分析暂不升入冻结真实跟踪。")}</Descriptions.Item>
-        </Descriptions>
-        {marketControlRows.length ? (
-          <List
-            className="shortpick-track-list"
-            size="small"
-            dataSource={marketControlRows}
-            renderItem={(control) => (
-              <List.Item>
-                <Space direction="vertical" size={0}>
-                  <Text strong>{String(control.label ?? "市场对照")}</Text>
-                  <Text type="secondary">{String(control.selection_rule ?? "")}</Text>
-                </Space>
-              </List.Item>
-            )}
-          />
-        ) : null}
+      <Card className="panel-card shortpick-rule-card" title="市场因子对照规则">
+        <Collapse className="shortpick-rule-collapse" ghost defaultActiveKey={[]} items={[{
+          key: "market-control-rule",
+          label: String(marketControlContract.label ?? "市场因子纸面对照：同池简单选法"),
+          children: (
+            <>
+              <Descriptions size="small" column={{ xs: 1, md: 2 }}>
+                <Descriptions.Item label="对照名称" span={2}>{String(marketControlContract.label ?? "市场因子纸面对照：同池简单选法")}</Descriptions.Item>
+                <Descriptions.Item label="运行方式" span={2}>{String(marketControlContract.mode ?? "和冻结策略使用同一个动量成交量Top40候选池，每个规则每天最多提前固定1只。")}</Descriptions.Item>
+                <Descriptions.Item label="监测规则" span={2}>{String(marketControlContract.monitoring_rule ?? "和冻结策略使用同一入场口径与三条退出轨道。")}</Descriptions.Item>
+                <Descriptions.Item label="边界说明" span={2}>{String(summary.market_control_scope_note ?? marketControlContract.scope_note ?? "单票分析暂不升入冻结真实跟踪。")}</Descriptions.Item>
+              </Descriptions>
+              {marketControlRows.length ? (
+                <List
+                  className="shortpick-track-list"
+                  size="small"
+                  dataSource={marketControlRows}
+                  renderItem={(control) => (
+                    <List.Item>
+                      <Space direction="vertical" size={0}>
+                        <Text strong>{String(control.label ?? "市场对照")}</Text>
+                        <Text type="secondary">{String(control.selection_rule ?? "")}</Text>
+                      </Space>
+                    </List.Item>
+                  )}
+                />
+              ) : null}
+            </>
+          ),
+        }]} />
       </Card>
 
       <Card
