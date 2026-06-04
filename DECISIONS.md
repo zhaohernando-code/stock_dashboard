@@ -1325,3 +1325,11 @@ canonical checkout 中的 `data/artifacts` 改动经抽样确认是正常 phase2
 - `phase5-daily-refresh` 四步（runtime refresh / horizon latest / horizon history / holding policy）各自独立 `session_scope`，写锁只在各步实际落库时短暂持有，不跨网络抓取与重计算。
 - slot 重试退避 `SLOT_RETRY_INTERVAL_SECONDS` 默认 1800→7200（≥ 日刷超时），避免被打断的 slot 在上次影响未沉淀时重试叠加写者。
 - 这些 PRAGMA/调度参数属基础设施配置（`stable_rule`），不是业务阈值；改动已过 policy-audit。
+
+[2026-06-04T05:00:00+08:00] 纸面追踪退出验证必须数据到位即补算，最新模拟交易卡按需展开全量对照：
+盘后日刷 `--analysis-only` 不同步基准指数，导致个股 K 线到最新日、基准滞后一天，冻结策略 5d/10d 退出长期卡在 `pending_benchmark_data`/`pending_forward_window`，看板上"5 日退出最新只到 5/26 买入"。同时试验田顶部筛选器只驱动一个 tab 却放全局头部、"最新模拟交易"卡硬编码冻结优先不回退使其余对照组从不展示。固定决策见归档 `docs/archive/PAPER_TRACKING_REVALIDATION_AND_UI_PLAN.md`。
+
+补充说明
+- 后端：`_refresh_runtime_data_output` 在 analysis 路径也同步基准 bar（不再只 ops 刷新）；`validate_recent_shortpick_runs` 改有界重验证循环（`max_iter=10` + 已处理 run 去重 + 「本轮无新 completed 即停」），数据到位的 pending 一次补齐，真缺数据不死循环。live 实测 signal 05-26 冻结 5 日退出由 pending→completed（stock_return 0.0708、excess 0.0646）。
+- 前端：试验田顶部的历史批次/起止日期筛选器移入"最新模拟交易"tab（只驱动 loadLab，作用域与位置一致）；"最新模拟交易"卡冻结策略默认展示，底部新增默认折叠 Collapse 展示**本轮全量候选（按 `latestRun.id` 限定，含全部对照组）**；纸面跟踪 4 张规则卡明细默认折叠（标题可见、一键展开）。
+- DeepSeek 两轮审核：方案首轮采纳 3 条修正（补算循环上限、基准同步层根治、本轮按 run.id），各步实现均审为可合入。

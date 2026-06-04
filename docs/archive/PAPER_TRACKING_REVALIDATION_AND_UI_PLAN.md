@@ -1,18 +1,19 @@
 # 修复方案：纸面追踪验证补跑 + 试验田筛选器归位 + 最新模拟交易折叠
 
-状态：✅ 已定稿（两轮 DeepSeek 审核通过；首轮采纳 3 条 P1/P3 修正，复审确认闭环、可进入实施）
+状态：✅ 全部完成并归档（P1/P2/P3/P3b 均合入 main 并发布验证）
 日期：2026-06-04
-worktree：`worker-workspaces/stock_dashboard/20260604-fix-paper-tracking-ui-and-revalidation-b00316`
+归档：本文件已从 `docs/contracts/` 移到 `docs/archive/`
+原始 worktree：`worker-workspaces/stock_dashboard/20260604-fix-paper-tracking-ui-and-revalidation-b00316`
 
 ## 0. 阶段落地状态
 
 | 步骤 | 状态 | 说明 |
 |------|------|------|
-| P1 验证补跑（含无数据自动补跑） | ✅ 已完成并合入 main | commit c68ea66；validate_recent 有界重验证循环(max_iter=10+去重+无新completed退出) + 日刷 analysis-only 也同步基准 bar；3 新测试通过；646 fast pytest + policy-audit pass；已发布 runtime |
+| P1 验证补跑（含无数据自动补跑） | ✅ 已完成并合入 main | commit c68ea66；validate_recent 有界重验证循环 + 日刷 analysis-only 也同步基准 bar；**live 实测：基准已刷到 06-03，signal 05-26 冻结 5 日退出由 pending→completed（stock_return 0.0708, excess 0.0646），served API 返回正确** |
 | P2 顶部筛选器移入对应 tab | ✅ 已完成并合入 main | run-select+起止日期从全局头部移入"最新模拟交易"tab(shortpickRunFilterBar)；tsc+vite build 通过；DeepSeek 可合入 |
 | P3 最新模拟交易：冻结默认展示 + 本轮全量默认折叠 | ✅ 已完成并合入 main | 冻结指标+冻结选股默认展示；底部加默认折叠 Collapse "本轮全部候选(N条,含对照组)"，按 latestRun.id 限定全分组；tsc+vite+647 pytest+static test 通过；DeepSeek 可合入 |
 | P3b 规则模块内容默认折叠（新增需求） | ✅ 已完成并合入 main | 4 张规则卡(冻结/v2/LLM对照/市场因子对照)内容包入默认折叠 Collapse(ghost,defaultActiveKey=[])，标题可见、一键展开；tsc+vite+static test 通过；DeepSeek 可合入 |
-| 归档 | ⬜ 未开始 | 全部完成后 docs/contracts→docs/archive |
+| 归档 | ✅ 已完成 | 本文件移入 `docs/archive/`；DECISIONS.md 记录耐久决策，PROCESS.md 记录反回归教训 |
 
 状态图例：⬜ 未开始 / ⏳ 进行中 / ✅ 已完成并合入 main。
 

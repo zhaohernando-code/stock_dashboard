@@ -134,6 +134,8 @@
 - **运行时 SQLite 必须 WAL，长写任务不能阻塞看板读**：触发场景——后端与盘后日刷两进程同连一个 db 文件，日刷是 ~50min 全量写。原则——`db.py` 连接级固定 `journal_mode=WAL + synchronous=NORMAL`，否则默认 rollback journal 写者排他会让所有读 30s 超时（“网页能开、所有 tab 超时”的典型症状）。必做——切 WAL 前备份 db，切换后重启 backend 让旧连接统一到 WAL；长流水线按步骤拆分 `session_scope`，写锁只在实际落库时短暂持有。
 - **LaunchAgent 不能让 reload/publish 触发重型任务**：触发场景——调度类 agent（如盘后日刷）跑重型长任务。原则——这类 agent `RunAtLoad` 必须为 false，发布脚本不得在 bootstrap 后 `kickstart -k` 强制启动；让 StartCalendarInterval/StartInterval + 幂等 `.ok` slot 守卫决定何时跑。否则治理期间反复 reload/publish 会叠起多个重型写任务，连锁触发上一条的锁竞争。排查顺序——面板超时先查后端是否 `database is locked`，再查是否有 `phase5-daily-refresh` 在跑、它的触发源（RunAtLoad / kickstart / tick）。
 - **打断重型 slot 的重试退避要 ≥ 任务时长**：被 kill 的长任务若退避窗口短于其运行时间，会在上次影响未沉淀时重试叠加。`SLOT_RETRY_INTERVAL_SECONDS` 等退避默认值应 ≥ 对应超时上限。
+- **盘后验证窗口数据要在同步层一并到位**：触发场景——shortpick 验证算超额收益需个股+基准两条 K 线都到目标交易日。原则——`--analysis-only` 日刷也必须同步基准指数（不要只在 ops 刷新里同步），否则个股到最新日、基准滞后一天，5d/10d 退出永远卡在 `pending_benchmark_data`/`pending_forward_window`。配套——验证补算要做成有界循环（`max_iter` + 已处理去重 + 「本轮无新 completed 即停」），数据到位的 pending 一次补齐，真缺数据的不死循环、不反复拉。
+- **手动 kill 重型验证后要 checkpoint WAL**：WAL 模式下被中断的大批量写会留下几百 MB 未 checkpoint 的 `-wal`，使后续读（如纸面追踪 ledger）变慢甚至像卡死。中断后跑一次 `PRAGMA wal_checkpoint(TRUNCATE)`，必要时重启 backend 清掉退化状态。排查"endpoint 卡死"时先分清是 ledger 计算慢（独立跑 0.6s 即排除）、auth 依赖、还是 WAL 膨胀。
 
 ## 已归档流水来源
 
