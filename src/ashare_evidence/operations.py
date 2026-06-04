@@ -1497,20 +1497,22 @@ def build_operations_detail(
     sample_symbol: str = "600519.SH",
     target_login: str = "root",
 ) -> dict[str, Any]:
+    if section != "portfolios":
+        return _build_operations_section_detail(
+            session,
+            section=section,
+            sample_symbol=sample_symbol,
+            target_login=target_login,
+        )
+
     payload = build_operations_dashboard(
         session,
         sample_symbol=sample_symbol,
-        include_simulation_workspace=section == "simulation_workspace",
+        include_simulation_workspace=False,
         target_login=target_login,
     )
     section_map = {
         "portfolios": {"portfolios": _compact_operations_portfolios(payload.get("portfolios", []))},
-        "replay": {"recommendation_replay": payload.get("recommendation_replay", [])},
-        "factor_observation": {"factor_observation_summary": payload.get("factor_observation_summary", {})},
-        "sector_exposure": {"sector_exposure": payload.get("sector_exposure", {})},
-        "manual_queue": {"manual_research_queue": payload.get("manual_research_queue", {})},
-        "simulation_workspace": {"simulation_workspace": payload.get("simulation_workspace")},
-        "policy_governance": {"policy_governance": payload.get("policy_governance", {})},
     }
     if section not in section_map:
         raise ValueError(f"Unsupported operations detail section: {section}")
@@ -1519,6 +1521,117 @@ def build_operations_detail(
         "generated_at": payload.get("overview", {}).get("generated_at"),
         **section_map[section],
     }
+
+
+def _operations_artifact_root(session: Session) -> Any:
+    bind = session.get_bind()
+    return artifact_root_from_database_url(bind.url.render_as_string(hide_password=False) if bind else None)
+
+
+def _build_operations_replay_detail(
+    session: Session,
+    *,
+    active_symbols: set[str],
+    artifact_root: Any,
+) -> list[dict[str, Any]]:
+    intraday_history, _intraday_stock_names, intraday_points = _market_history(
+        session,
+        active_symbols,
+        timeframe=INTRADAY_MARKET_TIMEFRAME,
+    )
+    daily_history, _daily_stock_names, daily_points = _market_history(session, active_symbols, timeframe="1d")
+    timeline_points = intraday_points or daily_points
+    if not timeline_points:
+        return []
+    price_history = daily_history or intraday_history
+    benchmark_close_map = _benchmark_close_map(
+        _distinct_trade_days(daily_points or timeline_points),
+        price_history=price_history,
+        active_symbols=active_symbols,
+    )
+    return _recommendation_replay_payload(
+        session,
+        active_symbols=active_symbols,
+        price_history=price_history,
+        benchmark_close_map=benchmark_close_map,
+        artifact_root=artifact_root,
+    )
+
+
+def _build_operations_section_detail(
+    session: Session,
+    *,
+    section: str,
+    sample_symbol: str,
+    target_login: str,
+) -> dict[str, Any]:
+    generated_at = datetime.now().astimezone()
+    active_symbols = set(active_watchlist_symbols(session))
+    artifact_root = _operations_artifact_root(session)
+    normalized_sample_symbol = sample_symbol.upper()
+    focus_symbol = (
+        normalized_sample_symbol
+        if normalized_sample_symbol in active_symbols
+        else (sorted(active_symbols)[0] if active_symbols else normalized_sample_symbol)
+    )
+    if section == "replay":
+        section_payload = {
+            "recommendation_replay": _build_operations_replay_detail(
+                session,
+                active_symbols=active_symbols,
+                artifact_root=artifact_root,
+            )
+        }
+    elif section == "factor_observation":
+        section_payload = {
+            "factor_observation_summary": _factor_observation_summary(
+                session,
+                artifact_root=artifact_root,
+                active_symbols=active_symbols,
+            )
+        }
+    elif section == "sector_exposure":
+        section_payload = {"sector_exposure": _sector_exposure_snapshot(session)}
+    elif section == "manual_queue":
+        section_payload = {
+            "manual_research_queue": _manual_research_queue_payload(
+                session,
+                active_symbols=active_symbols,
+                focus_symbol=focus_symbol,
+            )
+        }
+    elif section == "simulation_workspace":
+        section_payload = {
+            "simulation_workspace": _build_operations_simulation_workspace_detail(
+                session,
+                target_login=target_login,
+            )
+        }
+    elif section == "policy_governance":
+        section_payload = {
+            "policy_governance": {
+                **build_policy_governance_summary(session, include_details=False),
+                "audit": build_policy_audit_report(),
+            }
+        }
+    else:
+        raise ValueError(f"Unsupported operations detail section: {section}")
+    return {
+        "section": section,
+        "generated_at": generated_at,
+        **section_payload,
+    }
+
+
+def _build_operations_simulation_workspace_detail(session: Session, *, target_login: str) -> dict[str, Any]:
+    from ashare_evidence.simulation import get_simulation_workspace
+
+    return get_simulation_workspace(
+        session,
+        owner_login=target_login,
+        actor_login=target_login,
+        actor_role="root",
+    )
 
 
 def build_operations_dashboard(

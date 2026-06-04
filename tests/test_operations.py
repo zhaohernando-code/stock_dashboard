@@ -3,12 +3,14 @@ from __future__ import annotations
 import unittest
 from datetime import datetime
 from types import SimpleNamespace
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from ashare_evidence.operations import (
     OPERATIONS_NAV_HISTORY_POINT_LIMIT,
     _compact_operations_portfolio_payload,
     _portfolio_payload,
+    build_operations_detail,
 )
 
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
@@ -77,6 +79,42 @@ class OperationsTests(unittest.TestCase):
         self.assertEqual(compact["nav_history"][-1], points[-1])
         self.assertIn(points[37], compact["nav_history"])
         self.assertIn(points[73], compact["nav_history"])
+
+    def test_non_portfolio_operation_details_do_not_build_full_dashboard(self) -> None:
+        session = SimpleNamespace(get_bind=lambda: None)
+        expected_keys = {
+            "replay": "recommendation_replay",
+            "manual_queue": "manual_research_queue",
+            "factor_observation": "factor_observation_summary",
+            "sector_exposure": "sector_exposure",
+            "policy_governance": "policy_governance",
+            "simulation_workspace": "simulation_workspace",
+        }
+
+        with (
+            patch("ashare_evidence.operations.build_operations_dashboard", side_effect=AssertionError("full dashboard should not build")),
+            patch("ashare_evidence.operations.active_watchlist_symbols", return_value=["002475.SZ", "600519.SH"]),
+            patch("ashare_evidence.operations._operations_artifact_root", return_value="/tmp/artifacts"),
+            patch("ashare_evidence.operations._build_operations_replay_detail", return_value=[{"summary": "复盘"}]),
+            patch("ashare_evidence.operations._manual_research_queue_payload", return_value={"focus_symbol": "002475.SZ"}),
+            patch("ashare_evidence.operations._factor_observation_summary", return_value={"status": "pass"}),
+            patch("ashare_evidence.operations._sector_exposure_snapshot", return_value={"source": "test"}),
+            patch("ashare_evidence.operations.build_policy_governance_summary", return_value={"status": "pass"}),
+            patch("ashare_evidence.operations.build_policy_audit_report", return_value={"passed": True}),
+            patch("ashare_evidence.operations._build_operations_simulation_workspace_detail", return_value={"spaces": []}),
+        ):
+            for section, payload_key in expected_keys.items():
+                with self.subTest(section=section):
+                    payload = build_operations_detail(
+                        session,
+                        section=section,
+                        sample_symbol="002475.SZ",
+                        target_login="root",
+                    )
+
+                    self.assertEqual(payload["section"], section)
+                    self.assertIn("generated_at", payload)
+                    self.assertIn(payload_key, payload)
 
 
 if __name__ == "__main__":
