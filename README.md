@@ -1,196 +1,113 @@
-# 一个关于A股的当前数据和投资建议看板
+# A-Share Evidence Dashboard
 
-当前版本已经收口为“服务器入口 + 本机后端与数据库 + 反向隧道暴露”的一期服务端模式：
+A-Share Evidence Dashboard 是一个面向 A 股研究和模拟交易复盘的全栈数据看板。项目目标不是给出“买入建议”，而是把行情数据、候选池、因子规则、LLM 辅助研究、历史回放、模拟持仓和运营复盘放到同一个可审计系统里，让每个结论都能追溯到数据、规则和验证证据。
 
-- 前端不再暴露“在线 API / 离线快照”切换，也不再让用户配置项目后端地址。
-- 股票真实数据统一由服务端获取，围绕全站共享关注池做热点缓存。
-- 一期本地持久化确定为 `SQLite`，热点缓存方案确定为 `Redis`。
-- Web 新增“模型配置”视图，支持整站共享的大模型 `API Key` 管理、默认 Key 和故障切换。
+> Disclaimer: This project is for research, product, and engineering demonstration only. It is not financial advice, investment advice, or a trading recommendation system.
 
-## Canonical docs
+## Features
 
-- `PROJECT_STATUS.json`: current phase, blockers, next step, and linked docs
-- `README.md`: operator-facing overview, entry routes, and publish rules
-- `PROJECT_RULES.md`: repo-local constraints and live-verification requirements
-- `DECISIONS.md`: durable research, rollout, and product decisions
-- `PROCESS.md`: reusable lessons and anti-regression notes
-- `PROJECT_PLAN.md`: long-lived project plan and phase summary
-- `docs/contracts/`: active research, rollout, and metric contracts
-- `docs/archive/`: archived audit and research notes that are not default entry docs
+- Watchlist and stock workspace: 管理关注池，查看个股画像、K 线、财务指标、新闻和研究记录。
+- Evidence-first recommendations: 将候选股票、因子依据、人工复核和模型输出拆开记录，避免把结论包装成不可解释黑盒。
+- Short Pick Lab: 面向短线候选池的历史回放、分组对照、入场假设比较、稳定性分析和纸面跟踪。
+- Simulation workspace: 支持模拟持仓、订单事件、T+1 可卖约束、涨跌停和整手数量等 A 股交易规则校验。
+- Operations dashboard: 汇总刷新状态、数据质量、模型轨道、用户轨道和关键运行事件。
+- LLM-assisted research: 支持 OpenAI-compatible / Anthropic-compatible 模型配置，并保留模型选择、故障切换和研究产物。
+- Scheduled refresh: 支持盘后刷新、盘中对照任务、补跑保护和刷新状态反馈。
 
-## 当前访问入口
+## Architecture
 
-- 统一登录首页：`https://hernando-zhao.cn/`
-- 用户入口：`https://hernando-zhao.cn/stocks`
-- 规范挂载路径：`https://hernando-zhao.cn/projects/ashare-dashboard/`
-- 标准访问与验收都应优先使用不带 query 参数的规范挂载路径；`?cb=...` 只允许在排查缓存异常时临时使用，不应作为日常固定入口
-- 健康检查：`https://hernando-zhao.cn/projects/ashare-dashboard/api/health`
-- 本机后端：`127.0.0.1:8000`
-- 本机前端预览：`127.0.0.1:5173`
+```text
+Market data and research inputs
+  -> FastAPI service
+  -> SQLite data store
+  -> signal engine / validation / simulation modules
+  -> React dashboard
+  -> research artifacts and release evidence
+```
 
-## 本机运行拓扑
+Key directories:
 
-- 开发目录：`~/codex/projects/stock_dashboard`
-- 运行目录：`~/codex/runtime/projects/ashare-dashboard`
-- 控制平面的 worker task 会自动把代码同步到运行目录，并重启本机 frontend/backend 的 LaunchAgent
-- 直接在正式 repo 中运行的 Codex 会话不自动继承这条发布链；如果改动影响 live service，结束前必须手动执行 `scripts/publish-local-runtime.sh`
-- 对外服务必须跑在运行目录，不直接跑开发目录
+- `src/ashare_evidence/`: FastAPI API, signal engine, validation, research artifact, simulation, access, and scheduler logic.
+- `frontend/`: Vite + React + TypeScript dashboard UI.
+- `scripts/`: local backend/frontend startup, scheduled refresh, runtime publish, and verification scripts.
+- `tests/`: Python regression tests for API contracts, signal logic, simulation, scheduler behavior, and frontend static checks.
+- `docs/contracts/`: active research, rollout, and metric contracts.
+- `docs/archive/`: historical audits and research notes.
 
-## 当前实现
+## Tech Stack
 
-- 后端：`Python 3.10+ + FastAPI + SQLAlchemy`
-- 前端：`Vite + React + TypeScript + Ant Design`
-- 本地持久化：
-  - `watchlist_entries`
-  - `app_settings`
-  - `provider_credentials`
-  - `model_api_keys`
-- 统一数据源策略：
-  - `AKShare`：已接入运行时主数据/公开站点补缺，当前通过 `stock_individual_info_em` 解析股票简称、行业与上市时间
-  - `Tushare`：日线/K 线、财报与结构化指标
-  - 运行时选源，不在一期固化单一主源
-- 统一缓存策略：
-  - 实时行情：`5s`
-  - K 线：`60s`
-  - 财报：`86400s`
-  - 仅对全站共享关注池预热
-  - 启用单飞刷新、失败读旧值、空结果 TTL、锁超时与抖动
-- LLM 分析链路：
-  - 多个模型 Key
-  - 默认 Key
-  - 分析时显式选择 Key
-  - 主 Key 失败时按优先级自动故障切换
-  - `manual research` 在不选择模型 Key 时，默认改走本机 Codex CLI builtin executor，并以 `gpt-5.5` 直接执行；只有本机 Codex 不可用时才会回退到 unavailable 提示
+- Backend: Python 3.10+, FastAPI, SQLAlchemy, Pydantic
+- Frontend: React 18, TypeScript, Vite, Ant Design, ECharts
+- Data: SQLite for local persistence, AKShare and Tushare-compatible market data paths
+- Research and automation: deterministic factor studies, replay artifacts, LLM-assisted manual research, scheduled refresh scripts
+- Testing: pytest, TypeScript build checks, release verifier scripts
 
-## 主要接口
+## Quick Start
 
-- `/health`
-- `/watchlist`
-- `/watchlist/{symbol}/refresh`
-- `/dashboard/candidates`
-- `/dashboard/glossary`
-- `/dashboard/operations`
-- `/stocks/{symbol}/dashboard`
-- `/recommendations/{id}/trace`
-- `/settings/runtime`
-- `/settings/provider-credentials/{provider_name}`
-- `/settings/model-api-keys`
-- `/settings/model-api-keys/{id}`
-- `/settings/model-api-keys/{id}/default`
-- `/analysis/follow-up`
-
-## 运行方式
+Create a Python environment and install the backend package:
 
 ```bash
-PYTHONPATH=src uvicorn ashare_evidence.api:app --reload
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
 
+Start the backend:
+
+```bash
+mkdir -p data
+export ASHARE_DATABASE_URL="sqlite:///$(pwd)/data/ashare_dashboard.db"
+PYTHONPATH=src uvicorn ashare_evidence.api:app --reload --host 127.0.0.1 --port 8000
+```
+
+Start the frontend in another terminal:
+
+```bash
 cd frontend
+npm install
+export VITE_API_BASE_URL=http://127.0.0.1:8000
 npm run dev
 ```
 
-如果只是在本机做前端调试，可以临时设置：
+The local frontend defaults to Vite's development server. The backend exposes `/health` for a basic readiness check.
+
+## Configuration
+
+Common environment variables:
+
+- `ASHARE_DATABASE_URL`: SQLAlchemy database URL; defaults to a local SQLite database in startup scripts.
+- `ASHARE_ARTIFACT_ROOT`: output root for research and replay artifacts.
+- `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`: optional OpenAI-compatible model settings.
+- `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`: optional Anthropic-compatible model settings.
+- `VITE_API_BASE_URL`: frontend API base URL for local development.
+
+Market data credentials can also be managed through the application settings flow where supported. Do not commit API keys, account credentials, or runtime databases.
+
+## Validation
+
+Backend tests:
 
 ```bash
-export VITE_API_BASE_URL=http://127.0.0.1:8000
+PYTHONPATH=src pytest
 ```
 
-当前长期运行由 LaunchAgent 管理，入口脚本应指向运行目录中的：
-
-- `~/codex/runtime/projects/ashare-dashboard/scripts/start-local-backend.sh`
-- `~/codex/runtime/projects/ashare-dashboard/scripts/start-local-frontend.sh`
-- `~/codex/runtime/projects/ashare-dashboard/scripts/run-scheduled-refresh.sh`
-
-推荐的本地发布命令：
+Frontend build:
 
 ```bash
-cd ~/codex/projects/stock_dashboard
-scripts/publish-local-runtime.sh
-```
-
-这条命令现在是项目内唯一批准的 live publish 路径。它会先拒绝 dirty worktree，然后从当前 `HEAD` commit 出发构建 repo 前端、同步到 runtime、重启 frontend/backend LaunchAgent，并校验 `127.0.0.1:8000/health` 与 `127.0.0.1:5173/`。
-
-## Task closeout
-
-- Default branch name: `task/stock_dashboard/<yyyymmdd>-<slug>`
-- Before calling work complete, update `DECISIONS.md`, `PROCESS.md`, and `PROJECT_STATUS.json` when the change affects durable decisions, reusable lessons, or current handoff state.
-- Live-facing work is not complete until publish and real browser verification have both finished.
-- Unless the user explicitly asks to keep a task branch open, closeout does not stop at a branch-local commit: merge the task branch back into `main`, switch to `main`, and leave `git status --short` empty before declaring the task done.
-- Final git state is part of acceptance. If a change is committed but not merged, or merged but the repo is left on a dirty task branch, the response must say so explicitly instead of presenting the task as fully closed.
-
-## 开发测试必读
-
-- 所有 live-facing 改动都必须区分 `repo` 与 `runtime`：`~/codex/projects/stock_dashboard` 只是可编辑源码，真实服务只认 `~/codex/runtime/projects/ashare-dashboard`。`npm run build` 或 repo 内本地测试通过，不代表用户已经能看到结果。
-- 标准发布路径只有 `scripts/publish-local-runtime.sh`。如果主仓库是 dirty worktree，不要跳过发布，也不要直接改 runtime；应从当前 `HEAD` 做临时干净快照仓，再在快照仓里执行同一脚本。
-- 发布后先看本机健康，再看浏览器：至少确认 `http://127.0.0.1:8000/health` 和 `http://127.0.0.1:5173/` 正常，再进入页面验收。不要把浏览器异常直接当成发布失败。
-- `127.0.0.1:5173/` 首屏先出现 skeleton 或 hydration 延迟是允许现象，必须等待页面真正渲染完成后再判断。单个空白页、灰页或一次加载失败，不足以证明 runtime 没更新。
-- 点击/浏览器验收至少分两路：1) 本机预览 `http://127.0.0.1:5173/`；2) 真实标准入口 `https://hernando-zhao.cn/projects/ashare-dashboard/`。两路都过，才算 live-facing 验收闭环。
-- 标准入口默认只用不带 query 的规范路径。`?cb=...` 只能在明确排查缓存异常时临时使用，不能把带 `cb` 的链接当成日常验收入口，更不能据此宣布发布完成。
-- 如果 Browser Use、Chrome 或当前标签页状态可疑，不要在一个异常标签上反复猜。先检查 URL 是否输对、标签页是否仍持有旧登录态或旧内存态；必要时改用 Safari 重新打开标准入口和本机入口做交叉验证。
-- `scripts/publish-local-runtime.sh` 最后如果只卡在 canonical verifier 缺 `ASHARE_CANONICAL_USERNAME` / `ASHARE_CANONICAL_PASSWORD`，这次任务仍不能默认为“已自动验收完成”；必须补手工浏览器复验，并明确记录“自动 verifier 未跑通、改由人工复验”的事实。
-- 每次手工点击验收都要记下这四类证据：发布所用仓库路径、是否为临时干净快照、实际检查的 URL、最终浏览器结果。若出现空白页、URL 手误、浏览器假阴性或 hydration 误判，也必须写回 `PROCESS.md`，防止后续会话重复踩坑。
-- 使用 Playwright CLI 或其他自动化浏览器完成验收后，必须执行 `scripts/cleanup-browser-automation.sh`。这会关闭 Playwright daemon 和 `playwright_chromiumdev_profile-*` 自动化 Chrome，避免测试后残留进程越积越多；脚本不会关闭用户正常的 Chrome 主进程。
-
-发布完成的定义也已经收紧：脚本最后会自动执行 release parity verifier，只有在以下条件全部满足时才算成功：
-
-- repo build、runtime `frontend/dist`、localhost served frontend、canonical authenticated route 的 asset hash 全部一致
-- `/dashboard/operations`、`/settings/runtime`、`/dashboard/candidates` 的本地与 canonical API fingerprint 一致
-- 运营复盘的 user-visible 文本审计通过：必须保留 `用户轨道`、`模型轨道`，且不能重新出现 `运营复盘口径仍在迁移`、`Phase 5 baseline`、`research contract`、`pending_rebuild`、`manifest`、`verified`
-- `output/releases/<release-id>/manifest.json` 与 `output/releases/latest-successful.json` 成功生成
-
-如需执行 canonical parity 校验，请先提供这些环境变量：
-
-```bash
-export ASHARE_CANONICAL_USERNAME='<login-username>'
-export ASHARE_CANONICAL_PASSWORD='<login-password>'
-```
-
-可选环境变量：
-
-```bash
-export ASHARE_CANONICAL_BASE_URL='https://hernando-zhao.cn/projects/ashare-dashboard/'
-export ASHARE_CANONICAL_LOGIN_URL='https://hernando-zhao.cn/auth/login'
-export ASHARE_LOCAL_API_BASE_URL='http://127.0.0.1:8000/'
-export ASHARE_RELEASE_BETA_ACCESS_KEY='<beta-access-key-if-needed>'
-export ASHARE_RELEASE_OUTPUT_ROOT="$PWD/output/releases"
-```
-
-每次成功发布都会生成 release manifest，记录 commit SHA、asset hashes、关键 API fingerprints、artifact 路径，以及上一份成功 manifest 的路径与 commit SHA。后续若要回滚，只能回到上一份成功 manifest 对应的 release，不再允许从任意当前工作树或模糊 baseline 直接重发。
-
-推荐的刷新时点已经按 `Tushare 5000 积分 + 免费分钟兜底` 收口为：
-
-- `16:20`：盘后合并刷新，集中刷新日线、日终增量字段、财务指标和主 recommendation
-- `13:55`：交易日盘中生成短投试验田“14点同日买入版”对照，使用实时行情替代当日收盘价选股，并在生成推荐后再读取一次当前价作为纸面买入价；LaunchAgent 额外在 `14:00`、`14:05` 显式唤醒同一 slot，成功后由状态文件防重复写入
-- 交易时段：仅对关注池和模拟持仓做 `5 分钟` 分钟行情同步，优先复用本地缓存
-- 补跑保护：LaunchAgent 仍每 `5 分钟` 唤醒一次；如果因为移动、断网或电脑休眠错过 `16:20` daily refresh，脚本会在检测到已解除休眠且联网后按本地状态文件自动补执行一次，不重复跑已成功的同一 slot
-- 状态反馈：股票看板会读取 `/dashboard/scheduled-refresh-status`，直接显示每日分析正在跑、已完成、失败待重试或待补跑；不需要再靠 `pgrep` 和日志判断
-
-## 验证
-
-本轮已完成：
-
-```bash
-python3 -m py_compile \
-  src/ashare_evidence/models.py \
-  src/ashare_evidence/runtime_config.py \
-  src/ashare_evidence/llm_service.py \
-  src/ashare_evidence/api.py \
-  src/ashare_evidence/operations.py \
-  src/ashare_evidence/schemas.py \
-  tests/test_runtime_config.py
-
 cd frontend
 npm run build
 ```
 
-本轮未完成：
+For release-style local verification, use the scripts under `scripts/`. They are intentionally stricter than development startup commands because they check build output, service health, and selected user-visible routes.
 
-- `PYTHONPATH=src python3 -m unittest discover -s tests`
+## Project Notes
 
-原因：当前沙箱内缺少 `fastapi`、`sqlalchemy` 等 Python 依赖，且网络被限制，无法在线安装。
+The project is intentionally conservative about claims. Historical replay, paper tracking, and simulation artifacts are treated as evidence for product and engineering decisions, not as proof of real-market profitability. Strategy lines that do not pass account eligibility, data quality, forward-window, or sample-size checks remain research candidates rather than production recommendations.
 
-## 当前边界
+Useful internal documents:
 
-- `AKShare` 已接入主数据补缺和免费分钟兜底；`Tushare` Token 负责低频日线、财务和结构化指标主链路。
-- `Redis` 实连尚未在当前受限环境完成联调，但前端与后端已经不再依赖任何 demo/offline snapshot。
-- 盘中分钟链路当前采取“公开分钟源 + 本地缓存沉淀”，适合内部运营复盘，不等同于商业级分钟数据 SLA。
-- LLM 分析接口采用 OpenAI-compatible 协议，当前已完成 Key 选择与故障切换逻辑，但未在本环境对外部模型服务做真实连通验证。
+- `PROJECT_STATUS.json`: current phase, blockers, and handoff state
+- `PROJECT_RULES.md`: repository constraints and live verification rules
+- `DECISIONS.md`: durable research and product decisions
+- `PROCESS.md`: reusable lessons and anti-regression notes
+- `PROJECT_PLAN.md`: long-lived roadmap and phase summary
