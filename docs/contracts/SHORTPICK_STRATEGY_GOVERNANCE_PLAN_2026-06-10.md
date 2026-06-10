@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round20_p4_5_report_governance_projection_completed_ds_review_passed
+Status: round21_replay_feedback_governance_source_wiring_completed_ds_review_passed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -107,7 +107,7 @@ The next governance package should adopt four principles.
 | P4.2 | Add separate display sections for evidence basis | completed_partial_display_wiring_pending | Added backend view-projection sections that split true-forward tracking, retrospective replay, and historical backtest rows while preserving primary/archive membership in each section. API/page wiring remains pending. |
 | P4.3 | Add retirement archive view or archive summary rows | completed_partial_display_wiring_pending | Added archive summary rows grouped by evidence basis, strategy family, and entry-price source while preserving detailed archive records. API/page wiring remains pending. |
 | P4.4 | Add leakage and coverage notes | completed_partial_display_wiring_pending | Added leakage/coverage note metadata to strategy view projection and archive records. Retrospective rows default to showing signal-date cutoff policy and leakage audit status. API/page wiring remains pending. |
-| P4.5 | Update analytical report generation | completed_partial_source_artifact_wiring_pending | Added replay readout/report projection that reads strategy governance recommendations, view sections, archive summaries, and leakage notes from governance contract fields. Missing governance input explicitly forbids role-name inference. Persisted report artifact wiring remains pending. |
+| P4.5 | Update analytical report generation | completed_partial_page_rendering_pending | Added replay readout/report projection that reads strategy governance recommendations, view sections, archive summaries, and leakage notes from governance contract fields. `/shortpick-lab/replay-feedback` now builds a read-only governance source from the already loaded paper-tracking ledger when no persisted governance payload exists. Page rendering remains pending. |
 
 ## Retirement Threshold Draft
 
@@ -680,6 +680,25 @@ DeepSeek result:
 - Key confirmations: the report projection reads `recommended_status`, `evidence_basis`, `archive_records.summary_rows`, and `leakage_coverage_note` from governance contract inputs; missing governance inputs return `missing_artifact` with `may_infer_status_from_role_name=false`; API assembly only passes through existing `strategy_governance` data from replay feedback or overall payload; tests cover both missing and present governance inputs, including deliberate `tracking_role` distractors.
 - Nonblocking follow-up retained for later display work: persisted report artifacts and dashboard pages still need to provide/render `strategy_governance` payloads before the new projection is visible to end users.
 
+## Round 21 Review Result
+
+Status: completed DeepSeek review.
+
+Round 21 scope:
+
+- Read-only API source wiring for `strategy_governance` inside replay-feedback projection.
+- `_build_shortpick_strategy_governance_projection` fallback from already loaded paper-tracking ledger.
+- Extended tests: `tests/test_shortpick_replay_api_projection.py`.
+
+Round 21 makes the report governance projection source-backed in `/shortpick-lab/replay-feedback`. It does not write DB rows, execute backtests, execute leakage audits, create retirement artifacts, write paper-tracking rows, or alter active strategy generation.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge and push Round 21.
+- Key confirmations: `_build_shortpick_strategy_governance_projection` uses only in-memory paper-tracking data and pure governance projection helpers; `_attach_shortpick_replay_decision_projection` prefers existing `strategy_governance` payloads and only falls back to the paper-tracking ledger when absent; empty ledgers return `missing_source` and do not infer status from role names; tests cover normal ledger projection plus empty-ledger behavior.
+- Nonblocking follow-up retained for later display work: dashboard pages still need to render `strategy_governance_reporting` for users.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -736,11 +755,13 @@ DeepSeek result:
 | Round 18 DeepSeek review | completed |
 | P4.4 leakage and coverage notes | completed_partial_display_wiring_pending |
 | Round 19 DeepSeek review | completed |
-| P4.5 analytical report governance projection | completed_partial_source_artifact_wiring_pending |
+| P4.5 analytical report governance projection | completed_partial_page_rendering_pending |
 | Round 20 DeepSeek review | completed |
-| Runtime behavior changed | not_started |
+| Replay-feedback governance source wiring | completed_partial_page_rendering_pending |
+| Round 21 DeepSeek review | completed |
+| Runtime behavior changed | completed_for_read_only_replay_feedback_projection |
 | Registry changed | completed |
-| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_and_report_governance_projection |
+| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
 | Frontend helper code changed | completed_for_strategy_status_and_evidence_basis_label_helpers |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |
