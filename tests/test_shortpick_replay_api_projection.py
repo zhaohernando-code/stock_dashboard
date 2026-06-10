@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ashare_evidence.api import _slim_shortpick_strategy_slice_evidence
+from ashare_evidence.api import _build_shortpick_strategy_governance_projection, _slim_shortpick_strategy_slice_evidence
 
 
 def test_strategy_slice_response_projection_keeps_ui_fields_and_drops_heavy_detail() -> None:
@@ -136,3 +136,65 @@ def test_strategy_slice_response_projection_keeps_ui_fields_and_drops_heavy_deta
     assert "regime_strategy_rows" not in slim
     assert "time_slices" not in slim["portfolio_stability"]
     assert "raw_trades" not in slim["portfolio_return_attribution"]
+
+
+def test_api_builds_shortpick_strategy_governance_projection_from_paper_tracking() -> None:
+    projection = _build_shortpick_strategy_governance_projection(
+        {
+            "items": [
+                _paper_tracking_item(f"2026-05-{index + 1:02d}", stock_return=value)
+                for index, value in enumerate([-0.10, -0.05, 0.01])
+            ]
+        }
+    )
+
+    assert projection["status"] == "ready"
+    assert projection["source_policy"] == "read_only_paper_tracking_ledger_no_role_name_status_inference"
+    assert projection["strategy_count"] == 1
+    view = projection["view_projection"]
+    assert view["primary_count"] == 1
+    assert view["archive_count"] == 0
+    assert view["primary_items"][0]["evidence_basis"] == "true_forward_tracking"
+    assert view["primary_items"][0]["status_display"]["key"] == view["primary_items"][0]["recommended_status"]
+    assert projection["archive_records"]["archive_count"] == 0
+
+
+def test_api_strategy_governance_projection_does_not_infer_status_from_empty_ledger() -> None:
+    projection = _build_shortpick_strategy_governance_projection({"items": []})
+
+    assert projection == {
+        "status": "missing_source",
+        "source_policy": "read_only_paper_tracking_ledger_no_role_name_status_inference",
+        "reason": "paper tracking ledger has no strategy rows for governance projection",
+    }
+
+
+def _paper_tracking_item(signal_date: str, *, stock_return: float) -> dict[str, object]:
+    return {
+        "run_id": 1,
+        "candidate_id": hash(signal_date) % 100000,
+        "run_date": signal_date,
+        "signal_date": signal_date,
+        "entry_date": signal_date,
+        "symbol": "002371.SZ",
+        "name": "北方华创",
+        "tracking_group": "frozen_strategy",
+        "tracking_role": "frozen_paper_primary",
+        "selection_label": "冻结纸面策略",
+        "source_rank": 1,
+        "entry_rule": "次一交易日收盘买入",
+        "selection_score_components": {
+            "family": "low_turnover_20d_uptrend_liquid_top120",
+            "entry_price_source": "next_close",
+        },
+        "validation_by_horizon": [
+            {
+                "horizon_days": 10,
+                "status": "completed",
+                "entry_at": f"{signal_date}T15:00:00+08:00",
+                "exit_at": "2026-05-24T15:00:00+08:00",
+                "stock_return": stock_return,
+                "excess_return": stock_return - 0.01,
+            }
+        ],
+    }

@@ -145,6 +145,12 @@ from ashare_evidence.shortpick_replay import (
     list_shortpick_replay_runs,
 )
 from ashare_evidence.shortpick_replay_readout import CURRENT_FROZEN_STRATEGY, build_shortpick_replay_decision_projection
+from ashare_evidence.shortpick_strategy_governance import (
+    build_shortpick_strategy_archive_records,
+    build_shortpick_strategy_retirement_evidence_packs,
+    build_shortpick_strategy_status_recommendations,
+    project_shortpick_strategy_view_sections,
+)
 from ashare_evidence.simulation import (
     end_simulation_session,
     get_simulation_workspace,
@@ -727,6 +733,11 @@ def _attach_shortpick_replay_decision_projection(
             "summary": {},
             "items": [],
         }
+    strategy_governance = dict(enriched.get("strategy_governance") or overall.get("strategy_governance") or {})
+    if not strategy_governance and isinstance(projection_inputs.get("paper_tracking"), dict):
+        strategy_governance = _build_shortpick_strategy_governance_projection(
+            projection_inputs["paper_tracking"],  # type: ignore[arg-type]
+        )
     if isinstance(projection_inputs.get("strategy_slice_evidence"), dict):
         strategy_slice = dict(projection_inputs["strategy_slice_evidence"])  # type: ignore[arg-type]
         strategy_slice["portfolio_forward_tracking_alignment"] = _shortpick_portfolio_forward_tracking_alignment(
@@ -740,12 +751,36 @@ def _attach_shortpick_replay_decision_projection(
             market_study=projection_inputs["market_study"],  # type: ignore[arg-type]
             entry_artifacts=projection_inputs["entry_artifacts"],  # type: ignore[arg-type]
             paper_tracking=projection_inputs["paper_tracking"],  # type: ignore[arg-type]
-            strategy_governance=dict(enriched.get("strategy_governance") or overall.get("strategy_governance") or {}),
+            strategy_governance=strategy_governance,
         )
     )
     overall["strategy_slice_evidence"] = projection_inputs["strategy_slice_evidence"]
     enriched["overall"] = overall
     return enriched
+
+
+def _build_shortpick_strategy_governance_projection(paper_tracking: dict[str, object]) -> dict[str, object]:
+    items = paper_tracking.get("items")
+    if not isinstance(items, list) or not items:
+        return {
+            "status": "missing_source",
+            "source_policy": "read_only_paper_tracking_ledger_no_role_name_status_inference",
+            "reason": "paper tracking ledger has no strategy rows for governance projection",
+        }
+
+    evidence_packs = build_shortpick_strategy_retirement_evidence_packs(paper_tracking)
+    status_recommendations = build_shortpick_strategy_status_recommendations(evidence_packs)
+    view_projection = project_shortpick_strategy_view_sections(status_recommendations)
+    archive_records = build_shortpick_strategy_archive_records(view_projection, evidence_packs)
+    return {
+        "status": "ready",
+        "source_policy": "read_only_paper_tracking_ledger_no_role_name_status_inference",
+        "evidence_basis": evidence_packs.get("evidence_basis"),
+        "strategy_count": evidence_packs.get("strategy_count"),
+        "status_recommendations": status_recommendations,
+        "view_projection": view_projection,
+        "archive_records": archive_records,
+    }
 
 
 def _shortpick_portfolio_forward_tracking_alignment(
