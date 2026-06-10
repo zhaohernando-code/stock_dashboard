@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round1_contract_landed_ds_reviewed
+Status: round2_p0_protocols_completed_ds_review_passed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -59,11 +59,11 @@ The next governance package should adopt four principles.
 | P0.1 | Create this governance plan | completed | This document defines the background, strategy, implementation checklist, and acceptance criteria. |
 | P0.2 | DeepSeek review of this plan | completed | Read-only DeepSeek review found no blocking contradiction and recommended acceptance with nonblocking followups. |
 | P0.3 | Add `DECISIONS.md` entry for the governance direction | completed | Added 2026-06-10 decision entry covering retirement protocol, retrospective replay labeling, registry-first implementation, transition behavior, and Phase 5 gate alignment. |
-| P0.4 | Define strategy retirement thresholds | pending | Must be deterministic enough to prevent subjective deletion of unpopular strategies. |
-| P0.5 | Define retrospective replay labeling contract | pending | Must explicitly distinguish `historical_backtest`, `retrospective_forward_replay`, and `true_forward_tracking`. |
-| P0.6 | Define evaluation-baseline policy | pending | Random pool and cooldown control can be comparison baselines only after they are registered as baselines. |
-| P0.7 | Define transition rule before implementation | pending | Until registry and retirement flow are implemented, existing strategies remain in their current active or observed state. |
-| P0.8 | Define un-retirement protocol | pending | Retired strategies can only return through an explicit `retired -> observe` recovery path backed by new mature evidence. |
+| P0.4 | Define strategy retirement thresholds | completed | Round 2 defines minimum maturity, historical, forward, baseline, tail-risk, and diagnostic-value gates. |
+| P0.5 | Define retrospective replay labeling contract | completed | Round 2 defines evidence-basis labels, required metadata, leakage status, and display prohibitions. |
+| P0.6 | Define evaluation-baseline policy | completed | Round 2 defines baseline eligibility and restricts baseline claims until registry artifacts exist. |
+| P0.7 | Define transition rule before implementation | completed | Round 2 states existing strategies remain unchanged until registry, artifacts, and display support exist. |
+| P0.8 | Define un-retirement protocol | completed | Round 2 defines `retired -> observe` recovery conditions and forbids direct return to active/frozen. |
 
 ### P1 - Registry And Artifact Contracts
 
@@ -119,7 +119,7 @@ The first implementation should not retire a strategy only because a single rece
 - The strategy fails tail-dependence checks, such as positive mean being explained by one or two outliers while median and drawdown remain weak.
 - The strategy does not provide unique diagnostic value that justifies continued compute.
 
-Until P0.4 is complete and the threshold is machine-checkable enough for implementation, no strategy may be marked `retired`. The only allowed interim states are `active`, `observe`, or `retire_candidate`.
+Until the `strategy_retirement:v1` artifact family and required registry entries are implemented in P1, no strategy may be marked `retired`. The only allowed interim states are `active`, `observe`, or `retire_candidate`.
 
 Minimum evidence gates should be conservative:
 
@@ -133,6 +133,30 @@ The implementation of P0.4 must quantify ambiguous phrases before any strategy c
 - `persistently negative` must become a concrete rolling-window or calendar-slice rule.
 - `materially worse than registered baselines` must specify margin, sample count, and confidence or stability basis.
 - `unique diagnostic value` must state why a strategy remains worth compute even if it is not a promotion candidate.
+
+Round 2 makes the first machine-checkable threshold draft explicit. A strategy can be marked `retire_candidate` when all of the following hold:
+
+- Maturity gate:
+  - One-stock strategy/control: at least 10 completed 10-day rows.
+  - Multi-row strategy/control: at least 30 completed 10-day candidate rows and at least 10 distinct signal dates.
+  - Long-horizon retirement for 20/40-day claims is blocked until the matching horizon has completed rows across at least 10 distinct signal dates.
+- Historical gate:
+  - Account-executable historical replay shows after-cost excess return below `0` in the full window and in at least two of the last three calendar-month or rolling-60-trading-day slices.
+  - If historical evidence is missing, stale, not account-executable, or missing cost/benchmark definitions, the strategy can only be `observe`.
+- Forward gate:
+  - Completed true-forward evidence has stock-return median below `0`.
+  - Either stock-return mean is below `0`, or positive mean is explained by tail dependence.
+  - Win rate is below `45%` for one-stock strategies, or materially below the registered random-pool baseline once that baseline exists.
+- Tail-risk gate:
+  - Worst completed 10-day return is below `-8%`, or max drawdown / worst-tail evidence fails the strategy's documented risk envelope.
+  - If a single best observation contributes more than half of positive mean excess, the result must be flagged as tail-dependent and cannot be promoted.
+- Baseline gate:
+  - Until `evaluation_baseline_random_pool:v1` and `evaluation_baseline_cooldown_control:v1` are registered, baseline comparisons are advisory only.
+  - After registration, retirement can cite a baseline only when sample basis, horizon, entry price source, cost, and benchmark are aligned.
+- Diagnostic-value gate:
+  - A poor-performing strategy can stay `observe` if it tests a unique execution, exposure, or model-risk hypothesis that no other active control covers.
+
+A strategy can move from `retire_candidate` to `retired` only after `strategy_retirement:v1` exists, the evidence packet is generated, and `DECISIONS.md` records the decision. `retired` cannot be produced directly from raw query results.
 
 Retirement is not permanent deletion from project memory. A later un-retirement path is allowed only when:
 
@@ -151,6 +175,12 @@ Required labels:
 - `evidence_basis=retrospective_forward_replay`
 - `evidence_basis=true_forward_tracking`
 
+Evidence-basis definitions:
+
+- `historical_backtest`: long-window replay over historical market data before the observed paper-tracking period. It may support research ranking but is not a paper-ledger row.
+- `retrospective_forward_replay`: post-hoc replay over dates that already occurred in the paper-tracking era before the rule was registered. It can answer "what would this deterministic rule have done under point-in-time inputs?" but cannot be described as contemporaneous forward tracking.
+- `true_forward_tracking`: paper tracking that starts on or after `rule_defined_at` and after the control ID, rule signature, and artifact family are registered.
+
 Required metadata for retrospective replay:
 
 - `retrospective=true`
@@ -164,6 +194,9 @@ Required metadata for retrospective replay:
 - `entry_price_source`
 - `benchmark_definition`
 - `cost_definition`
+- `control_group_id`
+- `rule_signature`
+- `evidence_basis`
 
 Leakage audit must be defined before implementation. At minimum it should check:
 
@@ -178,6 +211,64 @@ Forbidden behavior:
 - Do not display retrospective rows in the same headline as true-forward rows without a basis split.
 - Do not use future-known outcomes to tune thresholds and then describe the replay as unbiased.
 - Do not call a replayed control "frozen" for dates before the rule was registered.
+
+Display policy:
+
+- Historical, retrospective, and true-forward rows must be visually separated by section or basis label.
+- A combined table is allowed only when `evidence_basis` is a visible column and default grouping keeps true-forward rows separate.
+- Headline metrics for promotion or retirement must default to true-forward rows; retrospective rows can appear only as supporting research evidence.
+- Any retrospective replay over thresholds tuned after seeing outcomes must be labeled `tuned_research`, not `validation`.
+
+## Evaluation Baseline Policy
+
+Baseline comparisons are useful only when their sample basis matches the strategy being judged.
+
+Required baseline statuses:
+
+- `baseline_candidate`: defined in a plan or doc, not registered; may not be used in promotion or retirement gates.
+- `baseline_registered`: has registry ID and schema, but may not have enough completed evidence; can be shown as pending.
+- `baseline_active`: has registered artifact family, aligned evidence basis, and enough completed rows for comparison.
+- `baseline_retired`: no longer used for current gates but retained for historical audit.
+
+Initial baseline IDs:
+
+- `evaluation_baseline_random_pool:v1`
+- `evaluation_baseline_cooldown_control:v1`
+
+Baseline usage rules:
+
+- A baseline must use the same horizon, entry price source, benchmark, cost definition, universe eligibility, and evidence basis as the strategy comparison.
+- Random pool is a noise and opportunity-cost reference, not proof of investable superiority.
+- Cooldown control is an exposure-governance reference, not a replacement strategy by itself.
+- Baseline comparisons before P1 registry completion must be described as advisory and cannot drive `retired` or `promoted` status.
+
+## Transition Rule
+
+Round 2 locks transition behavior while this governance work is still contract-only.
+
+- Existing strategy generation, paper tracking, frontend labels, replay projections, and runtime data remain unchanged until a later implementation round changes them.
+- No strategy may be hidden from active views solely because this plan exists.
+- No retrospective rows may be inserted into the true paper-tracking ledger before the retrospective artifact contract exists.
+- No new control can be called true-forward until its ID, rule signature, and artifact family have been registered.
+- Existing bad-looking controls can be manually discussed as weak, but their durable status remains unchanged until the retirement flow exists.
+
+## Un-Retirement Protocol
+
+Retirement is reversible only through a governed recovery path.
+
+Allowed recovery path:
+
+1. Keep the original `strategy_retirement:v1` artifact linked.
+2. Create a new evidence packet with a new rule version or materially new mature evidence.
+3. Record which original retirement blocker no longer applies.
+4. Move status from `retired` to `observe`.
+5. Require a new true-forward observation period before any `active`, `frozen`, or promotion-candidate status.
+
+Forbidden recovery:
+
+- A retired strategy cannot return directly to `active`, `frozen`, or production candidate.
+- A retrospective replay alone cannot un-retire a strategy.
+- A renamed strategy with identical rule signature cannot bypass the retirement artifact.
 
 ## Further Questions Mapping
 
@@ -230,6 +321,25 @@ Round 1 result:
   - Record this second DeepSeek review result.
   - State that Phase 5 contract and decision log take precedence if contracts conflict.
 
+## Round 2 Review Result
+
+Status: completed DeepSeek review.
+
+Round 2 scope:
+
+- P0.4 retirement threshold draft.
+- P0.5 retrospective replay labeling contract.
+- P0.6 evaluation baseline policy.
+- P0.7 transition rule.
+- P0.8 un-retirement protocol.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge and push after updating this status record.
+- Key confirmations: P0.4-P0.8 do not conflict with `DECISIONS.md` or `docs/contracts/PHASE5_RESEARCH_CONTRACT.md`; retrospective replay is separated from true forward tracking; baseline claims remain advisory until registry-backed; transition language does not imply runtime, data, frontend, or strategy-code changes.
+- Nonblocking follow-ups retained for P1: explain the source of the `-8%` tail threshold, treat 10 completed one-stock rows as a thin but conservative minimum because all gates must pass together, and convert leakage-audit text into executable checks when P1.7 lands.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -244,6 +354,8 @@ Round 1 result:
 | Plan document drafted | completed |
 | DECISIONS entry added | completed |
 | Round 1 DeepSeek review | completed |
+| P0 governance protocols drafted | completed |
+| Round 2 DeepSeek review | completed |
 | Runtime behavior changed | not_started |
 | Registry changed | not_started |
 | Strategy code changed | not_started |
