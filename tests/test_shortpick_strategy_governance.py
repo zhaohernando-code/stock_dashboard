@@ -11,6 +11,7 @@ from ashare_evidence.shortpick_strategy_governance import (
     build_shortpick_drawdown_reversal_filter_rule,
     build_shortpick_historical_backtest_generation_requests,
     build_shortpick_repeated_exposure_limit_rule,
+    build_shortpick_retrospective_forward_replay_requests,
     build_shortpick_same_symbol_cooldown_rule,
     build_shortpick_strategy_archive_records,
     build_shortpick_strategy_retirement_evidence_packs,
@@ -907,6 +908,79 @@ def test_historical_backtest_generation_requests_validate_inputs() -> None:
             end_date="2026-05-08",
             cost_bps=-1,
         )
+
+
+def test_retrospective_forward_replay_requests_derive_window_from_paper_tracking() -> None:
+    rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10T09:00:00+08:00")
+    paper_tracking = {
+        "items": [
+            {"candidate_id": "a", "signal_date": "2026-05-08"},
+            {"candidate_id": "b", "signal_date": "2026-05-10"},
+            {"candidate_id": "c", "signal_date": "2026-06-10"},
+            {"candidate_id": "d", "signal_date": "2026-06-11"},
+        ]
+    }
+
+    result = build_shortpick_retrospective_forward_replay_requests(
+        [rule],
+        paper_tracking,
+        generated_at="2026-06-10T12:00:00+08:00",
+    )
+
+    assert result["status"] == "ready"
+    assert result["paper_tracking_observed_start_date"] == "2026-05-08"
+    assert result["paper_tracking_observed_end_date"] == "2026-06-11"
+    assert result["request_count"] == 1
+    request = result["requests"][0]
+    assert request["request_id"].startswith("shortpick-retrospective-forward-replay-request:")
+    assert request["evidence_basis"] == "retrospective_forward_replay"
+    assert request["retrospective"] is True
+    assert request["true_forward_tracking_eligible"] is False
+    assert request["paper_tracking_write_policy"] == "forbidden"
+    assert request["leakage_audit_status"] == "not_run"
+    assert request["replay_start_date"] == "2026-05-08"
+    assert request["replay_end_date"] == "2026-05-10"
+    assert request["source_signal_count"] == 2
+    assert request["generated_at"] == "2026-06-10T12:00:00+08:00"
+
+
+def test_retrospective_forward_replay_requests_block_rules_without_required_identity() -> None:
+    result = build_shortpick_retrospective_forward_replay_requests(
+        [
+            {"control_group_id": "control_without_signature", "rule_defined_at": "2026-06-10"},
+            {"control_group_id": "control_without_defined_at", "rule_signature": "sha256:test"},
+        ],
+        {"items": [{"signal_date": "2026-05-08"}]},
+    )
+
+    assert result["status"] == "blocked"
+    assert result["request_count"] == 0
+    blockers = [item["blocker"] for item in result["blocked_rules"]]
+    assert blockers == ["missing_control_group_id_or_rule_signature", "missing_rule_defined_at"]
+
+
+def test_retrospective_forward_replay_requests_block_when_no_prior_paper_dates() -> None:
+    rule = build_shortpick_drawdown_reversal_filter_rule(rule_defined_at="2026-05-08")
+
+    result = build_shortpick_retrospective_forward_replay_requests(
+        [rule],
+        {"items": [{"signal_date": "2026-05-08"}, {"signal_date": "2026-05-09"}]},
+    )
+
+    assert result["status"] == "blocked"
+    assert result["request_count"] == 0
+    assert result["blocked_rules"][0]["blocker"] == "no_paper_tracking_signal_dates_before_rule_defined_at"
+
+
+def test_retrospective_forward_replay_requests_are_deterministic() -> None:
+    rule = build_shortpick_repeated_exposure_limit_rule(rule_defined_at="2026-06-10")
+    paper_tracking = {"items": [{"signal_date": "2026-05-08"}, {"run_date": "2026-05-09"}]}
+
+    first = build_shortpick_retrospective_forward_replay_requests([rule], paper_tracking)
+    second = build_shortpick_retrospective_forward_replay_requests([rule], paper_tracking)
+
+    assert first == second
+    assert first["execution_policy"] == "request_plan_only_no_replay_execution_no_data_write"
 
 
 def _evidence_from_returns(
