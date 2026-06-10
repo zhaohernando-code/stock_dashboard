@@ -325,6 +325,8 @@ def build_shortpick_strategy_archive_records(
         "decision_policy": "preserve_retired_strategy_statistics_and_evidence_refs",
         "archive_count": len(records),
         "records": records,
+        "archive_summary_policy": "group_retired_strategies_by_evidence_basis_family_and_entry_source",
+        "summary_rows": _archive_summary_rows(records),
     }
 
 
@@ -1137,6 +1139,56 @@ def _evidence_basis_sections(items: list[dict[str, Any]]) -> list[dict[str, Any]
             }
         )
     return sections
+
+
+def _archive_summary_rows(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for record in records:
+        evidence_basis = str(record.get("evidence_basis") or "unknown")
+        strategy_family = str(record.get("strategy_family") or "unknown")
+        entry_price_source = str(record.get("entry_price_source") or "unknown")
+        key = (evidence_basis, strategy_family, entry_price_source)
+        row = grouped.setdefault(
+            key,
+            {
+                "summary_key": "__".join(key),
+                "evidence_basis": evidence_basis,
+                "evidence_basis_display": _evidence_basis_display(evidence_basis),
+                "strategy_family": strategy_family,
+                "entry_price_source": entry_price_source,
+                "archived_strategy_count": 0,
+                "signal_count": 0,
+                "completed_observation_count": 0,
+                "first_signal_date": None,
+                "latest_signal_date": None,
+                "retirement_artifact_count": 0,
+            },
+        )
+        row["archived_strategy_count"] = int(row["archived_strategy_count"]) + 1
+        row["signal_count"] = int(row["signal_count"]) + int(record.get("signal_count") or 0)
+        row["completed_observation_count"] = int(row["completed_observation_count"]) + int(record.get("completed_observation_count") or 0)
+        if _dict(record.get("retirement_artifact_ref")).get("artifact_id"):
+            row["retirement_artifact_count"] = int(row["retirement_artifact_count"]) + 1
+        _extend_date_bounds(row, str(record.get("first_signal_date") or ""))
+        _extend_date_bounds(row, str(record.get("latest_signal_date") or ""))
+
+    return [
+        grouped[key]
+        for key in sorted(
+            grouped,
+            key=lambda item: (
+                _evidence_basis_section_sort_key(item[0]),
+                item[1],
+                item[2],
+            ),
+        )
+    ]
+
+
+def _evidence_basis_section_sort_key(value: str) -> tuple[int, str]:
+    if value in SHORTPICK_EVIDENCE_BASIS_SECTION_ORDER:
+        return (SHORTPICK_EVIDENCE_BASIS_SECTION_ORDER.index(value), value)
+    return (len(SHORTPICK_EVIDENCE_BASIS_SECTION_ORDER), value)
 
 
 def _strategy_metadata(item: dict[str, Any]) -> dict[str, Any]:
