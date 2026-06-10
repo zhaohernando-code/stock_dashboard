@@ -367,6 +367,7 @@ export interface ShortpickReplayFeedbackResponse {
     return_attribution?: Record<string, unknown>;
     forward_tracking_alignment?: Record<string, unknown>;
     strategy_slice_evidence?: Record<string, unknown>;
+    strategy_governance_reporting?: Record<string, unknown>;
   };
 }
 

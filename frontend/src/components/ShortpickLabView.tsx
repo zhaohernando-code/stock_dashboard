@@ -2094,6 +2094,7 @@ function ReplayDecisionReadout({
   const regime = recordValue<Record<string, unknown>>(feedback?.overall, "regime_stability") ?? {};
   const attribution = recordValue<Record<string, unknown>>(feedback?.overall, "return_attribution") ?? {};
   const forwardAlignment = recordValue<Record<string, unknown>>(feedback?.overall, "forward_tracking_alignment") ?? {};
+  const governanceReporting = recordValue<Record<string, unknown>>(feedback?.overall, "strategy_governance_reporting") ?? {};
   const strategySlice = recordValue<Record<string, unknown>>(feedback?.overall, "strategy_slice_evidence") ?? {};
   const strategySliceScope = recordValue<Record<string, unknown>>(strategySlice, "data_scope") ?? {};
   const strategySliceAdequacy = recordValue<Record<string, unknown>>(strategySlice, "sample_adequacy") ?? {};
@@ -2133,6 +2134,11 @@ function ReplayDecisionReadout({
   const portfolioSymbolIndustry = recordValue<Record<string, unknown>>(portfolioAttribution, "symbol_industry") ?? {};
   const portfolioTopSymbolRows = Array.isArray(portfolioSymbolIndustry.top_symbol_rows) ? portfolioSymbolIndustry.top_symbol_rows as Record<string, unknown>[] : [];
   const portfolioTopIndustryRows = Array.isArray(portfolioSymbolIndustry.top_industry_rows) ? portfolioSymbolIndustry.top_industry_rows as Record<string, unknown>[] : [];
+  const governanceSections = Array.isArray(governanceReporting.sections) ? governanceReporting.sections as Record<string, unknown>[] : [];
+  const governanceArchiveRows = Array.isArray(governanceReporting.archive_summary_rows) ? governanceReporting.archive_summary_rows as Record<string, unknown>[] : [];
+  const governanceLeakageRows = Array.isArray(governanceReporting.leakage_coverage_rows) ? governanceReporting.leakage_coverage_rows as Record<string, unknown>[] : [];
+  const governanceStatusCounts = recordValue<Record<string, unknown>>(governanceReporting, "status_counts") ?? {};
+  const governanceStatusEntries = Object.entries(governanceStatusCounts);
   const defaultPortfolioConfidence = portfolioConfidenceRows.find((item) => item.entry_price_source === "next_close" && item.strategy === "low_turnover_20d_uptrend_liquid_top120")
     ?? portfolioConfidenceRows[0];
   const defaultPortfolioAttribution = portfolioAttributionRows.find((item) => item.entry_price_source === "next_close" && item.strategy === "low_turnover_20d_uptrend_liquid_top120")
@@ -2229,6 +2235,99 @@ function ReplayDecisionReadout({
             <Text type="secondary">{item.reason || "读取预计算产物，不在页面请求时重算。"}</Text>
           </div>
         ))}
+      </div>
+
+      <div className="shortpick-replay-entry-matrix">
+        <Space direction="vertical" size={2}>
+          <Title level={5}>策略治理投影</Title>
+          <Text type="secondary">
+            {String(governanceReporting.status ?? "") === "ready"
+              ? "状态、证据分区、归档和泄漏信息均来自治理契约字段；页面不按 tracking_role 推断。"
+              : String(governanceReporting.reason ?? "治理投影待产物补齐；页面不会按 tracking_role 推断策略状态。")}
+          </Text>
+        </Space>
+        {String(governanceReporting.status ?? "") !== "ready" ? (
+          <Alert
+            showIcon
+            type="info"
+            message="策略治理投影待产物补齐"
+            description="报告缺少 strategy_governance_reporting 时不会从 tracking_role 或 role name 推断状态。"
+          />
+        ) : (
+          <>
+            <div className="shortpick-replay-decision-grid">
+              <div className="shortpick-replay-decision-tile">
+                <Space wrap size={6}>
+                  <span>主区策略</span>
+                  <Tag color="blue">Primary</Tag>
+                </Space>
+                <strong>{formatNumber(Number(governanceReporting.primary_count ?? 0))}</strong>
+                <Text type="secondary">归档 {formatNumber(Number(governanceReporting.archive_count ?? 0))}</Text>
+              </div>
+              <div className="shortpick-replay-decision-tile">
+                <Space wrap size={6}>
+                  <span>状态计数</span>
+                  <Tag color="purple">Contract</Tag>
+                </Space>
+                <strong>{governanceStatusEntries.length ? governanceStatusEntries.map(([key, value]) => `${replayDecisionStatusLabel(key)} ${formatNumber(Number(value ?? 0))}`).join(" / ") : "待补"}</strong>
+                <Text type="secondary">读取 recommended_status，不读取 role name。</Text>
+              </div>
+              <div className="shortpick-replay-decision-tile">
+                <Space wrap size={6}>
+                  <span>证据分区</span>
+                  <Tag color="geekblue">Basis</Tag>
+                </Space>
+                <strong>{governanceSections.length ? governanceSections.map((item) => `${String(recordValue<Record<string, unknown>>(item, "evidence_basis_display")?.label ?? item.evidence_basis)} ${formatNumber(Number(item.item_count ?? 0))}`).join(" / ") : "待补"}</strong>
+                <Text type="secondary">true-forward、retrospective、historical 分开展示。</Text>
+              </div>
+              <div className="shortpick-replay-decision-tile">
+                <Space wrap size={6}>
+                  <span>泄漏/覆盖</span>
+                  <Tag color={governanceLeakageRows.length ? "gold" : "default"}>Audit</Tag>
+                </Space>
+                <strong>{formatNumber(governanceLeakageRows.length)}</strong>
+                <Text type="secondary">需要显式展示 source cutoff 或 leakage status 的行。</Text>
+              </div>
+            </div>
+            <Table
+              className="shortpick-replay-stat-table"
+              rowKey={(item) => String(item.strategy_id ?? item.summary_key ?? item.evidence_basis)}
+              size="small"
+              pagination={false}
+              columns={[
+                {
+                  title: "策略 / 证据",
+                  render: (_, item) => (
+                    <Space direction="vertical" size={0}>
+                      <Text strong>{String(item.strategy_id ?? item.summary_key ?? "summary")}</Text>
+                      <Text type="secondary">{String(item.evidence_basis ?? "unknown")}</Text>
+                    </Space>
+                  ),
+                },
+                {
+                  title: "治理状态",
+                  render: (_, item) => (
+                    <Space direction="vertical" size={0}>
+                      <Text>{replayDecisionStatusLabel(String(item.recommended_status ?? "archive_summary"))}</Text>
+                      <Text type="secondary">{String(item.strategy_family ?? item.entry_price_source ?? "")}</Text>
+                    </Space>
+                  ),
+                },
+                {
+                  title: "审计 / 归档",
+                  render: (_, item) => (
+                    <Space direction="vertical" size={0}>
+                      <Text>{String(item.leakage_audit_status ?? item.archived_strategy_count ?? "not_applicable")}</Text>
+                      <Text type="secondary">{String(item.source_feature_cutoff_policy ?? item.feature_coverage_status ?? "archive summary")}</Text>
+                    </Space>
+                  ),
+                },
+              ]}
+              dataSource={governanceLeakageRows.length ? governanceLeakageRows : governanceArchiveRows}
+              locale={{ emptyText: "暂无需要展示的泄漏/覆盖或归档行" }}
+            />
+          </>
+        )}
       </div>
 
       <Collapse
