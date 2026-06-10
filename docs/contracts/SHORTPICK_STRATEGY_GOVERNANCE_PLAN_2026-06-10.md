@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round9_p2_6_archive_record_helper_completed_ds_review_passed
+Status: round10_p3_1_same_symbol_cooldown_rule_helper_completed_ds_review_passed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -92,7 +92,7 @@ The next governance package should adopt four principles.
 
 | ID | Work Item | Status | Notes |
 | --- | --- | --- | --- |
-| P3.1 | Same-symbol cooldown control | pending | First version should operate by symbol. Suggested starting window: 5 or 10 trading days, with longer cooldown after a negative completed trade. |
+| P3.1 | Same-symbol cooldown control | completed_partial_runtime_wiring_pending | Added a deterministic rule builder and pure input-to-output cooldown helper. It blocks candidates only from prior completed same-symbol negative outcomes, uses longer cooldown after severe losses, emits `rule_signature`, and labels evidence basis. Historical/replay generation, true-forward wiring, and frontend display remain pending. |
 | P3.2 | Drawdown/reversal filter control | pending | Blocks entries after short-window breakdown, high-level reversal, or recent drawdown threshold. Thresholds must be policy-governed. |
 | P3.3 | Repeated exposure limit control | pending | Limits repeated concentration by symbol first, then optionally by industry or theme after stable classification exists. |
 | P3.4 | Historical backtest generation | pending | Long-window deterministic backtest under existing account-executable universe rules. |
@@ -471,6 +471,26 @@ DeepSeek result:
 - Merge recommendation: merge and push Round 9.
 - Key confirmations: archive records are built only from `archive_items`; primary rows are ignored; retired strategy records preserve signal counts, completed observations, horizon summaries, historical evidence refs, baseline refs, and retirement artifact refs; and the helper is pure input-to-output with no side effects.
 
+## Round 10 Review Result
+
+Status: completed DeepSeek review.
+
+Round 10 scope:
+
+- P3.1 same-symbol cooldown deterministic rule builder.
+- P3.1 pure same-symbol cooldown control helper.
+- Extended module: `src/ashare_evidence/shortpick_strategy_governance.py`.
+- Extended tests: `tests/test_shortpick_strategy_governance.py`.
+
+Round 10 adds a helper only. It does not generate historical backtests, create retrospective forward replay artifacts, start true-forward tracking, write database rows, change frontend/API behavior, or alter active shortpick generation.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge and push Round 10.
+- Key confirmations: the helper ignores same-day or future outcomes and only uses prior completed negative same-symbol outcomes; `leakage_policy` matches implementation; all new functions are pure input-to-output; `evidence_basis` is explicit and does not disguise replay as true forward; tests cover stable rule signatures, invalid windows, normal and severe cooldown windows, wrong-horizon exclusion, symbol separation, and same-day/future leakage guards.
+- Nonblocking follow-ups retained for later hardening: add empty input tests, threshold-equality tests, and explicit default-rule-path tests.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -507,8 +527,10 @@ DeepSeek result:
 | Round 8 DeepSeek review | completed |
 | P2.6 archive record helper | completed |
 | Round 9 DeepSeek review | completed |
+| P3.1 same-symbol cooldown helper | completed_partial_runtime_wiring_pending |
+| Round 10 DeepSeek review | completed |
 | Runtime behavior changed | not_started |
 | Registry changed | completed |
-| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_and_archive_helpers |
+| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_and_same_symbol_cooldown_helpers |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |

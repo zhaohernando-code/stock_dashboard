@@ -5,6 +5,8 @@ import json
 import pytest
 
 from ashare_evidence.shortpick_strategy_governance import (
+    apply_shortpick_same_symbol_cooldown_control,
+    build_shortpick_same_symbol_cooldown_rule,
     build_shortpick_strategy_archive_records,
     build_shortpick_strategy_retirement_evidence_packs,
     build_shortpick_strategy_status_recommendations,
@@ -450,6 +452,139 @@ def test_archive_records_ignore_primary_rows() -> None:
 
     assert archive["archive_count"] == 0
     assert archive["records"] == []
+
+
+def test_same_symbol_cooldown_rule_signature_is_stable_and_parameter_sensitive() -> None:
+    first = build_shortpick_same_symbol_cooldown_rule(cooldown_signal_days=5)
+    second = build_shortpick_same_symbol_cooldown_rule(cooldown_signal_days=5)
+    changed = build_shortpick_same_symbol_cooldown_rule(cooldown_signal_days=6)
+
+    assert first["rule_signature"] == second["rule_signature"]
+    assert first["rule_signature"].startswith("sha256:")
+    assert first["rule_signature"] != changed["rule_signature"]
+
+
+def test_same_symbol_cooldown_rule_rejects_invalid_windows() -> None:
+    with pytest.raises(ValueError, match="cooldown_signal_days must be positive"):
+        build_shortpick_same_symbol_cooldown_rule(cooldown_signal_days=0)
+
+    with pytest.raises(ValueError, match="severe_cooldown_signal_days"):
+        build_shortpick_same_symbol_cooldown_rule(cooldown_signal_days=5, severe_cooldown_signal_days=4)
+
+    with pytest.raises(ValueError, match="negative_horizon_days must be positive"):
+        build_shortpick_same_symbol_cooldown_rule(negative_horizon_days=0)
+
+
+def test_same_symbol_cooldown_blocks_prior_completed_negative_same_symbol_only() -> None:
+    rule = build_shortpick_same_symbol_cooldown_rule(cooldown_signal_days=2, severe_cooldown_signal_days=4)
+    candidates = [
+        {"candidate_id": "aaa-3", "symbol": "AAA.SZ", "signal_date": "2026-05-03"},
+        {"candidate_id": "aaa-4", "symbol": "AAA.SZ", "signal_date": "2026-05-04"},
+        {"candidate_id": "aaa-5", "symbol": "AAA.SZ", "signal_date": "2026-05-05"},
+        {"candidate_id": "bbb-3", "symbol": "BBB.SZ", "signal_date": "2026-05-03"},
+    ]
+    outcomes = [
+        {
+            "candidate_id": "loss-aaa",
+            "run_id": "run-1",
+            "symbol": "AAA.SZ",
+            "signal_date": "2026-04-20",
+            "exit_date": "2026-05-02",
+            "horizon_days": 10,
+            "status": "completed",
+            "stock_return": -0.03,
+        },
+        {
+            "candidate_id": "loss-bbb",
+            "symbol": "BBB.SZ",
+            "signal_date": "2026-04-20",
+            "exit_date": "2026-05-02",
+            "horizon_days": 10,
+            "status": "completed",
+            "stock_return": -0.03,
+        },
+        {
+            "candidate_id": "wrong-horizon",
+            "symbol": "AAA.SZ",
+            "signal_date": "2026-04-20",
+            "exit_date": "2026-05-02",
+            "horizon_days": 5,
+            "status": "completed",
+            "stock_return": -0.50,
+        },
+    ]
+
+    result = apply_shortpick_same_symbol_cooldown_control(candidates, outcomes, rule=rule)
+
+    by_id = {row["candidate_id"]: row for row in result["rows"]}
+    assert result["blocked_count"] == 3
+    assert result["allowed_count"] == 1
+    assert by_id["aaa-3"]["cooldown_action"] == "blocked"
+    assert by_id["aaa-3"]["cooldown_blocker_events"][0]["elapsed_signal_days"] == 1
+    assert by_id["aaa-4"]["cooldown_action"] == "blocked"
+    assert by_id["aaa-5"]["cooldown_action"] == "allowed"
+    assert by_id["bbb-3"]["cooldown_action"] == "blocked"
+
+
+def test_same_symbol_cooldown_uses_longer_window_after_severe_loss() -> None:
+    rule = build_shortpick_same_symbol_cooldown_rule(
+        cooldown_signal_days=2,
+        severe_loss_threshold=-0.08,
+        severe_cooldown_signal_days=4,
+    )
+    candidates = [
+        {"candidate_id": f"aaa-{day}", "symbol": "AAA.SZ", "signal_date": f"2026-05-{day:02d}"}
+        for day in range(4, 9)
+    ]
+    outcomes = [
+        {
+            "candidate_id": "severe-loss",
+            "symbol": "AAA.SZ",
+            "signal_date": "2026-04-20",
+            "exit_date": "2026-05-03",
+            "horizon_days": 10,
+            "status": "completed",
+            "stock_return": -0.10,
+        }
+    ]
+
+    result = apply_shortpick_same_symbol_cooldown_control(candidates, outcomes, rule=rule)
+
+    by_id = {row["candidate_id"]: row for row in result["rows"]}
+    assert by_id["aaa-7"]["cooldown_action"] == "blocked"
+    assert by_id["aaa-7"]["cooldown_blocker_events"][0]["cooldown_signal_days"] == 4
+    assert by_id["aaa-8"]["cooldown_action"] == "allowed"
+
+
+def test_same_symbol_cooldown_ignores_same_day_or_future_outcomes_for_leakage() -> None:
+    candidates = [{"candidate_id": "aaa-2", "symbol": "AAA.SZ", "signal_date": "2026-05-02"}]
+    outcomes = [
+        {
+            "candidate_id": "same-day-loss",
+            "symbol": "AAA.SZ",
+            "signal_date": "2026-04-20",
+            "exit_date": "2026-05-02",
+            "horizon_days": 10,
+            "status": "completed",
+            "stock_return": -0.03,
+        },
+        {
+            "candidate_id": "future-loss",
+            "symbol": "AAA.SZ",
+            "signal_date": "2026-04-21",
+            "exit_date": "2026-05-03",
+            "horizon_days": 10,
+            "status": "completed",
+            "stock_return": -0.04,
+        },
+    ]
+
+    result = apply_shortpick_same_symbol_cooldown_control(candidates, outcomes)
+
+    assert result["leakage_audit_status"] == "passed"
+    assert result["ignored_future_or_same_day_outcome_count"] == 2
+    assert result["rows"][0]["cooldown_action"] == "allowed"
+    assert result["rows"][0]["cooldown_blocker_events"] == []
 
 
 def _evidence_from_returns(
