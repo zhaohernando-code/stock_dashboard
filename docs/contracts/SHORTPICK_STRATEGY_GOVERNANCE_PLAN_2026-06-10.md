@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round15_p3_6_true_forward_activation_plan_completed_ds_review_passed
+Status: round16_p4_1_strategy_status_labels_completed_ds_review_passed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -103,7 +103,7 @@ The next governance package should adopt four principles.
 
 | ID | Work Item | Status | Notes |
 | --- | --- | --- | --- |
-| P4.1 | Add strategy status labels | pending | Status values should distinguish active, observe, retired, historical-only, retrospective-only, and true-forward. |
+| P4.1 | Add strategy status labels | completed_partial_display_wiring_pending | Added backend view-projection label metadata for governance status and evidence basis, plus frontend label/color helpers for active, observe, retire-candidate, retired, historical-only, retrospective-only, and true-forward states. API/page wiring remains pending. |
 | P4.2 | Add separate display sections for evidence basis | pending | Historical backtest, retrospective replay, and true forward should not share a single headline as if they were the same evidence. |
 | P4.3 | Add retirement archive view or archive summary rows | pending | Retired strategies should remain explainable without staying in the active compute path. |
 | P4.4 | Add leakage and coverage notes | pending | Retrospective rows must show source cutoff and leakage audit status. |
@@ -587,6 +587,25 @@ DeepSeek result:
 - Key confirmations: the helper gates activation on `control_group_id`, `rule_signature`, and `rule_defined_at`; unregistered control IDs are blocked; `tracking_start_date` is `max(tracking_started_at, rule_defined_at)`; `evidence_basis=true_forward_tracking` is paired with `retrospective=false` and `retroactive_backfill_allowed=false`; and tests cover normal activation, missing identity or definition time, unregistered control blocking, determinism, and input validation.
 - Nonblocking follow-up retained for runtime wiring: the current artifact family reference points to the existing paper-tracking ledger concept rather than a newly registered dedicated artifact family; if the project later creates a dedicated true-forward artifact family, the activation plan should be wired to that registered family before writing rows.
 
+## Round 16 Review Result
+
+Status: completed DeepSeek sharded review.
+
+Round 16 scope:
+
+- P4.1 backend strategy-status and evidence-basis display metadata in `project_shortpick_strategy_view_sections`.
+- P4.1 frontend label/color helper functions in `frontend/src/components/shortpickLabLabels.ts`.
+- Extended tests: `tests/test_shortpick_strategy_governance.py` and `tests/test_frontend_shortpick_static.py`.
+
+Round 16 adds labels and projection metadata only. It does not create a new API route, wire governance projection into a live page, write runtime data, or change active strategy generation.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge and push Round 16.
+- Key confirmations: backend projection now adds stable `status_display` and `evidence_basis_display` metadata while preserving the rule that `retired` rows go only to archive; frontend helpers cover active, observe, retire-candidate, retired, historical-only, retrospective-only, true-forward, historical-backtest, retrospective-forward-replay, and true-forward-tracking labels; tests cover known labels, fallback labels, helper presence, and legacy projection/archive behavior.
+- Nonblocking follow-up retained for P4.2/P4.3: actual page display still requires an API or report data source that carries these projection rows; until then, the helper must not be presented as live UI evidence.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -635,8 +654,11 @@ DeepSeek result:
 | Round 14 DeepSeek review | completed |
 | P3.6 true forward tracking activation plan | completed_partial_runtime_wiring_pending |
 | Round 15 DeepSeek review | completed |
+| P4.1 strategy status labels | completed_partial_display_wiring_pending |
+| Round 16 DeepSeek review | completed |
 | Runtime behavior changed | not_started |
 | Registry changed | completed |
-| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_and_true_forward_activation_plan |
+| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_and_status_label_projection |
+| Frontend helper code changed | completed_for_strategy_status_and_evidence_basis_label_helpers |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |

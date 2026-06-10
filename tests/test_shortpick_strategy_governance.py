@@ -368,7 +368,18 @@ def test_strategy_view_projection_splits_retired_into_archive_only() -> None:
         {
             "strategy_id": "retired-id",
             "recommended_status": "retired",
+            "status_display": {
+                "key": "retired",
+                "label": "Retired",
+                "tone": "default",
+                "primary_section": "archive",
+            },
             "evidence_basis": "true_forward_tracking",
+            "evidence_basis_display": {
+                "key": "true_forward_tracking",
+                "label": "True forward tracking",
+                "tone": "green",
+            },
             "tracking_group": "market_factor_control",
             "tracking_role": None,
             "strategy_family": None,
@@ -390,6 +401,60 @@ def test_strategy_view_projection_tolerates_missing_lists() -> None:
 
     assert result["primary_items"][0]["reasons"] == []
     assert result["primary_items"][0]["blockers"] == []
+    assert result["primary_items"][0]["status_display"] == {
+        "key": "observe",
+        "label": "Observe",
+        "tone": "gold",
+        "primary_section": "primary",
+    }
+    assert result["primary_items"][0]["evidence_basis_display"] == {
+        "key": "unknown",
+        "label": "Unknown evidence",
+        "tone": "default",
+    }
+
+
+def test_strategy_view_projection_adds_status_and_evidence_labels() -> None:
+    result = project_shortpick_strategy_view_sections(
+        {
+            "recommendations": [
+                {
+                    "strategy_id": "candidate-id",
+                    "recommended_status": "retire_candidate",
+                    "evidence_basis": "retrospective_forward_replay",
+                },
+                {
+                    "strategy_id": "unknown-id",
+                    "recommended_status": "custom_future_status",
+                    "evidence_basis": "custom_basis",
+                },
+            ]
+        }
+    )
+
+    candidate, unknown = result["primary_items"]
+    assert candidate["status_display"] == {
+        "key": "retire_candidate",
+        "label": "Retire candidate",
+        "tone": "orange",
+        "primary_section": "primary",
+    }
+    assert candidate["evidence_basis_display"] == {
+        "key": "retrospective_forward_replay",
+        "label": "Retrospective replay",
+        "tone": "purple",
+    }
+    assert unknown["status_display"] == {
+        "key": "custom_future_status",
+        "label": "Unknown",
+        "tone": "default",
+        "primary_section": "primary",
+    }
+    assert unknown["evidence_basis_display"] == {
+        "key": "custom_basis",
+        "label": "Unknown evidence",
+        "tone": "default",
+    }
 
 
 def test_archive_records_preserve_statistics_and_evidence_refs_for_retired_rows() -> None:

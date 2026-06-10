@@ -204,6 +204,45 @@ export function statusLabel(value: string): string {
   return labels[value] ?? "待确认";
 }
 
+export function strategyGovernanceStatusLabel(value?: string | null): string {
+  const labels: Record<string, string> = {
+    active: "活跃",
+    observe: "观察",
+    retire_candidate: "退役候选",
+    retired: "已归档",
+    historical_only: "仅历史回测",
+    retrospective_only: "仅回放",
+    true_forward: "真实前向",
+  };
+  return labels[value ?? ""] ?? "治理状态待确认";
+}
+
+export function strategyGovernanceStatusColor(value?: string | null): string {
+  if (value === "active" || value === "true_forward") return "green";
+  if (value === "observe") return "gold";
+  if (value === "retire_candidate") return "orange";
+  if (value === "retired") return "default";
+  if (value === "historical_only") return "blue";
+  if (value === "retrospective_only") return "purple";
+  return "default";
+}
+
+export function strategyEvidenceBasisLabel(value?: string | null): string {
+  const labels: Record<string, string> = {
+    historical_backtest: "历史回测",
+    retrospective_forward_replay: "后验前向回放",
+    true_forward_tracking: "真实前向跟踪",
+  };
+  return labels[value ?? ""] ?? "证据口径待确认";
+}
+
+export function strategyEvidenceBasisColor(value?: string | null): string {
+  if (value === "historical_backtest") return "blue";
+  if (value === "retrospective_forward_replay") return "purple";
+  if (value === "true_forward_tracking") return "green";
+  return "default";
+}
+
 export function failureCategoryLabel(value?: string | null): string {
   if (value === "retryable_search_failure") return "搜索失败，可重跑";
   if (value === "retryable_parse_failure") return "解析失败，可重跑";

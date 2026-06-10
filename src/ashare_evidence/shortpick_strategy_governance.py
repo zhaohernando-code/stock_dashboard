@@ -24,6 +24,20 @@ REGISTERED_SHORTPICK_CONTROL_GROUP_IDS = frozenset(
         REPEATED_EXPOSURE_LIMIT_CONTROL_ID,
     }
 )
+SHORTPICK_STRATEGY_STATUS_DISPLAY = {
+    "active": {"label": "Active", "tone": "green", "primary_section": "primary"},
+    "observe": {"label": "Observe", "tone": "gold", "primary_section": "primary"},
+    "retire_candidate": {"label": "Retire candidate", "tone": "orange", "primary_section": "primary"},
+    "retired": {"label": "Retired", "tone": "default", "primary_section": "archive"},
+    "historical_only": {"label": "Historical only", "tone": "blue", "primary_section": "research"},
+    "retrospective_only": {"label": "Retrospective only", "tone": "purple", "primary_section": "research"},
+    "true_forward": {"label": "True forward", "tone": "green", "primary_section": "primary"},
+}
+SHORTPICK_EVIDENCE_BASIS_DISPLAY = {
+    "historical_backtest": {"label": "Historical backtest", "tone": "blue"},
+    "retrospective_forward_replay": {"label": "Retrospective replay", "tone": "purple"},
+    "true_forward_tracking": {"label": "True forward tracking", "tone": "green"},
+}
 
 
 def build_shortpick_strategy_retirement_evidence_packs(
@@ -230,7 +244,9 @@ def project_shortpick_strategy_view_sections(
         projected = {
             "strategy_id": item.get("strategy_id"),
             "recommended_status": item.get("recommended_status"),
+            "status_display": _strategy_status_display(item.get("recommended_status")),
             "evidence_basis": item.get("evidence_basis"),
+            "evidence_basis_display": _evidence_basis_display(item.get("evidence_basis")),
             "tracking_group": item.get("tracking_group"),
             "tracking_role": item.get("tracking_role"),
             "strategy_family": item.get("strategy_family"),
@@ -1072,6 +1088,18 @@ def _retrospective_forward_replay_request_id(payload: dict[str, Any]) -> str:
 def _true_forward_tracking_activation_id(payload: dict[str, Any]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return "shortpick-true-forward-activation:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+
+
+def _strategy_status_display(value: Any) -> dict[str, str]:
+    key = str(value or "unknown")
+    display = SHORTPICK_STRATEGY_STATUS_DISPLAY.get(key, {"label": "Unknown", "tone": "default", "primary_section": "primary"})
+    return {"key": key, **display}
+
+
+def _evidence_basis_display(value: Any) -> dict[str, str]:
+    key = str(value or "unknown")
+    display = SHORTPICK_EVIDENCE_BASIS_DISPLAY.get(key, {"label": "Unknown evidence", "tone": "default"})
+    return {"key": key, **display}
 
 
 def _strategy_metadata(item: dict[str, Any]) -> dict[str, Any]:
