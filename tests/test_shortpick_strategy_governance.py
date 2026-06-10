@@ -6,6 +6,7 @@ import pytest
 
 from ashare_evidence.shortpick_strategy_governance import (
     build_shortpick_strategy_retirement_evidence_packs,
+    build_shortpick_strategy_status_recommendations,
 )
 
 
@@ -159,6 +160,112 @@ def test_retirement_evidence_pack_preserves_evidence_basis_and_source_rank_zero(
 def test_retirement_evidence_pack_rejects_unknown_evidence_basis() -> None:
     with pytest.raises(ValueError, match="unsupported shortpick evidence_basis"):
         build_shortpick_strategy_retirement_evidence_packs({"items": []}, evidence_basis="mixed")
+
+
+def test_status_recommendation_marks_weak_mature_strategy_as_retire_candidate_not_retired() -> None:
+    evidence = _evidence_from_returns(
+        [-0.10, -0.05, -0.04, -0.03, -0.02, -0.01, -0.09, -0.02, 0.01, 0.02],
+        historical_evidence={
+            "low_turnover_20d_uptrend_liquid_top120": {
+                "status": "ready",
+                "after_cost_excess_return": -0.03,
+            }
+        },
+        baseline_evidence={
+            "low_turnover_20d_uptrend_liquid_top120": {
+                "status": "ready",
+                "mean_excess_return_gap": -0.02,
+            }
+        },
+    )
+
+    result = build_shortpick_strategy_status_recommendations(evidence)
+
+    recommendation = result["recommendations"][0]
+    assert result["decision_policy"] == "retired_requires_strategy_retirement_artifact_and_decision_log_ref"
+    assert recommendation["recommended_status"] == "retire_candidate"
+    assert recommendation["retirement_artifact_ref"] is None
+    assert "strategy_retirement_artifact_and_decision_log_ref_present" not in recommendation["reasons"]
+    assert recommendation["blockers"] == []
+    assert "historical_after_cost_excess_negative" in recommendation["reasons"]
+    assert "forward_win_rate_below_45pct" in recommendation["reasons"]
+
+
+def test_status_recommendation_requires_artifact_and_decision_log_for_retired() -> None:
+    evidence = _evidence_from_returns(
+        [-0.10, -0.05, -0.04, -0.03, -0.02, -0.01, -0.09, -0.02, 0.01, 0.02],
+        historical_evidence={
+            "low_turnover_20d_uptrend_liquid_top120": {
+                "status": "ready",
+                "after_cost_excess_return": -0.03,
+            }
+        },
+    )
+    strategy_id = evidence["packs"][0]["strategy_id"]
+
+    result = build_shortpick_strategy_status_recommendations(
+        evidence,
+        retirement_artifacts={
+            strategy_id: {
+                "status": "ready",
+                "artifact_family": "shortpick_strategy_retirement",
+                "artifact_id": "shortpick-retirement-fixture",
+                "decision_log_ref": "DECISIONS.md#2026-06-10-fixture",
+            }
+        },
+    )
+
+    recommendation = result["recommendations"][0]
+    assert recommendation["recommended_status"] == "retired"
+    assert recommendation["retirement_artifact_ref"]["artifact_id"] == "shortpick-retirement-fixture"
+    assert recommendation["reasons"] == ["strategy_retirement_artifact_and_decision_log_ref_present"]
+
+
+def test_status_recommendation_keeps_weak_immature_or_missing_history_in_observe() -> None:
+    evidence = _evidence_from_returns([-0.10, -0.05, 0.01])
+
+    result = build_shortpick_strategy_status_recommendations(evidence)
+
+    recommendation = result["recommendations"][0]
+    assert recommendation["recommended_status"] == "observe"
+    assert "forward_sample_not_mature" in recommendation["blockers"]
+    assert "historical_after_cost_evidence_missing" in recommendation["blockers"]
+
+
+def test_status_recommendation_keeps_non_triggering_strategy_active() -> None:
+    evidence = _evidence_from_returns([0.02, 0.03, 0.01, 0.04, 0.02])
+
+    result = build_shortpick_strategy_status_recommendations(evidence)
+
+    recommendation = result["recommendations"][0]
+    assert recommendation["recommended_status"] == "active"
+    assert recommendation["reasons"] == ["no_retirement_evidence_trigger"]
+    assert recommendation["blockers"] == []
+
+
+def _evidence_from_returns(
+    returns: list[float],
+    *,
+    historical_evidence: dict[str, object] | None = None,
+    baseline_evidence: dict[str, object] | None = None,
+) -> dict[str, object]:
+    payload = {
+        "items": [
+            _item(
+                f"2026-05-{index + 1:02d}",
+                "002371.SZ",
+                "北方华创",
+                value,
+                value - 0.01,
+            )
+            for index, value in enumerate(returns)
+        ]
+    }
+    return build_shortpick_strategy_retirement_evidence_packs(
+        payload,
+        historical_evidence=historical_evidence,
+        baseline_evidence=baseline_evidence,
+    )
 
 
 def _item(

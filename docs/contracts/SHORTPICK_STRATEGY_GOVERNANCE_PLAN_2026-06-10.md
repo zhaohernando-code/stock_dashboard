@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round5_p2_2_evidence_pack_builder_completed_ds_review_passed
+Status: round6_p2_3_status_recommendation_layer_completed_ds_review_passed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -83,7 +83,7 @@ The next governance package should adopt four principles.
 | --- | --- | --- | --- |
 | P2.1 | Inventory active shortpick strategies and controls | completed | Added `docs/contracts/SHORTPICK_STRATEGY_INVENTORY_2026-06-10.md`, separating true-forward paper tracking, generated overlay-only rows, historical/replay-only variants, and configured dormant controls. |
 | P2.2 | Compute retirement evidence pack per strategy | completed | Added a read-only builder in `src/ashare_evidence/shortpick_strategy_governance.py` that aggregates paper-tracking rows into evidence packs with evidence basis, forward mean/median/win rate, completed sample count, additive drawdown, tail dependence, same-symbol loss repeats, and optional historical/baseline evidence references. It does not mark `retired`, write runtime data, or change frontend/API behavior. |
-| P2.3 | Mark candidates as `active`, `observe`, `retire_candidate`, or `retired` | pending | `retired` requires a `strategy_retirement:v1` artifact and decision-log entry. |
+| P2.3 | Mark candidates as `active`, `observe`, `retire_candidate`, or `retired` | completed | Added a read-only status recommendation layer. Metrics alone can only produce `active`, `observe`, or `retire_candidate`; `retired` requires a valid `strategy_retirement:v1` / `shortpick_strategy_retirement` artifact plus `decision_log_ref`. No runtime state is persisted in this round. |
 | P2.4 | Remove retired strategies from active generation | pending | Retired strategies should not consume daily compute unless explicitly requested for archive rebuild. |
 | P2.5 | Remove retired strategies from primary frontend views | pending | Archive summaries remain visible in an audit or research archive view. |
 | P2.6 | Preserve archived statistics and evidence refs | pending | Do not physically erase all evidence from the only auditable source of truth. |
@@ -397,6 +397,25 @@ DeepSeek result:
 - Key confirmations: the builder is pure input-to-output and read-only; pack-level `decision_status` remains `not_evaluated`; `evidence_basis` is explicit and schema-limited to `true_forward_tracking`, `retrospective_forward_replay`, or `historical_backtest`; `source_rank=0` remains distinct from a missing rank; and missing structured entry-source data no longer falls back to Chinese UI text parsing.
 - Nonblocking follow-up retained for later consumer work: if a downstream view combines multiple evidence bases, it must de-duplicate by `strategy_id + evidence_basis` or otherwise keep basis visible.
 
+## Round 6 Review Result
+
+Status: completed DeepSeek review.
+
+Round 6 scope:
+
+- P2.3 read-only strategy governance status recommendation layer.
+- Extended module: `src/ashare_evidence/shortpick_strategy_governance.py`.
+- Extended tests: `tests/test_shortpick_strategy_governance.py`.
+
+Round 6 computes recommended statuses only. It does not persist status to the database, does not create retirement artifacts, does not append `DECISIONS.md`, does not remove strategies from active generation, and does not change frontend/API behavior.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge and push Round 6.
+- Key confirmations: `retired` cannot be produced by metrics alone; a valid retirement artifact and `decision_log_ref` are both required; `retire_candidate` requires all configured maturity, historical, forward, win-rate, tail-risk, and ready-baseline gates; immature or incomplete evidence falls to `observe`; and non-triggering strategies stay `active`.
+- Nonblocking follow-ups retained for future hardening: add tests for positive baseline gap blocking `retire_candidate`, mixed negative/positive forward signals, incomplete retirement artifacts, list-form artifact lookup, empty packs, and primary-horizon fallback.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -425,8 +444,10 @@ DeepSeek result:
 | Round 4 DeepSeek review | completed |
 | P2.2 evidence-pack builder | completed |
 | Round 5 DeepSeek review | completed |
+| P2.3 status recommendation layer | completed |
+| Round 6 DeepSeek review | completed |
 | Runtime behavior changed | not_started |
 | Registry changed | completed |
-| Strategy code changed | completed_for_read_only_governance_builder |
+| Strategy code changed | completed_for_read_only_governance_builder_and_status_layer |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |

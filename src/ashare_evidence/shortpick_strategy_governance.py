@@ -129,6 +129,33 @@ def build_shortpick_strategy_retirement_evidence_packs(
     }
 
 
+def build_shortpick_strategy_status_recommendations(
+    evidence_pack_result: dict[str, Any],
+    *,
+    retirement_artifacts: dict[str, Any] | None = None,
+    primary_horizon_days: int = 10,
+) -> dict[str, Any]:
+    """Recommend governance status from evidence packs without writing state."""
+
+    packs = [_dict(item) for item in evidence_pack_result.get("packs") or [] if isinstance(item, dict)]
+    recommendations = [
+        _status_recommendation(
+            pack,
+            retirement_artifact=_retirement_artifact_lookup(retirement_artifacts, str(pack.get("strategy_id") or "")),
+            primary_horizon_days=primary_horizon_days,
+        )
+        for pack in packs
+    ]
+    return {
+        "status": "ready",
+        "source": "shortpick_strategy_retirement_evidence_packs",
+        "decision_policy": "retired_requires_strategy_retirement_artifact_and_decision_log_ref",
+        "primary_horizon_days": primary_horizon_days,
+        "strategy_count": len(recommendations),
+        "recommendations": recommendations,
+    }
+
+
 def _strategy_metadata(item: dict[str, Any]) -> dict[str, Any]:
     components = _dict(item.get("selection_score_components"))
     tracking_group = str(item.get("tracking_group") or "unknown")
@@ -166,6 +193,154 @@ def _strategy_metadata(item: dict[str, Any]) -> dict[str, Any]:
         "entry_rule": entry_rule,
         "signal_count": 0,
     }
+
+
+def _status_recommendation(
+    pack: dict[str, Any],
+    *,
+    retirement_artifact: dict[str, Any],
+    primary_horizon_days: int,
+) -> dict[str, Any]:
+    strategy_id = str(pack.get("strategy_id") or "")
+    horizon = _primary_horizon_summary(pack, primary_horizon_days)
+    historical = _dict(pack.get("historical_evidence"))
+    baseline = _dict(pack.get("baseline_comparison"))
+    reasons: list[str] = []
+    blockers: list[str] = []
+
+    if _has_retirement_authority(retirement_artifact):
+        status = "retired"
+        reasons.append("strategy_retirement_artifact_and_decision_log_ref_present")
+    elif not horizon:
+        status = "observe"
+        blockers.append("primary_horizon_missing")
+    elif _has_negative_forward_signal(horizon):
+        if _retire_candidate_gates_pass(horizon, historical, baseline, reasons, blockers):
+            status = "retire_candidate"
+        else:
+            status = "observe"
+    else:
+        status = "active"
+        reasons.append("no_retirement_evidence_trigger")
+
+    return {
+        "strategy_id": strategy_id,
+        "recommended_status": status,
+        "evidence_basis": pack.get("evidence_basis"),
+        "tracking_group": pack.get("tracking_group"),
+        "tracking_role": pack.get("tracking_role"),
+        "strategy_family": pack.get("strategy_family"),
+        "entry_price_source": pack.get("entry_price_source"),
+        "primary_horizon_days": primary_horizon_days,
+        "primary_horizon_summary": horizon,
+        "reasons": reasons,
+        "blockers": blockers,
+        "retirement_artifact_ref": retirement_artifact if status == "retired" else None,
+    }
+
+
+def _retire_candidate_gates_pass(
+    horizon: dict[str, Any],
+    historical: dict[str, Any],
+    baseline: dict[str, Any],
+    reasons: list[str],
+    blockers: list[str],
+) -> bool:
+    if not horizon:
+        blockers.append("primary_horizon_missing")
+        return False
+
+    if horizon.get("maturity_status") not in {"mature_one_stock_review_sample", "mature_multi_row_review_sample"}:
+        blockers.append("forward_sample_not_mature")
+    else:
+        reasons.append("forward_sample_mature")
+
+    historical_value = _float(historical.get("after_cost_excess_return"))
+    if historical.get("status") != "ready" or historical_value is None:
+        blockers.append("historical_after_cost_evidence_missing")
+    elif historical_value < 0:
+        reasons.append("historical_after_cost_excess_negative")
+    else:
+        blockers.append("historical_after_cost_excess_not_negative")
+
+    median_return = _float(horizon.get("median_stock_return"))
+    mean_return = _float(horizon.get("mean_stock_return"))
+    win_rate = _float(horizon.get("win_rate"))
+    worst_return = _float(horizon.get("worst_stock_return"))
+    max_drawdown = _float(horizon.get("max_additive_drawdown"))
+    tail_dependency = _dict(horizon.get("tail_dependency"))
+    tail_dependent = bool(tail_dependency.get("tail_dependent"))
+
+    if median_return is not None and median_return < 0:
+        reasons.append("forward_median_stock_return_negative")
+    else:
+        blockers.append("forward_median_stock_return_not_negative")
+    if mean_return is not None and (mean_return < 0 or tail_dependent):
+        reasons.append("forward_mean_negative_or_tail_dependent")
+    else:
+        blockers.append("forward_mean_not_negative_and_not_tail_dependent")
+    if win_rate is not None and win_rate < 0.45:
+        reasons.append("forward_win_rate_below_45pct")
+    else:
+        blockers.append("forward_win_rate_not_below_threshold")
+    if (worst_return is not None and worst_return < -0.08) or (max_drawdown is not None and max_drawdown < -0.08):
+        reasons.append("tail_risk_gate_failed")
+    else:
+        blockers.append("tail_risk_gate_not_failed")
+
+    baseline_gap = _float(baseline.get("mean_excess_return_gap"))
+    if baseline.get("status") == "ready" and baseline_gap is not None:
+        if baseline_gap < 0:
+            reasons.append("registered_baseline_gap_negative")
+        else:
+            blockers.append("registered_baseline_gap_not_negative")
+
+    return not blockers
+
+
+def _has_negative_forward_signal(horizon: dict[str, Any]) -> bool:
+    median_return = _float(horizon.get("median_stock_return"))
+    mean_return = _float(horizon.get("mean_stock_return"))
+    win_rate = _float(horizon.get("win_rate"))
+    return any(
+        [
+            median_return is not None and median_return < 0,
+            mean_return is not None and mean_return < 0,
+            win_rate is not None and win_rate < 0.45,
+        ]
+    )
+
+
+def _primary_horizon_summary(pack: dict[str, Any], primary_horizon_days: int) -> dict[str, Any]:
+    summaries = [_dict(item) for item in pack.get("horizon_summaries") or [] if isinstance(item, dict)]
+    for summary in summaries:
+        if _horizon_key(summary.get("horizon_days")) == str(primary_horizon_days):
+            return summary
+    return summaries[0] if summaries else {}
+
+
+def _retirement_artifact_lookup(source: dict[str, Any] | None, strategy_id: str) -> dict[str, Any]:
+    if not isinstance(source, dict) or not source:
+        return {}
+    value = source.get(strategy_id)
+    if isinstance(value, dict):
+        return dict(value)
+    artifacts = source.get("artifacts")
+    if isinstance(artifacts, list):
+        for artifact in artifacts:
+            if isinstance(artifact, dict) and artifact.get("strategy_id") == strategy_id:
+                return dict(artifact)
+    return {}
+
+
+def _has_retirement_authority(artifact: dict[str, Any]) -> bool:
+    return bool(
+        artifact
+        and artifact.get("status") in {"ready", "recorded"}
+        and artifact.get("artifact_family") in {"strategy_retirement:v1", "shortpick_strategy_retirement"}
+        and artifact.get("artifact_id")
+        and artifact.get("decision_log_ref")
+    )
 
 
 def _horizon_summary(horizon_days: str, observations: list[dict[str, Any]]) -> dict[str, Any]:
