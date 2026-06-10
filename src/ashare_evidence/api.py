@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import copy
 import json
 import logging
 import os
@@ -184,6 +185,11 @@ SHORTPICK_REPLAY_FEEDBACK_CACHE_ARTIFACT = Path("output/shortpick-replay-feedbac
 SHORTPICK_STRATEGY_SLICE_EVIDENCE_ARTIFACT = Path("output/shortpick-strategy-slice-evidence.json")
 SHORTPICK_TRADE_REGIME_EVIDENCE_ARTIFACT = Path("output/shortpick-strategy-trade-regime-evidence.json")
 OPERATIONS_RESPONSE_CACHE_TTL_SECONDS = 60.0
+SHORTPICK_REPLAY_AGGREGATE_FEEDBACK_TTL_SECONDS = float(
+    os.getenv("ASHARE_SHORTPICK_REPLAY_AGGREGATE_FEEDBACK_TTL_SECONDS", "15")
+)
+_shortpick_replay_aggregate_feedback_cache_lock = threading.Lock()
+_shortpick_replay_aggregate_feedback_cache: tuple[float, dict[str, object]] | None = None
 
 
 def _operations_json_default(value: object) -> str:
@@ -784,11 +790,49 @@ def _build_shortpick_strategy_governance_projection(paper_tracking: dict[str, ob
 
 
 def _build_shortpick_replay_aggregate_feedback_response(session: Session) -> dict[str, object]:
+    cached = _get_cached_shortpick_replay_aggregate_feedback_response()
+    if cached is not None:
+        return cached
     projection = get_ready_frontend_projection_payload(session, SHORTPICK_REPLAY_FEEDBACK_PROJECTION_KEY)
     if projection is not None:
-        return _attach_shortpick_replay_decision_projection(projection, session=session)
+        return _store_shortpick_replay_aggregate_feedback_response(
+            _attach_shortpick_replay_decision_projection(projection, session=session)
+        )
     feedback = _load_shortpick_replay_feedback_from_cache(run_id=None)
-    return _attach_shortpick_replay_decision_projection(feedback, session=session)
+    return _store_shortpick_replay_aggregate_feedback_response(
+        _attach_shortpick_replay_decision_projection(feedback, session=session)
+    )
+
+
+def _get_cached_shortpick_replay_aggregate_feedback_response() -> dict[str, object] | None:
+    if SHORTPICK_REPLAY_AGGREGATE_FEEDBACK_TTL_SECONDS <= 0:
+        return None
+    global _shortpick_replay_aggregate_feedback_cache
+    with _shortpick_replay_aggregate_feedback_cache_lock:
+        cached = _shortpick_replay_aggregate_feedback_cache
+        if cached is None:
+            return None
+        cached_at, payload = cached
+        if time.perf_counter() - cached_at > SHORTPICK_REPLAY_AGGREGATE_FEEDBACK_TTL_SECONDS:
+            _shortpick_replay_aggregate_feedback_cache = None
+            return None
+        return copy.deepcopy(payload)
+
+
+def _store_shortpick_replay_aggregate_feedback_response(payload: dict[str, object]) -> dict[str, object]:
+    if SHORTPICK_REPLAY_AGGREGATE_FEEDBACK_TTL_SECONDS <= 0:
+        return payload
+    cached_payload = copy.deepcopy(payload)
+    with _shortpick_replay_aggregate_feedback_cache_lock:
+        global _shortpick_replay_aggregate_feedback_cache
+        _shortpick_replay_aggregate_feedback_cache = (time.perf_counter(), cached_payload)
+    return copy.deepcopy(cached_payload)
+
+
+def _clear_shortpick_replay_aggregate_feedback_cache() -> None:
+    with _shortpick_replay_aggregate_feedback_cache_lock:
+        global _shortpick_replay_aggregate_feedback_cache
+        _shortpick_replay_aggregate_feedback_cache = None
 
 
 def _shortpick_portfolio_forward_tracking_alignment(

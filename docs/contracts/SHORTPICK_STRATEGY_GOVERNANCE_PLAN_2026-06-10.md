@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round25_release_verifier_timeout_governance_ds_reviewed
+Status: round26_replay_feedback_ttl_cache_ds_reviewed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -808,6 +808,32 @@ DeepSeek result:
 - DS rereview: the publish-lock blocker is resolved; no remaining must-fix issue before merge.
 - Nonblocking DS followups: trap setup could be moved closer to lock acquisition in a later cleanup; stale-lock recovery can be tightened further for highly automated concurrent publish scenarios; `_request_text` and `_request_bytes` could share a helper.
 
+## Round 26 Review Result
+
+Status: completed DeepSeek review.
+
+Round 26 scope:
+
+- Added a short module-level TTL cache for `_build_shortpick_replay_aggregate_feedback_response(...)` so repeated `/shortpick-lab/replay-feedback` reads do not repeatedly enrich ready replay projections with artifact reads and paper-tracking/governance calculations.
+- Default TTL is `15` seconds via `ASHARE_SHORTPICK_REPLAY_AGGREGATE_FEEDBACK_TTL_SECONDS`; values `<=0` disable the cache.
+- Cached payloads are protected with `copy.deepcopy` on write and read so callers cannot mutate the cached object.
+- Added `_clear_shortpick_replay_aggregate_feedback_cache()` for deterministic tests.
+- Added a regression test proving TTL hits avoid repeated enrichment, returned payloads are independent copies, and TTL expiry refreshes the enriched response.
+
+Verification evidence:
+
+- `PYTHONPATH=src python3 -m pytest tests/test_shortpick_replay_api_projection.py` passed (`5 passed`).
+- `python3 -m compileall -q src/ashare_evidence/api.py` passed.
+- `python3 -m ruff check src/ashare_evidence/api.py tests/test_shortpick_replay_api_projection.py` passed.
+- `git diff --check` passed.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Correctness and permission review: the endpoint already returns the same aggregate payload for all authenticated stock users, so the single-key cache does not add a cross-user leak; a 15-second freshness window is acceptable for the read-only dashboard use case and can be disabled.
+- Concurrency review: module-level lock protects cache tuple reads/writes and deepcopy prevents object pollution.
+- Nonblocking followups: cold/expired concurrent requests can still stampede and compute the same payload more than once; the miss path does two deep copies; tests do not yet cover TTL disabled, fallback cache source, or concurrent request behavior.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -875,6 +901,8 @@ DeepSeek result:
 | Round 24 DeepSeek review | completed |
 | Release verifier timeout governance | completed_ds_reviewed_pending_publish_verifier_quiescence |
 | Round 25 DeepSeek review | completed |
+| Replay-feedback aggregate TTL cache | completed_ds_reviewed |
+| Round 26 DeepSeek review | completed |
 | Runtime behavior changed | published_for_read_only_replay_feedback_projection_real_data_enrichment |
 | Registry changed | completed |
 | Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |

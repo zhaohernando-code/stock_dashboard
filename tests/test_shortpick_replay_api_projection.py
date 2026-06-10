@@ -4,6 +4,7 @@ import ashare_evidence.api as api
 from ashare_evidence.api import (
     _build_shortpick_replay_aggregate_feedback_response,
     _build_shortpick_strategy_governance_projection,
+    _clear_shortpick_replay_aggregate_feedback_cache,
     _slim_shortpick_strategy_slice_evidence,
 )
 
@@ -175,6 +176,7 @@ def test_api_strategy_governance_projection_does_not_infer_status_from_empty_led
 
 
 def test_api_enriches_ready_replay_feedback_frontend_projection(monkeypatch) -> None:
+    _clear_shortpick_replay_aggregate_feedback_cache()
     session = object()
     ready_projection = {
         "generated_at": "2026-05-14T16:02:11+00:00",
@@ -207,6 +209,65 @@ def test_api_enriches_ready_replay_feedback_frontend_projection(monkeypatch) -> 
     response = _build_shortpick_replay_aggregate_feedback_response(session)  # type: ignore[arg-type]
 
     assert response["overall"]["strategy_governance_reporting"] == {"status": "ready"}  # type: ignore[index]
+    _clear_shortpick_replay_aggregate_feedback_cache()
+
+
+def test_api_caches_enriched_replay_feedback_for_short_ttl(monkeypatch) -> None:
+    _clear_shortpick_replay_aggregate_feedback_cache()
+    session = object()
+    now = {"value": 100.0}
+    ready_projection = {
+        "generated_at": "2026-05-14T16:02:11+00:00",
+        "overall": {"run_count": 1},
+    }
+    attach_calls = {"count": 0}
+
+    monkeypatch.setattr(api.time, "perf_counter", lambda: now["value"])
+    monkeypatch.setattr(
+        api,
+        "get_ready_frontend_projection_payload",
+        lambda actual_session, projection_key: ready_projection,
+    )
+    monkeypatch.setattr(
+        api,
+        "_load_shortpick_replay_feedback_from_cache",
+        lambda run_id=None: (_ for _ in ()).throw(AssertionError("cache fallback should not run")),
+    )
+
+    def attach_projection(payload: dict[str, object], *, session: object) -> dict[str, object]:
+        attach_calls["count"] += 1
+        return {
+            **payload,
+            "overall": {
+                **payload["overall"],  # type: ignore[arg-type]
+                "strategy_governance_reporting": {
+                    "status": "ready",
+                    "sequence": attach_calls["count"],
+                },
+            },
+        }
+
+    monkeypatch.setattr(api, "_attach_shortpick_replay_decision_projection", attach_projection)
+
+    first = _build_shortpick_replay_aggregate_feedback_response(session)  # type: ignore[arg-type]
+    first["overall"]["strategy_governance_reporting"]["status"] = "mutated"  # type: ignore[index]
+    second = _build_shortpick_replay_aggregate_feedback_response(session)  # type: ignore[arg-type]
+
+    assert attach_calls["count"] == 1
+    assert second["overall"]["strategy_governance_reporting"] == {  # type: ignore[index]
+        "status": "ready",
+        "sequence": 1,
+    }
+
+    now["value"] += api.SHORTPICK_REPLAY_AGGREGATE_FEEDBACK_TTL_SECONDS + 0.1
+    third = _build_shortpick_replay_aggregate_feedback_response(session)  # type: ignore[arg-type]
+
+    assert attach_calls["count"] == 2
+    assert third["overall"]["strategy_governance_reporting"] == {  # type: ignore[index]
+        "status": "ready",
+        "sequence": 2,
+    }
+    _clear_shortpick_replay_aggregate_feedback_cache()
 
 
 def _paper_tracking_item(signal_date: str, *, stock_return: float) -> dict[str, object]:
