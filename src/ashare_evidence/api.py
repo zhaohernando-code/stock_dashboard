@@ -783,6 +783,14 @@ def _build_shortpick_strategy_governance_projection(paper_tracking: dict[str, ob
     }
 
 
+def _build_shortpick_replay_aggregate_feedback_response(session: Session) -> dict[str, object]:
+    projection = get_ready_frontend_projection_payload(session, SHORTPICK_REPLAY_FEEDBACK_PROJECTION_KEY)
+    if projection is not None:
+        return _attach_shortpick_replay_decision_projection(projection, session=session)
+    feedback = _load_shortpick_replay_feedback_from_cache(run_id=None)
+    return _attach_shortpick_replay_decision_projection(feedback, session=session)
+
+
 def _shortpick_portfolio_forward_tracking_alignment(
     strategy_slice: dict[str, object],
     paper_tracking: dict[str, object],
@@ -1883,12 +1891,8 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        projection = get_ready_frontend_projection_payload(session, SHORTPICK_REPLAY_FEEDBACK_PROJECTION_KEY)
-        if projection is not None:
-            return projection
         try:
-            feedback = _load_shortpick_replay_feedback_from_cache(run_id=None)
-            return _attach_shortpick_replay_decision_projection(feedback, session=session)
+            return _build_shortpick_replay_aggregate_feedback_response(session)
         except LookupError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:

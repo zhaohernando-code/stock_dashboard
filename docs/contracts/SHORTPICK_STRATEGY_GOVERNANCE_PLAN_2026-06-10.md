@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round23_runtime_publish_completed_local_and_canonical_browser_verified
+Status: round24_replay_feedback_ready_projection_enrichment_completed_ds_review_passed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -743,6 +743,28 @@ Data-source caveat:
 - The real runtime `/shortpick-lab/replay-feedback` response currently does not include `overall.strategy_governance_reporting`, so the unmocked page may still show the guarded missing-projection state until runtime data contains a paper-tracking/governance source suitable for the Round 21 fallback.
 - When real runtime data eventually includes `overall.strategy_governance_reporting`, the already-published frontend code path should render the projection without another UI code change. A follow-up round must still verify that transition against unmocked runtime data before claiming full real-data end-to-end completion.
 
+## Round 24 Review Result
+
+Status: completed DeepSeek review.
+
+Round 24 scope:
+
+- Added `_build_shortpick_replay_aggregate_feedback_response(session)` so `/shortpick-lab/replay-feedback` enriches an existing ready frontend projection through `_attach_shortpick_replay_decision_projection(...)` instead of returning the stale projection payload directly.
+- Kept cache fallback behavior unchanged when no ready frontend projection exists.
+- Added a focused regression test proving a ready replay feedback projection still goes through enrichment and does not fall back to the replay feedback cache.
+
+Runtime verification before merge:
+
+- A temporary worktree API on `127.0.0.1:18081`, pointed at the runtime SQLite database, returned `overall.strategy_governance_reporting` from the real old ready projection path.
+- Observed governance projection values: `status=ready`, `primary_count=32`, `archive_count=0`, `sections=1`, `may_infer_status_from_role_name=false`.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: can merge and publish.
+- Key confirmations: old ready projections are copied and enriched without mutating the stored projection payload; `overall.update(...)` only overwrites known decision-projection keys while preserving unrelated fields; repeated enrichment is request-local and effectively idempotent.
+- Nonblocking follow-up: `/shortpick-lab/replay-feedback` now performs artifact reads plus paper-tracking ledger/governance calculations even when a ready projection exists. Add a short TTL cache if this endpoint becomes a hot path.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -806,7 +828,9 @@ Data-source caveat:
 | Frontend governance projection rendering | published_runtime_verified |
 | Round 22 DeepSeek review | completed |
 | Runtime publish and canonical browser verification | completed |
-| Runtime behavior changed | completed_for_read_only_replay_feedback_projection_ui_path_published_real_data_missing |
+| Replay-feedback ready projection enrichment | completed_partial_publish_pending |
+| Round 24 DeepSeek review | completed |
+| Runtime behavior changed | completed_for_read_only_replay_feedback_projection_ui_path_published_real_data_enrichment_pending_publish |
 | Registry changed | completed |
 | Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
 | Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_and_governance_projection_rendering |
