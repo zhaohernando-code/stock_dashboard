@@ -740,6 +740,7 @@ def _attach_shortpick_replay_decision_projection(
             market_study=projection_inputs["market_study"],  # type: ignore[arg-type]
             entry_artifacts=projection_inputs["entry_artifacts"],  # type: ignore[arg-type]
             paper_tracking=projection_inputs["paper_tracking"],  # type: ignore[arg-type]
+            strategy_governance=dict(enriched.get("strategy_governance") or overall.get("strategy_governance") or {}),
         )
     )
     overall["strategy_slice_evidence"] = projection_inputs["strategy_slice_evidence"]
