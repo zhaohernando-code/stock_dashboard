@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "shortpick_forward_validation_retrospective.schema.json",
+  "title": "Shortpick Forward Validation Retrospective Replay",
+  "type": "object",
+  "required": [
+    "artifact_family",
+    "schema_version",
+    "control_group_id",
+    "rule_signature",
+    "evidence_basis",
+    "retrospective",
+    "replay_window",
+    "source_feature_cutoff",
+    "generated_at",
+    "leakage_audit_status",
+    "leakage_audit_notes",
+    "rows_ref",
+    "event_refs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "artifact_family": {
+      "const": "shortpick_forward_validation_retrospective"
+    },
+    "schema_version": {
+      "const": "v1"
+    },
+    "control_group_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rule_signature": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence_basis": {
+      "const": "retrospective_forward_replay"
+    },
+    "retrospective": {
+      "const": true
+    },
+    "replay_window": {
+      "type": "object",
+      "required": ["start_date", "end_date", "horizons_days"],
+      "additionalProperties": false,
+      "properties": {
+        "start_date": {
+          "type": "string",
+          "minLength": 1
+        },
+        "end_date": {
+          "type": "string",
+          "minLength": 1
+        },
+        "horizons_days": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "source_feature_cutoff": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "leakage_audit_status": {
+      "type": "string",
+      "enum": ["passed", "failed", "blocked", "not_run"]
+    },
+    "leakage_audit_notes": {
+      "type": "string"
+    },
+    "rows_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "shortpick.retrospective_forward_replay.created.v1"
+      },
+      "uniqueItems": true
+    }
+  }
+}

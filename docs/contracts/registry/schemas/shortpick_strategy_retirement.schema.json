@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "shortpick_strategy_retirement.schema.json",
+  "title": "Shortpick Strategy Retirement",
+  "type": "object",
+  "required": [
+    "artifact_family",
+    "schema_version",
+    "strategy_id",
+    "strategy_version",
+    "strategy_status_before",
+    "retirement_reason_code",
+    "evidence_snapshot_refs",
+    "evidence_basis_refs",
+    "retired_at",
+    "archived_at",
+    "replacement_guidance",
+    "decision_log_ref",
+    "event_refs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "artifact_family": {
+      "const": "shortpick_strategy_retirement"
+    },
+    "schema_version": {
+      "const": "v1"
+    },
+    "strategy_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "strategy_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "strategy_status_before": {
+      "type": "string",
+      "enum": ["active", "observe", "retire_candidate"]
+    },
+    "retirement_reason_code": {
+      "type": "string",
+      "enum": [
+        "persistent_negative_after_cost_excess",
+        "forward_median_and_win_rate_failure",
+        "tail_dependence_failure",
+        "baseline_underperformance",
+        "duplicate_or_low_diagnostic_value"
+      ]
+    },
+    "evidence_snapshot_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "evidence_basis_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["historical_backtest", "retrospective_forward_replay", "true_forward_tracking"]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "retired_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "archived_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "replacement_guidance": {
+      "type": "string"
+    },
+    "decision_log_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "shortpick.strategy_retirement.recorded.v1"
+      },
+      "uniqueItems": true
+    }
+  }
+}

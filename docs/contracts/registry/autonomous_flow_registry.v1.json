@@ -3,7 +3,8 @@
   "generated_from": [
     "docs/contracts/autonomous-flow-trial/TRIAL_B_GLOBAL_PROTOCOL_CN.md",
     "docs/contracts/autonomous-flow-trial/TRIAL_C_LEDGER_AND_PUBLISH_DECISION_CN.md",
-    "docs/contracts/autonomous-flow-trial/TRIAL_C_REGISTRY_AND_CLAIM_GATE_DECISION_CN.md"
+    "docs/contracts/autonomous-flow-trial/TRIAL_C_REGISTRY_AND_CLAIM_GATE_DECISION_CN.md",
+    "docs/contracts/SHORTPICK_STRATEGY_GOVERNANCE_PLAN_2026-06-10.md"
   ],
   "events": [
     {
@@ -216,6 +217,30 @@
       "maturity": "partial"
     },
     {
+      "id": "shortpick.strategy_retirement.recorded.v1",
+      "status": "registered",
+      "provider": "shortpick_strategy_governance",
+      "consumers": ["decision_log", "strategy_generator", "frontend_projection", "research_review"],
+      "min_payload_fields": ["artifact_id", "strategy_id", "strategy_version", "retirement_reason_code", "evidence_snapshot_refs", "retired_at"],
+      "maturity": "scaffold"
+    },
+    {
+      "id": "shortpick.retrospective_forward_replay.created.v1",
+      "status": "registered",
+      "provider": "shortpick_replay_governance",
+      "consumers": ["research_review", "frontend_projection", "strategy_governance"],
+      "min_payload_fields": ["artifact_id", "control_group_id", "rule_signature", "evidence_basis", "source_feature_cutoff", "leakage_audit_status"],
+      "maturity": "scaffold"
+    },
+    {
+      "id": "shortpick.evaluation_baseline.created.v1",
+      "status": "registered",
+      "provider": "shortpick_baseline_runner",
+      "consumers": ["strategy_governance", "research_review", "frontend_projection"],
+      "min_payload_fields": ["artifact_id", "baseline_id", "baseline_status", "evidence_basis", "comparison_basis", "leakage_audit_status"],
+      "maturity": "scaffold"
+    },
+    {
       "id": "frontend.projection.updated.v1",
       "status": "registered",
       "provider": "projection_builder",
@@ -370,6 +395,30 @@
       "maturity": "partial"
     },
     {
+      "id": "shortpick_strategy_retirement",
+      "status": "registered",
+      "schema_ref": "schemas/shortpick_strategy_retirement.schema.json",
+      "provider": "shortpick_strategy_governance",
+      "consumers": ["decision_log", "strategy_generator", "frontend_projection", "research_review"],
+      "maturity": "scaffold"
+    },
+    {
+      "id": "shortpick_forward_validation_retrospective",
+      "status": "registered",
+      "schema_ref": "schemas/shortpick_forward_validation_retrospective.schema.json",
+      "provider": "shortpick_replay_governance",
+      "consumers": ["research_review", "frontend_projection", "strategy_governance"],
+      "maturity": "scaffold"
+    },
+    {
+      "id": "shortpick_evaluation_baseline",
+      "status": "registered",
+      "schema_ref": "schemas/shortpick_evaluation_baseline.schema.json",
+      "provider": "shortpick_baseline_runner",
+      "consumers": ["strategy_governance", "research_review", "frontend_projection"],
+      "maturity": "scaffold"
+    },
+    {
       "id": "autonomous_flow_trial_report",
       "status": "registered",
       "schema_ref": null,
@@ -460,6 +509,21 @@
       "maturity": "partial"
     },
     {
+      "id": "iface.shortpick.strategy-governance.v1",
+      "status": "registered",
+      "provider": "shortpick_strategy_governance",
+      "consumer": "strategy_generator_or_frontend_projection",
+      "contract_objects": [
+        "shortpick_strategy_retirement",
+        "shortpick_forward_validation_retrospective",
+        "shortpick_evaluation_baseline",
+        "shortpick.strategy_retirement.recorded.v1",
+        "shortpick.retrospective_forward_replay.created.v1",
+        "shortpick.evaluation_baseline.created.v1"
+      ],
+      "maturity": "scaffold"
+    },
+    {
       "id": "iface.projection.api-spa.v1",
       "status": "registered",
       "provider": "projection_builder",
@@ -548,6 +612,46 @@
       "id": "shortpick_lab_feedback",
       "status": "registered",
       "maturity": "partial"
+    },
+    {
+      "id": "shortpick_strategy_governance",
+      "status": "registered",
+      "maturity": "scaffold"
+    },
+    {
+      "id": "strategy_retirement:v1",
+      "status": "registered",
+      "maturity": "scaffold"
+    },
+    {
+      "id": "forward_validation_retrospective:v1",
+      "status": "registered",
+      "maturity": "scaffold"
+    },
+    {
+      "id": "evaluation_baseline_random_pool:v1",
+      "status": "registered",
+      "maturity": "scaffold"
+    },
+    {
+      "id": "evaluation_baseline_cooldown_control:v1",
+      "status": "registered",
+      "maturity": "scaffold"
+    },
+    {
+      "id": "control_same_symbol_cooldown:v1",
+      "status": "registered",
+      "maturity": "scaffold"
+    },
+    {
+      "id": "control_drawdown_reversal_filter:v1",
+      "status": "registered",
+      "maturity": "scaffold"
+    },
+    {
+      "id": "control_repeated_exposure_limit:v1",
+      "status": "registered",
+      "maturity": "scaffold"
     }
   ],
   "claim_ceiling_levels": [

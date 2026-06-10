@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "shortpick_evaluation_baseline.schema.json",
+  "title": "Shortpick Evaluation Baseline",
+  "type": "object",
+  "required": [
+    "artifact_family",
+    "schema_version",
+    "baseline_id",
+    "baseline_status",
+    "control_group_id",
+    "rule_signature",
+    "evidence_basis",
+    "comparison_basis",
+    "generated_at",
+    "leakage_audit_status",
+    "event_refs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "artifact_family": {
+      "const": "shortpick_evaluation_baseline"
+    },
+    "schema_version": {
+      "const": "v1"
+    },
+    "baseline_id": {
+      "type": "string",
+      "enum": ["evaluation_baseline_random_pool:v1", "evaluation_baseline_cooldown_control:v1"]
+    },
+    "baseline_status": {
+      "type": "string",
+      "enum": ["baseline_candidate", "baseline_registered", "baseline_active", "baseline_retired"]
+    },
+    "control_group_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rule_signature": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence_basis": {
+      "type": "string",
+      "enum": ["historical_backtest", "retrospective_forward_replay", "true_forward_tracking"]
+    },
+    "comparison_basis": {
+      "type": "object",
+      "required": [
+        "horizon_days",
+        "entry_price_source",
+        "benchmark_id",
+        "cost_definition_ref",
+        "universe_definition_ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "horizon_days": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "entry_price_source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "benchmark_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cost_definition_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "universe_definition_ref": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "generated_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "leakage_audit_status": {
+      "type": "string",
+      "enum": ["passed", "failed", "blocked", "not_run"]
+    },
+    "event_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "shortpick.evaluation_baseline.created.v1"
+      },
+      "uniqueItems": true
+    }
+  }
+}
