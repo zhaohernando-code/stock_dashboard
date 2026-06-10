@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round24_replay_feedback_ready_projection_enrichment_completed_ds_review_passed
+Status: round24_replay_feedback_ready_projection_enrichment_published_real_data_verified
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -765,6 +765,15 @@ DeepSeek result:
 - Key confirmations: old ready projections are copied and enriched without mutating the stored projection payload; `overall.update(...)` only overwrites known decision-projection keys while preserving unrelated fields; repeated enrichment is request-local and effectively idempotent.
 - Nonblocking follow-up: `/shortpick-lab/replay-feedback` now performs artifact reads plus paper-tracking ledger/governance calculations even when a ready projection exists. Add a short TTL cache if this endpoint becomes a hot path.
 
+Publish and real-data verification:
+
+- Published commit `ec959e918ef715fab4ed938aca7000fa125a355e` to local runtime with `ASHARE_PUBLISH_REFRESH_MODE=skip` and `ASHARE_PUBLISH_VERIFY_MODE=local`; release manifest `output/releases/local-20260610T080441Z-ec959e9.json`.
+- Runtime manifest `latest-successful.commit` points to `ec959e918ef715fab4ed938aca7000fa125a355e`.
+- Real local API `http://127.0.0.1:8000/shortpick-lab/replay-feedback` returned `overall.strategy_governance_reporting` with `status=ready`, `primary_count=32`, `sections=1`, and `may_infer_status_from_role_name=false`.
+- Real canonical API `https://hernando-zhao.cn/projects/ashare-dashboard/api/shortpick-lab/replay-feedback` with dev auth returned the same governance projection values.
+- Playwright against real local frontend `http://127.0.0.1:5173/?view=shortpick&shortpickTab=replay` rendered `策略治理投影`, `页面不按 tracking_role 推断`, `读取 recommended_status，不读取 role name`, `主区策略`, and count `32`; no page errors or console errors; screenshot `/tmp/round24-shortpick-governance-real-local.png`.
+- Playwright against real canonical frontend `https://hernando-zhao.cn/projects/ashare-dashboard/?view=shortpick&shortpickTab=replay` with dev auth rendered the same real-data governance projection UI; no page errors or console errors; screenshot `/tmp/round24-shortpick-governance-real-canonical.png`.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -828,9 +837,9 @@ DeepSeek result:
 | Frontend governance projection rendering | published_runtime_verified |
 | Round 22 DeepSeek review | completed |
 | Runtime publish and canonical browser verification | completed |
-| Replay-feedback ready projection enrichment | completed_partial_publish_pending |
+| Replay-feedback ready projection enrichment | published_runtime_verified_real_data |
 | Round 24 DeepSeek review | completed |
-| Runtime behavior changed | completed_for_read_only_replay_feedback_projection_ui_path_published_real_data_enrichment_pending_publish |
+| Runtime behavior changed | published_for_read_only_replay_feedback_projection_real_data_enrichment |
 | Registry changed | completed |
 | Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
 | Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_and_governance_projection_rendering |
