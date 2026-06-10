@@ -16,6 +16,7 @@ from typing import Any
 SAME_SYMBOL_COOLDOWN_CONTROL_ID = "control_same_symbol_cooldown:v1"
 DRAWDOWN_REVERSAL_FILTER_CONTROL_ID = "control_drawdown_reversal_filter:v1"
 REPEATED_EXPOSURE_LIMIT_CONTROL_ID = "control_repeated_exposure_limit:v1"
+SHORTPICK_HISTORICAL_BACKTEST_ENTRY_PRICE_SOURCES = {"next_close", "next_open", "same_close_proxy"}
 
 
 def build_shortpick_strategy_retirement_evidence_packs(
@@ -616,6 +617,93 @@ def apply_shortpick_repeated_exposure_limit_control(
     }
 
 
+def build_shortpick_historical_backtest_generation_requests(
+    control_rules: list[dict[str, Any]],
+    *,
+    start_date: str,
+    end_date: str,
+    entry_price_sources: list[str] | None = None,
+    horizon_days: int = 10,
+    cost_bps: float = 20.0,
+    benchmark_mode: str = "universe_equal_weight",
+    account_profile: str = "new_retail_cash_account",
+    pool_limit: int = 40,
+    rank_limit: int = 6,
+    min_signal_symbol_count: int = 45,
+    output_dir: str = "output/shortpick-governance-backtests",
+) -> dict[str, Any]:
+    """Build deterministic historical-backtest generation requests without executing them."""
+
+    start = _date_part(start_date)
+    end = _date_part(end_date)
+    if not start or not end or start > end:
+        raise ValueError("start_date must be <= end_date")
+    if horizon_days <= 0:
+        raise ValueError("horizon_days must be positive")
+    if cost_bps < 0:
+        raise ValueError("cost_bps must be non-negative")
+    if min_signal_symbol_count <= 0:
+        raise ValueError("min_signal_symbol_count must be positive")
+
+    entry_sources = list(entry_price_sources or ["next_close"])
+    unsupported = sorted(set(entry_sources) - SHORTPICK_HISTORICAL_BACKTEST_ENTRY_PRICE_SOURCES)
+    if unsupported:
+        raise ValueError(f"unsupported entry_price_sources: {unsupported}")
+
+    requests: list[dict[str, Any]] = []
+    for rule in [_dict(value) for value in control_rules if isinstance(value, dict)]:
+        control_group_id = str(rule.get("control_group_id") or "")
+        rule_signature = str(rule.get("rule_signature") or "")
+        if not control_group_id or not rule_signature:
+            continue
+        for entry_source in entry_sources:
+            request_payload = {
+                "control_group_id": control_group_id,
+                "rule_signature": rule_signature,
+                "entry_price_source": entry_source,
+                "start_date": start,
+                "end_date": end,
+                "horizon_days": int(horizon_days),
+                "cost_bps": round(float(cost_bps), 6),
+                "benchmark_mode": benchmark_mode,
+                "account_profile": account_profile,
+                "pool_limit": int(pool_limit),
+                "rank_limit": int(rank_limit),
+                "min_signal_symbol_count": int(min_signal_symbol_count),
+            }
+            request_id = _historical_backtest_request_id(request_payload)
+            output_path = (
+                f"{output_dir}/"
+                f"{_slug(control_group_id)}__{rule_signature.replace(':', '_')[:24]}__{entry_source}.json"
+            )
+            requests.append(
+                {
+                    **request_payload,
+                    "request_id": request_id,
+                    "evidence_basis": "historical_backtest",
+                    "source_command": "shortpick-portfolio-backtest",
+                    "argv": _historical_backtest_argv(request_payload, output_path=output_path),
+                    "output_path": output_path,
+                    "rule": rule,
+                    "leakage_audit_status": "not_run",
+                    "leakage_audit_reasons": [],
+                    "true_forward_tracking_eligible": False,
+                    "paper_tracking_write_policy": "forbidden",
+                }
+            )
+
+    return {
+        "status": "ready",
+        "evidence_basis": "historical_backtest",
+        "source_command": "shortpick-portfolio-backtest",
+        "request_count": len(requests),
+        "requests": requests,
+        "execution_policy": "request_plan_only_no_backtest_execution_no_data_write",
+        "paper_tracking_write_policy": "forbidden",
+        "true_forward_tracking_eligible": False,
+    }
+
+
 def _rule_signature(payload: dict[str, Any]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -757,6 +845,39 @@ def _exposure_group_key(row: dict[str, Any], group_fields: list[str]) -> tuple[s
 
 def _exposure_group_key_label(group_key: tuple[str, ...]) -> str:
     return "|".join(group_key)
+
+
+def _historical_backtest_request_id(payload: dict[str, Any]) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return "shortpick-historical-backtest-request:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+
+
+def _historical_backtest_argv(payload: dict[str, Any], *, output_path: str) -> list[str]:
+    return [
+        "shortpick-portfolio-backtest",
+        "--start-date",
+        str(payload["start_date"]),
+        "--end-date",
+        str(payload["end_date"]),
+        "--pool-limit",
+        str(payload["pool_limit"]),
+        "--rank-limit",
+        str(payload["rank_limit"]),
+        "--horizon-days",
+        str(payload["horizon_days"]),
+        "--cost-bps",
+        str(payload["cost_bps"]),
+        "--min-signal-symbol-count",
+        str(payload["min_signal_symbol_count"]),
+        "--benchmark-mode",
+        str(payload["benchmark_mode"]),
+        "--account-profile",
+        str(payload["account_profile"]),
+        "--entry-price-source",
+        str(payload["entry_price_source"]),
+        "--output",
+        output_path,
+    ]
 
 
 def _strategy_metadata(item: dict[str, Any]) -> dict[str, Any]:
