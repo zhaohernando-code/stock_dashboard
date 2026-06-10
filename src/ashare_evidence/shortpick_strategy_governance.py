@@ -260,6 +260,7 @@ def project_shortpick_strategy_view_sections(
             "primary_horizon_days": item.get("primary_horizon_days"),
             "reasons": item.get("reasons") if isinstance(item.get("reasons"), list) else [],
             "blockers": item.get("blockers") if isinstance(item.get("blockers"), list) else [],
+            "leakage_coverage_note": _leakage_coverage_note(item),
         }
         if projected["recommended_status"] == "retired":
             archive_items.append({**projected, "view_section": "archive"})
@@ -315,6 +316,7 @@ def build_shortpick_strategy_archive_records(
                 "horizon_summaries": pack.get("horizon_summaries") if isinstance(pack.get("horizon_summaries"), list) else [],
                 "historical_evidence": _dict(pack.get("historical_evidence")),
                 "baseline_comparison": _dict(pack.get("baseline_comparison")),
+                "leakage_coverage_note": _dict(item.get("leakage_coverage_note")) or _leakage_coverage_note(pack),
                 "retirement_artifact_ref": _retirement_artifact_lookup(retirement_artifacts, strategy_id),
                 "archive_reason": "retired_strategy_removed_from_primary_view",
             }
@@ -1112,6 +1114,36 @@ def _evidence_basis_display(value: Any) -> dict[str, str]:
     key = str(value or "unknown")
     display = SHORTPICK_EVIDENCE_BASIS_DISPLAY.get(key, {"label": "Unknown evidence", "tone": "default"})
     return {"key": key, **display}
+
+
+def _leakage_coverage_note(item: dict[str, Any]) -> dict[str, Any]:
+    evidence_basis = str(item.get("evidence_basis") or "unknown")
+    leakage_status = str(item.get("leakage_audit_status") or "not_run")
+    leakage_reasons = item.get("leakage_audit_reasons")
+    source_feature_cutoff_policy = item.get("source_feature_cutoff_policy")
+    if not source_feature_cutoff_policy and evidence_basis == "retrospective_forward_replay":
+        source_feature_cutoff_policy = "signal_date_available_inputs_only"
+    feature_cutoff_at = (
+        item.get("feature_cutoff_at")
+        or item.get("feature_cutoff_date")
+        or item.get("source_feature_cutoff_at")
+        or item.get("source_feature_cutoff_date")
+    )
+    feature_coverage_status = str(item.get("feature_coverage_status") or item.get("coverage_status") or "unknown")
+
+    return {
+        "evidence_basis": evidence_basis,
+        "leakage_audit_status": leakage_status,
+        "leakage_audit_reasons": leakage_reasons if isinstance(leakage_reasons, list) else [],
+        "source_feature_cutoff_policy": source_feature_cutoff_policy,
+        "feature_cutoff_at": feature_cutoff_at,
+        "feature_coverage_status": feature_coverage_status,
+        "display_required": (
+            evidence_basis in {"historical_backtest", "retrospective_forward_replay"}
+            or leakage_status != "not_run"
+            or feature_coverage_status != "unknown"
+        ),
+    }
 
 
 def _evidence_basis_sections(items: list[dict[str, Any]]) -> list[dict[str, Any]]:

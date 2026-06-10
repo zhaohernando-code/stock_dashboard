@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round18_p4_3_archive_summary_rows_completed_ds_review_passed
+Status: round19_p4_4_leakage_coverage_notes_completed_ds_review_passed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -106,7 +106,7 @@ The next governance package should adopt four principles.
 | P4.1 | Add strategy status labels | completed_partial_display_wiring_pending | Added backend view-projection label metadata for governance status and evidence basis, plus frontend label/color helpers for active, observe, retire-candidate, retired, historical-only, retrospective-only, and true-forward states. API/page wiring remains pending. |
 | P4.2 | Add separate display sections for evidence basis | completed_partial_display_wiring_pending | Added backend view-projection sections that split true-forward tracking, retrospective replay, and historical backtest rows while preserving primary/archive membership in each section. API/page wiring remains pending. |
 | P4.3 | Add retirement archive view or archive summary rows | completed_partial_display_wiring_pending | Added archive summary rows grouped by evidence basis, strategy family, and entry-price source while preserving detailed archive records. API/page wiring remains pending. |
-| P4.4 | Add leakage and coverage notes | pending | Retrospective rows must show source cutoff and leakage audit status. |
+| P4.4 | Add leakage and coverage notes | completed_partial_display_wiring_pending | Added leakage/coverage note metadata to strategy view projection and archive records. Retrospective rows default to showing signal-date cutoff policy and leakage audit status. API/page wiring remains pending. |
 | P4.5 | Update analytical report generation | pending | Future reports should read the new artifact contracts instead of inferring status from role names. |
 
 ## Retirement Threshold Draft
@@ -642,6 +642,25 @@ DeepSeek result:
 - Key confirmations: archive detail `records` remain intact; `summary_rows` are grouped by evidence basis, strategy family, and entry-price source; only `archive_items` contribute to summary rows; date ranges, signal counts, completed observation counts, and retirement artifact counts are aggregated correctly; and tests cover empty archive summaries, multi-strategy aggregation, evidence-basis ordering, and preserved detail records.
 - Nonblocking follow-up retained for P4.4/P4.5: summary rows still need page/API presentation plus leakage and coverage notes before they are dashboard-visible.
 
+## Round 19 Review Result
+
+Status: completed DeepSeek review.
+
+Round 19 scope:
+
+- P4.4 leakage and coverage note metadata in `project_shortpick_strategy_view_sections`.
+- P4.4 archive preservation and fallback note construction in `build_shortpick_strategy_archive_records`.
+- Extended tests: `tests/test_shortpick_strategy_governance.py`.
+
+Round 19 adds projection/archive metadata only. It does not create an API route, wire a live page, write runtime data, execute leakage audits, or alter active strategy generation.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge and push Round 19.
+- Key confirmations: projection rows now carry `leakage_coverage_note`; retrospective rows default missing `source_feature_cutoff_policy` to `signal_date_available_inputs_only`, default leakage status to `not_run`, and require display; archive records preserve projection notes or build a fallback from evidence packs; and tests cover retrospective notes, default cutoff policy, archive preservation, and archive fallback behavior.
+- Nonblocking follow-up retained for P4.5: report/API/page surfaces still need to read and render these metadata fields before users can rely on them in the dashboard.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -696,9 +715,11 @@ DeepSeek result:
 | Round 17 DeepSeek review | completed |
 | P4.3 archive summary rows | completed_partial_display_wiring_pending |
 | Round 18 DeepSeek review | completed |
+| P4.4 leakage and coverage notes | completed_partial_display_wiring_pending |
+| Round 19 DeepSeek review | completed |
 | Runtime behavior changed | not_started |
 | Registry changed | completed |
-| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_and_archive_summary_rows |
+| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_and_leakage_coverage_notes |
 | Frontend helper code changed | completed_for_strategy_status_and_evidence_basis_label_helpers |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |
