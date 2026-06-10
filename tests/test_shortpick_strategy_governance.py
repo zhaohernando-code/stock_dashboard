@@ -5,6 +5,7 @@ import json
 import pytest
 
 from ashare_evidence.shortpick_strategy_governance import (
+    build_shortpick_strategy_archive_records,
     build_shortpick_strategy_retirement_evidence_packs,
     build_shortpick_strategy_status_recommendations,
     filter_shortpick_generation_eligible_items,
@@ -380,6 +381,75 @@ def test_strategy_view_projection_tolerates_missing_lists() -> None:
 
     assert result["primary_items"][0]["reasons"] == []
     assert result["primary_items"][0]["blockers"] == []
+
+
+def test_archive_records_preserve_statistics_and_evidence_refs_for_retired_rows() -> None:
+    evidence = _evidence_from_returns(
+        [-0.10, -0.05, -0.04, -0.03, -0.02, -0.01, -0.09, -0.02, 0.01, 0.02],
+        historical_evidence={
+            "low_turnover_20d_uptrend_liquid_top120": {
+                "status": "ready",
+                "artifact_ref": "historical-fixture",
+                "after_cost_excess_return": -0.03,
+            }
+        },
+        baseline_evidence={
+            "low_turnover_20d_uptrend_liquid_top120": {
+                "status": "ready",
+                "baseline_id": "evaluation_baseline_random_pool:v1",
+                "artifact_ref": "baseline-fixture",
+            }
+        },
+    )
+    strategy_id = evidence["packs"][0]["strategy_id"]
+    status_result = build_shortpick_strategy_status_recommendations(
+        evidence,
+        retirement_artifacts={
+            strategy_id: {
+                "status": "ready",
+                "artifact_family": "shortpick_strategy_retirement",
+                "artifact_id": "retirement-fixture",
+                "decision_log_ref": "DECISIONS.md#fixture",
+            }
+        },
+    )
+    view = project_shortpick_strategy_view_sections(status_result)
+
+    archive = build_shortpick_strategy_archive_records(
+        view,
+        evidence,
+        retirement_artifacts={
+            strategy_id: {
+                "status": "ready",
+                "artifact_family": "shortpick_strategy_retirement",
+                "artifact_id": "retirement-fixture",
+                "decision_log_ref": "DECISIONS.md#fixture",
+            }
+        },
+    )
+
+    assert archive["decision_policy"] == "preserve_retired_strategy_statistics_and_evidence_refs"
+    assert archive["archive_count"] == 1
+    record = archive["records"][0]
+    assert record["strategy_id"] == strategy_id
+    assert record["recommended_status"] == "retired"
+    assert record["archive_reason"] == "retired_strategy_removed_from_primary_view"
+    assert record["signal_count"] == 10
+    assert record["completed_observation_count"] == 10
+    assert record["horizon_summaries"][0]["maturity_status"] == "mature_one_stock_review_sample"
+    assert record["historical_evidence"]["artifact_ref"] == "historical-fixture"
+    assert record["baseline_comparison"]["baseline_id"] == "evaluation_baseline_random_pool:v1"
+    assert record["retirement_artifact_ref"]["artifact_id"] == "retirement-fixture"
+
+
+def test_archive_records_ignore_primary_rows() -> None:
+    archive = build_shortpick_strategy_archive_records(
+        {"primary_items": [{"strategy_id": "active-id", "recommended_status": "active"}], "archive_items": []},
+        {"packs": [{"strategy_id": "active-id", "signal_count": 1}]},
+    )
+
+    assert archive["archive_count"] == 0
+    assert archive["records"] == []
 
 
 def _evidence_from_returns(

@@ -240,6 +240,54 @@ def project_shortpick_strategy_view_sections(
     }
 
 
+def build_shortpick_strategy_archive_records(
+    view_projection_result: dict[str, Any],
+    evidence_pack_result: dict[str, Any],
+    *,
+    retirement_artifacts: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build auditable archive records for strategies removed from primary view."""
+
+    packs_by_strategy_id = {
+        str(item.get("strategy_id") or ""): _dict(item)
+        for item in evidence_pack_result.get("packs") or []
+        if isinstance(item, dict) and item.get("strategy_id")
+    }
+    records: list[dict[str, Any]] = []
+    for item in view_projection_result.get("archive_items") or []:
+        if not isinstance(item, dict):
+            continue
+        strategy_id = str(item.get("strategy_id") or "")
+        pack = packs_by_strategy_id.get(strategy_id, {})
+        records.append(
+            {
+                "strategy_id": strategy_id,
+                "recommended_status": item.get("recommended_status"),
+                "evidence_basis": item.get("evidence_basis") or pack.get("evidence_basis"),
+                "tracking_group": item.get("tracking_group") or pack.get("tracking_group"),
+                "tracking_role": item.get("tracking_role") or pack.get("tracking_role"),
+                "strategy_family": item.get("strategy_family") or pack.get("strategy_family"),
+                "entry_price_source": item.get("entry_price_source") or pack.get("entry_price_source"),
+                "first_signal_date": pack.get("first_signal_date"),
+                "latest_signal_date": pack.get("latest_signal_date"),
+                "signal_count": pack.get("signal_count"),
+                "completed_observation_count": pack.get("completed_observation_count"),
+                "horizon_summaries": pack.get("horizon_summaries") if isinstance(pack.get("horizon_summaries"), list) else [],
+                "historical_evidence": _dict(pack.get("historical_evidence")),
+                "baseline_comparison": _dict(pack.get("baseline_comparison")),
+                "retirement_artifact_ref": _retirement_artifact_lookup(retirement_artifacts, strategy_id),
+                "archive_reason": "retired_strategy_removed_from_primary_view",
+            }
+        )
+
+    return {
+        "status": "ready",
+        "decision_policy": "preserve_retired_strategy_statistics_and_evidence_refs",
+        "archive_count": len(records),
+        "records": records,
+    }
+
+
 def _strategy_metadata(item: dict[str, Any]) -> dict[str, Any]:
     components = _dict(item.get("selection_score_components"))
     tracking_group = str(item.get("tracking_group") or "unknown")
