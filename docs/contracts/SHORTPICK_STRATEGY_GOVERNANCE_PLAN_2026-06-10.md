@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round27_governance_test_hardening_completed_ds_reviewed
+Status: round28_intent_clarification_amendment_recorded
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -207,7 +207,7 @@ Leakage audit must be defined before implementation. At minimum it should check:
 
 Forbidden behavior:
 
-- Do not insert retrospective rows as if they were true paper-tracking rows.
+- Do not insert retrospective rows as if they were true-forward rows. A retrospective row may share the same combined ledger/table as true-forward rows (per the Round 28 amendment) only when it carries a non-null `evidence_basis` plus the `retrospective=true` flag and is never represented, queried, aggregated, or counted as `true_forward_tracking`.
 - Do not display retrospective rows in the same headline as true-forward rows without a basis split.
 - Do not use future-known outcomes to tune thresholds and then describe the replay as unbiased.
 - Do not call a replayed control "frozen" for dates before the rule was registered.
@@ -218,6 +218,7 @@ Display policy:
 - A combined table is allowed only when `evidence_basis` is a visible column and default grouping keeps true-forward rows separate.
 - Headline metrics for promotion or retirement must default to true-forward rows; retrospective rows can appear only as supporting research evidence.
 - Any retrospective replay over thresholds tuned after seeing outcomes must be labeled `tuned_research`, not `validation`.
+- Per the Round 28 amendment, retrospective backfill rows are stored in the same combined ledger/table as their true-forward counterparts so the user gets a convenient side-by-side comparison, but every row keeps a mandatory `evidence_basis` and the retrospective rows carry a `pairing_key` (`control_group_id` + `rule_signature` + `symbol` + `signal_date`) that links each replay row to its matching true-forward row without merging the two bases.
 
 ## Evaluation Baseline Policy
 
@@ -251,6 +252,7 @@ Round 2 locks transition behavior while this governance work is still contract-o
 - No retrospective rows may be inserted into the true paper-tracking ledger before the retrospective artifact contract exists.
 - No new control can be called true-forward until its ID, rule signature, and artifact family have been registered.
 - Existing bad-looking controls can be manually discussed as weak, but their durable status remains unchanged until the retirement flow exists.
+- The Round 28 amendment authorizes the first implementation round that intentionally changes display and advancement behavior: once that round lands, evidence-based hiding from the primary frontend is driven by `recommended_status` (not merely by the plan's existence), so it remains consistent with the rule above that no strategy is hidden solely because this plan exists.
 
 ## Un-Retirement Protocol
 
@@ -874,6 +876,43 @@ DeepSeek result:
 - Merge recommendation: merge.
 - Key confirmations: all 12 new tests assert behavior the implementation in `src/ashare_evidence/shortpick_strategy_governance.py` actually produces, verified gate-by-gate (baseline blocker branch, tail-dependence conjunct, retirement-authority requirement, list-form artifact lookup branch, empty-pack comprehension, horizon fallback, cooldown threshold-equality `<=` / `>=` boundaries, entry-source set membership); the tests are genuine new-boundary coverage rather than tautological restatements or duplicates of existing assertions; and the test-only change implies no runtime, data, frontend, or strategy-code change.
 
+## Round 28 Intent-Clarification Amendment
+
+Status: requirements recorded; implementation not started.
+
+This round does not change code, runtime, data, frontend, registry, or schemas. It records the project owner's clarified original intent so later implementation rounds do not drift from it. The owner confirmed three goals and resolved two open questions that the prior rounds had deliberately left to a decision.
+
+Owner intent (verbatim sense):
+
+1. Add more credible control/comparison lines from the current data.
+2. There are too many poorly-performing or meaningless control groups; archive their data and display so they are no longer shown on the primary frontend and are no longer advanced.
+3. New lines must first run historical backtest, then backfill data inside paper tracking, but with an extra label.
+
+Resolved decisions:
+
+- Decision A (cleanup semantics for poorly-performing controls). "Cleanup" means: remove the control from the **primary frontend display and from continued advancement**, while **retaining its data** and **migrating or marking it into a deprecated/archived bucket** with a **regression guard** so it cannot silently re-enter active generation or the primary view.
+  - Mapping to existing status model: `active` and `observe` remain in the primary view (still under watch). Evidence-based `retire_candidate` and `retired` are moved to the deprecated/archived bucket, are not advanced, and keep their data.
+  - This is stricter than the original P2.5 (which only archived `retired`). The amendment intentionally also removes `retire_candidate` from the primary frontend, because the owner wants poorly-performing controls hidden once the evidence is clear, not only after a full durable retirement artifact exists.
+  - The durable `retired` record still requires a `strategy_retirement:v1` artifact plus `decision_log_ref`; the un-retirement protocol still governs any return to `active`/`frozen`. The deprecated bucket is the regression guard: leaving it requires the governed recovery path, never an automatic re-promotion.
+  - "Meaningless/redundant" controls (distinct from poorly-performing ones) are out of scope for the metric retirement gates and are handled as a separate inventory-driven archival decision; they must not be force-fit into the performance gates, and the diagnostic-value gate still protects a weak control that tests a unique hypothesis.
+
+- Decision B (retrospective backfill location). Backfilled retrospective data is stored in the **same combined ledger/table** as the true-forward rows (so the frontend can display a convenient comparison), **not** in a physically separate ledger. The anti-leakage guarantee is preserved by labeling rather than by physical separation:
+  - Every row carries a mandatory non-null `evidence_basis`; retrospective rows also carry `retrospective=true`, `rule_defined_at`, and the leakage-audit fields.
+  - Retrospective rows are never represented, queried, aggregated, or counted as `true_forward_tracking`. True-forward headline, promotion, and retirement metrics filter to `evidence_basis=true_forward_tracking` by default.
+  - Each retrospective row carries a `pairing_key` (`control_group_id` + `rule_signature` + `symbol` + `signal_date`) linking it to its matching true-forward row for side-by-side comparison.
+  - This supersedes the earlier "physically separate ledger" reading of the retrospective contract while keeping all of its leakage protections.
+
+New implementation requirement items (status `not_started`, scoped for later runtime/data rounds):
+
+| ID | Work Item | Status | Notes |
+| --- | --- | --- | --- |
+| P2.7 | Deprecated/archived display bucket plus regression guard | not_started | Move evidence-based `retire_candidate` and `retired` out of the primary frontend and out of continued advancement, retain their data, mark them deprecated, and block automatic re-promotion. Wires the existing read-only `filter_shortpick_generation_eligible_items` and `project_shortpick_strategy_view_sections` helpers into the real generation and frontend paths. |
+| P2.8 | Redundant/meaningless control inventory archival | not_started | Define an inventory-driven archival path for controls that are redundant or provide no unique diagnostic value, separate from the performance retirement gates, so they can leave the primary view without being mislabeled as performance failures. |
+| P3.7 | Labeled combined-ledger retrospective backfill with true-forward pairing | not_started | Persist retrospective backfill into the same ledger/table as true-forward rows with mandatory `evidence_basis`, `retrospective=true`, leakage-audit fields, and a `pairing_key`; guarantee true-forward queries and headline metrics filter by basis. Builds on the P3.4/P3.5 request builders and the P3.6 activation plan once runner and persistence exist. |
+| P3.8 | New credible control/comparison line build-out | not_started | Turn the P3.1-P3.3 control rules and the P1.3/P1.4 evaluation baselines into actually generated comparison lines on current data, gated through historical backtest before any paper-tracking backfill, per Decision B labeling. |
+
+These items remain blocked by the same precondition called out in earlier rounds: a real `strategy_retirement:v1` artifact writer, a backtest/replay runner, and runtime/frontend wiring must exist before any strategy is durably retired, hidden, or backfilled. Until then this amendment is contract-only.
+
 ## Validation To Run For This Planning Task
 
 
@@ -946,6 +985,11 @@ DeepSeek result:
 | Round 26 DeepSeek review | completed |
 | Governance test hardening (Round 6/10/13 follow-ups) | completed |
 | Round 27 DeepSeek review | completed |
+| Intent-clarification amendment (Round 28) | requirements_recorded_implementation_not_started |
+| P2.7 deprecated display bucket + regression guard | not_started |
+| P2.8 redundant/meaningless control archival | not_started |
+| P3.7 labeled combined-ledger retrospective backfill | not_started |
+| P3.8 new credible control/comparison line build-out | not_started |
 | Runtime behavior changed | published_for_read_only_replay_feedback_projection_real_data_enrichment_and_replay_feedback_aggregate_ttl_cache |
 | Registry changed | completed |
 | Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
