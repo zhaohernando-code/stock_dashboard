@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round3_p1_registry_contracts_completed_ds_review_passed
+Status: round4_p2_1_inventory_completed_ds_review_passed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -81,7 +81,7 @@ The next governance package should adopt four principles.
 
 | ID | Work Item | Status | Notes |
 | --- | --- | --- | --- |
-| P2.1 | Inventory active shortpick strategies and controls | pending | Include frozen lines, market-factor controls, LLM control, random pool, top3, offensive, cooldown, intraday, and historical-only variants. |
+| P2.1 | Inventory active shortpick strategies and controls | completed | Added `docs/contracts/SHORTPICK_STRATEGY_INVENTORY_2026-06-10.md`, separating true-forward paper tracking, generated overlay-only rows, historical/replay-only variants, and configured dormant controls. |
 | P2.2 | Compute retirement evidence pack per strategy | pending | Include historical after-cost excess, forward mean/median/win rate, completed sample count, drawdown, tail dependence, and baseline comparison. |
 | P2.3 | Mark candidates as `active`, `observe`, `retire_candidate`, or `retired` | pending | `retired` requires a `strategy_retirement:v1` artifact and decision-log entry. |
 | P2.4 | Remove retired strategies from active generation | pending | Retired strategies should not consume daily compute unless explicitly requested for archive rebuild. |
@@ -359,12 +359,32 @@ DeepSeek result:
 - Key confirmations: P1.1-P1.7 are honestly scoped to registry/schema contracts; the dual ID convention is acceptable under the current registry structure; new schemas are sufficient first contracts for retirement, retrospective replay, and baselines; `retired` remains blocked until P2 artifact writing, evidence packets, and `DECISIONS.md` logging exist; no contradiction was found with `DECISIONS.md` or `docs/contracts/PHASE5_RESEARCH_CONTRACT.md`.
 - Nonblocking follow-ups retained for P3/P4: add runtime artifact families/events before diagnostic controls produce data, decide whether schema `$id` values need full URIs, document why replay can span multiple horizons while baseline comparison is one horizon at a time, and ensure P3 retrospective generation turns `leakage_audit_status` from `not_run` into `passed`, `failed`, or `blocked`.
 
+## Round 4 Review Result
+
+Status: completed DeepSeek review.
+
+Round 4 scope:
+
+- P2.1 inventory of current shortpick strategies and controls.
+- New inventory file: `docs/contracts/SHORTPICK_STRATEGY_INVENTORY_2026-06-10.md`.
+- Source basis: `src/ashare_evidence/shortpick_lab.py`, `src/ashare_evidence/default_policy_configs.py`, `src/ashare_evidence/api.py`, and frontend shortpick display helpers.
+
+Round 4 changed only documentation. It does not mark any strategy as `retired`, compute retirement evidence packs, delete strategies, write runtime data, or change frontend/API behavior.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge and push Round 4.
+- Key confirmations: the inventory covers all 12 active paper-tracking roles; it correctly separates generated overlay-only rows, replay-only variants, and configured dormant controls; it does not imply retirement, runtime, data, frontend, or API changes; no contradiction was found with `DECISIONS.md`, `docs/contracts/PHASE5_RESEARCH_CONTRACT.md`, or the Round 3 registry/schema contracts.
+- Nonblocking follow-ups retained for P2.2 or later: clarify the intentional dormancy of standalone low-turnover control config, and keep the stop8 replay-only legacy second variant separate from the active non-stop legacy second paper control.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
 - `python3 -m json.tool` for modified registry and added schema files
 - `PYTHONPATH=src python3 -m pytest tests/test_contract_registry.py`
 - `PYTHONPATH=src python3 -m ashare_evidence.cli contract-registry-check --registry docs/contracts/registry/autonomous_flow_registry.v1.json --docs docs/contracts/SHORTPICK_STRATEGY_GOVERNANCE_PLAN_2026-06-10.md --fail-on-unregistered --fail-on-deprecated`
+- `PYTHONPATH=src python3 -m ashare_evidence.cli contract-registry-check --registry docs/contracts/registry/autonomous_flow_registry.v1.json --docs docs/contracts/SHORTPICK_STRATEGY_INVENTORY_2026-06-10.md --fail-on-unregistered --fail-on-deprecated`
 - Markdown inspection for required sections: background, summary, implementation status, and acceptance criteria.
 - DeepSeek read-only review against this file, `DECISIONS.md`, and `docs/contracts/PHASE5_RESEARCH_CONTRACT.md`.
 
@@ -380,6 +400,8 @@ DeepSeek result:
 | Round 2 DeepSeek review | completed |
 | P1 registry contracts drafted | completed |
 | Round 3 DeepSeek review | completed |
+| P2.1 strategy/control inventory | completed |
+| Round 4 DeepSeek review | completed |
 | Runtime behavior changed | not_started |
 | Registry changed | completed |
 | Strategy code changed | not_started |
