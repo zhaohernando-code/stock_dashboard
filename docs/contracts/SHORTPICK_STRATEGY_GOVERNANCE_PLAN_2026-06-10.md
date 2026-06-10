@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round26_replay_feedback_ttl_cache_published_runtime_verified
+Status: round27_governance_test_hardening_completed_ds_reviewed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -843,7 +843,39 @@ Publish and runtime verification:
 - Consecutive local API calls demonstrated the runtime TTL cache effect: first call `5.483s`, second call `0.085s`, same payload size.
 - Real canonical API `https://hernando-zhao.cn/projects/ashare-dashboard/api/shortpick-lab/replay-feedback` with dev auth returned HTTP 200 and the same governance status/source policy.
 
+## Round 27 Review Result
+
+Status: completed DeepSeek review.
+
+Round 27 scope:
+
+- Consolidated the nonblocking test-hardening follow-ups that earlier DeepSeek rounds retained for later (Round 6 status-recommendation gates, Round 10 same-symbol cooldown, Round 13 historical-backtest request builder).
+- Extended tests only: `tests/test_shortpick_strategy_governance.py` (12 new tests, 51 -> 63).
+
+Round 27 adds tests only. It does not change strategy code, registry, schemas, runtime data, frontend, or API behavior, so it stays inside the contract-only transition rule.
+
+New test coverage:
+
+- Round 6: positive registered baseline gap blocks `retire_candidate` and falls to `observe`; mixed positive-mean / negative-median tail-dependent evidence still reaches `retire_candidate`; an incomplete retirement artifact missing `decision_log_ref` cannot produce `retired`; list-form `{"artifacts": [...]}` retirement source resolves to `retired`; empty/missing packs return `strategy_count=0`; a requested `primary_horizon_days` with no matching summary falls back to the first horizon summary instead of dropping to `observe`.
+- Round 10: same-symbol cooldown handles empty inputs with zero counts and a default rule signature; the default-rule path uses `cooldown_signal_days=5` and `control_same_symbol_cooldown:v1`; threshold-equality boundaries are pinned (a `-0.08` outcome equals the severe threshold and selects the longer severe window; a `0.0` outcome equals `loss_return_threshold` and is excluded as a non-loss).
+- Round 13: `min_signal_symbol_count <= 0` raises; empty `control_rules` yields zero requests; `same_close_proxy` is accepted as an entry-price source and produces a single labeled request.
+
+Verification evidence:
+
+- `PYTHONPATH=src python3 -m pytest tests/test_shortpick_strategy_governance.py` passed (`63 passed`).
+- `PYTHONPATH=src python3 -m pytest` fast suite passed (`727 passed, 1 skipped, 161 deselected, 6 subtests passed`).
+- `python3 -m ruff check tests/test_shortpick_strategy_governance.py` passed.
+- `python3 -m compileall -q tests/test_shortpick_strategy_governance.py` passed.
+- `git diff --check` passed.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge.
+- Key confirmations: all 12 new tests assert behavior the implementation in `src/ashare_evidence/shortpick_strategy_governance.py` actually produces, verified gate-by-gate (baseline blocker branch, tail-dependence conjunct, retirement-authority requirement, list-form artifact lookup branch, empty-pack comprehension, horizon fallback, cooldown threshold-equality `<=` / `>=` boundaries, entry-source set membership); the tests are genuine new-boundary coverage rather than tautological restatements or duplicates of existing assertions; and the test-only change implies no runtime, data, frontend, or strategy-code change.
+
 ## Validation To Run For This Planning Task
+
 
 - `git status --short --branch`
 - `PYTHONPATH=src python3 -m pytest tests/test_shortpick_strategy_governance.py`
@@ -912,6 +944,8 @@ Publish and runtime verification:
 | Round 25 DeepSeek review | completed |
 | Replay-feedback aggregate TTL cache | published_runtime_verified |
 | Round 26 DeepSeek review | completed |
+| Governance test hardening (Round 6/10/13 follow-ups) | completed |
+| Round 27 DeepSeek review | completed |
 | Runtime behavior changed | published_for_read_only_replay_feedback_projection_real_data_enrichment_and_replay_feedback_aggregate_ttl_cache |
 | Registry changed | completed |
 | Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
