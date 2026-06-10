@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round12_p3_3_repeated_exposure_limit_helper_completed_ds_review_passed
+Status: round13_p3_4_historical_backtest_request_builder_completed_ds_review_passed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -95,7 +95,7 @@ The next governance package should adopt four principles.
 | P3.1 | Same-symbol cooldown control | completed_partial_runtime_wiring_pending | Added a deterministic rule builder and pure input-to-output cooldown helper. It blocks candidates only from prior completed same-symbol negative outcomes, uses longer cooldown after severe losses, emits `rule_signature`, and labels evidence basis. Historical/replay generation, true-forward wiring, and frontend display remain pending. |
 | P3.2 | Drawdown/reversal filter control | completed_partial_runtime_wiring_pending | Added a deterministic rule builder and pure input-to-output filter helper. It uses only signal-date-or-prior technical feature snapshots, blocks on recent drawdown, short-window breakdown plus price-vs-MA weakness, or high-level reversal triggers, emits `rule_signature`, and labels evidence basis. Feature generation, historical/replay artifacts, true-forward wiring, and frontend display remain pending. |
 | P3.3 | Repeated exposure limit control | completed_partial_runtime_wiring_pending | Added a deterministic rule builder and pure input-to-output exposure-limit helper. It defaults to symbol grouping, supports explicit group fields such as symbol plus industry for later governed use, ignores same-day/future exposure rows, emits `rule_signature`, and labels evidence basis. Runtime generation wiring, historical/replay artifacts, true-forward tracking, and frontend display remain pending. |
-| P3.4 | Historical backtest generation | pending | Long-window deterministic backtest under existing account-executable universe rules. |
+| P3.4 | Historical backtest generation | completed_partial_runner_wiring_pending | Added a deterministic historical-backtest generation request builder. It creates `shortpick-portfolio-backtest` request plans for rule-signature and entry-source combinations, labels `evidence_basis=historical_backtest`, marks `true_forward_tracking_eligible=false`, forbids paper-tracking writes, and does not execute backtests or write files. Runner wiring and artifact persistence remain pending. |
 | P3.5 | Retrospective forward replay generation | pending | Replays from the paper-tracking ledger start date through the rule creation date using only signal-date available features. The current observed start is `2026-05-08`, but implementation must derive it from data. |
 | P3.6 | True forward tracking start | pending | Starts only after control IDs, rule signatures, and artifact family contracts exist. |
 
@@ -530,6 +530,25 @@ DeepSeek result:
 - Key confirmations: the helper uses only exposure signal rows before candidate `signal_date`; same-day and future exposure rows are ignored and counted; functions remain pure input-to-output; no tracking rows are generated; tests cover deterministic signatures, invalid limits, same-symbol window blocking, same-day/future signal exclusion, explicit group fields, missing group-key behavior, and existing cooldown/filter leakage boundaries.
 - Nonblocking follow-up retained for later hardening: decide whether cooldown/exposure signal-day windows should count all candidate signal dates or only same-symbol / same-group signal dates when a runtime replay implementation chooses final evaluation semantics.
 
+## Round 13 Review Result
+
+Status: completed DeepSeek review.
+
+Round 13 scope:
+
+- P3.4 historical-backtest generation request builder.
+- Extended module: `src/ashare_evidence/shortpick_strategy_governance.py`.
+- Extended tests: `tests/test_shortpick_strategy_governance.py`.
+
+Round 13 adds a request-plan helper only. It does not execute `shortpick-portfolio-backtest`, write output artifacts, write database rows, generate paper-tracking rows, or change frontend/API behavior.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge and push Round 13.
+- Key confirmations: the helper only validates inputs and constructs request dictionaries with deterministic request IDs, argv, and output paths; labels clearly separate `historical_backtest` from true forward evidence; top-level and per-request `paper_tracking_write_policy=forbidden` and `true_forward_tracking_eligible=false` reduce downstream confusion risk; tests cover determinism, read-only policy labels, entry-source expansion, missing rule-signature skip behavior, and key input validation.
+- Nonblocking follow-ups retained for later hardening: add explicit tests for `min_signal_symbol_count <= 0`, empty `control_rules`, and `same_close_proxy`; implement the actual runner only after artifact persistence and leakage-audit handling are defined.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -572,8 +591,10 @@ DeepSeek result:
 | Round 11 DeepSeek review | completed |
 | P3.3 repeated exposure limit helper | completed_partial_runtime_wiring_pending |
 | Round 12 DeepSeek review | completed |
+| P3.4 historical backtest request builder | completed_partial_runner_wiring_pending |
+| Round 13 DeepSeek review | completed |
 | Runtime behavior changed | not_started |
 | Registry changed | completed |
-| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_and_repeated_exposure_helpers |
+| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_and_historical_backtest_request_builder |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |

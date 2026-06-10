@@ -9,6 +9,7 @@ from ashare_evidence.shortpick_strategy_governance import (
     apply_shortpick_repeated_exposure_limit_control,
     apply_shortpick_same_symbol_cooldown_control,
     build_shortpick_drawdown_reversal_filter_rule,
+    build_shortpick_historical_backtest_generation_requests,
     build_shortpick_repeated_exposure_limit_rule,
     build_shortpick_same_symbol_cooldown_rule,
     build_shortpick_strategy_archive_records,
@@ -808,6 +809,104 @@ def test_repeated_exposure_limit_allows_missing_group_key() -> None:
     assert result["blocked_count"] == 0
     assert result["rows"][0]["exposure_action"] == "allowed"
     assert result["rows"][0]["exposure_group_key"] == ""
+
+
+def test_historical_backtest_generation_requests_are_deterministic_and_read_only() -> None:
+    rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")
+
+    first = build_shortpick_historical_backtest_generation_requests(
+        [rule],
+        start_date="2023-04-13",
+        end_date="2026-05-08",
+        entry_price_sources=["next_close"],
+        horizon_days=10,
+        cost_bps=20,
+    )
+    second = build_shortpick_historical_backtest_generation_requests(
+        [rule],
+        start_date="2023-04-13",
+        end_date="2026-05-08",
+        entry_price_sources=["next_close"],
+        horizon_days=10,
+        cost_bps=20,
+    )
+
+    assert first == second
+    assert first["execution_policy"] == "request_plan_only_no_backtest_execution_no_data_write"
+    assert first["paper_tracking_write_policy"] == "forbidden"
+    assert first["true_forward_tracking_eligible"] is False
+    request = first["requests"][0]
+    assert request["request_id"].startswith("shortpick-historical-backtest-request:")
+    assert request["evidence_basis"] == "historical_backtest"
+    assert request["leakage_audit_status"] == "not_run"
+    assert request["control_group_id"] == rule["control_group_id"]
+    assert request["rule_signature"] == rule["rule_signature"]
+    assert request["source_command"] == "shortpick-portfolio-backtest"
+    assert "--output" in request["argv"]
+    assert "output/shortpick-governance-backtests/" in request["output_path"]
+
+
+def test_historical_backtest_generation_requests_expand_entry_sources() -> None:
+    rule = build_shortpick_drawdown_reversal_filter_rule(rule_defined_at="2026-06-10")
+
+    result = build_shortpick_historical_backtest_generation_requests(
+        [rule],
+        start_date="2023-04-13",
+        end_date="2026-05-08",
+        entry_price_sources=["next_close", "next_open"],
+        benchmark_mode="csi300",
+        account_profile="new_retail_cash_account",
+        min_signal_symbol_count=1000,
+    )
+
+    assert result["request_count"] == 2
+    entry_sources = [item["entry_price_source"] for item in result["requests"]]
+    assert entry_sources == ["next_close", "next_open"]
+    assert all(item["argv"][item["argv"].index("--benchmark-mode") + 1] == "csi300" for item in result["requests"])
+    assert all(item["argv"][item["argv"].index("--min-signal-symbol-count") + 1] == "1000" for item in result["requests"])
+
+
+def test_historical_backtest_generation_requests_skip_rules_without_signature() -> None:
+    result = build_shortpick_historical_backtest_generation_requests(
+        [{"control_group_id": "control_without_signature"}],
+        start_date="2023-04-13",
+        end_date="2026-05-08",
+    )
+
+    assert result["status"] == "ready"
+    assert result["request_count"] == 0
+    assert result["requests"] == []
+
+
+def test_historical_backtest_generation_requests_validate_inputs() -> None:
+    rule = build_shortpick_repeated_exposure_limit_rule()
+
+    with pytest.raises(ValueError, match="start_date must be <= end_date"):
+        build_shortpick_historical_backtest_generation_requests([rule], start_date="2026-05-09", end_date="2026-05-08")
+
+    with pytest.raises(ValueError, match="unsupported entry_price_sources"):
+        build_shortpick_historical_backtest_generation_requests(
+            [rule],
+            start_date="2023-04-13",
+            end_date="2026-05-08",
+            entry_price_sources=["intraday_unknown"],
+        )
+
+    with pytest.raises(ValueError, match="horizon_days must be positive"):
+        build_shortpick_historical_backtest_generation_requests(
+            [rule],
+            start_date="2023-04-13",
+            end_date="2026-05-08",
+            horizon_days=0,
+        )
+
+    with pytest.raises(ValueError, match="cost_bps must be non-negative"):
+        build_shortpick_historical_backtest_generation_requests(
+            [rule],
+            start_date="2023-04-13",
+            end_date="2026-05-08",
+            cost_bps=-1,
+        )
 
 
 def _evidence_from_returns(
