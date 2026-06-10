@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round16_p4_1_strategy_status_labels_completed_ds_review_passed
+Status: round17_p4_2_evidence_basis_sections_completed_ds_review_passed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -104,7 +104,7 @@ The next governance package should adopt four principles.
 | ID | Work Item | Status | Notes |
 | --- | --- | --- | --- |
 | P4.1 | Add strategy status labels | completed_partial_display_wiring_pending | Added backend view-projection label metadata for governance status and evidence basis, plus frontend label/color helpers for active, observe, retire-candidate, retired, historical-only, retrospective-only, and true-forward states. API/page wiring remains pending. |
-| P4.2 | Add separate display sections for evidence basis | pending | Historical backtest, retrospective replay, and true forward should not share a single headline as if they were the same evidence. |
+| P4.2 | Add separate display sections for evidence basis | completed_partial_display_wiring_pending | Added backend view-projection sections that split true-forward tracking, retrospective replay, and historical backtest rows while preserving primary/archive membership in each section. API/page wiring remains pending. |
 | P4.3 | Add retirement archive view or archive summary rows | pending | Retired strategies should remain explainable without staying in the active compute path. |
 | P4.4 | Add leakage and coverage notes | pending | Retrospective rows must show source cutoff and leakage audit status. |
 | P4.5 | Update analytical report generation | pending | Future reports should read the new artifact contracts instead of inferring status from role names. |
@@ -606,6 +606,24 @@ DeepSeek result:
 - Key confirmations: backend projection now adds stable `status_display` and `evidence_basis_display` metadata while preserving the rule that `retired` rows go only to archive; frontend helpers cover active, observe, retire-candidate, retired, historical-only, retrospective-only, true-forward, historical-backtest, retrospective-forward-replay, and true-forward-tracking labels; tests cover known labels, fallback labels, helper presence, and legacy projection/archive behavior.
 - Nonblocking follow-up retained for P4.2/P4.3: actual page display still requires an API or report data source that carries these projection rows; until then, the helper must not be presented as live UI evidence.
 
+## Round 17 Review Result
+
+Status: completed DeepSeek review.
+
+Round 17 scope:
+
+- P4.2 backend evidence-basis display sections in `project_shortpick_strategy_view_sections`.
+- Extended tests: `tests/test_shortpick_strategy_governance.py`.
+
+Round 17 adds projection metadata only. It does not create an API route, wire a live page, write runtime data, or alter active strategy generation.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge and push Round 17.
+- Key confirmations: primary/archive splitting remains unchanged; `evidence_basis_sections` groups all projected rows by true-forward tracking, retrospective replay, historical backtest, and unknown basis order; each section preserves item-level `view_section` plus `primary_count` and `archive_count`; and tests cover section order, retrospective primary/archive mixed counts, and old retired-only archive behavior.
+- Nonblocking follow-up retained for P4.3/P4.4: the page/API layer still needs to render these sections explicitly and show leakage/coverage notes before users can rely on the separation in the dashboard.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -656,9 +674,11 @@ DeepSeek result:
 | Round 15 DeepSeek review | completed |
 | P4.1 strategy status labels | completed_partial_display_wiring_pending |
 | Round 16 DeepSeek review | completed |
+| P4.2 evidence-basis display sections | completed_partial_display_wiring_pending |
+| Round 17 DeepSeek review | completed |
 | Runtime behavior changed | not_started |
 | Registry changed | completed |
-| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_and_status_label_projection |
+| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_and_evidence_basis_sections |
 | Frontend helper code changed | completed_for_strategy_status_and_evidence_basis_label_helpers |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |
