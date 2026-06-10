@@ -565,6 +565,11 @@ def test_archive_records_preserve_statistics_and_evidence_refs_for_retired_rows(
     assert record["historical_evidence"]["artifact_ref"] == "historical-fixture"
     assert record["baseline_comparison"]["baseline_id"] == "evaluation_baseline_random_pool:v1"
     assert record["retirement_artifact_ref"]["artifact_id"] == "retirement-fixture"
+    assert archive["archive_summary_policy"] == "group_retired_strategies_by_evidence_basis_family_and_entry_source"
+    assert archive["summary_rows"][0]["archived_strategy_count"] == 1
+    assert archive["summary_rows"][0]["signal_count"] == 10
+    assert archive["summary_rows"][0]["completed_observation_count"] == 10
+    assert archive["summary_rows"][0]["retirement_artifact_count"] == 1
 
 
 def test_archive_records_ignore_primary_rows() -> None:
@@ -574,7 +579,72 @@ def test_archive_records_ignore_primary_rows() -> None:
     )
 
     assert archive["archive_count"] == 0
-    assert archive["records"] == []
+    assert archive["summary_rows"] == []
+
+
+def test_archive_records_build_summary_rows_by_basis_family_and_entry_source() -> None:
+    archive = build_shortpick_strategy_archive_records(
+        {
+            "archive_items": [
+                {"strategy_id": "true-1", "recommended_status": "retired"},
+                {"strategy_id": "true-2", "recommended_status": "retired"},
+                {"strategy_id": "retro-1", "recommended_status": "retired"},
+            ]
+        },
+        {
+            "packs": [
+                {
+                    "strategy_id": "true-1",
+                    "evidence_basis": "true_forward_tracking",
+                    "strategy_family": "family_a",
+                    "entry_price_source": "next_close",
+                    "first_signal_date": "2026-05-01",
+                    "latest_signal_date": "2026-05-03",
+                    "signal_count": 3,
+                    "completed_observation_count": 2,
+                },
+                {
+                    "strategy_id": "true-2",
+                    "evidence_basis": "true_forward_tracking",
+                    "strategy_family": "family_a",
+                    "entry_price_source": "next_close",
+                    "first_signal_date": "2026-04-29",
+                    "latest_signal_date": "2026-05-04",
+                    "signal_count": 2,
+                    "completed_observation_count": 1,
+                },
+                {
+                    "strategy_id": "retro-1",
+                    "evidence_basis": "retrospective_forward_replay",
+                    "strategy_family": "family_b",
+                    "entry_price_source": "next_open",
+                    "first_signal_date": "2026-05-02",
+                    "latest_signal_date": "2026-05-05",
+                    "signal_count": 4,
+                    "completed_observation_count": 4,
+                },
+            ]
+        },
+        retirement_artifacts={
+            "true-1": {"artifact_id": "retire-true-1"},
+            "true-2": {"artifact_id": "retire-true-2"},
+        },
+    )
+
+    assert [item["evidence_basis"] for item in archive["summary_rows"]] == [
+        "true_forward_tracking",
+        "retrospective_forward_replay",
+    ]
+    true_forward = archive["summary_rows"][0]
+    assert true_forward["summary_key"] == "true_forward_tracking__family_a__next_close"
+    assert true_forward["archived_strategy_count"] == 2
+    assert true_forward["signal_count"] == 5
+    assert true_forward["completed_observation_count"] == 3
+    assert true_forward["first_signal_date"] == "2026-04-29"
+    assert true_forward["latest_signal_date"] == "2026-05-04"
+    assert true_forward["retirement_artifact_count"] == 2
+    assert archive["summary_rows"][1]["summary_key"] == "retrospective_forward_replay__family_b__next_open"
+    assert len(archive["records"]) == 3
 
 
 def test_same_symbol_cooldown_rule_signature_is_stable_and_parameter_sensitive() -> None:
