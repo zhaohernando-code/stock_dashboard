@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round19_p4_4_leakage_coverage_notes_completed_ds_review_passed
+Status: round20_p4_5_report_governance_projection_completed_ds_review_passed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -107,7 +107,7 @@ The next governance package should adopt four principles.
 | P4.2 | Add separate display sections for evidence basis | completed_partial_display_wiring_pending | Added backend view-projection sections that split true-forward tracking, retrospective replay, and historical backtest rows while preserving primary/archive membership in each section. API/page wiring remains pending. |
 | P4.3 | Add retirement archive view or archive summary rows | completed_partial_display_wiring_pending | Added archive summary rows grouped by evidence basis, strategy family, and entry-price source while preserving detailed archive records. API/page wiring remains pending. |
 | P4.4 | Add leakage and coverage notes | completed_partial_display_wiring_pending | Added leakage/coverage note metadata to strategy view projection and archive records. Retrospective rows default to showing signal-date cutoff policy and leakage audit status. API/page wiring remains pending. |
-| P4.5 | Update analytical report generation | pending | Future reports should read the new artifact contracts instead of inferring status from role names. |
+| P4.5 | Update analytical report generation | completed_partial_source_artifact_wiring_pending | Added replay readout/report projection that reads strategy governance recommendations, view sections, archive summaries, and leakage notes from governance contract fields. Missing governance input explicitly forbids role-name inference. Persisted report artifact wiring remains pending. |
 
 ## Retirement Threshold Draft
 
@@ -661,6 +661,25 @@ DeepSeek result:
 - Key confirmations: projection rows now carry `leakage_coverage_note`; retrospective rows default missing `source_feature_cutoff_policy` to `signal_date_available_inputs_only`, default leakage status to `not_run`, and require display; archive records preserve projection notes or build a fallback from evidence packs; and tests cover retrospective notes, default cutoff policy, archive preservation, and archive fallback behavior.
 - Nonblocking follow-up retained for P4.5: report/API/page surfaces still need to read and render these metadata fields before users can rely on them in the dashboard.
 
+## Round 20 Review Result
+
+Status: completed DeepSeek review.
+
+Round 20 scope:
+
+- P4.5 `strategy_governance_reporting` projection in `build_shortpick_replay_decision_projection`.
+- API replay-feedback projection passthrough for existing `strategy_governance` payloads.
+- Extended tests: `tests/test_shortpick_replay_readout.py`.
+
+Round 20 adds readout/report metadata only. It does not create a new runtime writer, execute backtests, execute leakage audits, write paper-tracking rows, or alter active strategy generation.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge and push Round 20.
+- Key confirmations: the report projection reads `recommended_status`, `evidence_basis`, `archive_records.summary_rows`, and `leakage_coverage_note` from governance contract inputs; missing governance inputs return `missing_artifact` with `may_infer_status_from_role_name=false`; API assembly only passes through existing `strategy_governance` data from replay feedback or overall payload; tests cover both missing and present governance inputs, including deliberate `tracking_role` distractors.
+- Nonblocking follow-up retained for later display work: persisted report artifacts and dashboard pages still need to provide/render `strategy_governance` payloads before the new projection is visible to end users.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -717,9 +736,11 @@ DeepSeek result:
 | Round 18 DeepSeek review | completed |
 | P4.4 leakage and coverage notes | completed_partial_display_wiring_pending |
 | Round 19 DeepSeek review | completed |
+| P4.5 analytical report governance projection | completed_partial_source_artifact_wiring_pending |
+| Round 20 DeepSeek review | completed |
 | Runtime behavior changed | not_started |
 | Registry changed | completed |
-| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_and_leakage_coverage_notes |
+| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_and_report_governance_projection |
 | Frontend helper code changed | completed_for_strategy_status_and_evidence_basis_label_helpers |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |

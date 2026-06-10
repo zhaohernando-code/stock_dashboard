@@ -146,6 +146,10 @@ def test_shortpick_replay_readout_handles_missing_artifacts_without_frontend_gue
     assert projection["confidence_intervals"]["status"] == "missing_artifact"
     assert projection["return_attribution"]["status"] == "missing_artifact"
     assert projection["forward_tracking_alignment"]["status"] == "insufficient_forward_sample"
+    governance = projection["strategy_governance_reporting"]
+    assert governance["status"] == "missing_artifact"
+    assert governance["may_infer_status_from_role_name"] is False
+    assert "tracking_role" in governance["reason"]
 
 
 def test_same_close_proxy_is_serialized_as_daily_proxy_not_intraday_proof():
@@ -166,6 +170,76 @@ def test_same_close_proxy_is_serialized_as_daily_proxy_not_intraday_proof():
     assert row["assumption_level"] == "diagnostic_proxy"
     assert "代理" in row["entry_price_source_note"]
     assert "不等同真实14:00" in row["entry_price_source_note"]
+
+
+def test_shortpick_replay_readout_reads_strategy_governance_contract_fields_not_role_names():
+    projection = build_shortpick_replay_decision_projection(
+        _replay_feedback(),
+        market_study=_market_study(),
+        entry_artifacts={},
+        paper_tracking={},
+        strategy_governance={
+            "recommendations": [
+                {
+                    "strategy_id": "retro-candidate",
+                    "tracking_role": "frozen_paper_primary",
+                    "recommended_status": "retire_candidate",
+                    "evidence_basis": "retrospective_forward_replay",
+                    "leakage_audit_status": "not_run",
+                    "leakage_audit_reasons": ["audit_pending"],
+                    "strategy_family": "cooldown",
+                    "entry_price_source": "next_close",
+                },
+                {
+                    "strategy_id": "true-retired",
+                    "tracking_role": "frozen_paper_primary",
+                    "recommended_status": "retired",
+                    "evidence_basis": "true_forward_tracking",
+                    "strategy_family": "low_turnover",
+                    "entry_price_source": "next_close",
+                },
+            ],
+            "archive_records": {
+                "summary_rows": [
+                    {
+                        "summary_key": "true_forward_tracking__low_turnover__next_close",
+                        "evidence_basis": "true_forward_tracking",
+                        "strategy_family": "low_turnover",
+                        "entry_price_source": "next_close",
+                        "archived_strategy_count": 1,
+                        "signal_count": 10,
+                        "completed_observation_count": 10,
+                        "retirement_artifact_count": 1,
+                    }
+                ]
+            },
+        },
+    )
+
+    governance = projection["strategy_governance_reporting"]
+    assert governance["status"] == "ready"
+    assert governance["source_policy"] == "read_governance_projection_not_role_names"
+    assert governance["may_infer_status_from_role_name"] is False
+    assert governance["primary_count"] == 1
+    assert governance["archive_count"] == 1
+    assert governance["status_counts"] == {"retire_candidate": 1, "retired": 1}
+    assert [section["evidence_basis"] for section in governance["sections"]] == [
+        "true_forward_tracking",
+        "retrospective_forward_replay",
+    ]
+    assert governance["archive_summary_rows"][0]["summary_key"] == "true_forward_tracking__low_turnover__next_close"
+    assert governance["leakage_coverage_rows"] == [
+        {
+            "strategy_id": "retro-candidate",
+            "recommended_status": "retire_candidate",
+            "evidence_basis": "retrospective_forward_replay",
+            "leakage_audit_status": "not_run",
+            "leakage_audit_reasons": ["audit_pending"],
+            "source_feature_cutoff_policy": "signal_date_available_inputs_only",
+            "feature_cutoff_at": None,
+            "feature_coverage_status": "unknown",
+        }
+    ]
 
 
 def test_shortpick_replay_readout_surfaces_phase_two_three_artifacts():

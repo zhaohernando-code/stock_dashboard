@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any
 
+from ashare_evidence.shortpick_strategy_governance import project_shortpick_strategy_view_sections
 
 CURRENT_FROZEN_STRATEGY = "low_turnover_20d_uptrend_liquid_top120"
 DEFAULT_CANDIDATE_FAMILY = "momentum_10d_turnover_cooldown_rank"
@@ -17,6 +19,7 @@ def build_shortpick_replay_decision_projection(
     market_study: dict[str, Any] | None = None,
     entry_artifacts: dict[str, dict[str, Any]] | None = None,
     paper_tracking: dict[str, Any] | None = None,
+    strategy_governance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build UI-facing readouts from already materialized artifacts only."""
 
@@ -24,6 +27,7 @@ def build_shortpick_replay_decision_projection(
     entry_artifacts = entry_artifacts or {}
     paper_tracking = paper_tracking or {}
     overall = _dict(replay_feedback.get("overall"))
+    strategy_governance = strategy_governance or _dict(replay_feedback.get("strategy_governance")) or _dict(overall.get("strategy_governance"))
     families = [_dict(item) for item in replay_feedback.get("families") or [] if isinstance(item, dict)]
     default_family = _find_family(families, DEFAULT_CANDIDATE_FAMILY)
     llm_family = _find_family(families, LLM_FAMILY)
@@ -67,6 +71,7 @@ def build_shortpick_replay_decision_projection(
             frozen_summary=frozen_summary,
             paper_tracking=paper_tracking,
         ),
+        "strategy_governance_reporting": _strategy_governance_reporting(strategy_governance),
     }
 
 
@@ -416,6 +421,115 @@ def _forward_tracking_alignment(
             else "前向样本达到最小数量后，应比较真实纸面结果和历史同口径期望。"
         ),
     }
+
+
+def _strategy_governance_reporting(strategy_governance: dict[str, Any]) -> dict[str, Any]:
+    view_projection = _governance_view_projection(strategy_governance)
+    archive_records = _dict(strategy_governance.get("archive_records"))
+    if not view_projection:
+        return {
+            "status": "missing_artifact",
+            "basis": "shortpick_strategy_governance_contracts",
+            "source_policy": "read_governance_projection_not_role_names",
+            "may_infer_status_from_role_name": False,
+            "reason": "缺少策略治理投影；报告不得从 tracking_role 或 role name 推断状态。",
+            "sections": [],
+            "archive_summary_rows": [],
+            "leakage_coverage_rows": [],
+            "status_counts": {},
+        }
+
+    items = _governance_projection_items(view_projection)
+    status_counts = Counter(str(item.get("recommended_status") or "unknown") for item in items)
+    sections = [_governance_section_summary(item) for item in view_projection.get("evidence_basis_sections") or [] if isinstance(item, dict)]
+    archive_summary_rows = [
+        _governance_archive_summary_row(item)
+        for item in archive_records.get("summary_rows") or []
+        if isinstance(item, dict)
+    ]
+    return {
+        "status": "ready",
+        "basis": "shortpick_strategy_governance_contracts",
+        "source_policy": "read_governance_projection_not_role_names",
+        "may_infer_status_from_role_name": False,
+        "primary_count": _int(view_projection.get("primary_count")),
+        "archive_count": _int(view_projection.get("archive_count")),
+        "status_counts": dict(sorted(status_counts.items())),
+        "sections": sections,
+        "archive_summary_rows": archive_summary_rows,
+        "leakage_coverage_rows": _governance_leakage_coverage_rows(items),
+    }
+
+
+def _governance_view_projection(strategy_governance: dict[str, Any]) -> dict[str, Any]:
+    view_projection = _dict(strategy_governance.get("view_projection"))
+    if view_projection:
+        return view_projection
+    recommendations = strategy_governance.get("recommendations")
+    if isinstance(recommendations, list):
+        return project_shortpick_strategy_view_sections({"recommendations": recommendations})
+    status_recommendations = _dict(strategy_governance.get("status_recommendations"))
+    if isinstance(status_recommendations.get("recommendations"), list):
+        return project_shortpick_strategy_view_sections(status_recommendations)
+    return {}
+
+
+def _governance_projection_items(view_projection: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        _dict(item)
+        for item in [
+            *(view_projection.get("primary_items") or []),
+            *(view_projection.get("archive_items") or []),
+        ]
+        if isinstance(item, dict)
+    ]
+
+
+def _governance_section_summary(section: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "evidence_basis": section.get("evidence_basis"),
+        "evidence_basis_display": _dict(section.get("evidence_basis_display")),
+        "item_count": _int(section.get("item_count")),
+        "primary_count": _int(section.get("primary_count")),
+        "archive_count": _int(section.get("archive_count")),
+    }
+
+
+def _governance_archive_summary_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "summary_key": row.get("summary_key"),
+        "evidence_basis": row.get("evidence_basis"),
+        "evidence_basis_display": _dict(row.get("evidence_basis_display")),
+        "strategy_family": row.get("strategy_family"),
+        "entry_price_source": row.get("entry_price_source"),
+        "archived_strategy_count": _int(row.get("archived_strategy_count")),
+        "signal_count": _int(row.get("signal_count")),
+        "completed_observation_count": _int(row.get("completed_observation_count")),
+        "first_signal_date": row.get("first_signal_date"),
+        "latest_signal_date": row.get("latest_signal_date"),
+        "retirement_artifact_count": _int(row.get("retirement_artifact_count")),
+    }
+
+
+def _governance_leakage_coverage_rows(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in items:
+        note = _dict(item.get("leakage_coverage_note"))
+        if not note or not note.get("display_required"):
+            continue
+        rows.append(
+            {
+                "strategy_id": item.get("strategy_id"),
+                "recommended_status": item.get("recommended_status"),
+                "evidence_basis": item.get("evidence_basis"),
+                "leakage_audit_status": note.get("leakage_audit_status"),
+                "leakage_audit_reasons": note.get("leakage_audit_reasons") if isinstance(note.get("leakage_audit_reasons"), list) else [],
+                "source_feature_cutoff_policy": note.get("source_feature_cutoff_policy"),
+                "feature_cutoff_at": note.get("feature_cutoff_at"),
+                "feature_coverage_status": note.get("feature_coverage_status"),
+            }
+        )
+    return rows
 
 
 def _funnel_step(id_: str, label: str, count: Any, basis: str, *, invert: bool = False) -> dict[str, Any]:
