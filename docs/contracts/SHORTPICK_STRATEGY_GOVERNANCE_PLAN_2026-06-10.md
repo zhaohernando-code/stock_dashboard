@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round4_p2_1_inventory_completed_ds_review_passed
+Status: round5_p2_2_evidence_pack_builder_completed_ds_review_passed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -82,7 +82,7 @@ The next governance package should adopt four principles.
 | ID | Work Item | Status | Notes |
 | --- | --- | --- | --- |
 | P2.1 | Inventory active shortpick strategies and controls | completed | Added `docs/contracts/SHORTPICK_STRATEGY_INVENTORY_2026-06-10.md`, separating true-forward paper tracking, generated overlay-only rows, historical/replay-only variants, and configured dormant controls. |
-| P2.2 | Compute retirement evidence pack per strategy | pending | Include historical after-cost excess, forward mean/median/win rate, completed sample count, drawdown, tail dependence, and baseline comparison. |
+| P2.2 | Compute retirement evidence pack per strategy | completed | Added a read-only builder in `src/ashare_evidence/shortpick_strategy_governance.py` that aggregates paper-tracking rows into evidence packs with evidence basis, forward mean/median/win rate, completed sample count, additive drawdown, tail dependence, same-symbol loss repeats, and optional historical/baseline evidence references. It does not mark `retired`, write runtime data, or change frontend/API behavior. |
 | P2.3 | Mark candidates as `active`, `observe`, `retire_candidate`, or `retired` | pending | `retired` requires a `strategy_retirement:v1` artifact and decision-log entry. |
 | P2.4 | Remove retired strategies from active generation | pending | Retired strategies should not consume daily compute unless explicitly requested for archive rebuild. |
 | P2.5 | Remove retired strategies from primary frontend views | pending | Archive summaries remain visible in an audit or research archive view. |
@@ -378,9 +378,30 @@ DeepSeek result:
 - Key confirmations: the inventory covers all 12 active paper-tracking roles; it correctly separates generated overlay-only rows, replay-only variants, and configured dormant controls; it does not imply retirement, runtime, data, frontend, or API changes; no contradiction was found with `DECISIONS.md`, `docs/contracts/PHASE5_RESEARCH_CONTRACT.md`, or the Round 3 registry/schema contracts.
 - Nonblocking follow-ups retained for P2.2 or later: clarify the intentional dormancy of standalone low-turnover control config, and keep the stop8 replay-only legacy second variant separate from the active non-stop legacy second paper control.
 
+## Round 5 Review Result
+
+Status: completed DeepSeek review.
+
+Round 5 scope:
+
+- P2.2 read-only retirement evidence-pack builder.
+- New module: `src/ashare_evidence/shortpick_strategy_governance.py`.
+- New tests: `tests/test_shortpick_strategy_governance.py`.
+
+Round 5 adds code for evidence aggregation only. It does not mark candidates as `active`, `observe`, `retire_candidate`, or `retired`; does not create `strategy_retirement:v1` artifacts; does not remove any strategy from active generation; does not write runtime data; and does not change frontend/API behavior.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge and push Round 5.
+- Key confirmations: the builder is pure input-to-output and read-only; pack-level `decision_status` remains `not_evaluated`; `evidence_basis` is explicit and schema-limited to `true_forward_tracking`, `retrospective_forward_replay`, or `historical_backtest`; `source_rank=0` remains distinct from a missing rank; and missing structured entry-source data no longer falls back to Chinese UI text parsing.
+- Nonblocking follow-up retained for later consumer work: if a downstream view combines multiple evidence bases, it must de-duplicate by `strategy_id + evidence_basis` or otherwise keep basis visible.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
+- `PYTHONPATH=src python3 -m pytest tests/test_shortpick_strategy_governance.py`
+- `python3 -m compileall -q src/ashare_evidence/shortpick_strategy_governance.py`
 - `python3 -m json.tool` for modified registry and added schema files
 - `PYTHONPATH=src python3 -m pytest tests/test_contract_registry.py`
 - `PYTHONPATH=src python3 -m ashare_evidence.cli contract-registry-check --registry docs/contracts/registry/autonomous_flow_registry.v1.json --docs docs/contracts/SHORTPICK_STRATEGY_GOVERNANCE_PLAN_2026-06-10.md --fail-on-unregistered --fail-on-deprecated`
@@ -402,8 +423,10 @@ DeepSeek result:
 | Round 3 DeepSeek review | completed |
 | P2.1 strategy/control inventory | completed |
 | Round 4 DeepSeek review | completed |
+| P2.2 evidence-pack builder | completed |
+| Round 5 DeepSeek review | completed |
 | Runtime behavior changed | not_started |
 | Registry changed | completed |
-| Strategy code changed | not_started |
+| Strategy code changed | completed_for_read_only_governance_builder |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |
