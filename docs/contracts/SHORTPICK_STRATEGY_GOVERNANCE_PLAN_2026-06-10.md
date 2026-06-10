@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round26_replay_feedback_ttl_cache_ds_reviewed
+Status: round26_replay_feedback_ttl_cache_published_runtime_verified
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -834,6 +834,15 @@ DeepSeek result:
 - Concurrency review: module-level lock protects cache tuple reads/writes and deepcopy prevents object pollution.
 - Nonblocking followups: cold/expired concurrent requests can still stampede and compute the same payload more than once; the miss path does two deep copies; tests do not yet cover TTL disabled, fallback cache source, or concurrent request behavior.
 
+Publish and runtime verification:
+
+- Published merge commit `4b9ac44ec337d8ed958702bfa82feb004aea1516` to local runtime with `ASHARE_PUBLISH_REFRESH_MODE=skip`, `ASHARE_PUBLISH_VERIFY_MODE=canonical`, `ASHARE_RELEASE_TIMEOUT_SECONDS=25`, and `ASHARE_RELEASE_OPERATIONS_WARMUP_TIMEOUT_SECONDS=90`.
+- Canonical release parity verifier passed and wrote manifest `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260610T084401Z-4b9ac44ec337/manifest.json`; `api_warmups` captured 8 operations endpoints.
+- Post-deploy verification passed (`19 passed, 0 failed`), backend health passed at `http://127.0.0.1:8000/health`, and frontend health passed at `http://127.0.0.1:5173/`.
+- Real local API `/shortpick-lab/replay-feedback` returned HTTP 200 with `overall.strategy_governance_reporting.status=ready`, `primary_count=32`, `archive_count=0`, and `source_policy=read_governance_projection_not_role_names`.
+- Consecutive local API calls demonstrated the runtime TTL cache effect: first call `5.483s`, second call `0.085s`, same payload size.
+- Real canonical API `https://hernando-zhao.cn/projects/ashare-dashboard/api/shortpick-lab/replay-feedback` with dev auth returned HTTP 200 and the same governance status/source policy.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -901,9 +910,9 @@ DeepSeek result:
 | Round 24 DeepSeek review | completed |
 | Release verifier timeout governance | completed_ds_reviewed_pending_publish_verifier_quiescence |
 | Round 25 DeepSeek review | completed |
-| Replay-feedback aggregate TTL cache | completed_ds_reviewed |
+| Replay-feedback aggregate TTL cache | published_runtime_verified |
 | Round 26 DeepSeek review | completed |
-| Runtime behavior changed | published_for_read_only_replay_feedback_projection_real_data_enrichment |
+| Runtime behavior changed | published_for_read_only_replay_feedback_projection_real_data_enrichment_and_replay_feedback_aggregate_ttl_cache |
 | Registry changed | completed |
 | Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
 | Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_and_governance_projection_rendering |
