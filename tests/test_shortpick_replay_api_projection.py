@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from ashare_evidence.api import _build_shortpick_strategy_governance_projection, _slim_shortpick_strategy_slice_evidence
+import ashare_evidence.api as api
+from ashare_evidence.api import (
+    _build_shortpick_replay_aggregate_feedback_response,
+    _build_shortpick_strategy_governance_projection,
+    _slim_shortpick_strategy_slice_evidence,
+)
 
 
 def test_strategy_slice_response_projection_keeps_ui_fields_and_drops_heavy_detail() -> None:
@@ -167,6 +172,41 @@ def test_api_strategy_governance_projection_does_not_infer_status_from_empty_led
         "source_policy": "read_only_paper_tracking_ledger_no_role_name_status_inference",
         "reason": "paper tracking ledger has no strategy rows for governance projection",
     }
+
+
+def test_api_enriches_ready_replay_feedback_frontend_projection(monkeypatch) -> None:
+    session = object()
+    ready_projection = {
+        "generated_at": "2026-05-14T16:02:11+00:00",
+        "overall": {"run_count": 1},
+    }
+
+    monkeypatch.setattr(
+        api,
+        "get_ready_frontend_projection_payload",
+        lambda actual_session, projection_key: ready_projection,
+    )
+    monkeypatch.setattr(
+        api,
+        "_load_shortpick_replay_feedback_from_cache",
+        lambda run_id=None: (_ for _ in ()).throw(AssertionError("cache fallback should not run")),
+    )
+
+    def attach_projection(payload: dict[str, object], *, session: object) -> dict[str, object]:
+        assert payload is ready_projection
+        return {
+            **payload,
+            "overall": {
+                **payload["overall"],  # type: ignore[arg-type]
+                "strategy_governance_reporting": {"status": "ready"},
+            },
+        }
+
+    monkeypatch.setattr(api, "_attach_shortpick_replay_decision_projection", attach_projection)
+
+    response = _build_shortpick_replay_aggregate_feedback_response(session)  # type: ignore[arg-type]
+
+    assert response["overall"]["strategy_governance_reporting"] == {"status": "ready"}  # type: ignore[index]
 
 
 def _paper_tracking_item(signal_date: str, *, stock_return: float) -> dict[str, object]:
