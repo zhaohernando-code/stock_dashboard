@@ -387,6 +387,15 @@ def test_strategy_view_projection_splits_retired_into_archive_only() -> None:
             "primary_horizon_days": None,
             "reasons": ["strategy_retirement_artifact_and_decision_log_ref_present"],
             "blockers": [],
+            "leakage_coverage_note": {
+                "evidence_basis": "true_forward_tracking",
+                "leakage_audit_status": "not_run",
+                "leakage_audit_reasons": [],
+                "source_feature_cutoff_policy": None,
+                "feature_cutoff_at": None,
+                "feature_coverage_status": "unknown",
+                "display_required": False,
+            },
             "view_section": "archive",
         }
     ]
@@ -460,6 +469,58 @@ def test_strategy_view_projection_adds_status_and_evidence_labels() -> None:
         "label": "Unknown evidence",
         "tone": "default",
     }
+
+
+def test_strategy_view_projection_adds_leakage_and_coverage_notes_for_retrospective_rows() -> None:
+    result = project_shortpick_strategy_view_sections(
+        {
+            "recommendations": [
+                {
+                    "strategy_id": "retrospective-id",
+                    "recommended_status": "observe",
+                    "evidence_basis": "retrospective_forward_replay",
+                    "leakage_audit_status": "not_run",
+                    "leakage_audit_reasons": ["audit_pending"],
+                    "source_feature_cutoff_policy": "signal_date_available_inputs_only",
+                    "feature_cutoff_at": "2026-05-10T15:00:00+08:00",
+                    "feature_coverage_status": "partial",
+                }
+            ]
+        }
+    )
+
+    note = result["primary_items"][0]["leakage_coverage_note"]
+    assert note == {
+        "evidence_basis": "retrospective_forward_replay",
+        "leakage_audit_status": "not_run",
+        "leakage_audit_reasons": ["audit_pending"],
+        "source_feature_cutoff_policy": "signal_date_available_inputs_only",
+        "feature_cutoff_at": "2026-05-10T15:00:00+08:00",
+        "feature_coverage_status": "partial",
+        "display_required": True,
+    }
+    assert result["evidence_basis_sections"][0]["items"][0]["leakage_coverage_note"] == note
+
+
+def test_strategy_view_projection_defaults_retrospective_cutoff_policy_when_missing() -> None:
+    result = project_shortpick_strategy_view_sections(
+        {
+            "recommendations": [
+                {
+                    "strategy_id": "retrospective-id",
+                    "recommended_status": "observe",
+                    "evidence_basis": "retrospective_forward_replay",
+                }
+            ]
+        }
+    )
+
+    note = result["primary_items"][0]["leakage_coverage_note"]
+    assert note["leakage_audit_status"] == "not_run"
+    assert note["leakage_audit_reasons"] == []
+    assert note["source_feature_cutoff_policy"] == "signal_date_available_inputs_only"
+    assert note["feature_coverage_status"] == "unknown"
+    assert note["display_required"] is True
 
 
 def test_strategy_view_projection_separates_evidence_basis_sections() -> None:
@@ -580,6 +641,77 @@ def test_archive_records_ignore_primary_rows() -> None:
 
     assert archive["archive_count"] == 0
     assert archive["summary_rows"] == []
+
+
+def test_archive_records_preserve_leakage_coverage_notes_for_retired_rows() -> None:
+    archive = build_shortpick_strategy_archive_records(
+        {
+            "archive_items": [
+                {
+                    "strategy_id": "retrospective-id",
+                    "recommended_status": "retired",
+                    "leakage_coverage_note": {
+                        "evidence_basis": "retrospective_forward_replay",
+                        "leakage_audit_status": "passed",
+                        "leakage_audit_reasons": ["used_only_signal_date_or_prior_features"],
+                        "source_feature_cutoff_policy": "signal_date_available_inputs_only",
+                        "feature_cutoff_at": "2026-05-10",
+                        "feature_coverage_status": "ready",
+                        "display_required": True,
+                    },
+                }
+            ]
+        },
+        {
+            "packs": [
+                {
+                    "strategy_id": "retrospective-id",
+                    "evidence_basis": "retrospective_forward_replay",
+                    "strategy_family": "cooldown",
+                    "entry_price_source": "next_close",
+                }
+            ]
+        },
+    )
+
+    assert archive["records"][0]["leakage_coverage_note"] == {
+        "evidence_basis": "retrospective_forward_replay",
+        "leakage_audit_status": "passed",
+        "leakage_audit_reasons": ["used_only_signal_date_or_prior_features"],
+        "source_feature_cutoff_policy": "signal_date_available_inputs_only",
+        "feature_cutoff_at": "2026-05-10",
+        "feature_coverage_status": "ready",
+        "display_required": True,
+    }
+
+
+def test_archive_records_build_leakage_coverage_notes_from_pack_when_projection_missing() -> None:
+    archive = build_shortpick_strategy_archive_records(
+        {"archive_items": [{"strategy_id": "retrospective-id", "recommended_status": "retired"}]},
+        {
+            "packs": [
+                {
+                    "strategy_id": "retrospective-id",
+                    "evidence_basis": "retrospective_forward_replay",
+                    "source_feature_cutoff_policy": "signal_date_available_inputs_only",
+                    "feature_cutoff_date": "2026-05-10",
+                    "feature_coverage_status": "missing",
+                    "leakage_audit_status": "blocked",
+                    "leakage_audit_reasons": ["feature_snapshot_missing"],
+                }
+            ]
+        },
+    )
+
+    assert archive["records"][0]["leakage_coverage_note"] == {
+        "evidence_basis": "retrospective_forward_replay",
+        "leakage_audit_status": "blocked",
+        "leakage_audit_reasons": ["feature_snapshot_missing"],
+        "source_feature_cutoff_policy": "signal_date_available_inputs_only",
+        "feature_cutoff_at": "2026-05-10",
+        "feature_coverage_status": "missing",
+        "display_required": True,
+    }
 
 
 def test_archive_records_build_summary_rows_by_basis_family_and_entry_source() -> None:
