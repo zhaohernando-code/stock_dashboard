@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round14_p3_5_retrospective_forward_replay_request_builder_completed_ds_review_passed
+Status: round15_p3_6_true_forward_activation_plan_completed_ds_review_passed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -97,7 +97,7 @@ The next governance package should adopt four principles.
 | P3.3 | Repeated exposure limit control | completed_partial_runtime_wiring_pending | Added a deterministic rule builder and pure input-to-output exposure-limit helper. It defaults to symbol grouping, supports explicit group fields such as symbol plus industry for later governed use, ignores same-day/future exposure rows, emits `rule_signature`, and labels evidence basis. Runtime generation wiring, historical/replay artifacts, true-forward tracking, and frontend display remain pending. |
 | P3.4 | Historical backtest generation | completed_partial_runner_wiring_pending | Added a deterministic historical-backtest generation request builder. It creates `shortpick-portfolio-backtest` request plans for rule-signature and entry-source combinations, labels `evidence_basis=historical_backtest`, marks `true_forward_tracking_eligible=false`, forbids paper-tracking writes, and does not execute backtests or write files. Runner wiring and artifact persistence remain pending. |
 | P3.5 | Retrospective forward replay generation | completed_partial_runner_wiring_pending | Added a deterministic retrospective-forward-replay request builder. It derives observed start/end from `paper_tracking.items`, includes only signal dates strictly before `rule_defined_at`, labels `evidence_basis=retrospective_forward_replay`, marks `retrospective=true`, forbids paper-tracking writes, and does not execute replay or write files. Runner wiring and artifact persistence remain pending. |
-| P3.6 | True forward tracking start | pending | Starts only after control IDs, rule signatures, and artifact family contracts exist. |
+| P3.6 | True forward tracking start | completed_partial_runtime_wiring_pending | Added a deterministic true-forward activation-plan helper. It allows only registered control IDs with `rule_signature` and `rule_defined_at`, sets `tracking_start_date` no earlier than both the requested start and rule definition date, labels `evidence_basis=true_forward_tracking`, forbids retroactive backfill, and does not write tracking rows. Runtime paper-ledger wiring remains pending. |
 
 ### P4 - Frontend And Reporting
 
@@ -568,6 +568,25 @@ DeepSeek result:
 - Key confirmations: the helper derives the observed paper-tracking start/end from `paper_tracking.items`; it keeps only replay signal dates strictly before `rule_defined_at`; it explicitly labels the result as `retrospective_forward_replay`, `retrospective=true`, `true_forward_tracking_eligible=false`, and `paper_tracking_write_policy=forbidden`; and tests cover window derivation, missing identity blocking, missing `rule_defined_at` blocking, no-prior-date blocking, and deterministic request generation.
 - Nonblocking follow-up retained for future precision work: `rule_defined_at` is date-truncated, so same-day signals are conservatively excluded. A later replay runner can move to full datetime comparison only if feature timestamps and paper ledger timestamps support that precision.
 
+## Round 15 Review Result
+
+Status: completed DeepSeek review.
+
+Round 15 scope:
+
+- P3.6 true-forward tracking activation-plan helper.
+- Extended module: `src/ashare_evidence/shortpick_strategy_governance.py`.
+- Extended tests: `tests/test_shortpick_strategy_governance.py`.
+
+Round 15 adds an activation-plan helper only. It does not write paper-tracking rows, execute generation, run retrospective replay, or change frontend/API behavior.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge and push Round 15.
+- Key confirmations: the helper gates activation on `control_group_id`, `rule_signature`, and `rule_defined_at`; unregistered control IDs are blocked; `tracking_start_date` is `max(tracking_started_at, rule_defined_at)`; `evidence_basis=true_forward_tracking` is paired with `retrospective=false` and `retroactive_backfill_allowed=false`; and tests cover normal activation, missing identity or definition time, unregistered control blocking, determinism, and input validation.
+- Nonblocking follow-up retained for runtime wiring: the current artifact family reference points to the existing paper-tracking ledger concept rather than a newly registered dedicated artifact family; if the project later creates a dedicated true-forward artifact family, the activation plan should be wired to that registered family before writing rows.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -614,8 +633,10 @@ DeepSeek result:
 | Round 13 DeepSeek review | completed |
 | P3.5 retrospective forward replay request builder | completed_partial_runner_wiring_pending |
 | Round 14 DeepSeek review | completed |
+| P3.6 true forward tracking activation plan | completed_partial_runtime_wiring_pending |
+| Round 15 DeepSeek review | completed |
 | Runtime behavior changed | not_started |
 | Registry changed | completed |
-| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_and_retrospective_forward_replay_request_builder |
+| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_and_true_forward_activation_plan |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |

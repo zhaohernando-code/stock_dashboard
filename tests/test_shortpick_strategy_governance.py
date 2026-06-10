@@ -16,6 +16,7 @@ from ashare_evidence.shortpick_strategy_governance import (
     build_shortpick_strategy_archive_records,
     build_shortpick_strategy_retirement_evidence_packs,
     build_shortpick_strategy_status_recommendations,
+    build_shortpick_true_forward_tracking_activation_plan,
     filter_shortpick_generation_eligible_items,
     project_shortpick_strategy_view_sections,
 )
@@ -981,6 +982,83 @@ def test_retrospective_forward_replay_requests_are_deterministic() -> None:
 
     assert first == second
     assert first["execution_policy"] == "request_plan_only_no_replay_execution_no_data_write"
+
+
+def test_true_forward_tracking_activation_plan_starts_no_earlier_than_rule_definition() -> None:
+    rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10T09:00:00+08:00")
+
+    result = build_shortpick_true_forward_tracking_activation_plan(
+        [rule],
+        tracking_started_at="2026-06-09T15:00:00+08:00",
+        generated_at="2026-06-10T12:00:00+08:00",
+    )
+
+    assert result["status"] == "ready"
+    assert result["evidence_basis"] == "true_forward_tracking"
+    assert result["retrospective"] is False
+    assert result["retroactive_backfill_allowed"] is False
+    assert result["execution_policy"] == "activation_plan_only_no_tracking_execution_no_data_write"
+    assert result["paper_tracking_write_policy"] == "not_written_by_plan_runtime_wiring_required"
+    activation = result["activations"][0]
+    assert activation["activation_id"].startswith("shortpick-true-forward-activation:")
+    assert activation["tracking_start_requested_at"] == "2026-06-09"
+    assert activation["tracking_start_date"] == "2026-06-10"
+    assert activation["true_forward_tracking_eligible"] is True
+    assert activation["retrospective"] is False
+    assert activation["retroactive_backfill_allowed"] is False
+    assert activation["forbidden_signal_date_policy"] == "do_not_write_rows_before_tracking_start_date"
+    assert activation["generated_at"] == "2026-06-10T12:00:00+08:00"
+
+
+def test_true_forward_tracking_activation_plan_blocks_missing_identity_and_defined_at() -> None:
+    result = build_shortpick_true_forward_tracking_activation_plan(
+        [
+            {"control_group_id": "control_same_symbol_cooldown:v1", "rule_defined_at": "2026-06-10"},
+            {"control_group_id": "control_drawdown_reversal_filter:v1", "rule_signature": "sha256:test"},
+        ],
+        tracking_started_at="2026-06-10",
+    )
+
+    assert result["status"] == "blocked"
+    assert result["activation_count"] == 0
+    assert [item["blocker"] for item in result["blocked_rules"]] == [
+        "missing_control_group_id_or_rule_signature",
+        "missing_rule_defined_at",
+    ]
+
+
+def test_true_forward_tracking_activation_plan_blocks_unregistered_controls() -> None:
+    result = build_shortpick_true_forward_tracking_activation_plan(
+        [
+            {
+                "control_group_id": "control_not_registered:v1",
+                "rule_signature": "sha256:test",
+                "rule_defined_at": "2026-06-10",
+            }
+        ],
+        tracking_started_at="2026-06-10",
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blocked_rule_count"] == 1
+    assert result["blocked_rules"][0]["blocker"] == "unregistered_control_group_id"
+
+
+def test_true_forward_tracking_activation_plan_is_deterministic_and_validates_inputs() -> None:
+    rule = build_shortpick_repeated_exposure_limit_rule(rule_defined_at="2026-06-10")
+
+    first = build_shortpick_true_forward_tracking_activation_plan([rule], tracking_started_at="2026-06-11")
+    second = build_shortpick_true_forward_tracking_activation_plan([rule], tracking_started_at="2026-06-11")
+
+    assert first == second
+    assert first["activations"][0]["tracking_start_date"] == "2026-06-11"
+    assert "control_repeated_exposure_limit:v1" in first["registered_control_group_ids"]
+
+    with pytest.raises(ValueError, match="tracking_started_at must include a date"):
+        build_shortpick_true_forward_tracking_activation_plan([rule], tracking_started_at="")
+
+    with pytest.raises(ValueError, match="artifact_family_id must be non-empty"):
+        build_shortpick_true_forward_tracking_activation_plan([rule], tracking_started_at="2026-06-11", artifact_family_id="")
 
 
 def _evidence_from_returns(
