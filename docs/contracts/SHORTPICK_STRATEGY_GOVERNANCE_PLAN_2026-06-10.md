@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round6_p2_3_status_recommendation_layer_completed_ds_review_passed
+Status: round7_p2_4_generation_filter_helper_completed_ds_review_passed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -84,7 +84,7 @@ The next governance package should adopt four principles.
 | P2.1 | Inventory active shortpick strategies and controls | completed | Added `docs/contracts/SHORTPICK_STRATEGY_INVENTORY_2026-06-10.md`, separating true-forward paper tracking, generated overlay-only rows, historical/replay-only variants, and configured dormant controls. |
 | P2.2 | Compute retirement evidence pack per strategy | completed | Added a read-only builder in `src/ashare_evidence/shortpick_strategy_governance.py` that aggregates paper-tracking rows into evidence packs with evidence basis, forward mean/median/win rate, completed sample count, additive drawdown, tail dependence, same-symbol loss repeats, and optional historical/baseline evidence references. It does not mark `retired`, write runtime data, or change frontend/API behavior. |
 | P2.3 | Mark candidates as `active`, `observe`, `retire_candidate`, or `retired` | completed | Added a read-only status recommendation layer. Metrics alone can only produce `active`, `observe`, or `retire_candidate`; `retired` requires a valid `strategy_retirement:v1` / `shortpick_strategy_retirement` artifact plus `decision_log_ref`. No runtime state is persisted in this round. |
-| P2.4 | Remove retired strategies from active generation | pending | Retired strategies should not consume daily compute unless explicitly requested for archive rebuild. |
+| P2.4 | Remove retired strategies from active generation | partial | Added a read-only generation eligibility filter that excludes only `recommended_status=retired` by default and keeps `retire_candidate`, `observe`, and `untracked` eligible. Archive rebuild can explicitly pass `include_retired=True`. Runtime generation wiring remains pending until a real retirement artifact source exists. |
 | P2.5 | Remove retired strategies from primary frontend views | pending | Archive summaries remain visible in an audit or research archive view. |
 | P2.6 | Preserve archived statistics and evidence refs | pending | Do not physically erase all evidence from the only auditable source of truth. |
 
@@ -416,6 +416,25 @@ DeepSeek result:
 - Key confirmations: `retired` cannot be produced by metrics alone; a valid retirement artifact and `decision_log_ref` are both required; `retire_candidate` requires all configured maturity, historical, forward, win-rate, tail-risk, and ready-baseline gates; immature or incomplete evidence falls to `observe`; and non-triggering strategies stay `active`.
 - Nonblocking follow-ups retained for future hardening: add tests for positive baseline gap blocking `retire_candidate`, mixed negative/positive forward signals, incomplete retirement artifacts, list-form artifact lookup, empty packs, and primary-horizon fallback.
 
+## Round 7 Review Result
+
+Status: completed DeepSeek review.
+
+Round 7 scope:
+
+- P2.4 read-only generation eligibility filter helper.
+- Extended module: `src/ashare_evidence/shortpick_strategy_governance.py`.
+- Extended tests: `tests/test_shortpick_strategy_governance.py`.
+
+Round 7 adds a helper only. It does not wire the helper into the active shortpick generation path, because there is not yet a real persisted retirement artifact source. No strategy is removed from generation by this round alone.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge and push Round 7.
+- Key confirmations: the filter excludes only `recommended_status=retired` when `include_retired=False`; it preserves `retire_candidate`, `observe`, and `untracked`; archive rebuilds can opt in with `include_retired=True`; and fallback strategy-id mismatch fails open as `untracked` rather than incorrectly excluding a strategy.
+- Nonblocking follow-ups retained for future wiring: make the `decision_policy` string reflect archive mode when `include_retired=True`, align fallback `family` priority with evidence-pack strategy-id derivation, add the LLM family fallback to generation-item derivation, and add cross-path strategy-id consistency tests.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -446,8 +465,10 @@ DeepSeek result:
 | Round 5 DeepSeek review | completed |
 | P2.3 status recommendation layer | completed |
 | Round 6 DeepSeek review | completed |
+| P2.4 generation filter helper | completed_partial_runtime_wiring_pending |
+| Round 7 DeepSeek review | completed |
 | Runtime behavior changed | not_started |
 | Registry changed | completed |
-| Strategy code changed | completed_for_read_only_governance_builder_and_status_layer |
+| Strategy code changed | completed_for_read_only_governance_builder_status_layer_and_filter_helper |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |

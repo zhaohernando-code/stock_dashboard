@@ -156,6 +156,53 @@ def build_shortpick_strategy_status_recommendations(
     }
 
 
+def filter_shortpick_generation_eligible_items(
+    items: list[dict[str, Any]],
+    status_recommendation_result: dict[str, Any],
+    *,
+    include_retired: bool = False,
+) -> dict[str, Any]:
+    """Filter generation candidates using already computed governance status."""
+
+    status_by_strategy_id = {
+        str(item.get("strategy_id") or ""): str(item.get("recommended_status") or "")
+        for item in status_recommendation_result.get("recommendations") or []
+        if isinstance(item, dict) and item.get("strategy_id")
+    }
+    eligible_items: list[dict[str, Any]] = []
+    excluded_items: list[dict[str, Any]] = []
+    for item in [_dict(value) for value in items if isinstance(value, dict)]:
+        strategy_id = _strategy_id_from_generation_item(item)
+        governance_status = status_by_strategy_id.get(strategy_id, "untracked")
+        projected = {
+            **item,
+            "strategy_id": strategy_id,
+            "governance_status": governance_status,
+        }
+        if governance_status == "retired" and not include_retired:
+            excluded_items.append(
+                {
+                    "strategy_id": strategy_id,
+                    "governance_status": governance_status,
+                    "reason": "retired_strategy_excluded_from_active_generation",
+                    "item": projected,
+                }
+            )
+        else:
+            eligible_items.append(projected)
+
+    return {
+        "status": "ready",
+        "decision_policy": "exclude_only_retired_status_from_active_generation",
+        "include_retired": include_retired,
+        "input_count": len(items),
+        "eligible_count": len(eligible_items),
+        "excluded_count": len(excluded_items),
+        "eligible_items": eligible_items,
+        "excluded_items": excluded_items,
+    }
+
+
 def _strategy_metadata(item: dict[str, Any]) -> dict[str, Any]:
     components = _dict(item.get("selection_score_components"))
     tracking_group = str(item.get("tracking_group") or "unknown")
@@ -317,6 +364,37 @@ def _primary_horizon_summary(pack: dict[str, Any], primary_horizon_days: int) ->
         if _horizon_key(summary.get("horizon_days")) == str(primary_horizon_days):
             return summary
     return summaries[0] if summaries else {}
+
+
+def _strategy_id_from_generation_item(item: dict[str, Any]) -> str:
+    explicit = str(item.get("strategy_id") or "")
+    if explicit:
+        return explicit
+    components = _dict(item.get("selection_score_components"))
+    tracking_group = str(item.get("tracking_group") or item.get("group") or "unknown")
+    tracking_role = str(item.get("tracking_role") or item.get("role") or "primary")
+    family = str(
+        components.get("family")
+        or item.get("strategy_family")
+        or item.get("family")
+        or item.get("baseline_family")
+        or "unknown"
+    )
+    entry_price_source = str(
+        components.get("entry_price_source")
+        or item.get("entry_price_source")
+        or _infer_entry_price_source(tracking_group=tracking_group, entry_rule=str(item.get("entry_rule") or ""))
+    )
+    source_rank = item.get("source_rank")
+    return _strategy_id(
+        [
+            tracking_group,
+            tracking_role,
+            family,
+            entry_price_source,
+            "" if source_rank is None else str(source_rank),
+        ]
+    )
 
 
 def _retirement_artifact_lookup(source: dict[str, Any] | None, strategy_id: str) -> dict[str, Any]:

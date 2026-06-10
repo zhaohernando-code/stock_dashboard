@@ -7,6 +7,7 @@ import pytest
 from ashare_evidence.shortpick_strategy_governance import (
     build_shortpick_strategy_retirement_evidence_packs,
     build_shortpick_strategy_status_recommendations,
+    filter_shortpick_generation_eligible_items,
 )
 
 
@@ -243,6 +244,68 @@ def test_status_recommendation_keeps_non_triggering_strategy_active() -> None:
     assert recommendation["blockers"] == []
 
 
+def test_generation_filter_excludes_only_retired_strategies() -> None:
+    retired = _generation_item("market_factor_control_cooldown_top1", "momentum_10d_turnover_cooldown_rank", 1)
+    candidate = _generation_item("market_factor_control_offensive_top1", "momentum_10d_turnover_rank", 1)
+    observed = _generation_item("market_factor_control_random_pool", "momentum_pool_deterministic_random_control", 1)
+    untracked = _generation_item("market_factor_control_golden_cross_10_200", "momentum_volume_golden_cross_10_200", 1)
+    status_result = {
+        "recommendations": [
+            {"strategy_id": retired["strategy_id"], "recommended_status": "retired"},
+            {"strategy_id": candidate["strategy_id"], "recommended_status": "retire_candidate"},
+            {"strategy_id": observed["strategy_id"], "recommended_status": "observe"},
+        ]
+    }
+
+    result = filter_shortpick_generation_eligible_items(
+        [retired, candidate, observed, untracked],
+        status_result,
+    )
+
+    assert result["decision_policy"] == "exclude_only_retired_status_from_active_generation"
+    assert result["input_count"] == 4
+    assert result["eligible_count"] == 3
+    assert result["excluded_count"] == 1
+    assert [item["strategy_id"] for item in result["excluded_items"]] == [retired["strategy_id"]]
+    eligible_statuses = {item["strategy_id"]: item["governance_status"] for item in result["eligible_items"]}
+    assert eligible_statuses[candidate["strategy_id"]] == "retire_candidate"
+    assert eligible_statuses[observed["strategy_id"]] == "observe"
+    assert eligible_statuses[untracked["strategy_id"]] == "untracked"
+
+
+def test_generation_filter_can_include_retired_for_archive_rebuild() -> None:
+    retired = _generation_item("market_factor_control_cooldown_top1", "momentum_10d_turnover_cooldown_rank", 1)
+    status_result = {"recommendations": [{"strategy_id": retired["strategy_id"], "recommended_status": "retired"}]}
+
+    result = filter_shortpick_generation_eligible_items([retired], status_result, include_retired=True)
+
+    assert result["include_retired"] is True
+    assert result["eligible_count"] == 1
+    assert result["excluded_count"] == 0
+    assert result["eligible_items"][0]["governance_status"] == "retired"
+
+
+def test_generation_filter_derives_strategy_id_from_generation_fields() -> None:
+    strategy_id = "market_factor_control__market_factor_control_cooldown_top1__momentum_10d_turnover_cooldown_rank__next_close__1"
+    status_result = {"recommendations": [{"strategy_id": strategy_id, "recommended_status": "retired"}]}
+
+    result = filter_shortpick_generation_eligible_items(
+        [
+            {
+                "tracking_group": "market_factor_control",
+                "role": "market_factor_control_cooldown_top1",
+                "family": "momentum_10d_turnover_cooldown_rank",
+                "entry_price_source": "next_close",
+                "source_rank": 1,
+            }
+        ],
+        status_result,
+    )
+
+    assert result["eligible_items"] == []
+    assert result["excluded_items"][0]["strategy_id"] == strategy_id
+
+
 def _evidence_from_returns(
     returns: list[float],
     *,
@@ -266,6 +329,24 @@ def _evidence_from_returns(
         historical_evidence=historical_evidence,
         baseline_evidence=baseline_evidence,
     )
+
+
+def _generation_item(role: str, family: str, source_rank: int) -> dict[str, object]:
+    strategy_id = (
+        "market_factor_control"
+        f"__{role}"
+        f"__{family}"
+        "__next_close"
+        f"__{source_rank}"
+    )
+    return {
+        "strategy_id": strategy_id,
+        "tracking_group": "market_factor_control",
+        "role": role,
+        "family": family,
+        "entry_price_source": "next_close",
+        "source_rank": source_rank,
+    }
 
 
 def _item(
