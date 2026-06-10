@@ -6,8 +6,10 @@ import pytest
 
 from ashare_evidence.shortpick_strategy_governance import (
     apply_shortpick_drawdown_reversal_filter_control,
+    apply_shortpick_repeated_exposure_limit_control,
     apply_shortpick_same_symbol_cooldown_control,
     build_shortpick_drawdown_reversal_filter_rule,
+    build_shortpick_repeated_exposure_limit_rule,
     build_shortpick_same_symbol_cooldown_rule,
     build_shortpick_strategy_archive_records,
     build_shortpick_strategy_retirement_evidence_packs,
@@ -712,6 +714,100 @@ def test_drawdown_reversal_filter_allows_missing_features_with_coverage_flag() -
     assert result["rows"][0]["filter_action"] == "allowed"
     assert result["rows"][0]["feature_coverage_status"] == "missing"
     assert result["rows"][0]["filter_triggers"] == []
+
+
+def test_repeated_exposure_limit_rule_signature_is_stable_and_parameter_sensitive() -> None:
+    first = build_shortpick_repeated_exposure_limit_rule(exposure_window_signal_days=10)
+    second = build_shortpick_repeated_exposure_limit_rule(exposure_window_signal_days=10)
+    changed = build_shortpick_repeated_exposure_limit_rule(exposure_window_signal_days=5)
+
+    assert first["rule_signature"] == second["rule_signature"]
+    assert first["rule_signature"].startswith("sha256:")
+    assert first["rule_signature"] != changed["rule_signature"]
+
+
+def test_repeated_exposure_limit_rule_rejects_invalid_limits() -> None:
+    with pytest.raises(ValueError, match="exposure_window_signal_days must be positive"):
+        build_shortpick_repeated_exposure_limit_rule(exposure_window_signal_days=0)
+
+    with pytest.raises(ValueError, match="max_prior_signals_per_group must be non-negative"):
+        build_shortpick_repeated_exposure_limit_rule(max_prior_signals_per_group=-1)
+
+
+def test_repeated_exposure_limit_blocks_prior_same_symbol_within_window() -> None:
+    rule = build_shortpick_repeated_exposure_limit_rule(
+        exposure_window_signal_days=1,
+        max_prior_signals_per_group=0,
+    )
+    candidates = [
+        {"candidate_id": "aaa-3", "symbol": "AAA.SZ", "signal_date": "2026-05-03"},
+        {"candidate_id": "aaa-5", "symbol": "AAA.SZ", "signal_date": "2026-05-05"},
+        {"candidate_id": "bbb-3", "symbol": "BBB.SZ", "signal_date": "2026-05-03"},
+    ]
+    exposure_rows = [
+        {"candidate_id": "aaa-prior", "symbol": "AAA.SZ", "signal_date": "2026-05-02"},
+        {"candidate_id": "aaa-old", "symbol": "AAA.SZ", "signal_date": "2026-04-20"},
+        {"candidate_id": "bbb-prior", "symbol": "BBB.SZ", "signal_date": "2026-05-02"},
+    ]
+
+    result = apply_shortpick_repeated_exposure_limit_control(candidates, exposure_rows, rule=rule)
+
+    by_id = {row["candidate_id"]: row for row in result["rows"]}
+    assert result["blocked_count"] == 2
+    assert result["allowed_count"] == 1
+    assert by_id["aaa-3"]["exposure_action"] == "blocked"
+    assert by_id["aaa-3"]["exposure_prior_signal_count"] == 1
+    assert by_id["aaa-3"]["exposure_blocker_rows"][0]["candidate_id"] == "aaa-prior"
+    assert by_id["aaa-5"]["exposure_action"] == "allowed"
+    assert by_id["bbb-3"]["exposure_action"] == "blocked"
+
+
+def test_repeated_exposure_limit_ignores_same_day_and_future_signals() -> None:
+    rule = build_shortpick_repeated_exposure_limit_rule(max_prior_signals_per_group=0)
+    candidates = [{"candidate_id": "aaa-3", "symbol": "AAA.SZ", "signal_date": "2026-05-03"}]
+    exposure_rows = [
+        {"candidate_id": "same-day", "symbol": "AAA.SZ", "signal_date": "2026-05-03"},
+        {"candidate_id": "future", "symbol": "AAA.SZ", "signal_date": "2026-05-04"},
+    ]
+
+    result = apply_shortpick_repeated_exposure_limit_control(candidates, exposure_rows, rule=rule)
+
+    assert result["ignored_same_day_or_future_signal_count"] == 2
+    assert result["blocked_count"] == 0
+    assert result["rows"][0]["exposure_action"] == "allowed"
+    assert result["rows"][0]["exposure_blocker_rows"] == []
+    assert result["leakage_audit_status"] == "passed"
+
+
+def test_repeated_exposure_limit_supports_explicit_group_fields() -> None:
+    rule = build_shortpick_repeated_exposure_limit_rule(
+        max_prior_signals_per_group=0,
+        group_fields=["symbol", "industry"],
+    )
+    candidates = [{"candidate_id": "aaa-3", "symbol": "AAA.SZ", "industry": "semi", "signal_date": "2026-05-03"}]
+    exposure_rows = [
+        {"candidate_id": "same-symbol-other-industry", "symbol": "AAA.SZ", "industry": "battery", "signal_date": "2026-05-02"},
+        {"candidate_id": "same-group", "symbol": "AAA.SZ", "industry": "semi", "signal_date": "2026-05-02"},
+    ]
+
+    result = apply_shortpick_repeated_exposure_limit_control(candidates, exposure_rows, rule=rule)
+
+    row = result["rows"][0]
+    assert row["exposure_action"] == "blocked"
+    assert row["exposure_group_key"] == "AAA.SZ|semi"
+    assert [item["candidate_id"] for item in row["exposure_blocker_rows"]] == ["same-group"]
+
+
+def test_repeated_exposure_limit_allows_missing_group_key() -> None:
+    rule = build_shortpick_repeated_exposure_limit_rule(max_prior_signals_per_group=0)
+    candidates = [{"candidate_id": "missing-symbol", "signal_date": "2026-05-03"}]
+    exposure_rows = [{"candidate_id": "prior", "symbol": "AAA.SZ", "signal_date": "2026-05-02"}]
+
+    result = apply_shortpick_repeated_exposure_limit_control(candidates, exposure_rows, rule=rule)
+
+    assert result["blocked_count"] == 0
+    assert result["rows"][0]["exposure_action"] == "allowed"
+    assert result["rows"][0]["exposure_group_key"] == ""
 
 
 def _evidence_from_returns(

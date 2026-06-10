@@ -15,6 +15,7 @@ from typing import Any
 
 SAME_SYMBOL_COOLDOWN_CONTROL_ID = "control_same_symbol_cooldown:v1"
 DRAWDOWN_REVERSAL_FILTER_CONTROL_ID = "control_drawdown_reversal_filter:v1"
+REPEATED_EXPOSURE_LIMIT_CONTROL_ID = "control_repeated_exposure_limit:v1"
 
 
 def build_shortpick_strategy_retirement_evidence_packs(
@@ -502,6 +503,119 @@ def apply_shortpick_drawdown_reversal_filter_control(
     }
 
 
+def build_shortpick_repeated_exposure_limit_rule(
+    *,
+    control_group_id: str = REPEATED_EXPOSURE_LIMIT_CONTROL_ID,
+    exposure_window_signal_days: int = 10,
+    max_prior_signals_per_group: int = 1,
+    group_fields: list[str] | None = None,
+    rule_defined_at: str | None = None,
+) -> dict[str, Any]:
+    """Build the deterministic repeated-exposure limit control rule."""
+
+    if exposure_window_signal_days <= 0:
+        raise ValueError("exposure_window_signal_days must be positive")
+    if max_prior_signals_per_group < 0:
+        raise ValueError("max_prior_signals_per_group must be non-negative")
+
+    payload = {
+        "control_group_id": control_group_id,
+        "rule_version": "repeated-exposure-limit-v1",
+        "exposure_basis": "prior_signal_rows_within_signal_day_window",
+        "exposure_window_signal_days": int(exposure_window_signal_days),
+        "max_prior_signals_per_group": int(max_prior_signals_per_group),
+        "group_fields": list(group_fields or ["symbol"]),
+        "rule_defined_at": rule_defined_at,
+        "leakage_policy": "ignore_signal_rows_on_or_after_candidate_signal_date",
+    }
+    return {
+        **payload,
+        "rule_signature": _rule_signature(payload),
+    }
+
+
+def apply_shortpick_repeated_exposure_limit_control(
+    candidate_rows: list[dict[str, Any]],
+    exposure_signal_rows: list[dict[str, Any]],
+    *,
+    rule: dict[str, Any] | None = None,
+    evidence_basis: str = "retrospective_forward_replay",
+) -> dict[str, Any]:
+    """Apply repeated-exposure limits using only prior signal rows."""
+
+    rule = dict(rule or build_shortpick_repeated_exposure_limit_rule())
+    group_fields = [str(value) for value in rule.get("group_fields") or ["symbol"]]
+    exposure_rows = [_dict(value) for value in exposure_signal_rows if isinstance(value, dict)]
+    signal_dates = sorted(
+        {
+            _date_part(item.get("signal_date") or item.get("run_date"))
+            for item in [*candidate_rows, *exposure_rows]
+            if isinstance(item, dict) and _date_part(item.get("signal_date") or item.get("run_date"))
+        }
+    )
+    rows: list[dict[str, Any]] = []
+    ignored_same_day_or_future_count = 0
+
+    for item in [_dict(value) for value in candidate_rows if isinstance(value, dict)]:
+        signal_date = _date_part(item.get("signal_date") or item.get("run_date"))
+        group_key = _exposure_group_key(item, group_fields)
+        blocker_rows: list[dict[str, Any]] = []
+
+        for exposure in exposure_rows:
+            if _exposure_group_key(exposure, group_fields) != group_key or not group_key:
+                continue
+            exposure_date = _date_part(exposure.get("signal_date") or exposure.get("run_date"))
+            if not signal_date or not exposure_date or exposure_date >= signal_date:
+                ignored_same_day_or_future_count += 1
+                continue
+            elapsed_signal_days = _elapsed_signal_days(signal_dates, exit_date=exposure_date, signal_date=signal_date)
+            if 0 < elapsed_signal_days <= int(rule["exposure_window_signal_days"]):
+                blocker_rows.append(
+                    {
+                        "candidate_id": exposure.get("candidate_id"),
+                        "run_id": exposure.get("run_id"),
+                        "signal_date": exposure_date,
+                        "group_key": _exposure_group_key_label(group_key),
+                        "elapsed_signal_days": elapsed_signal_days,
+                    }
+                )
+
+        blocked = len(blocker_rows) > int(rule["max_prior_signals_per_group"])
+        rows.append(
+            {
+                **item,
+                "control_group_id": rule.get("control_group_id"),
+                "rule_signature": rule.get("rule_signature"),
+                "evidence_basis": evidence_basis,
+                "exposure_action": "blocked" if blocked else "allowed",
+                "exposure_blocked": blocked,
+                "exposure_group_key": _exposure_group_key_label(group_key),
+                "exposure_prior_signal_count": len(blocker_rows),
+                "exposure_blocker_rows": blocker_rows if blocked else [],
+                "leakage_audit_status": "passed",
+                "leakage_audit_reasons": ["used_only_prior_signal_rows"],
+            }
+        )
+
+    return {
+        "status": "ready",
+        "control_group_id": rule.get("control_group_id"),
+        "rule_signature": rule.get("rule_signature"),
+        "evidence_basis": evidence_basis,
+        "rule": rule,
+        "leakage_audit_status": "passed",
+        "leakage_audit_reasons": [
+            "used_only_prior_signal_rows",
+            "ignored_same_day_or_future_signal_rows",
+        ],
+        "input_candidate_count": len(candidate_rows),
+        "blocked_count": sum(1 for row in rows if row["exposure_blocked"]),
+        "allowed_count": sum(1 for row in rows if not row["exposure_blocked"]),
+        "ignored_same_day_or_future_signal_count": ignored_same_day_or_future_count,
+        "rows": rows,
+    }
+
+
 def _rule_signature(payload: dict[str, Any]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -634,6 +748,15 @@ def _drawdown_reversal_triggers(feature: dict[str, Any], rule: dict[str, Any]) -
             }
         )
     return triggers
+
+
+def _exposure_group_key(row: dict[str, Any], group_fields: list[str]) -> tuple[str, ...]:
+    values = tuple(str(row.get(field) or "") for field in group_fields)
+    return values if all(values) else ()
+
+
+def _exposure_group_key_label(group_key: tuple[str, ...]) -> str:
+    return "|".join(group_key)
 
 
 def _strategy_metadata(item: dict[str, Any]) -> dict[str, Any]:

@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round11_p3_2_drawdown_reversal_filter_helper_completed_ds_review_passed
+Status: round12_p3_3_repeated_exposure_limit_helper_completed_ds_review_passed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -94,7 +94,7 @@ The next governance package should adopt four principles.
 | --- | --- | --- | --- |
 | P3.1 | Same-symbol cooldown control | completed_partial_runtime_wiring_pending | Added a deterministic rule builder and pure input-to-output cooldown helper. It blocks candidates only from prior completed same-symbol negative outcomes, uses longer cooldown after severe losses, emits `rule_signature`, and labels evidence basis. Historical/replay generation, true-forward wiring, and frontend display remain pending. |
 | P3.2 | Drawdown/reversal filter control | completed_partial_runtime_wiring_pending | Added a deterministic rule builder and pure input-to-output filter helper. It uses only signal-date-or-prior technical feature snapshots, blocks on recent drawdown, short-window breakdown plus price-vs-MA weakness, or high-level reversal triggers, emits `rule_signature`, and labels evidence basis. Feature generation, historical/replay artifacts, true-forward wiring, and frontend display remain pending. |
-| P3.3 | Repeated exposure limit control | pending | Limits repeated concentration by symbol first, then optionally by industry or theme after stable classification exists. |
+| P3.3 | Repeated exposure limit control | completed_partial_runtime_wiring_pending | Added a deterministic rule builder and pure input-to-output exposure-limit helper. It defaults to symbol grouping, supports explicit group fields such as symbol plus industry for later governed use, ignores same-day/future exposure rows, emits `rule_signature`, and labels evidence basis. Runtime generation wiring, historical/replay artifacts, true-forward tracking, and frontend display remain pending. |
 | P3.4 | Historical backtest generation | pending | Long-window deterministic backtest under existing account-executable universe rules. |
 | P3.5 | Retrospective forward replay generation | pending | Replays from the paper-tracking ledger start date through the rule creation date using only signal-date available features. The current observed start is `2026-05-08`, but implementation must derive it from data. |
 | P3.6 | True forward tracking start | pending | Starts only after control IDs, rule signatures, and artifact family contracts exist. |
@@ -510,6 +510,26 @@ DeepSeek result:
 - Merge recommendation: merge and push Round 11.
 - Key confirmations: the helper uses only feature snapshots with `feature_date <= signal_date`; future features are counted and ignored; all functions remain pure input-to-output; no paper-tracking rows are generated; tests cover deterministic signatures, invalid lookback validation, all three trigger families, future feature exclusion, missing feature coverage, and leakage audit labels.
 
+## Round 12 Review Result
+
+Status: completed DeepSeek review.
+
+Round 12 scope:
+
+- P3.3 repeated-exposure deterministic rule builder.
+- P3.3 pure repeated-exposure limit helper.
+- Extended module: `src/ashare_evidence/shortpick_strategy_governance.py`.
+- Extended tests: `tests/test_shortpick_strategy_governance.py`.
+
+Round 12 adds a helper only. It does not wire active generation, generate historical backtests, produce retrospective replay artifacts, start true-forward tracking, write paper-tracking rows, or change frontend/API behavior.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge and push Round 12.
+- Key confirmations: the helper uses only exposure signal rows before candidate `signal_date`; same-day and future exposure rows are ignored and counted; functions remain pure input-to-output; no tracking rows are generated; tests cover deterministic signatures, invalid limits, same-symbol window blocking, same-day/future signal exclusion, explicit group fields, missing group-key behavior, and existing cooldown/filter leakage boundaries.
+- Nonblocking follow-up retained for later hardening: decide whether cooldown/exposure signal-day windows should count all candidate signal dates or only same-symbol / same-group signal dates when a runtime replay implementation chooses final evaluation semantics.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -550,8 +570,10 @@ DeepSeek result:
 | Round 10 DeepSeek review | completed |
 | P3.2 drawdown/reversal filter helper | completed_partial_runtime_wiring_pending |
 | Round 11 DeepSeek review | completed |
+| P3.3 repeated exposure limit helper | completed_partial_runtime_wiring_pending |
+| Round 12 DeepSeek review | completed |
 | Runtime behavior changed | not_started |
 | Registry changed | completed |
-| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_and_drawdown_reversal_helpers |
+| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_and_repeated_exposure_helpers |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |
