@@ -17,6 +17,13 @@ SAME_SYMBOL_COOLDOWN_CONTROL_ID = "control_same_symbol_cooldown:v1"
 DRAWDOWN_REVERSAL_FILTER_CONTROL_ID = "control_drawdown_reversal_filter:v1"
 REPEATED_EXPOSURE_LIMIT_CONTROL_ID = "control_repeated_exposure_limit:v1"
 SHORTPICK_HISTORICAL_BACKTEST_ENTRY_PRICE_SOURCES = {"next_close", "next_open", "same_close_proxy"}
+REGISTERED_SHORTPICK_CONTROL_GROUP_IDS = frozenset(
+    {
+        SAME_SYMBOL_COOLDOWN_CONTROL_ID,
+        DRAWDOWN_REVERSAL_FILTER_CONTROL_ID,
+        REPEATED_EXPOSURE_LIMIT_CONTROL_ID,
+    }
+)
 
 
 def build_shortpick_strategy_retirement_evidence_packs(
@@ -801,6 +808,86 @@ def build_shortpick_retrospective_forward_replay_requests(
     }
 
 
+def build_shortpick_true_forward_tracking_activation_plan(
+    control_rules: list[dict[str, Any]],
+    *,
+    tracking_started_at: str,
+    generated_at: str | None = None,
+    registered_control_group_ids: set[str] | frozenset[str] | None = None,
+    artifact_family_id: str = "shortpick_paper_tracking_ledger",
+) -> dict[str, Any]:
+    """Build a true-forward activation plan without writing tracking rows."""
+
+    tracking_start_request_date = _date_part(tracking_started_at)
+    if not tracking_start_request_date:
+        raise ValueError("tracking_started_at must include a date")
+    if not artifact_family_id:
+        raise ValueError("artifact_family_id must be non-empty")
+
+    registered_ids = set(registered_control_group_ids or REGISTERED_SHORTPICK_CONTROL_GROUP_IDS)
+    activations: list[dict[str, Any]] = []
+    blocked_rules: list[dict[str, Any]] = []
+
+    for rule in [_dict(value) for value in control_rules if isinstance(value, dict)]:
+        control_group_id = str(rule.get("control_group_id") or "")
+        rule_signature = str(rule.get("rule_signature") or "")
+        rule_defined_at = _date_part(rule.get("rule_defined_at"))
+        base = {
+            "control_group_id": control_group_id,
+            "rule_signature": rule_signature,
+        }
+        if not control_group_id or not rule_signature:
+            blocked_rules.append({**base, "blocker": "missing_control_group_id_or_rule_signature"})
+            continue
+        if control_group_id not in registered_ids:
+            blocked_rules.append({**base, "blocker": "unregistered_control_group_id"})
+            continue
+        if not rule_defined_at:
+            blocked_rules.append({**base, "blocker": "missing_rule_defined_at"})
+            continue
+
+        tracking_start_date = max(tracking_start_request_date, rule_defined_at)
+        payload = {
+            "control_group_id": control_group_id,
+            "rule_signature": rule_signature,
+            "rule_defined_at": rule_defined_at,
+            "tracking_start_date": tracking_start_date,
+            "artifact_family_id": artifact_family_id,
+        }
+        activations.append(
+            {
+                **payload,
+                "activation_id": _true_forward_tracking_activation_id(payload),
+                "tracking_start_requested_at": tracking_start_request_date,
+                "generated_at": generated_at,
+                "evidence_basis": "true_forward_tracking",
+                "retrospective": False,
+                "retroactive_backfill_allowed": False,
+                "true_forward_tracking_eligible": True,
+                "source_feature_cutoff_policy": "signal_date_available_inputs_only",
+                "paper_tracking_write_policy": "not_written_by_plan_runtime_wiring_required",
+                "forbidden_signal_date_policy": "do_not_write_rows_before_tracking_start_date",
+                "rule": rule,
+            }
+        )
+
+    return {
+        "status": "ready" if activations else "blocked",
+        "evidence_basis": "true_forward_tracking",
+        "retrospective": False,
+        "artifact_family_id": artifact_family_id,
+        "registered_control_group_ids": sorted(registered_ids),
+        "tracking_start_requested_at": tracking_start_request_date,
+        "activation_count": len(activations),
+        "blocked_rule_count": len(blocked_rules),
+        "activations": activations,
+        "blocked_rules": blocked_rules,
+        "execution_policy": "activation_plan_only_no_tracking_execution_no_data_write",
+        "paper_tracking_write_policy": "not_written_by_plan_runtime_wiring_required",
+        "retroactive_backfill_allowed": False,
+    }
+
+
 def _rule_signature(payload: dict[str, Any]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -980,6 +1067,11 @@ def _historical_backtest_argv(payload: dict[str, Any], *, output_path: str) -> l
 def _retrospective_forward_replay_request_id(payload: dict[str, Any]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return "shortpick-retrospective-forward-replay-request:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+
+
+def _true_forward_tracking_activation_id(payload: dict[str, Any]) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return "shortpick-true-forward-activation:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
 
 
 def _strategy_metadata(item: dict[str, Any]) -> dict[str, Any]:
