@@ -7,9 +7,13 @@ or policy-governed retirement decisions, but they do not decide retirement.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections import Counter, defaultdict
 from statistics import mean, median
 from typing import Any
+
+SAME_SYMBOL_COOLDOWN_CONTROL_ID = "control_same_symbol_cooldown:v1"
 
 
 def build_shortpick_strategy_retirement_evidence_packs(
@@ -286,6 +290,169 @@ def build_shortpick_strategy_archive_records(
         "archive_count": len(records),
         "records": records,
     }
+
+
+def build_shortpick_same_symbol_cooldown_rule(
+    *,
+    control_group_id: str = SAME_SYMBOL_COOLDOWN_CONTROL_ID,
+    cooldown_signal_days: int = 5,
+    severe_loss_threshold: float = -0.08,
+    severe_cooldown_signal_days: int = 10,
+    loss_return_threshold: float = 0.0,
+    negative_horizon_days: int = 10,
+    rule_defined_at: str | None = None,
+) -> dict[str, Any]:
+    """Build the deterministic same-symbol cooldown control rule."""
+
+    if cooldown_signal_days <= 0:
+        raise ValueError("cooldown_signal_days must be positive")
+    if severe_cooldown_signal_days < cooldown_signal_days:
+        raise ValueError("severe_cooldown_signal_days must be greater than or equal to cooldown_signal_days")
+    if negative_horizon_days <= 0:
+        raise ValueError("negative_horizon_days must be positive")
+
+    payload = {
+        "control_group_id": control_group_id,
+        "rule_version": "same-symbol-cooldown-v1",
+        "cooldown_basis": "prior_completed_negative_same_symbol_signal_days",
+        "cooldown_signal_days": int(cooldown_signal_days),
+        "severe_loss_threshold": round(float(severe_loss_threshold), 6),
+        "severe_cooldown_signal_days": int(severe_cooldown_signal_days),
+        "loss_return_threshold": round(float(loss_return_threshold), 6),
+        "negative_horizon_days": int(negative_horizon_days),
+        "rule_defined_at": rule_defined_at,
+        "leakage_policy": "ignore_outcomes_with_exit_date_on_or_after_signal_date",
+    }
+    return {
+        **payload,
+        "rule_signature": _rule_signature(payload),
+    }
+
+
+def apply_shortpick_same_symbol_cooldown_control(
+    candidate_rows: list[dict[str, Any]],
+    completed_outcome_rows: list[dict[str, Any]],
+    *,
+    rule: dict[str, Any] | None = None,
+    evidence_basis: str = "retrospective_forward_replay",
+) -> dict[str, Any]:
+    """Apply same-symbol cooldown using only prior completed outcomes."""
+
+    rule = dict(rule or build_shortpick_same_symbol_cooldown_rule())
+    signal_dates = sorted(
+        {
+            _date_part(item.get("signal_date"))
+            for item in candidate_rows
+            if isinstance(item, dict) and _date_part(item.get("signal_date"))
+        }
+    )
+    negative_events_by_symbol = _same_symbol_negative_events_by_symbol(completed_outcome_rows, rule)
+    rows: list[dict[str, Any]] = []
+    ignored_future_or_same_day_count = 0
+
+    for item in [_dict(value) for value in candidate_rows if isinstance(value, dict)]:
+        symbol = str(item.get("symbol") or "")
+        signal_date = _date_part(item.get("signal_date"))
+        blocker_events: list[dict[str, Any]] = []
+        for event in negative_events_by_symbol.get(symbol, []):
+            exit_date = str(event.get("exit_date") or "")
+            if not signal_date or not exit_date or exit_date >= signal_date:
+                ignored_future_or_same_day_count += 1
+                continue
+            elapsed_signal_days = _elapsed_signal_days(signal_dates, exit_date=exit_date, signal_date=signal_date)
+            cooldown_days = (
+                int(rule["severe_cooldown_signal_days"])
+                if float(event["stock_return"]) <= float(rule["severe_loss_threshold"])
+                else int(rule["cooldown_signal_days"])
+            )
+            if 0 < elapsed_signal_days <= cooldown_days:
+                blocker_events.append(
+                    {
+                        **event,
+                        "elapsed_signal_days": elapsed_signal_days,
+                        "cooldown_signal_days": cooldown_days,
+                    }
+                )
+
+        rows.append(
+            {
+                **item,
+                "control_group_id": rule.get("control_group_id"),
+                "rule_signature": rule.get("rule_signature"),
+                "evidence_basis": evidence_basis,
+                "cooldown_action": "blocked" if blocker_events else "allowed",
+                "cooldown_blocked": bool(blocker_events),
+                "cooldown_blocker_events": blocker_events,
+                "leakage_audit_status": "passed",
+                "leakage_audit_reasons": ["used_only_completed_same_symbol_outcomes_before_signal_date"],
+            }
+        )
+
+    return {
+        "status": "ready",
+        "control_group_id": rule.get("control_group_id"),
+        "rule_signature": rule.get("rule_signature"),
+        "evidence_basis": evidence_basis,
+        "rule": rule,
+        "leakage_audit_status": "passed",
+        "leakage_audit_reasons": [
+            "used_only_completed_same_symbol_outcomes_before_signal_date",
+            "ignored_same_day_or_future_outcomes",
+        ],
+        "input_candidate_count": len(candidate_rows),
+        "blocked_count": sum(1 for row in rows if row["cooldown_blocked"]),
+        "allowed_count": sum(1 for row in rows if not row["cooldown_blocked"]),
+        "ignored_future_or_same_day_outcome_count": ignored_future_or_same_day_count,
+        "rows": rows,
+    }
+
+
+def _rule_signature(payload: dict[str, Any]) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _same_symbol_negative_events_by_symbol(
+    rows: list[dict[str, Any]],
+    rule: dict[str, Any],
+) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    loss_threshold = float(rule.get("loss_return_threshold", 0.0))
+    horizon_days = int(rule.get("negative_horizon_days", 10))
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("status") or "completed") != "completed":
+            continue
+        if _horizon_key(row.get("horizon_days")) != str(horizon_days):
+            continue
+
+        symbol = str(row.get("symbol") or "")
+        exit_date = _date_part(row.get("exit_date") or row.get("exit_at"))
+        stock_return = _float(row.get("stock_return"))
+        if not symbol or not exit_date or stock_return is None or stock_return >= loss_threshold:
+            continue
+
+        grouped[symbol].append(
+            {
+                "symbol": symbol,
+                "signal_date": _date_part(row.get("signal_date") or row.get("run_date")),
+                "exit_date": exit_date,
+                "horizon_days": horizon_days,
+                "stock_return": _round(stock_return),
+                "source_candidate_id": row.get("candidate_id"),
+                "source_run_id": row.get("run_id"),
+            }
+        )
+
+    for values in grouped.values():
+        values.sort(key=lambda item: (str(item.get("exit_date") or ""), str(item.get("signal_date") or "")))
+    return grouped
+
+
+def _elapsed_signal_days(signal_dates: list[str], *, exit_date: str, signal_date: str) -> int:
+    return sum(1 for value in signal_dates if exit_date < value <= signal_date)
 
 
 def _strategy_metadata(item: dict[str, Any]) -> dict[str, Any]:
