@@ -5,6 +5,7 @@ import json
 import pytest
 
 from ashare_evidence.shortpick_strategy_governance import (
+    SAME_SYMBOL_COOLDOWN_CONTROL_ID,
     apply_shortpick_drawdown_reversal_filter_control,
     apply_shortpick_repeated_exposure_limit_control,
     apply_shortpick_same_symbol_cooldown_control,
@@ -1377,6 +1378,269 @@ def test_true_forward_tracking_activation_plan_is_deterministic_and_validates_in
 
     with pytest.raises(ValueError, match="artifact_family_id must be non-empty"):
         build_shortpick_true_forward_tracking_activation_plan([rule], tracking_started_at="2026-06-11", artifact_family_id="")
+
+
+# --- Round 27 hardening: status-recommendation follow-ups (Round 6) ---
+
+
+_RETIRE_CANDIDATE_RETURNS = [-0.10, -0.05, -0.04, -0.03, -0.02, -0.01, -0.09, -0.02, 0.01, 0.02]
+_RETIRE_CANDIDATE_HISTORICAL = {
+    "low_turnover_20d_uptrend_liquid_top120": {
+        "status": "ready",
+        "after_cost_excess_return": -0.03,
+    }
+}
+
+
+def test_status_recommendation_positive_registered_baseline_gap_blocks_retire_candidate() -> None:
+    # Same weak-but-mature evidence that otherwise yields retire_candidate, but the
+    # registered baseline gap is non-negative, so the baseline gate must block.
+    evidence = _evidence_from_returns(
+        _RETIRE_CANDIDATE_RETURNS,
+        historical_evidence=_RETIRE_CANDIDATE_HISTORICAL,
+        baseline_evidence={
+            "low_turnover_20d_uptrend_liquid_top120": {
+                "status": "ready",
+                "mean_excess_return_gap": 0.02,
+            }
+        },
+    )
+
+    recommendation = build_shortpick_strategy_status_recommendations(evidence)["recommendations"][0]
+
+    assert recommendation["recommended_status"] == "observe"
+    assert recommendation["blockers"] == ["registered_baseline_gap_not_negative"]
+    assert "registered_baseline_gap_negative" not in recommendation["reasons"]
+
+
+def test_status_recommendation_mixed_positive_mean_negative_median_is_tail_dependent_retire_candidate() -> None:
+    # A single large winner lifts the mean above zero while the median stays negative;
+    # the tail-dependence path should still trigger retire_candidate, not active.
+    evidence = _evidence_from_returns(
+        [0.50, -0.02, -0.03, -0.01, -0.04, -0.02, -0.03, -0.01, -0.02, -0.05],
+        historical_evidence=_RETIRE_CANDIDATE_HISTORICAL,
+    )
+
+    recommendation = build_shortpick_strategy_status_recommendations(evidence)["recommendations"][0]
+    horizon = recommendation["primary_horizon_summary"]
+
+    assert recommendation["recommended_status"] == "retire_candidate"
+    assert recommendation["blockers"] == []
+    assert horizon["mean_stock_return"] == 0.027
+    assert horizon["median_stock_return"] == -0.02
+    assert horizon["tail_dependency"]["tail_dependent"] is True
+    assert "forward_mean_negative_or_tail_dependent" in recommendation["reasons"]
+
+
+def test_status_recommendation_incomplete_retirement_artifact_cannot_retire() -> None:
+    # An artifact that is present but missing decision_log_ref lacks retirement authority,
+    # so the status must fall back to metric-driven retire_candidate, never retired.
+    evidence = _evidence_from_returns(
+        _RETIRE_CANDIDATE_RETURNS,
+        historical_evidence=_RETIRE_CANDIDATE_HISTORICAL,
+        baseline_evidence={
+            "low_turnover_20d_uptrend_liquid_top120": {
+                "status": "ready",
+                "mean_excess_return_gap": -0.02,
+            }
+        },
+    )
+    strategy_id = evidence["packs"][0]["strategy_id"]
+
+    recommendation = build_shortpick_strategy_status_recommendations(
+        evidence,
+        retirement_artifacts={
+            strategy_id: {
+                "status": "ready",
+                "artifact_family": "shortpick_strategy_retirement",
+                "artifact_id": "incomplete-fixture",
+                # decision_log_ref deliberately omitted
+            }
+        },
+    )["recommendations"][0]
+
+    assert recommendation["recommended_status"] == "retire_candidate"
+    assert recommendation["retirement_artifact_ref"] is None
+    assert "strategy_retirement_artifact_and_decision_log_ref_present" not in recommendation["reasons"]
+
+
+def test_status_recommendation_resolves_retirement_artifact_from_list_form_source() -> None:
+    evidence = _evidence_from_returns(
+        _RETIRE_CANDIDATE_RETURNS,
+        historical_evidence=_RETIRE_CANDIDATE_HISTORICAL,
+    )
+    strategy_id = evidence["packs"][0]["strategy_id"]
+
+    recommendation = build_shortpick_strategy_status_recommendations(
+        evidence,
+        retirement_artifacts={
+            "artifacts": [
+                {
+                    "strategy_id": strategy_id,
+                    "status": "ready",
+                    "artifact_family": "strategy_retirement:v1",
+                    "artifact_id": "list-form-fixture",
+                    "decision_log_ref": "DECISIONS.md#2026-06-10-list-form",
+                }
+            ]
+        },
+    )["recommendations"][0]
+
+    assert recommendation["recommended_status"] == "retired"
+    assert recommendation["retirement_artifact_ref"]["artifact_id"] == "list-form-fixture"
+
+
+def test_status_recommendation_handles_empty_or_missing_packs() -> None:
+    empty = build_shortpick_strategy_status_recommendations({"packs": []})
+    assert empty["status"] == "ready"
+    assert empty["strategy_count"] == 0
+    assert empty["recommendations"] == []
+
+    missing = build_shortpick_strategy_status_recommendations({})
+    assert missing["strategy_count"] == 0
+    assert missing["recommendations"] == []
+
+
+def test_status_recommendation_falls_back_to_first_horizon_when_primary_horizon_absent() -> None:
+    # The evidence only carries a 10-day horizon; asking for a 40-day primary horizon
+    # must fall back to the first available summary instead of dropping to observe.
+    evidence = _evidence_from_returns([0.02, 0.03, 0.01, 0.04, 0.02])
+
+    recommendation = build_shortpick_strategy_status_recommendations(
+        evidence,
+        primary_horizon_days=40,
+    )["recommendations"][0]
+
+    assert recommendation["primary_horizon_days"] == 40
+    assert recommendation["primary_horizon_summary"]["horizon_days"] == 10
+    assert recommendation["recommended_status"] == "active"
+
+
+# --- Round 27 hardening: same-symbol cooldown follow-ups (Round 10) ---
+
+
+def test_same_symbol_cooldown_handles_empty_inputs() -> None:
+    result = apply_shortpick_same_symbol_cooldown_control([], [])
+
+    assert result["status"] == "ready"
+    assert result["rows"] == []
+    assert result["input_candidate_count"] == 0
+    assert result["blocked_count"] == 0
+    assert result["allowed_count"] == 0
+    assert result["ignored_future_or_same_day_outcome_count"] == 0
+    assert result["rule_signature"].startswith("sha256:")
+
+
+def test_same_symbol_cooldown_uses_default_rule_when_none_provided() -> None:
+    candidates = [{"candidate_id": "aaa-1", "symbol": "AAA.SZ", "signal_date": "2026-05-05"}]
+    outcomes = [
+        {
+            "symbol": "AAA.SZ",
+            "signal_date": "2026-04-20",
+            "exit_date": "2026-05-04",
+            "horizon_days": 10,
+            "status": "completed",
+            "stock_return": -0.03,
+        }
+    ]
+
+    result = apply_shortpick_same_symbol_cooldown_control(candidates, outcomes)
+
+    assert result["control_group_id"] == SAME_SYMBOL_COOLDOWN_CONTROL_ID
+    assert result["rule"]["cooldown_signal_days"] == 5
+    assert result["rows"][0]["cooldown_action"] == "blocked"
+
+
+def test_same_symbol_cooldown_threshold_equality_uses_severe_window_and_excludes_zero_return() -> None:
+    # severe_loss_threshold and loss_return_threshold are both boundary-tested:
+    # a -0.08 outcome (== severe threshold) must select the longer severe window,
+    # and a 0.0 outcome (== loss threshold) must not count as a loss at all.
+    rule = build_shortpick_same_symbol_cooldown_rule(
+        cooldown_signal_days=2,
+        severe_loss_threshold=-0.08,
+        severe_cooldown_signal_days=4,
+        loss_return_threshold=0.0,
+    )
+    candidates = [
+        {"candidate_id": f"aaa-{day:02d}", "symbol": "AAA.SZ", "signal_date": f"2026-05-{day:02d}"}
+        for day in (3, 4, 5, 6, 7)
+    ] + [{"candidate_id": "bbb-03", "symbol": "BBB.SZ", "signal_date": "2026-05-03"}]
+    outcomes = [
+        {
+            "candidate_id": "severe-equal",
+            "symbol": "AAA.SZ",
+            "signal_date": "2026-04-20",
+            "exit_date": "2026-05-02",
+            "horizon_days": 10,
+            "status": "completed",
+            "stock_return": -0.08,
+        },
+        {
+            "candidate_id": "zero-return",
+            "symbol": "BBB.SZ",
+            "signal_date": "2026-04-20",
+            "exit_date": "2026-05-02",
+            "horizon_days": 10,
+            "status": "completed",
+            "stock_return": 0.0,
+        },
+    ]
+
+    result = apply_shortpick_same_symbol_cooldown_control(candidates, outcomes, rule=rule)
+    by_id = {row["candidate_id"]: row for row in result["rows"]}
+
+    # elapsed signal days from exit 2026-05-02: day 06 -> 4 (severe window length), day 07 -> 5 (> window)
+    assert by_id["aaa-06"]["cooldown_action"] == "blocked"
+    assert by_id["aaa-06"]["cooldown_blocker_events"][0]["cooldown_signal_days"] == 4
+    assert by_id["aaa-06"]["cooldown_blocker_events"][0]["elapsed_signal_days"] == 4
+    assert by_id["aaa-07"]["cooldown_action"] == "allowed"
+    # 0.0 == loss_return_threshold is not a loss, so BBB is never blocked.
+    assert by_id["bbb-03"]["cooldown_action"] == "allowed"
+
+
+# --- Round 27 hardening: historical-backtest request follow-ups (Round 13) ---
+
+
+def test_historical_backtest_generation_requests_reject_non_positive_min_signal_symbol_count() -> None:
+    rule = build_shortpick_repeated_exposure_limit_rule()
+
+    with pytest.raises(ValueError, match="min_signal_symbol_count must be positive"):
+        build_shortpick_historical_backtest_generation_requests(
+            [rule],
+            start_date="2023-04-13",
+            end_date="2026-05-08",
+            min_signal_symbol_count=0,
+        )
+
+
+def test_historical_backtest_generation_requests_with_empty_control_rules_produce_no_requests() -> None:
+    result = build_shortpick_historical_backtest_generation_requests(
+        [],
+        start_date="2023-04-13",
+        end_date="2026-05-08",
+    )
+
+    assert result["status"] == "ready"
+    assert result["request_count"] == 0
+    assert result["requests"] == []
+
+
+def test_historical_backtest_generation_requests_support_same_close_proxy_entry_source() -> None:
+    rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")
+
+    result = build_shortpick_historical_backtest_generation_requests(
+        [rule],
+        start_date="2023-04-13",
+        end_date="2026-05-08",
+        entry_price_sources=["same_close_proxy"],
+    )
+
+    assert result["request_count"] == 1
+    request = result["requests"][0]
+    assert request["entry_price_source"] == "same_close_proxy"
+    assert request["evidence_basis"] == "historical_backtest"
+    assert request["true_forward_tracking_eligible"] is False
+    assert "same_close_proxy" in request["output_path"]
 
 
 def _evidence_from_returns(
