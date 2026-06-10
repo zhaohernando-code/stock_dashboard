@@ -5,7 +5,9 @@ import json
 import pytest
 
 from ashare_evidence.shortpick_strategy_governance import (
+    apply_shortpick_drawdown_reversal_filter_control,
     apply_shortpick_same_symbol_cooldown_control,
+    build_shortpick_drawdown_reversal_filter_rule,
     build_shortpick_same_symbol_cooldown_rule,
     build_shortpick_strategy_archive_records,
     build_shortpick_strategy_retirement_evidence_packs,
@@ -585,6 +587,131 @@ def test_same_symbol_cooldown_ignores_same_day_or_future_outcomes_for_leakage() 
     assert result["ignored_future_or_same_day_outcome_count"] == 2
     assert result["rows"][0]["cooldown_action"] == "allowed"
     assert result["rows"][0]["cooldown_blocker_events"] == []
+
+
+def test_drawdown_reversal_filter_rule_signature_is_stable_and_parameter_sensitive() -> None:
+    first = build_shortpick_drawdown_reversal_filter_rule(max_recent_drawdown_return=-0.08)
+    second = build_shortpick_drawdown_reversal_filter_rule(max_recent_drawdown_return=-0.08)
+    changed = build_shortpick_drawdown_reversal_filter_rule(max_recent_drawdown_return=-0.09)
+
+    assert first["rule_signature"] == second["rule_signature"]
+    assert first["rule_signature"].startswith("sha256:")
+    assert first["rule_signature"] != changed["rule_signature"]
+
+
+def test_drawdown_reversal_filter_rule_rejects_invalid_lookback() -> None:
+    with pytest.raises(ValueError, match="drawdown_lookback_days must be positive"):
+        build_shortpick_drawdown_reversal_filter_rule(drawdown_lookback_days=0)
+
+
+def test_drawdown_reversal_filter_blocks_any_registered_trigger() -> None:
+    rule = build_shortpick_drawdown_reversal_filter_rule(
+        max_recent_drawdown_return=-0.08,
+        short_window_return_threshold=-0.03,
+        price_vs_ma20_threshold=0.0,
+        high_level_reversal_return_threshold=-0.05,
+    )
+    candidates = [
+        {"candidate_id": "drawdown", "symbol": "AAA.SZ", "signal_date": "2026-05-10"},
+        {"candidate_id": "breakdown", "symbol": "BBB.SZ", "signal_date": "2026-05-10"},
+        {"candidate_id": "reversal", "symbol": "CCC.SZ", "signal_date": "2026-05-10"},
+        {"candidate_id": "clean", "symbol": "DDD.SZ", "signal_date": "2026-05-10"},
+    ]
+    features = [
+        {
+            "symbol": "AAA.SZ",
+            "feature_date": "2026-05-10",
+            "recent_drawdown_return": -0.09,
+            "short_window_return": 0.01,
+            "price_vs_ma20": 0.02,
+            "high_level_reversal_return": 0.01,
+        },
+        {
+            "symbol": "BBB.SZ",
+            "feature_date": "2026-05-10",
+            "recent_drawdown_return": -0.01,
+            "short_window_return": -0.04,
+            "price_vs_ma20": -0.01,
+            "high_level_reversal_return": 0.01,
+        },
+        {
+            "symbol": "CCC.SZ",
+            "feature_date": "2026-05-10",
+            "recent_drawdown_return": -0.01,
+            "short_window_return": 0.01,
+            "price_vs_ma20": 0.02,
+            "high_level_reversal_return": -0.06,
+        },
+        {
+            "symbol": "DDD.SZ",
+            "feature_date": "2026-05-10",
+            "recent_drawdown_return": -0.01,
+            "short_window_return": 0.01,
+            "price_vs_ma20": 0.02,
+            "high_level_reversal_return": 0.01,
+        },
+    ]
+
+    result = apply_shortpick_drawdown_reversal_filter_control(candidates, features, rule=rule)
+
+    by_id = {row["candidate_id"]: row for row in result["rows"]}
+    assert result["blocked_count"] == 3
+    assert result["allowed_count"] == 1
+    assert by_id["drawdown"]["filter_triggers"][0]["reason"] == "recent_drawdown_threshold_triggered"
+    assert by_id["breakdown"]["filter_triggers"][0]["reason"] == "short_window_breakdown_triggered"
+    assert by_id["reversal"]["filter_triggers"][0]["reason"] == "high_level_reversal_threshold_triggered"
+    assert by_id["clean"]["filter_action"] == "allowed"
+
+
+def test_drawdown_reversal_filter_uses_latest_signal_date_or_prior_feature_only() -> None:
+    candidates = [{"candidate_id": "aaa-10", "symbol": "AAA.SZ", "signal_date": "2026-05-10"}]
+    features = [
+        {
+            "symbol": "AAA.SZ",
+            "feature_date": "2026-05-08",
+            "recent_drawdown_return": -0.01,
+            "short_window_return": 0.01,
+            "price_vs_ma20": 0.02,
+            "high_level_reversal_return": 0.01,
+        },
+        {
+            "symbol": "AAA.SZ",
+            "feature_date": "2026-05-09",
+            "recent_drawdown_return": -0.09,
+            "short_window_return": 0.01,
+            "price_vs_ma20": 0.02,
+            "high_level_reversal_return": 0.01,
+        },
+        {
+            "symbol": "AAA.SZ",
+            "feature_date": "2026-05-11",
+            "recent_drawdown_return": -0.50,
+            "short_window_return": -0.50,
+            "price_vs_ma20": -0.50,
+            "high_level_reversal_return": -0.50,
+        },
+    ]
+
+    result = apply_shortpick_drawdown_reversal_filter_control(candidates, features)
+
+    row = result["rows"][0]
+    assert result["ignored_future_feature_count"] == 1
+    assert row["feature_cutoff_date"] == "2026-05-09"
+    assert row["filter_action"] == "blocked"
+    assert row["filter_triggers"][0]["reason"] == "recent_drawdown_threshold_triggered"
+    assert result["leakage_audit_status"] == "passed"
+
+
+def test_drawdown_reversal_filter_allows_missing_features_with_coverage_flag() -> None:
+    candidates = [{"candidate_id": "missing", "symbol": "AAA.SZ", "signal_date": "2026-05-10"}]
+
+    result = apply_shortpick_drawdown_reversal_filter_control(candidates, [])
+
+    assert result["blocked_count"] == 0
+    assert result["missing_feature_count"] == 1
+    assert result["rows"][0]["filter_action"] == "allowed"
+    assert result["rows"][0]["feature_coverage_status"] == "missing"
+    assert result["rows"][0]["filter_triggers"] == []
 
 
 def _evidence_from_returns(
