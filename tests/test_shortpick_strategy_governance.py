@@ -390,6 +390,11 @@ def test_strategy_view_projection_splits_retired_into_archive_only() -> None:
             "view_section": "archive",
         }
     ]
+    assert result["evidence_basis_section_policy"] == "separate_historical_retrospective_and_true_forward_sections"
+    assert result["evidence_basis_sections"][0]["evidence_basis"] == "true_forward_tracking"
+    assert result["evidence_basis_sections"][0]["item_count"] == 4
+    assert result["evidence_basis_sections"][0]["primary_count"] == 3
+    assert result["evidence_basis_sections"][0]["archive_count"] == 1
     assert "primary_horizon_summary" not in result["primary_items"][0]
     assert "retirement_artifact_ref" not in result["archive_items"][0]
 
@@ -455,6 +460,52 @@ def test_strategy_view_projection_adds_status_and_evidence_labels() -> None:
         "label": "Unknown evidence",
         "tone": "default",
     }
+
+
+def test_strategy_view_projection_separates_evidence_basis_sections() -> None:
+    result = project_shortpick_strategy_view_sections(
+        {
+            "recommendations": [
+                {
+                    "strategy_id": "true-forward-id",
+                    "recommended_status": "active",
+                    "evidence_basis": "true_forward_tracking",
+                },
+                {
+                    "strategy_id": "retrospective-id",
+                    "recommended_status": "observe",
+                    "evidence_basis": "retrospective_forward_replay",
+                },
+                {
+                    "strategy_id": "historical-id",
+                    "recommended_status": "observe",
+                    "evidence_basis": "historical_backtest",
+                },
+                {
+                    "strategy_id": "retired-retrospective-id",
+                    "recommended_status": "retired",
+                    "evidence_basis": "retrospective_forward_replay",
+                },
+            ]
+        }
+    )
+
+    sections = result["evidence_basis_sections"]
+    assert [item["evidence_basis"] for item in sections] == [
+        "true_forward_tracking",
+        "retrospective_forward_replay",
+        "historical_backtest",
+    ]
+    retrospective = sections[1]
+    assert retrospective["evidence_basis_display"] == {
+        "key": "retrospective_forward_replay",
+        "label": "Retrospective replay",
+        "tone": "purple",
+    }
+    assert retrospective["item_count"] == 2
+    assert retrospective["primary_count"] == 1
+    assert retrospective["archive_count"] == 1
+    assert [item["view_section"] for item in retrospective["items"]] == ["primary", "archive"]
 
 
 def test_archive_records_preserve_statistics_and_evidence_refs_for_retired_rows() -> None:

@@ -38,6 +38,12 @@ SHORTPICK_EVIDENCE_BASIS_DISPLAY = {
     "retrospective_forward_replay": {"label": "Retrospective replay", "tone": "purple"},
     "true_forward_tracking": {"label": "True forward tracking", "tone": "green"},
 }
+SHORTPICK_EVIDENCE_BASIS_SECTION_ORDER = [
+    "true_forward_tracking",
+    "retrospective_forward_replay",
+    "historical_backtest",
+    "unknown",
+]
 
 
 def build_shortpick_strategy_retirement_evidence_packs(
@@ -260,6 +266,8 @@ def project_shortpick_strategy_view_sections(
         else:
             primary_items.append({**projected, "view_section": "primary"})
 
+    all_items = [*primary_items, *archive_items]
+
     return {
         "status": "ready",
         "decision_policy": "retired_status_hidden_from_primary_view_and_kept_in_archive",
@@ -267,6 +275,8 @@ def project_shortpick_strategy_view_sections(
         "archive_count": len(archive_items),
         "primary_items": primary_items,
         "archive_items": archive_items,
+        "evidence_basis_section_policy": "separate_historical_retrospective_and_true_forward_sections",
+        "evidence_basis_sections": _evidence_basis_sections(all_items),
     }
 
 
@@ -1100,6 +1110,33 @@ def _evidence_basis_display(value: Any) -> dict[str, str]:
     key = str(value or "unknown")
     display = SHORTPICK_EVIDENCE_BASIS_DISPLAY.get(key, {"label": "Unknown evidence", "tone": "default"})
     return {"key": key, **display}
+
+
+def _evidence_basis_sections(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for item in items:
+        basis = str(item.get("evidence_basis") or "unknown")
+        grouped[basis].append(item)
+
+    def sort_key(value: str) -> tuple[int, str]:
+        if value in SHORTPICK_EVIDENCE_BASIS_SECTION_ORDER:
+            return (SHORTPICK_EVIDENCE_BASIS_SECTION_ORDER.index(value), value)
+        return (len(SHORTPICK_EVIDENCE_BASIS_SECTION_ORDER), value)
+
+    sections: list[dict[str, Any]] = []
+    for basis in sorted(grouped, key=sort_key):
+        section_items = grouped[basis]
+        sections.append(
+            {
+                "evidence_basis": basis,
+                "evidence_basis_display": _evidence_basis_display(basis),
+                "item_count": len(section_items),
+                "primary_count": sum(1 for item in section_items if item.get("view_section") == "primary"),
+                "archive_count": sum(1 for item in section_items if item.get("view_section") == "archive"),
+                "items": section_items,
+            }
+        )
+    return sections
 
 
 def _strategy_metadata(item: dict[str, Any]) -> dict[str, Any]:
