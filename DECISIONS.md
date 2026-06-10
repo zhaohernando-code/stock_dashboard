@@ -1,5 +1,25 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-06-10T16:10:00+08:00] Short Pick governance intent clarification: deprecated display bucket and labeled combined-ledger backfill:
+
+项目所有者明确了短投治理的初心，并拍板了此前各轮刻意留待决策的两个问题，记录到 `docs/contracts/SHORTPICK_STRATEGY_GOVERNANCE_PLAN_2026-06-10.md` 的 Round 28 修订段。本条为耐久决策，后续实现轮不得偏移。
+
+决策 A（成绩不好的对照组的"清理"语义）
+- "清理" = 从主前端展示与持续推进中移除，但数据保留，并迁移/标记进 deprecated/废弃归档桶，带 regression guard 防止回归。
+- 状态映射：`active` / `observe` 留在主视图（仍在观察）；证据明确的 `retire_candidate` 与 `retired` 移入 deprecated 桶、不再推进、数据保留。这比原 P2.5（只归档 `retired`）更严格——所有者要求证据明确后即从主前端隐藏弱对照组，而不必等到完整 `strategy_retirement:v1` artifact。
+- 持久 `retired` 记录仍需 `strategy_retirement:v1` artifact + `decision_log_ref`；离开 deprecated 桶只能走受治理的 un-retirement recovery，不得自动回主视图。
+- "无意义/冗余"对照组与"成绩不好"分开处理：走 inventory 驱动的归档路径，不塞进性能退役门槛；diagnostic-value gate 仍保护测试独特假设的弱对照组。
+
+决策 B（回溯补算数据的落点）
+- 回溯补算数据进入与 true-forward 行**同一张合并 ledger/表**（便于前端对照展示），不再要求物理分表。
+- 反泄漏保证改由标注而非物理隔离实现：每行强制非空 `evidence_basis`；回溯行带 `retrospective=true`、`rule_defined_at` 与 leakage 审计字段；回溯行永不被表示/查询/聚合/计入 `true_forward_tracking`；true-forward 的 headline / 晋级 / 退役指标默认按 basis 过滤。
+- 每条回溯行带 `pairing_key`（`control_group_id` + `rule_signature` + `symbol` + `signal_date`）与对应 true-forward 行配对，提供方便的对照关系。本决策取代回溯合同早期"物理分表"的读法，但保留其全部 leakage 保护。
+
+实现边界
+- 新增需求项 P2.7（deprecated 展示桶 + regression guard）、P2.8（冗余/无意义对照组 inventory 归档）、P3.7（带标注的合并 ledger 回溯补算 + true-forward 配对）、P3.8（把 P3.1-P3.3 控件与 P1.3/P1.4 baseline 落成真实对照链路，先历史回测再补算），状态均为 not_started。
+- 仍受同一前置阻塞：真实 `strategy_retirement:v1` artifact 写入器、回测/回放 runner、运行时/前端接线落地之前，本修订仅为合同，不得真正退役、隐藏或补算。
+- 若与 `docs/contracts/PHASE5_RESEARCH_CONTRACT.md` 或本决策日志冲突，Phase 5 合同与决策日志优先。
+
 [2026-06-10T12:35:00+08:00] Short Pick strategy governance must land retirement and retrospective-replay contracts before implementation:
 
 首月短投前向验证分析显示，冻结主线存在均值为正但中位数为负、少数大赢家拉高均值、北方华创重复暴露亏损等问题。后续治理不能直接靠临时前端隐藏、临时删策略或把事后新增规则伪装成真实前向验证来解决。本轮新增合同计划 `docs/contracts/SHORTPICK_STRATEGY_GOVERNANCE_PLAN_2026-06-10.md`，作为短投策略退役、回放补算、新诊断对照组和长期收益评估的实现前置。
