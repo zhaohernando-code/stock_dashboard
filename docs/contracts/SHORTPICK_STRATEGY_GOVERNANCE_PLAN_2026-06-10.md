@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round7_p2_4_generation_filter_helper_completed_ds_review_passed
+Status: round8_p2_5_view_projection_helper_completed_ds_review_passed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -85,7 +85,7 @@ The next governance package should adopt four principles.
 | P2.2 | Compute retirement evidence pack per strategy | completed | Added a read-only builder in `src/ashare_evidence/shortpick_strategy_governance.py` that aggregates paper-tracking rows into evidence packs with evidence basis, forward mean/median/win rate, completed sample count, additive drawdown, tail dependence, same-symbol loss repeats, and optional historical/baseline evidence references. It does not mark `retired`, write runtime data, or change frontend/API behavior. |
 | P2.3 | Mark candidates as `active`, `observe`, `retire_candidate`, or `retired` | completed | Added a read-only status recommendation layer. Metrics alone can only produce `active`, `observe`, or `retire_candidate`; `retired` requires a valid `strategy_retirement:v1` / `shortpick_strategy_retirement` artifact plus `decision_log_ref`. No runtime state is persisted in this round. |
 | P2.4 | Remove retired strategies from active generation | partial | Added a read-only generation eligibility filter that excludes only `recommended_status=retired` by default and keeps `retire_candidate`, `observe`, and `untracked` eligible. Archive rebuild can explicitly pass `include_retired=True`. Runtime generation wiring remains pending until a real retirement artifact source exists. |
-| P2.5 | Remove retired strategies from primary frontend views | pending | Archive summaries remain visible in an audit or research archive view. |
+| P2.5 | Remove retired strategies from primary frontend views | partial | Added a read-only view projection helper that sends `retired` rows to archive and keeps `active`, `observe`, and `retire_candidate` in primary projection. It deliberately omits heavy horizon evidence and retirement artifact refs. Frontend/runtime wiring remains pending. |
 | P2.6 | Preserve archived statistics and evidence refs | pending | Do not physically erase all evidence from the only auditable source of truth. |
 
 ### P3 - New Diagnostic Controls
@@ -435,6 +435,24 @@ DeepSeek result:
 - Key confirmations: the filter excludes only `recommended_status=retired` when `include_retired=False`; it preserves `retire_candidate`, `observe`, and `untracked`; archive rebuilds can opt in with `include_retired=True`; and fallback strategy-id mismatch fails open as `untracked` rather than incorrectly excluding a strategy.
 - Nonblocking follow-ups retained for future wiring: make the `decision_policy` string reflect archive mode when `include_retired=True`, align fallback `family` priority with evidence-pack strategy-id derivation, add the LLM family fallback to generation-item derivation, and add cross-path strategy-id consistency tests.
 
+## Round 8 Review Result
+
+Status: completed DeepSeek review.
+
+Round 8 scope:
+
+- P2.5 read-only primary/archive view projection helper.
+- Extended module: `src/ashare_evidence/shortpick_strategy_governance.py`.
+- Extended tests: `tests/test_shortpick_strategy_governance.py`.
+
+Round 8 adds a helper only. It does not change frontend code, API routes, runtime data, or served dashboard behavior.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge and push Round 8.
+- Key confirmations: only `recommended_status=retired` enters archive; `active`, `observe`, and `retire_candidate` remain in primary; projection is intentionally lightweight and excludes `primary_horizon_summary` and `retirement_artifact_ref`; and this should be marked helper-complete with runtime/frontend wiring pending.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -467,8 +485,10 @@ DeepSeek result:
 | Round 6 DeepSeek review | completed |
 | P2.4 generation filter helper | completed_partial_runtime_wiring_pending |
 | Round 7 DeepSeek review | completed |
+| P2.5 view projection helper | completed_partial_frontend_wiring_pending |
+| Round 8 DeepSeek review | completed |
 | Runtime behavior changed | not_started |
 | Registry changed | completed |
-| Strategy code changed | completed_for_read_only_governance_builder_status_layer_and_filter_helper |
+| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_and_view_projection_helpers |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |

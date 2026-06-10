@@ -8,6 +8,7 @@ from ashare_evidence.shortpick_strategy_governance import (
     build_shortpick_strategy_retirement_evidence_packs,
     build_shortpick_strategy_status_recommendations,
     filter_shortpick_generation_eligible_items,
+    project_shortpick_strategy_view_sections,
 )
 
 
@@ -304,6 +305,81 @@ def test_generation_filter_derives_strategy_id_from_generation_fields() -> None:
 
     assert result["eligible_items"] == []
     assert result["excluded_items"][0]["strategy_id"] == strategy_id
+
+
+def test_strategy_view_projection_splits_retired_into_archive_only() -> None:
+    result = project_shortpick_strategy_view_sections(
+        {
+            "recommendations": [
+                {
+                    "strategy_id": "active-id",
+                    "recommended_status": "active",
+                    "evidence_basis": "true_forward_tracking",
+                    "tracking_group": "market_factor_control",
+                    "reasons": ["no_retirement_evidence_trigger"],
+                    "primary_horizon_summary": {"heavy": True},
+                    "retirement_artifact_ref": None,
+                },
+                {
+                    "strategy_id": "observe-id",
+                    "recommended_status": "observe",
+                    "evidence_basis": "true_forward_tracking",
+                    "tracking_group": "market_factor_control",
+                    "blockers": ["forward_sample_not_mature"],
+                },
+                {
+                    "strategy_id": "candidate-id",
+                    "recommended_status": "retire_candidate",
+                    "evidence_basis": "true_forward_tracking",
+                    "tracking_group": "market_factor_control",
+                    "reasons": ["forward_win_rate_below_45pct"],
+                },
+                {
+                    "strategy_id": "retired-id",
+                    "recommended_status": "retired",
+                    "evidence_basis": "true_forward_tracking",
+                    "tracking_group": "market_factor_control",
+                    "reasons": ["strategy_retirement_artifact_and_decision_log_ref_present"],
+                    "retirement_artifact_ref": {"artifact_id": "retired-fixture"},
+                },
+            ]
+        }
+    )
+
+    assert result["decision_policy"] == "retired_status_hidden_from_primary_view_and_kept_in_archive"
+    assert result["primary_count"] == 3
+    assert result["archive_count"] == 1
+    assert [item["strategy_id"] for item in result["primary_items"]] == [
+        "active-id",
+        "observe-id",
+        "candidate-id",
+    ]
+    assert result["archive_items"] == [
+        {
+            "strategy_id": "retired-id",
+            "recommended_status": "retired",
+            "evidence_basis": "true_forward_tracking",
+            "tracking_group": "market_factor_control",
+            "tracking_role": None,
+            "strategy_family": None,
+            "entry_price_source": None,
+            "primary_horizon_days": None,
+            "reasons": ["strategy_retirement_artifact_and_decision_log_ref_present"],
+            "blockers": [],
+            "view_section": "archive",
+        }
+    ]
+    assert "primary_horizon_summary" not in result["primary_items"][0]
+    assert "retirement_artifact_ref" not in result["archive_items"][0]
+
+
+def test_strategy_view_projection_tolerates_missing_lists() -> None:
+    result = project_shortpick_strategy_view_sections(
+        {"recommendations": [{"strategy_id": "id", "recommended_status": "observe"}]}
+    )
+
+    assert result["primary_items"][0]["reasons"] == []
+    assert result["primary_items"][0]["blockers"] == []
 
 
 def _evidence_from_returns(

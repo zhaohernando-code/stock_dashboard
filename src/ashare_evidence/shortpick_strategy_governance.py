@@ -203,6 +203,43 @@ def filter_shortpick_generation_eligible_items(
     }
 
 
+def project_shortpick_strategy_view_sections(
+    status_recommendation_result: dict[str, Any],
+) -> dict[str, Any]:
+    """Split strategy status rows into primary and archive display sections."""
+
+    primary_items: list[dict[str, Any]] = []
+    archive_items: list[dict[str, Any]] = []
+    for item in status_recommendation_result.get("recommendations") or []:
+        if not isinstance(item, dict):
+            continue
+        projected = {
+            "strategy_id": item.get("strategy_id"),
+            "recommended_status": item.get("recommended_status"),
+            "evidence_basis": item.get("evidence_basis"),
+            "tracking_group": item.get("tracking_group"),
+            "tracking_role": item.get("tracking_role"),
+            "strategy_family": item.get("strategy_family"),
+            "entry_price_source": item.get("entry_price_source"),
+            "primary_horizon_days": item.get("primary_horizon_days"),
+            "reasons": item.get("reasons") if isinstance(item.get("reasons"), list) else [],
+            "blockers": item.get("blockers") if isinstance(item.get("blockers"), list) else [],
+        }
+        if projected["recommended_status"] == "retired":
+            archive_items.append({**projected, "view_section": "archive"})
+        else:
+            primary_items.append({**projected, "view_section": "primary"})
+
+    return {
+        "status": "ready",
+        "decision_policy": "retired_status_hidden_from_primary_view_and_kept_in_archive",
+        "primary_count": len(primary_items),
+        "archive_count": len(archive_items),
+        "primary_items": primary_items,
+        "archive_items": archive_items,
+    }
+
+
 def _strategy_metadata(item: dict[str, Any]) -> dict[str, Any]:
     components = _dict(item.get("selection_score_components"))
     tracking_group = str(item.get("tracking_group") or "unknown")
