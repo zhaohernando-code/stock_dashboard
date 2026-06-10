@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round10_p3_1_same_symbol_cooldown_rule_helper_completed_ds_review_passed
+Status: round11_p3_2_drawdown_reversal_filter_helper_completed_ds_review_passed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -93,7 +93,7 @@ The next governance package should adopt four principles.
 | ID | Work Item | Status | Notes |
 | --- | --- | --- | --- |
 | P3.1 | Same-symbol cooldown control | completed_partial_runtime_wiring_pending | Added a deterministic rule builder and pure input-to-output cooldown helper. It blocks candidates only from prior completed same-symbol negative outcomes, uses longer cooldown after severe losses, emits `rule_signature`, and labels evidence basis. Historical/replay generation, true-forward wiring, and frontend display remain pending. |
-| P3.2 | Drawdown/reversal filter control | pending | Blocks entries after short-window breakdown, high-level reversal, or recent drawdown threshold. Thresholds must be policy-governed. |
+| P3.2 | Drawdown/reversal filter control | completed_partial_runtime_wiring_pending | Added a deterministic rule builder and pure input-to-output filter helper. It uses only signal-date-or-prior technical feature snapshots, blocks on recent drawdown, short-window breakdown plus price-vs-MA weakness, or high-level reversal triggers, emits `rule_signature`, and labels evidence basis. Feature generation, historical/replay artifacts, true-forward wiring, and frontend display remain pending. |
 | P3.3 | Repeated exposure limit control | pending | Limits repeated concentration by symbol first, then optionally by industry or theme after stable classification exists. |
 | P3.4 | Historical backtest generation | pending | Long-window deterministic backtest under existing account-executable universe rules. |
 | P3.5 | Retrospective forward replay generation | pending | Replays from the paper-tracking ledger start date through the rule creation date using only signal-date available features. The current observed start is `2026-05-08`, but implementation must derive it from data. |
@@ -491,6 +491,25 @@ DeepSeek result:
 - Key confirmations: the helper ignores same-day or future outcomes and only uses prior completed negative same-symbol outcomes; `leakage_policy` matches implementation; all new functions are pure input-to-output; `evidence_basis` is explicit and does not disguise replay as true forward; tests cover stable rule signatures, invalid windows, normal and severe cooldown windows, wrong-horizon exclusion, symbol separation, and same-day/future leakage guards.
 - Nonblocking follow-ups retained for later hardening: add empty input tests, threshold-equality tests, and explicit default-rule-path tests.
 
+## Round 11 Review Result
+
+Status: completed DeepSeek review.
+
+Round 11 scope:
+
+- P3.2 drawdown/reversal deterministic rule builder.
+- P3.2 pure drawdown/reversal filter helper.
+- Extended module: `src/ashare_evidence/shortpick_strategy_governance.py`.
+- Extended tests: `tests/test_shortpick_strategy_governance.py`.
+
+Round 11 adds a helper only. It does not generate feature snapshots, historical backtests, retrospective forward replay artifacts, true-forward tracking rows, database writes, frontend/API changes, or active shortpick generation changes.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge and push Round 11.
+- Key confirmations: the helper uses only feature snapshots with `feature_date <= signal_date`; future features are counted and ignored; all functions remain pure input-to-output; no paper-tracking rows are generated; tests cover deterministic signatures, invalid lookback validation, all three trigger families, future feature exclusion, missing feature coverage, and leakage audit labels.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -529,8 +548,10 @@ DeepSeek result:
 | Round 9 DeepSeek review | completed |
 | P3.1 same-symbol cooldown helper | completed_partial_runtime_wiring_pending |
 | Round 10 DeepSeek review | completed |
+| P3.2 drawdown/reversal filter helper | completed_partial_runtime_wiring_pending |
+| Round 11 DeepSeek review | completed |
 | Runtime behavior changed | not_started |
 | Registry changed | completed |
-| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_and_same_symbol_cooldown_helpers |
+| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_and_drawdown_reversal_helpers |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |

@@ -14,6 +14,7 @@ from statistics import mean, median
 from typing import Any
 
 SAME_SYMBOL_COOLDOWN_CONTROL_ID = "control_same_symbol_cooldown:v1"
+DRAWDOWN_REVERSAL_FILTER_CONTROL_ID = "control_drawdown_reversal_filter:v1"
 
 
 def build_shortpick_strategy_retirement_evidence_packs(
@@ -407,6 +408,100 @@ def apply_shortpick_same_symbol_cooldown_control(
     }
 
 
+def build_shortpick_drawdown_reversal_filter_rule(
+    *,
+    control_group_id: str = DRAWDOWN_REVERSAL_FILTER_CONTROL_ID,
+    drawdown_lookback_days: int = 10,
+    max_recent_drawdown_return: float = -0.08,
+    short_window_return_threshold: float = -0.03,
+    price_vs_ma20_threshold: float = 0.0,
+    high_level_reversal_return_threshold: float = -0.05,
+    rule_defined_at: str | None = None,
+) -> dict[str, Any]:
+    """Build the deterministic drawdown/reversal filter control rule."""
+
+    if drawdown_lookback_days <= 0:
+        raise ValueError("drawdown_lookback_days must be positive")
+
+    payload = {
+        "control_group_id": control_group_id,
+        "rule_version": "drawdown-reversal-filter-v1",
+        "filter_basis": "signal_date_or_prior_technical_features",
+        "drawdown_lookback_days": int(drawdown_lookback_days),
+        "max_recent_drawdown_return": round(float(max_recent_drawdown_return), 6),
+        "short_window_return_threshold": round(float(short_window_return_threshold), 6),
+        "price_vs_ma20_threshold": round(float(price_vs_ma20_threshold), 6),
+        "high_level_reversal_return_threshold": round(float(high_level_reversal_return_threshold), 6),
+        "trigger_policy": "block_if_any_threshold_triggered",
+        "rule_defined_at": rule_defined_at,
+        "leakage_policy": "ignore_features_after_signal_date",
+    }
+    return {
+        **payload,
+        "rule_signature": _rule_signature(payload),
+    }
+
+
+def apply_shortpick_drawdown_reversal_filter_control(
+    candidate_rows: list[dict[str, Any]],
+    signal_feature_rows: list[dict[str, Any]],
+    *,
+    rule: dict[str, Any] | None = None,
+    evidence_basis: str = "retrospective_forward_replay",
+) -> dict[str, Any]:
+    """Apply drawdown/reversal filtering using signal-date-or-prior features."""
+
+    rule = dict(rule or build_shortpick_drawdown_reversal_filter_rule())
+    features_by_symbol = _drawdown_reversal_features_by_symbol(signal_feature_rows)
+    rows: list[dict[str, Any]] = []
+    ignored_future_feature_count = 0
+
+    for item in [_dict(value) for value in candidate_rows if isinstance(value, dict)]:
+        symbol = str(item.get("symbol") or "")
+        signal_date = _date_part(item.get("signal_date"))
+        feature, ignored_count = _latest_drawdown_reversal_feature(
+            features_by_symbol.get(symbol, []),
+            signal_date=signal_date,
+        )
+        ignored_future_feature_count += ignored_count
+        triggers = _drawdown_reversal_triggers(feature, rule) if feature else []
+
+        rows.append(
+            {
+                **item,
+                "control_group_id": rule.get("control_group_id"),
+                "rule_signature": rule.get("rule_signature"),
+                "evidence_basis": evidence_basis,
+                "filter_action": "blocked" if triggers else "allowed",
+                "filter_blocked": bool(triggers),
+                "filter_triggers": triggers,
+                "feature_cutoff_date": feature.get("feature_date") if feature else None,
+                "feature_coverage_status": "ready" if feature else "missing",
+                "leakage_audit_status": "passed",
+                "leakage_audit_reasons": ["used_only_signal_date_or_prior_features"],
+            }
+        )
+
+    return {
+        "status": "ready",
+        "control_group_id": rule.get("control_group_id"),
+        "rule_signature": rule.get("rule_signature"),
+        "evidence_basis": evidence_basis,
+        "rule": rule,
+        "leakage_audit_status": "passed",
+        "leakage_audit_reasons": [
+            "used_only_signal_date_or_prior_features",
+            "ignored_features_after_signal_date",
+        ],
+        "input_candidate_count": len(candidate_rows),
+        "blocked_count": sum(1 for row in rows if row["filter_blocked"]),
+        "allowed_count": sum(1 for row in rows if not row["filter_blocked"]),
+        "missing_feature_count": sum(1 for row in rows if row["feature_coverage_status"] == "missing"),
+        "ignored_future_feature_count": ignored_future_feature_count,
+        "rows": rows,
+    }
+
+
 def _rule_signature(payload: dict[str, Any]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -453,6 +548,92 @@ def _same_symbol_negative_events_by_symbol(
 
 def _elapsed_signal_days(signal_dates: list[str], *, exit_date: str, signal_date: str) -> int:
     return sum(1 for value in signal_dates if exit_date < value <= signal_date)
+
+
+def _drawdown_reversal_features_by_symbol(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        symbol = str(row.get("symbol") or "")
+        feature_date = _date_part(row.get("feature_date") or row.get("as_of_date") or row.get("signal_date"))
+        if not symbol or not feature_date:
+            continue
+        grouped[symbol].append(
+            {
+                **dict(row),
+                "symbol": symbol,
+                "feature_date": feature_date,
+            }
+        )
+
+    for values in grouped.values():
+        values.sort(key=lambda item: str(item.get("feature_date") or ""))
+    return grouped
+
+
+def _latest_drawdown_reversal_feature(
+    rows: list[dict[str, Any]],
+    *,
+    signal_date: str,
+) -> tuple[dict[str, Any], int]:
+    latest: dict[str, Any] = {}
+    ignored_future_count = 0
+    for row in rows:
+        feature_date = str(row.get("feature_date") or "")
+        if not signal_date or not feature_date or feature_date > signal_date:
+            ignored_future_count += 1
+            continue
+        latest = row
+    return latest, ignored_future_count
+
+
+def _drawdown_reversal_triggers(feature: dict[str, Any], rule: dict[str, Any]) -> list[dict[str, Any]]:
+    triggers: list[dict[str, Any]] = []
+    recent_drawdown = _float(feature.get("recent_drawdown_return"))
+    short_window_return = _float(feature.get("short_window_return"))
+    price_vs_ma20 = _float(feature.get("price_vs_ma20"))
+    high_level_reversal = _float(feature.get("high_level_reversal_return"))
+
+    if recent_drawdown is not None and recent_drawdown <= float(rule["max_recent_drawdown_return"]):
+        triggers.append(
+            {
+                "reason": "recent_drawdown_threshold_triggered",
+                "field": "recent_drawdown_return",
+                "value": _round(recent_drawdown),
+                "threshold": rule["max_recent_drawdown_return"],
+            }
+        )
+    if (
+        short_window_return is not None
+        and price_vs_ma20 is not None
+        and short_window_return <= float(rule["short_window_return_threshold"])
+        and price_vs_ma20 <= float(rule["price_vs_ma20_threshold"])
+    ):
+        triggers.append(
+            {
+                "reason": "short_window_breakdown_triggered",
+                "field": "short_window_return_and_price_vs_ma20",
+                "value": {
+                    "short_window_return": _round(short_window_return),
+                    "price_vs_ma20": _round(price_vs_ma20),
+                },
+                "threshold": {
+                    "short_window_return": rule["short_window_return_threshold"],
+                    "price_vs_ma20": rule["price_vs_ma20_threshold"],
+                },
+            }
+        )
+    if high_level_reversal is not None and high_level_reversal <= float(rule["high_level_reversal_return_threshold"]):
+        triggers.append(
+            {
+                "reason": "high_level_reversal_threshold_triggered",
+                "field": "high_level_reversal_return",
+                "value": _round(high_level_reversal),
+                "threshold": rule["high_level_reversal_return_threshold"],
+            }
+        )
+    return triggers
 
 
 def _strategy_metadata(item: dict[str, Any]) -> dict[str, Any]:
