@@ -7,6 +7,7 @@ import os
 import re
 import ssl
 import sys
+import time
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from http.cookiejar import CookieJar
@@ -175,6 +176,8 @@ def _request_bytes(
         raise ReleaseVerificationError(f"{method} {url} failed: {exc.code} {detail}".strip()) from exc
     except error.URLError as exc:
         raise ReleaseVerificationError(f"{method} {url} failed: {exc.reason}") from exc
+    except (TimeoutError, OSError) as exc:
+        raise ReleaseVerificationError(f"{method} {url} failed after {timeout}s: {exc}") from exc
 
 
 def _request_text(
@@ -196,6 +199,8 @@ def _request_text(
         raise ReleaseVerificationError(f"{method} {url} failed: {exc.code} {detail}".strip()) from exc
     except error.URLError as exc:
         raise ReleaseVerificationError(f"{method} {url} failed: {exc.reason}") from exc
+    except (TimeoutError, OSError) as exc:
+        raise ReleaseVerificationError(f"{method} {url} failed after {timeout}s: {exc}") from exc
 
 
 def _request_json(
@@ -420,6 +425,7 @@ def build_release_manifest(
     artifact_root: Path,
     previous_successful_manifest: dict[str, Any] | None,
     asset_sets: dict[str, Any],
+    api_warmups: dict[str, Any],
     api_fingerprints: dict[str, Any],
     operations_text_audit: dict[str, Any],
     artifact_paths: dict[str, str],
@@ -442,6 +448,7 @@ def build_release_manifest(
         "canonical_base_url": canonical_base_url,
         "artifact_root": str(artifact_root),
         "asset_sets": asset_sets,
+        "api_warmups": api_warmups,
         "api_fingerprints": api_fingerprints,
         "operations_text_audit": operations_text_audit,
         "artifacts": artifact_paths,
@@ -469,6 +476,88 @@ def _build_api_headers(header_name: str, header_value: str | None) -> dict[str, 
     if not header_value:
         return {}
     return {header_name: header_value}
+
+
+def endpoint_with_operations_sample_symbol(endpoint: str, sample_symbol: str | None) -> str:
+    if not sample_symbol or not endpoint.startswith("/dashboard/operations/"):
+        return endpoint
+    parsed = parse.urlsplit(endpoint)
+    query_items = parse.parse_qsl(parsed.query, keep_blank_values=True)
+    if any(key == "sample_symbol" for key, _ in query_items):
+        return endpoint
+    query_items.append(("sample_symbol", sample_symbol.strip().upper()))
+    return parse.urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parse.urlencode(query_items),
+            parsed.fragment,
+        )
+    )
+
+
+def _timed_request_json(
+    opener,
+    url: str,
+    *,
+    timeout: int,
+    headers: dict[str, str] | None = None,
+) -> tuple[dict[str, Any], float]:
+    started_at = time.perf_counter()
+    payload = _request_json(opener, url, timeout=timeout, headers=headers)
+    return payload, round(time.perf_counter() - started_at, 3)
+
+
+def _api_url(base_url: str, endpoint: str) -> str:
+    return parse.urljoin(_trailing_slash(base_url), endpoint.lstrip("/"))
+
+
+def _canonical_api_url(canonical_base_url: str, endpoint: str) -> str:
+    return _api_url(parse.urljoin(_trailing_slash(canonical_base_url), "api/"), endpoint)
+
+
+def warm_operations_api_endpoints(
+    *,
+    anonymous_opener,
+    canonical_opener,
+    local_api_base_url: str,
+    canonical_base_url: str,
+    operations_sample_symbol: str | None,
+    timeout: int,
+    headers: dict[str, str],
+) -> dict[str, Any]:
+    warmups: dict[str, Any] = {}
+    for endpoint in API_ENDPOINTS.values():
+        if not endpoint.startswith("/dashboard/operations/"):
+            continue
+        request_endpoint = endpoint_with_operations_sample_symbol(endpoint, operations_sample_symbol)
+        local_url = _api_url(local_api_base_url, request_endpoint)
+        canonical_url = _canonical_api_url(canonical_base_url, request_endpoint)
+        local_payload, local_duration_seconds = _timed_request_json(
+            anonymous_opener,
+            local_url,
+            timeout=timeout,
+            headers=headers,
+        )
+        canonical_payload, canonical_duration_seconds = _timed_request_json(
+            canonical_opener,
+            canonical_url,
+            timeout=timeout,
+            headers=headers,
+        )
+        warmups[endpoint] = {
+            "request_endpoint": request_endpoint,
+            "local_url": local_url,
+            "canonical_url": canonical_url,
+            "local_duration_seconds": local_duration_seconds,
+            "canonical_duration_seconds": canonical_duration_seconds,
+            "local_payload_bytes": len(json.dumps(local_payload, ensure_ascii=False, default=str).encode("utf-8")),
+            "canonical_payload_bytes": len(
+                json.dumps(canonical_payload, ensure_ascii=False, default=str).encode("utf-8")
+            ),
+        }
+    return warmups
 
 
 def _load_previous_successful_manifest(output_root: Path) -> dict[str, Any] | None:
@@ -607,6 +696,15 @@ def verify_release_parity(args: argparse.Namespace) -> Path:
         raise ReleaseVerificationError("Repo build assets do not match canonical served assets")
 
     api_headers = _build_api_headers(args.beta_access_header_name, args.beta_access_key)
+    api_warmups = warm_operations_api_endpoints(
+        anonymous_opener=anonymous_opener,
+        canonical_opener=canonical_opener,
+        local_api_base_url=local_api_base_url,
+        canonical_base_url=canonical_base_url,
+        operations_sample_symbol=args.operations_sample_symbol,
+        timeout=args.operations_warmup_timeout_seconds,
+        headers=api_headers,
+    )
     api_fingerprints: dict[str, Any] = {}
     snapshot_paths: dict[str, str] = {
         "repo_index_html": str(artifact_root / "repo-index.html"),
@@ -617,15 +715,16 @@ def verify_release_parity(args: argparse.Namespace) -> Path:
     canonical_operations_payload: dict[str, Any] | None = None
     local_operations_payload: dict[str, Any] | None = None
     for slug, endpoint in API_ENDPOINTS.items():
-        local_url = parse.urljoin(local_api_base_url, endpoint.lstrip("/"))
-        canonical_url = parse.urljoin(_trailing_slash(parse.urljoin(canonical_base_url, "api/")), endpoint.lstrip("/"))
-        local_payload = _request_json(
+        request_endpoint = endpoint_with_operations_sample_symbol(endpoint, args.operations_sample_symbol)
+        local_url = _api_url(local_api_base_url, request_endpoint)
+        canonical_url = _canonical_api_url(canonical_base_url, request_endpoint)
+        local_payload, local_duration_seconds = _timed_request_json(
             anonymous_opener,
             local_url,
             timeout=args.timeout_seconds,
             headers=api_headers,
         )
-        canonical_payload = _request_json(
+        canonical_payload, canonical_duration_seconds = _timed_request_json(
             canonical_opener,
             canonical_url,
             timeout=args.timeout_seconds,
@@ -645,11 +744,14 @@ def verify_release_parity(args: argparse.Namespace) -> Path:
         api_fingerprints[endpoint] = {
             "local_url": local_url,
             "canonical_url": canonical_url,
+            "request_endpoint": request_endpoint,
             "local_fingerprint": local_fingerprint,
             "canonical_fingerprint": canonical_fingerprint,
             "match": local_fingerprint == canonical_fingerprint,
             "local_snapshot_path": str(local_snapshot_path),
             "canonical_snapshot_path": str(canonical_snapshot_path),
+            "local_duration_seconds": local_duration_seconds,
+            "canonical_duration_seconds": canonical_duration_seconds,
             "normalized_local_size": len(json.dumps(local_normalized, ensure_ascii=False)),
             "normalized_canonical_size": len(json.dumps(canonical_normalized, ensure_ascii=False)),
         }
@@ -720,6 +822,7 @@ def verify_release_parity(args: argparse.Namespace) -> Path:
         artifact_root=artifact_root,
         previous_successful_manifest=previous_successful_manifest,
         asset_sets=asset_sets,
+        api_warmups=api_warmups,
         api_fingerprints=api_fingerprints,
         operations_text_audit=operations_text_audit,
         artifact_paths=snapshot_paths,
@@ -760,6 +863,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--timeout-seconds",
         type=int,
         default=int(os.getenv("ASHARE_RELEASE_TIMEOUT_SECONDS", "20")),
+    )
+    parser.add_argument(
+        "--operations-sample-symbol",
+        default=(
+            os.getenv("ASHARE_RELEASE_OPERATIONS_SAMPLE_SYMBOL")
+            or os.getenv("ASHARE_OPERATIONS_PREWARM_SAMPLE_SYMBOL")
+            or "600519.SH"
+        ),
+    )
+    parser.add_argument(
+        "--operations-warmup-timeout-seconds",
+        type=int,
+        default=int(os.getenv("ASHARE_RELEASE_OPERATIONS_WARMUP_TIMEOUT_SECONDS", "90")),
     )
     return parser
 

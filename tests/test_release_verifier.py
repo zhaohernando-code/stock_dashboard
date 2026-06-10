@@ -7,8 +7,11 @@ from ashare_evidence.release_verifier import (
     API_ENDPOINTS,
     BANNED_USER_VISIBLE_TERMS,
     REQUIRED_TRACK_TERMS,
+    ReleaseVerificationError,
+    _request_text,
     audit_user_visible_operations_text,
     build_release_manifest,
+    endpoint_with_operations_sample_symbol,
     extract_asset_references,
     fingerprint_payload,
     merge_operations_audit_payload,
@@ -219,6 +222,37 @@ class ReleaseVerifierTests(unittest.TestCase):
         self.assertIn("/dashboard/operations/details?section=policy_governance", API_ENDPOINTS.values())
         self.assertIn("/dashboard/operations/details?section=simulation_workspace", API_ENDPOINTS.values())
 
+    def test_release_verifier_adds_operations_sample_symbol_to_bounded_endpoints(self) -> None:
+        self.assertEqual(
+            endpoint_with_operations_sample_symbol(
+                "/dashboard/operations/details?section=replay",
+                "002028.sz",
+            ),
+            "/dashboard/operations/details?section=replay&sample_symbol=002028.SZ",
+        )
+        self.assertEqual(
+            endpoint_with_operations_sample_symbol(
+                "/dashboard/operations/details?section=replay&sample_symbol=600519.SH",
+                "002028.SZ",
+            ),
+            "/dashboard/operations/details?section=replay&sample_symbol=600519.SH",
+        )
+        self.assertEqual(
+            endpoint_with_operations_sample_symbol("/dashboard/candidates", "002028.SZ"),
+            "/dashboard/candidates",
+        )
+
+    def test_request_text_wraps_raw_timeout_errors(self) -> None:
+        class TimeoutOpener:
+            def open(self, _request, *, timeout: int):  # noqa: ANN001
+                raise TimeoutError("timed out")
+
+        with self.assertRaisesRegex(
+            ReleaseVerificationError,
+            r"GET http://127.0.0.1:8000/slow failed after 3s: timed out",
+        ):
+            _request_text(TimeoutOpener(), "http://127.0.0.1:8000/slow", timeout=3)
+
     def test_operations_text_audit_payload_merge_preserves_required_and_banned_terms(self) -> None:
         summary = {
             "overview": {
@@ -260,6 +294,7 @@ class ReleaseVerifierTests(unittest.TestCase):
                 "commit_sha": "oldercommit",
             },
             asset_sets={"all_match": True},
+            api_warmups={"/dashboard/operations/details?section=portfolios": {"local_duration_seconds": 12.3}},
             api_fingerprints={"/dashboard/operations/summary": {"match": True}},
             operations_text_audit={"match": True},
             artifact_paths={"local_dashboard_operations": "/tmp/local-dashboard-operations.json"},
@@ -274,6 +309,10 @@ class ReleaseVerifierTests(unittest.TestCase):
         self.assertEqual(
             manifest["manifest_path"],
             "/repo/output/releases/20260426T123000Z-abcdef123456/manifest.json",
+        )
+        self.assertEqual(
+            manifest["api_warmups"],
+            {"/dashboard/operations/details?section=portfolios": {"local_duration_seconds": 12.3}},
         )
 
 

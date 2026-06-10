@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round24_replay_feedback_ready_projection_enrichment_published_real_data_verified
+Status: round25_release_verifier_timeout_governance_ds_reviewed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -774,6 +774,40 @@ Publish and real-data verification:
 - Playwright against real local frontend `http://127.0.0.1:5173/?view=shortpick&shortpickTab=replay` rendered `策略治理投影`, `页面不按 tracking_role 推断`, `读取 recommended_status，不读取 role name`, `主区策略`, and count `32`; no page errors or console errors; screenshot `/tmp/round24-shortpick-governance-real-local.png`.
 - Playwright against real canonical frontend `https://hernando-zhao.cn/projects/ashare-dashboard/?view=shortpick&shortpickTab=replay` with dev auth rendered the same real-data governance projection UI; no page errors or console errors; screenshot `/tmp/round24-shortpick-governance-real-canonical.png`.
 
+## Round 25 Review Result
+
+Status: completed DeepSeek review after blocker repair.
+
+Round 25 scope:
+
+- Hardened `src/ashare_evidence/release_verifier.py` so raw `TimeoutError` / `OSError` from URL requests are reported as `ReleaseVerificationError` with method, URL, and timeout seconds.
+- Added explicit operations `sample_symbol` handling for bounded `/dashboard/operations/*` verifier endpoints.
+- Added a two-stage operations verifier flow: first warm local and canonical operations endpoints with `--operations-warmup-timeout-seconds`, then run the normal shorter API fingerprint comparison on warmed caches.
+- Added `api_warmups`, request endpoints, durations, and payload byte counts to the release manifest so slow verifier endpoints are auditable.
+- Updated `scripts/publish-local-runtime.sh` to pass the release operations sample/warmup settings, pause scheduled refresh before publish, wait for scheduled refresh lock/process quiescence, restore the LaunchAgent through `cleanup_on_exit`, and acquire an atomic `mkdir`-based publish lock.
+- Added regression/static tests for timeout wrapping, operations endpoint sampling, manifest warmup records, publish quiescence, verifier arguments, and atomic publish locking.
+
+Investigation evidence:
+
+- Direct local endpoint probes showed cold operations details could exceed the old 20-second verifier budget; with an active scheduled refresh, `/dashboard/operations/details?section=portfolios&sample_symbol=600519.SH` exceeded even a 90-second warmup timeout.
+- Process inspection during the timeout showed `phase5-daily-refresh --analysis-only` and scheduled-refresh wrapper processes running with `run.lock` held by the scheduled refresh. This confirmed the full verifier must not run concurrently with DB-heavy scheduled refresh.
+- Because the current runtime had an active scheduled refresh, the full canonical verifier was not forced in this worktree. The new publish script now waits for quiescence and refuses to publish if the DB-heavy refresh remains active past `ASHARE_PUBLISH_SCHEDULED_REFRESH_QUIESCE_TIMEOUT_SECONDS`.
+
+Verification evidence:
+
+- `PYTHONPATH=src python3 -m pytest tests/test_release_verifier.py tests/test_publish_script_static.py` passed (`19 passed`).
+- `bash -n scripts/publish-local-runtime.sh` passed.
+- `python3 -m compileall -q src/ashare_evidence/release_verifier.py` passed.
+- `python3 -m ruff check src/ashare_evidence/release_verifier.py tests/test_release_verifier.py tests/test_publish_script_static.py` passed.
+- `git diff --check` passed.
+
+DeepSeek result:
+
+- Initial DS review: release verifier warmup/sample/duration changes were reasonable; publish pause/wait/resume ordering had no fatal issue, but the existing publish lock was a merge-blocking TOCTOU risk.
+- Follow-up fix: changed publish locking to atomic `mkdir "$PUBLISH_LOCK_DIR"` with stale-lock recovery and test coverage.
+- DS rereview: the publish-lock blocker is resolved; no remaining must-fix issue before merge.
+- Nonblocking DS followups: trap setup could be moved closer to lock acquisition in a later cleanup; stale-lock recovery can be tightened further for highly automated concurrent publish scenarios; `_request_text` and `_request_bytes` could share a helper.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -839,6 +873,8 @@ Publish and real-data verification:
 | Runtime publish and canonical browser verification | completed |
 | Replay-feedback ready projection enrichment | published_runtime_verified_real_data |
 | Round 24 DeepSeek review | completed |
+| Release verifier timeout governance | completed_ds_reviewed_pending_publish_verifier_quiescence |
+| Round 25 DeepSeek review | completed |
 | Runtime behavior changed | published_for_read_only_replay_feedback_projection_real_data_enrichment |
 | Registry changed | completed |
 | Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |

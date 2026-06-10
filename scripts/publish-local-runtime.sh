@@ -17,6 +17,8 @@ REFRESH_TIMEOUT_SECONDS="${ASHARE_PUBLISH_REFRESH_TIMEOUT_SECONDS:-900}"
 BACKUP_MODE="${ASHARE_PUBLISH_BACKUP_MODE:-skip}"
 VERIFY_MODE="${ASHARE_PUBLISH_VERIFY_MODE:-canonical}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+RELEASE_OPERATIONS_SAMPLE_SYMBOL="${ASHARE_RELEASE_OPERATIONS_SAMPLE_SYMBOL:-${ASHARE_OPERATIONS_PREWARM_SAMPLE_SYMBOL:-600519.SH}}"
+RELEASE_OPERATIONS_WARMUP_TIMEOUT_SECONDS="${ASHARE_RELEASE_OPERATIONS_WARMUP_TIMEOUT_SECONDS:-90}"
 FRONTEND_DIR="$REPO_ROOT/frontend"
 
 if [[ -f "$FRONTEND_ENV_FILE" ]]; then
@@ -71,29 +73,37 @@ ensure_frontend_dependencies() {
 }
 
 LOCK_DIR="$HOME/.codex-system/locks"
-PUBLISH_LOCK="$LOCK_DIR/publish.lock"
+PUBLISH_LOCK_DIR="$LOCK_DIR/publish.lock"
 LOCK_MAX_AGE_SECONDS=300
 
 acquire_publish_lock() {
   mkdir -p "$LOCK_DIR"
-  if [[ -f "$PUBLISH_LOCK" ]]; then
+  if mkdir "$PUBLISH_LOCK_DIR" 2>/dev/null; then
+    printf "pid=%s\nstarted=%s\noperation=publish\n" "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$PUBLISH_LOCK_DIR/meta"
+    return 0
+  fi
+  if [[ -d "$PUBLISH_LOCK_DIR" ]]; then
     local lock_age
-    lock_age="$(($(date +%s) - $(stat -f %m "$PUBLISH_LOCK" 2>/dev/null || date +%s)))"
+    lock_age="$(($(date +%s) - $(stat -f %m "$PUBLISH_LOCK_DIR" 2>/dev/null || date +%s)))"
     if [[ "$lock_age" -lt "$LOCK_MAX_AGE_SECONDS" ]]; then
       echo "Refusing to publish: lock file exists (age=${lock_age}s)." >&2
-      echo "Another publish may be in progress. Remove $PUBLISH_LOCK if this is stale." >&2
+      echo "Another publish may be in progress. Remove $PUBLISH_LOCK_DIR if this is stale." >&2
       exit 1
     fi
-    echo "Stale lock file (age=${lock_age}s) — overwriting." >&2
+    echo "Stale lock directory (age=${lock_age}s) — overwriting." >&2
+    rm -rf "$PUBLISH_LOCK_DIR"
+    if mkdir "$PUBLISH_LOCK_DIR" 2>/dev/null; then
+      printf "pid=%s\nstarted=%s\noperation=publish\n" "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$PUBLISH_LOCK_DIR/meta"
+      return 0
+    fi
   fi
-  printf "pid=%s\nstarted=%s\noperation=publish\n" "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$PUBLISH_LOCK"
+  echo "Refusing to publish: unable to acquire publish lock at $PUBLISH_LOCK_DIR." >&2
+  exit 1
 }
 
 release_publish_lock() {
-  rm -f "$PUBLISH_LOCK"
+  rm -rf "$PUBLISH_LOCK_DIR"
 }
-
-trap release_publish_lock EXIT
 
 DIRTY_STATUS="$(git -C "$REPO_ROOT" status --short --untracked-files=normal)"
 if [[ -n "$DIRTY_STATUS" ]]; then
@@ -102,11 +112,15 @@ if [[ -n "$DIRTY_STATUS" ]]; then
   exit 1
 fi
 
+acquire_publish_lock
+
 # Pause scheduled refresh during publish to avoid concurrent DB writes
 SCHEDULED_LABEL="com.codex.ashare-dashboard.scheduled-refresh"
 SCHEDULED_PLIST="$HOME/Library/LaunchAgents/${SCHEDULED_LABEL}.plist"
-echo "[publish] Pausing scheduled-refresh"
-launchctl stop "$SCHEDULED_LABEL" 2>/dev/null || true
+SCHEDULED_REFRESH_PAUSED=0
+SCHEDULED_REFRESH_STATE_DIR="${ASHARE_SCHEDULED_REFRESH_STATE_DIR:-$HOME/.cache/codex/ashare-dashboard-refresh}"
+SCHEDULED_RUN_LOCK_DIR="$SCHEDULED_REFRESH_STATE_DIR/run.lock"
+SCHEDULED_REFRESH_QUIESCE_TIMEOUT_SECONDS="${ASHARE_PUBLISH_SCHEDULED_REFRESH_QUIESCE_TIMEOUT_SECONDS:-180}"
 
 ensure_scheduled_refresh_calendar() {
   if [[ ! -f "$SCHEDULED_PLIST" ]]; then
@@ -153,6 +167,70 @@ with path.open("wb") as handle:
     plistlib.dump(payload, handle)
 PY
 }
+
+scheduled_refresh_lock_active() {
+  if [[ ! -f "$SCHEDULED_RUN_LOCK_DIR/pid" ]]; then
+    return 1
+  fi
+  local lock_pid
+  lock_pid="$(cat "$SCHEDULED_RUN_LOCK_DIR/pid" 2>/dev/null || true)"
+  [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null
+}
+
+scheduled_refresh_process_active() {
+  pgrep -f "$RUNTIME_ROOT/scripts/run-scheduled-refresh.sh" >/dev/null 2>&1 && return 0
+  pgrep -f "ashare_evidence.cli phase5-daily-refresh .*${RUNTIME_ROOT}/data/ashare_dashboard.db" >/dev/null 2>&1 && return 0
+  pgrep -f "ashare_evidence.cli refresh-runtime-data .*${RUNTIME_ROOT}/data/ashare_dashboard.db" >/dev/null 2>&1 && return 0
+  return 1
+}
+
+wait_for_scheduled_refresh_quiescent() {
+  local deadline=$((SECONDS + SCHEDULED_REFRESH_QUIESCE_TIMEOUT_SECONDS))
+  while (( SECONDS < deadline )); do
+    if ! scheduled_refresh_lock_active && ! scheduled_refresh_process_active; then
+      return 0
+    fi
+    sleep 2
+  done
+  echo "Scheduled refresh is still running after ${SCHEDULED_REFRESH_QUIESCE_TIMEOUT_SECONDS}s; refusing to publish while DB-heavy refresh is active." >&2
+  return 1
+}
+
+resume_scheduled_refresh() {
+  if [[ "$SCHEDULED_REFRESH_PAUSED" != "1" ]]; then
+    return 0
+  fi
+  echo "[publish] Resuming scheduled-refresh"
+  if [[ ! -f "$SCHEDULED_PLIST" ]]; then
+    echo "Scheduled refresh plist missing: $SCHEDULED_PLIST" >&2
+    return 1
+  fi
+  ensure_scheduled_refresh_calendar
+  launchctl bootout "gui/$(id -u)" "$SCHEDULED_PLIST" 2>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"
+  # Do NOT kickstart here. The agent is loaded with RunAtLoad=false; its
+  # StartCalendarInterval/StartInterval ticks plus the .ok slot guard fire
+  # exactly one phase5-daily-refresh per trading day. Force-starting on every
+  # publish would launch a ~50min full refresh that holds the DB lock and times
+  # out the dashboard (the original outage).
+  SCHEDULED_REFRESH_PAUSED=0
+}
+
+cleanup_on_exit() {
+  local status=$?
+  if [[ "${SCHEDULED_REFRESH_PAUSED:-0}" == "1" ]]; then
+    resume_scheduled_refresh || true
+  fi
+  release_publish_lock
+  exit "$status"
+}
+
+trap cleanup_on_exit EXIT
+
+echo "[publish] Pausing scheduled-refresh"
+launchctl stop "$SCHEDULED_LABEL" 2>/dev/null || true
+SCHEDULED_REFRESH_PAUSED=1
+wait_for_scheduled_refresh_quiescent
 
 COMMIT_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 
@@ -294,20 +372,6 @@ if [[ "$repo_assets" != "$served_assets" ]]; then
   exit 1
 fi
 
-echo "[publish] Resuming scheduled-refresh"
-if [[ ! -f "$SCHEDULED_PLIST" ]]; then
-  echo "Scheduled refresh plist missing: $SCHEDULED_PLIST" >&2
-  exit 1
-fi
-ensure_scheduled_refresh_calendar
-launchctl bootout "gui/$(id -u)" "$SCHEDULED_PLIST" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"
-# Do NOT kickstart here. The agent is loaded with RunAtLoad=false; its
-# StartCalendarInterval/StartInterval ticks plus the .ok slot guard fire
-# exactly one phase5-daily-refresh per trading day. Force-starting on every
-# publish would launch a ~50min full refresh that holds the DB lock and times
-# out the dashboard (the original outage).
-
 mkdir -p "$RUNTIME_ROOT/output/releases"
 if [[ "$VERIFY_MODE" == "canonical" ]]; then
   echo "[publish] Verifying repo/runtime/canonical parity"
@@ -320,7 +384,9 @@ if [[ "$VERIFY_MODE" == "canonical" ]]; then
       --local-api-base-url "$LOCAL_API_BASE_URL" \
       --canonical-base-url "$CANONICAL_BASE_URL" \
       --expected-commit-sha "$COMMIT_SHA" \
-      --release-output-root "$RUNTIME_ROOT/output/releases"
+      --release-output-root "$RUNTIME_ROOT/output/releases" \
+      --operations-sample-symbol "$RELEASE_OPERATIONS_SAMPLE_SYMBOL" \
+      --operations-warmup-timeout-seconds "$RELEASE_OPERATIONS_WARMUP_TIMEOUT_SECONDS"
   )"
 elif [[ "$VERIFY_MODE" == "local" ]]; then
   echo "[publish] Canonical release verifier skipped (ASHARE_PUBLISH_VERIFY_MODE=local)"
