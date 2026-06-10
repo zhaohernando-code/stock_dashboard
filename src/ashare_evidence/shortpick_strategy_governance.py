@@ -704,6 +704,103 @@ def build_shortpick_historical_backtest_generation_requests(
     }
 
 
+def build_shortpick_retrospective_forward_replay_requests(
+    control_rules: list[dict[str, Any]],
+    paper_tracking: dict[str, Any],
+    *,
+    generated_at: str | None = None,
+    replay_source: str = "shortpick_paper_tracking_ledger",
+) -> dict[str, Any]:
+    """Build retrospective forward replay requests without executing them."""
+
+    signal_dates = sorted(
+        {
+            _date_part(item.get("signal_date") or item.get("run_date"))
+            for item in paper_tracking.get("items") or []
+            if isinstance(item, dict) and _date_part(item.get("signal_date") or item.get("run_date"))
+        }
+    )
+    requests: list[dict[str, Any]] = []
+    blocked_rules: list[dict[str, Any]] = []
+
+    for rule in [_dict(value) for value in control_rules if isinstance(value, dict)]:
+        control_group_id = str(rule.get("control_group_id") or "")
+        rule_signature = str(rule.get("rule_signature") or "")
+        rule_defined_at = _date_part(rule.get("rule_defined_at"))
+        if not control_group_id or not rule_signature:
+            blocked_rules.append(
+                {
+                    "control_group_id": control_group_id,
+                    "rule_signature": rule_signature,
+                    "blocker": "missing_control_group_id_or_rule_signature",
+                }
+            )
+            continue
+        if not rule_defined_at:
+            blocked_rules.append(
+                {
+                    "control_group_id": control_group_id,
+                    "rule_signature": rule_signature,
+                    "blocker": "missing_rule_defined_at",
+                }
+            )
+            continue
+
+        replay_dates = [value for value in signal_dates if value < rule_defined_at]
+        if not replay_dates:
+            blocked_rules.append(
+                {
+                    "control_group_id": control_group_id,
+                    "rule_signature": rule_signature,
+                    "rule_defined_at": rule_defined_at,
+                    "blocker": "no_paper_tracking_signal_dates_before_rule_defined_at",
+                }
+            )
+            continue
+
+        request_payload = {
+            "control_group_id": control_group_id,
+            "rule_signature": rule_signature,
+            "rule_defined_at": rule_defined_at,
+            "replay_start_date": replay_dates[0],
+            "replay_end_date": replay_dates[-1],
+            "source_signal_count": len(replay_dates),
+            "replay_source": replay_source,
+        }
+        requests.append(
+            {
+                **request_payload,
+                "request_id": _retrospective_forward_replay_request_id(request_payload),
+                "evidence_basis": "retrospective_forward_replay",
+                "retrospective": True,
+                "source_feature_cutoff_policy": "signal_date_available_inputs_only",
+                "generated_at": generated_at,
+                "rule": rule,
+                "leakage_audit_status": "not_run",
+                "leakage_audit_reasons": [],
+                "true_forward_tracking_eligible": False,
+                "paper_tracking_write_policy": "forbidden",
+            }
+        )
+
+    return {
+        "status": "ready" if requests else "blocked",
+        "evidence_basis": "retrospective_forward_replay",
+        "retrospective": True,
+        "replay_source": replay_source,
+        "paper_tracking_signal_date_count": len(signal_dates),
+        "paper_tracking_observed_start_date": signal_dates[0] if signal_dates else None,
+        "paper_tracking_observed_end_date": signal_dates[-1] if signal_dates else None,
+        "request_count": len(requests),
+        "blocked_rule_count": len(blocked_rules),
+        "requests": requests,
+        "blocked_rules": blocked_rules,
+        "execution_policy": "request_plan_only_no_replay_execution_no_data_write",
+        "paper_tracking_write_policy": "forbidden",
+        "true_forward_tracking_eligible": False,
+    }
+
+
 def _rule_signature(payload: dict[str, Any]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -878,6 +975,11 @@ def _historical_backtest_argv(payload: dict[str, Any], *, output_path: str) -> l
         "--output",
         output_path,
     ]
+
+
+def _retrospective_forward_replay_request_id(payload: dict[str, Any]) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return "shortpick-retrospective-forward-replay-request:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
 
 
 def _strategy_metadata(item: dict[str, Any]) -> dict[str, Any]:
