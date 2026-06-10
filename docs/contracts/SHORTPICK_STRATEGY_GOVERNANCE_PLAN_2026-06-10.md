@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round22_frontend_strategy_governance_projection_render_completed_ds_review_passed
+Status: round23_runtime_publish_completed_local_and_canonical_browser_verified
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -103,11 +103,11 @@ The next governance package should adopt four principles.
 
 | ID | Work Item | Status | Notes |
 | --- | --- | --- | --- |
-| P4.1 | Add strategy status labels | completed_partial_live_publish_pending | Added backend view-projection label metadata for governance status and evidence basis, plus frontend label/color helpers for active, observe, retire-candidate, retired, historical-only, retrospective-only, and true-forward states. The replay decision page now renders strategy governance projection labels; live deployment remains pending. |
-| P4.2 | Add separate display sections for evidence basis | completed_partial_live_publish_pending | Added backend view-projection sections that split true-forward tracking, retrospective replay, and historical backtest rows while preserving primary/archive membership in each section. The replay decision page now renders evidence-basis summary; live deployment remains pending. |
-| P4.3 | Add retirement archive view or archive summary rows | completed_partial_live_publish_pending | Added archive summary rows grouped by evidence basis, strategy family, and entry-price source while preserving detailed archive records. The replay decision page now renders archive fallback rows; live deployment remains pending. |
-| P4.4 | Add leakage and coverage notes | completed_partial_live_publish_pending | Added leakage/coverage note metadata to strategy view projection and archive records. Retrospective rows default to showing signal-date cutoff policy and leakage audit status. The replay decision page now renders audit rows; live deployment remains pending. |
-| P4.5 | Update analytical report generation | completed_partial_live_publish_pending | Added replay readout/report projection that reads strategy governance recommendations, view sections, archive summaries, and leakage notes from governance contract fields. `/shortpick-lab/replay-feedback` builds a read-only governance source from the already loaded paper-tracking ledger when no persisted governance payload exists, and the Shortpick replay decision page renders it. Live deployment remains pending. |
+| P4.1 | Add strategy status labels | published_runtime_verified | Added backend view-projection label metadata for governance status and evidence basis, plus frontend label/color helpers for active, observe, retire-candidate, retired, historical-only, retrospective-only, and true-forward states. The replay decision page now renders strategy governance projection labels; runtime and canonical browser verification completed for the UI path. |
+| P4.2 | Add separate display sections for evidence basis | published_runtime_verified | Added backend view-projection sections that split true-forward tracking, retrospective replay, and historical backtest rows while preserving primary/archive membership in each section. The replay decision page now renders evidence-basis summary; runtime and canonical browser verification completed for the UI path. |
+| P4.3 | Add retirement archive view or archive summary rows | published_runtime_verified | Added archive summary rows grouped by evidence basis, strategy family, and entry-price source while preserving detailed archive records. The replay decision page now renders archive fallback rows; runtime and canonical browser verification completed for the UI path. |
+| P4.4 | Add leakage and coverage notes | published_runtime_verified | Added leakage/coverage note metadata to strategy view projection and archive records. Retrospective rows default to showing signal-date cutoff policy and leakage audit status. The replay decision page now renders audit rows; runtime and canonical browser verification completed for the UI path. |
+| P4.5 | Update analytical report generation | published_runtime_verified | Added replay readout/report projection that reads strategy governance recommendations, view sections, archive summaries, and leakage notes from governance contract fields. `/shortpick-lab/replay-feedback` builds a read-only governance source from the already loaded paper-tracking ledger when no persisted governance payload exists, and the Shortpick replay decision page renders it. Runtime and canonical browser verification completed for the UI path. |
 
 ## Retirement Threshold Draft
 
@@ -720,6 +720,29 @@ DeepSeek result:
 - Browser verification: local Vite + API run with controlled replay endpoint fixtures rendered `策略治理投影`, `页面不按 tracking_role 推断`, `读取 recommended_status，不读取 role name`, `审计 / 归档`, and `retro-candidate`; screenshot saved at `/tmp/round22-shortpick-governance-ui-mocked-clean.png`.
 - Remaining follow-up: live deployment verification is required before claiming user-visible production availability.
 
+## Round 23 Publish Result
+
+Status: completed local runtime publish and canonical browser verification.
+
+Publish scope:
+
+- Published commit `b6948c8fff828895f0c85f0af86a4ed93a1cee3f` to local runtime `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard`.
+- Used `ASHARE_PUBLISH_REFRESH_MODE=skip` because this round only changed frontend rendering and read-only projection code.
+- First canonical release verifier attempt timed out while fingerprinting local API JSON, after runtime sync and LaunchAgent restart had already completed. The root cause has not yet been investigated and may affect later full canonical publish verification. The follow-up local publish closeout succeeded and wrote `output/releases/local-20260610T075038Z-b6948c8.json`; this is accepted as an interim closeout for this UI-path publish, not as a replacement for full canonical verifier health.
+
+Verification evidence:
+
+- Runtime manifest `latest-successful.commit` now points to `b6948c8fff828895f0c85f0af86a4ed93a1cee3f`.
+- Runtime health passed at `http://127.0.0.1:8000/health`; runtime frontend served asset hash `assets/index-2b30162a.js`.
+- Canonical `https://hernando-zhao.cn/projects/ashare-dashboard/` with dev auth served the same new asset hash `assets/index-2b30162a.js`.
+- Playwright against runtime frontend `http://127.0.0.1:5173/?view=shortpick&shortpickTab=replay` with controlled replay endpoint fixtures rendered `策略治理投影`, `页面不按 tracking_role 推断`, `读取 recommended_status，不读取 role name`, `审计 / 归档`, and `retro-candidate`; no page errors or console errors; screenshot `/tmp/round22-shortpick-governance-ui-runtime.png`.
+- Playwright against canonical frontend `https://hernando-zhao.cn/projects/ashare-dashboard/?view=shortpick&shortpickTab=replay` with dev auth and controlled replay endpoint fixtures rendered the same governance projection UI; no page errors or console errors; screenshot `/tmp/round22-shortpick-governance-ui-canonical.png`.
+
+Data-source caveat:
+
+- The real runtime `/shortpick-lab/replay-feedback` response currently does not include `overall.strategy_governance_reporting`, so the unmocked page may still show the guarded missing-projection state until runtime data contains a paper-tracking/governance source suitable for the Round 21 fallback.
+- When real runtime data eventually includes `overall.strategy_governance_reporting`, the already-published frontend code path should render the projection without another UI code change. A follow-up round must still verify that transition against unmocked runtime data before claiming full real-data end-to-end completion.
+
 ## Validation To Run For This Planning Task
 
 - `git status --short --branch`
@@ -768,21 +791,22 @@ DeepSeek result:
 | Round 14 DeepSeek review | completed |
 | P3.6 true forward tracking activation plan | completed_partial_runtime_wiring_pending |
 | Round 15 DeepSeek review | completed |
-| P4.1 strategy status labels | completed_partial_live_publish_pending |
+| P4.1 strategy status labels | published_runtime_verified |
 | Round 16 DeepSeek review | completed |
-| P4.2 evidence-basis display sections | completed_partial_live_publish_pending |
+| P4.2 evidence-basis display sections | published_runtime_verified |
 | Round 17 DeepSeek review | completed |
-| P4.3 archive summary rows | completed_partial_live_publish_pending |
+| P4.3 archive summary rows | published_runtime_verified |
 | Round 18 DeepSeek review | completed |
-| P4.4 leakage and coverage notes | completed_partial_live_publish_pending |
+| P4.4 leakage and coverage notes | published_runtime_verified |
 | Round 19 DeepSeek review | completed |
-| P4.5 analytical report governance projection | completed_partial_live_publish_pending |
+| P4.5 analytical report governance projection | published_runtime_verified |
 | Round 20 DeepSeek review | completed |
-| Replay-feedback governance source wiring | completed_partial_live_publish_pending |
+| Replay-feedback governance source wiring | published_runtime_verified |
 | Round 21 DeepSeek review | completed |
-| Frontend governance projection rendering | completed_partial_live_publish_pending |
+| Frontend governance projection rendering | published_runtime_verified |
 | Round 22 DeepSeek review | completed |
-| Runtime behavior changed | completed_for_read_only_replay_feedback_projection |
+| Runtime publish and canonical browser verification | completed |
+| Runtime behavior changed | completed_for_read_only_replay_feedback_projection_ui_path_published_real_data_missing |
 | Registry changed | completed |
 | Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
 | Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_and_governance_projection_rendering |
