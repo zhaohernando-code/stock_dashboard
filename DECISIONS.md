@@ -1,5 +1,17 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-06-10T12:35:00+08:00] Short Pick strategy governance must land retirement and retrospective-replay contracts before implementation:
+
+首月短投前向验证分析显示，冻结主线存在均值为正但中位数为负、少数大赢家拉高均值、北方华创重复暴露亏损等问题。后续治理不能直接靠临时前端隐藏、临时删策略或把事后新增规则伪装成真实前向验证来解决。本轮新增合同计划 `docs/contracts/SHORTPICK_STRATEGY_GOVERNANCE_PLAN_2026-06-10.md`，作为短投策略退役、回放补算、新诊断对照组和长期收益评估的实现前置。
+
+补充说明
+- 弱策略后续可以从 active generation、热路径统计和前端主视图退役，但不得无标准物理抹除唯一证据链。正式退役必须先有确定性门槛、`strategy_retirement:v1` artifact、证据快照引用和决策日志。
+- 新增同股冷却、回撤/反转过滤、重复暴露限制等诊断对照组，可以跑历史回测和既有前向区间的 retrospective replay，但必须显式标注 `historical_backtest` / `retrospective_forward_replay` / `true_forward_tracking`，不得把事后补算行写成当时已经真实前向跟踪。
+- 真前向跟踪从控制组 ID、规则签名和 artifact family 注册后开始计算；注册日前的补算只能作为 post-hoc replay 或 historical research evidence。
+- 新增 artifact family、evaluation baseline、control group ID 和 schema 必须遵守 registry-first。Markdown 计划不是机器真值源；实现前仍需进入 JSON registry / schema 或对应可检查 allowlist。
+- 在 registry、退役 artifact 和前端 basis 展示完成前，现有策略生成和展示语义保持不变，不因本计划自动退役、重算、隐藏或替换主线。
+- Future strategy questions 必须回接 Phase 5 gate：优先 after-cost excess、20/40 日成熟样本、中位数、胜率、回撤、尾部依赖、regime stability，以及相对注册 baseline 的稳定领先，不另起一套不受合同约束的晋级体系。
+
 [2026-05-20T00:30:00+08:00] Autonomous flow implementation starts with registry and claim gate before scheduler code:
 
 Trial C 收敛了 Trial B 留下的实现前置架构决策。后续自运行流程实现的顺序固定为：先建立机器 registry 与 checker，再实现公共 claim ceiling gate，之后才实现 Phase 5 cycle ledger、recovery ticket、gate readout 的写入路径，最后接入 scheduler、projection 和 publish verifier。
