@@ -134,6 +134,13 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
                     symbol: "300002.SZ",
                   },
                 ];
+                const replayRow = {
+                  tracking_group: "market_factor_control",
+                  control_label: "同股冷却过滤",
+                  selection_label: "后验前向回放：同股冷却过滤",
+                  name: "回放",
+                  symbol: "600183.SH",
+                };
                 console.log(JSON.stringify({
                   frozenGroups: frozen.map((item) => item.tracking_group),
                   frozenNames: frozen.map((item) => item.name),
@@ -146,6 +153,8 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
                   latestVisibleNames: helpers.latestPaperTrackingChoices(latestRows, { id: 20, run_date: "2026-06-20" }).map((item) => item.name),
                   frozenVisibleNames: helpers.latestFrozenPaperTrackingChoices(latestRows).map((item) => item.name),
                   allArchivedChoices: helpers.latestPaperTrackingChoices([{ ...latestRows[0], governance_status: "inventory_archived" }], { id: 20, run_date: "2026-06-20" }).length,
+                  replayRecordGroupLabel: helpers.paperTrackingRecordGroupLabel(replayRow),
+                  replayGroupFilterMatches: helpers.paperTrackingGroupFilterMatches(replayRow, "同股冷却过滤"),
                 }));
                 """
             )
@@ -178,3 +187,5 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
         self.assertEqual(payload["latestVisibleNames"], ["仍可显示"])
         self.assertEqual(payload["frozenVisibleNames"], ["仍可显示"])
         self.assertEqual(payload["allArchivedChoices"], 0)
+        self.assertEqual(payload["replayRecordGroupLabel"], "同股冷却过滤")
+        self.assertTrue(payload["replayGroupFilterMatches"])

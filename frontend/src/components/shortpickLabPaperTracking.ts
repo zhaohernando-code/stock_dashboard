@@ -40,6 +40,11 @@ export function paperTrackingGroupLabel(value?: string | null): string {
   return "纸面跟踪";
 }
 
+export function paperTrackingRecordGroupLabel(item: ShortpickPaperTrackingItem): string {
+  const strategyFilterKey = paperTrackingStrategyFilterKey(item);
+  return strategyFilterKey || paperTrackingGroupLabel(item.tracking_group);
+}
+
 export function paperTrackingGroupColor(value?: string | null): string {
   if (value === "llm_paper_control") return "blue";
   if (value === "market_factor_control") return "cyan";

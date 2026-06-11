@@ -65,6 +65,7 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("回撤/反转过滤", component_source)
         self.assertIn("重复暴露限制", component_source)
         self.assertIn("paperTrackingGroupFilterMatches(item, ledgerGroupFilter)", component_source)
+        self.assertIn("paperTrackingRecordGroupLabel(item)", component_source)
         self.assertIn("入场状态", component_source)
         self.assertIn("买入口径", component_source)
         self.assertIn("机械5日已退出", component_source)

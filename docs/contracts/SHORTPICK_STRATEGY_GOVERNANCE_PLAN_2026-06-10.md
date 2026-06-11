@@ -1942,6 +1942,12 @@ Acceptance criteria for Round 56:
 - The paper-tracking page can show inventory archive counts from durable artifacts.
 - Runtime DB paper-tracking rows are not mutated by the code change; durable inventory decisions are supplied through artifacts.
 
+Post-merge paper-tracking record-group correction:
+
+- The three retrospective control display names (`同股冷却过滤`, `回撤/反转过滤`, `重复暴露限制`) remain in the existing `记录分组` filter rather than a separate rule-name filter.
+- Paper-tracking rows now render the same record-group display field with `paperTrackingRecordGroupLabel(item)`, so retrospective replay rows show the concrete control name while preserving the underlying governance `tracking_group` for statistics and headline eligibility.
+- Verification: `pytest -q tests/test_frontend_shortpick_static.py tests/test_frontend_shortpick_paper_tracking_helpers.py`, `npm run build`, and `git diff --check` passed. A focused DeepSeek read-only review returned `PASS`.
+
 ## Validation To Run For This Planning Task
 
 

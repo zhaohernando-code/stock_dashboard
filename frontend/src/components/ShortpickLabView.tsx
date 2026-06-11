@@ -121,6 +121,7 @@ import {
   paperTrackingGroupLabel,
   paperTrackingMechanical10dExitTrack,
   paperTrackingPrimaryExitTrack,
+  paperTrackingRecordGroupLabel,
   paperTrackingSearchText,
   paperTrackingSignalDate,
   paperTrackingStatusLabel,
@@ -1036,7 +1037,7 @@ function PaperTrackingTab({
         <Space direction="vertical" size={0}>
           <Text strong>{item.name} · {item.symbol}</Text>
           <Space wrap size={4}>
-            <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
+            <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingRecordGroupLabel(item)}</Tag>
             {item.evidence_basis ? (
               <Tag color={strategyEvidenceBasisColor(item.evidence_basis)}>
                 {strategyEvidenceBasisLabel(item.evidence_basis)}
@@ -1431,7 +1432,7 @@ function PaperTrackingTab({
                     <div className="shortpick-paper-mobile-head">
                       <Text strong>{item.name} · {item.symbol}</Text>
                       <Space wrap size={4}>
-                        <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
+                        <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingRecordGroupLabel(item)}</Tag>
                         {item.evidence_basis ? (
                           <Tag color={strategyEvidenceBasisColor(item.evidence_basis)}>
                             {strategyEvidenceBasisLabel(item.evidence_basis)}
@@ -1593,7 +1594,7 @@ function LatestSimulationTradeCard({
                 <div className="shortpick-choice-copy">
                   <Space wrap size={6}>
                     <Text strong>{item.name} · {item.symbol}</Text>
-                    <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
+                    <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingRecordGroupLabel(item)}</Tag>
                     {index === 0 && item.tracking_group === "frozen_strategy" ? <Tag color="purple">冻结规则优先</Tag> : null}
                     {item.tracking_group === "frozen_strategy_v2" ? <Tag color="geekblue">开盘买候选</Tag> : null}
                   </Space>
@@ -1627,7 +1628,7 @@ function LatestSimulationTradeCard({
                         <div className="shortpick-choice-copy">
                           <Space wrap size={6}>
                             <Text strong>{item.name} · {item.symbol}</Text>
-                            <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
+                            <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingRecordGroupLabel(item)}</Tag>
                           </Space>
                           <Text type="secondary">{item.selection_label || "纸面对照"} · {paperTrackingExpectedEntryText(item)}</Text>
                           <Text type="secondary">{item.entry_rule || "次一交易日收盘买入"}</Text>
