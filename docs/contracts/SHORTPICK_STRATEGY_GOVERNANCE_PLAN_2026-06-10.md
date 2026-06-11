@@ -1986,10 +1986,13 @@ Verification:
 
 Status:
 
-- Implementation completed in task worktree `task/20260611-paper-tracking-selector-and-timeout-ea420a`.
+- Implementation merged at commit `96457bff4dfdf015f85704160be56c94366f0208`.
 - DeepSeek initial review found two blockers: compact summary still performed full combined-ledger row projection before discarding output, and the removed SQL row cap lacked an explicit regression guard. Both were fixed.
 - DeepSeek focused re-review passed after the fix and found no remaining blocker before merge.
-- Runtime publish pending after merge.
+- Runtime publish completed. Release parity manifest: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260611T161728Z-96457bff4dfd/manifest.json`.
+- Deploy verification passed `19/19`.
+- Canonical API verification after publish: `/shortpick-lab/paper-tracking/summary` returned `200` in `4.217s`, `12137` bytes, `items=[]`, and combined-ledger count keys only; `/shortpick-lab/paper-tracking` returned `200` in `6.775s`, `2738365` bytes, and `337` items without truncation.
+- Canonical browser verification passed on `https://hernando-zhao.cn/projects/ashare-dashboard/?view=shortpick&shortpickTab=paper-tracking&symbol=002028.SZ`: `累计纸面收益` defaults to `冻结策略`; `策略退出效果排名` defaults to `均值`; metric options include `均值`, `中位收益`, and `胜率`; chart click links table filters and exposes `清除图表联动筛选`, and clearing returns the record-group filter to the unscoped state.
 
 
 - `git status --short --branch`
