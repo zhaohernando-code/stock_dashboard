@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round54_true_forward_control_runtime_wiring_ds_reviewed_ready_to_merge
+Status: round55_plan_status_reconciled_ds_reviewed_ready_to_merge
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -86,7 +86,7 @@ The next governance package should adopt four principles.
 | P2.2 | Compute retirement evidence pack per strategy | completed | Added a read-only builder in `src/ashare_evidence/shortpick_strategy_governance.py` that aggregates paper-tracking rows into evidence packs with evidence basis, forward mean/median/win rate, completed sample count, additive drawdown, tail dependence, same-symbol loss repeats, and optional historical/baseline evidence references. It does not mark `retired`, write runtime data, or change frontend/API behavior. |
 | P2.3 | Mark candidates as `active`, `observe`, `retire_candidate`, or `retired` | completed_runtime_artifact_source_wired_ds_reviewed | Added a read-only status recommendation layer. Metrics alone can only produce `active`, `observe`, or `retire_candidate`; `retired` requires a valid `strategy_retirement:v1` / `shortpick_strategy_retirement` artifact plus `decision_log_ref`. Round 38 adds a retirement artifact writer; Round 39 wires runtime/API artifact-source discovery into status recommendation projection and paper-tracking governance partition. |
 | P2.4 | Remove retired strategies from active generation | completed_generation_path_wired_ds_reviewed | Added a read-only generation eligibility filter that excludes only `recommended_status=retired` by default and keeps `retire_candidate`, `observe`, and `untracked` eligible. Archive rebuild can explicitly pass `include_retired=True`. Round 39 lets API projections consume retirement artifacts. Round 40 wires the active shortpick market-factor generation paths to read the runtime retirement artifact source, apply the eligibility filter before validation/commit, delete excluded in-transaction candidates, and report `generation_governance` in overlay summaries. |
-| P2.5 | Remove retired strategies from primary frontend views | partial | Added a read-only view projection helper that sends `retired` rows to archive and keeps `active`, `observe`, and `retire_candidate` in primary projection. It deliberately omits heavy horizon evidence and retirement artifact refs. Frontend/runtime wiring remains pending. |
+| P2.5 | Remove retired strategies from primary frontend views | completed_runtime_frontend_wired_published_verified | Initial Round 8 helper sent `retired` rows to archive. Later rounds completed runtime/frontend wiring: Round 29 added paper-tracking governance partitioning, Round 30 rendered deprecated/archive buckets, P4.1-P4.5 added governance/evidence-basis reporting, and Rounds 21-24 published and runtime-verified the replay-feedback governance projection. The later Round 28 amendment also moves `retire_candidate` and `inventory_archived` rows out of the primary paper-tracking view; P2.7 tracks the remaining continued-advancement/generation question separately. |
 | P2.6 | Preserve archived statistics and evidence refs | completed | Added a read-only archive record helper that builds audit records only from archive rows and preserves signal counts, completed sample counts, horizon summaries, historical evidence refs, baseline refs, and retirement artifact refs. It does not delete or persist data. |
 
 ### P3 - New Diagnostic Controls
@@ -1871,6 +1871,37 @@ Acceptance criteria for Round 54:
 - Retrospective artifacts and combined-ledger artifacts remain research evidence and are not consulted for runtime selection.
 - No existing runtime database rows, replay artifacts, or paper-tracking rows are changed by this implementation round.
 
+## Round 55 - Plan Status Reconciliation
+
+Round 55 scope:
+
+- Reconcile stale plan statuses after Round 54 without changing runtime code or data.
+- Mark items complete only when later rounds already supplied implementation, frontend/runtime wiring, and verification evidence.
+- Preserve real remaining blockers instead of hiding them under a broad "completed" label.
+
+Implemented in Round 55:
+
+- Updated P2.5 from `partial` to `completed_runtime_frontend_wired_published_verified`.
+- The completion basis is the later implementation chain already recorded in this plan:
+  - Round 29 wired paper-tracking governance partitioning into the API ledger.
+  - Round 30 rendered deprecated/archive buckets and removed deprecated rows from latest simulated trade choices.
+  - P4.1-P4.5 added strategy labels, evidence-basis sections, archive summaries, leakage/coverage notes, and report projection.
+  - Rounds 21-24 published and runtime-verified the replay-feedback governance projection.
+- Kept P2.7 as not fully complete because the plan still separates frontend hiding from the remaining continued-advancement/generation policy for `retire_candidate`.
+- Kept P2.8 as not fully complete because no durable real inventory decision source has yet supplied explicit `inventory_diagnostic_value` decisions.
+
+Verification in Round 55:
+
+- `rg` evidence check across `src`, `frontend`, `tests`, and this plan confirmed the runtime/API/frontend governance projection and deprecated-bucket code paths exist.
+- No code, runtime data, registry, artifact, or frontend file was changed in this round.
+- DeepSeek read-only review returned `PASS/MERGE`; it agreed that P2.5 can be marked complete and that P2.7/P2.8 should remain explicitly open.
+
+Acceptance criteria for Round 55:
+
+- P2.5 no longer appears as a stale partial item.
+- Remaining `partial/pending` statuses distinguish real blockers from already-completed frontend/runtime view wiring.
+- This round remains documentation-only and does not claim new runtime behavior.
+
 ## Validation To Run For This Planning Task
 
 
@@ -1904,7 +1935,7 @@ Acceptance criteria for Round 54:
 | Round 6 DeepSeek review | completed |
 | P2.4 generation filter helper + active generation wiring | completed_generation_path_wired_ds_reviewed |
 | Round 7 DeepSeek review | completed |
-| P2.5 view projection helper | completed_partial_frontend_wiring_pending |
+| P2.5 view projection helper | completed_runtime_frontend_wired_published_verified |
 | Round 8 DeepSeek review | completed |
 | P2.6 archive record helper | completed |
 | Round 9 DeepSeek review | completed |
@@ -1951,9 +1982,10 @@ Acceptance criteria for Round 54:
 | P3.7 labeled combined-ledger retrospective backfill + artifact writer + API source projection + frontend display | completed_filter_reselect_runtime_materialized_api_verified |
 | P3.8 new credible control/comparison line build-out | completed_historical_gate_ranked_pool_replay_and_combined_ledger_runtime_verified |
 | Round 54 true-forward control runtime wiring | completed_ds_reviewed_ready_to_merge |
-| Runtime behavior changed | round54_true_forward_control_generation_wired_tests_ds_reviewed_no_runtime_db_mutation |
+| Round 55 plan status reconciliation | completed_ds_reviewed_ready_to_merge |
+| Runtime behavior changed | round54_true_forward_control_generation_wired_tests_ds_reviewed_no_runtime_db_mutation_round55_docs_only |
 | Registry changed | completed |
 | Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_combined_ledger_backfill_preparation_credible_control_line_buildout_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_replay_feedback_source_wiring_and_round54_true_forward_control_runtime_generation |
 | Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_governance_projection_rendering_round30_deprecated_bucket_filtering_and_round31_inventory_archived_fallback |
-| Runtime data changed | corrected_replay_and_combined_ledger_artifacts_regenerated_in_round53_round54_no_database_artifact_or_paper_tracking_writes |
-| DeepSeek plan review | round54_pass_merge |
+| Runtime data changed | corrected_replay_and_combined_ledger_artifacts_regenerated_in_round53_round54_and_round55_no_database_artifact_or_paper_tracking_writes |
+| DeepSeek plan review | round55_pass_merge |
