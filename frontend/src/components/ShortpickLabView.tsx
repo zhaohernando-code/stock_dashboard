@@ -20,7 +20,8 @@ import {
 } from "antd";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
 import { ExperimentOutlined, ReloadOutlined, SafetyCertificateOutlined, SyncOutlined } from "@ant-design/icons";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { init } from "echarts";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type {
   ShortpickCandidateView,
@@ -94,6 +95,8 @@ import {
   type PaperTrackingEntryStateFilter,
   type PaperTrackingExitStateFilter,
   type PaperTrackingGroupFilter,
+  type PaperTrackingEffectExitTrackKey,
+  PAPER_TRACKING_EFFECT_EXIT_TRACKS,
   comparePaperTrackingRows,
   comparePaperTrackingSignalEntryRows,
   deprecatedPaperTrackingRows,
@@ -112,6 +115,9 @@ import {
   paperTrackingDisplayRank,
   paperTrackingEntryDate,
   paperTrackingEntryRuleKey,
+  paperTrackingEffectObservations,
+  paperTrackingEffectSummaries,
+  paperTrackingEffectExitStateFilter,
   paperTrackingExitDay,
   paperTrackingExitReturn,
   paperTrackingExitText,
@@ -957,6 +963,265 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
   );
 }
 
+function PaperTrackingEffectCharts({
+  rows,
+  onSelect,
+}: {
+  rows: ShortpickPaperTrackingItem[];
+  onSelect: (groupFilter: PaperTrackingGroupFilter, exitTrackKey: PaperTrackingEffectExitTrackKey) => void;
+}) {
+  const lineRef = useRef<HTMLDivElement | null>(null);
+  const rankingRef = useRef<HTMLDivElement | null>(null);
+  const observations = useMemo(() => paperTrackingEffectObservations(rows), [rows]);
+  const summaries = useMemo(() => paperTrackingEffectSummaries(rows), [rows]);
+  const strategyLabels = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const summary of summaries) {
+      counts.set(summary.strategyLabel, (counts.get(summary.strategyLabel) ?? 0) + summary.count);
+    }
+    return [...counts.entries()]
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], "zh-Hans-CN"))
+      .map(([label]) => label);
+  }, [summaries]);
+
+  useEffect(() => {
+    if (!lineRef.current || observations.length === 0) return;
+    const container = lineRef.current;
+    const chart = init(container, undefined, { renderer: "canvas" });
+    const styles = getComputedStyle(container);
+    const mutedColor = styles.getPropertyValue("--text-muted").trim() || "#64748b";
+    const lineColor = styles.getPropertyValue("--line").trim() || "rgba(16, 35, 60, 0.08)";
+    const palette: Record<PaperTrackingEffectExitTrackKey, string> = {
+      mechanical_5d: "#0a5bff",
+      mechanical_10d: "#d48700",
+      take_profit_stop_loss: "#0b8f63",
+    };
+    const series = PAPER_TRACKING_EFFECT_EXIT_TRACKS.map((track) => {
+      const byDate = new Map<string, number[]>();
+      for (const observation of observations) {
+        if (observation.exitTrackKey !== track.key) continue;
+        byDate.set(observation.signalDate, [...(byDate.get(observation.signalDate) ?? []), observation.stockReturn]);
+      }
+      let cumulative = 0;
+      const data = [...byDate.entries()]
+        .sort((left, right) => left[0].localeCompare(right[0]))
+        .map(([date, values]) => {
+          const dailyMean = values.reduce((sum, value) => sum + value, 0) / values.length;
+          cumulative += dailyMean;
+          return {
+            value: [date, Number(cumulative.toFixed(6))],
+            dailyReturn: dailyMean,
+            count: values.length,
+            exitTrackKey: track.key,
+            exitTrackLabel: track.label,
+          };
+        });
+      return {
+        name: track.label,
+        type: "line",
+        smooth: true,
+        symbolSize: 7,
+        lineStyle: { width: 2.4 },
+        itemStyle: { color: palette[track.key] },
+        emphasis: { focus: "series" },
+        data,
+      };
+    }).filter((item) => item.data.length > 0);
+
+    chart.setOption({
+      animation: false,
+      backgroundColor: "transparent",
+      color: PAPER_TRACKING_EFFECT_EXIT_TRACKS.map((track) => palette[track.key]),
+      legend: { type: "scroll", top: 0, textStyle: { color: mutedColor } },
+      tooltip: {
+        trigger: "item",
+        confine: true,
+        backgroundColor: "rgba(15, 35, 64, 0.92)",
+        borderWidth: 0,
+        textStyle: { color: "#f8fbff" },
+        extraCssText: "border-radius: 10px; box-shadow: 0 18px 36px rgba(10,24,42,0.24);",
+        formatter: (rawParam: unknown) => {
+          const param = rawParam as { seriesName?: string; data?: { value?: [string, number]; dailyReturn?: number; count?: number } };
+          const value = param.data?.value;
+          return [
+            `<strong>${param.seriesName ?? ""}</strong>`,
+            `信号日 ${value?.[0] ?? "--"}`,
+            `累计 ${formatPercent(value?.[1] ?? null)}`,
+            `当日均值 ${formatPercent(param.data?.dailyReturn ?? null)}`,
+            `样本 ${param.data?.count ?? 0}`,
+            "点击筛选该退出轨道",
+          ].join("<br/>");
+        },
+      },
+      grid: { left: 48, right: 18, top: 44, bottom: 34 },
+      xAxis: {
+        type: "time",
+        axisLine: { lineStyle: { color: lineColor } },
+        axisTick: { show: false },
+        axisLabel: { color: mutedColor },
+        splitLine: { show: false },
+      },
+      yAxis: {
+        type: "value",
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: mutedColor, formatter: (value: number) => formatPercent(value) },
+        splitLine: { lineStyle: { color: lineColor } },
+      },
+      series,
+    });
+    chart.on("click", (params: unknown) => {
+      const data = (params as { data?: { exitTrackKey?: PaperTrackingEffectExitTrackKey } }).data;
+      if (data?.exitTrackKey) onSelect("", data.exitTrackKey);
+    });
+    const resizeObserver = new ResizeObserver(() => chart.resize());
+    resizeObserver.observe(container);
+    return () => {
+      resizeObserver.disconnect();
+      chart.dispose();
+    };
+  }, [observations, onSelect]);
+
+  useEffect(() => {
+    if (!rankingRef.current || summaries.length === 0 || strategyLabels.length === 0) return;
+    const container = rankingRef.current;
+    const chart = init(container, undefined, { renderer: "canvas" });
+    const styles = getComputedStyle(container);
+    const textColor = styles.getPropertyValue("--text-main").trim() || "#10233c";
+    const mutedColor = styles.getPropertyValue("--text-muted").trim() || "#64748b";
+    const lineColor = styles.getPropertyValue("--line").trim() || "rgba(16, 35, 60, 0.08)";
+    const palette: Record<PaperTrackingEffectExitTrackKey, string> = {
+      mechanical_5d: "#0a5bff",
+      mechanical_10d: "#d48700",
+      take_profit_stop_loss: "#0b8f63",
+    };
+    const summaryMap = new Map(summaries.map((summary) => [`${summary.strategyLabel}\u0000${summary.exitTrackKey}`, summary]));
+    const groupFilterByStrategy = new Map(summaries.map((summary) => [summary.strategyLabel, summary.groupFilter]));
+    const series = PAPER_TRACKING_EFFECT_EXIT_TRACKS.map((track) => ({
+      name: track.label,
+      type: "bar",
+      barMaxWidth: 18,
+      itemStyle: { color: palette[track.key], borderRadius: [0, 4, 4, 0] },
+      emphasis: { focus: "series" },
+      data: strategyLabels.map((label) => {
+        const summary = summaryMap.get(`${label}\u0000${track.key}`);
+        return summary
+          ? {
+              value: Number(summary.medianReturn.toFixed(6)),
+              meanReturn: summary.meanReturn,
+              winRate: summary.winRate,
+              count: summary.count,
+              groupFilter: summary.groupFilter,
+              exitTrackKey: track.key,
+              strategyLabel: label,
+            }
+          : {
+              value: null,
+              count: 0,
+              groupFilter: groupFilterByStrategy.get(label) ?? "",
+              exitTrackKey: track.key,
+              strategyLabel: label,
+            };
+      }),
+    }));
+
+    chart.setOption({
+      animation: false,
+      backgroundColor: "transparent",
+      color: PAPER_TRACKING_EFFECT_EXIT_TRACKS.map((track) => palette[track.key]),
+      legend: { type: "scroll", top: 0, textStyle: { color: mutedColor } },
+      tooltip: {
+        trigger: "item",
+        confine: true,
+        backgroundColor: "rgba(15, 35, 64, 0.92)",
+        borderWidth: 0,
+        textStyle: { color: "#f8fbff" },
+        extraCssText: "border-radius: 10px; box-shadow: 0 18px 36px rgba(10,24,42,0.24);",
+        formatter: (rawParam: unknown) => {
+          const param = rawParam as {
+            seriesName?: string;
+            name?: string;
+            data?: { value?: number | null; meanReturn?: number; winRate?: number; count?: number };
+          };
+          return [
+            `<strong>${param.name ?? ""} · ${param.seriesName ?? ""}</strong>`,
+            `中位收益 ${formatPercent(param.data?.value ?? null)}`,
+            `均值 ${formatPercent(param.data?.meanReturn ?? null)}`,
+            `胜率 ${formatPercent(param.data?.winRate ?? null)}`,
+            `样本 ${param.data?.count ?? 0}`,
+            "点击联动筛选表格",
+          ].join("<br/>");
+        },
+      },
+      grid: { left: 104, right: 20, top: 44, bottom: 34 },
+      xAxis: {
+        type: "value",
+        axisLine: { lineStyle: { color: lineColor } },
+        axisTick: { show: false },
+        axisLabel: { color: mutedColor, formatter: (value: number) => formatPercent(value) },
+        splitLine: { lineStyle: { color: lineColor } },
+      },
+      yAxis: {
+        type: "category",
+        data: strategyLabels,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: textColor, width: 92, overflow: "truncate" },
+      },
+      series,
+    });
+    chart.on("click", (params: unknown) => {
+      const data = (params as { data?: { groupFilter?: PaperTrackingGroupFilter; exitTrackKey?: PaperTrackingEffectExitTrackKey } }).data;
+      if (data?.exitTrackKey) onSelect(data.groupFilter ?? "", data.exitTrackKey);
+    });
+    const resizeObserver = new ResizeObserver(() => chart.resize());
+    resizeObserver.observe(container);
+    return () => {
+      resizeObserver.disconnect();
+      chart.dispose();
+    };
+  }, [onSelect, strategyLabels, summaries]);
+
+  if (!observations.length) {
+    return (
+      <div className="shortpick-paper-effect-panel shortpick-paper-effect-empty">
+        <Empty description="当前筛选下还没有已完成的 5日、10日或止盈止损退出样本。" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="shortpick-paper-effect-panel">
+      <div className="shortpick-paper-effect-head">
+        <Space direction="vertical" size={2}>
+          <Text strong>策略纸面对照效果</Text>
+          <Text type="secondary">三条退出轨道作为 series；点击线点或柱子联动筛选下方纸面记录。</Text>
+        </Space>
+        <Space wrap>
+          <Tag color="blue">样本 {observations.length}</Tag>
+          <Tag color="cyan">策略 {strategyLabels.length}</Tag>
+        </Space>
+      </div>
+      <Row gutter={[12, 12]}>
+        <Col xs={24} xl={12}>
+          <div className="shortpick-paper-effect-chart-block">
+            <Text strong>累计纸面收益</Text>
+            <Text type="secondary">按信号日聚合，日内多标的取均值后累计。</Text>
+            <div ref={lineRef} className="shortpick-paper-effect-chart" />
+          </div>
+        </Col>
+        <Col xs={24} xl={12}>
+          <div className="shortpick-paper-effect-chart-block">
+            <Text strong>策略退出效果排名</Text>
+            <Text type="secondary">按策略与退出轨道展示中位收益；tooltip 含均值、胜率、样本数。</Text>
+            <div ref={rankingRef} className="shortpick-paper-effect-chart" />
+          </div>
+        </Col>
+      </Row>
+    </div>
+  );
+}
+
 function PaperTrackingTab({
   tracking,
   loading,
@@ -978,7 +1243,23 @@ function PaperTrackingTab({
   const [ledgerEntryStateFilter, setLedgerEntryStateFilter] = useState<PaperTrackingEntryStateFilter>("entered");
   const [ledgerEntryRuleFilter, setLedgerEntryRuleFilter] = useState<PaperTrackingEntryRuleFilter>("");
   const [ledgerExitStateFilter, setLedgerExitStateFilter] = useState<PaperTrackingExitStateFilter>("");
+  const handlePaperEffectSelect = useCallback((groupFilter: PaperTrackingGroupFilter, exitTrackKey: PaperTrackingEffectExitTrackKey) => {
+    setLedgerSearch("");
+    if (groupFilter) setLedgerGroupFilter(groupFilter);
+    setLedgerEntryStateFilter("entered");
+    setLedgerExitStateFilter(paperTrackingEffectExitStateFilter(exitTrackKey));
+  }, []);
   const normalizedLedgerSearch = ledgerSearch.trim().toLowerCase();
+  // Charts remain comparative after table linkage, so they inherit context filters but not the exit-result filter.
+  const chartRows = primaryRows.filter((item) => {
+    const entered = hasPaperTrackingEntered(item);
+    if (ledgerEntryStateFilter === "entered" && !entered) return false;
+    if (ledgerEntryStateFilter === "pending" && entered) return false;
+    if (!paperTrackingGroupFilterMatches(item, ledgerGroupFilter)) return false;
+    if (ledgerEntryRuleFilter && paperTrackingEntryRuleKey(item) !== ledgerEntryRuleFilter) return false;
+    if (normalizedLedgerSearch && !paperTrackingSearchText(item).includes(normalizedLedgerSearch)) return false;
+    return true;
+  });
   const displayRows = primaryRows.filter((item) => {
     const entered = hasPaperTrackingEntered(item);
     const hasMechanical5dExit = hasPaperTrackingMechanical5dExit(item);
@@ -1330,6 +1611,7 @@ function PaperTrackingTab({
         className="panel-card shortpick-paper-ledger-card"
         title="纸面跟踪记录（正式策略与对照组）"
       >
+        <PaperTrackingEffectCharts rows={chartRows} onSelect={handlePaperEffectSelect} />
         <Space wrap className="shortpick-filter-bar shortpick-paper-ledger-filter-bar">
           <Input.Search
             allowClear

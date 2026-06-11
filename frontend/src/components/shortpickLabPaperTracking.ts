@@ -16,6 +16,37 @@ export type PaperTrackingEntryStateFilter = "entered" | "pending" | "";
 export type PaperTrackingEntryRuleFilter = "" | "next_close" | "next_open" | "same_day_intraday_current";
 export type PaperTrackingExitStateFilter = "" | "mechanical_5d_done" | "mechanical_10d_done" | "take_profit_stop_loss_done" | "waiting_exit";
 export type FrozenPaperTrackingGroup = "frozen_strategy" | "frozen_strategy_v2";
+export type PaperTrackingEffectExitTrackKey = "mechanical_5d" | "mechanical_10d" | "take_profit_stop_loss";
+
+export interface PaperTrackingEffectObservation {
+  rowKey: string;
+  strategyLabel: string;
+  groupFilter: PaperTrackingGroupFilter;
+  exitTrackKey: PaperTrackingEffectExitTrackKey;
+  exitTrackLabel: string;
+  signalDate: string;
+  exitTradeDay: string;
+  stockReturn: number;
+  evidenceBasis: string;
+  retrospective: boolean;
+}
+
+export interface PaperTrackingEffectSummary {
+  strategyLabel: string;
+  groupFilter: PaperTrackingGroupFilter;
+  exitTrackKey: PaperTrackingEffectExitTrackKey;
+  exitTrackLabel: string;
+  count: number;
+  meanReturn: number;
+  medianReturn: number;
+  winRate: number;
+}
+
+export const PAPER_TRACKING_EFFECT_EXIT_TRACKS: Array<{ key: PaperTrackingEffectExitTrackKey; label: string; exitStateFilter: PaperTrackingExitStateFilter }> = [
+  { key: "mechanical_5d", label: "机械5日", exitStateFilter: "mechanical_5d_done" },
+  { key: "mechanical_10d", label: "机械10日", exitStateFilter: "mechanical_10d_done" },
+  { key: "take_profit_stop_loss", label: "止盈止损", exitStateFilter: "take_profit_stop_loss_done" },
+];
 
 export function paperTrackingStatusLabel(value?: string | null): string {
   if (value === "tracking_active") return "已有正式标的";
@@ -268,6 +299,80 @@ export function paperTrackingDisplayExitTracks(item: ShortpickPaperTrackingItem)
   return [...paperTrackingExitTracks(item)]
     .filter((track) => track.exit_trade_day || typeof track.stock_return === "number")
     .sort((left, right) => paperTrackingExitTrackSortValue(left) - paperTrackingExitTrackSortValue(right));
+}
+
+export function paperTrackingEffectExitTrackLabel(key: string): string {
+  return PAPER_TRACKING_EFFECT_EXIT_TRACKS.find((track) => track.key === key)?.label ?? String(key || "退出");
+}
+
+export function paperTrackingEffectExitStateFilter(key: string): PaperTrackingExitStateFilter {
+  return PAPER_TRACKING_EFFECT_EXIT_TRACKS.find((track) => track.key === key)?.exitStateFilter ?? "";
+}
+
+function isPaperTrackingEffectExitTrackKey(value: unknown): value is PaperTrackingEffectExitTrackKey {
+  return PAPER_TRACKING_EFFECT_EXIT_TRACKS.some((track) => track.key === value);
+}
+
+function paperTrackingMean(values: number[]): number {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+}
+
+function paperTrackingMedian(values: number[]): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+export function paperTrackingEffectObservations(rows: ShortpickPaperTrackingItem[]): PaperTrackingEffectObservation[] {
+  return rows.flatMap((item) => {
+    const groupFilter = (paperTrackingStrategyFilterKey(item) || item.tracking_group || "") as PaperTrackingGroupFilter;
+    const strategyLabel = paperTrackingRecordGroupLabel(item);
+    const signalDate = paperTrackingSignalDate(item);
+    const rowKey = String(item.combined_ledger_row_id || item.candidate_id || `${item.symbol}:${signalDate}`);
+    return paperTrackingDisplayExitTracks(item)
+      .filter((track) => isPaperTrackingEffectExitTrackKey(track.key) && typeof track.stock_return === "number")
+      .map((track) => ({
+        rowKey,
+        strategyLabel,
+        groupFilter,
+        exitTrackKey: track.key as PaperTrackingEffectExitTrackKey,
+        exitTrackLabel: paperTrackingEffectExitTrackLabel(String(track.key)),
+        signalDate,
+        exitTradeDay: String(track.exit_trade_day ?? item.exit_at ?? ""),
+        stockReturn: Number(track.stock_return),
+        evidenceBasis: String(item.evidence_basis || "true_forward_tracking"),
+        retrospective: item.retrospective === true,
+      }));
+  });
+}
+
+export function paperTrackingEffectSummaries(rows: ShortpickPaperTrackingItem[]): PaperTrackingEffectSummary[] {
+  const groups = new Map<string, PaperTrackingEffectObservation[]>();
+  for (const observation of paperTrackingEffectObservations(rows)) {
+    const key = `${observation.strategyLabel}\u0000${observation.exitTrackKey}`;
+    groups.set(key, [...(groups.get(key) ?? []), observation]);
+  }
+  return [...groups.values()]
+    .map((observations) => {
+      const first = observations[0];
+      const values = observations.map((item) => item.stockReturn);
+      return {
+        strategyLabel: first.strategyLabel,
+        groupFilter: first.groupFilter,
+        exitTrackKey: first.exitTrackKey,
+        exitTrackLabel: first.exitTrackLabel,
+        count: values.length,
+        meanReturn: paperTrackingMean(values),
+        medianReturn: paperTrackingMedian(values),
+        winRate: values.filter((value) => value > 0).length / values.length,
+      };
+    })
+    .sort((left, right) => (
+      left.strategyLabel.localeCompare(right.strategyLabel, "zh-Hans-CN")
+      || PAPER_TRACKING_EFFECT_EXIT_TRACKS.findIndex((track) => track.key === left.exitTrackKey)
+        - PAPER_TRACKING_EFFECT_EXIT_TRACKS.findIndex((track) => track.key === right.exitTrackKey)
+    ));
 }
 
 function paperTrackingMechanical5dExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {

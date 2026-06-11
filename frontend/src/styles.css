@@ -872,6 +872,46 @@ body[data-theme="dark"] {
   border-radius: 16px;
 }
 
+.shortpick-paper-effect-panel {
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(248, 251, 255, 0.72);
+}
+
+.shortpick-paper-effect-empty {
+  display: flex;
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+}
+
+.shortpick-paper-effect-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.shortpick-paper-effect-chart-block {
+  display: flex;
+  min-height: 320px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid rgba(16, 35, 60, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.shortpick-paper-effect-chart {
+  min-height: 260px;
+  width: 100%;
+  flex: 1 1 auto;
+}
+
 .chart-shell-modal {
   height: 520px;
 }
