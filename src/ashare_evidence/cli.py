@@ -233,6 +233,32 @@ def _governance_requests_from_payload(
     return [dict(item) for item in requests if isinstance(item, dict)]
 
 
+def _filter_governance_requests(
+    requests: list[dict[str, Any]],
+    *,
+    request_ids: list[str] | None,
+    control_group_ids: list[str] | None,
+) -> list[dict[str, Any]]:
+    selected_request_ids = {str(value) for value in request_ids or [] if str(value)}
+    selected_control_group_ids = {str(value) for value in control_group_ids or [] if str(value)}
+    if not selected_request_ids and not selected_control_group_ids:
+        return requests
+    filtered = [
+        request
+        for request in requests
+        if (
+            (selected_request_ids and str(request.get("request_id") or "") in selected_request_ids)
+            or (
+                selected_control_group_ids
+                and str(request.get("control_group_id") or "") in selected_control_group_ids
+            )
+        )
+    ]
+    if not filtered:
+        raise ValueError("No governance requests matched --request-id or --control-group-id")
+    return filtered
+
+
 def _phase5_horizon_study_output(
     session,
     *,
@@ -786,6 +812,8 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_governance_historical_backtest.add_argument("--database-url", default=None)
     shortpick_governance_historical_backtest.add_argument("--request-path", required=True)
     shortpick_governance_historical_backtest.add_argument("--output-dir", default=None)
+    shortpick_governance_historical_backtest.add_argument("--request-id", action="append", default=None)
+    shortpick_governance_historical_backtest.add_argument("--control-group-id", action="append", default=None)
 
     shortpick_governance_retrospective_replay = subparsers.add_parser(
         "shortpick-governance-retrospective-replay",
@@ -795,6 +823,8 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_governance_retrospective_replay.add_argument("--request-path", required=True)
     shortpick_governance_retrospective_replay.add_argument("--paper-tracking-path", required=True)
     shortpick_governance_retrospective_replay.add_argument("--output-dir", default=None)
+    shortpick_governance_retrospective_replay.add_argument("--request-id", action="append", default=None)
+    shortpick_governance_retrospective_replay.add_argument("--control-group-id", action="append", default=None)
 
     shortpick_governance_credible_control_plan = subparsers.add_parser(
         "shortpick-governance-credible-control-plan",
@@ -1314,6 +1344,11 @@ def main(argv: list[str] | None = None) -> int:
             request_payload,
             nested_plan_key="historical_backtest_plan",
         )
+        requests = _filter_governance_requests(
+            requests,
+            request_ids=args.request_id,
+            control_group_ids=args.control_group_id,
+        )
         with session_scope(args.database_url) as session:
             payload = run_shortpick_historical_backtest_requests(
                 session,
@@ -1329,6 +1364,11 @@ def main(argv: list[str] | None = None) -> int:
         requests = _governance_requests_from_payload(
             request_payload,
             nested_plan_key="retrospective_replay_plan",
+        )
+        requests = _filter_governance_requests(
+            requests,
+            request_ids=args.request_id,
+            control_group_ids=args.control_group_id,
         )
         payload = run_shortpick_retrospective_forward_replay_requests(
             requests,

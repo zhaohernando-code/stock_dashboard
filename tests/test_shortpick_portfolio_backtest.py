@@ -576,6 +576,56 @@ def test_cli_governance_historical_backtest_runs_credible_control_plan_file() ->
         assert evidence_path.parent == output_dir
 
 
+def test_cli_governance_historical_backtest_filters_nested_plan_by_control_group_id() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_url = f"sqlite:///{Path(temp_dir) / 'portfolio-backtest.db'}"
+        output_dir = Path(temp_dir) / "evidence"
+        request_path = Path(temp_dir) / "credible-control-plan.json"
+        init_database(database_url)
+        _seed_long_sample_fixture(database_url)
+        request = {
+            **build_shortpick_historical_backtest_generation_requests(
+                [build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")],
+                start_date="2026-01-01",
+                end_date="2026-03-05",
+                min_signal_symbol_count=3,
+            )["requests"][0],
+            "portfolio_strategies": ["ret10_turnover_cooldown"],
+        }
+        ignored_request = {
+            **request,
+            "request_id": "ignored-request",
+            "control_group_id": "ignored-control:v1",
+            "portfolio_strategies": ["missing_strategy_should_not_run"],
+        }
+        request_path.write_text(
+            json.dumps({"historical_backtest_plan": {"requests": [ignored_request, request]}}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = main(
+                [
+                    "shortpick-governance-historical-backtest",
+                    "--database-url",
+                    database_url,
+                    "--request-path",
+                    str(request_path),
+                    "--output-dir",
+                    str(output_dir),
+                    "--control-group-id",
+                    request["control_group_id"],
+                ]
+            )
+
+        assert exit_code == 0
+        rendered = json.loads(stdout.getvalue())
+        assert rendered["request_count"] == 1
+        assert rendered["passed_count"] == 1
+        assert rendered["evidence"][0]["control_group_id"] == request["control_group_id"]
+
+
 def test_cli_governance_retrospective_replay_runs_request_file() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         request_path = Path(temp_dir) / "request.json"
@@ -668,6 +718,56 @@ def test_cli_governance_retrospective_replay_runs_credible_control_plan_file() -
         assert rendered["ready_count"] == 1
         artifact_path = Path(rendered["artifacts"][0]["artifact"]["path"])
         assert artifact_path.parent == output_dir
+
+
+def test_cli_governance_retrospective_replay_filters_nested_plan_by_request_id() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        request_path = Path(temp_dir) / "credible-control-plan.json"
+        paper_tracking_path = Path(temp_dir) / "paper-tracking.json"
+        output_dir = Path(temp_dir) / "replay"
+        rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")
+        paper_tracking = {
+            "items": [
+                {
+                    "candidate_id": "a",
+                    "signal_date": "2026-05-20",
+                    "symbol": "002028.SZ",
+                    "validation_by_horizon": [
+                        {"horizon_days": 10, "status": "completed", "stock_return": -0.09, "exit_date": "2026-05-24"}
+                    ],
+                },
+                {"candidate_id": "b", "signal_date": "2026-05-26", "symbol": "002028.SZ"},
+            ]
+        }
+        request = build_shortpick_retrospective_forward_replay_requests([rule], paper_tracking)["requests"][0]
+        ignored_request = {**request, "request_id": "ignored-request", "control_group_id": "ignored-control:v1"}
+        request_path.write_text(
+            json.dumps({"retrospective_replay_plan": {"requests": [ignored_request, request]}}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        paper_tracking_path.write_text(json.dumps(paper_tracking, ensure_ascii=False), encoding="utf-8")
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = main(
+                [
+                    "shortpick-governance-retrospective-replay",
+                    "--request-path",
+                    str(request_path),
+                    "--paper-tracking-path",
+                    str(paper_tracking_path),
+                    "--output-dir",
+                    str(output_dir),
+                    "--request-id",
+                    request["request_id"],
+                ]
+            )
+
+        assert exit_code == 0
+        rendered = json.loads(stdout.getvalue())
+        assert rendered["request_count"] == 1
+        assert rendered["ready_count"] == 1
+        assert rendered["artifacts"][0]["request"]["request_id"] == request["request_id"]
 
 
 def test_cli_governance_credible_control_plan_writes_request_plan() -> None:
