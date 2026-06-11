@@ -1734,8 +1734,10 @@ def _historical_backtest_evidence_for_rule(
         value = source.get(key)
         if isinstance(value, dict):
             return dict(value)
-    artifacts = source.get("artifacts")
-    if isinstance(artifacts, list):
+    for evidence_key in ("artifacts", "evidence"):
+        artifacts = source.get(evidence_key)
+        if not isinstance(artifacts, list):
+            continue
         for artifact in artifacts:
             if not isinstance(artifact, dict):
                 continue
