@@ -17,6 +17,9 @@ SAME_SYMBOL_COOLDOWN_CONTROL_ID = "control_same_symbol_cooldown:v1"
 DRAWDOWN_REVERSAL_FILTER_CONTROL_ID = "control_drawdown_reversal_filter:v1"
 REPEATED_EXPOSURE_LIMIT_CONTROL_ID = "control_repeated_exposure_limit:v1"
 SHORTPICK_HISTORICAL_BACKTEST_ENTRY_PRICE_SOURCES = {"next_close", "next_open", "same_close_proxy"}
+# Decision A (Round 28 amendment): evidence-based statuses that leave the primary
+# paper-tracking view into the deprecated/archive bucket while data is retained.
+GOVERNANCE_DEPRECATED_VIEW_STATUSES = frozenset({"retire_candidate", "retired"})
 REGISTERED_SHORTPICK_CONTROL_GROUP_IDS = frozenset(
     {
         SAME_SYMBOL_COOLDOWN_CONTROL_ID,
@@ -278,6 +281,63 @@ def project_shortpick_strategy_view_sections(
         "archive_items": archive_items,
         "evidence_basis_section_policy": "separate_historical_retrospective_and_true_forward_sections",
         "evidence_basis_sections": _evidence_basis_sections(all_items),
+    }
+
+
+def partition_paper_tracking_rows_by_governance(
+    paper_tracking: dict[str, Any],
+    status_recommendation_result: dict[str, Any],
+) -> dict[str, Any]:
+    """Annotate paper-tracking rows with governance status and split primary vs deprecated.
+
+    Decision A (Round 28 amendment): evidence-based ``retire_candidate`` and
+    ``retired`` strategies leave the primary view into a deprecated/archive bucket
+    while their data is retained. ``active``, ``observe`` and untracked rows stay
+    in the primary view. This helper is pure input-to-output: it does not hide,
+    delete, or persist anything by itself; the API layer decides how to serve the
+    partition. Each row is annotated with its derived ``governance_strategy_id``,
+    ``governance_status`` and ``governance_view_section`` without dropping any
+    original field, and the original row order is preserved in ``items``.
+    """
+
+    status_by_strategy_id = {
+        str(item.get("strategy_id") or ""): str(item.get("recommended_status") or "")
+        for item in status_recommendation_result.get("recommendations") or []
+        if isinstance(item, dict) and item.get("strategy_id")
+    }
+    annotated_items: list[dict[str, Any]] = []
+    primary_items: list[dict[str, Any]] = []
+    deprecated_items: list[dict[str, Any]] = []
+    deprecated_strategy_ids: set[str] = set()
+
+    for item in [_dict(value) for value in paper_tracking.get("items") or [] if isinstance(value, dict)]:
+        strategy_id = str(_strategy_metadata(item)["strategy_id"])
+        status = status_by_strategy_id.get(strategy_id, "untracked")
+        section = "deprecated" if status in GOVERNANCE_DEPRECATED_VIEW_STATUSES else "primary"
+        annotated = {
+            **item,
+            "governance_strategy_id": strategy_id,
+            "governance_status": status,
+            "governance_view_section": section,
+        }
+        annotated_items.append(annotated)
+        if section == "deprecated":
+            deprecated_items.append(annotated)
+            deprecated_strategy_ids.add(strategy_id)
+        else:
+            primary_items.append(annotated)
+
+    return {
+        "status": "ready",
+        "decision_policy": "hide_retire_candidate_and_retired_from_primary_keep_data_in_deprecated_bucket",
+        "deprecated_status_set": sorted(GOVERNANCE_DEPRECATED_VIEW_STATUSES),
+        "input_count": len(annotated_items),
+        "primary_count": len(primary_items),
+        "deprecated_count": len(deprecated_items),
+        "deprecated_strategy_ids": sorted(deprecated_strategy_ids),
+        "items": annotated_items,
+        "primary_items": primary_items,
+        "deprecated_items": deprecated_items,
     }
 
 
