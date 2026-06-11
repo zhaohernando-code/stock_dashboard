@@ -210,6 +210,7 @@ export function strategyGovernanceStatusLabel(value?: string | null): string {
     observe: "观察",
     retire_candidate: "退役候选",
     retired: "已归档",
+    inventory_archived: "库存归档",
     historical_only: "仅历史回测",
     retrospective_only: "仅回放",
     true_forward: "真实前向",
@@ -222,6 +223,7 @@ export function strategyGovernanceStatusColor(value?: string | null): string {
   if (value === "observe") return "gold";
   if (value === "retire_candidate") return "orange";
   if (value === "retired") return "default";
+  if (value === "inventory_archived") return "default";
   if (value === "historical_only") return "blue";
   if (value === "retrospective_only") return "purple";
   return "default";

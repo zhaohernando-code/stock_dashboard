@@ -165,6 +165,37 @@ def test_api_builds_shortpick_strategy_governance_projection_from_paper_tracking
     assert projection["archive_records"]["archive_count"] == 0
 
 
+def test_api_strategy_governance_projection_applies_inventory_archive_decisions() -> None:
+    strategy_id = "frozen_strategy__frozen_paper_primary__low_turnover_20d_uptrend_liquid_top120__next_close__1"
+
+    projection = _build_shortpick_strategy_governance_projection(
+        {
+            "items": [
+                _paper_tracking_item(f"2026-05-{index + 1:02d}", stock_return=value)
+                for index, value in enumerate([0.02, 0.03, 0.01])
+            ],
+            "market_control_contract": {
+                "inventory_archive_decisions": [
+                    {
+                        "strategy_id": strategy_id,
+                        "archive_action": "archive",
+                        "decision_basis": "inventory_diagnostic_value",
+                        "archive_reason_code": "no_unique_diagnostic_value",
+                    }
+                ]
+            },
+        }
+    )
+
+    assert projection["status"] == "ready"
+    assert projection["inventory_archive_decisions"]["archived_strategy_ids"] == [strategy_id]
+    view = projection["view_projection"]
+    assert view["primary_count"] == 0
+    assert view["archive_count"] == 1
+    assert view["archive_items"][0]["recommended_status"] == "inventory_archived"
+    assert projection["archive_records"]["records"][0]["archive_reason"] == "inventory_archived_control_removed_from_primary_view"
+
+
 def test_api_strategy_governance_projection_does_not_infer_status_from_empty_ledger() -> None:
     projection = _build_shortpick_strategy_governance_projection({"items": []})
 

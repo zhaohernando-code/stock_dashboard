@@ -51,7 +51,7 @@ export function paperTrackingDisplayRank(item: ShortpickPaperTrackingItem): numb
 
 export function paperTrackingGovernanceViewSection(item: ShortpickPaperTrackingItem): "primary" | "deprecated" {
   if (item.governance_view_section === "deprecated") return "deprecated";
-  if (item.governance_status === "retire_candidate" || item.governance_status === "retired") return "deprecated";
+  if (item.governance_status === "retire_candidate" || item.governance_status === "retired" || item.governance_status === "inventory_archived") return "deprecated";
   return "primary";
 }
 
@@ -133,12 +133,14 @@ export function paperTrackingChoiceTimingText(
 }
 
 export function latestPaperTrackingChoices(rows: ShortpickPaperTrackingItem[], latestRun?: Record<string, unknown> | null): ShortpickPaperTrackingItem[] {
+  const primaryRows = primaryPaperTrackingRows(rows);
+  if (!primaryRows.length) return [];
   const latestRunId = Number(latestRun?.id ?? 0);
   const latestRunDate = typeof latestRun?.run_date === "string" ? latestRun.run_date : "";
-  const scoped = rows.filter((item) => (
+  const scoped = primaryRows.filter((item) => (
     latestRunId ? Number(item.run_id) === latestRunId : latestRunDate ? item.run_date === latestRunDate : false
   ));
-  const source = scoped.length ? scoped : rows;
+  const source = scoped.length ? scoped : primaryRows;
   const latestDate = source.reduce((value, item) => (paperTrackingSignalDate(item) > value ? paperTrackingSignalDate(item) : value), "");
   return source
     .filter((item) => paperTrackingSignalDate(item) === latestDate)
@@ -153,7 +155,7 @@ export function latestPaperTrackingChoiceForGroup(
   rows: ShortpickPaperTrackingItem[],
   group: FrozenPaperTrackingGroup,
 ): ShortpickPaperTrackingItem | null {
-  return rows
+  return primaryPaperTrackingRows(rows)
     .filter((item) => item.tracking_group === group)
     .sort((left, right) => (
       paperTrackingSignalDate(right).localeCompare(paperTrackingSignalDate(left))

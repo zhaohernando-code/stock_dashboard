@@ -112,6 +112,7 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
                   { candidate_id: 2, governance_view_section: "deprecated", governance_status: "retire_candidate", name: "归档", symbol: "000002.SZ" },
                   { candidate_id: 3, governance_status: "observe", name: "旧字段", symbol: "000003.SZ" },
                   { candidate_id: 4, governance_status: "retired", name: "仅状态归档", symbol: "000004.SZ" },
+                  { candidate_id: 5, governance_status: "inventory_archived", name: "库存归档", symbol: "000005.SZ" },
                 ];
                 const latestRows = [
                   {
@@ -133,7 +134,6 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
                     symbol: "300002.SZ",
                   },
                 ];
-                const visibleLatestRows = helpers.primaryPaperTrackingRows(latestRows);
                 console.log(JSON.stringify({
                   frozenGroups: frozen.map((item) => item.tracking_group),
                   frozenNames: frozen.map((item) => item.name),
@@ -143,8 +143,9 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
                   rankedGroups: ranked.map((item) => item.tracking_group),
                   primaryIds: helpers.primaryPaperTrackingRows(governanceRows).map((item) => item.candidate_id),
                   deprecatedIds: helpers.deprecatedPaperTrackingRows(governanceRows).map((item) => item.candidate_id),
-                  latestVisibleNames: helpers.latestPaperTrackingChoices(visibleLatestRows, { id: 20, run_date: "2026-06-20" }).map((item) => item.name),
-                  frozenVisibleNames: helpers.latestFrozenPaperTrackingChoices(visibleLatestRows).map((item) => item.name),
+                  latestVisibleNames: helpers.latestPaperTrackingChoices(latestRows, { id: 20, run_date: "2026-06-20" }).map((item) => item.name),
+                  frozenVisibleNames: helpers.latestFrozenPaperTrackingChoices(latestRows).map((item) => item.name),
+                  allArchivedChoices: helpers.latestPaperTrackingChoices([{ ...latestRows[0], governance_status: "inventory_archived" }], { id: 20, run_date: "2026-06-20" }).length,
                 }));
                 """
             )
@@ -173,6 +174,7 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
             ],
         )
         self.assertEqual(payload["primaryIds"], [1, 3])
-        self.assertEqual(payload["deprecatedIds"], [2, 4])
+        self.assertEqual(payload["deprecatedIds"], [2, 4, 5])
         self.assertEqual(payload["latestVisibleNames"], ["仍可显示"])
         self.assertEqual(payload["frozenVisibleNames"], ["仍可显示"])
+        self.assertEqual(payload["allArchivedChoices"], 0)

@@ -17,9 +17,21 @@ SAME_SYMBOL_COOLDOWN_CONTROL_ID = "control_same_symbol_cooldown:v1"
 DRAWDOWN_REVERSAL_FILTER_CONTROL_ID = "control_drawdown_reversal_filter:v1"
 REPEATED_EXPOSURE_LIMIT_CONTROL_ID = "control_repeated_exposure_limit:v1"
 SHORTPICK_HISTORICAL_BACKTEST_ENTRY_PRICE_SOURCES = {"next_close", "next_open", "same_close_proxy"}
+GOVERNANCE_INVENTORY_ARCHIVED_STATUS = "inventory_archived"
 # Decision A (Round 28 amendment): evidence-based statuses that leave the primary
 # paper-tracking view into the deprecated/archive bucket while data is retained.
-GOVERNANCE_DEPRECATED_VIEW_STATUSES = frozenset({"retire_candidate", "retired"})
+GOVERNANCE_DEPRECATED_VIEW_STATUSES = frozenset(
+    {"retire_candidate", "retired", GOVERNANCE_INVENTORY_ARCHIVED_STATUS}
+)
+SHORTPICK_CONTROL_INVENTORY_ARCHIVE_REASON_CODES = frozenset(
+    {
+        "redundant_with_primary_signal",
+        "redundant_with_registered_control",
+        "no_unique_diagnostic_value",
+        "superseded_by_new_control",
+        "dormant_legacy_control",
+    }
+)
 REGISTERED_SHORTPICK_CONTROL_GROUP_IDS = frozenset(
     {
         SAME_SYMBOL_COOLDOWN_CONTROL_ID,
@@ -32,6 +44,7 @@ SHORTPICK_STRATEGY_STATUS_DISPLAY = {
     "observe": {"label": "Observe", "tone": "gold", "primary_section": "primary"},
     "retire_candidate": {"label": "Retire candidate", "tone": "orange", "primary_section": "primary"},
     "retired": {"label": "Retired", "tone": "default", "primary_section": "archive"},
+    GOVERNANCE_INVENTORY_ARCHIVED_STATUS: {"label": "Inventory archived", "tone": "default", "primary_section": "archive"},
     "historical_only": {"label": "Historical only", "tone": "blue", "primary_section": "research"},
     "retrospective_only": {"label": "Retrospective only", "tone": "purple", "primary_section": "research"},
     "true_forward": {"label": "True forward", "tone": "green", "primary_section": "primary"},
@@ -197,7 +210,9 @@ def filter_shortpick_generation_eligible_items(
     items: list[dict[str, Any]],
     status_recommendation_result: dict[str, Any],
     *,
+    inventory_archive_decision_result: dict[str, Any] | None = None,
     include_retired: bool = False,
+    include_inventory_archived: bool = False,
 ) -> dict[str, Any]:
     """Filter generation candidates using already computed governance status."""
 
@@ -206,15 +221,23 @@ def filter_shortpick_generation_eligible_items(
         for item in status_recommendation_result.get("recommendations") or []
         if isinstance(item, dict) and item.get("strategy_id")
     }
+    inventory_archive_by_strategy_id = _inventory_archive_decisions_by_strategy_id(inventory_archive_decision_result)
     eligible_items: list[dict[str, Any]] = []
     excluded_items: list[dict[str, Any]] = []
     for item in [_dict(value) for value in items if isinstance(value, dict)]:
         strategy_id = _strategy_id_from_generation_item(item)
-        governance_status = status_by_strategy_id.get(strategy_id, "untracked")
+        inventory_archive_decision = inventory_archive_by_strategy_id.get(strategy_id)
+        governance_status = (
+            GOVERNANCE_INVENTORY_ARCHIVED_STATUS
+            if inventory_archive_decision
+            else status_by_strategy_id.get(strategy_id, "untracked")
+        )
         projected = {
             **item,
             "strategy_id": strategy_id,
             "governance_status": governance_status,
+            "governance_archive_basis": inventory_archive_decision.get("decision_basis") if inventory_archive_decision else None,
+            "inventory_archive_decision": inventory_archive_decision,
         }
         if governance_status == "retired" and not include_retired:
             excluded_items.append(
@@ -225,13 +248,23 @@ def filter_shortpick_generation_eligible_items(
                     "item": projected,
                 }
             )
+        elif governance_status == GOVERNANCE_INVENTORY_ARCHIVED_STATUS and not include_inventory_archived:
+            excluded_items.append(
+                {
+                    "strategy_id": strategy_id,
+                    "governance_status": governance_status,
+                    "reason": "inventory_archived_control_excluded_from_active_generation",
+                    "item": projected,
+                }
+            )
         else:
             eligible_items.append(projected)
 
     return {
         "status": "ready",
-        "decision_policy": "exclude_only_retired_status_from_active_generation",
+        "decision_policy": "exclude_retired_and_inventory_archived_from_active_generation",
         "include_retired": include_retired,
+        "include_inventory_archived": include_inventory_archived,
         "input_count": len(items),
         "eligible_count": len(eligible_items),
         "excluded_count": len(excluded_items),
@@ -240,20 +273,107 @@ def filter_shortpick_generation_eligible_items(
     }
 
 
+def build_shortpick_redundant_control_archive_decisions(
+    control_inventory: list[dict[str, Any]],
+    *,
+    generated_at: str | None = None,
+) -> dict[str, Any]:
+    """Build inventory-driven archive decisions for redundant controls.
+
+    This is deliberately separate from performance retirement gates. A control
+    can be archived here only when an inventory owner explicitly says it has no
+    unique diagnostic value, is redundant, superseded, or dormant. Weak returns
+    are not an accepted reason code in this path.
+    """
+
+    archived_records: list[dict[str, Any]] = []
+    kept_records: list[dict[str, Any]] = []
+    blocked_records: list[dict[str, Any]] = []
+
+    for item in [_dict(value) for value in control_inventory if isinstance(value, dict)]:
+        strategy_id = _strategy_id_from_generation_item(item)
+        action = str(item.get("inventory_action") or item.get("archive_action") or item.get("recommended_action") or "").strip()
+        reason_code = str(item.get("archive_reason_code") or item.get("reason_code") or "").strip()
+        decision_basis = str(item.get("decision_basis") or "").strip()
+        normalized = {
+            **item,
+            "strategy_id": strategy_id,
+            "archive_reason_code": reason_code or None,
+            "decision_basis": decision_basis or None,
+        }
+
+        if action not in {"archive", "archived", "deprecated"}:
+            kept_records.append({**normalized, "inventory_archive_status": "kept"})
+            continue
+        if decision_basis != "inventory_diagnostic_value":
+            blocked_records.append(
+                {
+                    **normalized,
+                    "inventory_archive_status": "blocked",
+                    "blocker": "inventory_archive_requires_inventory_diagnostic_value_basis",
+                }
+            )
+            continue
+        if reason_code not in SHORTPICK_CONTROL_INVENTORY_ARCHIVE_REASON_CODES:
+            blocked_records.append(
+                {
+                    **normalized,
+                    "inventory_archive_status": "blocked",
+                    "blocker": "unsupported_inventory_archive_reason_code",
+                }
+            )
+            continue
+
+        archived_records.append(
+            {
+                **normalized,
+                "inventory_archive_status": "archived",
+                "governance_status": GOVERNANCE_INVENTORY_ARCHIVED_STATUS,
+                "governance_view_section": "deprecated",
+            }
+        )
+
+    return {
+        "status": "ready",
+        "generated_at": generated_at,
+        "decision_policy": "inventory_diagnostic_value_archive_separate_from_performance_retirement",
+        "allowed_reason_codes": sorted(SHORTPICK_CONTROL_INVENTORY_ARCHIVE_REASON_CODES),
+        "input_count": len(control_inventory),
+        "archived_count": len(archived_records),
+        "kept_count": len(kept_records),
+        "blocked_count": len(blocked_records),
+        "archived_strategy_ids": sorted({str(item.get("strategy_id") or "") for item in archived_records if item.get("strategy_id")}),
+        "archived_records": archived_records,
+        "kept_records": kept_records,
+        "blocked_records": blocked_records,
+    }
+
+
 def project_shortpick_strategy_view_sections(
     status_recommendation_result: dict[str, Any],
+    *,
+    inventory_archive_decision_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Split strategy status rows into primary and archive display sections."""
 
+    inventory_archive_by_strategy_id = _inventory_archive_decisions_by_strategy_id(inventory_archive_decision_result)
+    projected_strategy_ids: set[str] = set()
     primary_items: list[dict[str, Any]] = []
     archive_items: list[dict[str, Any]] = []
     for item in status_recommendation_result.get("recommendations") or []:
         if not isinstance(item, dict):
             continue
+        strategy_id = str(item.get("strategy_id") or "")
+        inventory_archive_decision = inventory_archive_by_strategy_id.get(strategy_id)
+        recommended_status = (
+            GOVERNANCE_INVENTORY_ARCHIVED_STATUS
+            if inventory_archive_decision
+            else item.get("recommended_status")
+        )
         projected = {
-            "strategy_id": item.get("strategy_id"),
-            "recommended_status": item.get("recommended_status"),
-            "status_display": _strategy_status_display(item.get("recommended_status")),
+            "strategy_id": strategy_id,
+            "recommended_status": recommended_status,
+            "status_display": _strategy_status_display(recommended_status),
             "evidence_basis": item.get("evidence_basis"),
             "evidence_basis_display": _evidence_basis_display(item.get("evidence_basis")),
             "tracking_group": item.get("tracking_group"),
@@ -264,11 +384,37 @@ def project_shortpick_strategy_view_sections(
             "reasons": item.get("reasons") if isinstance(item.get("reasons"), list) else [],
             "blockers": item.get("blockers") if isinstance(item.get("blockers"), list) else [],
             "leakage_coverage_note": _leakage_coverage_note(item),
+            "governance_archive_basis": inventory_archive_decision.get("decision_basis") if inventory_archive_decision else None,
+            "inventory_archive_decision": inventory_archive_decision,
         }
-        if projected["recommended_status"] == "retired":
+        projected_strategy_ids.add(strategy_id)
+        if projected["recommended_status"] in {"retired", GOVERNANCE_INVENTORY_ARCHIVED_STATUS}:
             archive_items.append({**projected, "view_section": "archive"})
         else:
             primary_items.append({**projected, "view_section": "primary"})
+
+    for strategy_id, inventory_archive_decision in sorted(inventory_archive_by_strategy_id.items()):
+        if strategy_id in projected_strategy_ids:
+            continue
+        projected = {
+            "strategy_id": strategy_id,
+            "recommended_status": GOVERNANCE_INVENTORY_ARCHIVED_STATUS,
+            "status_display": _strategy_status_display(GOVERNANCE_INVENTORY_ARCHIVED_STATUS),
+            "evidence_basis": inventory_archive_decision.get("evidence_basis"),
+            "evidence_basis_display": _evidence_basis_display(inventory_archive_decision.get("evidence_basis")),
+            "tracking_group": inventory_archive_decision.get("tracking_group"),
+            "tracking_role": inventory_archive_decision.get("tracking_role") or inventory_archive_decision.get("role"),
+            "strategy_family": inventory_archive_decision.get("strategy_family") or inventory_archive_decision.get("family"),
+            "entry_price_source": inventory_archive_decision.get("entry_price_source"),
+            "primary_horizon_days": None,
+            "reasons": ["inventory_archive_decision_present"],
+            "blockers": [],
+            "leakage_coverage_note": _leakage_coverage_note(inventory_archive_decision),
+            "governance_archive_basis": inventory_archive_decision.get("decision_basis"),
+            "inventory_archive_decision": inventory_archive_decision,
+            "view_section": "archive",
+        }
+        archive_items.append(projected)
 
     all_items = [*primary_items, *archive_items]
 
@@ -287,6 +433,8 @@ def project_shortpick_strategy_view_sections(
 def partition_paper_tracking_rows_by_governance(
     paper_tracking: dict[str, Any],
     status_recommendation_result: dict[str, Any],
+    *,
+    inventory_archive_decision_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Annotate paper-tracking rows with governance status and split primary vs deprecated.
 
@@ -305,6 +453,7 @@ def partition_paper_tracking_rows_by_governance(
         for item in status_recommendation_result.get("recommendations") or []
         if isinstance(item, dict) and item.get("strategy_id")
     }
+    inventory_archive_by_strategy_id = _inventory_archive_decisions_by_strategy_id(inventory_archive_decision_result)
     annotated_items: list[dict[str, Any]] = []
     primary_items: list[dict[str, Any]] = []
     deprecated_items: list[dict[str, Any]] = []
@@ -312,13 +461,20 @@ def partition_paper_tracking_rows_by_governance(
 
     for item in [_dict(value) for value in paper_tracking.get("items") or [] if isinstance(value, dict)]:
         strategy_id = str(_strategy_metadata(item)["strategy_id"])
-        status = status_by_strategy_id.get(strategy_id, "untracked")
+        inventory_archive_decision = inventory_archive_by_strategy_id.get(strategy_id)
+        status = (
+            GOVERNANCE_INVENTORY_ARCHIVED_STATUS
+            if inventory_archive_decision
+            else status_by_strategy_id.get(strategy_id, "untracked")
+        )
         section = "deprecated" if status in GOVERNANCE_DEPRECATED_VIEW_STATUSES else "primary"
         annotated = {
             **item,
             "governance_strategy_id": strategy_id,
             "governance_status": status,
             "governance_view_section": section,
+            "governance_archive_basis": inventory_archive_decision.get("decision_basis") if inventory_archive_decision else None,
+            "inventory_archive_decision": inventory_archive_decision,
         }
         annotated_items.append(annotated)
         if section == "deprecated":
@@ -335,6 +491,9 @@ def partition_paper_tracking_rows_by_governance(
         "primary_count": len(primary_items),
         "deprecated_count": len(deprecated_items),
         "deprecated_strategy_ids": sorted(deprecated_strategy_ids),
+        "inventory_archived_count": sum(
+            1 for item in deprecated_items if item.get("governance_status") == GOVERNANCE_INVENTORY_ARCHIVED_STATUS
+        ),
         "items": annotated_items,
         "primary_items": primary_items,
         "deprecated_items": deprecated_items,
@@ -378,7 +537,12 @@ def build_shortpick_strategy_archive_records(
                 "baseline_comparison": _dict(pack.get("baseline_comparison")),
                 "leakage_coverage_note": _dict(item.get("leakage_coverage_note")) or _leakage_coverage_note(pack),
                 "retirement_artifact_ref": _retirement_artifact_lookup(retirement_artifacts, strategy_id),
-                "archive_reason": "retired_strategy_removed_from_primary_view",
+                "inventory_archive_decision": _dict(item.get("inventory_archive_decision")),
+                "archive_reason": (
+                    "inventory_archived_control_removed_from_primary_view"
+                    if item.get("recommended_status") == GOVERNANCE_INVENTORY_ARCHIVED_STATUS
+                    else "retired_strategy_removed_from_primary_view"
+                ),
             }
         )
 
@@ -1475,6 +1639,16 @@ def _strategy_id_from_generation_item(item: dict[str, Any]) -> str:
             "" if source_rank is None else str(source_rank),
         ]
     )
+
+
+def _inventory_archive_decisions_by_strategy_id(result: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    if not isinstance(result, dict):
+        return {}
+    return {
+        str(item.get("strategy_id") or ""): _dict(item)
+        for item in result.get("archived_records") or []
+        if isinstance(item, dict) and item.get("strategy_id")
+    }
 
 
 def _retirement_artifact_lookup(source: dict[str, Any] | None, strategy_id: str) -> dict[str, Any]:

@@ -11,6 +11,7 @@ from ashare_evidence.shortpick_strategy_governance import (
     apply_shortpick_same_symbol_cooldown_control,
     build_shortpick_drawdown_reversal_filter_rule,
     build_shortpick_historical_backtest_generation_requests,
+    build_shortpick_redundant_control_archive_decisions,
     build_shortpick_repeated_exposure_limit_rule,
     build_shortpick_retrospective_forward_replay_requests,
     build_shortpick_same_symbol_cooldown_rule,
@@ -275,7 +276,7 @@ def test_generation_filter_excludes_only_retired_strategies() -> None:
         status_result,
     )
 
-    assert result["decision_policy"] == "exclude_only_retired_status_from_active_generation"
+    assert result["decision_policy"] == "exclude_retired_and_inventory_archived_from_active_generation"
     assert result["input_count"] == 4
     assert result["eligible_count"] == 3
     assert result["excluded_count"] == 1
@@ -296,6 +297,99 @@ def test_generation_filter_can_include_retired_for_archive_rebuild() -> None:
     assert result["eligible_count"] == 1
     assert result["excluded_count"] == 0
     assert result["eligible_items"][0]["governance_status"] == "retired"
+
+
+def test_inventory_archive_decisions_require_inventory_basis_and_reason_code() -> None:
+    archive_item = _generation_item(
+        "market_factor_control_legacy_second_candidate",
+        "momentum_10d_turnover_legacy_second_candidate",
+        2,
+    )
+    performance_item = _generation_item(
+        "market_factor_control_cooldown_top1",
+        "momentum_10d_turnover_cooldown_rank",
+        1,
+    )
+    missing_basis_item = _generation_item(
+        "market_factor_control_golden_cross_10_200",
+        "momentum_volume_golden_cross_10_200",
+        1,
+    )
+
+    result = build_shortpick_redundant_control_archive_decisions(
+        [
+            {
+                **archive_item,
+                "archive_action": "archive",
+                "decision_basis": "inventory_diagnostic_value",
+                "archive_reason_code": "redundant_with_registered_control",
+                "archive_note": "covered by a stronger registered comparison line",
+            },
+            {
+                **performance_item,
+                "archive_action": "archive",
+                "decision_basis": "performance_retirement",
+                "archive_reason_code": "poor_forward_returns",
+            },
+            {
+                **missing_basis_item,
+                "archive_action": "archive",
+                "archive_reason_code": "no_unique_diagnostic_value",
+            },
+        ],
+        generated_at="2026-06-11T10:00:00+08:00",
+    )
+
+    assert result["status"] == "ready"
+    assert result["decision_policy"] == "inventory_diagnostic_value_archive_separate_from_performance_retirement"
+    assert result["archived_count"] == 1
+    assert result["blocked_count"] == 2
+    assert result["archived_records"][0]["governance_status"] == "inventory_archived"
+    assert result["archived_records"][0]["governance_view_section"] == "deprecated"
+    assert result["archived_records"][0]["archive_reason_code"] == "redundant_with_registered_control"
+    assert {item["blocker"] for item in result["blocked_records"]} == {
+        "inventory_archive_requires_inventory_diagnostic_value_basis",
+    }
+
+
+def test_generation_filter_excludes_inventory_archived_controls_separately_from_retirement() -> None:
+    archived = _generation_item(
+        "market_factor_control_legacy_second_candidate",
+        "momentum_10d_turnover_legacy_second_candidate",
+        2,
+    )
+    active = _generation_item("market_factor_control_offensive_top1", "momentum_10d_turnover_rank", 1)
+    inventory = build_shortpick_redundant_control_archive_decisions(
+        [
+            {
+                **archived,
+                "archive_action": "archive",
+                "decision_basis": "inventory_diagnostic_value",
+                "archive_reason_code": "no_unique_diagnostic_value",
+            }
+        ]
+    )
+
+    result = filter_shortpick_generation_eligible_items(
+        [archived, active],
+        {"recommendations": []},
+        inventory_archive_decision_result=inventory,
+    )
+
+    assert result["decision_policy"] == "exclude_retired_and_inventory_archived_from_active_generation"
+    assert result["eligible_count"] == 1
+    assert result["excluded_count"] == 1
+    assert result["excluded_items"][0]["governance_status"] == "inventory_archived"
+    assert result["excluded_items"][0]["reason"] == "inventory_archived_control_excluded_from_active_generation"
+
+    archive_rebuild = filter_shortpick_generation_eligible_items(
+        [archived],
+        {"recommendations": []},
+        inventory_archive_decision_result=inventory,
+        include_inventory_archived=True,
+    )
+    assert archive_rebuild["eligible_count"] == 1
+    assert archive_rebuild["eligible_items"][0]["governance_status"] == "inventory_archived"
 
 
 def test_generation_filter_derives_strategy_id_from_generation_fields() -> None:
@@ -398,6 +492,8 @@ def test_strategy_view_projection_splits_retired_into_archive_only() -> None:
                 "feature_coverage_status": "unknown",
                 "display_required": False,
             },
+            "governance_archive_basis": None,
+            "inventory_archive_decision": None,
             "view_section": "archive",
         }
     ]
@@ -408,6 +504,50 @@ def test_strategy_view_projection_splits_retired_into_archive_only() -> None:
     assert result["evidence_basis_sections"][0]["archive_count"] == 1
     assert "primary_horizon_summary" not in result["primary_items"][0]
     assert "retirement_artifact_ref" not in result["archive_items"][0]
+
+
+def test_strategy_view_projection_moves_inventory_archived_to_archive() -> None:
+    inventory = build_shortpick_redundant_control_archive_decisions(
+        [
+            {
+                "strategy_id": "inventory-id",
+                "tracking_group": "market_factor_control",
+                "role": "market_factor_control_legacy_second_candidate",
+                "family": "momentum_10d_turnover_legacy_second_candidate",
+                "entry_price_source": "next_close",
+                "source_rank": 2,
+                "archive_action": "archive",
+                "decision_basis": "inventory_diagnostic_value",
+                "archive_reason_code": "redundant_with_registered_control",
+            }
+        ]
+    )
+
+    result = project_shortpick_strategy_view_sections(
+        {
+            "recommendations": [
+                {
+                    "strategy_id": "inventory-id",
+                    "recommended_status": "active",
+                    "evidence_basis": "true_forward_tracking",
+                    "tracking_group": "market_factor_control",
+                    "tracking_role": "market_factor_control_legacy_second_candidate",
+                    "strategy_family": "momentum_10d_turnover_legacy_second_candidate",
+                    "entry_price_source": "next_close",
+                }
+            ]
+        },
+        inventory_archive_decision_result=inventory,
+    )
+
+    assert result["primary_count"] == 0
+    assert result["archive_count"] == 1
+    archived = result["archive_items"][0]
+    assert archived["recommended_status"] == "inventory_archived"
+    assert archived["status_display"]["primary_section"] == "archive"
+    assert archived["view_section"] == "archive"
+    assert archived["governance_archive_basis"] == "inventory_diagnostic_value"
+    assert archived["inventory_archive_decision"]["archive_reason_code"] == "redundant_with_registered_control"
 
 
 def test_strategy_view_projection_tolerates_missing_lists() -> None:
@@ -633,6 +773,61 @@ def test_archive_records_preserve_statistics_and_evidence_refs_for_retired_rows(
     assert archive["summary_rows"][0]["signal_count"] == 10
     assert archive["summary_rows"][0]["completed_observation_count"] == 10
     assert archive["summary_rows"][0]["retirement_artifact_count"] == 1
+
+
+def test_archive_records_mark_inventory_archived_reason_separately_from_retirement() -> None:
+    items = [
+        _control_tracking_item(
+            f"2026-05-{index + 1:02d}",
+            "002371.SZ",
+            "北方华创",
+            role="market_factor_control_legacy_second_candidate",
+            family="momentum_10d_turnover_legacy_second_candidate",
+            source_rank=2,
+        )
+        for index in range(3)
+    ]
+    evidence = build_shortpick_strategy_retirement_evidence_packs({"items": items})
+    strategy_id = evidence["packs"][0]["strategy_id"]
+    inventory = build_shortpick_redundant_control_archive_decisions(
+        [
+            {
+                "strategy_id": strategy_id,
+                "tracking_group": "market_factor_control",
+                "role": "market_factor_control_legacy_second_candidate",
+                "family": "momentum_10d_turnover_legacy_second_candidate",
+                "entry_price_source": "next_close",
+                "source_rank": 2,
+                "archive_action": "archive",
+                "decision_basis": "inventory_diagnostic_value",
+                "archive_reason_code": "dormant_legacy_control",
+            }
+        ]
+    )
+    status = {
+        "recommendations": [
+            {
+                "strategy_id": strategy_id,
+                "recommended_status": "active",
+                "evidence_basis": "true_forward_tracking",
+                "tracking_group": "market_factor_control",
+                "tracking_role": "market_factor_control_legacy_second_candidate",
+                "strategy_family": "momentum_10d_turnover_legacy_second_candidate",
+                "entry_price_source": "next_close",
+            }
+        ]
+    }
+    view = project_shortpick_strategy_view_sections(status, inventory_archive_decision_result=inventory)
+
+    archive = build_shortpick_strategy_archive_records(view, evidence)
+
+    assert archive["archive_count"] == 1
+    record = archive["records"][0]
+    assert record["recommended_status"] == "inventory_archived"
+    assert record["archive_reason"] == "inventory_archived_control_removed_from_primary_view"
+    assert record["inventory_archive_decision"]["archive_reason_code"] == "dormant_legacy_control"
+    assert record["retirement_artifact_ref"] == {}
+    assert archive["summary_rows"][0]["retirement_artifact_count"] == 0
 
 
 def test_archive_records_ignore_primary_rows() -> None:
@@ -1679,7 +1874,7 @@ def test_partition_moves_retire_candidate_to_deprecated_and_keeps_active_primary
     partition = partition_paper_tracking_rows_by_governance(paper_tracking, recommendations)
 
     assert partition["status"] == "ready"
-    assert partition["deprecated_status_set"] == ["retire_candidate", "retired"]
+    assert partition["deprecated_status_set"] == ["inventory_archived", "retire_candidate", "retired"]
     assert partition["deprecated_count"] == 10
     assert partition["primary_count"] == 5
     assert len(partition["items"]) == 15  # original order preserved, all annotated
@@ -1729,6 +1924,46 @@ def test_partition_defaults_unrecommended_rows_to_primary() -> None:
     assert row["governance_status"] == "untracked"
     assert row["governance_view_section"] == "primary"
     assert row["symbol"] == "002371.SZ"
+
+
+def test_partition_moves_inventory_archived_control_to_deprecated_without_performance_status() -> None:
+    item = _control_tracking_item(
+        "2026-05-10",
+        "002371.SZ",
+        "北方华创",
+        role="market_factor_control_legacy_second_candidate",
+        family="momentum_10d_turnover_legacy_second_candidate",
+        source_rank=2,
+    )
+    inventory = build_shortpick_redundant_control_archive_decisions(
+        [
+            {
+                "tracking_group": "market_factor_control",
+                "role": "market_factor_control_legacy_second_candidate",
+                "family": "momentum_10d_turnover_legacy_second_candidate",
+                "entry_price_source": "next_close",
+                "source_rank": 2,
+                "archive_action": "archive",
+                "decision_basis": "inventory_diagnostic_value",
+                "archive_reason_code": "dormant_legacy_control",
+            }
+        ]
+    )
+
+    partition = partition_paper_tracking_rows_by_governance(
+        {"items": [item]},
+        {"recommendations": []},
+        inventory_archive_decision_result=inventory,
+    )
+
+    assert partition["primary_count"] == 0
+    assert partition["deprecated_count"] == 1
+    assert partition["inventory_archived_count"] == 1
+    archived = partition["deprecated_items"][0]
+    assert archived["governance_status"] == "inventory_archived"
+    assert archived["governance_view_section"] == "deprecated"
+    assert archived["governance_archive_basis"] == "inventory_diagnostic_value"
+    assert archived["inventory_archive_decision"]["archive_reason_code"] == "dormant_legacy_control"
 
 
 def _evidence_from_returns(
@@ -1813,4 +2048,31 @@ def _item(
                 "excess_return": excess_return,
             }
         ],
+    }
+
+
+def _control_tracking_item(
+    signal_date: str,
+    symbol: str,
+    name: str,
+    *,
+    role: str,
+    family: str,
+    source_rank: int,
+) -> dict[str, object]:
+    return {
+        **_item(
+            signal_date,
+            symbol,
+            name,
+            0.01,
+            0.0,
+            tracking_group="market_factor_control",
+            source_rank=source_rank,
+        ),
+        "tracking_role": role,
+        "selection_score_components": {
+            "family": family,
+            "entry_price_source": "next_close",
+        },
     }

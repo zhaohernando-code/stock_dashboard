@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round30_deprecated_frontend_bucket_ds_reviewed_pending_merge_publish
+Status: round31_redundant_control_inventory_archive_path_ds_reviewed_pending_merge_publish
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -907,7 +907,7 @@ New implementation requirement items (status `not_started`, scoped for later run
 | ID | Work Item | Status | Notes |
 | --- | --- | --- | --- |
 | P2.7 | Deprecated/archived display bucket plus regression guard | completed_partial_generation_wiring_pending | Round 29 added the paper-tracking governance partition; Round 30 moves evidence-based `retire_candidate` and `retired` rows out of the paper-tracking primary frontend table and latest simulated trade surface into a collapsed deprecated/archive bucket. Continued-advancement/generation wiring remains pending under P2.4 / later runtime rounds. |
-| P2.8 | Redundant/meaningless control inventory archival | not_started | Define an inventory-driven archival path for controls that are redundant or provide no unique diagnostic value, separate from the performance retirement gates, so they can leave the primary view without being mislabeled as performance failures. |
+| P2.8 | Redundant/meaningless control inventory archival | completed_partial_inventory_decision_source_pending | Round 31 added an inventory-driven archival decision helper, generation exclusion, paper-tracking deprecated-bucket partitioning, API summary fields, and frontend status fallback for `inventory_archived`. No real control is archived until a durable inventory decision source supplies explicit `inventory_diagnostic_value` decisions with allowed reason codes. |
 | P3.7 | Labeled combined-ledger retrospective backfill with true-forward pairing | not_started | Persist retrospective backfill into the same ledger/table as true-forward rows with mandatory `evidence_basis`, `retrospective=true`, leakage-audit fields, and a `pairing_key`; guarantee true-forward queries and headline metrics filter by basis. Builds on the P3.4/P3.5 request builders and the P3.6 activation plan once runner and persistence exist. |
 | P3.8 | New credible control/comparison line build-out | not_started | Turn the P3.1-P3.3 control rules and the P1.3/P1.4 evaluation baselines into actually generated comparison lines on current data, gated through historical backtest before any paper-tracking backfill, per Decision B labeling. |
 
@@ -931,7 +931,7 @@ Round 29 merge evidence:
 
 ## Round 30 Review Result
 
-Status: completed DeepSeek review; merge and runtime publish pending.
+Status: completed DeepSeek review, merged, pushed, and runtime published.
 
 Round 30 scope:
 
@@ -956,6 +956,40 @@ DeepSeek result:
 - Follow-up fix added status fallback classification and targeted tests for status-only deprecated rows plus latest simulated trade filtering.
 - DeepSeek rereview confirmed the blocker is fixed and found no remaining merge-blocking issue.
 - Nonblocking note retained: `latestPaperTrackingChoices(...)` and `latestFrozenPaperTrackingChoices(...)` assume their caller passes primary rows; production call sites now do that, and helper tests cover the intended calling contract.
+
+Merge and publish evidence:
+
+- Commit `71c6297` (`Add shortpick deprecated frontend bucket`) was merged into main by `ba79122`.
+- Runtime publish was rerun with `ASHARE_PUBLISH_MAX_WAIT_SECONDS=180` after backend startup exceeded the default 30-second health window.
+- Deploy verifier passed (`19 passed, 0 failed`), runtime frontend matched the repo build, backend health passed at `http://127.0.0.1:8000/health`, and frontend health passed at `http://127.0.0.1:5173/`.
+- Scheduled refresh was resumed by the publish script after verification.
+
+## Round 31 Review Result
+
+Status: implementation completed; DeepSeek review passed; merge and runtime publish pending.
+
+Round 31 scope:
+
+- Added `build_shortpick_redundant_control_archive_decisions(...)` for inventory-driven archival of redundant or meaningless controls.
+- Kept the path separate from performance retirement gates: archival requires `decision_basis=inventory_diagnostic_value` and an allowed inventory reason code; performance-style or missing-basis attempts are blocked.
+- Extended `filter_shortpick_generation_eligible_items(...)` so `inventory_archived` controls are excluded from continued advancement by default, while archive rebuilds can opt in with `include_inventory_archived=True`.
+- Extended `partition_paper_tracking_rows_by_governance(...)` so inventory-archived rows move to the deprecated bucket and carry `governance_archive_basis` plus the inventory decision payload.
+- Wired the API paper-tracking ledger to evaluate `market_control_contract.inventory_archive_decisions` when present and expose inventory archive policy/count fields under `strategy_governance`.
+- Added frontend fallback/label support for `inventory_archived`, so status-only archived rows cannot silently re-enter the primary paper-tracking surface.
+
+DeepSeek result:
+
+- Initial DeepSeek review found three merge-blocking gaps: strategy governance projection did not yet apply inventory archive decisions, API strategy projection did not pass those decisions into the view projection, and frontend latest-choice helpers still accepted deprecated/status-only rows when called directly.
+- The implementation was updated to apply inventory archive decisions in `project_shortpick_strategy_view_sections(...)`, wire those decisions through `_build_shortpick_strategy_governance_projection(...)`, and make `latestPaperTrackingChoices(...)` plus `latestFrozenPaperTrackingChoices(...)` filter to primary rows internally.
+- DeepSeek rereview returned `PASS`. One shard noted it could not independently inspect `project_shortpick_strategy_view_sections(...)`, but the source-code shard confirmed the original blockers were closed and found no remaining merge blocker.
+
+Verification evidence before merge:
+
+- `PYTHONPATH=src python3 -m pytest tests/test_shortpick_strategy_governance.py tests/test_shortpick_lab_paper_tracking.py tests/test_shortpick_replay_api_projection.py tests/test_frontend_shortpick_paper_tracking_helpers.py tests/test_frontend_shortpick_static.py` passed (`83 passed, 6 deselected`).
+- `python3 -m ruff check src/ashare_evidence/shortpick_strategy_governance.py src/ashare_evidence/api.py tests/test_shortpick_strategy_governance.py tests/test_shortpick_lab_paper_tracking.py tests/test_shortpick_replay_api_projection.py tests/test_frontend_shortpick_paper_tracking_helpers.py tests/test_frontend_shortpick_static.py` passed.
+- `python3 -m compileall -q src/ashare_evidence/shortpick_strategy_governance.py src/ashare_evidence/api.py` passed.
+- `git diff --check` passed.
+- `npm --prefix frontend run build -- --mode production` passed with the existing Vite chunk-size warning only.
 
 ## Validation To Run For This Planning Task
 
@@ -1031,14 +1065,14 @@ DeepSeek result:
 | Round 27 DeepSeek review | completed |
 | Intent-clarification amendment (Round 28) | requirements_recorded_runtime_implementation_started |
 | Round 29 paper-tracking governance partition | completed_merged_plan_reconciled |
-| Round 30 frontend deprecated bucket | completed_ds_reviewed_pending_merge_publish |
+| Round 30 frontend deprecated bucket | published_runtime_verified |
 | P2.7 deprecated display bucket + regression guard | completed_partial_generation_wiring_pending |
-| P2.8 redundant/meaningless control archival | not_started |
+| P2.8 redundant/meaningless control archival | completed_partial_inventory_decision_source_pending |
 | P3.7 labeled combined-ledger retrospective backfill | not_started |
 | P3.8 new credible control/comparison line build-out | not_started |
-| Runtime behavior changed | frontend_user_visible_change_pending_merge_publish_for_round30 |
+| Runtime behavior changed | round30_frontend_user_visible_change_published_verified_round31_ds_reviewed_pending_merge_publish |
 | Registry changed | completed |
 | Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
-| Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_governance_projection_rendering_and_round30_deprecated_bucket_filtering |
+| Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_governance_projection_rendering_round30_deprecated_bucket_filtering_and_round31_inventory_archived_fallback |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |
