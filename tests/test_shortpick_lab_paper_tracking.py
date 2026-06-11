@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ashare_evidence.research_artifact_store import (
     artifact_root_from_database_url,
+    write_shortpick_combined_ledger_backfill_artifact_record,
     write_shortpick_strategy_retirement_artifact_record,
 )
 from tests.shortpick_lab_test_support import *
@@ -540,3 +541,45 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
         )
         self.assertEqual(payload["items"][0]["governance_status"], "retired")
         self.assertEqual(payload["items"][0]["governance_view_section"], "deprecated")
+
+    def test_paper_tracking_exposes_combined_ledger_artifact_without_polluting_items(self) -> None:
+        artifact_root = artifact_root_from_database_url(self.database_url)
+        write_shortpick_combined_ledger_backfill_artifact_record(
+            {
+                "artifact_id": "shortpick-combined-ledger-backfill:paper-tracking-fixture",
+                "artifact_type": "shortpick_combined_ledger_backfill",
+                "status": "ready",
+                "ledger_mode": "combined_paper_tracking_ledger",
+                "headline_metric_filter_policy": "true_forward_queries_must_filter_evidence_basis_true_forward_tracking",
+                "combined_rows": [
+                    {
+                        "combined_ledger_row_id": "shortpick-combined-ledger-retrospective:fixture",
+                        "evidence_basis": "retrospective_forward_replay",
+                        "retrospective": True,
+                        "headline_metric_eligible": False,
+                        "control_group_id": "control_same_symbol_cooldown:v1",
+                        "rule_signature": "cooldown-fixture",
+                        "pairing_key": "control_same_symbol_cooldown:v1|cooldown-fixture|600001.SH|2026-05-10",
+                        "symbol": "600001.SH",
+                        "name": "测试回放",
+                        "signal_date": "2026-05-10",
+                        "rule_defined_at": "2026-06-10",
+                    }
+                ],
+                "true_forward_rows": [],
+                "retrospective_rows": [],
+            },
+            root=artifact_root,
+        )
+
+        client = TestClient(create_app(self.database_url, enable_background_ops_tick=False))
+        payload = client.get("/shortpick-lab/paper-tracking").json()
+
+        self.assertEqual(payload["items"], [])
+        combined = payload["combined_ledger"]
+        self.assertEqual(combined["artifact_count"], 1)
+        self.assertEqual(combined["combined_row_count"], 1)
+        self.assertEqual(combined["true_forward_count"], 0)
+        self.assertEqual(combined["retrospective_count"], 1)
+        self.assertEqual(combined["source_policy"], "artifact_source_only_not_merged_into_true_forward_items")
+        self.assertEqual(combined["retrospective_rows"][0]["evidence_basis"], "retrospective_forward_replay")

@@ -65,6 +65,7 @@ from ashare_evidence.policy_audit import build_policy_audit_report
 from ashare_evidence.policy_config_loader import build_policy_governance_summary, list_policy_config_versions
 from ashare_evidence.research_artifact_store import (
     artifact_root_from_database_url,
+    read_shortpick_combined_ledger_backfill_artifacts,
     read_shortpick_strategy_retirement_artifacts,
 )
 from ashare_evidence.runtime_config import (
@@ -155,6 +156,7 @@ from ashare_evidence.shortpick_strategy_governance import (
     build_shortpick_strategy_archive_records,
     build_shortpick_strategy_retirement_evidence_packs,
     build_shortpick_strategy_status_recommendations,
+    filter_shortpick_combined_ledger_rows_by_evidence_basis,
     partition_paper_tracking_rows_by_governance,
     project_shortpick_strategy_view_sections,
 )
@@ -823,6 +825,10 @@ def _shortpick_strategy_retirement_artifacts_for_session(session: Session) -> di
     return read_shortpick_strategy_retirement_artifacts(root=_artifact_root_for_session(session))
 
 
+def _shortpick_combined_ledger_backfill_artifacts_for_session(session: Session) -> dict[str, object]:
+    return read_shortpick_combined_ledger_backfill_artifacts(root=_artifact_root_for_session(session))
+
+
 def _artifact_root_for_session(session: Session) -> Path:
     bind = session.get_bind()
     database_url = bind.url.render_as_string(hide_password=False) if bind is not None else None
@@ -845,6 +851,62 @@ def _shortpick_retirement_artifact_source_summary(source: dict[str, object] | No
         "artifact_count": int(source.get("artifact_count") or len(artifacts)),
         "ignored_count": int(source.get("ignored_count") or 0),
         "strategy_ids": sorted({str(item.get("strategy_id") or "") for item in artifacts if item.get("strategy_id")}),
+    }
+
+
+def _shortpick_combined_ledger_projection(source: dict[str, object] | None) -> dict[str, object]:
+    if not isinstance(source, dict):
+        return {
+            "status": "not_configured",
+            "source": "shortpick_combined_ledger_backfill_artifact_store",
+            "artifact_count": 0,
+            "ignored_count": 0,
+            "combined_row_count": 0,
+            "true_forward_count": 0,
+            "retrospective_count": 0,
+            "rows": [],
+            "true_forward_rows": [],
+            "retrospective_rows": [],
+        }
+
+    rows_by_id: dict[str, dict[str, object]] = {}
+    duplicate_row_count = 0
+    for artifact in source.get("artifacts") or []:
+        if not isinstance(artifact, dict):
+            continue
+        artifact_ref = str(artifact.get("artifact_id") or "")
+        for row in artifact.get("combined_rows") or []:
+            if not isinstance(row, dict):
+                continue
+            row_id = str(row.get("combined_ledger_row_id") or "")
+            if not row_id:
+                continue
+            if row_id in rows_by_id:
+                duplicate_row_count += 1
+                continue
+            rows_by_id[row_id] = {**row, "source_combined_ledger_artifact_id": artifact_ref}
+
+    rows = list(rows_by_id.values())
+    true_forward = filter_shortpick_combined_ledger_rows_by_evidence_basis(rows, evidence_basis="true_forward_tracking")
+    retrospective = filter_shortpick_combined_ledger_rows_by_evidence_basis(rows, evidence_basis="retrospective_forward_replay")
+    return {
+        "status": "ready",
+        "source": source.get("source") or "shortpick_combined_ledger_backfill_artifact_store",
+        "source_policy": "artifact_source_only_not_merged_into_true_forward_items",
+        "headline_metric_filter_policy": "true_forward_queries_must_filter_evidence_basis_true_forward_tracking",
+        "artifact_count": source.get("artifact_count", 0),
+        "ignored_count": source.get("ignored_count", 0),
+        "duplicate_row_count": duplicate_row_count,
+        "combined_row_count": len(rows),
+        "true_forward_count": true_forward["selected_count"],
+        "retrospective_count": retrospective["selected_count"],
+        "basis_counts": {
+            "true_forward_tracking": true_forward["selected_count"],
+            "retrospective_forward_replay": retrospective["selected_count"],
+        },
+        "rows": rows,
+        "true_forward_rows": true_forward["rows"],
+        "retrospective_rows": retrospective["rows"],
     }
 
 
@@ -1279,6 +1341,9 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
         inventory_archive_decision_result=inventory_archive_decisions,
     )
     items = governance_partition["items"]
+    combined_ledger = _shortpick_combined_ledger_projection(
+        _shortpick_combined_ledger_backfill_artifacts_for_session(session)
+    )
 
     return {
         "generated_at": utcnow().isoformat(),
@@ -1326,6 +1391,7 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
             "llm_control_scope_note": str(llm_contract.get("scope_note") or ""),
             "market_control_scope_note": str(market_control_contract.get("scope_note") or ""),
         },
+        "combined_ledger": combined_ledger,
         "items": items,
     }
 
