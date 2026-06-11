@@ -203,6 +203,7 @@ export function paperTrackingSearchText(item: ShortpickPaperTrackingItem): strin
     item.entry_rule,
     item.exit_rule,
     item.thesis,
+    item.evidence_basis,
     item.governance_status,
     item.governance_strategy_id,
   ]

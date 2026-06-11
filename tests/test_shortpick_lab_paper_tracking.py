@@ -640,7 +640,7 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
             "shortpick-control-inventory-archive:paper-tracking-fixture",
         )
 
-    def test_paper_tracking_exposes_combined_ledger_artifact_without_polluting_items(self) -> None:
+    def test_paper_tracking_merges_retrospective_replay_items_with_exit_results(self) -> None:
         artifact_root = artifact_root_from_database_url(self.database_url)
         write_shortpick_combined_ledger_backfill_artifact_record(
             {
@@ -661,7 +661,26 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
                         "symbol": "600001.SH",
                         "name": "测试回放",
                         "signal_date": "2026-05-10",
+                        "entry_date": "2026-05-11",
+                        "entry_price_source": "next_close",
+                        "source_rank": 1,
                         "rule_defined_at": "2026-06-10",
+                        "validation_by_horizon": [
+                            {
+                                "horizon_days": 5,
+                                "status": "completed",
+                                "entry_date": "2026-05-11",
+                                "exit_date": "2026-05-15",
+                                "stock_return": -0.05,
+                            },
+                            {
+                                "horizon_days": 10,
+                                "status": "completed",
+                                "entry_date": "2026-05-11",
+                                "exit_date": "2026-05-22",
+                                "stock_return": 0.03,
+                            },
+                        ],
                     }
                 ],
                 "true_forward_rows": [],
@@ -673,11 +692,30 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
         client = TestClient(create_app(self.database_url, enable_background_ops_tick=False))
         payload = client.get("/shortpick-lab/paper-tracking").json()
 
-        self.assertEqual(payload["items"], [])
+        self.assertEqual(len(payload["items"]), 1)
+        item = payload["items"][0]
+        self.assertEqual(item["combined_ledger_row_id"], "shortpick-combined-ledger-retrospective:fixture")
+        self.assertEqual(item["evidence_basis"], "retrospective_forward_replay")
+        self.assertTrue(item["retrospective"])
+        self.assertFalse(item["headline_metric_eligible"])
+        self.assertEqual(item["governance_status"], "retrospective_only")
+        self.assertEqual(item["selection_label"], "后验前向回放：同股冷却过滤")
+        self.assertEqual(item["control_group_id"], "control_same_symbol_cooldown:v1")
+        self.assertEqual(item["control_label"], "同股冷却过滤")
+        self.assertEqual(item["validation_status"], "completed")
+        self.assertEqual(item["validation_horizon_days"], 10)
+        self.assertEqual(item["stock_return"], 0.03)
+        self.assertEqual(
+            [(track["key"], track["exit_trade_day"], track["stock_return"]) for track in item["paper_tracking_exit_tracks"]],
+            [("mechanical_5d", "2026-05-15", -0.05), ("mechanical_10d", "2026-05-22", 0.03)],
+        )
+        self.assertEqual(payload["summary"]["retrospective_replay_signal_count"], 1)
+        self.assertEqual(payload["summary"]["comparison_signal_count"], 1)
+        self.assertEqual(payload["summary"]["true_forward_comparison_signal_count"], 0)
         combined = payload["combined_ledger"]
         self.assertEqual(combined["artifact_count"], 1)
         self.assertEqual(combined["combined_row_count"], 1)
         self.assertEqual(combined["true_forward_count"], 0)
         self.assertEqual(combined["retrospective_count"], 1)
-        self.assertEqual(combined["source_policy"], "artifact_source_only_not_merged_into_true_forward_items")
+        self.assertEqual(combined["source_policy"], "artifact_source_merged_into_paper_tracking_items_with_evidence_basis")
         self.assertEqual(combined["retrospective_rows"][0]["evidence_basis"], "retrospective_forward_replay")

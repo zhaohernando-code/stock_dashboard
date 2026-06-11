@@ -465,6 +465,8 @@ export interface ShortpickMarketFactorStudyResponse {
 export interface ShortpickPaperTrackingItem {
   run_id: number;
   candidate_id: number;
+  combined_ledger_row_id?: string | null;
+  source_combined_ledger_artifact_id?: string | null;
   run_date: string;
   signal_date?: string | null;
   entry_date?: string | null;
@@ -488,6 +490,14 @@ export interface ShortpickPaperTrackingItem {
   excess_return?: number | null;
   validation_by_horizon?: Record<string, unknown>[];
   paper_tracking_exit_tracks?: Record<string, unknown>[];
+  evidence_basis?: string | null;
+  retrospective?: boolean | null;
+  headline_metric_eligible?: boolean | null;
+  control_group_id?: string | null;
+  control_label?: string | null;
+  rule_signature?: string | null;
+  pairing_key?: string | null;
+  rule_defined_at?: string | null;
   holding_days?: number | null;
   stop_loss_pct?: number | null;
   thesis?: string | null;

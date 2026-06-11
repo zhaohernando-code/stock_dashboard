@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import copy
+import hashlib
 import json
 import logging
 import os
@@ -919,7 +920,7 @@ def _shortpick_combined_ledger_projection(source: dict[str, object] | None) -> d
     return {
         "status": "ready",
         "source": source.get("source") or "shortpick_combined_ledger_backfill_artifact_store",
-        "source_policy": "artifact_source_only_not_merged_into_true_forward_items",
+        "source_policy": "artifact_source_merged_into_paper_tracking_items_with_evidence_basis",
         "headline_metric_filter_policy": "true_forward_queries_must_filter_evidence_basis_true_forward_tracking",
         "artifact_count": source.get("artifact_count", 0),
         "ignored_count": source.get("ignored_count", 0),
@@ -935,6 +936,132 @@ def _shortpick_combined_ledger_projection(source: dict[str, object] | None) -> d
         "true_forward_rows": true_forward["rows"],
         "retrospective_rows": retrospective["rows"],
     }
+
+
+def _shortpick_combined_ledger_exit_tracks(row: dict[str, object]) -> list[dict[str, object]]:
+    labels = {
+        1: "机械1日",
+        3: "机械3日",
+        5: "机械5日",
+        10: "机械10日",
+        20: "机械20日",
+    }
+    tracks: list[dict[str, object]] = []
+    for horizon in row.get("validation_by_horizon") or []:
+        if not isinstance(horizon, dict) or str(horizon.get("status") or "") != "completed":
+            continue
+        try:
+            horizon_days = int(horizon.get("horizon_days") or 0)
+        except (TypeError, ValueError):
+            horizon_days = 0
+        key = f"mechanical_{horizon_days}d" if horizon_days else "mechanical_replay"
+        tracks.append(
+            {
+                "key": key,
+                "label": labels.get(horizon_days, f"机械{horizon_days}日" if horizon_days else "回放退出"),
+                "exit_trade_day": _paper_tracking_date_part(horizon.get("exit_date") or horizon.get("exit_at")),
+                "entry_trade_day": _paper_tracking_date_part(horizon.get("entry_date") or horizon.get("entry_at")),
+                "horizon_days": horizon_days or horizon.get("horizon_days"),
+                "status": horizon.get("status"),
+                "stock_return": horizon.get("stock_return"),
+                "excess_return": horizon.get("excess_return"),
+                "evidence_basis": row.get("evidence_basis"),
+            }
+        )
+    return tracks
+
+
+def _shortpick_int_or_zero(value: object) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _shortpick_combined_ledger_control_label(control_group_id: str) -> str:
+    labels = {
+        "control_same_symbol_cooldown:v1": "同股冷却过滤",
+        "control_drawdown_reversal_filter:v1": "回撤/反转过滤",
+        "control_repeated_exposure_limit:v1": "重复暴露限制",
+    }
+    return labels.get(control_group_id, control_group_id or "后验回放对照")
+
+
+def _shortpick_combined_ledger_display_item(row: dict[str, object]) -> dict[str, object]:
+    validation_by_horizon = [item for item in row.get("validation_by_horizon") or [] if isinstance(item, dict)]
+    completed = [item for item in validation_by_horizon if str(item.get("status") or "") == "completed"]
+    preferred = (
+        next((item for item in completed if _shortpick_int_or_zero(item.get("horizon_days")) == 10), None)
+        or next((item for item in completed if _shortpick_int_or_zero(item.get("horizon_days")) == 5), None)
+        or (completed[-1] if completed else None)
+    )
+    entry_price_source = str(row.get("entry_price_source") or (preferred or {}).get("entry_price_source") or "next_close")
+    signal_date = _paper_tracking_date_part(row.get("signal_date") or row.get("run_date"))
+    entry_date = _paper_tracking_date_part(row.get("entry_date") or (preferred or {}).get("entry_date"))
+    control_group_id = str(row.get("control_group_id") or "retrospective_replay")
+    control_label = _shortpick_combined_ledger_control_label(control_group_id)
+    row_id = str(row.get("combined_ledger_row_id") or row.get("pairing_key") or "")
+    item_id = -int(hashlib.sha256(row_id.encode("utf-8")).hexdigest()[:12], 16) if row_id else 0
+    exit_tracks = _shortpick_combined_ledger_exit_tracks(row)
+    return {
+        "run_id": 0,
+        "candidate_id": item_id,
+        "combined_ledger_row_id": row_id,
+        "source_combined_ledger_artifact_id": row.get("source_combined_ledger_artifact_id"),
+        "run_date": signal_date,
+        "signal_date": signal_date,
+        "entry_date": entry_date,
+        "symbol": str(row.get("symbol") or ""),
+        "name": str(row.get("name") or row.get("symbol") or "后验回放"),
+        "status": "tracking_signal",
+        "tracking_group": str(row.get("tracking_group") or "market_factor_control"),
+        "tracking_role": str(row.get("tracking_role") or control_group_id),
+        "selection_label": f"后验前向回放：{control_label}",
+        "source_rank": row.get("source_rank"),
+        "entry_rule": (
+            "次一交易日开盘买入；后验前向回放"
+            if entry_price_source == "next_open"
+            else "信号日盘中当前价买入；后验前向回放"
+            if entry_price_source == "same_day_intraday_current"
+            else "次一交易日收盘买入；后验前向回放"
+        ),
+        "exit_rule": "后验前向回放退出结果；仅作为对照证据，不作为真实前向 headline",
+        "monitoring_tracks": [],
+        "holding_days": (preferred or {}).get("horizon_days"),
+        "stop_loss_pct": None,
+        "thesis": str(row.get("thesis") or "从已冻结 ranked-pool 回放 artifact 合成的纸面跟踪对照行。"),
+        "gate": {"passed": True, "inserted": True},
+        "regime": {},
+        "selection_score_components": row,
+        "validation_status": (preferred or {}).get("status") or ("completed" if completed else "not_started"),
+        "validation_horizon_days": (preferred or {}).get("horizon_days"),
+        "entry_at": (preferred or {}).get("entry_date"),
+        "exit_at": (preferred or {}).get("exit_date"),
+        "entry_price": (preferred or {}).get("entry_price"),
+        "exit_price": (preferred or {}).get("exit_price"),
+        "stock_return": (preferred or {}).get("stock_return") if preferred else row.get("stock_return"),
+        "excess_return": (preferred or {}).get("excess_return") if preferred else row.get("excess_return"),
+        "validation_by_horizon": validation_by_horizon,
+        "paper_tracking_exit_tracks": exit_tracks,
+        "evidence_basis": str(row.get("evidence_basis") or "retrospective_forward_replay"),
+        "retrospective": bool(row.get("retrospective", True)),
+        "headline_metric_eligible": bool(row.get("headline_metric_eligible", False)),
+        "rule_signature": row.get("rule_signature"),
+        "control_group_id": control_group_id,
+        "control_label": control_label,
+        "pairing_key": row.get("pairing_key"),
+        "rule_defined_at": row.get("rule_defined_at"),
+        "governance_status": "retrospective_only",
+        "governance_strategy_id": str(row.get("tracking_role") or control_group_id),
+        "governance_view_section": "primary",
+        "created_at": row.get("combined_ledger_materialized_at"),
+        "updated_at": row.get("combined_ledger_materialized_at"),
+    }
+
+
+def _shortpick_combined_ledger_display_items(combined_ledger: dict[str, object]) -> list[dict[str, object]]:
+    rows = combined_ledger.get("retrospective_rows") if isinstance(combined_ledger, dict) else []
+    return [_shortpick_combined_ledger_display_item(row) for row in rows or [] if isinstance(row, dict)]
 
 
 def _build_shortpick_replay_aggregate_feedback_response(session: Session) -> dict[str, object]:
@@ -1380,6 +1507,8 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
     combined_ledger = _shortpick_combined_ledger_projection(
         _shortpick_combined_ledger_backfill_artifacts_for_session(session)
     )
+    retrospective_items = _shortpick_combined_ledger_display_items(combined_ledger)
+    display_items = [*items, *retrospective_items]
 
     return {
         "generated_at": utcnow().isoformat(),
@@ -1423,7 +1552,9 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
             "frozen_v2_signal_count": len(frozen_v2_items),
             "llm_paper_control_signal_count": len(llm_control_items),
             "market_control_signal_count": len(market_control_items),
-            "comparison_signal_count": len(items),
+            "retrospective_replay_signal_count": len(retrospective_items),
+            "comparison_signal_count": len(display_items),
+            "true_forward_comparison_signal_count": len(items),
             "required_forward_trading_days": int(contract.get("required_forward_trading_days") or 40),
             "frozen_at": frozen_at.isoformat(),
             "family": family,
@@ -1432,7 +1563,7 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
             "market_control_scope_note": str(market_control_contract.get("scope_note") or ""),
         },
         "combined_ledger": combined_ledger,
-        "items": items,
+        "items": display_items,
     }
 
 
