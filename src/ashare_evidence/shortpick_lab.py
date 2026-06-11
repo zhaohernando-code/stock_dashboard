@@ -55,9 +55,14 @@ from ashare_evidence.models import (
     WatchlistFollow,
 )
 from ashare_evidence.recommendation_selection import recommendation_recency_ordering
-from ashare_evidence.research_artifact_store import artifact_root_from_database_url, write_shortpick_lab_artifact
+from ashare_evidence.research_artifact_store import (
+    artifact_root_from_database_url,
+    read_shortpick_strategy_retirement_artifacts,
+    write_shortpick_lab_artifact,
+)
 from ashare_evidence.runtime_config import get_builtin_llm_executor_config, resolve_llm_key_candidates
 from ashare_evidence.shortpick_policy import SHORTPICK_FROZEN_STRATEGY_CONFIG
+from ashare_evidence.shortpick_strategy_governance import filter_shortpick_generation_eligible_items
 from ashare_evidence.stock_master import DEFAULT_AKSHARE_TIMEOUT_SECONDS, akshare_runtime_ready, resolve_stock_profile
 
 _host_from_url = _source_audit.host_from_url
@@ -1654,9 +1659,19 @@ def insert_shortpick_intraday_same_day_candidate(session: Session, run: Shortpic
                 }
             )
             break
+    inserted, generation_governance = _apply_shortpick_generation_governance_to_inserted_candidates(
+        session,
+        inserted,
+    )
     result = {
         "status": "inserted" if inserted else "skipped",
-        "reason": None if inserted else "frozen_gate_or_rank_not_triggered",
+        "reason": (
+            None
+            if inserted
+            else "no_generation_eligible_intraday_same_day_candidate"
+            if generation_governance.get("excluded_count")
+            else "frozen_gate_or_rank_not_triggered"
+        ),
         "removed_existing_candidate_count": removed,
         "inserted_candidate_count": len(inserted),
         "pool_limit": SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_POOL_LIMIT,
@@ -1667,6 +1682,7 @@ def insert_shortpick_intraday_same_day_candidate(session: Session, run: Shortpic
             "inserted": bool(inserted),
         },
         "market_factor_paper_controls": shortpick_market_factor_paper_control_contracts(),
+        "generation_governance": generation_governance,
         "regime": regime,
         "market_data_sync": universe_sync,
         "quote_snapshot": quote_snapshot.get("summary", {}),
@@ -2321,8 +2337,13 @@ def insert_shortpick_market_factor_overlay_candidates(session: Session, run: Sho
                 "score": golden_item.get("_market_factor_score"),
             }
         )
+    inserted, generation_governance = _apply_shortpick_generation_governance_to_inserted_candidates(
+        session,
+        inserted,
+    )
     result = {
-        "status": "inserted",
+        "status": "inserted" if inserted else "skipped",
+        "reason": None if inserted else "no_generation_eligible_market_factor_candidates",
         "removed_existing_candidate_count": removed,
         "inserted_candidate_count": len(inserted),
         "pool_limit": SHORTPICK_MARKET_FACTOR_POOL_LIMIT,
@@ -2345,6 +2366,7 @@ def insert_shortpick_market_factor_overlay_candidates(session: Session, run: Sho
             "inserted": any(item.get("tracking_role") == "frozen_paper_primary" for item in inserted),
         },
         "market_factor_paper_controls": shortpick_market_factor_paper_control_contracts(),
+        "generation_governance": generation_governance,
         "regime": regime,
         "market_data_sync": universe_sync,
         "candidates": inserted,
@@ -2353,6 +2375,148 @@ def insert_shortpick_market_factor_overlay_candidates(session: Session, run: Sho
     run.summary_payload = {**dict(run.summary_payload or {}), "market_factor_overlay": result}
     session.flush()
     return result
+
+
+def _shortpick_generation_governance_filter(
+    session: Session,
+    candidate_specs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    retirement_artifacts = _read_shortpick_generation_retirement_artifacts(session)
+    status_recommendations = {
+        "status": "ready",
+        "source": "shortpick_strategy_retirement_artifact_store",
+        "decision_policy": "retired_requires_strategy_retirement_artifact_and_decision_log_ref",
+        "strategy_count": len(retirement_artifacts.get("artifacts") or []),
+        "recommendations": [
+            {
+                "strategy_id": str(artifact.get("strategy_id") or ""),
+                "recommended_status": "retired",
+                "retirement_artifact_ref": {
+                    "artifact_id": artifact.get("artifact_id"),
+                    "decision_log_ref": artifact.get("decision_log_ref"),
+                },
+            }
+            for artifact in retirement_artifacts.get("artifacts") or []
+            if isinstance(artifact, dict) and _shortpick_generation_retirement_artifact_is_retired_authority(artifact)
+        ],
+    }
+    result = filter_shortpick_generation_eligible_items(candidate_specs, status_recommendations)
+    return {
+        **result,
+        "retirement_artifact_source": {
+            "status": retirement_artifacts.get("status"),
+            "source": retirement_artifacts.get("source"),
+            "artifact_count": retirement_artifacts.get("artifact_count", 0),
+            "ignored_count": retirement_artifacts.get("ignored_count", 0),
+            "strategy_ids": sorted(
+                {
+                    str(artifact.get("strategy_id") or "")
+                    for artifact in retirement_artifacts.get("artifacts") or []
+                    if isinstance(artifact, dict) and artifact.get("strategy_id")
+                }
+            ),
+        },
+    }
+
+
+def _shortpick_generation_retirement_artifact_is_retired_authority(artifact: dict[str, Any]) -> bool:
+    explicit_status = str(
+        artifact.get("recommended_status")
+        or artifact.get("strategy_recommended_status")
+        or artifact.get("retirement_status")
+        or ""
+    ).strip()
+    return bool(
+        artifact.get("strategy_id")
+        and artifact.get("decision_log_ref")
+        and (not explicit_status or explicit_status == "retired")
+    )
+
+
+def _apply_shortpick_generation_governance_to_inserted_candidates(
+    session: Session,
+    inserted: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    candidate_ids = [int(item["candidate_id"]) for item in inserted if item.get("candidate_id") is not None]
+    if not candidate_ids:
+        return inserted, _shortpick_generation_governance_filter(session, [])
+    candidates = session.scalars(
+        select(ShortpickCandidate)
+        .where(ShortpickCandidate.id.in_(candidate_ids))
+        .order_by(ShortpickCandidate.id.asc())
+    ).all()
+    specs = [_shortpick_generation_candidate_spec_from_candidate(candidate) for candidate in candidates]
+    generation_governance = _shortpick_generation_governance_filter(session, specs)
+    excluded_candidate_ids = {
+        int(candidate_id)
+        for item in generation_governance.get("excluded_items") or []
+        if isinstance(item, dict)
+        for candidate_id in [_candidate_id_from_generation_filter_item(item)]
+        if candidate_id is not None
+    }
+    if not excluded_candidate_ids:
+        return inserted, generation_governance
+
+    for candidate in candidates:
+        if candidate.id in excluded_candidate_ids:
+            session.delete(candidate)
+    session.flush()
+    return [item for item in inserted if int(item.get("candidate_id") or 0) not in excluded_candidate_ids], generation_governance
+
+
+def _shortpick_generation_candidate_spec_from_candidate(candidate: ShortpickCandidate) -> dict[str, Any]:
+    payload = candidate.candidate_payload if isinstance(candidate.candidate_payload, dict) else {}
+    overlay = payload.get("market_factor_overlay") if isinstance(payload.get("market_factor_overlay"), dict) else {}
+    family = str(payload.get("baseline_family") or overlay.get("family") or "unknown")
+    tracking_role = str(payload.get("tracking_role") or overlay.get("tracking_role") or "control")
+    return _shortpick_generation_candidate_spec(
+        family=family,
+        tracking_role=tracking_role,
+        rank=int(overlay.get("rank") or 1),
+        source_rank=overlay.get("source_rank"),
+        entry_price_source=str(overlay.get("entry_price_source") or SHORTPICK_ENTRY_PRICE_SOURCE_CLOSE),
+        candidate_id=candidate.id,
+    )
+
+
+def _candidate_id_from_generation_filter_item(item: dict[str, Any]) -> int | None:
+    projected = item.get("item") if isinstance(item.get("item"), dict) else item
+    try:
+        return int(projected.get("candidate_id")) if projected.get("candidate_id") is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _read_shortpick_generation_retirement_artifacts(session: Session) -> dict[str, Any]:
+    bind = session.get_bind()
+    database_url = bind.url.render_as_string(hide_password=False) if bind is not None else None
+    return read_shortpick_strategy_retirement_artifacts(root=artifact_root_from_database_url(database_url))
+
+
+def _shortpick_generation_candidate_spec(
+    *,
+    family: str,
+    tracking_role: str,
+    rank: int,
+    source_rank: int | None = None,
+    entry_price_source: str | None = None,
+    candidate_id: int | None = None,
+) -> dict[str, Any]:
+    return {
+        "candidate_id": candidate_id,
+        "tracking_group": _shortpick_generation_tracking_group(family=family, tracking_role=tracking_role),
+        "tracking_role": tracking_role,
+        "baseline_family": family,
+        "entry_price_source": entry_price_source or SHORTPICK_ENTRY_PRICE_SOURCE_CLOSE,
+        "rank": rank,
+        "source_rank": source_rank,
+    }
+
+
+def _shortpick_generation_tracking_group(*, family: str, tracking_role: str) -> str:
+    if family == SHORTPICK_FROZEN_PAPER_FAMILY or tracking_role == "frozen_paper_primary":
+        return "frozen_strategy"
+    return "market_factor_control"
 
 
 def _shortpick_limit_band_for_symbol(symbol: str, name: str | None = None) -> float:
