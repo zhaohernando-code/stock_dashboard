@@ -116,6 +116,7 @@ import {
   paperTrackingExitReturn,
   paperTrackingExitText,
   paperTrackingExpectedEntryText,
+  paperTrackingGroupFilterMatches,
   paperTrackingGroupColor,
   paperTrackingGroupLabel,
   paperTrackingMechanical10dExitTrack,
@@ -988,14 +989,14 @@ function PaperTrackingTab({
     if (ledgerExitStateFilter === "mechanical_10d_done" && !hasMechanical10dExit) return false;
     if (ledgerExitStateFilter === "take_profit_stop_loss_done" && !hasRiskExit) return false;
     if (ledgerExitStateFilter === "waiting_exit" && (!entered || hasMechanical5dExit || hasMechanical10dExit || hasRiskExit)) return false;
-    if (ledgerGroupFilter && item.tracking_group !== ledgerGroupFilter) return false;
+    if (!paperTrackingGroupFilterMatches(item, ledgerGroupFilter)) return false;
     if (ledgerEntryRuleFilter && paperTrackingEntryRuleKey(item) !== ledgerEntryRuleFilter) return false;
     if (normalizedLedgerSearch && !paperTrackingSearchText(item).includes(normalizedLedgerSearch)) return false;
     return true;
   }).sort((left, right) => comparePaperTrackingSignalEntryRows(right, left));
   const archivedDisplayRows = deprecatedRows
     .filter((item) => {
-      if (ledgerGroupFilter && item.tracking_group !== ledgerGroupFilter) return false;
+      if (!paperTrackingGroupFilterMatches(item, ledgerGroupFilter)) return false;
       if (ledgerEntryRuleFilter && paperTrackingEntryRuleKey(item) !== ledgerEntryRuleFilter) return false;
       if (normalizedLedgerSearch && !paperTrackingSearchText(item).includes(normalizedLedgerSearch)) return false;
       return true;
@@ -1348,6 +1349,9 @@ function PaperTrackingTab({
               { value: "llm_paper_control", label: "LLM纸面对照" },
               { value: "market_factor_control", label: "市场因子对照" },
               { value: "market_random_control", label: "同池随机基线" },
+              { value: "同股冷却过滤", label: "同股冷却过滤" },
+              { value: "回撤/反转过滤", label: "回撤/反转过滤" },
+              { value: "重复暴露限制", label: "重复暴露限制" },
             ]}
             onChange={(value) => setLedgerGroupFilter((value ?? "") as PaperTrackingGroupFilter)}
           />

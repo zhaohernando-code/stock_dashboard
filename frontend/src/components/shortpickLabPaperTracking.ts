@@ -2,7 +2,16 @@ import type { ShortpickPaperTrackingItem } from "../types";
 import { formatDate } from "../utils/format";
 import { statusLabel } from "./shortpickLabLabels";
 
-export type PaperTrackingGroupFilter = "" | "frozen_strategy" | "frozen_strategy_v2" | "llm_paper_control" | "market_factor_control" | "market_random_control";
+export type PaperTrackingGroupFilter =
+  | ""
+  | "frozen_strategy"
+  | "frozen_strategy_v2"
+  | "llm_paper_control"
+  | "market_factor_control"
+  | "market_random_control"
+  | "同股冷却过滤"
+  | "回撤/反转过滤"
+  | "重复暴露限制";
 export type PaperTrackingEntryStateFilter = "entered" | "pending" | "";
 export type PaperTrackingEntryRuleFilter = "" | "next_close" | "next_open" | "same_day_intraday_current";
 export type PaperTrackingExitStateFilter = "" | "mechanical_5d_done" | "mechanical_10d_done" | "take_profit_stop_loss_done" | "waiting_exit";
@@ -192,6 +201,20 @@ export function paperTrackingEntryRuleKey(item: ShortpickPaperTrackingItem): Pap
   return "next_close";
 }
 
+export function paperTrackingStrategyFilterKey(item: ShortpickPaperTrackingItem): PaperTrackingGroupFilter {
+  const label = item.control_label || item.selection_label?.replace(/^后验前向回放：/, "");
+  if (label === "同股冷却过滤" || label === "回撤/反转过滤" || label === "重复暴露限制") return label;
+  return "";
+}
+
+export function paperTrackingGroupFilterMatches(item: ShortpickPaperTrackingItem, filter: PaperTrackingGroupFilter): boolean {
+  if (!filter) return true;
+  if (filter === "同股冷却过滤" || filter === "回撤/反转过滤" || filter === "重复暴露限制") {
+    return paperTrackingStrategyFilterKey(item) === filter;
+  }
+  return item.tracking_group === filter;
+}
+
 export function paperTrackingSearchText(item: ShortpickPaperTrackingItem): string {
   return [
     item.symbol,
@@ -200,6 +223,7 @@ export function paperTrackingSearchText(item: ShortpickPaperTrackingItem): strin
     paperTrackingEntryDate(item),
     paperTrackingGroupLabel(item.tracking_group),
     item.selection_label,
+    item.control_label,
     item.entry_rule,
     item.exit_rule,
     item.thesis,
