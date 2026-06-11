@@ -636,6 +636,61 @@ def test_cli_governance_combined_ledger_backfill_materializes_replay_artifact() 
         )
 
 
+def test_cli_governance_combined_ledger_materialize_discovers_runtime_replay_artifacts() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        replay_dir = root / "shortpick_retrospective_replays"
+        replay_dir.mkdir()
+        rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")
+        replay_artifact = {
+            "artifact_id": "shortpick-retrospective-forward-replay:test",
+            "artifact_type": "shortpick_retrospective_forward_replay",
+            "status": "ready",
+            "evidence_basis": "retrospective_forward_replay",
+            "retrospective": True,
+            "paper_tracking_write_policy": "forbidden",
+            "request": {
+                "control_group_id": rule["control_group_id"],
+                "rule_signature": rule["rule_signature"],
+                "rule_defined_at": "2026-06-10",
+            },
+            "rows": [
+                {
+                    "candidate_id": "a",
+                    "signal_date": "2026-05-20",
+                    "symbol": "002028.SZ",
+                    "control_group_id": rule["control_group_id"],
+                    "rule_signature": rule["rule_signature"],
+                    "rule_defined_at": "2026-06-10",
+                    "leakage_audit_status": "passed",
+                }
+            ],
+        }
+        (replay_dir / "ready.json").write_text(json.dumps(replay_artifact, ensure_ascii=False), encoding="utf-8")
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = main(
+                [
+                    "shortpick-governance-combined-ledger-materialize",
+                    "--artifact-root",
+                    str(root),
+                    "--generated-at",
+                    "2026-06-11T12:00:00+08:00",
+                ]
+            )
+
+        assert exit_code == 0
+        rendered = json.loads(stdout.getvalue())
+        assert rendered["status"] == "ready"
+        assert rendered["source_discovery"]["artifact_count"] == 1
+        artifact_path = Path(rendered["artifact"]["path"])
+        assert artifact_path.parent == root / "shortpick_combined_ledgers"
+        saved = json.loads(artifact_path.read_text(encoding="utf-8"))
+        assert saved["artifact_type"] == "shortpick_combined_ledger_backfill"
+        assert saved["combined_row_count"] == 1
+
+
 def test_cli_governance_retirement_artifact_writes_ready_artifact() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         evidence_path = Path(temp_dir) / "evidence.json"

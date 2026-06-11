@@ -59,6 +59,7 @@ from ashare_evidence.research_artifact_store import (
 from ashare_evidence.services import get_latest_recommendation_summary, get_recommendation_trace
 from ashare_evidence.shortpick_combined_ledger_writer import (
     load_shortpick_combined_ledger_inputs,
+    materialize_shortpick_combined_ledger_from_artifact_root,
     run_shortpick_combined_ledger_backfill_artifact,
 )
 from ashare_evidence.shortpick_lab import (
@@ -786,6 +787,17 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_governance_combined_ledger_backfill.add_argument("--generated-at", default=None)
     shortpick_governance_combined_ledger_backfill.add_argument("--output-path", required=True)
 
+    shortpick_governance_combined_ledger_materialize = subparsers.add_parser(
+        "shortpick-governance-combined-ledger-materialize",
+        help="Discover ready retrospective replay artifacts and materialize a combined-ledger artifact.",
+    )
+    shortpick_governance_combined_ledger_materialize.add_argument("--database-url", default=None)
+    shortpick_governance_combined_ledger_materialize.add_argument("--artifact-root", default=None)
+    shortpick_governance_combined_ledger_materialize.add_argument("--true-forward-path", default=None)
+    shortpick_governance_combined_ledger_materialize.add_argument("--generated-at", default=None)
+    shortpick_governance_combined_ledger_materialize.add_argument("--output-path", default=None)
+    shortpick_governance_combined_ledger_materialize.add_argument("--write-blocked", action="store_true")
+
     shortpick_governance_retirement_artifact = subparsers.add_parser(
         "shortpick-governance-retirement-artifact",
         help="Write a governed Short Pick strategy-retirement artifact for an approved retire_candidate strategy.",
@@ -1298,6 +1310,19 @@ def main(argv: list[str] | None = None) -> int:
             true_forward_rows=true_forward_rows,
             generated_at=args.generated_at,
             output_path=args.output_path,
+        )
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-governance-combined-ledger-materialize":
+        root = Path(args.artifact_root) if args.artifact_root else artifact_root_from_database_url(args.database_url)
+        _, true_forward_rows = load_shortpick_combined_ledger_inputs([], true_forward_path=args.true_forward_path)
+        payload = materialize_shortpick_combined_ledger_from_artifact_root(
+            root=root,
+            true_forward_rows=true_forward_rows,
+            generated_at=args.generated_at,
+            output_path=args.output_path,
+            write_blocked=args.write_blocked,
         )
         _print_json(payload)
         return 0

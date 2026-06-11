@@ -5,10 +5,16 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ashare_evidence.research_artifact_store import (
+    artifact_path,
+    write_shortpick_combined_ledger_backfill_artifact_record,
+)
 from ashare_evidence.shortpick_strategy_governance import (
     build_shortpick_combined_ledger_retrospective_backfill,
     filter_shortpick_combined_ledger_rows_by_evidence_basis,
 )
+
+RETROSPECTIVE_REPLAY_ARTIFACT_TYPE = "shortpick_retrospective_forward_replay"
 
 
 def run_shortpick_combined_ledger_backfill_artifact(
@@ -112,6 +118,82 @@ def run_shortpick_combined_ledger_backfill_artifact(
     return payload
 
 
+def discover_shortpick_retrospective_forward_replay_artifacts(
+    *,
+    root: str | Path,
+) -> dict[str, Any]:
+    artifacts: list[dict[str, Any]] = []
+    ignored: list[dict[str, str]] = []
+    seen_artifact_ids: set[str] = set()
+    source_dirs = _retrospective_replay_artifact_dirs(root=Path(root))
+
+    for directory in source_dirs:
+        if not directory.exists():
+            continue
+        for target in sorted(directory.glob("*.json")):
+            try:
+                payload = _load_json_object(target)
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                ignored.append({"path": str(target), "reason": f"unreadable_json:{type(exc).__name__}"})
+                continue
+            if not _is_ready_retrospective_replay_artifact(payload):
+                ignored.append({"path": str(target), "reason": "not_ready_retrospective_forward_replay_artifact"})
+                continue
+            artifact_id = str(payload.get("artifact_id") or "")
+            if artifact_id in seen_artifact_ids:
+                ignored.append({"path": str(target), "reason": "duplicate_artifact_id"})
+                continue
+            seen_artifact_ids.add(artifact_id)
+            artifact_payload = dict(payload)
+            artifact_payload["artifact"] = {**dict(artifact_payload.get("artifact") or {}), "path": str(target)}
+            artifacts.append(artifact_payload)
+
+    return {
+        "status": "ready",
+        "source": "shortpick_retrospective_forward_replay_artifact_discovery",
+        "source_dirs": [str(path) for path in source_dirs],
+        "artifact_count": len(artifacts),
+        "ignored_count": len(ignored),
+        "ignored": ignored,
+        "artifacts": artifacts,
+    }
+
+
+def materialize_shortpick_combined_ledger_from_artifact_root(
+    *,
+    root: str | Path,
+    true_forward_rows: list[dict[str, Any]] | None = None,
+    generated_at: str | None = None,
+    output_path: str | Path | None = None,
+    write_blocked: bool = False,
+) -> dict[str, Any]:
+    root_path = Path(root)
+    discovery = discover_shortpick_retrospective_forward_replay_artifacts(root=root_path)
+    payload = run_shortpick_combined_ledger_backfill_artifact(
+        [dict(item) for item in discovery["artifacts"] if isinstance(item, dict)],
+        true_forward_rows=true_forward_rows,
+        generated_at=generated_at,
+    )
+    payload = {
+        **payload,
+        "source_discovery": {
+            "source": discovery["source"],
+            "source_dirs": discovery["source_dirs"],
+            "artifact_count": discovery["artifact_count"],
+            "ignored_count": discovery["ignored_count"],
+            "ignored": discovery["ignored"],
+        },
+    }
+    should_write = payload.get("status") == "ready" or write_blocked
+    if output_path is not None and should_write:
+        path = write_shortpick_combined_ledger_backfill_artifact(payload, output_path=output_path)
+        return {**payload, "artifact": {"path": str(path)}}
+    if output_path is None and should_write:
+        path = write_shortpick_combined_ledger_backfill_artifact_record(payload, root=root_path)
+        return {**payload, "artifact": {"path": str(path)}}
+    return payload
+
+
 def write_shortpick_combined_ledger_backfill_artifact(payload: dict[str, Any], *, output_path: str | Path) -> Path:
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -177,6 +259,31 @@ def _load_true_forward_rows(path: str | Path) -> list[dict[str, Any]]:
 def _source_ref(replay: dict[str, Any], *, index: int) -> str:
     artifact = replay.get("artifact") if isinstance(replay.get("artifact"), dict) else {}
     return str(artifact.get("path") or replay.get("artifact_id") or f"replay-artifact:{index}")
+
+
+def _retrospective_replay_artifact_dirs(*, root: Path) -> tuple[Path, ...]:
+    standard_dir = artifact_path(RETROSPECTIVE_REPLAY_ARTIFACT_TYPE, "__index__", root=root).parent
+    legacy_replays_dir = root / "replays"
+    return tuple(dict.fromkeys((standard_dir, legacy_replays_dir)))
+
+
+def _is_ready_retrospective_replay_artifact(payload: dict[str, Any]) -> bool:
+    rows = payload.get("rows")
+    request = payload.get("request")
+    return bool(
+        payload.get("status") == "ready"
+        and payload.get("artifact_type") == RETROSPECTIVE_REPLAY_ARTIFACT_TYPE
+        and payload.get("artifact_id")
+        and payload.get("evidence_basis") == "retrospective_forward_replay"
+        and payload.get("retrospective") is True
+        and payload.get("paper_tracking_write_policy") == "forbidden"
+        and isinstance(request, dict)
+        and request.get("control_group_id")
+        and request.get("rule_signature")
+        and request.get("rule_defined_at")
+        and isinstance(rows, list)
+        and rows
+    )
 
 
 def _combined_ledger_artifact_id(source_refs: list[str], rows: list[dict[str, Any]]) -> str:
