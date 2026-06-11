@@ -49,6 +49,20 @@ export function paperTrackingDisplayRank(item: ShortpickPaperTrackingItem): numb
   return 5;
 }
 
+export function paperTrackingGovernanceViewSection(item: ShortpickPaperTrackingItem): "primary" | "deprecated" {
+  if (item.governance_view_section === "deprecated") return "deprecated";
+  if (item.governance_status === "retire_candidate" || item.governance_status === "retired") return "deprecated";
+  return "primary";
+}
+
+export function primaryPaperTrackingRows(rows: ShortpickPaperTrackingItem[]): ShortpickPaperTrackingItem[] {
+  return rows.filter((item) => paperTrackingGovernanceViewSection(item) === "primary");
+}
+
+export function deprecatedPaperTrackingRows(rows: ShortpickPaperTrackingItem[]): ShortpickPaperTrackingItem[] {
+  return rows.filter((item) => paperTrackingGovernanceViewSection(item) === "deprecated");
+}
+
 export function paperTrackingChoiceLabel(latestRun?: Record<string, unknown> | null): "跟踪中" | "待入场" {
   const now = new Date();
   const day = now.getDay();
@@ -187,6 +201,8 @@ export function paperTrackingSearchText(item: ShortpickPaperTrackingItem): strin
     item.entry_rule,
     item.exit_rule,
     item.thesis,
+    item.governance_status,
+    item.governance_strategy_id,
   ]
     .filter(Boolean)
     .join(" ")

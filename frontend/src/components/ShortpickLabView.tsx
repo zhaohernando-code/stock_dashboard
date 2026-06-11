@@ -79,6 +79,8 @@ import {
   sampleScopeLabel,
   sourceCredibilityColor,
   sourceCredibilityLabel,
+  strategyGovernanceStatusColor,
+  strategyGovernanceStatusLabel,
   statusColor,
   statusLabel,
   topicLabel,
@@ -92,6 +94,7 @@ import {
   type PaperTrackingGroupFilter,
   comparePaperTrackingRows,
   comparePaperTrackingSignalEntryRows,
+  deprecatedPaperTrackingRows,
   hasPaperTrackingEntered,
   hasPaperTrackingMechanical10dExit,
   hasPaperTrackingMechanical5dExit,
@@ -121,6 +124,7 @@ import {
   paperTrackingTrackExitDay,
   paperTrackingTrackExitText,
   paperTrackingTrackReturn,
+  primaryPaperTrackingRows,
 } from "./shortpickLabPaperTracking";
 import {
   STRATEGY_DUAL_TEST_CONFIGS,
@@ -960,15 +964,18 @@ function PaperTrackingTab({
   const llmControlContract = tracking?.llm_control_contract ?? {};
   const marketControlContract = tracking?.market_control_contract ?? {};
   const summary = tracking?.summary ?? {};
+  const governance = tracking?.strategy_governance ?? {};
   const latestRun = tracking?.latest_run ?? null;
   const rows = tracking?.items ?? [];
+  const primaryRows = primaryPaperTrackingRows(rows);
+  const deprecatedRows = deprecatedPaperTrackingRows(rows);
   const [ledgerSearch, setLedgerSearch] = useState("");
   const [ledgerGroupFilter, setLedgerGroupFilter] = useState<PaperTrackingGroupFilter>("");
   const [ledgerEntryStateFilter, setLedgerEntryStateFilter] = useState<PaperTrackingEntryStateFilter>("entered");
   const [ledgerEntryRuleFilter, setLedgerEntryRuleFilter] = useState<PaperTrackingEntryRuleFilter>("");
   const [ledgerExitStateFilter, setLedgerExitStateFilter] = useState<PaperTrackingExitStateFilter>("");
   const normalizedLedgerSearch = ledgerSearch.trim().toLowerCase();
-  const displayRows = rows.filter((item) => {
+  const displayRows = primaryRows.filter((item) => {
     const entered = hasPaperTrackingEntered(item);
     const hasMechanical5dExit = hasPaperTrackingMechanical5dExit(item);
     const hasMechanical10dExit = hasPaperTrackingMechanical10dExit(item);
@@ -984,15 +991,23 @@ function PaperTrackingTab({
     if (normalizedLedgerSearch && !paperTrackingSearchText(item).includes(normalizedLedgerSearch)) return false;
     return true;
   }).sort((left, right) => comparePaperTrackingSignalEntryRows(right, left));
-  const filteredOutCount = Math.max(rows.length - displayRows.length, 0);
-  const pendingEntryDate = nextPendingEntryDate(rows);
+  const archivedDisplayRows = deprecatedRows
+    .filter((item) => {
+      if (ledgerGroupFilter && item.tracking_group !== ledgerGroupFilter) return false;
+      if (ledgerEntryRuleFilter && paperTrackingEntryRuleKey(item) !== ledgerEntryRuleFilter) return false;
+      if (normalizedLedgerSearch && !paperTrackingSearchText(item).includes(normalizedLedgerSearch)) return false;
+      return true;
+    })
+    .sort((left, right) => comparePaperTrackingSignalEntryRows(right, left));
+  const filteredOutCount = Math.max(primaryRows.length - displayRows.length, 0);
+  const pendingEntryDate = nextPendingEntryDate(primaryRows);
   const monitoringTracks = (Array.isArray(contract.monitoring_tracks) ? contract.monitoring_tracks : []) as Record<string, unknown>[];
   const marketControls = (Array.isArray(marketControlContract.controls) ? marketControlContract.controls : []) as Record<string, unknown>[];
   const frozenV2Control = marketControls.find((control) => control.role === "market_factor_control_low_turnover_uptrend_next_open_entry") ?? {};
   const marketControlRows = marketControls.filter((control) => control.role !== "market_factor_control_low_turnover_uptrend_next_open_entry");
-  const enteredRows = rows.filter((item) => hasPaperTrackingEntered(item));
-  const mechanical5dRows = rows.filter(hasPaperTrackingMechanical5dExit).sort(comparePaperTrackingRows);
-  const mechanical10dRows = rows.filter(hasPaperTrackingMechanical10dExit).sort(comparePaperTrackingRows);
+  const enteredRows = primaryRows.filter((item) => hasPaperTrackingEntered(item));
+  const mechanical5dRows = primaryRows.filter(hasPaperTrackingMechanical5dExit).sort(comparePaperTrackingRows);
+  const mechanical10dRows = primaryRows.filter(hasPaperTrackingMechanical10dExit).sort(comparePaperTrackingRows);
   const latestMechanical5d = mechanical5dRows[0] ?? null;
   const latestMechanical10d = mechanical10dRows[0] ?? null;
   const waiting10dRows = enteredRows.filter((item) => !hasPaperTrackingMechanical10dExit(item));
@@ -1019,6 +1034,9 @@ function PaperTrackingTab({
           <Text strong>{item.name} · {item.symbol}</Text>
           <Space wrap size={4}>
             <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
+            <Tag color={strategyGovernanceStatusColor(item.governance_status)}>
+              {strategyGovernanceStatusLabel(item.governance_status)}
+            </Tag>
             <Text type="secondary">{item.selection_label || "纸面对照"}</Text>
           </Space>
         </Space>
@@ -1124,6 +1142,13 @@ function PaperTrackingTab({
               <span>市场对照数</span>
               <strong>{Number(summary.market_control_signal_count ?? 0)}</strong>
               <Text type="secondary">第1名、降追高、随机同池基线</Text>
+            </div>
+          </Col>
+          <Col xs={24} md={6}>
+            <div className="shortpick-metric">
+              <span>主表 / 归档</span>
+              <strong>{Number(governance.primary_count ?? primaryRows.length)} / {Number(governance.deprecated_count ?? deprecatedRows.length)}</strong>
+              <Text type="secondary">退役候选与已归档移出主表</Text>
             </div>
           </Col>
         </Row>
@@ -1337,7 +1362,8 @@ function PaperTrackingTab({
             onChange={(value) => setLedgerExitStateFilter((value ?? "") as PaperTrackingExitStateFilter)}
           />
           <Text type="secondary">
-            显示 {displayRows.length} / {rows.length} 条{filteredOutCount ? ` · 已筛掉 ${filteredOutCount} 条` : ""}
+            主表显示 {displayRows.length} / {primaryRows.length} 条{filteredOutCount ? ` · 已筛掉 ${filteredOutCount} 条` : ""}
+            {deprecatedRows.length ? ` · 已归档 ${deprecatedRows.length} 条` : ""}
           </Text>
           {(ledgerSearch || ledgerGroupFilter || ledgerEntryStateFilter !== "entered" || ledgerEntryRuleFilter || ledgerExitStateFilter) ? (
             <Button
@@ -1374,7 +1400,12 @@ function PaperTrackingTab({
                   <div className="shortpick-paper-mobile-item">
                     <div className="shortpick-paper-mobile-head">
                       <Text strong>{item.name} · {item.symbol}</Text>
-                      <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
+                      <Space wrap size={4}>
+                        <Tag color={paperTrackingGroupColor(item.tracking_group)}>{paperTrackingGroupLabel(item.tracking_group)}</Tag>
+                        <Tag color={strategyGovernanceStatusColor(item.governance_status)}>
+                          {strategyGovernanceStatusLabel(item.governance_status)}
+                        </Tag>
+                      </Space>
                     </div>
                     <Text type="secondary">信号 {paperTrackingSignalDate(item)} · 买入 {paperTrackingEntryDate(item)} · {item.selection_label || "纸面对照"}</Text>
                     <Space direction="vertical" size={0}>
@@ -1397,7 +1428,7 @@ function PaperTrackingTab({
             description={
               loading
                 ? "纸面跟踪状态加载中"
-                : rows.length
+                : primaryRows.length
                   ? "没有符合当前筛选条件的纸面跟踪记录。"
                   : pendingEntryDate
                     ? `尚无已入场纸面记录；最新信号将在 ${pendingEntryDate} 收盘买入后进入跟踪记录。`
@@ -1405,6 +1436,31 @@ function PaperTrackingTab({
             }
           />
         )}
+        {deprecatedRows.length ? (
+          <Collapse
+            className="shortpick-paper-archive-collapse"
+            ghost
+            defaultActiveKey={[]}
+            items={[
+              {
+                key: "deprecated-paper-tracking",
+                label: `已归档 / 废弃观察桶（${archivedDisplayRows.length} / ${deprecatedRows.length} 条）`,
+                children: (
+                  <Table
+                    className="shortpick-paper-ledger-table shortpick-paper-archive-table"
+                    rowKey={(item) => `archive:${item.candidate_id}:${item.governance_strategy_id ?? ""}`}
+                    size="small"
+                    loading={loading}
+                    columns={columns}
+                    dataSource={archivedDisplayRows}
+                    pagination={{ pageSize: 6 }}
+                    scroll={{ x: 920 }}
+                  />
+                ),
+              },
+            ]}
+          />
+        ) : null}
       </Card>
     </>
   );
@@ -1418,7 +1474,7 @@ function LatestSimulationTradeCard({
   loading: boolean;
 }) {
   const latestRun = tracking?.latest_run ?? null;
-  const rows = tracking?.items ?? [];
+  const rows = primaryPaperTrackingRows(tracking?.items ?? []);
   const choiceLabel = paperTrackingChoiceLabel(latestRun);
   const frozenRows = latestFrozenPaperTrackingChoices(rows);
   const fallbackRows = latestPaperTrackingChoices(rows, latestRun);

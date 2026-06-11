@@ -107,6 +107,33 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
                 const frozen = helpers.latestFrozenPaperTrackingChoices(rows);
                 const latestRunChoices = helpers.latestPaperTrackingChoices(rows, { id: 3, run_date: "2026-06-03" });
                 const ranked = helpers.latestPaperTrackingChoices(sameDateRows, { id: 9, run_date: "2026-06-03" });
+                const governanceRows = [
+                  { candidate_id: 1, governance_view_section: "primary", governance_status: "active", name: "主表", symbol: "000001.SZ" },
+                  { candidate_id: 2, governance_view_section: "deprecated", governance_status: "retire_candidate", name: "归档", symbol: "000002.SZ" },
+                  { candidate_id: 3, governance_status: "observe", name: "旧字段", symbol: "000003.SZ" },
+                  { candidate_id: 4, governance_status: "retired", name: "仅状态归档", symbol: "000004.SZ" },
+                ];
+                const latestRows = [
+                  {
+                    run_id: 20,
+                    run_date: "2026-06-20",
+                    tracking_group: "frozen_strategy",
+                    signal_date: "2026-06-20",
+                    governance_status: "retire_candidate",
+                    name: "不应显示",
+                    symbol: "300001.SZ",
+                  },
+                  {
+                    run_id: 19,
+                    run_date: "2026-06-19",
+                    tracking_group: "frozen_strategy",
+                    signal_date: "2026-06-19",
+                    governance_status: "active",
+                    name: "仍可显示",
+                    symbol: "300002.SZ",
+                  },
+                ];
+                const visibleLatestRows = helpers.primaryPaperTrackingRows(latestRows);
                 console.log(JSON.stringify({
                   frozenGroups: frozen.map((item) => item.tracking_group),
                   frozenNames: frozen.map((item) => item.name),
@@ -114,6 +141,10 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
                   latestRunChoiceGroups: latestRunChoices.map((item) => item.tracking_group),
                   latestRunChoiceSignalDates: latestRunChoices.map((item) => item.signal_date),
                   rankedGroups: ranked.map((item) => item.tracking_group),
+                  primaryIds: helpers.primaryPaperTrackingRows(governanceRows).map((item) => item.candidate_id),
+                  deprecatedIds: helpers.deprecatedPaperTrackingRows(governanceRows).map((item) => item.candidate_id),
+                  latestVisibleNames: helpers.latestPaperTrackingChoices(visibleLatestRows, { id: 20, run_date: "2026-06-20" }).map((item) => item.name),
+                  frozenVisibleNames: helpers.latestFrozenPaperTrackingChoices(visibleLatestRows).map((item) => item.name),
                 }));
                 """
             )
@@ -141,3 +172,7 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
                 "market_random_control",
             ],
         )
+        self.assertEqual(payload["primaryIds"], [1, 3])
+        self.assertEqual(payload["deprecatedIds"], [2, 4])
+        self.assertEqual(payload["latestVisibleNames"], ["仍可显示"])
+        self.assertEqual(payload["frozenVisibleNames"], ["仍可显示"])
