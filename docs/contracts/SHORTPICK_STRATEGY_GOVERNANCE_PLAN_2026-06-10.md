@@ -1382,8 +1382,40 @@ DeepSeek review result:
 Remaining blockers after Round 42:
 
 - DeepSeek review passed.
-- Served runtime/canonical verification remains pending.
+- Served runtime/canonical verification was pending at Round 42 merge time and was closed in Round 43.
 - Runtime data generation remains artifact-only until governed jobs produce real combined-ledger backfill artifacts for the runtime artifact root.
+
+## Round 43 Publish Closeout For Combined-Ledger Frontend
+
+Status: completed and merged.
+
+Background:
+
+- Round 42 changed user-visible frontend rendering, but Browser-plugin visual verification was blocked by URL policy when using a mock `apiBase` endpoint.
+- The global runtime rule requires live-facing changes to be published to `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard` and verified against served output before the work can be called closed.
+
+Implementation and verification:
+
+- Published merge commit `a6b245ce3f53ec7ae404a4a23161eff958872682` to the local runtime.
+- The publish that acquired the runtime lock wrote local release manifest `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/local-20260611T053042Z-a6b245c.json` and updated `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/latest-successful.commit` to `a6b245ce3f53ec7ae404a4a23161eff958872682`.
+- Local runtime frontend `http://127.0.0.1:5173/` served `assets/index-c2e8a0e9.css` and `assets/index-c8c805d0.js`.
+- Canonical authenticated entry `https://hernando-zhao.cn/projects/ashare-dashboard/` served the same asset names.
+- Local and canonical served JS asset `assets/index-c8c805d0.js` contains the new `组合 Ledger 回放对照` title and the visible evidence-basis warning `后验回放行仅来自 combined_ledger artifact`.
+- Local runtime `/health` returned `{"status":"ok","database_url":"sqlite:////Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/ashare_dashboard.db"}`.
+- Local and canonical authenticated `/api/shortpick-lab/paper-tracking` returned the `combined_ledger` top-level block; current runtime data has `combined_artifacts=0` and `combined_rows=0`, so this verifies API shape and served frontend code, not real combined-ledger data population.
+
+Verification limits:
+
+- This round did not rerun the Browser-plugin visual flow because Round 42's Browser policy block explicitly forbade attempting the same mock-route outcome through alternate browser surfaces.
+- The publish manifest is `verification_mode=local`; canonical release parity was instead checked by direct authenticated served asset/API probes.
+- Runtime data generation remains pending until governed jobs create real combined-ledger backfill artifacts under the runtime artifact root.
+
+DeepSeek review result:
+
+- Result: `PASS`.
+- Confirmation: the Round 43 closeout does not overstate the local release manifest as a canonical release verifier pass.
+- Confirmation: the document clearly records that current runtime combined-ledger data is still empty (`combined_artifacts=0`, `combined_rows=0`) and that this round only verifies served frontend code and API shape.
+- Confirmation: the update is mergeable as a documentation closeout and preserves the Browser-policy limitation.
 
 ## Validation To Run For This Planning Task
 
@@ -1462,7 +1494,7 @@ Remaining blockers after Round 42:
 | Round 30 frontend deprecated bucket | published_runtime_verified |
 | P2.7 deprecated display bucket + regression guard | completed_generation_wiring_pending_runtime_data_verification |
 | P2.8 redundant/meaningless control archival | completed_partial_inventory_decision_source_pending |
-| P3.7 labeled combined-ledger retrospective backfill + artifact writer + API source projection + frontend display | completed_partial_frontend_display_ds_reviewed_browser_blocked_runtime_data_pending |
+| P3.7 labeled combined-ledger retrospective backfill + artifact writer + API source projection + frontend display | published_served_asset_and_api_shape_verified_runtime_data_pending |
 | P3.8 new credible control/comparison line build-out | completed_partial_replay_writer_pending |
 | Runtime behavior changed | round31_inventory_archive_governance_path_published_runtime_verified |
 | Registry changed | completed |
