@@ -20,6 +20,7 @@ from ashare_evidence.research_artifacts import (
 
 PROJECT_ROOT = _core.PROJECT_ROOT
 DEFAULT_ARTIFACT_ROOT = _core.DEFAULT_ARTIFACT_ROOT
+SHORTPICK_FILTER_RESELECT_SELECTION_POLICY = "filter_ranked_pool_select_first_allowed"
 
 read_frontend_projection_manifest_artifact = _autonomous_flow_store.read_frontend_projection_manifest_artifact
 read_frontend_projection_manifest_artifact_if_exists = (
@@ -273,6 +274,7 @@ def _is_ready_shortpick_combined_ledger_backfill_artifact(payload: dict[str, Any
         and payload.get("artifact_type") == "shortpick_combined_ledger_backfill"
         and payload.get("artifact_id")
         and payload.get("ledger_mode") == "combined_paper_tracking_ledger"
+        and payload.get("selection_policy") == SHORTPICK_FILTER_RESELECT_SELECTION_POLICY
         and payload.get("headline_metric_filter_policy") == "true_forward_queries_must_filter_evidence_basis_true_forward_tracking"
         and all(
             isinstance(row, dict)

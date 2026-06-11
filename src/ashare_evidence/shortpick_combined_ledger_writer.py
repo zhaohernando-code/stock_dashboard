@@ -13,6 +13,7 @@ from ashare_evidence.shortpick_strategy_governance import (
     build_shortpick_combined_ledger_retrospective_backfill,
     filter_shortpick_combined_ledger_rows_by_evidence_basis,
 )
+from ashare_evidence.shortpick_strategy_replay_runner import FILTER_RESELECT_SELECTION_POLICY
 
 RETROSPECTIVE_REPLAY_ARTIFACT_TYPE = "shortpick_retrospective_forward_replay"
 
@@ -99,6 +100,7 @@ def run_shortpick_combined_ledger_backfill_artifact(
         "evidence_basis_policy": "mandatory_non_null_basis_with_true_forward_default_filters",
         "generated_at": generated_at,
         "source_replay_artifact_count": len(replay_artifacts),
+        "selection_policy": FILTER_RESELECT_SELECTION_POLICY,
         "ready_replay_artifact_count": len(replay_artifacts) - len(blocked_sources),
         "blocked_source_count": len(blocked_sources),
         "true_forward_count": true_forward_filter["selected_count"],
@@ -276,6 +278,7 @@ def _is_ready_retrospective_replay_artifact(payload: dict[str, Any]) -> bool:
         and payload.get("artifact_id")
         and payload.get("evidence_basis") == "retrospective_forward_replay"
         and payload.get("retrospective") is True
+        and payload.get("selection_policy") == FILTER_RESELECT_SELECTION_POLICY
         and payload.get("paper_tracking_write_policy") == "forbidden"
         and isinstance(request, dict)
         and request.get("control_group_id")

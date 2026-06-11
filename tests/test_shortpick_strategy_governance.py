@@ -1595,41 +1595,59 @@ def test_retrospective_forward_replay_requests_are_deterministic() -> None:
     assert first["execution_policy"] == "request_plan_only_no_replay_execution_no_data_write"
 
 
+def _ranked_replay_paper_tracking_fixture() -> dict[str, object]:
+    return {
+        "items": [
+            {"candidate_id": "loss", "signal_date": "2026-05-20", "symbol": "002028.SZ"},
+            {"candidate_id": "blocked", "signal_date": "2026-05-26", "symbol": "002028.SZ"},
+        ],
+        "ranked_candidate_pools": [
+            {
+                "signal_date": "2026-05-20",
+                "candidates": [
+                    {
+                        "candidate_id": "loss",
+                        "signal_date": "2026-05-20",
+                        "symbol": "002028.SZ",
+                        "name": "思源电气",
+                        "candidate_rank": 1,
+                        "validation_by_horizon": [
+                            {
+                                "horizon_days": 10,
+                                "status": "completed",
+                                "stock_return": -0.09,
+                                "exit_date": "2026-05-24",
+                            }
+                        ],
+                    }
+                ],
+            },
+            {
+                "signal_date": "2026-05-26",
+                "candidates": [
+                    {
+                        "candidate_id": "blocked",
+                        "signal_date": "2026-05-26",
+                        "symbol": "002028.SZ",
+                        "name": "思源电气",
+                        "candidate_rank": 1,
+                    },
+                    {
+                        "candidate_id": "fallback",
+                        "signal_date": "2026-05-26",
+                        "symbol": "300750.SZ",
+                        "name": "宁德时代",
+                        "candidate_rank": 2,
+                    },
+                ],
+            },
+        ],
+    }
+
+
 def test_retrospective_forward_replay_runner_applies_same_symbol_cooldown_and_prepares_rows() -> None:
     rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")
-    paper_tracking = {
-        "items": [
-            {
-                "candidate_id": "loss",
-                "signal_date": "2026-05-20",
-                "symbol": "002028.SZ",
-                "name": "思源电气",
-                "validation_by_horizon": [
-                    {
-                        "horizon_days": 10,
-                        "status": "completed",
-                        "stock_return": -0.09,
-                        "exit_date": "2026-05-24",
-                    }
-                ],
-            },
-            {
-                "candidate_id": "blocked",
-                "signal_date": "2026-05-26",
-                "symbol": "002028.SZ",
-                "name": "思源电气",
-                "validation_by_horizon": [
-                    {
-                        "horizon_days": 10,
-                        "status": "completed",
-                        "stock_return": 0.05,
-                        "exit_date": "2026-06-05",
-                    }
-                ],
-            },
-            {"candidate_id": "future", "signal_date": "2026-06-10", "symbol": "002028.SZ"},
-        ]
-    }
+    paper_tracking = _ranked_replay_paper_tracking_fixture()
     request = build_shortpick_retrospective_forward_replay_requests(
         [rule],
         paper_tracking,
@@ -1643,14 +1661,18 @@ def test_retrospective_forward_replay_runner_applies_same_symbol_cooldown_and_pr
     assert replay["retrospective"] is True
     assert replay["paper_tracking_write_policy"] == "forbidden"
     assert replay["true_forward_tracking_eligible"] is False
-    assert replay["input_candidate_count"] == 2
+    assert replay["selection_policy"] == "filter_ranked_pool_select_first_allowed"
+    assert replay["input_candidate_count"] == 3
     rows_by_id = {row["candidate_id"]: row for row in replay["rows"]}
     assert rows_by_id["loss"]["cooldown_action"] == "allowed"
-    assert rows_by_id["blocked"]["cooldown_action"] == "blocked"
-    assert rows_by_id["blocked"]["leakage_audit_status"] == "passed"
-    assert rows_by_id["blocked"]["rule_defined_at"] == "2026-06-10"
-    assert rows_by_id["blocked"]["pairing_key"] == (
-        f"control_same_symbol_cooldown:v1|{rule['rule_signature']}|002028.SZ|2026-05-26"
+    assert "blocked" not in rows_by_id
+    assert rows_by_id["fallback"]["cooldown_action"] == "allowed"
+    assert rows_by_id["fallback"]["candidate_rank"] == 2
+    assert rows_by_id["fallback"]["blocked_higher_ranked_candidates"][0]["candidate_id"] == "blocked"
+    assert rows_by_id["fallback"]["leakage_audit_status"] == "passed"
+    assert rows_by_id["fallback"]["rule_defined_at"] == "2026-06-10"
+    assert rows_by_id["fallback"]["pairing_key"] == (
+        f"control_same_symbol_cooldown:v1|{rule['rule_signature']}|300750.SZ|2026-05-26"
     )
 
     prepared = build_shortpick_combined_ledger_retrospective_backfill(
@@ -1738,7 +1760,20 @@ def test_retrospective_forward_replay_runner_limits_cooldown_auxiliary_rows_to_r
                 ],
             },
             {"candidate_id": "inside-window-candidate", "signal_date": "2026-05-26", "symbol": "002028.SZ"},
-        ]
+        ],
+        "ranked_candidate_pools": [
+            {
+                "signal_date": "2026-05-26",
+                "candidates": [
+                    {
+                        "candidate_id": "inside-window-candidate",
+                        "signal_date": "2026-05-26",
+                        "symbol": "002028.SZ",
+                        "candidate_rank": 1,
+                    }
+                ],
+            }
+        ],
     }
 
     replay = run_shortpick_retrospective_forward_replay_request(request, paper_tracking)
@@ -1775,7 +1810,20 @@ def test_retrospective_forward_replay_runner_limits_drawdown_features_to_replay_
                 },
             },
             {"candidate_id": "inside-window-candidate", "signal_date": "2026-05-26", "symbol": "002028.SZ"},
-        ]
+        ],
+        "ranked_candidate_pools": [
+            {
+                "signal_date": "2026-05-26",
+                "candidates": [
+                    {
+                        "candidate_id": "inside-window-candidate",
+                        "signal_date": "2026-05-26",
+                        "symbol": "002028.SZ",
+                        "candidate_rank": 1,
+                    }
+                ],
+            }
+        ],
     }
 
     replay = run_shortpick_retrospective_forward_replay_request(request, paper_tracking)
@@ -1790,19 +1838,7 @@ def test_retrospective_forward_replay_runner_limits_drawdown_features_to_replay_
 
 def test_combined_ledger_backfill_writer_materializes_labeled_replay_rows() -> None:
     rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")
-    paper_tracking = {
-        "items": [
-            {
-                "candidate_id": "loss",
-                "signal_date": "2026-05-20",
-                "symbol": "002028.SZ",
-                "validation_by_horizon": [
-                    {"horizon_days": 10, "status": "completed", "stock_return": -0.09, "exit_date": "2026-05-24"}
-                ],
-            },
-            {"candidate_id": "blocked", "signal_date": "2026-05-26", "symbol": "002028.SZ"},
-        ]
-    }
+    paper_tracking = _ranked_replay_paper_tracking_fixture()
     request = build_shortpick_retrospective_forward_replay_requests([rule], paper_tracking)["requests"][0]
     replay = run_shortpick_retrospective_forward_replay_request(request, paper_tracking)
 
@@ -2728,6 +2764,7 @@ def _ready_retrospective_replay_artifact(
         "status": "ready",
         "evidence_basis": "retrospective_forward_replay",
         "retrospective": True,
+        "selection_policy": "filter_ranked_pool_select_first_allowed",
         "paper_tracking_write_policy": "forbidden",
         "request": {
             "control_group_id": rule["control_group_id"],

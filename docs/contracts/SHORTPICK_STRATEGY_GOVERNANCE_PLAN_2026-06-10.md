@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round51_runtime_replay_combined_ledger_verified_ds_reviewed_ready_to_merge
+Status: round52_filter_reselect_semantic_correction_ds_reviewed_runtime_cleanup_verified_ready_to_merge
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -40,6 +40,7 @@ The next governance package should adopt four principles.
    - Historical long-window backtest is allowed.
    - Retrospective forward replay over the already-observed forward window is allowed.
    - Neither can be represented as true forward tracking.
+   - Controls that operate on the frozen ranked pool must use `filter_ranked_pool_select_first_allowed`: start from the frozen strategy's ranked candidate pool, apply the control as a filter, and select only the highest-ranked candidate that passes. A blocked original rank1 is audit metadata, not a buy row.
 
 3. True forward evidence is protected as a separate ledger.
    - A new control becomes true-forward eligible only from the date its rule and registry entries are created.
@@ -95,8 +96,8 @@ The next governance package should adopt four principles.
 | P3.1 | Same-symbol cooldown control | completed_partial_runtime_wiring_pending | Added a deterministic rule builder and pure input-to-output cooldown helper. It blocks candidates only from prior completed same-symbol negative outcomes, uses longer cooldown after severe losses, emits `rule_signature`, and labels evidence basis. Historical/replay generation, true-forward wiring, and frontend display remain pending. |
 | P3.2 | Drawdown/reversal filter control | completed_partial_runtime_wiring_pending | Added a deterministic rule builder and pure input-to-output filter helper. It uses only signal-date-or-prior technical feature snapshots, blocks on recent drawdown, short-window breakdown plus price-vs-MA weakness, or high-level reversal triggers, emits `rule_signature`, and labels evidence basis. Feature generation, historical/replay artifacts, true-forward wiring, and frontend display remain pending. |
 | P3.3 | Repeated exposure limit control | completed_partial_runtime_wiring_pending | Added a deterministic rule builder and pure input-to-output exposure-limit helper. It defaults to symbol grouping, supports explicit group fields such as symbol plus industry for later governed use, ignores same-day/future exposure rows, emits `rule_signature`, and labels evidence basis. Runtime generation wiring, historical/replay artifacts, true-forward tracking, and frontend display remain pending. |
-| P3.4 | Historical backtest generation | completed_partial_replay_writer_pending | Added a deterministic historical-backtest generation request builder. Round 34 added a gated runner and artifact persistence path. Round 35 adds explicit executable portfolio strategy mappings for the three registered P3 controls, so generated P3 historical requests can now run through the existing portfolio backtest instead of being blocked for missing mappings. |
-| P3.5 | Retrospective forward replay generation | completed_runtime_artifacts_verified | Added a deterministic retrospective-forward-replay request builder. Round 36 adds a replay runner and artifact persistence path that consumes generated requests plus paper-tracking JSON, applies the registered P3 control logic only to signal dates strictly before `rule_defined_at`, labels output rows `evidence_basis=retrospective_forward_replay`, marks `retrospective=true`, and forbids paper-tracking writes. Round 51 generated ready runtime artifacts for all three credible-control lines under the served runtime artifact root. Runtime database writer remains intentionally not used. |
+| P3.4 | Historical backtest generation | completed_filter_reselect_semantics_wired | Added a deterministic historical-backtest generation request builder. Round 34 added a gated runner and artifact persistence path. Round 35 adds explicit executable portfolio strategy mappings for the three registered P3 controls. Round 52 corrects these mappings to use filter-and-reselect semantics: for each signal day, only the highest-ranked allowed candidate is selected, and stateful controls use prior selected rows rather than treating every allowed row as a buy. |
+| P3.5 | Retrospective forward replay generation | corrected_filter_reselect_contract_old_round51_artifacts_superseded | Added a deterministic retrospective-forward-replay request builder. Round 36 added a replay runner and artifact persistence path. Round 51 generated ready runtime artifacts, but the user clarified that controls are alternative filter-and-reselect strategies, not allowed/blocked overlays on already-selected paper rows. Round 52 therefore supersedes the Round 51 artifacts as strategy evidence: new replay results require a ranked candidate pool and output one selected row per signal date per control, or an explicit no-trade row if all ranked candidates are blocked. |
 | P3.6 | True forward tracking start | completed_partial_runtime_wiring_pending | Added a deterministic true-forward activation-plan helper. It allows only registered control IDs with `rule_signature` and `rule_defined_at`, sets `tracking_start_date` no earlier than both the requested start and rule definition date, labels `evidence_basis=true_forward_tracking`, forbids retroactive backfill, and does not write tracking rows. Runtime paper-ledger wiring remains pending. |
 
 ### P4 - Frontend And Reporting
@@ -1719,6 +1720,53 @@ DeepSeek review result:
 - Confirmation: `blocked_row_count=3` is not blocking because the rows were duplicate `combined_ledger_row_id` rows removed by the materializer, with no blocked replay sources.
 - Nonblocking suggestion incorporated before merge: record the dedup rate so future runs can detect unexpected duplicate growth.
 
+## Round 52 - Filter-And-Reselect Semantic Correction
+
+User clarification on 2026-06-11 changed the governing definition for the three P3 controls.
+
+Correct definition:
+
+- The frozen strategy first produces a ranked candidate pool for the signal day.
+- Each control is an alternative strategy over that same ranked pool.
+- For each control, scan candidates by original frozen rank and buy only the first candidate that passes the control.
+- If rank1 is blocked, it is retained as audit metadata and rank2/rank3 can become the actual selected row.
+- If no ranked candidate passes, the control has a no-trade event for that signal day.
+
+Impact on Round 51:
+
+- Round 51 artifacts are valid only as diagnostic allowed/blocked overlays over already-present paper-tracking rows.
+- They are not valid evidence for the intended control strategies because they do not reselect from the ranked pool.
+- The following runtime artifacts are therefore superseded for strategy evidence and must not be read by API/frontend projections after Round 52:
+  - `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/runtime-artifacts/shortpick_retrospective_replays/shortpick-retrospective-forward-replay-request:f5bd43aac9146f02.json`
+  - `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/runtime-artifacts/shortpick_retrospective_replays/shortpick-retrospective-forward-replay-request:b714d0e13817d7d4.json`
+  - `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/runtime-artifacts/shortpick_retrospective_replays/shortpick-retrospective-forward-replay-request:3a4186dff6c24b5e.json`
+  - `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/runtime-artifacts/shortpick_combined_ledgers/shortpick-combined-ledger-backfill:c886e25ac71e2a36.json`
+
+Reusable data:
+
+- Runtime `shortpick_candidates` rows are reusable because they preserve same-run candidate pools and `source_rank` for market-factor overlays.
+- Historical market bars and validation snapshots remain reusable.
+- Round 51 replay/combined-ledger JSON rows are not reusable as strategy result rows; at most they can be manually referenced as obsolete diagnostic overlay evidence.
+
+Implemented in Round 52:
+
+- Retrospective replay runner now requires `ranked_candidates` or `ranked_candidate_pools` input and blocks old `paper_tracking.items`-only inputs with `missing_ranked_candidate_pool`.
+- Retrospective replay runner now emits `selection_policy=filter_ranked_pool_select_first_allowed`.
+- Same-symbol cooldown and repeated-exposure replay are evaluated sequentially by signal date using prior selected rows, so stateful controls no longer count every allowed candidate as if it were bought.
+- Drawdown/reversal replay filters all ranked candidates for the day and keeps only the first allowed candidate.
+- Historical P3 control mappings now output one selected row per signal day, not all allowed rows.
+- Combined-ledger artifact discovery now accepts only replay artifacts with `selection_policy=filter_ranked_pool_select_first_allowed`.
+- Combined-ledger artifact store now accepts only combined-ledger artifacts with the same `selection_policy`, so old Round 51 combined-ledger JSON is ignored even before physical cleanup.
+- Physical cleanup removed the four superseded Round 51 runtime JSON files from `shortpick_retrospective_replays` and `shortpick_combined_ledgers`.
+- Live backend verification after cleanup returned `combined_ledger.artifact_count=0`, `combined_row_count=0`, `true_forward_count=0`, and `retrospective_count=0`, so the obsolete 777-row overlay output is no longer served.
+
+Acceptance criteria for Round 52:
+
+- Focused tests pass for historical control mappings, retrospective replay CLI, combined-ledger materialization, and artifact-store filtering.
+- Live artifact cleanup removed the four superseded Round 51 runtime JSON files so the frontend cannot display obsolete 777-row overlay output.
+- Backend `/shortpick-lab/paper-tracking` returns no combined-ledger rows from the superseded Round 51 artifact after cleanup.
+- DeepSeek review returned `PASS/MERGE`; its only note was the now-completed physical cleanup of stale runtime JSON files.
+
 ## Validation To Run For This Planning Task
 
 
@@ -1762,9 +1810,9 @@ DeepSeek review result:
 | Round 11 DeepSeek review | completed |
 | P3.3 repeated exposure limit helper | completed_partial_runtime_wiring_pending |
 | Round 12 DeepSeek review | completed |
-| P3.4 historical backtest request builder + runner + P3 mappings | completed_partial_replay_writer_pending |
+| P3.4 historical backtest request builder + runner + P3 mappings | completed_filter_reselect_semantics_wired |
 | Round 13 DeepSeek review | completed |
-| P3.5 retrospective forward replay request builder + runner | completed_runtime_artifacts_verified |
+| P3.5 retrospective forward replay request builder + runner | corrected_filter_reselect_contract_old_round51_artifacts_superseded |
 | Round 14 DeepSeek review | completed |
 | P3.6 true forward tracking activation plan | completed_partial_runtime_wiring_pending |
 | Round 15 DeepSeek review | completed |
@@ -1796,11 +1844,11 @@ DeepSeek review result:
 | Round 30 frontend deprecated bucket | published_runtime_verified |
 | P2.7 deprecated display bucket + regression guard | completed_generation_wiring_pending_runtime_data_verification |
 | P2.8 redundant/meaningless control archival | completed_partial_inventory_decision_source_pending |
-| P3.7 labeled combined-ledger retrospective backfill + artifact writer + API source projection + frontend display | completed_runtime_materialized_and_frontend_verified |
-| P3.8 new credible control/comparison line build-out | completed_historical_gate_replay_and_combined_ledger_runtime_verified |
-| Runtime behavior changed | round51_combined_ledger_runtime_artifacts_api_and_frontend_verified |
+| P3.7 labeled combined-ledger retrospective backfill + artifact writer + API source projection + frontend display | corrected_filter_reselect_selection_policy_required_old_round51_artifact_removed |
+| P3.8 new credible control/comparison line build-out | filter_reselect_semantic_correction_completed_ds_reviewed |
+| Runtime behavior changed | round52_blocks_and_removes_old_overlay_artifacts_live_api_verified |
 | Registry changed | completed |
 | Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_combined_ledger_backfill_preparation_credible_control_line_buildout_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
 | Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_governance_projection_rendering_round30_deprecated_bucket_filtering_and_round31_inventory_archived_fallback |
-| Runtime data changed | runtime_replay_and_combined_ledger_artifacts_created_no_database_or_paper_tracking_writes |
-| DeepSeek plan review | completed |
+| Runtime data changed | round51_overlay_artifacts_removed_no_database_or_paper_tracking_writes |
+| DeepSeek plan review | round52_pass_merge |

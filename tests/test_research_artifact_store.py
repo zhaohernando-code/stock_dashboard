@@ -131,6 +131,7 @@ class ResearchArtifactStoreTests(unittest.TestCase):
                 "artifact_type": "shortpick_combined_ledger_backfill",
                 "status": "ready",
                 "ledger_mode": "combined_paper_tracking_ledger",
+                "selection_policy": "filter_ranked_pool_select_first_allowed",
                 "headline_metric_filter_policy": "true_forward_queries_must_filter_evidence_basis_true_forward_tracking",
                 "combined_rows": [
                     {
