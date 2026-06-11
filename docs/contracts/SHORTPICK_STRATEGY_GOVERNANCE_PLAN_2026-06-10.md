@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round33_credible_control_line_buildout_ds_reviewed_pending_merge
+Status: round33_credible_control_line_buildout_merged_pushed
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -1035,7 +1035,7 @@ Merge evidence:
 
 ## Round 33 Review Result
 
-Status: implementation completed; DeepSeek review passed; merge pending.
+Status: implementation completed; DeepSeek review passed; merged and pushed.
 
 Round 33 scope:
 
@@ -1059,6 +1059,12 @@ Verification evidence before merge:
 - `python3 -m ruff check src/ashare_evidence/shortpick_strategy_governance.py tests/test_shortpick_strategy_governance.py` passed.
 - `python3 -m compileall -q src/ashare_evidence/shortpick_strategy_governance.py tests/test_shortpick_strategy_governance.py` passed.
 - `git diff --check` passed.
+
+Merge evidence:
+
+- Commit `5ab1bc2` (`Add shortpick credible control line buildout plan`) was merged into main by `e9786b9`.
+- `git push origin main` completed; the pre-push hook passed stock_dashboard fast regression (`748 passed, 161 deselected, 6 subtests passed`) and policy governance audit.
+- No runtime publish was required because Round 33 added read-only helper logic, tests, and planning documentation only; it did not change API routes, frontend runtime, database rows, LaunchAgents, or user-visible served behavior.
 
 ## Validation To Run For This Planning Task
 
