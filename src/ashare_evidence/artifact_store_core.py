@@ -21,6 +21,7 @@ ARTIFACT_FOLDERS = {
     "phase5_holding_policy_experiment": "studies",
     "phase5_producer_contract_study": "studies",
     "shortpick_lab": "shortpick_lab",
+    "shortpick_retrospective_forward_replay": "shortpick_retrospective_replays",
     "shortpick_combined_ledger_backfill": "shortpick_combined_ledgers",
     "phase5_cycle_ledger": "autonomous_flow/phase5_cycle_ledger",
     "phase5_recovery_ticket": "autonomous_flow/phase5_recovery_ticket",

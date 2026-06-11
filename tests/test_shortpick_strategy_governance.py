@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 import json
+import tempfile
+from pathlib import Path
 
 import pytest
 
-from ashare_evidence.shortpick_combined_ledger_writer import run_shortpick_combined_ledger_backfill_artifact
+from ashare_evidence.research_artifact_store import read_shortpick_combined_ledger_backfill_artifacts
+from ashare_evidence.shortpick_combined_ledger_writer import (
+    discover_shortpick_retrospective_forward_replay_artifacts,
+    materialize_shortpick_combined_ledger_from_artifact_root,
+    run_shortpick_combined_ledger_backfill_artifact,
+)
 from ashare_evidence.shortpick_strategy_governance import (
     SAME_SYMBOL_COOLDOWN_CONTROL_ID,
     apply_shortpick_drawdown_reversal_filter_control,
@@ -1826,6 +1833,66 @@ def test_combined_ledger_backfill_writer_materializes_labeled_replay_rows() -> N
     assert artifact["true_forward_rows"][0]["evidence_basis"] == "true_forward_tracking"
 
 
+def test_combined_ledger_discovery_reads_only_ready_governance_replay_artifacts() -> None:
+    rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")
+    ready = _ready_retrospective_replay_artifact(rule, artifact_id="shortpick-retrospective-forward-replay:ready")
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        replay_dir = root / "shortpick_retrospective_replays"
+        replay_dir.mkdir()
+        (replay_dir / "ready.json").write_text(json.dumps(ready), encoding="utf-8")
+        (replay_dir / "blocked.json").write_text(
+            json.dumps({**ready, "artifact_id": "blocked", "status": "blocked"}),
+            encoding="utf-8",
+        )
+        (replay_dir / "wrong-basis.json").write_text(
+            json.dumps({**ready, "artifact_id": "wrong-basis", "evidence_basis": "historical_backtest"}),
+            encoding="utf-8",
+        )
+        (replay_dir / "z-duplicate.json").write_text(json.dumps(ready), encoding="utf-8")
+        legacy_dir = root / "replays"
+        legacy_dir.mkdir()
+        (legacy_dir / "old-replay-alignment.json").write_text(
+            json.dumps({"artifact_type": "replay_alignment", "status": "ready", "rows": [{}]}),
+            encoding="utf-8",
+        )
+        (legacy_dir / "broken.json").write_text("{", encoding="utf-8")
+
+        discovery = discover_shortpick_retrospective_forward_replay_artifacts(root=root)
+
+    assert discovery["artifact_count"] == 1
+    assert discovery["artifacts"][0]["artifact_id"] == "shortpick-retrospective-forward-replay:ready"
+    assert discovery["artifacts"][0]["artifact"]["path"].endswith("ready.json")
+    reasons = [item["reason"] for item in discovery["ignored"]]
+    assert reasons.count("not_ready_retrospective_forward_replay_artifact") == 3
+    assert reasons.count("duplicate_artifact_id") == 1
+    assert any(reason.startswith("unreadable_json:") for reason in reasons)
+
+
+def test_combined_ledger_materializer_writes_runtime_artifact_from_discovery_root() -> None:
+    rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")
+    ready = _ready_retrospective_replay_artifact(rule)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        replay_dir = root / "shortpick_retrospective_replays"
+        replay_dir.mkdir()
+        (replay_dir / "ready.json").write_text(json.dumps(ready), encoding="utf-8")
+
+        payload = materialize_shortpick_combined_ledger_from_artifact_root(
+            root=root,
+            generated_at="2026-06-11T12:00:00+08:00",
+        )
+        source = read_shortpick_combined_ledger_backfill_artifacts(root=root)
+
+    assert payload["status"] == "ready"
+    assert payload["artifact"]["path"].endswith(".json")
+    assert payload["source_discovery"]["artifact_count"] == 1
+    assert payload["retrospective_count"] == 1
+    assert source["artifact_count"] == 1
+    assert source["artifacts"][0]["artifact_id"] == payload["artifact_id"]
+    assert source["artifacts"][0]["combined_rows"][0]["evidence_basis"] == "retrospective_forward_replay"
+
+
 def test_true_forward_tracking_activation_plan_starts_no_earlier_than_rule_definition() -> None:
     rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10T09:00:00+08:00")
 
@@ -2613,6 +2680,37 @@ def _generation_item(role: str, family: str, source_rank: int) -> dict[str, obje
         "family": family,
         "entry_price_source": "next_close",
         "source_rank": source_rank,
+    }
+
+
+def _ready_retrospective_replay_artifact(
+    rule: dict[str, object],
+    *,
+    artifact_id: str = "shortpick-retrospective-forward-replay:test",
+) -> dict[str, object]:
+    return {
+        "artifact_id": artifact_id,
+        "artifact_type": "shortpick_retrospective_forward_replay",
+        "status": "ready",
+        "evidence_basis": "retrospective_forward_replay",
+        "retrospective": True,
+        "paper_tracking_write_policy": "forbidden",
+        "request": {
+            "control_group_id": rule["control_group_id"],
+            "rule_signature": rule["rule_signature"],
+            "rule_defined_at": "2026-06-10",
+        },
+        "rows": [
+            {
+                "candidate_id": "retrospective-row",
+                "signal_date": "2026-05-20",
+                "symbol": "002028.SZ",
+                "control_group_id": rule["control_group_id"],
+                "rule_signature": rule["rule_signature"],
+                "rule_defined_at": "2026-06-10",
+                "leakage_audit_status": "passed",
+            }
+        ],
     }
 
 
