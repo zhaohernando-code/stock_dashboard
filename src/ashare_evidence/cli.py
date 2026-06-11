@@ -214,6 +214,25 @@ def _should_initialize_database(database_url: str | None) -> bool:
 PLAN_ONLY_COMMANDS = {"shortpick-governance-credible-control-plan"}
 
 
+def _governance_requests_from_payload(
+    payload: object,
+    *,
+    nested_plan_key: str,
+    path_label: str = "request-path",
+) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path_label} must contain a request object or an object with a requests list")
+    requests = payload.get("requests")
+    nested_plan = payload.get(nested_plan_key)
+    if requests is None and isinstance(nested_plan, dict):
+        requests = nested_plan.get("requests")
+    if requests is None:
+        requests = [payload]
+    if not isinstance(requests, list):
+        raise ValueError(f"{path_label} must contain a request object or an object with a requests list")
+    return [dict(item) for item in requests if isinstance(item, dict)]
+
+
 def _phase5_horizon_study_output(
     session,
     *,
@@ -1291,15 +1310,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "shortpick-governance-historical-backtest":
         request_payload = json.loads(Path(args.request_path).read_text(encoding="utf-8"))
-        requests = request_payload.get("requests") if isinstance(request_payload, dict) else None
-        if requests is None and isinstance(request_payload, dict):
-            requests = [request_payload]
-        if not isinstance(requests, list):
-            raise ValueError("request-path must contain a request object or an object with a requests list")
+        requests = _governance_requests_from_payload(
+            request_payload,
+            nested_plan_key="historical_backtest_plan",
+        )
         with session_scope(args.database_url) as session:
             payload = run_shortpick_historical_backtest_requests(
                 session,
-                [dict(item) for item in requests if isinstance(item, dict)],
+                requests,
                 output_dir=args.output_dir,
             )
         _print_json(payload)
@@ -1308,13 +1326,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "shortpick-governance-retrospective-replay":
         request_payload = json.loads(Path(args.request_path).read_text(encoding="utf-8"))
         paper_tracking = json.loads(Path(args.paper_tracking_path).read_text(encoding="utf-8"))
-        requests = request_payload.get("requests") if isinstance(request_payload, dict) else None
-        if requests is None and isinstance(request_payload, dict):
-            requests = [request_payload]
-        if not isinstance(requests, list):
-            raise ValueError("request-path must contain a request object or an object with a requests list")
+        requests = _governance_requests_from_payload(
+            request_payload,
+            nested_plan_key="retrospective_replay_plan",
+        )
         payload = run_shortpick_retrospective_forward_replay_requests(
-            [dict(item) for item in requests if isinstance(item, dict)],
+            requests,
             dict(paper_tracking) if isinstance(paper_tracking, dict) else {},
             output_dir=args.output_dir,
         )
