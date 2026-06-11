@@ -147,6 +147,7 @@ from ashare_evidence.shortpick_replay import (
 )
 from ashare_evidence.shortpick_replay_readout import CURRENT_FROZEN_STRATEGY, build_shortpick_replay_decision_projection
 from ashare_evidence.shortpick_strategy_governance import (
+    build_shortpick_redundant_control_archive_decisions,
     build_shortpick_strategy_archive_records,
     build_shortpick_strategy_retirement_evidence_packs,
     build_shortpick_strategy_status_recommendations,
@@ -777,7 +778,17 @@ def _build_shortpick_strategy_governance_projection(paper_tracking: dict[str, ob
 
     evidence_packs = build_shortpick_strategy_retirement_evidence_packs(paper_tracking)
     status_recommendations = build_shortpick_strategy_status_recommendations(evidence_packs)
-    view_projection = project_shortpick_strategy_view_sections(status_recommendations)
+    market_control_contract = paper_tracking.get("market_control_contract")
+    inventory_archive_decisions = build_shortpick_redundant_control_archive_decisions(
+        market_control_contract.get("inventory_archive_decisions")
+        if isinstance(market_control_contract, dict)
+        and isinstance(market_control_contract.get("inventory_archive_decisions"), list)
+        else []
+    )
+    view_projection = project_shortpick_strategy_view_sections(
+        status_recommendations,
+        inventory_archive_decision_result=inventory_archive_decisions,
+    )
     archive_records = build_shortpick_strategy_archive_records(view_projection, evidence_packs)
     return {
         "status": "ready",
@@ -785,6 +796,7 @@ def _build_shortpick_strategy_governance_projection(paper_tracking: dict[str, ob
         "evidence_basis": evidence_packs.get("evidence_basis"),
         "strategy_count": evidence_packs.get("strategy_count"),
         "status_recommendations": status_recommendations,
+        "inventory_archive_decisions": inventory_archive_decisions,
         "view_projection": view_projection,
         "archive_records": archive_records,
     }
@@ -1210,7 +1222,14 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
     governance_recommendations = build_shortpick_strategy_status_recommendations(
         build_shortpick_strategy_retirement_evidence_packs({"items": items})
     )
-    governance_partition = partition_paper_tracking_rows_by_governance({"items": items}, governance_recommendations)
+    inventory_archive_decisions = build_shortpick_redundant_control_archive_decisions(
+        market_control_contract.get("inventory_archive_decisions") if isinstance(market_control_contract.get("inventory_archive_decisions"), list) else []
+    )
+    governance_partition = partition_paper_tracking_rows_by_governance(
+        {"items": items},
+        governance_recommendations,
+        inventory_archive_decision_result=inventory_archive_decisions,
+    )
     items = governance_partition["items"]
 
     return {
@@ -1225,6 +1244,10 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
             "primary_count": governance_partition["primary_count"],
             "deprecated_count": governance_partition["deprecated_count"],
             "deprecated_strategy_ids": governance_partition["deprecated_strategy_ids"],
+            "inventory_archive_policy": inventory_archive_decisions["decision_policy"],
+            "inventory_archived_count": governance_partition["inventory_archived_count"],
+            "inventory_archived_strategy_ids": inventory_archive_decisions["archived_strategy_ids"],
+            "inventory_archive_blocked_count": inventory_archive_decisions["blocked_count"],
         },
         "contract": contract,
         "llm_control_contract": llm_contract,

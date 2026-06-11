@@ -45,6 +45,8 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("已归档 / 废弃观察桶", component_source)
         self.assertIn("退役候选与已归档移出主表", component_source)
         self.assertIn("strategyGovernanceStatusLabel(item.governance_status)", component_source)
+        self.assertIn("inventory_archived", component_source)
+        self.assertIn("库存归档", component_source)
         self.assertIn('defaultSortOrder: "descend"', component_source)
         self.assertIn('sortDirections: ["descend", "ascend"]', component_source)
         self.assertIn("记录分组", component_source)

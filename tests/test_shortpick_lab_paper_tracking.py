@@ -446,7 +446,14 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
         # Round 29: governance partition is attached additively (non-breaking).
         governance = payload["strategy_governance"]
         self.assertEqual(governance["status"], "ready")
-        self.assertEqual(governance["deprecated_status_set"], ["retire_candidate", "retired"])
+        self.assertEqual(governance["deprecated_status_set"], ["inventory_archived", "retire_candidate", "retired"])
+        self.assertEqual(
+            governance["inventory_archive_policy"],
+            "inventory_diagnostic_value_archive_separate_from_performance_retirement",
+        )
+        self.assertEqual(governance["inventory_archived_count"], 0)
+        self.assertEqual(governance["inventory_archived_strategy_ids"], [])
+        self.assertEqual(governance["inventory_archive_blocked_count"], 0)
         # The live ledger path passes no historical after-cost evidence, and the
         # retire_candidate gate requires it, so nothing is deprecated yet by design.
         self.assertEqual(governance["deprecated_count"], 0)
