@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+import ashare_evidence.cli as cli_module
 import ashare_evidence.shortpick_portfolio_backtest as portfolio_backtest
 import ashare_evidence.shortpick_strategy_backtest_runner as governance_backtest_runner
 from ashare_evidence.cli import main
@@ -577,6 +578,82 @@ def test_cli_governance_retrospective_replay_runs_request_file() -> None:
         saved = json.loads(artifact_path.read_text(encoding="utf-8"))
         assert saved["evidence_basis"] == "retrospective_forward_replay"
         assert saved["paper_tracking_write_policy"] == "forbidden"
+
+
+def test_cli_governance_credible_control_plan_writes_request_plan() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        paper_tracking_path = Path(temp_dir) / "paper-tracking.json"
+        output_path = Path(temp_dir) / "credible-control-plan.json"
+        paper_tracking_path.write_text(
+            json.dumps(
+                {
+                    "items": [
+                        {"candidate_id": "a", "symbol": "002028.SZ", "signal_date": "2026-05-26"},
+                        {"candidate_id": "b", "symbol": "300750.SZ", "signal_date": "2026-05-27"},
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = main(
+                [
+                    "shortpick-governance-credible-control-plan",
+                    "--paper-tracking-path",
+                    str(paper_tracking_path),
+                    "--rule-defined-at",
+                    "2026-06-11T09:00:00+08:00",
+                    "--generated-at",
+                    "2026-06-11T10:00:00+08:00",
+                    "--output-path",
+                    str(output_path),
+                ]
+            )
+
+        assert exit_code == 0
+        rendered = json.loads(stdout.getvalue())
+        saved = json.loads(output_path.read_text(encoding="utf-8"))
+        assert rendered["artifact"]["path"] == str(output_path)
+        assert saved["status"] == "blocked"
+        assert saved["line_count"] == 3
+        assert saved["retrospective_replay_plan"]["request_count"] == 3
+        assert saved["historical_backtest_plan"]["request_count"] == 3
+        assert saved["true_forward_activation_plan"]["activation_count"] == 3
+        assert saved["paper_tracking_write_policy"] == "plan_only_no_backfill_rows_written"
+        assert saved["runtime_dependency_status"] == "runner_and_writer_required_before_rows_exist"
+        assert all(
+            request["paper_tracking_write_policy"] == "forbidden"
+            for request in saved["retrospective_replay_plan"]["requests"]
+        )
+
+
+def test_cli_governance_credible_control_plan_skips_database_initialization(monkeypatch: pytest.MonkeyPatch) -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        paper_tracking_path = Path(temp_dir) / "paper-tracking.json"
+        paper_tracking_path.write_text(
+            json.dumps({"items": [{"candidate_id": "a", "symbol": "002028.SZ", "signal_date": "2026-05-26"}]}),
+            encoding="utf-8",
+        )
+        init_calls: list[str | None] = []
+        monkeypatch.setattr(cli_module, "init_database", lambda database_url=None: init_calls.append(database_url))
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = cli_module.main(
+                [
+                    "shortpick-governance-credible-control-plan",
+                    "--paper-tracking-path",
+                    str(paper_tracking_path),
+                    "--rule-defined-at",
+                    "2026-06-11",
+                ]
+            )
+
+    assert exit_code == 0
+    assert init_calls == []
 
 
 def test_cli_governance_combined_ledger_backfill_materializes_replay_artifact() -> None:

@@ -86,6 +86,7 @@ from ashare_evidence.shortpick_replay import (
     run_shortpick_replay_rejection,
 )
 from ashare_evidence.shortpick_strategy_backtest_runner import run_shortpick_historical_backtest_requests
+from ashare_evidence.shortpick_strategy_governance import build_shortpick_credible_control_comparison_line_plan
 from ashare_evidence.shortpick_strategy_replay_runner import run_shortpick_retrospective_forward_replay_requests
 from ashare_evidence.shortpick_strategy_retirement_writer import (
     load_shortpick_strategy_retirement_inputs,
@@ -208,6 +209,10 @@ def _should_initialize_database(database_url: str | None) -> bool:
     if not database_url.startswith("sqlite:///") or database_url == "sqlite:///:memory:":
         return True
     return not Path(database_url.removeprefix("sqlite:///")).exists()
+
+
+PLAN_ONLY_COMMANDS = {"shortpick-governance-credible-control-plan"}
+
 
 def _phase5_horizon_study_output(
     session,
@@ -772,6 +777,22 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_governance_retrospective_replay.add_argument("--paper-tracking-path", required=True)
     shortpick_governance_retrospective_replay.add_argument("--output-dir", default=None)
 
+    shortpick_governance_credible_control_plan = subparsers.add_parser(
+        "shortpick-governance-credible-control-plan",
+        help="Build the Short Pick credible-control comparison-line request plan without executing jobs.",
+    )
+    shortpick_governance_credible_control_plan.add_argument("--database-url", default=None)
+    shortpick_governance_credible_control_plan.add_argument("--paper-tracking-path", required=True)
+    shortpick_governance_credible_control_plan.add_argument("--rule-defined-at", required=True)
+    shortpick_governance_credible_control_plan.add_argument("--historical-evidence-path", default=None)
+    shortpick_governance_credible_control_plan.add_argument("--generated-at", default=None)
+    shortpick_governance_credible_control_plan.add_argument("--historical-backtest-start-date", default="2023-04-13")
+    shortpick_governance_credible_control_plan.add_argument("--historical-backtest-end-date", default=None)
+    shortpick_governance_credible_control_plan.add_argument("--tracking-started-at", default=None)
+    shortpick_governance_credible_control_plan.add_argument("--entry-price-source", action="append", default=None)
+    shortpick_governance_credible_control_plan.add_argument("--baseline-id", action="append", default=None)
+    shortpick_governance_credible_control_plan.add_argument("--output-path", default=None)
+
     shortpick_governance_combined_ledger_backfill = subparsers.add_parser(
         "shortpick-governance-combined-ledger-backfill",
         help="Materialize Short Pick retrospective replay artifacts into a labeled combined-ledger artifact.",
@@ -871,7 +892,7 @@ def main(argv: list[str] | None = None) -> int:
         return governance_exit_code
     if args.command == "phase5-local-cycle-step":
         return handle_phase5_local_cycle_step_command(args)
-    if _should_initialize_database(args.database_url):
+    if args.command not in PLAN_ONLY_COMMANDS and _should_initialize_database(args.database_url):
         init_database(args.database_url)
     if args.command == "latest":
         with session_scope(args.database_url) as session:
@@ -1297,6 +1318,38 @@ def main(argv: list[str] | None = None) -> int:
             dict(paper_tracking) if isinstance(paper_tracking, dict) else {},
             output_dir=args.output_dir,
         )
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-governance-credible-control-plan":
+        paper_tracking = json.loads(Path(args.paper_tracking_path).read_text(encoding="utf-8"))
+        historical_evidence = None
+        if args.historical_evidence_path:
+            historical_evidence_payload = json.loads(Path(args.historical_evidence_path).read_text(encoding="utf-8"))
+            if not isinstance(historical_evidence_payload, dict):
+                raise ValueError("historical-evidence-path must contain a JSON object")
+            historical_evidence = historical_evidence_payload
+        if not isinstance(paper_tracking, dict):
+            raise ValueError("paper-tracking-path must contain a JSON object")
+        payload = build_shortpick_credible_control_comparison_line_plan(
+            paper_tracking,
+            rule_defined_at=args.rule_defined_at,
+            historical_backtest_evidence=historical_evidence,
+            generated_at=args.generated_at,
+            historical_backtest_start_date=args.historical_backtest_start_date,
+            historical_backtest_end_date=args.historical_backtest_end_date,
+            tracking_started_at=args.tracking_started_at,
+            entry_price_sources=args.entry_price_source,
+            baseline_ids=args.baseline_id,
+        )
+        if args.output_path:
+            output_path = Path(args.output_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n",
+                encoding="utf-8",
+            )
+            payload = {**payload, "artifact": {"path": str(output_path)}}
         _print_json(payload)
         return 0
 
