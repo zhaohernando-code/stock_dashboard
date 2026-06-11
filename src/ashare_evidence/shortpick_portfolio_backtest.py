@@ -495,18 +495,19 @@ def _apply_strategy_control_filter(
         return selections
     candidate_rows = _selection_candidate_rows(selections)
     if strategy == SAME_SYMBOL_COOLDOWN_CONTROL_BACKTEST_STRATEGY:
-        result = apply_shortpick_same_symbol_cooldown_control(
+        return _stateful_control_filter_reselect(
             candidate_rows,
-            _completed_outcome_rows(
+            action_field="cooldown_action",
+            control_fn=apply_shortpick_same_symbol_cooldown_control,
+            evidence_builder=lambda selected_rows: _completed_outcome_rows_for_candidate_rows(
                 series_by_symbol,
-                selections,
+                selected_rows,
                 horizon_days=horizon_days,
                 entry_price_source=entry_price_source,
             ),
             rule=build_shortpick_same_symbol_cooldown_rule(),
             evidence_basis="historical_backtest",
         )
-        return _allowed_control_rows_to_selections(result["rows"], action_field="cooldown_action")
     if strategy == DRAWDOWN_REVERSAL_CONTROL_BACKTEST_STRATEGY:
         result = apply_shortpick_drawdown_reversal_filter_control(
             candidate_rows,
@@ -515,13 +516,14 @@ def _apply_strategy_control_filter(
             evidence_basis="historical_backtest",
         )
         return _allowed_control_rows_to_selections(result["rows"], action_field="filter_action")
-    result = apply_shortpick_repeated_exposure_limit_control(
+    return _stateful_control_filter_reselect(
         candidate_rows,
-        candidate_rows,
+        action_field="exposure_action",
+        control_fn=apply_shortpick_repeated_exposure_limit_control,
+        evidence_builder=lambda selected_rows: selected_rows,
         rule=build_shortpick_repeated_exposure_limit_rule(),
         evidence_basis="historical_backtest",
     )
-    return _allowed_control_rows_to_selections(result["rows"], action_field="exposure_action")
 
 
 def _selection_candidate_rows(selections: dict[date, list[str]]) -> list[dict[str, Any]]:
@@ -541,12 +543,69 @@ def _selection_candidate_rows(selections: dict[date, list[str]]) -> list[dict[st
 
 def _allowed_control_rows_to_selections(rows: list[dict[str, Any]], *, action_field: str) -> dict[date, list[str]]:
     selections: dict[date, list[str]] = defaultdict(list)
+    rows_by_day: dict[date, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
-        if row.get(action_field) != "allowed":
-            continue
         signal_day = date.fromisoformat(str(row["signal_date"]))
-        selections[signal_day].append(str(row["symbol"]))
+        rows_by_day[signal_day].append(row)
+    for signal_day, day_rows in rows_by_day.items():
+        selected = _first_allowed_control_row(day_rows, action_field=action_field)
+        if selected is None:
+            continue
+        selections[signal_day].append(str(selected["symbol"]))
     return dict(selections)
+
+
+def _stateful_control_filter_reselect(
+    candidate_rows: list[dict[str, Any]],
+    *,
+    action_field: str,
+    control_fn: Any,
+    evidence_builder: Any,
+    rule: dict[str, Any],
+    evidence_basis: str,
+) -> dict[date, list[str]]:
+    selections: dict[date, list[str]] = defaultdict(list)
+    selected_rows: list[dict[str, Any]] = []
+    for signal_day_text in sorted({_date_part(row.get("signal_date")) for row in candidate_rows if _date_part(row.get("signal_date"))}):
+        day_rows = sorted(
+            [row for row in candidate_rows if _date_part(row.get("signal_date")) == signal_day_text],
+            key=_candidate_rank,
+        )
+        result = control_fn(
+            day_rows,
+            evidence_builder(selected_rows),
+            rule=rule,
+            evidence_basis=evidence_basis,
+        )
+        selected = _first_allowed_control_row(result.get("rows") or [], action_field=action_field)
+        if selected is None:
+            continue
+        selected_rows.append(selected)
+        selections[date.fromisoformat(signal_day_text)].append(str(selected["symbol"]))
+    return dict(selections)
+
+
+def _first_allowed_control_row(rows: list[dict[str, Any]], *, action_field: str) -> dict[str, Any] | None:
+    for row in sorted(rows, key=_candidate_rank):
+        if row.get(action_field) == "allowed":
+            return dict(row)
+    return None
+
+
+def _candidate_rank(row: dict[str, Any]) -> int:
+    try:
+        value = int(row.get("candidate_rank") or row.get("source_rank") or row.get("rank") or 999999)
+    except (TypeError, ValueError):
+        return 999999
+    return value if value > 0 else 999999
+
+
+def _date_part(value: Any) -> str:
+    if isinstance(value, date):
+        return value.isoformat()
+    if not isinstance(value, str) or not value:
+        return ""
+    return value.split("T", 1)[0].split(" ", 1)[0]
 
 
 def _completed_outcome_rows(
@@ -583,6 +642,47 @@ def _completed_outcome_rows(
                     "candidate_rank": rank,
                 }
             )
+    return rows
+
+
+def _completed_outcome_rows_for_candidate_rows(
+    series_by_symbol: dict[str, Any],
+    candidate_rows: list[dict[str, Any]],
+    *,
+    horizon_days: int,
+    entry_price_source: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in sorted(candidate_rows, key=lambda row: (_date_part(row.get("signal_date")), _candidate_rank(row))):
+        signal_day_text = _date_part(item.get("signal_date"))
+        symbol = str(item.get("symbol") or "")
+        if not signal_day_text or not symbol:
+            continue
+        signal_day = date.fromisoformat(signal_day_text)
+        series = series_by_symbol.get(symbol)
+        if series is None:
+            continue
+        signal_index = series.by_day.get(signal_day)
+        if signal_index is None:
+            continue
+        entry_index = _entry_index_for_signal(signal_index, entry_price_source)
+        exit_index = entry_index + horizon_days
+        if exit_index >= len(series.bars):
+            continue
+        entry_price = _entry_price(series.bars[entry_index], entry_price_source)
+        exit_close = float(series.bars[exit_index].close)
+        if not entry_price:
+            continue
+        rows.append(
+            {
+                "candidate_id": item.get("candidate_id") or f"{signal_day.isoformat()}:{_candidate_rank(item)}:{symbol}",
+                "signal_date": signal_day.isoformat(),
+                "symbol": symbol,
+                "exit_date": series.bars[exit_index].day.isoformat(),
+                "stock_return": round(exit_close / float(entry_price) - 1.0, 6),
+                "candidate_rank": _candidate_rank(item),
+            }
+        )
     return rows
 
 

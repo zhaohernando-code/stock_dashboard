@@ -14,6 +14,8 @@ from ashare_evidence.shortpick_strategy_governance import (
     apply_shortpick_same_symbol_cooldown_control,
 )
 
+FILTER_RESELECT_SELECTION_POLICY = "filter_ranked_pool_select_first_allowed"
+
 
 def run_shortpick_retrospective_forward_replay_request(
     request: dict[str, Any],
@@ -27,11 +29,11 @@ def run_shortpick_retrospective_forward_replay_request(
         payload = _blocked_replay(normalized, block_reason=block_reason)
         return _with_optional_artifact(payload, output_path)
 
-    candidates, blocked_rows = _candidate_rows(paper_tracking, request=normalized)
+    candidates, blocked_rows = _ranked_candidate_rows(paper_tracking, request=normalized)
     if not candidates:
         payload = _blocked_replay(
             normalized,
-            block_reason="no_replay_candidates_inside_window_before_rule_defined_at",
+            block_reason="no_ranked_replay_candidates_inside_window_before_rule_defined_at",
             blocked_rows=blocked_rows,
         )
         return _with_optional_artifact(payload, output_path)
@@ -51,13 +53,18 @@ def run_shortpick_retrospective_forward_replay_request(
         "rule_defined_at": normalized.get("rule_defined_at"),
         "request": normalized,
         "input_candidate_count": len(candidates),
+        "selection_policy": FILTER_RESELECT_SELECTION_POLICY,
         "replay_row_count": len(rows),
+        "no_trade_signal_count": len(result.get("no_trade_rows") or []),
         "blocked_row_count": len(blocked_rows),
         "control_result": _control_summary(result),
         "rows": rows,
+        "no_trade_rows": result.get("no_trade_rows") or [],
         "blocked_rows": blocked_rows,
         "leakage_audit_status": result.get("leakage_audit_status") or "passed",
-        "leakage_audit_reasons": result.get("leakage_audit_reasons") or ["used_only_replay_window_rows_before_rule_defined_at"],
+        "leakage_audit_reasons": result.get("leakage_audit_reasons") or [
+            "used_only_ranked_replay_pool_rows_before_rule_defined_at"
+        ],
         "source_feature_cutoff_policy": "signal_date_available_inputs_only",
         "paper_tracking_write_policy": "forbidden",
         "true_forward_tracking_eligible": False,
@@ -144,14 +151,18 @@ def _request_block_reason(request: dict[str, Any]) -> str | None:
     return None
 
 
-def _candidate_rows(
+def _ranked_candidate_rows(
     paper_tracking: dict[str, Any],
     *,
     request: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     candidates: list[dict[str, Any]] = []
     blocked: list[dict[str, Any]] = []
-    for index, item in enumerate(paper_tracking.get("items") or []):
+    source_rows = _ranked_candidate_source_rows(paper_tracking)
+    if not source_rows:
+        return [], [{"blocker": "missing_ranked_candidate_pool", "paper_tracking_item_count": len(paper_tracking.get("items") or [])}]
+
+    for index, item in enumerate(source_rows):
         if not isinstance(item, dict):
             blocked.append({"row_index": index, "blocker": "row_not_object"})
             continue
@@ -171,33 +182,237 @@ def _candidate_rows(
                 "candidate_id": item.get("candidate_id") or f"{signal_date}:{symbol}:{index}",
                 "signal_date": signal_date,
                 "symbol": symbol,
+                "candidate_rank": _rank_value(item, fallback=index + 1),
             }
         )
     return candidates, blocked
 
 
+def _ranked_candidate_source_rows(paper_tracking: dict[str, Any]) -> list[dict[str, Any]]:
+    if isinstance(paper_tracking.get("ranked_candidates"), list):
+        return [dict(item) for item in paper_tracking["ranked_candidates"] if isinstance(item, dict)]
+
+    rows: list[dict[str, Any]] = []
+    for pool_index, pool in enumerate(paper_tracking.get("ranked_candidate_pools") or []):
+        if not isinstance(pool, dict):
+            continue
+        signal_date = _date_part(pool.get("signal_date") or pool.get("run_date"))
+        run_id = pool.get("run_id")
+        for rank_index, item in enumerate(pool.get("candidates") or [], start=1):
+            if not isinstance(item, dict):
+                continue
+            rows.append(
+                {
+                    **item,
+                    "signal_date": _date_part(item.get("signal_date") or item.get("run_date")) or signal_date,
+                    "run_id": item.get("run_id") or run_id,
+                    "candidate_rank": _rank_value(item, fallback=rank_index),
+                    "ranked_pool_index": pool_index,
+                }
+            )
+    return rows
+
+
 def _apply_control(request: dict[str, Any], candidates: list[dict[str, Any]], paper_tracking: dict[str, Any]) -> dict[str, Any]:
     rule = dict(request.get("rule") or {})
     if request["control_group_id"] == SAME_SYMBOL_COOLDOWN_CONTROL_ID:
-        return apply_shortpick_same_symbol_cooldown_control(
+        return _apply_stateful_filter_reselect(
+            request,
             candidates,
-            _completed_outcome_rows(paper_tracking, request=request),
             rule=rule,
-            evidence_basis="retrospective_forward_replay",
+            action_field="cooldown_action",
+            control_fn=apply_shortpick_same_symbol_cooldown_control,
+            evidence_builder=_selected_completed_outcome_rows,
+        )
+    if request["control_group_id"] == REPEATED_EXPOSURE_LIMIT_CONTROL_ID:
+        return _apply_stateful_filter_reselect(
+            request,
+            candidates,
+            rule=rule,
+            action_field="exposure_action",
+            control_fn=apply_shortpick_repeated_exposure_limit_control,
+            evidence_builder=lambda selected_rows: selected_rows,
         )
     if request["control_group_id"] == DRAWDOWN_REVERSAL_FILTER_CONTROL_ID:
-        return apply_shortpick_drawdown_reversal_filter_control(
+        result = apply_shortpick_drawdown_reversal_filter_control(
             candidates,
             _feature_rows(paper_tracking, request=request),
             rule=rule,
             evidence_basis="retrospective_forward_replay",
         )
-    return apply_shortpick_repeated_exposure_limit_control(
+        return _filter_reselect_result(result, action_field="filter_action")
+    return _blocked_control_result(
+        request,
         candidates,
-        candidates,
-        rule=rule,
-        evidence_basis="retrospective_forward_replay",
+        block_reason="unsupported_control_group_id",
     )
+
+
+def _apply_stateful_filter_reselect(
+    request: dict[str, Any],
+    candidates: list[dict[str, Any]],
+    *,
+    rule: dict[str, Any],
+    action_field: str,
+    control_fn: Any,
+    evidence_builder: Any,
+) -> dict[str, Any]:
+    selected_rows: list[dict[str, Any]] = []
+    no_trade_rows: list[dict[str, Any]] = []
+    diagnostic_rows: list[dict[str, Any]] = []
+    for signal_date in sorted({_date_part(row.get("signal_date")) for row in candidates if _date_part(row.get("signal_date"))}):
+        day_candidates = sorted(
+            [row for row in candidates if _date_part(row.get("signal_date")) == signal_date],
+            key=lambda row: _rank_value(row, fallback=999999),
+        )
+        result = control_fn(
+            day_candidates,
+            evidence_builder(selected_rows),
+            rule=rule,
+            evidence_basis="retrospective_forward_replay",
+        )
+        diagnostic_rows.extend(result.get("rows") or [])
+        selected = _first_allowed_row(result.get("rows") or [], action_field=action_field)
+        if selected is None:
+            no_trade_rows.append(
+                {
+                    "signal_date": signal_date,
+                    "control_group_id": request["control_group_id"],
+                    "rule_signature": request["rule_signature"],
+                    "blocked_higher_ranked_candidates": result.get("rows") or [],
+                    "selection_policy": FILTER_RESELECT_SELECTION_POLICY,
+                    "no_trade_reason": "all_ranked_candidates_blocked_by_control",
+                }
+            )
+            continue
+        selected_rows.append(
+            {
+                **selected,
+                "selection_policy": FILTER_RESELECT_SELECTION_POLICY,
+                "selected_after_control": True,
+                "selected_rank_after_filter": 1,
+                "blocked_higher_ranked_candidates": [
+                    row
+                    for row in result.get("rows") or []
+                    if _rank_value(row, fallback=999999) < _rank_value(selected, fallback=999999)
+                    and row.get(action_field) != "allowed"
+                ],
+            }
+        )
+    return {
+        "status": "ready",
+        "control_group_id": request["control_group_id"],
+        "rule_signature": request["rule_signature"],
+        "evidence_basis": "retrospective_forward_replay",
+        "selection_policy": FILTER_RESELECT_SELECTION_POLICY,
+        "leakage_audit_status": "passed",
+        "leakage_audit_reasons": ["selected_first_allowed_candidate_from_ranked_pool_by_signal_date"],
+        "input_candidate_count": len(candidates),
+        "diagnostic_row_count": len(diagnostic_rows),
+        "blocked_count": len(diagnostic_rows) - len([row for row in diagnostic_rows if row.get(action_field) == "allowed"]),
+        "allowed_count": len([row for row in diagnostic_rows if row.get(action_field) == "allowed"]),
+        "selected_count": len(selected_rows),
+        "no_trade_count": len(no_trade_rows),
+        "rows": selected_rows,
+        "diagnostic_rows": diagnostic_rows,
+        "no_trade_rows": no_trade_rows,
+    }
+
+
+def _filter_reselect_result(result: dict[str, Any], *, action_field: str) -> dict[str, Any]:
+    selected_rows: list[dict[str, Any]] = []
+    no_trade_rows: list[dict[str, Any]] = []
+    rows = [dict(row) for row in result.get("rows") or [] if isinstance(row, dict)]
+    for signal_date in sorted({_date_part(row.get("signal_date")) for row in rows if _date_part(row.get("signal_date"))}):
+        day_rows = sorted(
+            [row for row in rows if _date_part(row.get("signal_date")) == signal_date],
+            key=lambda row: _rank_value(row, fallback=999999),
+        )
+        selected = _first_allowed_row(day_rows, action_field=action_field)
+        if selected is None:
+            no_trade_rows.append(
+                {
+                    "signal_date": signal_date,
+                    "control_group_id": result.get("control_group_id"),
+                    "rule_signature": result.get("rule_signature"),
+                    "blocked_higher_ranked_candidates": day_rows,
+                    "selection_policy": FILTER_RESELECT_SELECTION_POLICY,
+                    "no_trade_reason": "all_ranked_candidates_blocked_by_control",
+                }
+            )
+            continue
+        selected_rows.append(
+            {
+                **selected,
+                "selection_policy": FILTER_RESELECT_SELECTION_POLICY,
+                "selected_after_control": True,
+                "selected_rank_after_filter": 1,
+                "blocked_higher_ranked_candidates": [
+                    row
+                    for row in day_rows
+                    if _rank_value(row, fallback=999999) < _rank_value(selected, fallback=999999)
+                    and row.get(action_field) != "allowed"
+                ],
+            }
+        )
+    return {
+        **result,
+        "selection_policy": FILTER_RESELECT_SELECTION_POLICY,
+        "diagnostic_row_count": len(rows),
+        "selected_count": len(selected_rows),
+        "no_trade_count": len(no_trade_rows),
+        "rows": selected_rows,
+        "diagnostic_rows": rows,
+        "no_trade_rows": no_trade_rows,
+    }
+
+
+def _first_allowed_row(rows: list[dict[str, Any]], *, action_field: str) -> dict[str, Any] | None:
+    for row in sorted(rows, key=lambda item: _rank_value(item, fallback=999999)):
+        if row.get(action_field) == "allowed":
+            return dict(row)
+    return None
+
+
+def _blocked_control_result(request: dict[str, Any], candidates: list[dict[str, Any]], *, block_reason: str) -> dict[str, Any]:
+    return {
+        "status": "blocked",
+        "control_group_id": request.get("control_group_id"),
+        "rule_signature": request.get("rule_signature"),
+        "evidence_basis": "retrospective_forward_replay",
+        "selection_policy": FILTER_RESELECT_SELECTION_POLICY,
+        "leakage_audit_status": "blocked",
+        "leakage_audit_reasons": [block_reason],
+        "input_candidate_count": len(candidates),
+        "rows": [],
+        "no_trade_rows": [],
+        "blocker": block_reason,
+    }
+
+
+def _selected_completed_outcome_rows(selected_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in selected_rows:
+        signal_date = _date_part(item.get("signal_date") or item.get("run_date"))
+        symbol = str(item.get("symbol") or "")
+        for horizon in item.get("validation_by_horizon") or []:
+            if not isinstance(horizon, dict) or str(horizon.get("status") or "") != "completed":
+                continue
+            stock_return = _float(horizon.get("stock_return"))
+            exit_date = _date_part(horizon.get("exit_date") or horizon.get("exit_at") or item.get("exit_date") or item.get("exit_at"))
+            if signal_date and symbol and exit_date and stock_return is not None:
+                rows.append(
+                    {
+                        "candidate_id": item.get("candidate_id"),
+                        "signal_date": signal_date,
+                        "symbol": symbol,
+                        "exit_date": exit_date,
+                        "horizon_days": horizon.get("horizon_days"),
+                        "status": "completed",
+                        "stock_return": stock_return,
+                    }
+                )
+    return rows
 
 
 def _completed_outcome_rows(paper_tracking: dict[str, Any], *, request: dict[str, Any]) -> list[dict[str, Any]]:
@@ -287,6 +502,17 @@ def _replay_row(row: dict[str, Any], *, request: dict[str, Any]) -> dict[str, An
         "source_feature_cutoff_policy": "signal_date_available_inputs_only",
         "pairing_key": f"{request['control_group_id']}|{request['rule_signature']}|{symbol}|{signal_date}",
     }
+
+
+def _rank_value(row: dict[str, Any], *, fallback: int) -> int:
+    for field in ("candidate_rank", "source_rank", "rank"):
+        try:
+            value = int(row.get(field))
+        except (TypeError, ValueError):
+            continue
+        if value > 0:
+            return value
+    return fallback
 
 
 def _control_summary(result: dict[str, Any]) -> dict[str, Any]:

@@ -42,6 +42,38 @@ def _lineage(payload: object, uri: str) -> dict[str, str]:
     }
 
 
+def _paper_tracking_with_ranked_replay_pool() -> dict[str, object]:
+    return {
+        "items": [
+            {"candidate_id": "a", "signal_date": "2026-05-20", "symbol": "002028.SZ"},
+            {"candidate_id": "b", "signal_date": "2026-05-26", "symbol": "002028.SZ"},
+        ],
+        "ranked_candidate_pools": [
+            {
+                "signal_date": "2026-05-20",
+                "candidates": [
+                    {
+                        "candidate_id": "a",
+                        "signal_date": "2026-05-20",
+                        "symbol": "002028.SZ",
+                        "candidate_rank": 1,
+                        "validation_by_horizon": [
+                            {"horizon_days": 10, "status": "completed", "stock_return": -0.09, "exit_date": "2026-05-24"}
+                        ],
+                    }
+                ],
+            },
+            {
+                "signal_date": "2026-05-26",
+                "candidates": [
+                    {"candidate_id": "b", "signal_date": "2026-05-26", "symbol": "002028.SZ", "candidate_rank": 1},
+                    {"candidate_id": "c", "signal_date": "2026-05-26", "symbol": "300750.SZ", "candidate_rank": 2},
+                ],
+            },
+        ],
+    }
+
+
 def _seed_long_sample_fixture(database_url: str) -> None:
     start = date(2026, 1, 1)
     symbols = [
@@ -420,8 +452,10 @@ def test_shortpick_portfolio_backtest_p3_control_mappings_invoke_control_helpers
                 ),
             )
 
-        assert [item[0] for item in calls] == ["same_symbol", "drawdown", "repeated_exposure"]
-        assert all(item[1] > 0 for item in calls)
+        assert {item[0] for item in calls} == {"same_symbol", "drawdown", "repeated_exposure"}
+        assert any(item[0] == "same_symbol" and item[1] == 0 for item in calls)
+        assert any(item[0] == "drawdown" and item[1] > 0 for item in calls)
+        assert any(item[0] == "repeated_exposure" for item in calls)
         assert all(item[2] == "historical_backtest" for item in calls)
         assert set(payload["results"]["daily_rolling_5x10k"]) == {
             SAME_SYMBOL_COOLDOWN_CONTROL_BACKTEST_STRATEGY,
@@ -632,19 +666,7 @@ def test_cli_governance_retrospective_replay_runs_request_file() -> None:
         paper_tracking_path = Path(temp_dir) / "paper-tracking.json"
         output_dir = Path(temp_dir) / "replay"
         rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")
-        paper_tracking = {
-            "items": [
-                {
-                    "candidate_id": "a",
-                    "signal_date": "2026-05-20",
-                    "symbol": "002028.SZ",
-                    "validation_by_horizon": [
-                        {"horizon_days": 10, "status": "completed", "stock_return": -0.09, "exit_date": "2026-05-24"}
-                    ],
-                },
-                {"candidate_id": "b", "signal_date": "2026-05-26", "symbol": "002028.SZ"},
-            ]
-        }
+        paper_tracking = _paper_tracking_with_ranked_replay_pool()
         request = build_shortpick_retrospective_forward_replay_requests([rule], paper_tracking)["requests"][0]
         request_path.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
         paper_tracking_path.write_text(json.dumps(paper_tracking, ensure_ascii=False), encoding="utf-8")
@@ -671,6 +693,9 @@ def test_cli_governance_retrospective_replay_runs_request_file() -> None:
         saved = json.loads(artifact_path.read_text(encoding="utf-8"))
         assert saved["evidence_basis"] == "retrospective_forward_replay"
         assert saved["paper_tracking_write_policy"] == "forbidden"
+        assert saved["selection_policy"] == "filter_ranked_pool_select_first_allowed"
+        assert [row["symbol"] for row in saved["rows"]] == ["002028.SZ", "300750.SZ"]
+        assert saved["rows"][1]["candidate_rank"] == 2
 
 
 def test_cli_governance_retrospective_replay_runs_credible_control_plan_file() -> None:
@@ -679,19 +704,7 @@ def test_cli_governance_retrospective_replay_runs_credible_control_plan_file() -
         paper_tracking_path = Path(temp_dir) / "paper-tracking.json"
         output_dir = Path(temp_dir) / "replay"
         rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")
-        paper_tracking = {
-            "items": [
-                {
-                    "candidate_id": "a",
-                    "signal_date": "2026-05-20",
-                    "symbol": "002028.SZ",
-                    "validation_by_horizon": [
-                        {"horizon_days": 10, "status": "completed", "stock_return": -0.09, "exit_date": "2026-05-24"}
-                    ],
-                },
-                {"candidate_id": "b", "signal_date": "2026-05-26", "symbol": "002028.SZ"},
-            ]
-        }
+        paper_tracking = _paper_tracking_with_ranked_replay_pool()
         request = build_shortpick_retrospective_forward_replay_requests([rule], paper_tracking)["requests"][0]
         request_path.write_text(
             json.dumps({"retrospective_replay_plan": {"requests": [request]}}, ensure_ascii=False),
@@ -726,19 +739,7 @@ def test_cli_governance_retrospective_replay_filters_nested_plan_by_request_id()
         paper_tracking_path = Path(temp_dir) / "paper-tracking.json"
         output_dir = Path(temp_dir) / "replay"
         rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")
-        paper_tracking = {
-            "items": [
-                {
-                    "candidate_id": "a",
-                    "signal_date": "2026-05-20",
-                    "symbol": "002028.SZ",
-                    "validation_by_horizon": [
-                        {"horizon_days": 10, "status": "completed", "stock_return": -0.09, "exit_date": "2026-05-24"}
-                    ],
-                },
-                {"candidate_id": "b", "signal_date": "2026-05-26", "symbol": "002028.SZ"},
-            ]
-        }
+        paper_tracking = _paper_tracking_with_ranked_replay_pool()
         request = build_shortpick_retrospective_forward_replay_requests([rule], paper_tracking)["requests"][0]
         ignored_request = {**request, "request_id": "ignored-request", "control_group_id": "ignored-control:v1"}
         request_path.write_text(
@@ -857,6 +858,7 @@ def test_cli_governance_combined_ledger_backfill_materializes_replay_artifact() 
             "status": "ready",
             "evidence_basis": "retrospective_forward_replay",
             "retrospective": True,
+            "selection_policy": "filter_ranked_pool_select_first_allowed",
             "request": {
                 "control_group_id": rule["control_group_id"],
                 "rule_signature": rule["rule_signature"],
@@ -915,6 +917,7 @@ def test_cli_governance_combined_ledger_materialize_discovers_runtime_replay_art
             "status": "ready",
             "evidence_basis": "retrospective_forward_replay",
             "retrospective": True,
+            "selection_policy": "filter_ranked_pool_select_first_allowed",
             "paper_tracking_write_policy": "forbidden",
             "request": {
                 "control_group_id": rule["control_group_id"],
