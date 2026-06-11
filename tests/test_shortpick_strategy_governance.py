@@ -2212,6 +2212,40 @@ def test_credible_control_comparison_line_plan_allows_backfill_only_after_passed
     ]
 
 
+def test_credible_control_comparison_line_plan_accepts_runner_evidence_aggregate() -> None:
+    paper_tracking = {"items": [{"candidate_id": "a", "symbol": "002028.SZ", "signal_date": "2026-05-26"}]}
+    blocked = build_shortpick_credible_control_comparison_line_plan(
+        paper_tracking,
+        rule_defined_at="2026-06-11",
+    )
+    first_line = blocked["lines"][0]
+
+    passed = build_shortpick_credible_control_comparison_line_plan(
+        paper_tracking,
+        rule_defined_at="2026-06-11",
+        historical_backtest_evidence={
+            "status": "ready",
+            "evidence_basis": "historical_backtest",
+            "evidence": [
+                {
+                    "status": "ready",
+                    "evidence_basis": "historical_backtest",
+                    "gate_status": "passed",
+                    "leakage_audit_status": "passed",
+                    "artifact_id": "hist-aggregate-pass",
+                    "control_group_id": first_line["control_group_id"],
+                    "rule_signature": first_line["rule_signature"],
+                }
+            ],
+        },
+    )
+
+    ready_line = next(line for line in passed["lines"] if line["control_group_id"] == first_line["control_group_id"])
+    assert ready_line["status"] == "ready_for_retrospective_backfill"
+    assert ready_line["historical_backtest_gate"]["gate_status"] == "passed"
+    assert ready_line["historical_backtest_gate"]["evidence_ref"]["artifact_id"] == "hist-aggregate-pass"
+
+
 def test_credible_control_comparison_line_plan_rejects_unregistered_baseline_ids() -> None:
     with pytest.raises(ValueError, match="unsupported shortpick evaluation baseline ids"):
         build_shortpick_credible_control_comparison_line_plan(
