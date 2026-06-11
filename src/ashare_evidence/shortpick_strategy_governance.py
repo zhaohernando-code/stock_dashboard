@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter, defaultdict
+from datetime import date, timedelta
 from statistics import mean, median
 from typing import Any
 
@@ -64,6 +65,9 @@ SHORTPICK_LEDGER_EVIDENCE_BASIS_VALUES = frozenset(
     {"true_forward_tracking", "retrospective_forward_replay", "historical_backtest"}
 )
 SHORTPICK_LEAKAGE_AUDIT_STATUSES = frozenset({"passed", "failed", "blocked", "not_run"})
+SHORTPICK_REGISTERED_EVALUATION_BASELINE_IDS = frozenset(
+    {"evaluation_baseline_random_pool:v1", "evaluation_baseline_cooldown_control:v1"}
+)
 
 
 def build_shortpick_strategy_retirement_evidence_packs(
@@ -1213,6 +1217,114 @@ def build_shortpick_combined_ledger_retrospective_backfill(
     }
 
 
+def build_shortpick_credible_control_comparison_line_plan(
+    paper_tracking: dict[str, Any],
+    *,
+    rule_defined_at: str,
+    historical_backtest_evidence: dict[str, Any] | None = None,
+    generated_at: str | None = None,
+    historical_backtest_start_date: str = "2023-04-13",
+    historical_backtest_end_date: str | None = None,
+    tracking_started_at: str | None = None,
+    entry_price_sources: list[str] | None = None,
+    baseline_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build the P3.8 control-line plan without running backtests or writing rows."""
+
+    rule_date = _date_part(rule_defined_at)
+    if not rule_date:
+        raise ValueError("rule_defined_at must include a date")
+    baseline_values = list(baseline_ids or sorted(SHORTPICK_REGISTERED_EVALUATION_BASELINE_IDS))
+    unsupported_baselines = sorted(set(baseline_values) - SHORTPICK_REGISTERED_EVALUATION_BASELINE_IDS)
+    if unsupported_baselines:
+        raise ValueError(f"unsupported shortpick evaluation baseline ids: {unsupported_baselines}")
+
+    rules = _default_shortpick_credible_control_rules(rule_defined_at=rule_date)
+    observed_dates = sorted(
+        {
+            _date_part(item.get("signal_date") or item.get("run_date"))
+            for item in paper_tracking.get("items") or []
+            if isinstance(item, dict) and _date_part(item.get("signal_date") or item.get("run_date"))
+        }
+    )
+    backtest_end = _date_part(historical_backtest_end_date) or _previous_iso_date(observed_dates[0] if observed_dates else rule_date)
+    historical_plan = build_shortpick_historical_backtest_generation_requests(
+        rules,
+        start_date=historical_backtest_start_date,
+        end_date=backtest_end,
+        entry_price_sources=entry_price_sources,
+    )
+    retrospective_plan = build_shortpick_retrospective_forward_replay_requests(
+        rules,
+        paper_tracking,
+        generated_at=generated_at,
+    )
+    activation_plan = build_shortpick_true_forward_tracking_activation_plan(
+        rules,
+        tracking_started_at=tracking_started_at or rule_date,
+        generated_at=generated_at,
+    )
+    historical_requests_by_rule = _requests_by_rule_identity(historical_plan.get("requests") or [])
+    retrospective_requests_by_rule = _first_requests_by_rule_identity(retrospective_plan.get("requests") or [])
+    activations_by_rule = _first_requests_by_rule_identity(activation_plan.get("activations") or [])
+
+    lines: list[dict[str, Any]] = []
+    for rule in rules:
+        identity = _rule_identity(rule)
+        gate = _credible_control_historical_gate(rule, historical_backtest_evidence)
+        retrospective_request = retrospective_requests_by_rule.get(identity)
+        activation = activations_by_rule.get(identity)
+        ready_for_backfill = gate["gate_status"] == "passed" and bool(retrospective_request)
+        blockers: list[str] = []
+        if gate["gate_status"] != "passed":
+            blockers.extend(gate["blockers"])
+        if not retrospective_request:
+            blockers.append("retrospective_replay_request_missing")
+        line_status = "ready_for_retrospective_backfill" if ready_for_backfill else "blocked_pending_historical_backtest"
+        lines.append(
+            {
+                "line_id": _credible_control_line_id(rule),
+                "status": line_status,
+                "control_group_id": identity[0],
+                "rule_signature": identity[1],
+                "rule_defined_at": rule_date,
+                "rule": rule,
+                "baseline_ids": baseline_values,
+                "historical_backtest_gate": gate,
+                "historical_backtest_request_ids": [
+                    request["request_id"] for request in historical_requests_by_rule.get(identity, [])
+                ],
+                "retrospective_replay_request_id": retrospective_request.get("request_id") if retrospective_request else None,
+                "true_forward_activation_id": activation.get("activation_id") if activation else None,
+                "paper_tracking_backfill_policy": (
+                    "allowed_after_historical_backtest_gate_passed"
+                    if ready_for_backfill
+                    else "blocked_until_historical_backtest_gate_passes"
+                ),
+                "headline_metric_filter_policy": "true_forward_queries_must_filter_evidence_basis_true_forward_tracking",
+                "blockers": blockers,
+            }
+        )
+
+    ready_count = sum(1 for line in lines if line["status"] == "ready_for_retrospective_backfill")
+    return {
+        "status": "ready" if ready_count else "blocked",
+        "generated_at": generated_at,
+        "rule_defined_at": rule_date,
+        "baseline_ids": baseline_values,
+        "line_count": len(lines),
+        "ready_line_count": ready_count,
+        "blocked_line_count": len(lines) - ready_count,
+        "lines": lines,
+        "historical_backtest_plan": historical_plan,
+        "retrospective_replay_plan": retrospective_plan,
+        "true_forward_activation_plan": activation_plan,
+        "comparison_line_policy": "historical_backtest_gate_before_retrospective_backfill",
+        "paper_tracking_write_policy": "plan_only_no_backfill_rows_written",
+        "runtime_dependency_status": "runner_and_writer_required_before_rows_exist",
+    }
+
+
 def filter_shortpick_combined_ledger_rows_by_evidence_basis(
     rows: list[dict[str, Any]],
     *,
@@ -1548,6 +1660,110 @@ def _combined_ledger_row_id(prefix: str, row: dict[str, Any]) -> str:
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return f"shortpick-combined-ledger-{prefix}:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+
+
+def _default_shortpick_credible_control_rules(*, rule_defined_at: str) -> list[dict[str, Any]]:
+    return [
+        build_shortpick_same_symbol_cooldown_rule(rule_defined_at=rule_defined_at),
+        build_shortpick_drawdown_reversal_filter_rule(rule_defined_at=rule_defined_at),
+        build_shortpick_repeated_exposure_limit_rule(rule_defined_at=rule_defined_at),
+    ]
+
+
+def _credible_control_historical_gate(
+    rule: dict[str, Any],
+    historical_backtest_evidence: dict[str, Any] | None,
+) -> dict[str, Any]:
+    evidence = _historical_backtest_evidence_for_rule(historical_backtest_evidence, rule)
+    if not evidence:
+        return {
+            "gate_status": "blocked",
+            "blockers": ["historical_backtest_evidence_missing"],
+            "evidence_ref": None,
+        }
+
+    blockers: list[str] = []
+    status = str(evidence.get("status") or "")
+    if status not in {"ready", "passed"}:
+        blockers.append("historical_backtest_status_not_ready")
+    evidence_basis = str(evidence.get("evidence_basis") or "")
+    if evidence_basis != "historical_backtest":
+        blockers.append("historical_backtest_evidence_basis_mismatch")
+    leakage_status = str(evidence.get("leakage_audit_status") or "")
+    if leakage_status != "passed":
+        blockers.append("historical_backtest_leakage_audit_not_passed")
+    explicit_gate = str(
+        evidence.get("gate_status")
+        or evidence.get("historical_backtest_gate_status")
+        or evidence.get("backtest_gate_status")
+        or ""
+    )
+    if explicit_gate != "passed":
+        blockers.append("historical_backtest_gate_not_passed")
+
+    return {
+        "gate_status": "passed" if not blockers else "blocked",
+        "blockers": blockers,
+        "evidence_ref": {
+            "artifact_id": evidence.get("artifact_id"),
+            "artifact_path": evidence.get("artifact_path"),
+            "status": status,
+            "gate_status": explicit_gate or None,
+            "leakage_audit_status": leakage_status or None,
+        },
+    }
+
+
+def _historical_backtest_evidence_for_rule(
+    source: dict[str, Any] | None,
+    rule: dict[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(source, dict) or not source:
+        return {}
+    control_group_id, rule_signature = _rule_identity(rule)
+    for key in (rule_signature, control_group_id):
+        value = source.get(key)
+        if isinstance(value, dict):
+            return dict(value)
+    artifacts = source.get("artifacts")
+    if isinstance(artifacts, list):
+        for artifact in artifacts:
+            if not isinstance(artifact, dict):
+                continue
+            if artifact.get("rule_signature") == rule_signature or artifact.get("control_group_id") == control_group_id:
+                return dict(artifact)
+    return {}
+
+
+def _requests_by_rule_identity(rows: list[dict[str, Any]]) -> dict[tuple[str, str], list[dict[str, Any]]]:
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in [_dict(value) for value in rows if isinstance(value, dict)]:
+        identity = _rule_identity(row)
+        if not all(identity):
+            continue
+        grouped[identity].append(row)
+    return dict(grouped)
+
+
+def _first_requests_by_rule_identity(rows: list[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:
+    return {identity: values[0] for identity, values in _requests_by_rule_identity(rows).items() if values}
+
+
+def _rule_identity(row: dict[str, Any]) -> tuple[str, str]:
+    return str(row.get("control_group_id") or ""), str(row.get("rule_signature") or "")
+
+
+def _credible_control_line_id(rule: dict[str, Any]) -> str:
+    payload = {"control_group_id": rule.get("control_group_id"), "rule_signature": rule.get("rule_signature")}
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return "shortpick-credible-control-line:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+
+
+def _previous_iso_date(value: str) -> str:
+    try:
+        return (date.fromisoformat(value) - timedelta(days=1)).isoformat()
+    except ValueError:
+        return value
 
 
 def _strategy_status_display(value: Any) -> dict[str, str]:
