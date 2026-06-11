@@ -86,6 +86,10 @@ from ashare_evidence.shortpick_replay import (
 )
 from ashare_evidence.shortpick_strategy_backtest_runner import run_shortpick_historical_backtest_requests
 from ashare_evidence.shortpick_strategy_replay_runner import run_shortpick_retrospective_forward_replay_requests
+from ashare_evidence.shortpick_strategy_retirement_writer import (
+    load_shortpick_strategy_retirement_inputs,
+    run_shortpick_strategy_retirement_artifact,
+)
 from ashare_evidence.shortpick_strategy_slices import build_shortpick_strategy_slice_evidence
 from ashare_evidence.simulation import restart_simulation_session, step_simulation_session
 from ashare_evidence.stock_master import DEFAULT_AKSHARE_TIMEOUT_SECONDS
@@ -782,6 +786,24 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_governance_combined_ledger_backfill.add_argument("--generated-at", default=None)
     shortpick_governance_combined_ledger_backfill.add_argument("--output-path", required=True)
 
+    shortpick_governance_retirement_artifact = subparsers.add_parser(
+        "shortpick-governance-retirement-artifact",
+        help="Write a governed Short Pick strategy-retirement artifact for an approved retire_candidate strategy.",
+    )
+    shortpick_governance_retirement_artifact.add_argument("--database-url", default=None)
+    shortpick_governance_retirement_artifact.add_argument("--evidence-pack-path", required=True)
+    shortpick_governance_retirement_artifact.add_argument("--status-recommendation-path", required=True)
+    shortpick_governance_retirement_artifact.add_argument("--strategy-id", required=True)
+    shortpick_governance_retirement_artifact.add_argument("--decision-log-ref", required=True)
+    shortpick_governance_retirement_artifact.add_argument("--evidence-snapshot-ref", action="append", required=True)
+    shortpick_governance_retirement_artifact.add_argument("--retired-at", required=True)
+    shortpick_governance_retirement_artifact.add_argument("--archived-at", default=None)
+    shortpick_governance_retirement_artifact.add_argument("--strategy-version", default="shortpick-governance-v1")
+    shortpick_governance_retirement_artifact.add_argument("--retirement-reason-code", default=None)
+    shortpick_governance_retirement_artifact.add_argument("--replacement-guidance", default="")
+    shortpick_governance_retirement_artifact.add_argument("--event-ref", action="append", default=None)
+    shortpick_governance_retirement_artifact.add_argument("--output-path", required=True)
+
     shortpick_strategy_slice_evidence = subparsers.add_parser(
         "shortpick-strategy-slice-evidence",
         help="Build offline trade-level strategy slice evidence for Short Pick Lab history analysis.",
@@ -1275,6 +1297,28 @@ def main(argv: list[str] | None = None) -> int:
             replay_artifacts,
             true_forward_rows=true_forward_rows,
             generated_at=args.generated_at,
+            output_path=args.output_path,
+        )
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-governance-retirement-artifact":
+        evidence_pack_result, status_recommendation_result = load_shortpick_strategy_retirement_inputs(
+            evidence_pack_path=args.evidence_pack_path,
+            status_recommendation_path=args.status_recommendation_path,
+        )
+        payload = run_shortpick_strategy_retirement_artifact(
+            evidence_pack_result,
+            status_recommendation_result,
+            strategy_id=args.strategy_id,
+            decision_log_ref=args.decision_log_ref,
+            evidence_snapshot_refs=args.evidence_snapshot_ref,
+            retired_at=args.retired_at,
+            archived_at=args.archived_at,
+            strategy_version=args.strategy_version,
+            retirement_reason_code=args.retirement_reason_code,
+            replacement_guidance=args.replacement_guidance,
+            event_refs=args.event_ref,
             output_path=args.output_path,
         )
         _print_json(payload)
