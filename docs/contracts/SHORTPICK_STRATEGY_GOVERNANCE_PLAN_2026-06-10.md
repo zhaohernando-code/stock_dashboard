@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round49_governance_request_selectors_ds_reviewed_ready_to_merge
+Status: round50_runtime_historical_gate_passed_ds_reviewed_ready_to_merge
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -1614,6 +1614,57 @@ DeepSeek review result:
 - Confirmation: `--request-id` and `--control-group-id` only filter request dictionaries before handing them to the existing runners; runner, gate, database, paper-tracking, and combined-ledger behavior are unchanged.
 - Confirmation: the nested-plan selector tests prove ignored requests are not executed.
 
+## Round 50 Runtime Historical Gate Completion
+
+Status: implementation completed locally; runtime historical gate artifacts generated; tests passed; DeepSeek review passed; ready to merge.
+
+Round 50 scope:
+
+- Optimized the shared shortpick daily-series loader by selecting only the columns needed to build `_Series` instead of hydrating full `Stock` and `MarketBar` ORM objects for every 1d bar.
+- Added an `include_golden_cross` option to `_context_for_signal_day(...)` while keeping the default behavior unchanged. Golden-cross moving-average features are still computed for `momentum_volume_golden_cross_10_200`; portfolio eligibility and regime aggregation paths now skip those unused 10/200 calculations.
+- Kept market-factor eligible-day counting on its prior index/date basis so the performance fix does not change that sample-count semantics.
+- Used the Round 49 request selectors to execute the three credible-control historical gate requests one control at a time against the runtime database.
+- Rebuilt the credible-control comparison plan with the resulting historical evidence aggregate.
+
+Runtime artifacts:
+
+- Source paper-tracking snapshot: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/analytics/20260611-credible-control-runtime/paper-tracking.json`.
+- Original credible-control plan: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/analytics/20260611-credible-control-runtime/credible-control-plan.json`.
+- Historical evidence aggregate: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/analytics/20260611-credible-control-runtime/perf/historical-backtest-evidence.aggregate.json`.
+- Historical-gate-passed credible-control plan: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/analytics/20260611-credible-control-runtime/perf/credible-control-plan.historical-gate-passed.json`.
+- Per-control historical backtest artifacts: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/shortpick-governance-backtests/20260611T1512-runtime-gate-perf/`.
+
+Runtime result:
+
+- The aggregate historical evidence returned `status=ready`, `evidence_count=3`, `passed_count=3`, and `blocked_count=0`.
+- The three passed controls are `control_same_symbol_cooldown:v1`, `control_drawdown_reversal_filter:v1`, and `control_repeated_exposure_limit:v1`.
+- Each evidence item reports `gate_status=passed` and `leakage_audit_status=passed`.
+- The regenerated credible-control plan returned `status=ready`, `line_count=3`, `ready_line_count=3`, `blocked_line_count=0`, and all three lines set `paper_tracking_backfill_policy=allowed_after_historical_backtest_gate_passed`.
+- This round created runtime artifacts only. It did not write database rows, did not append paper-tracking rows, did not materialize combined-ledger artifacts, and did not change true-forward tracking status.
+
+Verification evidence before DeepSeek:
+
+- Related regression passed: `python3 -m pytest tests/test_shortpick_portfolio_backtest.py tests/test_shortpick_strategy_slices.py tests/test_shortpick_strategy_governance.py` (`119 passed`).
+- Static checks passed: `python3 -m ruff check src/ashare_evidence/shortpick_market_factor_study.py src/ashare_evidence/shortpick_portfolio_backtest.py`.
+- Compile checks passed: `python3 -m compileall -q src/ashare_evidence/shortpick_market_factor_study.py src/ashare_evidence/shortpick_portfolio_backtest.py`.
+- `git diff --check` passed.
+
+Remaining blockers after Round 50:
+
+- Execute governed retrospective replay for the three now-unlocked credible-control lines.
+- Materialize combined-ledger retrospective rows only from ready replay artifacts with visible `evidence_basis=retrospective_forward_replay`.
+- Keep true-forward tracking separate until rule-defined tracking starts in real forward time.
+- Frontend exposure of these new control comparison lines remains pending until replay artifacts and combined-ledger materialization exist.
+
+DeepSeek review result:
+
+- DeepSeek read-only review returned `PASS/MERGE`.
+- Confirmation: column loading preserves `_Series` construction while avoiding full ORM hydration.
+- Confirmation: `include_golden_cross` remains backward-compatible by default, non-golden strategy ranking paths do not read golden-cross fields, and the golden-cross strategy still computes the 10/200 features.
+- Confirmation: portfolio eligible-day and regime aggregation only need context existence and non-golden regime fields, so skipping unused golden-cross calculations there is semantically safe.
+- Confirmation: Round 50 documentation is honest: the 3/3 passed runtime historical gate only unlocks historical-gate status and does not claim paper-tracking writes, combined-ledger materialization, true-forward status changes, or frontend exposure.
+- Nonblocking suggestions addressed before merge: extracted `GOLDEN_CROSS_STRATEGY` in the market-factor study module and documented that hot paths should pass `include_golden_cross=False` when they do not read golden-cross fields.
+
 ## Validation To Run For This Planning Task
 
 
@@ -1692,10 +1743,10 @@ DeepSeek review result:
 | P2.7 deprecated display bucket + regression guard | completed_generation_wiring_pending_runtime_data_verification |
 | P2.8 redundant/meaningless control archival | completed_partial_inventory_decision_source_pending |
 | P3.7 labeled combined-ledger retrospective backfill + artifact writer + API source projection + frontend display | completed_discovery_materializer_pending_governance_replay_artifacts |
-| P3.8 new credible control/comparison line build-out | completed_request_selector_wiring_pending_runtime_sharded_gate_execution |
+| P3.8 new credible control/comparison line build-out | historical_gate_passed_runtime_replay_pending |
 | Runtime behavior changed | round31_inventory_archive_governance_path_published_runtime_verified |
 | Registry changed | completed |
 | Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_combined_ledger_backfill_preparation_credible_control_line_buildout_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
 | Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_governance_projection_rendering_round30_deprecated_bucket_filtering_and_round31_inventory_archived_fallback |
-| Runtime data changed | not_started |
+| Runtime data changed | runtime_artifacts_created_no_database_or_paper_tracking_writes |
 | DeepSeek plan review | completed |

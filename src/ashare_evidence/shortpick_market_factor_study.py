@@ -15,6 +15,7 @@ from ashare_evidence.models import MarketBar, Stock
 INDEX_SYMBOLS = {"000300.SH", "000905.SH", "000852.SH"}
 LOW_TURNOVER_UPTREND_STRATEGY = "low_turnover_20d_uptrend_liquid_top120"
 QUIET_BREAKOUT_BASE_STRATEGY = "quiet_20d_5d_breakout"
+GOLDEN_CROSS_STRATEGY = "momentum_volume_golden_cross_10_200"
 DEFAULT_STRATEGIES = (
     "base",
     "turnover",
@@ -25,7 +26,7 @@ DEFAULT_STRATEGIES = (
     "ret10_turnover_cooldown_diversified",
     LOW_TURNOVER_UPTREND_STRATEGY,
     QUIET_BREAKOUT_BASE_STRATEGY,
-    "momentum_volume_golden_cross_10_200",
+    GOLDEN_CROSS_STRATEGY,
     "combo",
 )
 DEFAULT_HORIZONS = (1, 3, 5, 10, 20)
@@ -240,25 +241,47 @@ def build_shortpick_market_factor_study(
 
 def _load_daily_series(session: Session) -> dict[str, _Series]:
     rows = session.execute(
-        select(Stock, MarketBar)
+        select(
+            Stock.symbol,
+            Stock.name,
+            Stock.profile_payload,
+            MarketBar.observed_at,
+            MarketBar.open_price,
+            MarketBar.high_price,
+            MarketBar.low_price,
+            MarketBar.close_price,
+            MarketBar.amount,
+            MarketBar.turnover_rate,
+        )
         .join(MarketBar, MarketBar.stock_id == Stock.id)
         .where(MarketBar.timeframe == "1d")
         .order_by(Stock.symbol.asc(), MarketBar.observed_at.asc(), MarketBar.id.asc())
-    ).all()
+    )
     grouped: dict[str, tuple[str, str, list[_Bar]]] = {}
-    for stock, bar in rows:
-        day = bar.observed_at.date()
-        if not bar.close_price:
+    for (
+        symbol,
+        name,
+        profile_payload,
+        observed_at,
+        open_price,
+        high_price,
+        low_price,
+        close_price,
+        amount,
+        turnover_rate,
+    ) in rows:
+        day = observed_at.date()
+        if not close_price:
             continue
-        grouped.setdefault(stock.symbol, (stock.name, _stock_industry(stock), []))[2].append(
+        grouped.setdefault(symbol, (name, _industry_from_profile_payload(profile_payload), []))[2].append(
             _Bar(
                 day=day,
-                open=float(bar.open_price),
-                high=float(bar.high_price),
-                low=float(bar.low_price),
-                close=float(bar.close_price),
-                amount=float(bar.amount or 0.0),
-                turnover=None if bar.turnover_rate is None else float(bar.turnover_rate),
+                open=float(open_price),
+                high=float(high_price),
+                low=float(low_price),
+                close=float(close_price),
+                amount=float(amount or 0.0),
+                turnover=None if turnover_rate is None else float(turnover_rate),
             )
         )
     output: dict[str, _Series] = {}
@@ -278,7 +301,11 @@ def _load_daily_series(session: Session) -> dict[str, _Series]:
 
 
 def _stock_industry(stock: Stock) -> str:
-    payload = stock.profile_payload or {}
+    return _industry_from_profile_payload(stock.profile_payload)
+
+
+def _industry_from_profile_payload(profile_payload: object) -> str:
+    payload = profile_payload or {}
     value = payload.get("industry") if isinstance(payload, dict) else None
     return str(value or "unknown")
 
@@ -318,7 +345,13 @@ def _build_strategy_selections(
             context
             for symbol, series in series_by_symbol.items()
             if symbol not in INDEX_SYMBOLS
-            for context in [_context_for_signal_day(series, signal_day)]
+            for context in [
+                _context_for_signal_day(
+                    series,
+                    signal_day,
+                    include_golden_cross=strategy == GOLDEN_CROSS_STRATEGY,
+                )
+            ]
             if context is not None
         ]
         effective_pool_limit = pool_limit
@@ -348,7 +381,7 @@ def _build_strategy_selections(
             continue
         if strategy == "base":
             ranked = pool
-        elif strategy == "momentum_volume_golden_cross_10_200":
+        elif strategy == GOLDEN_CROSS_STRATEGY:
             ranked = [item for item in pool if item.get("golden_cross_10_200")]
         else:
             ranked = sorted(pool, key=lambda item, strategy=strategy: _strategy_score(pool, item, strategy), reverse=True)
@@ -394,14 +427,20 @@ def _industry_diversified_rank(
     return selected + [item for item in ranked if item["symbol"] not in selected_symbols]
 
 
-def _context_for_signal_day(series: _Series, signal_day: date) -> dict[str, Any] | None:
+def _context_for_signal_day(
+    series: _Series,
+    signal_day: date,
+    *,
+    include_golden_cross: bool = True,
+) -> dict[str, Any] | None:
+    """Build ranking context; pass False on hot paths that do not read golden-cross fields."""
     index = series.by_day.get(signal_day)
     if index is None or index < 20 or index + 2 >= len(series.bars):
         return None
     latest = series.bars[index]
     if latest.amount <= 0:
         return None
-    return {
+    context = {
         "symbol": series.symbol,
         "industry": series.industry,
         "return_1d": _lookback_return(series, index, 1),
@@ -411,8 +450,20 @@ def _context_for_signal_day(series: _Series, signal_day: date) -> dict[str, Any]
         "abs_return_1d": abs(_lookback_return(series, index, 1)),
         "amount": latest.amount,
         "turnover_rate": latest.turnover or 0.0,
-        **_golden_cross_features(series, index, short_window=10, long_window=200),
     }
+    if include_golden_cross:
+        context.update(_golden_cross_features(series, index, short_window=10, long_window=200))
+    else:
+        context.update(
+            {
+                "golden_cross_10_200": False,
+                "ma10": None,
+                "ma200": None,
+                "previous_ma10": None,
+                "previous_ma200": None,
+            }
+        )
+    return context
 
 
 def _lookback_return(series: _Series, index: int, days: int) -> float:
@@ -962,7 +1013,7 @@ def _regime_features_by_day(
             context
             for symbol, series in series_by_symbol.items()
             if symbol not in INDEX_SYMBOLS
-            for context in [_context_for_signal_day(series, signal_day)]
+            for context in [_context_for_signal_day(series, signal_day, include_golden_cross=False)]
             if context is not None
         ]
         if not contexts:
