@@ -15,6 +15,15 @@
   --line: rgba(16, 35, 60, 0.08);
   --surface-1: rgba(245, 249, 253, 0.96);
   --surface-2: rgba(239, 245, 251, 0.92);
+  --chart-panel-bg: rgba(248, 251, 255, 0.72);
+  --chart-surface-bg: rgba(255, 255, 255, 0.72);
+  --chart-border: rgba(16, 35, 60, 0.08);
+  --chart-grid: rgba(16, 35, 60, 0.08);
+  --chart-tooltip-bg: rgba(15, 35, 64, 0.92);
+  --chart-tooltip-text: #f8fbff;
+  --chart-series-primary: #0a5bff;
+  --chart-series-gold: #d48700;
+  --chart-series-green: #0b8f63;
 }
 
 * {
@@ -75,6 +84,15 @@ body[data-theme="dark"],
   --line: rgba(124, 160, 201, 0.16);
   --surface-1: rgba(16, 31, 53, 0.9);
   --surface-2: rgba(11, 22, 40, 0.92);
+  --chart-panel-bg: rgba(10, 19, 34, 0.72);
+  --chart-surface-bg: rgba(13, 28, 50, 0.76);
+  --chart-border: rgba(124, 160, 201, 0.16);
+  --chart-grid: rgba(149, 167, 191, 0.18);
+  --chart-tooltip-bg: rgba(4, 12, 24, 0.94);
+  --chart-tooltip-text: #f8fbff;
+  --chart-series-primary: #66a4ff;
+  --chart-series-gold: #f0b84d;
+  --chart-series-green: #42c99a;
 }
 
 .app-theme-shell[data-theme="dark"]::before {
@@ -875,9 +893,9 @@ body[data-theme="dark"] {
 .shortpick-paper-effect-panel {
   margin-bottom: 16px;
   padding: 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--chart-border);
   border-radius: 8px;
-  background: rgba(248, 251, 255, 0.72);
+  background: var(--chart-panel-bg);
 }
 
 .shortpick-paper-effect-empty {
@@ -895,21 +913,44 @@ body[data-theme="dark"] {
   margin-bottom: 12px;
 }
 
+.shortpick-paper-effect-controls {
+  justify-content: flex-end;
+}
+
+.shortpick-paper-effect-strategy-select {
+  width: min(240px, 100%);
+}
+
 .shortpick-paper-effect-chart-block {
   display: flex;
   min-height: 320px;
   flex-direction: column;
   gap: 4px;
   padding: 12px;
-  border: 1px solid rgba(16, 35, 60, 0.08);
+  border: 1px solid var(--chart-border);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--chart-surface-bg);
 }
 
 .shortpick-paper-effect-chart {
   min-height: 260px;
   width: 100%;
   flex: 1 1 auto;
+}
+
+@media (max-width: 720px) {
+  .shortpick-paper-effect-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .shortpick-paper-effect-controls {
+    justify-content: flex-start;
+  }
+
+  .shortpick-paper-effect-strategy-select {
+    flex: 1 1 180px;
+  }
 }
 
 .chart-shell-modal {

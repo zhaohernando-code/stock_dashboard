@@ -2,12 +2,14 @@ import { useRef, useEffect } from "react";
 import { Empty } from "antd";
 import { init } from "echarts";
 import type { PricePointView } from "../types";
+import { readDashboardChartTheme, useDashboardThemeRevision } from "../utils/chartTheme";
 import { formatNumber, formatPercent } from "../utils/format";
 
 
 
 export function KlineChart({ points, compact = false }: { points: PricePointView[]; compact?: boolean }) {
   const chartRef = useRef<HTMLDivElement | null>(null);
+  const themeRevision = useDashboardThemeRevision();
 
   useEffect(() => {
     if (!chartRef.current || points.length === 0) {
@@ -16,14 +18,11 @@ export function KlineChart({ points, compact = false }: { points: PricePointView
 
     const container = chartRef.current;
     const chart = init(container, undefined, { renderer: "canvas" });
-    const styles = getComputedStyle(container);
-    const textColor = styles.getPropertyValue("--text-main").trim() || "#10233c";
-    const mutedColor = styles.getPropertyValue("--text-muted").trim() || "#64748b";
-    const lineColor = styles.getPropertyValue("--line").trim() || "rgba(16, 35, 60, 0.08)";
+    const chartTheme = readDashboardChartTheme(container);
     const upColor = "#d14343";
     const downColor = "#0b8f63";
-    const accentColor = styles.getPropertyValue("--brand").trim() || "#0a5bff";
-    const goldColor = "#d48700";
+    const accentColor = chartTheme.brandColor;
+    const goldColor = chartTheme.goldColor;
     const dates = points.map((point) => {
       const parsed = new Date(point.observed_at);
       return Number.isNaN(parsed.getTime())
@@ -54,12 +53,12 @@ export function KlineChart({ points, compact = false }: { points: PricePointView
         axisPointer: {
           type: "cross",
           label: {
-            backgroundColor: "rgba(15, 35, 64, 0.9)",
+            backgroundColor: chartTheme.tooltipBackgroundColor,
           },
         },
-        backgroundColor: "rgba(15, 35, 64, 0.92)",
+        backgroundColor: chartTheme.tooltipBackgroundColor,
         borderWidth: 0,
-        textStyle: { color: "#f8fbff" },
+        textStyle: { color: chartTheme.tooltipTextColor },
         extraCssText: "border-radius: 12px; box-shadow: 0 18px 36px rgba(10,24,42,0.24);",
         formatter: (rawParams: unknown) => {
           const params = Array.isArray(rawParams)
@@ -97,9 +96,9 @@ export function KlineChart({ points, compact = false }: { points: PricePointView
           type: "category",
           data: dates,
           boundaryGap: true,
-          axisLine: { lineStyle: { color: lineColor } },
+          axisLine: { lineStyle: { color: chartTheme.lineColor } },
           axisTick: { show: false },
-          axisLabel: { color: mutedColor, showMaxLabel: true, showMinLabel: true },
+          axisLabel: { color: chartTheme.mutedColor, showMaxLabel: true, showMinLabel: true },
           splitLine: { show: false },
         },
         {
@@ -107,7 +106,7 @@ export function KlineChart({ points, compact = false }: { points: PricePointView
           gridIndex: 1,
           data: dates,
           boundaryGap: true,
-          axisLine: { lineStyle: { color: lineColor } },
+          axisLine: { lineStyle: { color: chartTheme.lineColor } },
           axisTick: { show: false },
           axisLabel: { show: false },
           splitLine: { show: false },
@@ -119,8 +118,8 @@ export function KlineChart({ points, compact = false }: { points: PricePointView
           splitNumber: 4,
           axisLine: { show: false },
           axisTick: { show: false },
-          axisLabel: { color: mutedColor },
-          splitLine: { lineStyle: { color: lineColor } },
+          axisLabel: { color: chartTheme.mutedColor },
+          splitLine: { lineStyle: { color: chartTheme.lineColor } },
         },
         {
           scale: true,
@@ -129,7 +128,7 @@ export function KlineChart({ points, compact = false }: { points: PricePointView
           axisLine: { show: false },
           axisTick: { show: false },
           axisLabel: {
-            color: mutedColor,
+            color: chartTheme.mutedColor,
             formatter: (value: number) => `${Math.round(value / 10000)}万`,
           },
           splitLine: { show: false },
@@ -154,14 +153,14 @@ export function KlineChart({ points, compact = false }: { points: PricePointView
                 backgroundColor: "rgba(16, 35, 60, 0.06)",
                 fillerColor: "rgba(10, 91, 255, 0.14)",
                 dataBackground: {
-                  lineStyle: { color: mutedColor, opacity: 0.45 },
+                  lineStyle: { color: chartTheme.mutedColor, opacity: 0.45 },
                   areaStyle: { color: "rgba(10, 91, 255, 0.04)" },
                 },
                 handleStyle: {
                   color: accentColor,
                   borderColor: accentColor,
                 },
-                textStyle: { color: mutedColor },
+                textStyle: { color: chartTheme.mutedColor },
               }]
         ),
       ],
@@ -221,7 +220,7 @@ export function KlineChart({ points, compact = false }: { points: PricePointView
         },
       ],
       textStyle: {
-        color: textColor,
+        color: chartTheme.textColor,
       },
     });
 
@@ -231,7 +230,7 @@ export function KlineChart({ points, compact = false }: { points: PricePointView
       window.removeEventListener("resize", resize);
       chart.dispose();
     };
-  }, [compact, points]);
+  }, [compact, points, themeRevision]);
 
   if (points.length === 0) {
     return <Empty description="暂无价格轨迹" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
@@ -239,4 +238,3 @@ export function KlineChart({ points, compact = false }: { points: PricePointView
 
   return <div ref={chartRef} className={`echarts-kline${compact ? " echarts-kline-compact" : ""}`} />;
 }
-

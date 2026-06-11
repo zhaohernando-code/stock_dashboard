@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: paper_effect_chart_series_linkage_published_runtime_verified
+Status: paper_effect_chart_theme_strategy_filter_ds_reviewed_ready_to_merge_publish
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -110,6 +110,7 @@ The next governance package should adopt four principles.
 | P4.4 | Add leakage and coverage notes | published_runtime_verified | Added leakage/coverage note metadata to strategy view projection and archive records. Retrospective rows default to showing signal-date cutoff policy and leakage audit status. The replay decision page now renders audit rows; runtime and canonical browser verification completed for the UI path. |
 | P4.5 | Update analytical report generation | published_runtime_verified | Added replay readout/report projection that reads strategy governance recommendations, view sections, archive summaries, and leakage notes from governance contract fields. `/shortpick-lab/replay-feedback` builds a read-only governance source from the already loaded paper-tracking ledger when no persisted governance payload exists, and the Shortpick replay decision page renders it. Runtime and canonical browser verification completed for the UI path. |
 | P4.6 | Add paper-tracking strategy effect charts | published_runtime_verified | Adds the `策略纸面对照效果` chart panel directly inside `纸面跟踪记录（正式策略与对照组）`. The chart uses `机械5日`, `机械10日`, and `止盈止损` as ECharts series, excludes meaningless 1日/3日 exits, and links chart clicks to the existing record-group and exit-result table filters. The chart source follows current search/group/entry filters but intentionally ignores the table's exit-result filter so all three series remain comparable after linkage. DeepSeek review found no blockers; publish verification passed 19/19, and browser verification confirmed the chart panel, series legend, and table-filter linkage in the live dashboard. |
+| P4.7 | Correct paper effect chart UX and theme behavior | completed_ds_reviewed_ready_to_merge_publish | Removes the implementation-description sentence from the chart header and tooltip content, adds a cumulative-chart strategy selector that defaults to `冻结策略` when present, and moves chart colors/surfaces/tooltips to shared CSS variables plus a reusable ECharts theme-revision helper so canvas charts redraw on light/dark theme changes. DeepSeek review found the initial tooltip wording blocker, the wording was removed, and the follow-up review marked the change mergeable. |
 
 ## Retirement Threshold Draft
 
