@@ -913,12 +913,29 @@ body[data-theme="dark"] {
   margin-bottom: 12px;
 }
 
+.shortpick-paper-effect-summary-tags {
+  justify-content: flex-end;
+}
+
 .shortpick-paper-effect-controls {
+  flex: 0 0 auto;
   justify-content: flex-end;
 }
 
 .shortpick-paper-effect-strategy-select {
-  width: min(240px, 100%);
+  width: 176px;
+  min-width: 176px;
+}
+
+.shortpick-paper-effect-strategy-select .ant-select-selection-item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shortpick-paper-effect-metric-select {
+  width: 112px;
+  min-width: 112px;
 }
 
 .shortpick-paper-effect-chart-block {
@@ -930,6 +947,17 @@ body[data-theme="dark"] {
   border: 1px solid var(--chart-border);
   border-radius: 8px;
   background: var(--chart-surface-bg);
+}
+
+.shortpick-paper-effect-chart-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.shortpick-paper-effect-chart-title {
+  min-width: 0;
 }
 
 .shortpick-paper-effect-chart {
@@ -944,12 +972,27 @@ body[data-theme="dark"] {
     flex-direction: column;
   }
 
+  .shortpick-paper-effect-summary-tags {
+    justify-content: flex-start;
+  }
+
+  .shortpick-paper-effect-chart-head {
+    flex-direction: column;
+  }
+
   .shortpick-paper-effect-controls {
+    width: 100%;
     justify-content: flex-start;
   }
 
   .shortpick-paper-effect-strategy-select {
-    flex: 1 1 180px;
+    width: min(100%, 220px);
+    min-width: min(100%, 220px);
+  }
+
+  .shortpick-paper-effect-metric-select {
+    width: min(100%, 160px);
+    min-width: min(100%, 160px);
   }
 }
 

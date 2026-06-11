@@ -1962,6 +1962,35 @@ Post-merge retrospective-control exit-track correction:
 
 ## Validation To Run For This Planning Task
 
+## Paper-Tracking Chart And Timeout Follow-Up - 2026-06-11
+
+Scope:
+
+- Move the cumulative-return strategy selector into the `累计纸面收益` chart card, make its default `冻结策略`, and prevent the selector from being squeezed/truncated.
+- Add a card-level selector to `策略退出效果排名` with `均值`, `中位收益`, and `胜率`; default metric is `均值`.
+- Keep chart-to-table linkage useful without trapping the chart in a single-strategy view: charts now ignore record-group and exit-result filters, and the chart panel exposes `清除图表联动筛选`.
+- Reduce paper-tracking timeout risk without dropping rows: full ledger uses the long-running frontend request behavior, the backend SQL query no longer has the historical 1000-row safety cap, and `/shortpick-lab/paper-tracking/summary` no longer returns full combined-ledger row arrays.
+
+Measured request facts before publish:
+
+- Canonical direct paper-tracking route via a same-origin proxy made 4 startup data requests: `/auth/context`, `/dashboard/shell`, `/stocks/002028.SZ/dashboard`, and `/shortpick-lab/paper-tracking`; `/dashboard/scheduled-refresh-status` then started its periodic polling.
+- The slow path is not broad tab fan-out. The observed bottleneck is the full `/shortpick-lab/paper-tracking` ledger, which measured about `76.5s` once during concurrent/proxy validation and `9.2s` on a follow-up direct canonical sample, with a `2.7MB` response.
+- Local TestClient compact summary after the change returns `items=[]` and combined-ledger counts only, with no `rows`, `true_forward_rows`, or `retrospective_rows`.
+
+Verification:
+
+- `PYTHONPATH=src python3 -m unittest tests.test_frontend_shortpick_static tests.test_shortpick_lab_paper_tracking`
+- `python3 -m py_compile src/ashare_evidence/api.py`
+- `git diff --check`
+- `npm run build`
+
+Status:
+
+- Implementation completed in task worktree `task/20260611-paper-tracking-selector-and-timeout-ea420a`.
+- DeepSeek initial review found two blockers: compact summary still performed full combined-ledger row projection before discarding output, and the removed SQL row cap lacked an explicit regression guard. Both were fixed.
+- DeepSeek focused re-review passed after the fix and found no remaining blocker before merge.
+- Runtime publish pending after merge.
+
 
 - `git status --short --branch`
 - `PYTHONPATH=src python3 -m pytest tests/test_shortpick_strategy_governance.py`

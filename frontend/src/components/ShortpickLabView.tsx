@@ -95,6 +95,7 @@ import {
   type PaperTrackingEntryRuleFilter,
   type PaperTrackingEntryStateFilter,
   type PaperTrackingExitStateFilter,
+  type PaperTrackingEffectSummary,
   type PaperTrackingGroupFilter,
   type PaperTrackingEffectExitTrackKey,
   PAPER_TRACKING_EFFECT_EXIT_TRACKS,
@@ -168,6 +169,12 @@ import { SourceList, TodayRunTab, ValidationList } from "./shortpickLabToday";
 const { Paragraph, Text, Title } = Typography;
 const DEFAULT_VALIDATION_PAGE_SIZE = 50;
 const PAPER_TRACKING_EFFECT_ALL_STRATEGIES = "__all__";
+type PaperTrackingRankingMetricKey = "meanReturn" | "medianReturn" | "winRate";
+const PAPER_TRACKING_RANKING_METRIC_OPTIONS: Array<{ value: PaperTrackingRankingMetricKey; label: string }> = [
+  { value: "meanReturn", label: "均值" },
+  { value: "medianReturn", label: "中位收益" },
+  { value: "winRate", label: "胜率" },
+];
 
 function loadingAwareText(loading: boolean, value: string | number | null | undefined, emptyText = "暂无数据") {
   if (loading) return <Text type="secondary">加载中</Text>;
@@ -968,14 +975,22 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
 function PaperTrackingEffectCharts({
   rows,
   onSelect,
+  activeGroupFilter,
+  activeExitStateFilter,
+  onClearSelection,
 }: {
   rows: ShortpickPaperTrackingItem[];
   onSelect: (groupFilter: PaperTrackingGroupFilter, exitTrackKey: PaperTrackingEffectExitTrackKey) => void;
+  activeGroupFilter: PaperTrackingGroupFilter;
+  activeExitStateFilter: PaperTrackingExitStateFilter;
+  onClearSelection: () => void;
 }) {
   const lineRef = useRef<HTMLDivElement | null>(null);
   const rankingRef = useRef<HTMLDivElement | null>(null);
   const themeRevision = useDashboardThemeRevision();
+  const initializedDefaultStrategyRef = useRef(false);
   const [selectedLineStrategy, setSelectedLineStrategy] = useState<string>(PAPER_TRACKING_EFFECT_ALL_STRATEGIES);
+  const [selectedRankingMetric, setSelectedRankingMetric] = useState<PaperTrackingRankingMetricKey>("meanReturn");
   const observations = useMemo(() => paperTrackingEffectObservations(rows), [rows]);
   const summaries = useMemo(() => paperTrackingEffectSummaries(rows), [rows]);
   const strategyLabels = useMemo(() => {
@@ -994,11 +1009,22 @@ function PaperTrackingEffectCharts({
     [observations, selectedLineStrategy],
   );
   const selectedLineStrategyLabel = selectedLineStrategy === PAPER_TRACKING_EFFECT_ALL_STRATEGIES ? "全部策略" : selectedLineStrategy;
+  const selectedRankingMetricLabel = PAPER_TRACKING_RANKING_METRIC_OPTIONS.find((item) => item.value === selectedRankingMetric)?.label ?? "均值";
+  const hasLinkedTableFilter = Boolean(activeGroupFilter || activeExitStateFilter);
 
   useEffect(() => {
+    if (!strategyLabels.length) {
+      if (!initializedDefaultStrategyRef.current) {
+        setSelectedLineStrategy(PAPER_TRACKING_EFFECT_ALL_STRATEGIES);
+      }
+      return;
+    }
+    if (!initializedDefaultStrategyRef.current) {
+      initializedDefaultStrategyRef.current = true;
+      setSelectedLineStrategy(strategyLabels.includes("冻结策略") ? "冻结策略" : PAPER_TRACKING_EFFECT_ALL_STRATEGIES);
+      return;
+    }
     setSelectedLineStrategy((current) => {
-      if (!strategyLabels.length) return PAPER_TRACKING_EFFECT_ALL_STRATEGIES;
-      if (current === PAPER_TRACKING_EFFECT_ALL_STRATEGIES && strategyLabels.includes("冻结策略")) return "冻结策略";
       if (current === PAPER_TRACKING_EFFECT_ALL_STRATEGIES || strategyLabels.includes(current)) return current;
       return strategyLabels.includes("冻结策略") ? "冻结策略" : PAPER_TRACKING_EFFECT_ALL_STRATEGIES;
     });
@@ -1112,6 +1138,13 @@ function PaperTrackingEffectCharts({
     };
     const summaryMap = new Map(summaries.map((summary) => [`${summary.strategyLabel}\u0000${summary.exitTrackKey}`, summary]));
     const groupFilterByStrategy = new Map(summaries.map((summary) => [summary.strategyLabel, summary.groupFilter]));
+    const rankingMetricValue = (summary: PaperTrackingEffectSummary) => (
+      selectedRankingMetric === "medianReturn"
+        ? summary.medianReturn
+        : selectedRankingMetric === "winRate"
+          ? summary.winRate
+          : summary.meanReturn
+    );
     const series = PAPER_TRACKING_EFFECT_EXIT_TRACKS.map((track) => ({
       name: track.label,
       type: "bar",
@@ -1122,7 +1155,8 @@ function PaperTrackingEffectCharts({
         const summary = summaryMap.get(`${label}\u0000${track.key}`);
         return summary
           ? {
-              value: Number(summary.medianReturn.toFixed(6)),
+              value: Number(rankingMetricValue(summary).toFixed(6)),
+              medianReturn: summary.medianReturn,
               meanReturn: summary.meanReturn,
               winRate: summary.winRate,
               count: summary.count,
@@ -1156,11 +1190,12 @@ function PaperTrackingEffectCharts({
           const param = rawParam as {
             seriesName?: string;
             name?: string;
-            data?: { value?: number | null; meanReturn?: number; winRate?: number; count?: number };
+            data?: { value?: number | null; medianReturn?: number; meanReturn?: number; winRate?: number; count?: number };
           };
           return [
             `<strong>${param.name ?? ""} · ${param.seriesName ?? ""}</strong>`,
-            `中位收益 ${formatPercent(param.data?.value ?? null)}`,
+            `${selectedRankingMetricLabel} ${formatPercent(param.data?.value ?? null)}`,
+            `中位收益 ${formatPercent(param.data?.medianReturn ?? null)}`,
             `均值 ${formatPercent(param.data?.meanReturn ?? null)}`,
             `胜率 ${formatPercent(param.data?.winRate ?? null)}`,
             `样本 ${param.data?.count ?? 0}`,
@@ -1194,12 +1229,17 @@ function PaperTrackingEffectCharts({
       resizeObserver.disconnect();
       chart.dispose();
     };
-  }, [onSelect, strategyLabels, summaries, themeRevision]);
+  }, [onSelect, selectedRankingMetric, selectedRankingMetricLabel, strategyLabels, summaries, themeRevision]);
 
   if (!observations.length) {
     return (
       <div className="shortpick-paper-effect-panel shortpick-paper-effect-empty">
-        <Empty description="当前筛选下还没有已完成的 5日、10日或止盈止损退出样本。" />
+        <Space direction="vertical" align="center">
+          <Empty description="当前筛选下还没有已完成的 5日、10日或止盈止损退出样本。" />
+          {hasLinkedTableFilter ? (
+            <Button size="small" onClick={onClearSelection}>清除图表联动筛选</Button>
+          ) : null}
+        </Space>
       </div>
     );
   }
@@ -1210,18 +1250,10 @@ function PaperTrackingEffectCharts({
         <Space direction="vertical" size={2}>
           <Text strong>策略纸面对照效果</Text>
         </Space>
-        <Space wrap className="shortpick-paper-effect-controls">
-          <Text type="secondary">累计图策略</Text>
-          <Select
-            size="small"
-            className="shortpick-paper-effect-strategy-select"
-            value={selectedLineStrategy}
-            onChange={setSelectedLineStrategy}
-            options={[
-              { label: "全部策略", value: PAPER_TRACKING_EFFECT_ALL_STRATEGIES },
-              ...strategyLabels.map((label) => ({ label, value: label })),
-            ]}
-          />
+        <Space wrap className="shortpick-paper-effect-summary-tags">
+          {hasLinkedTableFilter ? (
+            <Button size="small" onClick={onClearSelection}>清除图表联动筛选</Button>
+          ) : null}
           <Tag color="blue">样本 {selectedLineObservations.length}</Tag>
           <Tag color="cyan">策略 {strategyLabels.length}</Tag>
         </Space>
@@ -1229,15 +1261,48 @@ function PaperTrackingEffectCharts({
       <Row gutter={[12, 12]}>
         <Col xs={24} xl={12}>
           <div className="shortpick-paper-effect-chart-block">
-            <Text strong>累计纸面收益</Text>
-            <Text type="secondary">{selectedLineStrategyLabel}，按信号日聚合，日内多标的取均值后累计。</Text>
+            <div className="shortpick-paper-effect-chart-head">
+              <Space direction="vertical" size={2} className="shortpick-paper-effect-chart-title">
+                <Text strong>累计纸面收益</Text>
+                <Text type="secondary">{selectedLineStrategyLabel}，按信号日聚合，日内多标的取均值后累计。</Text>
+              </Space>
+              <Space className="shortpick-paper-effect-controls">
+                <Text type="secondary">策略</Text>
+                <Select
+                  size="small"
+                  popupMatchSelectWidth={false}
+                  className="shortpick-paper-effect-strategy-select"
+                  value={selectedLineStrategy}
+                  onChange={setSelectedLineStrategy}
+                  options={[
+                    { label: "全部策略", value: PAPER_TRACKING_EFFECT_ALL_STRATEGIES },
+                    ...strategyLabels.map((label) => ({ label, value: label })),
+                  ]}
+                />
+              </Space>
+            </div>
             <div ref={lineRef} className="shortpick-paper-effect-chart" />
           </div>
         </Col>
         <Col xs={24} xl={12}>
           <div className="shortpick-paper-effect-chart-block">
-            <Text strong>策略退出效果排名</Text>
-            <Text type="secondary">按策略与退出轨道展示中位收益、均值、胜率与样本数。</Text>
+            <div className="shortpick-paper-effect-chart-head">
+              <Space direction="vertical" size={2} className="shortpick-paper-effect-chart-title">
+                <Text strong>策略退出效果排名</Text>
+                <Text type="secondary">当前指标：{selectedRankingMetricLabel}；按策略与退出轨道汇总。</Text>
+              </Space>
+              <Space className="shortpick-paper-effect-controls">
+                <Text type="secondary">指标</Text>
+                <Select<PaperTrackingRankingMetricKey>
+                  size="small"
+                  popupMatchSelectWidth={false}
+                  className="shortpick-paper-effect-metric-select"
+                  value={selectedRankingMetric}
+                  onChange={setSelectedRankingMetric}
+                  options={PAPER_TRACKING_RANKING_METRIC_OPTIONS}
+                />
+              </Space>
+            </div>
             <div ref={rankingRef} className="shortpick-paper-effect-chart" />
           </div>
         </Col>
@@ -1273,13 +1338,16 @@ function PaperTrackingTab({
     setLedgerEntryStateFilter("entered");
     setLedgerExitStateFilter(paperTrackingEffectExitStateFilter(exitTrackKey));
   }, []);
+  const handlePaperEffectClearSelection = useCallback(() => {
+    setLedgerGroupFilter("");
+    setLedgerExitStateFilter("");
+  }, []);
   const normalizedLedgerSearch = ledgerSearch.trim().toLowerCase();
-  // Charts remain comparative after table linkage, so they inherit context filters but not the exit-result filter.
+  // Charts remain comparative after table linkage, so they ignore record-group and exit-result filters.
   const chartRows = primaryRows.filter((item) => {
     const entered = hasPaperTrackingEntered(item);
     if (ledgerEntryStateFilter === "entered" && !entered) return false;
     if (ledgerEntryStateFilter === "pending" && entered) return false;
-    if (!paperTrackingGroupFilterMatches(item, ledgerGroupFilter)) return false;
     if (ledgerEntryRuleFilter && paperTrackingEntryRuleKey(item) !== ledgerEntryRuleFilter) return false;
     if (normalizedLedgerSearch && !paperTrackingSearchText(item).includes(normalizedLedgerSearch)) return false;
     return true;
@@ -1635,7 +1703,13 @@ function PaperTrackingTab({
         className="panel-card shortpick-paper-ledger-card"
         title="纸面跟踪记录（正式策略与对照组）"
       >
-        <PaperTrackingEffectCharts rows={chartRows} onSelect={handlePaperEffectSelect} />
+        <PaperTrackingEffectCharts
+          rows={chartRows}
+          onSelect={handlePaperEffectSelect}
+          activeGroupFilter={ledgerGroupFilter}
+          activeExitStateFilter={ledgerExitStateFilter}
+          onClearSelection={handlePaperEffectClearSelection}
+        />
         <Space wrap className="shortpick-filter-bar shortpick-paper-ledger-filter-bar">
           <Input.Search
             allowClear

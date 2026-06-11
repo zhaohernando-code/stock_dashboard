@@ -883,9 +883,13 @@ def _shortpick_inventory_archive_artifact_source_summary(source: dict[str, objec
     }
 
 
-def _shortpick_combined_ledger_projection(source: dict[str, object] | None) -> dict[str, object]:
+def _shortpick_combined_ledger_projection(
+    source: dict[str, object] | None,
+    *,
+    include_rows: bool = True,
+) -> dict[str, object]:
     if not isinstance(source, dict):
-        return {
+        payload = {
             "status": "not_configured",
             "source": "shortpick_combined_ledger_backfill_artifact_store",
             "artifact_count": 0,
@@ -893,10 +897,10 @@ def _shortpick_combined_ledger_projection(source: dict[str, object] | None) -> d
             "combined_row_count": 0,
             "true_forward_count": 0,
             "retrospective_count": 0,
-            "rows": [],
-            "true_forward_rows": [],
-            "retrospective_rows": [],
         }
+        if include_rows:
+            payload.update({"rows": [], "true_forward_rows": [], "retrospective_rows": []})
+        return payload
 
     rows_by_id: dict[str, dict[str, object]] = {}
     duplicate_row_count = 0
@@ -918,7 +922,7 @@ def _shortpick_combined_ledger_projection(source: dict[str, object] | None) -> d
     rows = list(rows_by_id.values())
     true_forward = filter_shortpick_combined_ledger_rows_by_evidence_basis(rows, evidence_basis="true_forward_tracking")
     retrospective = filter_shortpick_combined_ledger_rows_by_evidence_basis(rows, evidence_basis="retrospective_forward_replay")
-    return {
+    payload = {
         "status": "ready",
         "source": source.get("source") or "shortpick_combined_ledger_backfill_artifact_store",
         "source_policy": "artifact_source_merged_into_paper_tracking_items_with_evidence_basis",
@@ -933,10 +937,16 @@ def _shortpick_combined_ledger_projection(source: dict[str, object] | None) -> d
             "true_forward_tracking": true_forward["selected_count"],
             "retrospective_forward_replay": retrospective["selected_count"],
         },
-        "rows": rows,
-        "true_forward_rows": true_forward["rows"],
-        "retrospective_rows": retrospective["rows"],
     }
+    if include_rows:
+        payload.update(
+            {
+                "rows": rows,
+                "true_forward_rows": true_forward["rows"],
+                "retrospective_rows": retrospective["rows"],
+            }
+        )
+    return payload
 
 
 def _shortpick_float_or_none(value: object) -> float | None:
@@ -1379,7 +1389,12 @@ def _paper_tracking_validation_snapshots_for_candidates(session: Session, candid
     }
 
 
-def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object]:
+def _build_shortpick_paper_tracking_ledger(
+    session: Session,
+    *,
+    include_items: bool = True,
+    include_combined_ledger_rows: bool = True,
+) -> dict[str, object]:
     contract = shortpick_frozen_paper_strategy_contract()
     llm_contract = shortpick_llm_paper_control_contract()
     market_control_contract = shortpick_market_factor_paper_control_contracts()
@@ -1416,7 +1431,6 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
             ShortpickCandidate.parse_status == "parsed",
         )
         .order_by(ShortpickExperimentRun.run_date.desc(), ShortpickCandidate.id.desc())
-        .limit(1000)
     ).all()
     validation_snapshots = _paper_tracking_validation_snapshots_for_candidates(
         session,
@@ -1516,9 +1530,6 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
             continue
         seen_semantic_keys.add(semantic_key)
         items.append(item)
-        # Paper-tracking items are small (~40 frozen+LLM total, ~18 daily controls);
-        # the 1000-row SQL limit is the safety valve. Do not silently truncate
-        # historical frozen-strategy data with a memory-side cap.
 
     latest_summary = dict(latest_run.summary_payload or {}) if latest_run else {}
     latest_overlay = dict(latest_summary.get("market_factor_overlay") or {})
@@ -1580,10 +1591,12 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
     )
     items = governance_partition["items"]
     combined_ledger = _shortpick_combined_ledger_projection(
-        _shortpick_combined_ledger_backfill_artifacts_for_session(session)
+        _shortpick_combined_ledger_backfill_artifacts_for_session(session),
+        include_rows=include_combined_ledger_rows,
     )
-    retrospective_items = _shortpick_combined_ledger_display_items(combined_ledger)
-    display_items = [*items, *retrospective_items]
+    retrospective_items = _shortpick_combined_ledger_display_items(combined_ledger) if include_items else []
+    display_items = [*items, *retrospective_items] if include_items else []
+    retrospective_count = int(combined_ledger.get("retrospective_count") or len(retrospective_items))
 
     return {
         "generated_at": utcnow().isoformat(),
@@ -1627,8 +1640,8 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
             "frozen_v2_signal_count": len(frozen_v2_items),
             "llm_paper_control_signal_count": len(llm_control_items),
             "market_control_signal_count": len(market_control_items),
-            "retrospective_replay_signal_count": len(retrospective_items),
-            "comparison_signal_count": len(display_items),
+            "retrospective_replay_signal_count": retrospective_count,
+            "comparison_signal_count": len(items) + retrospective_count,
             "true_forward_comparison_signal_count": len(items),
             "required_forward_trading_days": int(contract.get("required_forward_trading_days") or 40),
             "frozen_at": frozen_at.isoformat(),
@@ -2260,8 +2273,11 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        payload = _build_shortpick_paper_tracking_ledger(session)
-        return {key: value for key, value in payload.items() if key != "items"} | {"items": []}
+        return _build_shortpick_paper_tracking_ledger(
+            session,
+            include_items=False,
+            include_combined_ledger_rows=False,
+        )
 
     @app.get("/shortpick-lab/replay-runs", response_model=ShortpickRunListResponse)
     def shortpick_replay_run_list(

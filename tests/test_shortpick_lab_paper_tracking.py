@@ -1,6 +1,8 @@
 # ruff: noqa: F403,F405
 from __future__ import annotations
 
+from pathlib import Path
+
 from ashare_evidence.api import _shortpick_combined_ledger_exit_tracks
 from ashare_evidence.research_artifact_store import (
     SHORTPICK_FILTER_RESELECT_SELECTION_POLICY,
@@ -13,6 +15,15 @@ from tests.shortpick_lab_test_support import *
 
 
 class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
+    def test_paper_tracking_summary_uses_compact_mode_without_sql_row_limit(self) -> None:
+        api_source = (Path(__file__).resolve().parents[1] / "src" / "ashare_evidence" / "api.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("include_items=False", api_source)
+        self.assertIn("include_combined_ledger_rows=False", api_source)
+        self.assertNotIn(".limit(1000)", api_source)
+
     def test_frozen_paper_contract_tracks_three_trading_day_exit_windows(self) -> None:
         contract = shortpick_frozen_paper_strategy_contract()
         tracks = contract["monitoring_tracks"]
@@ -808,3 +819,11 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
         self.assertEqual(combined["retrospective_count"], 1)
         self.assertEqual(combined["source_policy"], "artifact_source_merged_into_paper_tracking_items_with_evidence_basis")
         self.assertEqual(combined["retrospective_rows"][0]["evidence_basis"], "retrospective_forward_replay")
+
+        summary_payload = client.get("/shortpick-lab/paper-tracking/summary").json()
+        self.assertEqual(summary_payload["items"], [])
+        self.assertEqual(summary_payload["combined_ledger"]["artifact_count"], 1)
+        self.assertEqual(summary_payload["combined_ledger"]["combined_row_count"], 1)
+        self.assertNotIn("rows", summary_payload["combined_ledger"])
+        self.assertNotIn("true_forward_rows", summary_payload["combined_ledger"])
+        self.assertNotIn("retrospective_rows", summary_payload["combined_ledger"])
