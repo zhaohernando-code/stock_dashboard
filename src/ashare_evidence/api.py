@@ -150,6 +150,7 @@ from ashare_evidence.shortpick_strategy_governance import (
     build_shortpick_strategy_archive_records,
     build_shortpick_strategy_retirement_evidence_packs,
     build_shortpick_strategy_status_recommendations,
+    partition_paper_tracking_rows_by_governance,
     project_shortpick_strategy_view_sections,
 )
 from ashare_evidence.simulation import (
@@ -1202,11 +1203,29 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
         current_label = "等待正式纸面信号"
         current_message = "冻结策略合同已存在，等待下一次符合条件的批次。"
 
+    # Governance partition (Round 28 Decision A, additive/non-breaking): annotate each
+    # paper-tracking row with its evidence-based governance status and split poorly
+    # performing controls (retire_candidate / retired) into a deprecated bucket while
+    # keeping their data. `items` stays in original order; only new fields are added.
+    governance_recommendations = build_shortpick_strategy_status_recommendations(
+        build_shortpick_strategy_retirement_evidence_packs({"items": items})
+    )
+    governance_partition = partition_paper_tracking_rows_by_governance({"items": items}, governance_recommendations)
+    items = governance_partition["items"]
+
     return {
         "generated_at": utcnow().isoformat(),
         "current_status": current_status,
         "current_label": current_label,
         "current_message": current_message,
+        "strategy_governance": {
+            "status": governance_partition["status"],
+            "policy": governance_partition["decision_policy"],
+            "deprecated_status_set": governance_partition["deprecated_status_set"],
+            "primary_count": governance_partition["primary_count"],
+            "deprecated_count": governance_partition["deprecated_count"],
+            "deprecated_strategy_ids": governance_partition["deprecated_strategy_ids"],
+        },
         "contract": contract,
         "llm_control_contract": llm_contract,
         "market_control_contract": market_control_contract,

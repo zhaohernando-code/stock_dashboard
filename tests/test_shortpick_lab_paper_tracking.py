@@ -442,3 +442,16 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
         ]
         self.assertEqual(len(matching), 1)
         self.assertEqual(payload["summary"]["tracked_signal_count"], 1)
+
+        # Round 29: governance partition is attached additively (non-breaking).
+        governance = payload["strategy_governance"]
+        self.assertEqual(governance["status"], "ready")
+        self.assertEqual(governance["deprecated_status_set"], ["retire_candidate", "retired"])
+        # The live ledger path passes no historical after-cost evidence, and the
+        # retire_candidate gate requires it, so nothing is deprecated yet by design.
+        self.assertEqual(governance["deprecated_count"], 0)
+        self.assertEqual(governance["deprecated_strategy_ids"], [])
+        for item in payload["items"]:
+            self.assertIn("governance_status", item)
+            self.assertIn("governance_strategy_id", item)
+            self.assertEqual(item["governance_view_section"], "primary")

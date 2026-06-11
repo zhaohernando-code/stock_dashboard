@@ -19,6 +19,7 @@ from ashare_evidence.shortpick_strategy_governance import (
     build_shortpick_strategy_status_recommendations,
     build_shortpick_true_forward_tracking_activation_plan,
     filter_shortpick_generation_eligible_items,
+    partition_paper_tracking_rows_by_governance,
     project_shortpick_strategy_view_sections,
 )
 
@@ -1641,6 +1642,93 @@ def test_historical_backtest_generation_requests_support_same_close_proxy_entry_
     assert request["evidence_basis"] == "historical_backtest"
     assert request["true_forward_tracking_eligible"] is False
     assert "same_close_proxy" in request["output_path"]
+
+
+# --- Round 29: primary/deprecated governance partition of the paper-tracking ledger ---
+
+
+def test_partition_moves_retire_candidate_to_deprecated_and_keeps_active_primary() -> None:
+    weak = [
+        _item(f"2026-05-{index + 1:02d}", "002371.SZ", "北方华创", value, value - 0.01)
+        for index, value in enumerate([-0.10, -0.05, -0.04, -0.03, -0.02, -0.01, -0.09, -0.02, 0.01, 0.02])
+    ]
+    strong = [
+        _item(
+            f"2026-05-{index + 1:02d}",
+            "300750.SZ",
+            "宁德时代",
+            value,
+            value + 0.01,
+            tracking_group="llm_paper_control",
+            source_rank=2,
+        )
+        for index, value in enumerate([0.02, 0.03, 0.01, 0.04, 0.02])
+    ]
+    paper_tracking = {"items": [*weak, *strong]}
+    evidence = build_shortpick_strategy_retirement_evidence_packs(
+        paper_tracking,
+        historical_evidence={
+            "low_turnover_20d_uptrend_liquid_top120": {
+                "status": "ready",
+                "after_cost_excess_return": -0.03,
+            }
+        },
+    )
+    recommendations = build_shortpick_strategy_status_recommendations(evidence)
+
+    partition = partition_paper_tracking_rows_by_governance(paper_tracking, recommendations)
+
+    assert partition["status"] == "ready"
+    assert partition["deprecated_status_set"] == ["retire_candidate", "retired"]
+    assert partition["deprecated_count"] == 10
+    assert partition["primary_count"] == 5
+    assert len(partition["items"]) == 15  # original order preserved, all annotated
+    assert {row["governance_status"] for row in partition["deprecated_items"]} == {"retire_candidate"}
+    assert {row["governance_status"] for row in partition["primary_items"]} == {"active"}
+    assert all(row["governance_view_section"] == "deprecated" for row in partition["deprecated_items"])
+    assert partition["deprecated_items"][0]["symbol"] == "002371.SZ"  # original fields retained
+
+
+def test_partition_moves_retired_strategy_to_deprecated() -> None:
+    items = [
+        _item(f"2026-05-{index + 1:02d}", "002371.SZ", "北方华创", value, value - 0.01)
+        for index, value in enumerate([-0.10, -0.05, -0.04, -0.03, -0.02, -0.01, -0.09, -0.02, 0.01, 0.02])
+    ]
+    paper_tracking = {"items": items}
+    evidence = build_shortpick_strategy_retirement_evidence_packs(paper_tracking)
+    strategy_id = evidence["packs"][0]["strategy_id"]
+    recommendations = build_shortpick_strategy_status_recommendations(
+        evidence,
+        retirement_artifacts={
+            strategy_id: {
+                "status": "ready",
+                "artifact_family": "shortpick_strategy_retirement",
+                "artifact_id": "partition-fixture",
+                "decision_log_ref": "DECISIONS.md#2026-06-11-partition",
+            }
+        },
+    )
+
+    partition = partition_paper_tracking_rows_by_governance(paper_tracking, recommendations)
+
+    assert partition["deprecated_count"] == 10
+    assert partition["primary_count"] == 0
+    assert partition["deprecated_strategy_ids"] == [strategy_id]
+    assert all(row["governance_status"] == "retired" for row in partition["deprecated_items"])
+
+
+def test_partition_defaults_unrecommended_rows_to_primary() -> None:
+    items = [_item("2026-05-10", "002371.SZ", "北方华创", -0.10, -0.12)]
+
+    partition = partition_paper_tracking_rows_by_governance({"items": items}, {"recommendations": []})
+
+    assert partition["primary_count"] == 1
+    assert partition["deprecated_count"] == 0
+    assert partition["deprecated_strategy_ids"] == []
+    row = partition["items"][0]
+    assert row["governance_status"] == "untracked"
+    assert row["governance_view_section"] == "primary"
+    assert row["symbol"] == "002371.SZ"
 
 
 def _evidence_from_returns(
