@@ -80,6 +80,7 @@ from ashare_evidence.shortpick_replay import (
     run_shortpick_replay_hard_veto_experiment,
     run_shortpick_replay_rejection,
 )
+from ashare_evidence.shortpick_strategy_backtest_runner import run_shortpick_historical_backtest_requests
 from ashare_evidence.shortpick_strategy_slices import build_shortpick_strategy_slice_evidence
 from ashare_evidence.simulation import restart_simulation_session, step_simulation_session
 from ashare_evidence.stock_master import DEFAULT_AKSHARE_TIMEOUT_SECONDS
@@ -744,6 +745,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     shortpick_portfolio_backtest.add_argument("--output", default=None)
 
+    shortpick_governance_historical_backtest = subparsers.add_parser(
+        "shortpick-governance-historical-backtest",
+        help="Run Short Pick governance historical-backtest request plans into gated evidence artifacts.",
+    )
+    shortpick_governance_historical_backtest.add_argument("--database-url", default=None)
+    shortpick_governance_historical_backtest.add_argument("--request-path", required=True)
+    shortpick_governance_historical_backtest.add_argument("--output-dir", default=None)
+
     shortpick_strategy_slice_evidence = subparsers.add_parser(
         "shortpick-strategy-slice-evidence",
         help="Build offline trade-level strategy slice evidence for Short Pick Lab history analysis.",
@@ -1193,6 +1202,22 @@ def main(argv: list[str] | None = None) -> int:
         if args.output:
             path = write_shortpick_portfolio_backtest(payload, output_path=args.output)
             payload = {**payload, "artifact": {"path": str(path)}}
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-governance-historical-backtest":
+        request_payload = json.loads(Path(args.request_path).read_text(encoding="utf-8"))
+        requests = request_payload.get("requests") if isinstance(request_payload, dict) else None
+        if requests is None and isinstance(request_payload, dict):
+            requests = [request_payload]
+        if not isinstance(requests, list):
+            raise ValueError("request-path must contain a request object or an object with a requests list")
+        with session_scope(args.database_url) as session:
+            payload = run_shortpick_historical_backtest_requests(
+                session,
+                [dict(item) for item in requests if isinstance(item, dict)],
+                output_dir=args.output_dir,
+            )
         _print_json(payload)
         return 0
 
