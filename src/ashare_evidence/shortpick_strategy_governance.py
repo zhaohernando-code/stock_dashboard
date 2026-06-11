@@ -68,6 +68,11 @@ SHORTPICK_LEAKAGE_AUDIT_STATUSES = frozenset({"passed", "failed", "blocked", "no
 SHORTPICK_REGISTERED_EVALUATION_BASELINE_IDS = frozenset(
     {"evaluation_baseline_random_pool:v1", "evaluation_baseline_cooldown_control:v1"}
 )
+SHORTPICK_HISTORICAL_BACKTEST_PORTFOLIO_STRATEGIES_BY_CONTROL = {
+    SAME_SYMBOL_COOLDOWN_CONTROL_ID: ["control_same_symbol_cooldown_low_turnover_uptrend"],
+    DRAWDOWN_REVERSAL_FILTER_CONTROL_ID: ["control_drawdown_reversal_low_turnover_uptrend"],
+    REPEATED_EXPOSURE_LIMIT_CONTROL_ID: ["control_repeated_exposure_low_turnover_uptrend"],
+}
 
 
 def build_shortpick_strategy_retirement_evidence_packs(
@@ -929,6 +934,10 @@ def build_shortpick_historical_backtest_generation_requests(
             request_payload = {
                 "control_group_id": control_group_id,
                 "rule_signature": rule_signature,
+                "portfolio_strategies": SHORTPICK_HISTORICAL_BACKTEST_PORTFOLIO_STRATEGIES_BY_CONTROL.get(
+                    control_group_id,
+                    [],
+                ),
                 "entry_price_source": entry_source,
                 "start_date": start,
                 "end_date": end,

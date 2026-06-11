@@ -1361,6 +1361,7 @@ def test_historical_backtest_generation_requests_are_deterministic_and_read_only
     assert request["leakage_audit_status"] == "not_run"
     assert request["control_group_id"] == rule["control_group_id"]
     assert request["rule_signature"] == rule["rule_signature"]
+    assert request["portfolio_strategies"] == ["control_same_symbol_cooldown_low_turnover_uptrend"]
     assert request["source_command"] == "shortpick-portfolio-backtest"
     assert "--output" in request["argv"]
     assert "output/shortpick-governance-backtests/" in request["output_path"]
@@ -1384,6 +1385,26 @@ def test_historical_backtest_generation_requests_expand_entry_sources() -> None:
     assert entry_sources == ["next_close", "next_open"]
     assert all(item["argv"][item["argv"].index("--benchmark-mode") + 1] == "csi300" for item in result["requests"])
     assert all(item["argv"][item["argv"].index("--min-signal-symbol-count") + 1] == "1000" for item in result["requests"])
+
+
+def test_historical_backtest_generation_requests_attach_registered_p3_control_strategy_mappings() -> None:
+    result = build_shortpick_historical_backtest_generation_requests(
+        [
+            build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10"),
+            build_shortpick_drawdown_reversal_filter_rule(rule_defined_at="2026-06-10"),
+            build_shortpick_repeated_exposure_limit_rule(rule_defined_at="2026-06-10"),
+        ],
+        start_date="2023-04-13",
+        end_date="2026-05-08",
+    )
+
+    mappings = {item["control_group_id"]: item["portfolio_strategies"] for item in result["requests"]}
+
+    assert mappings == {
+        "control_same_symbol_cooldown:v1": ["control_same_symbol_cooldown_low_turnover_uptrend"],
+        "control_drawdown_reversal_filter:v1": ["control_drawdown_reversal_low_turnover_uptrend"],
+        "control_repeated_exposure_limit:v1": ["control_repeated_exposure_low_turnover_uptrend"],
+    }
 
 
 def test_historical_backtest_generation_requests_skip_rules_without_signature() -> None:
