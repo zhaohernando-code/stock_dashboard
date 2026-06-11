@@ -612,15 +612,16 @@ def apply_shortpick_same_symbol_cooldown_control(
     *,
     rule: dict[str, Any] | None = None,
     evidence_basis: str = "retrospective_forward_replay",
+    signal_date_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Apply same-symbol cooldown using only prior completed outcomes."""
 
     rule = dict(rule or build_shortpick_same_symbol_cooldown_rule())
     signal_dates = sorted(
         {
-            _date_part(item.get("signal_date"))
-            for item in candidate_rows
-            if isinstance(item, dict) and _date_part(item.get("signal_date"))
+            _date_part(item.get("signal_date") or item.get("run_date"))
+            for item in [*candidate_rows, *completed_outcome_rows, *(signal_date_rows or [])]
+            if isinstance(item, dict) and _date_part(item.get("signal_date") or item.get("run_date"))
         }
     )
     negative_events_by_symbol = _same_symbol_negative_events_by_symbol(completed_outcome_rows, rule)

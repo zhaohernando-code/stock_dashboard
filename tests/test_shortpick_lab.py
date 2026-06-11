@@ -9,6 +9,369 @@ from tests.shortpick_lab_test_support import *
 
 
 class ShortpickLabTests(ShortpickLabTestCase):
+    def test_market_factor_overlay_inserts_p3_true_forward_filter_reselect_controls(self) -> None:
+        now = datetime(2026, 6, 11, 12, 0, tzinfo=UTC)
+        contexts = [
+            {
+                "symbol": "600001.SH",
+                "name": "测试一",
+                "industry": "测试行业",
+                "latest_trade_day": "2026-06-11",
+                "close": 10.0,
+                "amount": 1_000_000_000.0,
+                "turnover_rate": 0.10,
+                "return_1d": 0.01,
+                "return_5d": 0.05,
+                "return_10d": 0.10,
+                "return_20d": 0.30,
+                "abs_return_1d": 0.01,
+                "recent_drawdown_return": -0.12,
+                "short_window_return": -0.04,
+                "price_vs_ma20": -0.02,
+                "high_level_reversal_return": -0.12,
+                "golden_cross_10_200": False,
+                "ma10": 11.0,
+                "ma200": 10.0,
+                "previous_ma10": 9.5,
+                "previous_ma200": 10.0,
+            },
+            {
+                "symbol": "600002.SH",
+                "name": "测试二",
+                "industry": "测试行业",
+                "latest_trade_day": "2026-06-11",
+                "close": 20.0,
+                "amount": 900_000_000.0,
+                "turnover_rate": 0.12,
+                "return_1d": 0.01,
+                "return_5d": 0.04,
+                "return_10d": 0.09,
+                "return_20d": 0.25,
+                "abs_return_1d": 0.01,
+                "recent_drawdown_return": -0.01,
+                "short_window_return": 0.02,
+                "price_vs_ma20": 0.03,
+                "high_level_reversal_return": -0.01,
+                "golden_cross_10_200": False,
+                "ma10": 21.0,
+                "ma200": 18.0,
+                "previous_ma10": 20.5,
+                "previous_ma200": 18.0,
+            },
+            {
+                "symbol": "600003.SH",
+                "name": "测试三",
+                "industry": "测试行业",
+                "latest_trade_day": "2026-06-11",
+                "close": 30.0,
+                "amount": 800_000_000.0,
+                "turnover_rate": 0.14,
+                "return_1d": 0.01,
+                "return_5d": 0.03,
+                "return_10d": 0.08,
+                "return_20d": 0.20,
+                "abs_return_1d": 0.01,
+                "recent_drawdown_return": -0.01,
+                "short_window_return": 0.01,
+                "price_vs_ma20": 0.02,
+                "high_level_reversal_return": -0.01,
+                "golden_cross_10_200": False,
+                "ma10": 31.0,
+                "ma200": 28.0,
+                "previous_ma10": 30.5,
+                "previous_ma200": 28.0,
+            },
+        ]
+        with session_scope(self.database_url) as session:
+            for item in contexts:
+                ticker, _, exchange = item["symbol"].partition(".")
+                session.add(
+                    Stock(
+                        symbol=item["symbol"],
+                        ticker=ticker,
+                        exchange=exchange,
+                        name=item["name"],
+                        provider_symbol=item["symbol"],
+                        listed_date=date(2020, 1, 1),
+                        status="active",
+                        profile_payload={"industry": item["industry"]},
+                        license_tag="test",
+                        usage_scope="internal-test",
+                        redistribution_scope="none",
+                        source_uri=f"test://stock/{item['symbol']}",
+                        lineage_hash=compute_lineage_hash({"symbol": item["symbol"]}),
+                    )
+                )
+            run = ShortpickExperimentRun(
+                run_key="shortpick:2026-06-11:p3-true-forward-controls",
+                run_date=date(2026, 6, 11),
+                prompt_version="test",
+                information_mode=SHORTPICK_INFORMATION_MODE,
+                status="running",
+                trigger_source="scheduled_cli",
+                triggered_by="test",
+                started_at=now,
+                completed_at=None,
+                model_config={},
+                summary_payload={},
+            )
+            session.add(run)
+            session.flush()
+            run_id = run.id
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_market_factor_universe", return_value={"status": "skipped"}):
+            with patch("ashare_evidence.shortpick_lab._shortpick_market_factor_contexts", return_value=(contexts, {})):
+                with session_scope(self.database_url) as session:
+                    run = session.get(ShortpickExperimentRun, run_id)
+                    assert run is not None
+                    overlay = insert_shortpick_market_factor_overlay_candidates(session, run)
+                    candidates = session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all()
+
+        p3_summary = overlay["p3_true_forward_controls"]
+        self.assertEqual(p3_summary["status"], "ready")
+        self.assertEqual(p3_summary["evidence_basis"], SHORTPICK_P3_CONTROL_EVIDENCE_BASIS)
+        self.assertEqual(p3_summary["selection_policy"], SHORTPICK_P3_CONTROL_SELECTION_POLICY)
+        self.assertEqual(p3_summary["inserted_candidate_count"], 3)
+
+        by_role = {item["tracking_role"]: item for item in overlay["candidates"]}
+        self.assertEqual(by_role[SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_CONTROL_ROLE]["symbol"], "600001.SH")
+        self.assertEqual(by_role[SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE]["symbol"], "600001.SH")
+        drawdown_summary = by_role[SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_CONTROL_ROLE]
+        self.assertEqual(drawdown_summary["symbol"], "600002.SH")
+        self.assertEqual(drawdown_summary["source_rank"], 2)
+        self.assertEqual(drawdown_summary["blocked_higher_ranked_count"], 1)
+
+        payload_by_role = {candidate.candidate_payload["tracking_role"]: candidate.candidate_payload for candidate in candidates}
+        drawdown_payload = payload_by_role[SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_CONTROL_ROLE]
+        self.assertEqual(drawdown_payload["paper_tracking_evidence_basis"], SHORTPICK_P3_CONTROL_EVIDENCE_BASIS)
+        self.assertEqual(drawdown_payload["p3_control"]["selected_source_rank"], 2)
+        self.assertEqual(drawdown_payload["p3_control"]["blocked_higher_ranked_candidates"][0]["symbol"], "600001.SH")
+        self.assertEqual(drawdown_payload["market_factor_overlay"]["p3_control"]["selection_policy"], SHORTPICK_P3_CONTROL_SELECTION_POLICY)
+
+    def test_p3_true_forward_controls_use_same_control_post_rule_state_only(self) -> None:
+        contexts = [
+            {
+                "symbol": "600001.SH",
+                "name": "测试一",
+                "industry": "测试行业",
+                "latest_trade_day": "2026-06-12",
+                "close": 10.0,
+                "amount": 1_000_000_000.0,
+                "turnover_rate": 0.10,
+                "return_1d": 0.01,
+                "return_5d": 0.05,
+                "return_10d": 0.10,
+                "return_20d": 0.30,
+                "abs_return_1d": 0.01,
+                "recent_drawdown_return": -0.01,
+                "short_window_return": 0.02,
+                "price_vs_ma20": 0.03,
+                "high_level_reversal_return": -0.01,
+                "golden_cross_10_200": False,
+                "ma10": 11.0,
+                "ma200": 10.0,
+                "previous_ma10": 9.5,
+                "previous_ma200": 10.0,
+            },
+            {
+                "symbol": "600002.SH",
+                "name": "测试二",
+                "industry": "测试行业",
+                "latest_trade_day": "2026-06-12",
+                "close": 20.0,
+                "amount": 900_000_000.0,
+                "turnover_rate": 0.12,
+                "return_1d": 0.01,
+                "return_5d": 0.04,
+                "return_10d": 0.09,
+                "return_20d": 0.25,
+                "abs_return_1d": 0.01,
+                "recent_drawdown_return": -0.01,
+                "short_window_return": 0.02,
+                "price_vs_ma20": 0.03,
+                "high_level_reversal_return": -0.01,
+                "golden_cross_10_200": False,
+                "ma10": 21.0,
+                "ma200": 18.0,
+                "previous_ma10": 20.5,
+                "previous_ma200": 18.0,
+            },
+        ]
+
+        def add_prior_candidate(
+            session: Session,
+            *,
+            run: ShortpickExperimentRun,
+            role: str,
+            key_suffix: str,
+            with_loss: bool = False,
+        ) -> ShortpickCandidate:
+            candidate = ShortpickCandidate(
+                run_id=run.id,
+                round_id=None,
+                candidate_key=f"fixture:{run.run_date}:{role}:{key_suffix}",
+                symbol="600001.SH",
+                name="测试一",
+                normalized_theme="策略候选：fixture",
+                horizon_trading_days=10,
+                confidence=1.0,
+                thesis="fixture",
+                catalysts=[],
+                invalidation=[],
+                risks=[],
+                sources_payload=[],
+                novelty_note=None,
+                limitations=[],
+                convergence_group="market_factor",
+                research_priority="fixture",
+                parse_status="parsed",
+                is_system_external=False,
+                candidate_payload={
+                    "tracking_role": role,
+                    "market_factor_overlay": {"tracking_role": role, "source_rank": 1},
+                },
+            )
+            session.add(candidate)
+            session.flush()
+            if with_loss:
+                session.add(
+                    ShortpickValidationSnapshot(
+                        candidate_id=candidate.id,
+                        horizon_days=10,
+                        status="completed",
+                        entry_at=datetime(2026, 6, 10, 7, 0, tzinfo=UTC),
+                        exit_at=datetime(2026, 6, 11, 7, 0, tzinfo=UTC),
+                        entry_close=10.0,
+                        exit_close=9.5,
+                        stock_return=-0.05,
+                        benchmark_return=0.0,
+                        excess_return=-0.05,
+                        validation_payload={},
+                    )
+                )
+            return candidate
+
+        with session_scope(self.database_url) as session:
+            for item in contexts:
+                ticker, _, exchange = item["symbol"].partition(".")
+                session.add(
+                    Stock(
+                        symbol=item["symbol"],
+                        ticker=ticker,
+                        exchange=exchange,
+                        name=item["name"],
+                        provider_symbol=item["symbol"],
+                        listed_date=date(2020, 1, 1),
+                        status="active",
+                        profile_payload={"industry": item["industry"]},
+                        license_tag="test",
+                        usage_scope="internal-test",
+                        redistribution_scope="none",
+                        source_uri=f"test://stock/{item['symbol']}",
+                        lineage_hash=compute_lineage_hash({"symbol": item["symbol"]}),
+                    )
+                )
+            pre_rule_run = ShortpickExperimentRun(
+                run_key="shortpick:2026-06-09:p3-state-pre-rule",
+                run_date=date(2026, 6, 9),
+                prompt_version="test",
+                information_mode=SHORTPICK_INFORMATION_MODE,
+                status="completed",
+                trigger_source="fixture",
+                triggered_by="test",
+                started_at=datetime(2026, 6, 9, 7, 0, tzinfo=UTC),
+                completed_at=datetime(2026, 6, 9, 7, 5, tzinfo=UTC),
+                model_config={},
+                summary_payload={},
+            )
+            cooldown_run = ShortpickExperimentRun(
+                run_key="shortpick:2026-06-10:p3-state-cooldown",
+                run_date=date(2026, 6, 10),
+                prompt_version="test",
+                information_mode=SHORTPICK_INFORMATION_MODE,
+                status="completed",
+                trigger_source="fixture",
+                triggered_by="test",
+                started_at=datetime(2026, 6, 10, 7, 0, tzinfo=UTC),
+                completed_at=datetime(2026, 6, 10, 7, 5, tzinfo=UTC),
+                model_config={},
+                summary_payload={},
+            )
+            exposure_run = ShortpickExperimentRun(
+                run_key="shortpick:2026-06-11:p3-state-exposure",
+                run_date=date(2026, 6, 11),
+                prompt_version="test",
+                information_mode=SHORTPICK_INFORMATION_MODE,
+                status="completed",
+                trigger_source="fixture",
+                triggered_by="test",
+                started_at=datetime(2026, 6, 11, 7, 0, tzinfo=UTC),
+                completed_at=datetime(2026, 6, 11, 7, 5, tzinfo=UTC),
+                model_config={},
+                summary_payload={},
+            )
+            current_run = ShortpickExperimentRun(
+                run_key="shortpick:2026-06-12:p3-state-current",
+                run_date=date(2026, 6, 12),
+                prompt_version="test",
+                information_mode=SHORTPICK_INFORMATION_MODE,
+                status="running",
+                trigger_source="scheduled_cli",
+                triggered_by="test",
+                started_at=datetime(2026, 6, 12, 7, 0, tzinfo=UTC),
+                completed_at=None,
+                model_config={},
+                summary_payload={},
+            )
+            session.add_all([pre_rule_run, cooldown_run, exposure_run, current_run])
+            session.flush()
+            add_prior_candidate(
+                session,
+                run=pre_rule_run,
+                role=SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_CONTROL_ROLE,
+                key_suffix="ignored-pre-rule-loss",
+                with_loss=True,
+            )
+            add_prior_candidate(
+                session,
+                run=cooldown_run,
+                role=SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_CONTROL_ROLE,
+                key_suffix="post-rule-loss",
+                with_loss=True,
+            )
+            add_prior_candidate(
+                session,
+                run=cooldown_run,
+                role=SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE,
+                key_suffix="exposure-1",
+            )
+            add_prior_candidate(
+                session,
+                run=exposure_run,
+                role=SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE,
+                key_suffix="exposure-2",
+            )
+            current_run_id = current_run.id
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_market_factor_universe", return_value={"status": "skipped"}):
+            with patch("ashare_evidence.shortpick_lab._shortpick_market_factor_contexts", return_value=(contexts, {})):
+                with session_scope(self.database_url) as session:
+                    run = session.get(ShortpickExperimentRun, current_run_id)
+                    assert run is not None
+                    overlay = insert_shortpick_market_factor_overlay_candidates(session, run)
+
+        by_role = {item["tracking_role"]: item for item in overlay["candidates"]}
+        cooldown_summary = by_role[SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_CONTROL_ROLE]
+        exposure_summary = by_role[SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE]
+        drawdown_summary = by_role[SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_CONTROL_ROLE]
+        self.assertEqual(cooldown_summary["symbol"], "600002.SH")
+        self.assertEqual(cooldown_summary["source_rank"], 2)
+        self.assertEqual(cooldown_summary["blocked_higher_ranked_count"], 1)
+        self.assertEqual(exposure_summary["symbol"], "600002.SH")
+        self.assertEqual(exposure_summary["source_rank"], 2)
+        self.assertEqual(exposure_summary["blocked_higher_ranked_count"], 1)
+        self.assertEqual(drawdown_summary["symbol"], "600001.SH")
+
     def test_market_factor_overlay_excludes_retired_generation_strategy(self) -> None:
         now = datetime(2026, 5, 14, 12, 0, tzinfo=UTC)
         contexts = [

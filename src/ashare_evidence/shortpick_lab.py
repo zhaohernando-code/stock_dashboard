@@ -62,7 +62,18 @@ from ashare_evidence.research_artifact_store import (
 )
 from ashare_evidence.runtime_config import get_builtin_llm_executor_config, resolve_llm_key_candidates
 from ashare_evidence.shortpick_policy import SHORTPICK_FROZEN_STRATEGY_CONFIG
-from ashare_evidence.shortpick_strategy_governance import filter_shortpick_generation_eligible_items
+from ashare_evidence.shortpick_strategy_governance import (
+    DRAWDOWN_REVERSAL_FILTER_CONTROL_ID,
+    REPEATED_EXPOSURE_LIMIT_CONTROL_ID,
+    SAME_SYMBOL_COOLDOWN_CONTROL_ID,
+    apply_shortpick_drawdown_reversal_filter_control,
+    apply_shortpick_repeated_exposure_limit_control,
+    apply_shortpick_same_symbol_cooldown_control,
+    build_shortpick_drawdown_reversal_filter_rule,
+    build_shortpick_repeated_exposure_limit_rule,
+    build_shortpick_same_symbol_cooldown_rule,
+    filter_shortpick_generation_eligible_items,
+)
 from ashare_evidence.stock_master import DEFAULT_AKSHARE_TIMEOUT_SECONDS, akshare_runtime_ready, resolve_stock_profile
 
 _host_from_url = _source_audit.host_from_url
@@ -214,6 +225,21 @@ SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_RET20_WEIGHT = float(_SHORTPICK_QUIET_BRE
 SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_RET5_WEIGHT = float(_SHORTPICK_QUIET_BREAKOUT_WEIGHTS["return_5d"])
 SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_LOW_ABS_RET1_WEIGHT = float(_SHORTPICK_QUIET_BREAKOUT_WEIGHTS["low_abs_return_1d"])
 SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_AMOUNT_WEIGHT = float(_SHORTPICK_QUIET_BREAKOUT_WEIGHTS["amount"])
+SHORTPICK_P3_CONTROL_RULE_DEFINED_AT = "2026-06-10"
+SHORTPICK_P3_CONTROL_EVIDENCE_BASIS = "true_forward_tracking"
+SHORTPICK_P3_CONTROL_SELECTION_POLICY = "filter_ranked_pool_select_first_allowed"
+SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_CONTROL_ROLE = (
+    "market_factor_control_same_symbol_cooldown_low_turnover_uptrend"
+)
+SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_FAMILY = "control_same_symbol_cooldown_low_turnover_uptrend"
+SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_CONTROL_ROLE = (
+    "market_factor_control_drawdown_reversal_low_turnover_uptrend"
+)
+SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_FAMILY = "control_drawdown_reversal_low_turnover_uptrend"
+SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE = (
+    "market_factor_control_repeated_exposure_low_turnover_uptrend"
+)
+SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_FAMILY = "control_repeated_exposure_low_turnover_uptrend"
 SHORTPICK_MARKET_FACTOR_PAPER_CONTROL_ROLES = {
     SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE,
@@ -225,6 +251,9 @@ SHORTPICK_MARKET_FACTOR_PAPER_CONTROL_ROLES = {
     SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE,
 }
 SHORTPICK_MARKET_FACTOR_BREADTH10_THRESHOLD = float(_SHORTPICK_MARKET_FACTOR_CONFIG["breadth10_threshold"])
 SHORTPICK_MARKET_FACTOR_POOL_RET10_THRESHOLD = float(_SHORTPICK_MARKET_FACTOR_CONFIG["pool_ret10_threshold"])
@@ -364,6 +393,27 @@ def shortpick_market_factor_paper_control_contracts() -> dict[str, Any]:
                 "label": "冻结候选 v2：次日开盘买入",
                 "selection_rule": "沿用冻结 v1 的低换手上升趋势第1名，只把入场价格从次一交易日收盘改为次一交易日开盘；若次日开盘价接近涨停，则不假设开盘可成交。",
                 "entry_rule": "次一交易日开盘买入；开盘直接接近涨停时标记为不可假设成交。",
+            },
+            {
+                "role": SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_CONTROL_ROLE,
+                "label": "同股亏损冷却版",
+                "selection_rule": "从冻结低换手上升趋势排名池开始，过滤同一control过去已完成的同股负收益冷却窗口，再买入原始排名最高的可通过候选。",
+                "evidence_basis": SHORTPICK_P3_CONTROL_EVIDENCE_BASIS,
+                "selection_policy": SHORTPICK_P3_CONTROL_SELECTION_POLICY,
+            },
+            {
+                "role": SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_CONTROL_ROLE,
+                "label": "回撤反转过滤版",
+                "selection_rule": "从冻结低换手上升趋势排名池开始，只用信号日及以前的技术特征过滤近期回撤、短窗跌破和高位回落，再买入原始排名最高的可通过候选。",
+                "evidence_basis": SHORTPICK_P3_CONTROL_EVIDENCE_BASIS,
+                "selection_policy": SHORTPICK_P3_CONTROL_SELECTION_POLICY,
+            },
+            {
+                "role": SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE,
+                "label": "重复暴露限制版",
+                "selection_rule": "从冻结低换手上升趋势排名池开始，过滤同一control近期已重复暴露的股票，再买入原始排名最高的可通过候选。",
+                "evidence_basis": SHORTPICK_P3_CONTROL_EVIDENCE_BASIS,
+                "selection_policy": SHORTPICK_P3_CONTROL_SELECTION_POLICY,
             },
             {
                 "role": SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
@@ -2002,6 +2052,373 @@ def _candidate_from_round(
     return candidate
 
 
+def _shortpick_p3_rule_defined_day() -> date:
+    return date.fromisoformat(SHORTPICK_P3_CONTROL_RULE_DEFINED_AT)
+
+
+def _shortpick_p3_ranked_candidate_rows(
+    ranked: list[dict[str, Any]],
+    *,
+    signal_date: date,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    signal_date_text = signal_date.isoformat()
+    for source_rank, item in enumerate(ranked[:SHORTPICK_MARKET_FACTOR_RANK_LIMIT], start=1):
+        symbol = str(item.get("symbol") or "")
+        if not symbol:
+            continue
+        rows.append(
+            {
+                "candidate_id": f"runtime-low-turnover-ranked:{signal_date_text}:{source_rank}:{symbol}",
+                "signal_date": signal_date_text,
+                "run_date": signal_date_text,
+                "symbol": symbol,
+                "name": item.get("name"),
+                "industry": item.get("industry"),
+                "candidate_rank": source_rank,
+                "source_rank": source_rank,
+                "rank": source_rank,
+            }
+        )
+    return rows
+
+
+def _shortpick_p3_drawdown_feature_rows(
+    ranked: list[dict[str, Any]],
+    *,
+    signal_date: date,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    signal_date_text = signal_date.isoformat()
+    feature_fields = (
+        "recent_drawdown_return",
+        "short_window_return",
+        "price_vs_ma20",
+        "high_level_reversal_return",
+    )
+    for item in ranked[:SHORTPICK_MARKET_FACTOR_RANK_LIMIT]:
+        symbol = str(item.get("symbol") or "")
+        if not symbol or not any(item.get(field) is not None for field in feature_fields):
+            continue
+        rows.append(
+            {
+                "symbol": symbol,
+                "feature_date": item.get("drawdown_reversal_feature_date") or item.get("latest_trade_day") or signal_date_text,
+                "signal_date": signal_date_text,
+                **{field: item.get(field) for field in feature_fields},
+            }
+        )
+    return rows
+
+
+def _shortpick_candidate_tracking_role(candidate: ShortpickCandidate) -> str:
+    payload = candidate.candidate_payload if isinstance(candidate.candidate_payload, dict) else {}
+    overlay = payload.get("market_factor_overlay") if isinstance(payload.get("market_factor_overlay"), dict) else {}
+    return str(payload.get("tracking_role") or overlay.get("tracking_role") or "")
+
+
+def _shortpick_candidate_signal_date(candidate: ShortpickCandidate, run: ShortpickExperimentRun) -> str:
+    payload = candidate.candidate_payload if isinstance(candidate.candidate_payload, dict) else {}
+    signal_date = payload.get("paper_tracking_signal_date")
+    if signal_date:
+        return str(signal_date)
+    return run.run_date.isoformat()
+
+
+def _shortpick_p3_prior_signal_rows(
+    session: Session,
+    *,
+    tracking_role: str,
+    before_signal_date: date,
+) -> list[dict[str, Any]]:
+    records = session.execute(
+        select(ShortpickCandidate, ShortpickExperimentRun)
+        .join(ShortpickExperimentRun, ShortpickCandidate.run_id == ShortpickExperimentRun.id)
+        .where(
+            ShortpickExperimentRun.run_date >= _shortpick_p3_rule_defined_day(),
+            ShortpickExperimentRun.run_date < before_signal_date,
+        )
+        .order_by(ShortpickExperimentRun.run_date.asc(), ShortpickCandidate.id.asc())
+    ).all()
+    rows: list[dict[str, Any]] = []
+    for candidate, run in records:
+        if _shortpick_candidate_tracking_role(candidate) != tracking_role:
+            continue
+        payload = candidate.candidate_payload if isinstance(candidate.candidate_payload, dict) else {}
+        overlay = payload.get("market_factor_overlay") if isinstance(payload.get("market_factor_overlay"), dict) else {}
+        rows.append(
+            {
+                "candidate_id": candidate.id,
+                "run_id": run.id,
+                "signal_date": _shortpick_candidate_signal_date(candidate, run),
+                "symbol": candidate.symbol,
+                "name": candidate.name,
+                "industry": overlay.get("industry") or overlay.get("sector"),
+                "source_rank": overlay.get("source_rank"),
+            }
+        )
+    return rows
+
+
+def _shortpick_p3_prior_completed_outcome_rows(
+    session: Session,
+    *,
+    tracking_role: str,
+    before_signal_date: date,
+    horizon_days: int,
+) -> list[dict[str, Any]]:
+    records = session.execute(
+        select(ShortpickCandidate, ShortpickExperimentRun, ShortpickValidationSnapshot)
+        .join(ShortpickExperimentRun, ShortpickCandidate.run_id == ShortpickExperimentRun.id)
+        .join(ShortpickValidationSnapshot, ShortpickValidationSnapshot.candidate_id == ShortpickCandidate.id)
+        .where(
+            ShortpickExperimentRun.run_date >= _shortpick_p3_rule_defined_day(),
+            ShortpickExperimentRun.run_date < before_signal_date,
+            ShortpickValidationSnapshot.horizon_days == horizon_days,
+            ShortpickValidationSnapshot.status == "completed",
+        )
+        .order_by(ShortpickExperimentRun.run_date.asc(), ShortpickCandidate.id.asc())
+    ).all()
+    rows: list[dict[str, Any]] = []
+    for candidate, run, snapshot in records:
+        if _shortpick_candidate_tracking_role(candidate) != tracking_role:
+            continue
+        rows.append(
+            {
+                "candidate_id": candidate.id,
+                "run_id": run.id,
+                "signal_date": _shortpick_candidate_signal_date(candidate, run),
+                "symbol": candidate.symbol,
+                "exit_date": snapshot.exit_at.date().isoformat() if snapshot.exit_at else None,
+                "horizon_days": snapshot.horizon_days,
+                "status": snapshot.status,
+                "stock_return": snapshot.stock_return,
+            }
+        )
+    return rows
+
+
+def _shortpick_p3_signal_date_rows(
+    session: Session,
+    *,
+    through_signal_date: date,
+) -> list[dict[str, Any]]:
+    run_dates = session.scalars(
+        select(ShortpickExperimentRun.run_date)
+        .where(
+            ShortpickExperimentRun.run_date >= _shortpick_p3_rule_defined_day(),
+            ShortpickExperimentRun.run_date <= through_signal_date,
+        )
+        .order_by(ShortpickExperimentRun.run_date.asc())
+    ).all()
+    return [{"signal_date": value.isoformat()} for value in run_dates]
+
+
+def _shortpick_p3_first_allowed_row(result: dict[str, Any], *, action_field: str) -> dict[str, Any] | None:
+    rows = [row for row in result.get("rows") or [] if isinstance(row, dict)]
+    rows.sort(key=lambda row: int(row.get("candidate_rank") or row.get("source_rank") or row.get("rank") or 999999))
+    for row in rows:
+        if row.get(action_field) == "allowed":
+            return row
+    return None
+
+
+def _shortpick_p3_blocked_higher_ranked_rows(result: dict[str, Any], *, selected_rank: int) -> list[dict[str, Any]]:
+    blocked: list[dict[str, Any]] = []
+    for row in result.get("rows") or []:
+        if not isinstance(row, dict):
+            continue
+        rank = int(row.get("candidate_rank") or row.get("source_rank") or row.get("rank") or 999999)
+        if rank >= selected_rank:
+            continue
+        blocked.append(
+            {
+                "candidate_id": row.get("candidate_id"),
+                "symbol": row.get("symbol"),
+                "candidate_rank": rank,
+                "cooldown_action": row.get("cooldown_action"),
+                "filter_action": row.get("filter_action"),
+                "exposure_action": row.get("exposure_action"),
+                "filter_triggers": row.get("filter_triggers"),
+                "cooldown_blocker_events": row.get("cooldown_blocker_events"),
+                "exposure_blocker_rows": row.get("exposure_blocker_rows"),
+            }
+        )
+    return blocked
+
+
+def _insert_shortpick_p3_true_forward_control_candidates(
+    session: Session,
+    *,
+    run: ShortpickExperimentRun,
+    low_turnover_ranked: list[dict[str, Any]],
+    low_turnover_pool: list[dict[str, Any]],
+    regime: dict[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    if run.run_date < _shortpick_p3_rule_defined_day():
+        return [], {
+            "status": "skipped",
+            "reason": "before_rule_defined_at",
+            "rule_defined_at": SHORTPICK_P3_CONTROL_RULE_DEFINED_AT,
+        }
+
+    candidate_rows = _shortpick_p3_ranked_candidate_rows(low_turnover_ranked, signal_date=run.run_date)
+    if not candidate_rows:
+        return [], {"status": "skipped", "reason": "empty_ranked_pool"}
+
+    ranked_by_candidate_id = {
+        str(row["candidate_id"]): item
+        for row, item in zip(candidate_rows, low_turnover_ranked[:SHORTPICK_MARKET_FACTOR_RANK_LIMIT], strict=False)
+    }
+    drawdown_feature_rows = _shortpick_p3_drawdown_feature_rows(low_turnover_ranked, signal_date=run.run_date)
+    cooldown_rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at=SHORTPICK_P3_CONTROL_RULE_DEFINED_AT)
+    drawdown_rule = build_shortpick_drawdown_reversal_filter_rule(rule_defined_at=SHORTPICK_P3_CONTROL_RULE_DEFINED_AT)
+    exposure_rule = build_shortpick_repeated_exposure_limit_rule(rule_defined_at=SHORTPICK_P3_CONTROL_RULE_DEFINED_AT)
+
+    control_specs = [
+        {
+            "control_group_id": SAME_SYMBOL_COOLDOWN_CONTROL_ID,
+            "family": SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_FAMILY,
+            "tracking_role": SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_CONTROL_ROLE,
+            "rule": cooldown_rule,
+            "action_field": "cooldown_action",
+            "result": apply_shortpick_same_symbol_cooldown_control(
+                candidate_rows,
+                _shortpick_p3_prior_completed_outcome_rows(
+                    session,
+                    tracking_role=SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_CONTROL_ROLE,
+                    before_signal_date=run.run_date,
+                    horizon_days=int(cooldown_rule["negative_horizon_days"]),
+                ),
+                rule=cooldown_rule,
+                evidence_basis=SHORTPICK_P3_CONTROL_EVIDENCE_BASIS,
+                signal_date_rows=_shortpick_p3_signal_date_rows(session, through_signal_date=run.run_date),
+            ),
+        },
+        {
+            "control_group_id": DRAWDOWN_REVERSAL_FILTER_CONTROL_ID,
+            "family": SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_FAMILY,
+            "tracking_role": SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_CONTROL_ROLE,
+            "rule": drawdown_rule,
+            "action_field": "filter_action",
+            "result": apply_shortpick_drawdown_reversal_filter_control(
+                candidate_rows,
+                drawdown_feature_rows,
+                rule=drawdown_rule,
+                evidence_basis=SHORTPICK_P3_CONTROL_EVIDENCE_BASIS,
+            ),
+        },
+        {
+            "control_group_id": REPEATED_EXPOSURE_LIMIT_CONTROL_ID,
+            "family": SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_FAMILY,
+            "tracking_role": SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE,
+            "rule": exposure_rule,
+            "action_field": "exposure_action",
+            "result": apply_shortpick_repeated_exposure_limit_control(
+                candidate_rows,
+                _shortpick_p3_prior_signal_rows(
+                    session,
+                    tracking_role=SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE,
+                    before_signal_date=run.run_date,
+                ),
+                rule=exposure_rule,
+                evidence_basis=SHORTPICK_P3_CONTROL_EVIDENCE_BASIS,
+            ),
+        },
+    ]
+
+    inserted: list[dict[str, Any]] = []
+    control_summaries: list[dict[str, Any]] = []
+    for spec in control_specs:
+        result = spec["result"]
+        selected_row = _shortpick_p3_first_allowed_row(result, action_field=str(spec["action_field"]))
+        summary = {
+            "control_group_id": spec["control_group_id"],
+            "tracking_role": spec["tracking_role"],
+            "baseline_family": spec["family"],
+            "rule_signature": spec["rule"].get("rule_signature"),
+            "rule_defined_at": SHORTPICK_P3_CONTROL_RULE_DEFINED_AT,
+            "evidence_basis": SHORTPICK_P3_CONTROL_EVIDENCE_BASIS,
+            "selection_policy": SHORTPICK_P3_CONTROL_SELECTION_POLICY,
+            "input_candidate_count": result.get("input_candidate_count"),
+            "blocked_count": result.get("blocked_count"),
+            "allowed_count": result.get("allowed_count"),
+            "selected": bool(selected_row),
+        }
+        if selected_row is None:
+            control_summaries.append({**summary, "reason": "all_ranked_candidates_blocked"})
+            continue
+
+        source_rank = int(selected_row.get("candidate_rank") or selected_row.get("source_rank") or 1)
+        raw_item = ranked_by_candidate_id.get(str(selected_row.get("candidate_id")))
+        if raw_item is None:
+            control_summaries.append({**summary, "selected": False, "reason": "selected_candidate_missing_source_item"})
+            continue
+        blocked_higher_ranked_candidates = _shortpick_p3_blocked_higher_ranked_rows(result, selected_rank=source_rank)
+        metadata = {
+            **summary,
+            "selected_candidate_id": selected_row.get("candidate_id"),
+            "selected_symbol": selected_row.get("symbol"),
+            "selected_source_rank": source_rank,
+            "selected_control_row": selected_row,
+            "blocked_higher_ranked_candidates": blocked_higher_ranked_candidates,
+            "leakage_audit_status": result.get("leakage_audit_status"),
+            "leakage_audit_reasons": result.get("leakage_audit_reasons"),
+        }
+        item = {
+            **raw_item,
+            "_pool_limit_override": SHORTPICK_MARKET_FACTOR_LOW_TURNOVER_UPTREND_POOL_LIMIT,
+            "_p3_control_metadata": metadata,
+        }
+        candidate = _upsert_shortpick_market_factor_candidate(
+            session,
+            run=run,
+            item=item,
+            family=str(spec["family"]),
+            rank=1,
+            pool=low_turnover_pool,
+            regime=regime,
+            source_rank=source_rank,
+            tracking_role=str(spec["tracking_role"]),
+        )
+        inserted.append(
+            {
+                "candidate_id": candidate.id,
+                "symbol": candidate.symbol,
+                "name": candidate.name,
+                "baseline_family": spec["family"],
+                "rank": 1,
+                "source_rank": source_rank,
+                "tracking_role": spec["tracking_role"],
+                "score": item.get("_market_factor_score"),
+                "control_group_id": spec["control_group_id"],
+                "rule_signature": spec["rule"].get("rule_signature"),
+                "rule_defined_at": SHORTPICK_P3_CONTROL_RULE_DEFINED_AT,
+                "evidence_basis": SHORTPICK_P3_CONTROL_EVIDENCE_BASIS,
+                "selection_policy": SHORTPICK_P3_CONTROL_SELECTION_POLICY,
+                "blocked_higher_ranked_count": len(blocked_higher_ranked_candidates),
+            }
+        )
+        control_summaries.append(
+            {
+                **summary,
+                "selected_symbol": candidate.symbol,
+                "selected_source_rank": source_rank,
+                "blocked_higher_ranked_count": len(blocked_higher_ranked_candidates),
+            }
+        )
+
+    return inserted, {
+        "status": "ready",
+        "evidence_basis": SHORTPICK_P3_CONTROL_EVIDENCE_BASIS,
+        "selection_policy": SHORTPICK_P3_CONTROL_SELECTION_POLICY,
+        "rule_defined_at": SHORTPICK_P3_CONTROL_RULE_DEFINED_AT,
+        "ranked_pool_count": len(candidate_rows),
+        "inserted_candidate_count": len(inserted),
+        "controls": control_summaries,
+    }
+
+
 def insert_shortpick_market_factor_overlay_candidates(session: Session, run: ShortpickExperimentRun) -> dict[str, Any]:
     """Attach the production market-factor strategy candidates to a shortpick run.
 
@@ -2072,6 +2489,7 @@ def insert_shortpick_market_factor_overlay_candidates(session: Session, run: Sho
         "interpretation": "仅作仓位/环境诊断，不过滤候选；避免在小样本上过拟合。",
     }
     inserted: list[dict[str, Any]] = []
+    p3_true_forward_controls: dict[str, Any] = {"status": "skipped", "reason": "frozen_gate_not_passed_or_empty_ranked_pool"}
     frozen_ranked = _rank_shortpick_market_factor_pool(pool, family=SHORTPICK_MARKET_FACTOR_OFFENSIVE_FAMILY)
     low_turnover_pool = sorted(
         contexts,
@@ -2173,6 +2591,14 @@ def insert_shortpick_market_factor_overlay_candidates(session: Session, run: Sho
                     "score": no_limit_chase_item.get("_market_factor_score"),
                 }
             )
+        p3_inserted, p3_true_forward_controls = _insert_shortpick_p3_true_forward_control_candidates(
+            session,
+            run=run,
+            low_turnover_ranked=low_turnover_ranked,
+            low_turnover_pool=low_turnover_pool,
+            regime=regime,
+        )
+        inserted.extend(p3_inserted)
     if legacy_second_gate_pass and len(frozen_ranked) >= 2:
         legacy_item = frozen_ranked[1]
         candidate = _upsert_shortpick_market_factor_candidate(
@@ -2359,12 +2785,16 @@ def insert_shortpick_market_factor_overlay_candidates(session: Session, run: Sho
             SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_FAMILY,
             SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_FAMILY,
             SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_FAMILY,
+            SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_FAMILY,
+            SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_FAMILY,
+            SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_FAMILY,
         ],
         "frozen_paper_strategy": {
             **shortpick_frozen_paper_strategy_contract(),
             "gate_pass": frozen_gate_pass,
             "inserted": any(item.get("tracking_role") == "frozen_paper_primary" for item in inserted),
         },
+        "p3_true_forward_controls": p3_true_forward_controls,
         "market_factor_paper_controls": shortpick_market_factor_paper_control_contracts(),
         "generation_governance": generation_governance,
         "regime": regime,
@@ -3386,6 +3816,15 @@ def _market_factor_context_from_bars(stock: Stock, bars: list[MarketBar]) -> dic
     if previous.close_price <= 0 or five_back.close_price <= 0 or ten_back.close_price <= 0 or twenty_back.close_price <= 0:
         return None
     return_1d = (latest.close_price / previous.close_price) - 1
+    closes = [float(bar.close_price) for bar in bars if float(bar.close_price) > 0]
+    recent_closes = closes[-10:]
+    ma20_window = closes[-20:]
+    high_window = closes[-60:]
+    close = closes[-1]
+    recent_high = max(recent_closes) if recent_closes else close
+    short_start = closes[-4] if len(closes) >= 4 else closes[0]
+    ma20 = sum(ma20_window) / len(ma20_window) if ma20_window else close
+    high = max(high_window) if high_window else close
     profile = stock.profile_payload if isinstance(stock.profile_payload, dict) else {}
     turnover_rate = latest.turnover_rate
     if turnover_rate is None:
@@ -3403,6 +3842,11 @@ def _market_factor_context_from_bars(stock: Stock, bars: list[MarketBar]) -> dic
         "return_10d": (latest.close_price / ten_back.close_price) - 1,
         "return_20d": (latest.close_price / twenty_back.close_price) - 1,
         "abs_return_1d": abs(return_1d),
+        "drawdown_reversal_feature_date": latest.observed_at.date().isoformat(),
+        "recent_drawdown_return": round(close / recent_high - 1.0, 6) if recent_high else None,
+        "short_window_return": round(close / short_start - 1.0, 6) if short_start else None,
+        "price_vs_ma20": round(close / ma20 - 1.0, 6) if ma20 else None,
+        "high_level_reversal_return": round(close / high - 1.0, 6) if high else None,
         "bars": len(bars),
         **_shortpick_golden_cross_features(bars, short_window=10, long_window=200),
     }
@@ -3767,6 +4211,21 @@ def _upsert_shortpick_market_factor_candidate(
             f"{family_label}：沿用冻结低换手上升趋势第 {source_rank or rank} 名，"
             "只把入场价格从次一交易日收盘改为次一交易日开盘；若开盘价接近涨停，则不假设开盘可成交。"
         )
+    elif tracking_role == SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_CONTROL_ROLE:
+        thesis = (
+            f"{family_label}：先沿用冻结低换手上升趋势排名池，再过滤同一 control 近期已完成的同股负收益冷却窗口，"
+            f"取过滤后的第 {source_rank or rank} 名。"
+        )
+    elif tracking_role == SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_CONTROL_ROLE:
+        thesis = (
+            f"{family_label}：先沿用冻结低换手上升趋势排名池，再用信号日及以前的回撤、短窗跌破和高位回落特征过滤，"
+            f"取过滤后的第 {source_rank or rank} 名。"
+        )
+    elif tracking_role == SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE:
+        thesis = (
+            f"{family_label}：先沿用冻结低换手上升趋势排名池，再限制同一 control 近期重复暴露同一股票，"
+            f"取过滤后的第 {source_rank or rank} 名。"
+        )
     elif tracking_role == SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE:
         thesis = (
             f"{family_label}：交易日下午用实时行情替代当日收盘价，沿用冻结低换手上升趋势第 {source_rank or rank} 名，"
@@ -3813,11 +4272,16 @@ def _upsert_shortpick_market_factor_candidate(
             "rank_limit": SHORTPICK_MARKET_FACTOR_RANK_LIMIT,
             "pool_symbol_count": len(pool),
             "latest_trade_day": item.get("latest_trade_day"),
+            "industry": item.get("industry"),
             "return_1d": item.get("return_1d"),
             "return_5d": item.get("return_5d"),
             "return_10d": item.get("return_10d"),
             "return_20d": item.get("return_20d"),
             "abs_return_1d": item.get("abs_return_1d"),
+            "recent_drawdown_return": item.get("recent_drawdown_return"),
+            "short_window_return": item.get("short_window_return"),
+            "price_vs_ma20": item.get("price_vs_ma20"),
+            "high_level_reversal_return": item.get("high_level_reversal_return"),
             "amount": item.get("amount"),
             "turnover_rate": item.get("turnover_rate"),
             "ret10_rank_percentile": item.get("_ret10_rank_percentile"),
@@ -3849,6 +4313,12 @@ def _upsert_shortpick_market_factor_candidate(
             "regime": regime,
         },
     }
+    p3_control_metadata = item.get("_p3_control_metadata")
+    if isinstance(p3_control_metadata, dict):
+        payload["evidence_basis"] = SHORTPICK_P3_CONTROL_EVIDENCE_BASIS
+        payload["paper_tracking_evidence_basis"] = SHORTPICK_P3_CONTROL_EVIDENCE_BASIS
+        payload["p3_control"] = p3_control_metadata
+        payload["market_factor_overlay"]["p3_control"] = p3_control_metadata
     if tracking_role == SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE:
         payload["paper_tracking_entry_price_source"] = SHORTPICK_ENTRY_PRICE_SOURCE_OPEN
     if tracking_role == SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE:
@@ -3909,6 +4379,12 @@ def _upsert_shortpick_market_factor_candidate(
             if tracking_role == SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE
             else "market_factor_open_entry_low_turnover_uptrend"
             if tracking_role == SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE
+            else "market_factor_same_symbol_cooldown_low_turnover_uptrend"
+            if tracking_role == SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_CONTROL_ROLE
+            else "market_factor_drawdown_reversal_low_turnover_uptrend"
+            if tracking_role == SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_CONTROL_ROLE
+            else "market_factor_repeated_exposure_low_turnover_uptrend"
+            if tracking_role == SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE
             else "market_factor_intraday_same_day_low_turnover_uptrend"
             if tracking_role == SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE
             else "market_factor_quiet_breakout"
@@ -3947,6 +4423,12 @@ def _shortpick_market_factor_family_label(family: str) -> str:
         return "可执行风控版"
     if family == SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_FAMILY:
         return "次日开盘买入版"
+    if family == SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_FAMILY:
+        return "同股亏损冷却版"
+    if family == SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_FAMILY:
+        return "回撤反转过滤版"
+    if family == SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_FAMILY:
+        return "重复暴露限制版"
     if family == SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_FAMILY:
         return "14点同日买入版"
     if family == SHORTPICK_MARKET_FACTOR_QUIET_BREAKOUT_FAMILY:

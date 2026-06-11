@@ -1153,6 +1153,36 @@ def test_same_symbol_cooldown_uses_longer_window_after_severe_loss() -> None:
     assert by_id["aaa-8"]["cooldown_action"] == "allowed"
 
 
+def test_same_symbol_cooldown_can_use_external_signal_date_calendar() -> None:
+    rule = build_shortpick_same_symbol_cooldown_rule(
+        cooldown_signal_days=2,
+        severe_loss_threshold=-0.08,
+        severe_cooldown_signal_days=4,
+    )
+    candidates = [{"candidate_id": "aaa-8", "symbol": "AAA.SZ", "signal_date": "2026-05-08"}]
+    outcomes = [
+        {
+            "candidate_id": "severe-loss",
+            "symbol": "AAA.SZ",
+            "signal_date": "2026-04-20",
+            "exit_date": "2026-05-03",
+            "horizon_days": 10,
+            "status": "completed",
+            "stock_return": -0.10,
+        }
+    ]
+    signal_date_rows = [{"signal_date": f"2026-05-{day:02d}"} for day in range(4, 9)]
+
+    result = apply_shortpick_same_symbol_cooldown_control(
+        candidates,
+        outcomes,
+        rule=rule,
+        signal_date_rows=signal_date_rows,
+    )
+
+    assert result["rows"][0]["cooldown_action"] == "allowed"
+
+
 def test_same_symbol_cooldown_ignores_same_day_or_future_outcomes_for_leakage() -> None:
     candidates = [{"candidate_id": "aaa-2", "symbol": "AAA.SZ", "signal_date": "2026-05-02"}]
     outcomes = [
