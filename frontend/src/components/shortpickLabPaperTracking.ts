@@ -245,6 +245,10 @@ function paperTrackingExitTracks(item: ShortpickPaperTrackingItem): Record<strin
   return Array.isArray(item.paper_tracking_exit_tracks) ? item.paper_tracking_exit_tracks : [];
 }
 
+function isRetrospectiveReplayPaperTrackingRow(item: ShortpickPaperTrackingItem): boolean {
+  return item.retrospective === true || item.evidence_basis === "retrospective_forward_replay";
+}
+
 export function paperTrackingPrimaryExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
   const tracks = paperTrackingExitTracks(item);
   return tracks.find((track) => track.key === "mechanical_5d") ?? tracks[0] ?? null;
@@ -315,6 +319,7 @@ export function paperTrackingExitText(item: ShortpickPaperTrackingItem): string 
     const exitDay = String(track.exit_trade_day ?? item.exit_at ?? "");
     return `${label}${exitDay ? ` ${exitDay}` : ""}`;
   }
+  if (isRetrospectiveReplayPaperTrackingRow(item)) return "等待窗口";
   if (item.validation_status === "completed" && item.exit_at) {
     return `${Number(item.validation_horizon_days ?? 0) || "--"}日 ${formatDate(item.exit_at)}`;
   }
@@ -330,6 +335,7 @@ export function paperTrackingTrackExitText(track: Record<string, unknown>, fallb
 
 export function paperTrackingExitReturn(item: ShortpickPaperTrackingItem): number | null {
   const track = paperTrackingPrimaryExitTrack(item);
+  if (!track && isRetrospectiveReplayPaperTrackingRow(item)) return null;
   return paperTrackingTrackReturn(track, item);
 }
 

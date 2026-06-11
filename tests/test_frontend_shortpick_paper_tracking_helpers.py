@@ -141,6 +141,29 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
                   name: "回放",
                   symbol: "600183.SH",
                 };
+                const immatureReplayRow = {
+                  tracking_group: "market_factor_control",
+                  control_label: "同股冷却过滤",
+                  evidence_basis: "retrospective_forward_replay",
+                  retrospective: true,
+                  validation_status: "completed",
+                  validation_horizon_days: 3,
+                  exit_at: "2026-06-10T08:00:00Z",
+                  stock_return: 0.069,
+                  paper_tracking_exit_tracks: [],
+                  name: "未成熟回放",
+                  symbol: "600183.SH",
+                };
+                const ordinaryCompletedRow = {
+                  tracking_group: "frozen_strategy",
+                  validation_status: "completed",
+                  validation_horizon_days: 3,
+                  exit_at: "2026-06-10T08:00:00Z",
+                  stock_return: 0.069,
+                  paper_tracking_exit_tracks: [],
+                  name: "普通完成行",
+                  symbol: "600183.SH",
+                };
                 console.log(JSON.stringify({
                   frozenGroups: frozen.map((item) => item.tracking_group),
                   frozenNames: frozen.map((item) => item.name),
@@ -155,6 +178,10 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
                   allArchivedChoices: helpers.latestPaperTrackingChoices([{ ...latestRows[0], governance_status: "inventory_archived" }], { id: 20, run_date: "2026-06-20" }).length,
                   replayRecordGroupLabel: helpers.paperTrackingRecordGroupLabel(replayRow),
                   replayGroupFilterMatches: helpers.paperTrackingGroupFilterMatches(replayRow, "同股冷却过滤"),
+                  immatureReplayExitText: helpers.paperTrackingExitText(immatureReplayRow),
+                  immatureReplayExitReturn: helpers.paperTrackingExitReturn(immatureReplayRow),
+                  ordinaryCompletedExitText: helpers.paperTrackingExitText(ordinaryCompletedRow),
+                  ordinaryCompletedExitReturn: helpers.paperTrackingExitReturn(ordinaryCompletedRow),
                 }));
                 """
             )
@@ -189,3 +216,7 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
         self.assertEqual(payload["allArchivedChoices"], 0)
         self.assertEqual(payload["replayRecordGroupLabel"], "同股冷却过滤")
         self.assertTrue(payload["replayGroupFilterMatches"])
+        self.assertEqual(payload["immatureReplayExitText"], "等待窗口")
+        self.assertIsNone(payload["immatureReplayExitReturn"])
+        self.assertEqual(payload["ordinaryCompletedExitText"], "3日 06/10 16:00")
+        self.assertEqual(payload["ordinaryCompletedExitReturn"], 0.069)
