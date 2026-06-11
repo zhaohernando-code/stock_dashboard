@@ -81,6 +81,7 @@ from ashare_evidence.shortpick_replay import (
     run_shortpick_replay_rejection,
 )
 from ashare_evidence.shortpick_strategy_backtest_runner import run_shortpick_historical_backtest_requests
+from ashare_evidence.shortpick_strategy_replay_runner import run_shortpick_retrospective_forward_replay_requests
 from ashare_evidence.shortpick_strategy_slices import build_shortpick_strategy_slice_evidence
 from ashare_evidence.simulation import restart_simulation_session, step_simulation_session
 from ashare_evidence.stock_master import DEFAULT_AKSHARE_TIMEOUT_SECONDS
@@ -753,6 +754,15 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_governance_historical_backtest.add_argument("--request-path", required=True)
     shortpick_governance_historical_backtest.add_argument("--output-dir", default=None)
 
+    shortpick_governance_retrospective_replay = subparsers.add_parser(
+        "shortpick-governance-retrospective-replay",
+        help="Run Short Pick governance retrospective replay requests into labeled evidence artifacts.",
+    )
+    shortpick_governance_retrospective_replay.add_argument("--database-url", default=None)
+    shortpick_governance_retrospective_replay.add_argument("--request-path", required=True)
+    shortpick_governance_retrospective_replay.add_argument("--paper-tracking-path", required=True)
+    shortpick_governance_retrospective_replay.add_argument("--output-dir", default=None)
+
     shortpick_strategy_slice_evidence = subparsers.add_parser(
         "shortpick-strategy-slice-evidence",
         help="Build offline trade-level strategy slice evidence for Short Pick Lab history analysis.",
@@ -1218,6 +1228,22 @@ def main(argv: list[str] | None = None) -> int:
                 [dict(item) for item in requests if isinstance(item, dict)],
                 output_dir=args.output_dir,
             )
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-governance-retrospective-replay":
+        request_payload = json.loads(Path(args.request_path).read_text(encoding="utf-8"))
+        paper_tracking = json.loads(Path(args.paper_tracking_path).read_text(encoding="utf-8"))
+        requests = request_payload.get("requests") if isinstance(request_payload, dict) else None
+        if requests is None and isinstance(request_payload, dict):
+            requests = [request_payload]
+        if not isinstance(requests, list):
+            raise ValueError("request-path must contain a request object or an object with a requests list")
+        payload = run_shortpick_retrospective_forward_replay_requests(
+            [dict(item) for item in requests if isinstance(item, dict)],
+            dict(paper_tracking) if isinstance(paper_tracking, dict) else {},
+            output_dir=args.output_dir,
+        )
         _print_json(payload)
         return 0
 

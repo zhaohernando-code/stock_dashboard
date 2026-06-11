@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round35_control_backtest_mapping_ds_reviewed_ready_to_merge
+Status: round36_retrospective_replay_runner_ds_reviewed_ready_to_merge
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -96,7 +96,7 @@ The next governance package should adopt four principles.
 | P3.2 | Drawdown/reversal filter control | completed_partial_runtime_wiring_pending | Added a deterministic rule builder and pure input-to-output filter helper. It uses only signal-date-or-prior technical feature snapshots, blocks on recent drawdown, short-window breakdown plus price-vs-MA weakness, or high-level reversal triggers, emits `rule_signature`, and labels evidence basis. Feature generation, historical/replay artifacts, true-forward wiring, and frontend display remain pending. |
 | P3.3 | Repeated exposure limit control | completed_partial_runtime_wiring_pending | Added a deterministic rule builder and pure input-to-output exposure-limit helper. It defaults to symbol grouping, supports explicit group fields such as symbol plus industry for later governed use, ignores same-day/future exposure rows, emits `rule_signature`, and labels evidence basis. Runtime generation wiring, historical/replay artifacts, true-forward tracking, and frontend display remain pending. |
 | P3.4 | Historical backtest generation | completed_partial_replay_writer_pending | Added a deterministic historical-backtest generation request builder. Round 34 added a gated runner and artifact persistence path. Round 35 adds explicit executable portfolio strategy mappings for the three registered P3 controls, so generated P3 historical requests can now run through the existing portfolio backtest instead of being blocked for missing mappings. |
-| P3.5 | Retrospective forward replay generation | completed_partial_runner_wiring_pending | Added a deterministic retrospective-forward-replay request builder. It derives observed start/end from `paper_tracking.items`, includes only signal dates strictly before `rule_defined_at`, labels `evidence_basis=retrospective_forward_replay`, marks `retrospective=true`, forbids paper-tracking writes, and does not execute replay or write files. Runner wiring and artifact persistence remain pending. |
+| P3.5 | Retrospective forward replay generation | completed_partial_writer_pending | Added a deterministic retrospective-forward-replay request builder. Round 36 adds a replay runner and artifact persistence path that consumes generated requests plus paper-tracking JSON, applies the registered P3 control logic only to signal dates strictly before `rule_defined_at`, labels output rows `evidence_basis=retrospective_forward_replay`, marks `retrospective=true`, and forbids paper-tracking writes. Runtime database writer remains pending. |
 | P3.6 | True forward tracking start | completed_partial_runtime_wiring_pending | Added a deterministic true-forward activation-plan helper. It allows only registered control IDs with `rule_signature` and `rule_defined_at`, sets `tracking_start_date` no earlier than both the requested start and rule definition date, labels `evidence_basis=true_forward_tracking`, forbids retroactive backfill, and does not write tracking rows. Runtime paper-ledger wiring remains pending. |
 
 ### P4 - Frontend And Reporting
@@ -908,10 +908,10 @@ New implementation requirement items (status `not_started`, scoped for later run
 | --- | --- | --- | --- |
 | P2.7 | Deprecated/archived display bucket plus regression guard | completed_partial_generation_wiring_pending | Round 29 added the paper-tracking governance partition; Round 30 moves evidence-based `retire_candidate` and `retired` rows out of the paper-tracking primary frontend table and latest simulated trade surface into a collapsed deprecated/archive bucket. Continued-advancement/generation wiring remains pending under P2.4 / later runtime rounds. |
 | P2.8 | Redundant/meaningless control inventory archival | completed_partial_inventory_decision_source_pending | Round 31 added an inventory-driven archival decision helper, generation exclusion, paper-tracking deprecated-bucket partitioning, API summary fields, and frontend status fallback for `inventory_archived`. No real control is archived until a durable inventory decision source supplies explicit `inventory_diagnostic_value` decisions with allowed reason codes. |
-| P3.7 | Labeled combined-ledger retrospective backfill with true-forward pairing | completed_partial_runner_writer_pending | Round 32 added a combined-ledger backfill preparation helper that materializes already-produced retrospective replay rows with mandatory `evidence_basis=retrospective_forward_replay`, `retrospective=true`, `rule_defined_at`, leakage-audit fields, deterministic `pairing_key`, and headline-safe true-forward basis filtering. It intentionally does not write database rows until the replay runner and runtime ledger writer exist. |
+| P3.7 | Labeled combined-ledger retrospective backfill with true-forward pairing | completed_partial_writer_pending | Round 32 added a combined-ledger backfill preparation helper that materializes already-produced retrospective replay rows with mandatory `evidence_basis=retrospective_forward_replay`, `retrospective=true`, `rule_defined_at`, leakage-audit fields, deterministic `pairing_key`, and headline-safe true-forward basis filtering. Round 36 adds replay artifact rows that can feed this helper. Runtime ledger writer remains pending. |
 | P3.8 | New credible control/comparison line build-out | completed_partial_replay_writer_pending | Round 33 added a credible-control comparison-line build-out plan for the three registered P3 controls and the two registered P1 baselines. Round 34 added the historical-backtest runner and evidence artifact persistence path. Round 35 adds executable control-to-portfolio strategy mappings for the three registered P3 controls. Retrospective replay, paper-ledger write, and frontend/runtime exposure remain pending. |
 
-These items remain blocked by the remaining runtime preconditions called out in earlier rounds: a real `strategy_retirement:v1` artifact writer, a retrospective replay runner, a paper-ledger writer, and runtime/frontend wiring must exist before any strategy is durably retired, hidden, or backfilled. Round 34 removed the generic historical-backtest runner/artifact gap; Round 35 removes the missing P3 historical control-mapping gap for the three registered controls.
+These items remain blocked by the remaining runtime preconditions called out in earlier rounds: a real `strategy_retirement:v1` artifact writer, a paper-ledger writer, and runtime/frontend wiring must exist before any strategy is durably retired, hidden, or backfilled. Round 34 removed the generic historical-backtest runner/artifact gap; Round 35 removed the missing P3 historical control-mapping gap for the three registered controls; Round 36 removes the retrospective replay runner/artifact gap without writing runtime ledger rows.
 
 ## Round 29 Review Result
 
@@ -1146,6 +1146,48 @@ Remaining blockers after Round 35:
 - Retrospective replay execution and combined-ledger writer remain pending before P3.7/P3.8 can create labeled backfill rows.
 - Runtime/frontend exposure of new comparison lines remains pending until retrospective rows exist with explicit evidence-basis labels.
 
+Round 35 merge evidence:
+
+- Commit `0589af9` (`Add shortpick P3 control backtest mappings`) was merged into main by `356d423`.
+- `git push origin main` completed; the pre-push hook passed stock_dashboard fast regression (`756 passed, 161 deselected, 6 subtests passed`) and policy governance audit.
+- No runtime publish was required because Round 35 added offline strategy mapping/test/docs only; it did not change API routes, frontend runtime, database rows, LaunchAgents, or served user-visible behavior.
+
+## Round 36 Review Result
+
+Status: implementation completed locally; targeted tests passed; DeepSeek review passed after blocker repair; ready to merge.
+
+Round 36 scope:
+
+- Added `shortpick_strategy_replay_runner.py`, an artifact-only retrospective replay execution layer for P3.5. It consumes generated retrospective replay requests plus paper-tracking JSON and writes `shortpick_retrospective_forward_replay` artifacts.
+- The runner applies the registered P3 control logic to replay candidates:
+  - same-symbol cooldown uses completed prior outcomes from `validation_by_horizon`;
+  - drawdown/reversal uses `drawdown_reversal_features`, `signal_features`, or top-level signal-date features;
+  - repeated exposure uses replay candidate rows and the existing prior-signal control helper.
+- Replay rows are explicitly labeled: `evidence_basis=retrospective_forward_replay`, `retrospective=true`, `true_forward_tracking_eligible=false`, `headline_metric_eligible=false`, `source_feature_cutoff_policy=signal_date_available_inputs_only`, and `paper_tracking_write_policy=forbidden`.
+- Added CLI command `shortpick-governance-retrospective-replay --request-path ... --paper-tracking-path ... [--output-dir ...]`.
+- The runner blocks unsafe request windows where `replay_end_date >= rule_defined_at`, so retrospective rows cannot include signal dates on or after rule definition.
+- The runner rejects requests that try to set `true_forward_tracking_eligible=true` or `headline_metric_eligible=true`, and blocked outputs still force no-write / not-headline labels.
+- Auxiliary control data for cooldown and drawdown replay is limited to paper rows whose `signal_date` is inside the replay window and strictly before `rule_defined_at`; empty drawdown feature rows no longer count as feature coverage.
+- Verified replay rows can feed `build_shortpick_combined_ledger_retrospective_backfill(...)` without writing the database.
+
+Verification evidence after blocker repair:
+
+- `pytest tests/test_shortpick_strategy_governance.py tests/test_shortpick_portfolio_backtest.py` passed (`99 passed`).
+- `python3 -m ruff check src/ashare_evidence/shortpick_strategy_replay_runner.py src/ashare_evidence/cli.py tests/test_shortpick_strategy_governance.py tests/test_shortpick_portfolio_backtest.py` passed.
+- `python3 -m compileall -q src/ashare_evidence/shortpick_strategy_replay_runner.py src/ashare_evidence/cli.py tests/test_shortpick_strategy_governance.py tests/test_shortpick_portfolio_backtest.py` passed.
+- `git diff --check` passed.
+
+DeepSeek review evidence:
+
+- Initial sharded DS review rejected the draft because cooldown/drawdown auxiliary data was not limited to replay scope and because tampered true-forward/headline request fields were not explicitly blocked.
+- The runner was updated to scope auxiliary paper rows with `replay_start_date <= signal_date <= replay_end_date` and `signal_date < rule_defined_at`, reject true-forward/headline tampering, and avoid treating empty drawdown feature rows as ready coverage.
+- DS re-review returned MERGE: both blockers resolved, no residual blocking issues, and new tests cover cooldown auxiliary scope, drawdown auxiliary scope, and true-forward/headline tampering.
+
+Remaining blockers after Round 36:
+
+- Runtime combined-ledger writer remains pending before replay artifacts become durable paper-tracking rows.
+- Runtime/frontend exposure of new comparison lines remains pending until labeled retrospective rows exist in the combined ledger.
+
 ## Validation To Run For This Planning Task
 
 
@@ -1191,7 +1233,7 @@ Remaining blockers after Round 35:
 | Round 12 DeepSeek review | completed |
 | P3.4 historical backtest request builder + runner + P3 mappings | completed_partial_replay_writer_pending |
 | Round 13 DeepSeek review | completed |
-| P3.5 retrospective forward replay request builder | completed_partial_runner_wiring_pending |
+| P3.5 retrospective forward replay request builder + runner | completed_partial_writer_pending |
 | Round 14 DeepSeek review | completed |
 | P3.6 true forward tracking activation plan | completed_partial_runtime_wiring_pending |
 | Round 15 DeepSeek review | completed |
@@ -1223,7 +1265,7 @@ Remaining blockers after Round 35:
 | Round 30 frontend deprecated bucket | published_runtime_verified |
 | P2.7 deprecated display bucket + regression guard | completed_partial_generation_wiring_pending |
 | P2.8 redundant/meaningless control archival | completed_partial_inventory_decision_source_pending |
-| P3.7 labeled combined-ledger retrospective backfill | completed_partial_runner_writer_pending |
+| P3.7 labeled combined-ledger retrospective backfill | completed_partial_writer_pending |
 | P3.8 new credible control/comparison line build-out | completed_partial_replay_writer_pending |
 | Runtime behavior changed | round31_inventory_archive_governance_path_published_runtime_verified |
 | Registry changed | completed |
