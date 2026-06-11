@@ -165,6 +165,47 @@ def test_api_builds_shortpick_strategy_governance_projection_from_paper_tracking
     assert projection["archive_records"]["archive_count"] == 0
 
 
+def test_api_strategy_governance_projection_consumes_retirement_artifact_source() -> None:
+    strategy_id = "frozen_strategy__frozen_paper_primary__low_turnover_20d_uptrend_liquid_top120__next_close__1"
+    projection = _build_shortpick_strategy_governance_projection(
+        {
+            "items": [
+                _paper_tracking_item(f"2026-05-{index + 1:02d}", stock_return=value)
+                for index, value in enumerate([0.02, 0.03, 0.01])
+            ]
+        },
+        retirement_artifacts={
+            "status": "ready",
+            "source": "shortpick_strategy_retirement_artifact_store",
+            "artifact_count": 1,
+            "ignored_count": 1,
+            "artifacts": [
+                {
+                    "artifact_id": "shortpick-retirement:fixture",
+                    "status": "ready",
+                    "artifact_family": "shortpick_strategy_retirement",
+                    "strategy_id": strategy_id,
+                    "decision_log_ref": "DECISIONS.md#fixture",
+                }
+            ],
+        },
+    )
+
+    assert projection["retirement_artifact_source"] == {
+        "status": "ready",
+        "source": "shortpick_strategy_retirement_artifact_store",
+        "artifact_count": 1,
+        "ignored_count": 1,
+        "strategy_ids": [strategy_id],
+    }
+    retired = projection["status_recommendations"]["recommendations"][0]
+    assert retired["recommended_status"] == "retired"
+    assert retired["retirement_artifact_ref"]["artifact_id"] == "shortpick-retirement:fixture"
+    assert projection["view_projection"]["primary_count"] == 0
+    assert projection["view_projection"]["archive_count"] == 1
+    assert projection["archive_records"]["records"][0]["retirement_artifact_ref"]["artifact_id"] == "shortpick-retirement:fixture"
+
+
 def test_api_strategy_governance_projection_applies_inventory_archive_decisions() -> None:
     strategy_id = "frozen_strategy__frozen_paper_primary__low_turnover_20d_uptrend_liquid_top120__next_close__1"
 

@@ -63,6 +63,10 @@ from ashare_evidence.operations import (
 )
 from ashare_evidence.policy_audit import build_policy_audit_report
 from ashare_evidence.policy_config_loader import build_policy_governance_summary, list_policy_config_versions
+from ashare_evidence.research_artifact_store import (
+    artifact_root_from_database_url,
+    read_shortpick_strategy_retirement_artifacts,
+)
 from ashare_evidence.runtime_config import (
     create_model_api_key,
     delete_model_api_key,
@@ -745,6 +749,7 @@ def _attach_shortpick_replay_decision_projection(
     if not strategy_governance and isinstance(projection_inputs.get("paper_tracking"), dict):
         strategy_governance = _build_shortpick_strategy_governance_projection(
             projection_inputs["paper_tracking"],  # type: ignore[arg-type]
+            retirement_artifacts=_shortpick_strategy_retirement_artifacts_for_session(session),
         )
     if isinstance(projection_inputs.get("strategy_slice_evidence"), dict):
         strategy_slice = dict(projection_inputs["strategy_slice_evidence"])  # type: ignore[arg-type]
@@ -767,7 +772,11 @@ def _attach_shortpick_replay_decision_projection(
     return enriched
 
 
-def _build_shortpick_strategy_governance_projection(paper_tracking: dict[str, object]) -> dict[str, object]:
+def _build_shortpick_strategy_governance_projection(
+    paper_tracking: dict[str, object],
+    *,
+    retirement_artifacts: dict[str, object] | None = None,
+) -> dict[str, object]:
     items = paper_tracking.get("items")
     if not isinstance(items, list) or not items:
         return {
@@ -777,7 +786,10 @@ def _build_shortpick_strategy_governance_projection(paper_tracking: dict[str, ob
         }
 
     evidence_packs = build_shortpick_strategy_retirement_evidence_packs(paper_tracking)
-    status_recommendations = build_shortpick_strategy_status_recommendations(evidence_packs)
+    status_recommendations = build_shortpick_strategy_status_recommendations(
+        evidence_packs,
+        retirement_artifacts=retirement_artifacts,
+    )
     market_control_contract = paper_tracking.get("market_control_contract")
     inventory_archive_decisions = build_shortpick_redundant_control_archive_decisions(
         market_control_contract.get("inventory_archive_decisions")
@@ -789,16 +801,50 @@ def _build_shortpick_strategy_governance_projection(paper_tracking: dict[str, ob
         status_recommendations,
         inventory_archive_decision_result=inventory_archive_decisions,
     )
-    archive_records = build_shortpick_strategy_archive_records(view_projection, evidence_packs)
+    archive_records = build_shortpick_strategy_archive_records(
+        view_projection,
+        evidence_packs,
+        retirement_artifacts=retirement_artifacts,
+    )
     return {
         "status": "ready",
         "source_policy": "read_only_paper_tracking_ledger_no_role_name_status_inference",
         "evidence_basis": evidence_packs.get("evidence_basis"),
         "strategy_count": evidence_packs.get("strategy_count"),
+        "retirement_artifact_source": _shortpick_retirement_artifact_source_summary(retirement_artifacts),
         "status_recommendations": status_recommendations,
         "inventory_archive_decisions": inventory_archive_decisions,
         "view_projection": view_projection,
         "archive_records": archive_records,
+    }
+
+
+def _shortpick_strategy_retirement_artifacts_for_session(session: Session) -> dict[str, object]:
+    return read_shortpick_strategy_retirement_artifacts(root=_artifact_root_for_session(session))
+
+
+def _artifact_root_for_session(session: Session) -> Path:
+    bind = session.get_bind()
+    database_url = bind.url.render_as_string(hide_password=False) if bind is not None else None
+    return artifact_root_from_database_url(database_url)
+
+
+def _shortpick_retirement_artifact_source_summary(source: dict[str, object] | None) -> dict[str, object]:
+    if not isinstance(source, dict):
+        return {
+            "status": "not_configured",
+            "source": "shortpick_strategy_retirement_artifact_store",
+            "artifact_count": 0,
+            "ignored_count": 0,
+            "strategy_ids": [],
+        }
+    artifacts = [item for item in source.get("artifacts") or [] if isinstance(item, dict)]
+    return {
+        "status": str(source.get("status") or "unknown"),
+        "source": str(source.get("source") or "shortpick_strategy_retirement_artifact_store"),
+        "artifact_count": int(source.get("artifact_count") or len(artifacts)),
+        "ignored_count": int(source.get("ignored_count") or 0),
+        "strategy_ids": sorted({str(item.get("strategy_id") or "") for item in artifacts if item.get("strategy_id")}),
     }
 
 
@@ -1219,8 +1265,10 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
     # paper-tracking row with its evidence-based governance status and split poorly
     # performing controls (retire_candidate / retired) into a deprecated bucket while
     # keeping their data. `items` stays in original order; only new fields are added.
+    retirement_artifacts = _shortpick_strategy_retirement_artifacts_for_session(session)
     governance_recommendations = build_shortpick_strategy_status_recommendations(
-        build_shortpick_strategy_retirement_evidence_packs({"items": items})
+        build_shortpick_strategy_retirement_evidence_packs({"items": items}),
+        retirement_artifacts=retirement_artifacts,
     )
     inventory_archive_decisions = build_shortpick_redundant_control_archive_decisions(
         market_control_contract.get("inventory_archive_decisions") if isinstance(market_control_contract.get("inventory_archive_decisions"), list) else []
@@ -1244,6 +1292,7 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
             "primary_count": governance_partition["primary_count"],
             "deprecated_count": governance_partition["deprecated_count"],
             "deprecated_strategy_ids": governance_partition["deprecated_strategy_ids"],
+            "retirement_artifact_source": _shortpick_retirement_artifact_source_summary(retirement_artifacts),
             "inventory_archive_policy": inventory_archive_decisions["decision_policy"],
             "inventory_archived_count": governance_partition["inventory_archived_count"],
             "inventory_archived_strategy_ids": inventory_archive_decisions["archived_strategy_ids"],

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from datetime import UTC, datetime
@@ -17,6 +18,7 @@ from ashare_evidence.research_artifact_store import (
     read_phase5_horizon_study_artifact,
     read_phase5_producer_contract_study_artifact,
     read_replay_alignment_artifact,
+    read_shortpick_strategy_retirement_artifacts,
     read_validation_metrics,
     resolve_backtest_artifact,
     write_backtest_artifact,
@@ -27,6 +29,7 @@ from ashare_evidence.research_artifact_store import (
     write_phase5_producer_contract_study_artifact,
     write_replay_alignment_artifact,
     write_shortpick_lab_artifact,
+    write_shortpick_strategy_retirement_artifact_record,
     write_validation_metrics,
 )
 from ashare_evidence.research_artifacts import (
@@ -83,6 +86,40 @@ class ResearchArtifactStoreTests(unittest.TestCase):
 
             self.assertEqual(artifact_path.parent, target_root / "shortpick_lab")
             self.assertTrue(artifact_path.exists())
+
+    def test_shortpick_retirement_artifact_source_reads_only_ready_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            ready = {
+                "artifact_id": "shortpick-retirement:fixture",
+                "status": "ready",
+                "artifact_family": "shortpick_strategy_retirement",
+                "schema_version": "v1",
+                "strategy_id": "strategy-fixture",
+                "decision_log_ref": "DECISIONS.md#fixture",
+            }
+            write_shortpick_strategy_retirement_artifact_record(ready, root=root)
+            blocked = root / "shortpick_strategy_retirements" / "blocked.json"
+            blocked.write_text(
+                json.dumps(
+                    {
+                        "artifact_id": "blocked-fixture",
+                        "status": "blocked",
+                        "artifact_family": "shortpick_strategy_retirement",
+                        "strategy_id": "strategy-fixture",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            duplicate = root / "shortpick_strategy_retirements" / "duplicate-ready.json"
+            duplicate.write_text(json.dumps(ready), encoding="utf-8")
+
+            source = read_shortpick_strategy_retirement_artifacts(root=root)
+
+            self.assertEqual(source["status"], "ready")
+            self.assertEqual(source["artifact_count"], 1)
+            self.assertEqual(source["ignored_count"], 2)
+            self.assertEqual(source["artifacts"][0]["artifact_id"], "shortpick-retirement:fixture")
 
     def test_resolve_backtest_artifact_falls_back_to_canonical_portfolio_key(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

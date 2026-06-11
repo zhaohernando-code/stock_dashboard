@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round38_strategy_retirement_artifact_writer_ds_reviewed_ready_to_merge
+Status: round39_retirement_artifact_source_wiring_ds_reviewed_ready_to_merge
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -83,8 +83,8 @@ The next governance package should adopt four principles.
 | --- | --- | --- | --- |
 | P2.1 | Inventory active shortpick strategies and controls | completed | Added `docs/contracts/SHORTPICK_STRATEGY_INVENTORY_2026-06-10.md`, separating true-forward paper tracking, generated overlay-only rows, historical/replay-only variants, and configured dormant controls. |
 | P2.2 | Compute retirement evidence pack per strategy | completed | Added a read-only builder in `src/ashare_evidence/shortpick_strategy_governance.py` that aggregates paper-tracking rows into evidence packs with evidence basis, forward mean/median/win rate, completed sample count, additive drawdown, tail dependence, same-symbol loss repeats, and optional historical/baseline evidence references. It does not mark `retired`, write runtime data, or change frontend/API behavior. |
-| P2.3 | Mark candidates as `active`, `observe`, `retire_candidate`, or `retired` | completed_artifact_writer_pending_runtime_source | Added a read-only status recommendation layer. Metrics alone can only produce `active`, `observe`, or `retire_candidate`; `retired` requires a valid `strategy_retirement:v1` / `shortpick_strategy_retirement` artifact plus `decision_log_ref`. Round 38 adds a retirement artifact writer that can produce a schema-backed artifact consumed by this recommendation layer. Runtime artifact discovery/source wiring remains pending. |
-| P2.4 | Remove retired strategies from active generation | partial_artifact_writer_ready_runtime_wiring_pending | Added a read-only generation eligibility filter that excludes only `recommended_status=retired` by default and keeps `retire_candidate`, `observe`, and `untracked` eligible. Archive rebuild can explicitly pass `include_retired=True`. Round 38 adds the retirement artifact writer; runtime generation wiring remains pending until the active generation path reads the artifact source. |
+| P2.3 | Mark candidates as `active`, `observe`, `retire_candidate`, or `retired` | completed_runtime_artifact_source_wired_ds_reviewed | Added a read-only status recommendation layer. Metrics alone can only produce `active`, `observe`, or `retire_candidate`; `retired` requires a valid `strategy_retirement:v1` / `shortpick_strategy_retirement` artifact plus `decision_log_ref`. Round 38 adds a retirement artifact writer; Round 39 wires runtime/API artifact-source discovery into status recommendation projection and paper-tracking governance partition. |
+| P2.4 | Remove retired strategies from active generation | partial_retirement_source_wired_generation_path_pending | Added a read-only generation eligibility filter that excludes only `recommended_status=retired` by default and keeps `retire_candidate`, `observe`, and `untracked` eligible. Archive rebuild can explicitly pass `include_retired=True`. Round 39 lets API projections consume retirement artifacts, but the active strategy generation path still does not call the eligibility filter with the runtime artifact source. |
 | P2.5 | Remove retired strategies from primary frontend views | partial | Added a read-only view projection helper that sends `retired` rows to archive and keeps `active`, `observe`, and `retire_candidate` in primary projection. It deliberately omits heavy horizon evidence and retirement artifact refs. Frontend/runtime wiring remains pending. |
 | P2.6 | Preserve archived statistics and evidence refs | completed | Added a read-only archive record helper that builds audit records only from archive rows and preserves signal counts, completed sample counts, horizon summaries, historical evidence refs, baseline refs, and retirement artifact refs. It does not delete or persist data. |
 
@@ -911,7 +911,7 @@ New implementation requirement items (status `not_started`, scoped for later run
 | P3.7 | Labeled combined-ledger retrospective backfill with true-forward pairing | completed_partial_runtime_frontend_pending | Round 32 added a combined-ledger backfill preparation helper that materializes already-produced retrospective replay rows with mandatory `evidence_basis=retrospective_forward_replay`, `retrospective=true`, `rule_defined_at`, leakage-audit fields, deterministic `pairing_key`, and headline-safe true-forward basis filtering. Round 36 adds replay artifact rows that can feed this helper. Round 37 adds an artifact-only combined-ledger writer/CLI that persists labeled combined rows without writing the database. Runtime DB/API/frontend consumption remains pending. |
 | P3.8 | New credible control/comparison line build-out | completed_partial_replay_writer_pending | Round 33 added a credible-control comparison-line build-out plan for the three registered P3 controls and the two registered P1 baselines. Round 34 added the historical-backtest runner and evidence artifact persistence path. Round 35 adds executable control-to-portfolio strategy mappings for the three registered P3 controls. Retrospective replay, paper-ledger write, and frontend/runtime exposure remain pending. |
 
-These items remain blocked by the remaining runtime preconditions called out in earlier rounds: runtime/frontend wiring must exist before any strategy is durably hidden or displayed from backfilled comparison rows. Round 34 removed the generic historical-backtest runner/artifact gap; Round 35 removed the missing P3 historical control-mapping gap for the three registered controls; Round 36 removes the retrospective replay runner/artifact gap without writing runtime ledger rows. Round 37 adds combined-ledger artifact materialization, but not DB/API/frontend consumption. Round 38 adds the `strategy_retirement:v1` artifact writer and aligns its schema with the existing retired-status authority check, but does not wire artifact discovery into generation or frontend runtime.
+These items remain blocked by the remaining runtime preconditions called out in earlier rounds: active generation wiring must exist before any retired strategy is durably skipped from future strategy advancement, and runtime/frontend wiring must exist before backfilled comparison rows are displayed as normal dashboard evidence. Round 34 removed the generic historical-backtest runner/artifact gap; Round 35 removed the missing P3 historical control-mapping gap for the three registered controls; Round 36 removes the retrospective replay runner/artifact gap without writing runtime ledger rows. Round 37 adds combined-ledger artifact materialization, but not DB/API/frontend consumption. Round 38 adds the `strategy_retirement:v1` artifact writer and aligns its schema with the existing retired-status authority check. Round 39 wires retirement artifact discovery into API governance projections and paper-tracking partitioning, but not into active generation.
 
 ## Round 29 Review Result
 
@@ -1244,6 +1244,33 @@ Remaining blockers after Round 38:
 - Runtime artifact discovery/source wiring remains pending before active generation or frontend views automatically consume retirement artifacts.
 - Physical deletion of retired strategies remains intentionally blocked until archive/statistics retention and runtime consumption are verified end to end.
 
+## Round 39 Review Result
+
+Status: implementation completed locally; targeted tests passed; DeepSeek review passed; ready to merge.
+
+Round 39 scope:
+
+- Added `shortpick_strategy_retirement` to the runtime artifact folder map as `shortpick_strategy_retirements`.
+- Added `write_shortpick_strategy_retirement_artifact_record(...)` and `read_shortpick_strategy_retirement_artifacts(...)` so runtime code can discover ready/recorded retirement artifacts from the configured artifact root without scanning arbitrary output paths.
+- The reader ignores blocked, malformed, non-object, incomplete, or duplicate-`artifact_id` artifacts and reports `artifact_count`, `ignored_count`, and source directories for diagnostics.
+- Wired `/shortpick-lab/paper-tracking` governance partition and replay-feedback governance projection to pass runtime retirement artifacts into `build_shortpick_strategy_status_recommendations(...)`.
+- Passed the same artifact source into archive-record generation so retired rows retain their retirement artifact refs and summary counts.
+
+Verification evidence:
+
+- `python3 -m pytest tests/test_research_artifact_store.py tests/test_shortpick_replay_api_projection.py tests/test_shortpick_lab_paper_tracking.py` passed for the default fast subset (`14 passed, 7 deselected`).
+- `python3 -m pytest -m runtime_integration tests/test_shortpick_lab_paper_tracking.py::ShortpickLabPaperTrackingTests::test_paper_tracking_reads_retirement_artifact_source_for_governance_partition` passed.
+- `python3 -m ruff check src/ashare_evidence/artifact_store_core.py src/ashare_evidence/research_artifact_store.py src/ashare_evidence/api.py tests/test_research_artifact_store.py tests/test_shortpick_replay_api_projection.py tests/test_shortpick_lab_paper_tracking.py` passed.
+- `python3 -m compileall -q src/ashare_evidence/artifact_store_core.py src/ashare_evidence/research_artifact_store.py src/ashare_evidence/api.py tests/test_research_artifact_store.py tests/test_shortpick_replay_api_projection.py tests/test_shortpick_lab_paper_tracking.py` passed.
+- `git diff --check` passed.
+- DeepSeek sharded review returned `PASS/MERGE`; it confirmed reader filtering, API source propagation, and plan scope honesty. The first shard noted a non-blocking duplicate-artifact count risk when runtime and legacy roots both contain the same `artifact_id`; the follow-up fix added `artifact_id` de-duplication and a ready+blocked+duplicate regression test.
+- Focused DeepSeek re-review of the de-duplication fix returned `PASS/MERGE`, confirming duplicates enter `ignored` and do not inflate `artifact_count` or the returned `artifacts` list.
+
+Remaining blockers after Round 39:
+
+- Active shortpick generation still does not call `filter_shortpick_generation_eligible_items(...)` with the runtime retirement artifact source, so this round affects runtime governance display/partitioning but not future generation exclusion.
+- Physical deletion of retired strategies remains intentionally blocked until archive/statistics retention and generation exclusion are both verified end to end.
+
 ## Validation To Run For This Planning Task
 
 
@@ -1273,9 +1300,9 @@ Remaining blockers after Round 38:
 | Round 4 DeepSeek review | completed |
 | P2.2 evidence-pack builder | completed |
 | Round 5 DeepSeek review | completed |
-| P2.3 status recommendation layer + retirement artifact writer | completed_artifact_writer_pending_runtime_source |
+| P2.3 status recommendation layer + retirement artifact writer + runtime artifact source | completed_runtime_artifact_source_wired_ds_reviewed |
 | Round 6 DeepSeek review | completed |
-| P2.4 generation filter helper | completed_partial_artifact_source_runtime_wiring_pending |
+| P2.4 generation filter helper | completed_partial_retirement_source_wired_generation_path_pending |
 | Round 7 DeepSeek review | completed |
 | P2.5 view projection helper | completed_partial_frontend_wiring_pending |
 | Round 8 DeepSeek review | completed |
