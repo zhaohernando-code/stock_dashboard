@@ -220,13 +220,14 @@ def test_shortpick_replay_readout_reads_strategy_governance_contract_fields_not_
     assert governance["status"] == "ready"
     assert governance["source_policy"] == "read_governance_projection_not_role_names"
     assert governance["may_infer_status_from_role_name"] is False
-    assert governance["primary_count"] == 1
-    assert governance["archive_count"] == 1
+    assert governance["primary_count"] == 0
+    assert governance["archive_count"] == 2
     assert governance["status_counts"] == {"retire_candidate": 1, "retired": 1}
     assert [section["evidence_basis"] for section in governance["sections"]] == [
         "true_forward_tracking",
         "retrospective_forward_replay",
     ]
+    assert [section["archive_count"] for section in governance["sections"]] == [1, 1]
     assert governance["archive_summary_rows"][0]["summary_key"] == "true_forward_tracking__low_turnover__next_close"
     assert governance["leakage_coverage_rows"] == [
         {
