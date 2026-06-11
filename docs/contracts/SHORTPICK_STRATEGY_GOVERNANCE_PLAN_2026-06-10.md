@@ -1918,6 +1918,7 @@ Implemented in Round 56:
 - Added `shortpick_control_inventory_archive_items_from_artifacts(...)` so inventory artifact rows feed the existing diagnostic-value archival gates without duplicating decision logic.
 - Wired inventory archive artifacts into `/shortpick-lab/paper-tracking` and active market-factor generation governance.
 - Added frontend type fields and a visible paper-tracking metric for inventory archive decisions and artifact count.
+- Added `inventory_archive_decision_count` to the paper-tracking governance summary so the UI can show a durable archival decision even when the current paper-tracking ledger has no matching historical row for that archived control.
 
 Verification in Round 56 before DeepSeek review:
 
@@ -1926,6 +1927,8 @@ Verification in Round 56 before DeepSeek review:
 - `python3 -m compileall -q src/ashare_evidence` passed.
 - `npm run build` in `frontend/` passed.
 - DeepSeek flash diff review returned `PASS/MERGE`. Nonblocking observation: generation filtering and the source summary expose slightly different ready-artifact lists; this is harmless because filtering still uses only generation-authoritative `retire_candidate|retired` statuses, while the summary reports source visibility.
+- Follow-up visible-count patch passed `pytest -q tests/test_shortpick_lab_paper_tracking.py::ShortpickLabPaperTrackingTests::test_paper_tracking_reads_inventory_archive_artifact_source_for_deprecated_bucket tests/test_frontend_shortpick_static.py`, `ruff check src/ashare_evidence/api.py tests/test_shortpick_lab_paper_tracking.py tests/test_frontend_shortpick_static.py`, and `git diff --check`.
+- DeepSeek flash review of the visible-count patch returned `PASS/MERGE`.
 
 Acceptance criteria for Round 56:
 

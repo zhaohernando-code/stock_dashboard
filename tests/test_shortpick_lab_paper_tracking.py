@@ -629,6 +629,7 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
 
         self.assertEqual(governance["inventory_archive_artifact_source"]["artifact_count"], 1)
         self.assertEqual(governance["inventory_archive_artifact_source"]["decision_count"], 1)
+        self.assertEqual(governance["inventory_archive_decision_count"], 1)
         self.assertEqual(governance["inventory_archived_count"], 1)
         self.assertEqual(governance["inventory_archived_strategy_ids"], [strategy_id])
         self.assertEqual(governance["deprecated_count"], 1)

@@ -1218,7 +1218,7 @@ function PaperTrackingTab({
           <Col xs={24} md={6}>
             <div className="shortpick-metric">
               <span>库存归档决策</span>
-              <strong>{Number(governance.inventory_archived_count ?? 0)}</strong>
+              <strong>{Number(governance.inventory_archive_decision_count ?? governance.inventory_archived_count ?? 0)}</strong>
               <Text type="secondary">
                 artifact {Number((governance.inventory_archive_artifact_source as Record<string, unknown> | null | undefined)?.artifact_count ?? 0)}
               </Text>

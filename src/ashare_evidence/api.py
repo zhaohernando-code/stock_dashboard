@@ -1398,6 +1398,7 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
             "inventory_archive_artifact_source": _shortpick_inventory_archive_artifact_source_summary(
                 inventory_archive_artifacts
             ),
+            "inventory_archive_decision_count": inventory_archive_decisions["archived_count"],
             "inventory_archived_count": governance_partition["inventory_archived_count"],
             "inventory_archived_strategy_ids": inventory_archive_decisions["archived_strategy_ids"],
             "inventory_archive_blocked_count": inventory_archive_decisions["blocked_count"],

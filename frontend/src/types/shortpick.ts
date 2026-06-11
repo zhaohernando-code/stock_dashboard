@@ -511,6 +511,7 @@ export interface ShortpickPaperTrackingGovernanceSummary {
   deprecated_strategy_ids?: string[];
   inventory_archive_policy?: string | null;
   inventory_archive_artifact_source?: Record<string, unknown> | null;
+  inventory_archive_decision_count?: number | null;
   inventory_archived_count?: number | null;
   inventory_archived_strategy_ids?: string[];
   inventory_archive_blocked_count?: number | null;

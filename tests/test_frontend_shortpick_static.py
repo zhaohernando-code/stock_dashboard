@@ -53,6 +53,7 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("inventory_archived", component_source)
         self.assertIn("库存归档", component_source)
         self.assertIn("inventory_archive_artifact_source", component_source)
+        self.assertIn("inventory_archive_decision_count", component_source)
         self.assertIn('defaultSortOrder: "descend"', component_source)
         self.assertIn('sortDirections: ["descend", "ascend"]', component_source)
         self.assertIn("记录分组", component_source)
