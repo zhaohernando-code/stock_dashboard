@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round31_redundant_control_inventory_archive_path_ds_reviewed_pending_merge_publish
+Status: round31_redundant_control_inventory_archive_path_published_runtime_verified
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -966,7 +966,7 @@ Merge and publish evidence:
 
 ## Round 31 Review Result
 
-Status: implementation completed; DeepSeek review passed; merge and runtime publish pending.
+Status: implementation completed; DeepSeek review passed; merged, pushed, and runtime published.
 
 Round 31 scope:
 
@@ -990,6 +990,15 @@ Verification evidence before merge:
 - `python3 -m compileall -q src/ashare_evidence/shortpick_strategy_governance.py src/ashare_evidence/api.py` passed.
 - `git diff --check` passed.
 - `npm --prefix frontend run build -- --mode production` passed with the existing Vite chunk-size warning only.
+
+Merge and publish evidence:
+
+- Commit `97e5144` (`Add shortpick inventory archive governance path`) was merged into main by `0c4a245`.
+- `git push origin main` completed; the pre-push hook passed stock_dashboard fast regression (`737 passed, 161 deselected, 6 subtests passed`) and policy governance audit.
+- Runtime publish completed from release source `0c4a245ba019eb2bdf8ec4823f911783714fb2d5` with `ASHARE_PUBLISH_REFRESH_MODE=skip` and `ASHARE_PUBLISH_MAX_WAIT_SECONDS=180`.
+- Deploy verifier passed (`19 passed, 0 failed`), runtime frontend matched the repo build, backend health passed at `http://127.0.0.1:8000/health`, and frontend health passed at `http://127.0.0.1:5173/`.
+- Runtime API check confirmed `strategy_governance.inventory_archive_policy=inventory_diagnostic_value_archive_separate_from_performance_retirement`, `deprecated_status_set` includes `inventory_archived`, and current real-data inventory archive count remains `0`.
+- Playwright CLI loaded the published frontend at `http://127.0.0.1:5173/?view=shortpick&shortpickTab=paper-tracking&symbol=002028.SZ`; the Short Pick Lab paper-tracking page rendered successfully.
 
 ## Validation To Run For This Planning Task
 
@@ -1070,7 +1079,7 @@ Verification evidence before merge:
 | P2.8 redundant/meaningless control archival | completed_partial_inventory_decision_source_pending |
 | P3.7 labeled combined-ledger retrospective backfill | not_started |
 | P3.8 new credible control/comparison line build-out | not_started |
-| Runtime behavior changed | round30_frontend_user_visible_change_published_verified_round31_ds_reviewed_pending_merge_publish |
+| Runtime behavior changed | round31_inventory_archive_governance_path_published_runtime_verified |
 | Registry changed | completed |
 | Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
 | Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_governance_projection_rendering_round30_deprecated_bucket_filtering_and_round31_inventory_archived_fallback |
