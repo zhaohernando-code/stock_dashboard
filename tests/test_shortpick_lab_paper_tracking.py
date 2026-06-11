@@ -1,6 +1,10 @@
 # ruff: noqa: F403,F405
 from __future__ import annotations
 
+from ashare_evidence.research_artifact_store import (
+    artifact_root_from_database_url,
+    write_shortpick_strategy_retirement_artifact_record,
+)
 from tests.shortpick_lab_test_support import *
 
 
@@ -462,3 +466,77 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
             self.assertIn("governance_status", item)
             self.assertIn("governance_strategy_id", item)
             self.assertEqual(item["governance_view_section"], "primary")
+
+    def test_paper_tracking_reads_retirement_artifact_source_for_governance_partition(self) -> None:
+        now = datetime(2026, 5, 14, 12, 0, tzinfo=UTC)
+        with session_scope(self.database_url) as session:
+            run = ShortpickExperimentRun(
+                run_key="shortpick:2026-05-14:test-retirement-artifact-source",
+                run_date=date(2026, 5, 14),
+                prompt_version="test",
+                information_mode=SHORTPICK_INFORMATION_MODE,
+                status="completed",
+                trigger_source="scheduled_cli",
+                triggered_by="scheduled_cli",
+                started_at=now,
+                completed_at=now,
+                model_config={},
+                summary_payload={"market_factor_overlay": {"frozen_paper_strategy": {"inserted": True, "gate_pass": True}}},
+            )
+            session.add(run)
+            session.flush()
+            candidate = ShortpickCandidate(
+                run_id=run.id,
+                candidate_key="shortpick-market-factor:retired-source:frozen_paper_primary:1",
+                symbol="600183.SH",
+                name="生益科技",
+                normalized_theme="低换手上升趋势",
+                horizon_trading_days=10,
+                confidence=1.0,
+                thesis="用于验证退休 artifact source 接入。",
+                catalysts=[],
+                invalidation=[],
+                risks=[],
+                sources_payload=[],
+                novelty_note=None,
+                limitations=[],
+                convergence_group="market_factor",
+                research_priority="market_factor_frozen_paper",
+                parse_status="parsed",
+                is_system_external=False,
+                candidate_payload={
+                    "tracking_role": "frozen_paper_primary",
+                    "market_factor_overlay": {
+                        "family": "low_turnover_20d_uptrend_liquid_top120",
+                        "source_rank": 1,
+                        "entry_price_source": "next_close",
+                    },
+                },
+            )
+            session.add(candidate)
+
+        artifact_root = artifact_root_from_database_url(self.database_url)
+        write_shortpick_strategy_retirement_artifact_record(
+            {
+                "artifact_id": "shortpick-retirement:paper-tracking-fixture",
+                "status": "ready",
+                "artifact_family": "shortpick_strategy_retirement",
+                "schema_version": "v1",
+                "strategy_id": "frozen_strategy__frozen_paper_primary__low_turnover_20d_uptrend_liquid_top120__next_close__1",
+                "decision_log_ref": "DECISIONS.md#paper-tracking-fixture",
+            },
+            root=artifact_root,
+        )
+
+        client = TestClient(create_app(self.database_url, enable_background_ops_tick=False))
+        payload = client.get("/shortpick-lab/paper-tracking").json()
+        governance = payload["strategy_governance"]
+
+        self.assertEqual(governance["retirement_artifact_source"]["artifact_count"], 1)
+        self.assertEqual(governance["deprecated_count"], 1)
+        self.assertEqual(
+            governance["deprecated_strategy_ids"],
+            ["frozen_strategy__frozen_paper_primary__low_turnover_20d_uptrend_liquid_top120__next_close__1"],
+        )
+        self.assertEqual(payload["items"][0]["governance_status"], "retired")
+        self.assertEqual(payload["items"][0]["governance_view_section"], "deprecated")

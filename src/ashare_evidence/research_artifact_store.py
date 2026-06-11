@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from ashare_evidence import artifact_store_core as _core
 from ashare_evidence import autonomous_flow_artifact_store as _autonomous_flow_store
@@ -108,6 +109,87 @@ def read_shortpick_lab_artifact_if_exists(
     if not target.exists():
         return None
     return json.loads(target.read_text(encoding="utf-8"))
+
+
+def write_shortpick_strategy_retirement_artifact_record(
+    payload: dict[str, Any],
+    *,
+    root: Path | None = None,
+) -> Path:
+    artifact_id = str(payload.get("artifact_id") or "").strip()
+    if not artifact_id:
+        raise ValueError("shortpick strategy retirement artifact requires artifact_id")
+    target = artifact_path("shortpick_strategy_retirement", artifact_id, root=root)
+    _ensure_artifact_write_allowed(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    return target
+
+
+def read_shortpick_strategy_retirement_artifacts(
+    *,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    artifacts: list[dict[str, Any]] = []
+    ignored: list[dict[str, str]] = []
+    seen_artifact_ids: set[str] = set()
+    source_dirs = _shortpick_strategy_retirement_artifact_dirs(root=root)
+    for directory in source_dirs:
+        if not directory.exists():
+            continue
+        for target in sorted(directory.glob("*.json")):
+            try:
+                payload = json.loads(target.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                ignored.append({"path": str(target), "reason": f"unreadable_json:{type(exc).__name__}"})
+                continue
+            if not isinstance(payload, dict):
+                ignored.append({"path": str(target), "reason": "payload_not_object"})
+                continue
+            if _is_ready_shortpick_strategy_retirement_artifact(payload):
+                artifact_id = str(payload.get("artifact_id") or "")
+                if artifact_id in seen_artifact_ids:
+                    ignored.append({"path": str(target), "reason": "duplicate_artifact_id"})
+                    continue
+                seen_artifact_ids.add(artifact_id)
+                artifacts.append(dict(payload))
+            else:
+                ignored.append({"path": str(target), "reason": "not_ready_strategy_retirement_artifact"})
+    return {
+        "status": "ready",
+        "source": "shortpick_strategy_retirement_artifact_store",
+        "source_dirs": [str(path) for path in source_dirs],
+        "artifact_count": len(artifacts),
+        "ignored_count": len(ignored),
+        "ignored": ignored,
+        "artifacts": artifacts,
+    }
+
+
+def _shortpick_strategy_retirement_artifact_dirs(*, root: Path | None = None) -> tuple[Path, ...]:
+    if root is not None:
+        return (artifact_path("shortpick_strategy_retirement", "__index__", root=root).parent,)
+    return tuple(
+        dict.fromkeys(
+            path.parent
+            for path in _core._read_paths(
+                "shortpick_strategy_retirement",
+                "__index__",
+                default_artifact_root=DEFAULT_ARTIFACT_ROOT,
+                project_root=PROJECT_ROOT,
+            )
+        )
+    )
+
+
+def _is_ready_shortpick_strategy_retirement_artifact(payload: dict[str, Any]) -> bool:
+    return bool(
+        payload.get("status") in {"ready", "recorded"}
+        and payload.get("artifact_family") in {"strategy_retirement:v1", "shortpick_strategy_retirement"}
+        and payload.get("artifact_id")
+        and payload.get("strategy_id")
+        and payload.get("decision_log_ref")
+    )
 
 
 def write_manifest(manifest: ResearchArtifactManifestView, *, root: Path | None = None) -> Path:
