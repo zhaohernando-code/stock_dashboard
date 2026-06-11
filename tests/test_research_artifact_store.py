@@ -18,6 +18,7 @@ from ashare_evidence.research_artifact_store import (
     read_phase5_horizon_study_artifact,
     read_phase5_producer_contract_study_artifact,
     read_replay_alignment_artifact,
+    read_shortpick_combined_ledger_backfill_artifacts,
     read_shortpick_strategy_retirement_artifacts,
     read_validation_metrics,
     resolve_backtest_artifact,
@@ -28,6 +29,7 @@ from ashare_evidence.research_artifact_store import (
     write_phase5_horizon_study_artifact,
     write_phase5_producer_contract_study_artifact,
     write_replay_alignment_artifact,
+    write_shortpick_combined_ledger_backfill_artifact_record,
     write_shortpick_lab_artifact,
     write_shortpick_strategy_retirement_artifact_record,
     write_validation_metrics,
@@ -120,6 +122,77 @@ class ResearchArtifactStoreTests(unittest.TestCase):
             self.assertEqual(source["artifact_count"], 1)
             self.assertEqual(source["ignored_count"], 2)
             self.assertEqual(source["artifacts"][0]["artifact_id"], "shortpick-retirement:fixture")
+
+    def test_shortpick_combined_ledger_source_reads_only_ready_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            ready = {
+                "artifact_id": "shortpick-combined-ledger-backfill:fixture",
+                "artifact_type": "shortpick_combined_ledger_backfill",
+                "status": "ready",
+                "ledger_mode": "combined_paper_tracking_ledger",
+                "headline_metric_filter_policy": "true_forward_queries_must_filter_evidence_basis_true_forward_tracking",
+                "combined_rows": [
+                    {
+                        "combined_ledger_row_id": "row-retro-1",
+                        "evidence_basis": "retrospective_forward_replay",
+                        "retrospective": True,
+                        "symbol": "600001.SH",
+                        "signal_date": "2026-05-10",
+                    }
+                ],
+            }
+            write_shortpick_combined_ledger_backfill_artifact_record(ready, root=root)
+            blocked = root / "shortpick_combined_ledgers" / "blocked.json"
+            blocked.write_text(
+                json.dumps(
+                    {
+                        "artifact_id": "blocked-fixture",
+                        "artifact_type": "shortpick_combined_ledger_backfill",
+                        "status": "blocked",
+                        "combined_rows": ready["combined_rows"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            duplicate = root / "shortpick_combined_ledgers" / "duplicate-ready.json"
+            duplicate.write_text(json.dumps(ready), encoding="utf-8")
+            missing_row_id = root / "shortpick_combined_ledgers" / "missing-row-id.json"
+            missing_row_id.write_text(
+                json.dumps({**ready, "artifact_id": "missing-row-id", "combined_rows": [{"evidence_basis": "retrospective_forward_replay"}]}),
+                encoding="utf-8",
+            )
+            missing_basis = root / "shortpick_combined_ledgers" / "missing-basis.json"
+            missing_basis.write_text(
+                json.dumps({**ready, "artifact_id": "missing-basis", "combined_rows": [{"combined_ledger_row_id": "row-missing-basis"}]}),
+                encoding="utf-8",
+            )
+            unknown_basis = root / "shortpick_combined_ledgers" / "unknown-basis.json"
+            unknown_basis.write_text(
+                json.dumps(
+                    {
+                        **ready,
+                        "artifact_id": "unknown-basis",
+                        "combined_rows": [
+                            {
+                                "combined_ledger_row_id": "row-unknown-basis",
+                                "evidence_basis": "historical_backtest",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            source = read_shortpick_combined_ledger_backfill_artifacts(root=root)
+
+            self.assertEqual(source["status"], "ready")
+            self.assertEqual(source["artifact_count"], 1)
+            self.assertEqual(source["ignored_count"], 5)
+            self.assertEqual(source["artifacts"][0]["artifact_id"], "shortpick-combined-ledger-backfill:fixture")
+            ignored_reasons = [item["reason"] for item in source["ignored"]]
+            self.assertEqual(ignored_reasons.count("duplicate_artifact_id"), 1)
+            self.assertEqual(ignored_reasons.count("not_ready_shortpick_combined_ledger_backfill_artifact"), 4)
 
     def test_resolve_backtest_artifact_falls_back_to_canonical_portfolio_key(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

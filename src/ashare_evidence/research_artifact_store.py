@@ -192,6 +192,97 @@ def _is_ready_shortpick_strategy_retirement_artifact(payload: dict[str, Any]) ->
     )
 
 
+def write_shortpick_combined_ledger_backfill_artifact_record(
+    payload: dict[str, Any],
+    *,
+    root: Path | None = None,
+) -> Path:
+    artifact_id = str(payload.get("artifact_id") or "").strip()
+    if not artifact_id:
+        raise ValueError("shortpick combined ledger backfill artifact requires artifact_id")
+    target = artifact_path("shortpick_combined_ledger_backfill", artifact_id, root=root)
+    _ensure_artifact_write_allowed(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    return target
+
+
+def read_shortpick_combined_ledger_backfill_artifacts(
+    *,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    artifacts: list[dict[str, Any]] = []
+    ignored: list[dict[str, str]] = []
+    seen_artifact_ids: set[str] = set()
+    source_dirs = _shortpick_combined_ledger_backfill_artifact_dirs(root=root)
+    for directory in source_dirs:
+        if not directory.exists():
+            continue
+        for target in sorted(directory.glob("*.json")):
+            try:
+                payload = json.loads(target.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                ignored.append({"path": str(target), "reason": f"unreadable_json:{type(exc).__name__}"})
+                continue
+            if not isinstance(payload, dict):
+                ignored.append({"path": str(target), "reason": "payload_not_object"})
+                continue
+            if _is_ready_shortpick_combined_ledger_backfill_artifact(payload):
+                artifact_id = str(payload.get("artifact_id") or "")
+                if artifact_id in seen_artifact_ids:
+                    ignored.append({"path": str(target), "reason": "duplicate_artifact_id"})
+                    continue
+                seen_artifact_ids.add(artifact_id)
+                artifacts.append(dict(payload))
+            else:
+                ignored.append({"path": str(target), "reason": "not_ready_shortpick_combined_ledger_backfill_artifact"})
+    return {
+        "status": "ready",
+        "source": "shortpick_combined_ledger_backfill_artifact_store",
+        "source_dirs": [str(path) for path in source_dirs],
+        "artifact_count": len(artifacts),
+        "ignored_count": len(ignored),
+        "ignored": ignored,
+        "artifacts": artifacts,
+    }
+
+
+def _shortpick_combined_ledger_backfill_artifact_dirs(*, root: Path | None = None) -> tuple[Path, ...]:
+    if root is not None:
+        return (artifact_path("shortpick_combined_ledger_backfill", "__index__", root=root).parent,)
+    return tuple(
+        dict.fromkeys(
+            path.parent
+            for path in _core._read_paths(
+                "shortpick_combined_ledger_backfill",
+                "__index__",
+                default_artifact_root=DEFAULT_ARTIFACT_ROOT,
+                project_root=PROJECT_ROOT,
+            )
+        )
+    )
+
+
+def _is_ready_shortpick_combined_ledger_backfill_artifact(payload: dict[str, Any]) -> bool:
+    combined_rows = payload.get("combined_rows")
+    if not isinstance(combined_rows, list) or not combined_rows:
+        return False
+    allowed_evidence_bases = {"true_forward_tracking", "retrospective_forward_replay"}
+    return bool(
+        payload.get("status") == "ready"
+        and payload.get("artifact_type") == "shortpick_combined_ledger_backfill"
+        and payload.get("artifact_id")
+        and payload.get("ledger_mode") == "combined_paper_tracking_ledger"
+        and payload.get("headline_metric_filter_policy") == "true_forward_queries_must_filter_evidence_basis_true_forward_tracking"
+        and all(
+            isinstance(row, dict)
+            and row.get("combined_ledger_row_id")
+            and row.get("evidence_basis") in allowed_evidence_bases
+            for row in combined_rows
+        )
+    )
+
+
 def write_manifest(manifest: ResearchArtifactManifestView, *, root: Path | None = None) -> Path:
     return _write_model(manifest, "rolling_validation", manifest.artifact_id, root=root)
 
