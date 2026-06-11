@@ -10,6 +10,7 @@ from ashare_evidence.shortpick_strategy_governance import (
     apply_shortpick_repeated_exposure_limit_control,
     apply_shortpick_same_symbol_cooldown_control,
     build_shortpick_combined_ledger_retrospective_backfill,
+    build_shortpick_credible_control_comparison_line_plan,
     build_shortpick_drawdown_reversal_filter_rule,
     build_shortpick_historical_backtest_generation_requests,
     build_shortpick_redundant_control_archive_decisions,
@@ -1736,6 +1737,126 @@ def test_combined_ledger_backfill_blocks_non_true_forward_basis_in_true_forward_
     assert result["true_forward_count"] == 0
     assert result["blocked_row_count"] == 1
     assert result["blocked_rows"][0]["blocker"] == "true_forward_input_row_has_non_true_forward_basis"
+
+
+def test_credible_control_comparison_line_plan_generates_three_registered_lines_with_backtest_gate() -> None:
+    paper_tracking = {
+        "items": [
+            {"candidate_id": "a", "symbol": "002028.SZ", "signal_date": "2026-05-26"},
+            {"candidate_id": "b", "symbol": "300750.SZ", "signal_date": "2026-05-27"},
+        ]
+    }
+
+    result = build_shortpick_credible_control_comparison_line_plan(
+        paper_tracking,
+        rule_defined_at="2026-06-11T09:00:00+08:00",
+        generated_at="2026-06-11T10:00:00+08:00",
+    )
+
+    assert result["status"] == "blocked"
+    assert result["comparison_line_policy"] == "historical_backtest_gate_before_retrospective_backfill"
+    assert result["paper_tracking_write_policy"] == "plan_only_no_backfill_rows_written"
+    assert result["runtime_dependency_status"] == "runner_and_writer_required_before_rows_exist"
+    assert result["line_count"] == 3
+    assert result["ready_line_count"] == 0
+    assert result["blocked_line_count"] == 3
+    assert result["baseline_ids"] == [
+        "evaluation_baseline_cooldown_control:v1",
+        "evaluation_baseline_random_pool:v1",
+    ]
+    assert result["historical_backtest_plan"]["request_count"] == 3
+    assert result["retrospective_replay_plan"]["request_count"] == 3
+    assert result["true_forward_activation_plan"]["activation_count"] == 3
+    assert result["historical_backtest_plan"]["requests"][0]["end_date"] == "2026-05-25"
+
+    control_ids = [line["control_group_id"] for line in result["lines"]]
+    assert control_ids == [
+        "control_same_symbol_cooldown:v1",
+        "control_drawdown_reversal_filter:v1",
+        "control_repeated_exposure_limit:v1",
+    ]
+    assert all(line["line_id"].startswith("shortpick-credible-control-line:") for line in result["lines"])
+    assert all(line["paper_tracking_backfill_policy"] == "blocked_until_historical_backtest_gate_passes" for line in result["lines"])
+    assert all(line["historical_backtest_gate"]["blockers"] == ["historical_backtest_evidence_missing"] for line in result["lines"])
+    assert all(line["retrospective_replay_request_id"] for line in result["lines"])
+    assert all(line["true_forward_activation_id"] for line in result["lines"])
+
+
+def test_credible_control_comparison_line_plan_allows_backfill_only_after_passed_historical_gate() -> None:
+    paper_tracking = {"items": [{"candidate_id": "a", "symbol": "002028.SZ", "signal_date": "2026-05-26"}]}
+    blocked = build_shortpick_credible_control_comparison_line_plan(
+        paper_tracking,
+        rule_defined_at="2026-06-11",
+    )
+    first_line = blocked["lines"][0]
+
+    passed = build_shortpick_credible_control_comparison_line_plan(
+        paper_tracking,
+        rule_defined_at="2026-06-11",
+        historical_backtest_evidence={
+            first_line["rule_signature"]: {
+                "status": "ready",
+                "evidence_basis": "historical_backtest",
+                "gate_status": "passed",
+                "leakage_audit_status": "passed",
+                "artifact_id": "hist-pass",
+            }
+        },
+    )
+
+    assert passed["status"] == "ready"
+    assert passed["ready_line_count"] == 1
+    by_control = {line["control_group_id"]: line for line in passed["lines"]}
+    ready_line = by_control[first_line["control_group_id"]]
+    assert ready_line["status"] == "ready_for_retrospective_backfill"
+    assert ready_line["historical_backtest_gate"]["gate_status"] == "passed"
+    assert ready_line["historical_backtest_gate"]["evidence_ref"]["artifact_id"] == "hist-pass"
+    assert ready_line["paper_tracking_backfill_policy"] == "allowed_after_historical_backtest_gate_passed"
+    assert ready_line["blockers"] == []
+
+    blocked_lines = [line for line in passed["lines"] if line["control_group_id"] != first_line["control_group_id"]]
+    assert [line["status"] for line in blocked_lines] == [
+        "blocked_pending_historical_backtest",
+        "blocked_pending_historical_backtest",
+    ]
+
+
+def test_credible_control_comparison_line_plan_rejects_unregistered_baseline_ids() -> None:
+    with pytest.raises(ValueError, match="unsupported shortpick evaluation baseline ids"):
+        build_shortpick_credible_control_comparison_line_plan(
+            {"items": [{"signal_date": "2026-05-26"}]},
+            rule_defined_at="2026-06-11",
+            baseline_ids=["unregistered_baseline:v1"],
+        )
+
+
+def test_credible_control_comparison_line_plan_requires_explicit_historical_evidence_basis() -> None:
+    blocked = build_shortpick_credible_control_comparison_line_plan(
+        {"items": [{"candidate_id": "a", "symbol": "002028.SZ", "signal_date": "2026-05-26"}]},
+        rule_defined_at="2026-06-11",
+    )
+    first_line = blocked["lines"][0]
+
+    result = build_shortpick_credible_control_comparison_line_plan(
+        {"items": [{"candidate_id": "a", "symbol": "002028.SZ", "signal_date": "2026-05-26"}]},
+        rule_defined_at="2026-06-11",
+        historical_backtest_evidence={
+            first_line["rule_signature"]: {
+                "status": "ready",
+                "gate_status": "passed",
+                "leakage_audit_status": "passed",
+            }
+        },
+    )
+
+    gated_line = result["lines"][0]
+    assert gated_line["status"] == "blocked_pending_historical_backtest"
+    assert "historical_backtest_evidence_basis_mismatch" in gated_line["historical_backtest_gate"]["blockers"]
+
+
+def test_credible_control_comparison_line_plan_requires_rule_defined_at() -> None:
+    with pytest.raises(ValueError, match="rule_defined_at must include a date"):
+        build_shortpick_credible_control_comparison_line_plan({"items": []}, rule_defined_at="")
 
 
 # --- Round 27 hardening: status-recommendation follow-ups (Round 6) ---

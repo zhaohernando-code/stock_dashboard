@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round32_combined_ledger_backfill_preparation_merged_pushed
+Status: round33_credible_control_line_buildout_ds_reviewed_pending_merge
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -909,7 +909,7 @@ New implementation requirement items (status `not_started`, scoped for later run
 | P2.7 | Deprecated/archived display bucket plus regression guard | completed_partial_generation_wiring_pending | Round 29 added the paper-tracking governance partition; Round 30 moves evidence-based `retire_candidate` and `retired` rows out of the paper-tracking primary frontend table and latest simulated trade surface into a collapsed deprecated/archive bucket. Continued-advancement/generation wiring remains pending under P2.4 / later runtime rounds. |
 | P2.8 | Redundant/meaningless control inventory archival | completed_partial_inventory_decision_source_pending | Round 31 added an inventory-driven archival decision helper, generation exclusion, paper-tracking deprecated-bucket partitioning, API summary fields, and frontend status fallback for `inventory_archived`. No real control is archived until a durable inventory decision source supplies explicit `inventory_diagnostic_value` decisions with allowed reason codes. |
 | P3.7 | Labeled combined-ledger retrospective backfill with true-forward pairing | completed_partial_runner_writer_pending | Round 32 added a combined-ledger backfill preparation helper that materializes already-produced retrospective replay rows with mandatory `evidence_basis=retrospective_forward_replay`, `retrospective=true`, `rule_defined_at`, leakage-audit fields, deterministic `pairing_key`, and headline-safe true-forward basis filtering. It intentionally does not write database rows until the replay runner and runtime ledger writer exist. |
-| P3.8 | New credible control/comparison line build-out | not_started | Turn the P3.1-P3.3 control rules and the P1.3/P1.4 evaluation baselines into actually generated comparison lines on current data, gated through historical backtest before any paper-tracking backfill, per Decision B labeling. |
+| P3.8 | New credible control/comparison line build-out | completed_partial_runner_writer_pending | Round 33 added a credible-control comparison-line build-out plan for the three registered P3 controls and the two registered P1 baselines. It generates control-line definitions, historical backtest request plans, retrospective replay requests, and true-forward activation plans from the current paper-tracking date context; retrospective backfill remains blocked unless explicit historical backtest evidence has `gate_status=passed` and `leakage_audit_status=passed`. No real backtest, replay, paper-ledger write, or frontend/runtime exposure is performed until runner and writer wiring exists. |
 
 These items remain blocked by the same precondition called out in earlier rounds: a real `strategy_retirement:v1` artifact writer, a backtest/replay runner, and runtime/frontend wiring must exist before any strategy is durably retired, hidden, or backfilled. Until then this amendment is contract-only.
 
@@ -1033,6 +1033,33 @@ Merge evidence:
 - `git push origin main` completed; the pre-push hook passed stock_dashboard fast regression (`743 passed, 161 deselected, 6 subtests passed`) and policy governance audit.
 - No runtime publish was required because Round 32 added read-only helper logic, tests, and planning documentation only; it did not change API routes, frontend runtime, database rows, LaunchAgents, or user-visible served behavior.
 
+## Round 33 Review Result
+
+Status: implementation completed; DeepSeek review passed; merge pending.
+
+Round 33 scope:
+
+- Added `build_shortpick_credible_control_comparison_line_plan(...)` for P3.8. It creates the three registered control-line definitions (`control_same_symbol_cooldown:v1`, `control_drawdown_reversal_filter:v1`, `control_repeated_exposure_limit:v1`) from deterministic P3.1-P3.3 rule builders.
+- The plan attaches the two registered P1 baseline IDs (`evaluation_baseline_random_pool:v1`, `evaluation_baseline_cooldown_control:v1`) and rejects unregistered baseline IDs.
+- The helper reuses P3.4/P3.5/P3.6 builders to produce historical backtest request plans, retrospective forward replay requests, and true-forward activation plans from the current paper-tracking observed date context.
+- The helper enforces the P3.8 gate: a line is `ready_for_retrospective_backfill` only when supplied historical backtest evidence explicitly has `status=ready|passed`, `evidence_basis=historical_backtest`, `gate_status=passed`, and `leakage_audit_status=passed`; otherwise paper-tracking backfill remains blocked.
+- The helper remains read-only: `paper_tracking_write_policy=plan_only_no_backfill_rows_written`, `runtime_dependency_status=runner_and_writer_required_before_rows_exist`.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge.
+- Key confirmations: the helper generates the three registered control lines, attaches the two registered baselines, delegates to the historical backtest / retrospective replay / true-forward activation request builders, and stays no-write/no-runtime-exposure through top-level and child plan policies.
+- DeepSeek noted one nonblocking strictness suggestion: require `evidence_basis=historical_backtest` explicitly instead of defaulting missing basis to historical. This was applied before merge.
+- DeepSeek rereview confirmed the strict basis check closes the suggestion and introduces no new blocker.
+
+Verification evidence before merge:
+
+- `PYTHONPATH=src python3 -m pytest tests/test_shortpick_strategy_governance.py` passed (`82 passed`).
+- `python3 -m ruff check src/ashare_evidence/shortpick_strategy_governance.py tests/test_shortpick_strategy_governance.py` passed.
+- `python3 -m compileall -q src/ashare_evidence/shortpick_strategy_governance.py tests/test_shortpick_strategy_governance.py` passed.
+- `git diff --check` passed.
+
 ## Validation To Run For This Planning Task
 
 
@@ -1111,10 +1138,10 @@ Merge evidence:
 | P2.7 deprecated display bucket + regression guard | completed_partial_generation_wiring_pending |
 | P2.8 redundant/meaningless control archival | completed_partial_inventory_decision_source_pending |
 | P3.7 labeled combined-ledger retrospective backfill | completed_partial_runner_writer_pending |
-| P3.8 new credible control/comparison line build-out | not_started |
+| P3.8 new credible control/comparison line build-out | completed_partial_runner_writer_pending |
 | Runtime behavior changed | round31_inventory_archive_governance_path_published_runtime_verified |
 | Registry changed | completed |
-| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_combined_ledger_backfill_preparation_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
+| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_combined_ledger_backfill_preparation_credible_control_line_buildout_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
 | Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_governance_projection_rendering_round30_deprecated_bucket_filtering_and_round31_inventory_archived_fallback |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |
