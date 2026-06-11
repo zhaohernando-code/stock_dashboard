@@ -60,6 +60,10 @@ SHORTPICK_EVIDENCE_BASIS_SECTION_ORDER = [
     "historical_backtest",
     "unknown",
 ]
+SHORTPICK_LEDGER_EVIDENCE_BASIS_VALUES = frozenset(
+    {"true_forward_tracking", "retrospective_forward_replay", "historical_backtest"}
+)
+SHORTPICK_LEAKAGE_AUDIT_STATUSES = frozenset({"passed", "failed", "blocked", "not_run"})
 
 
 def build_shortpick_strategy_retirement_evidence_packs(
@@ -1142,6 +1146,97 @@ def build_shortpick_true_forward_tracking_activation_plan(
     }
 
 
+def build_shortpick_combined_ledger_retrospective_backfill(
+    retrospective_rows: list[dict[str, Any]],
+    *,
+    true_forward_rows: list[dict[str, Any]] | None = None,
+    replay_request: dict[str, Any] | None = None,
+    generated_at: str | None = None,
+    source_artifact_ref: str | None = None,
+) -> dict[str, Any]:
+    """Prepare labeled retrospective rows for the combined paper-tracking ledger.
+
+    The helper materializes rows only. It does not write database records; a
+    runtime writer must persist the returned rows after the replay runner exists.
+    """
+
+    request = _dict(replay_request)
+    normalized_true_forward_rows: list[dict[str, Any]] = []
+    normalized_retrospective_rows: list[dict[str, Any]] = []
+    blocked_rows: list[dict[str, Any]] = []
+
+    for index, row in enumerate(true_forward_rows or []):
+        if not isinstance(row, dict):
+            blocked_rows.append({"row_index": index, "row_basis": "true_forward_tracking", "blocker": "row_not_object"})
+            continue
+        normalized = _combined_ledger_true_forward_row(row, generated_at=generated_at)
+        if normalized.get("blocker"):
+            blocked_rows.append({"row_index": index, **normalized})
+        else:
+            normalized_true_forward_rows.append(normalized)
+
+    for index, row in enumerate(retrospective_rows or []):
+        if not isinstance(row, dict):
+            blocked_rows.append(
+                {"row_index": index, "row_basis": "retrospective_forward_replay", "blocker": "row_not_object"}
+            )
+            continue
+        normalized = _combined_ledger_retrospective_row(
+            row,
+            request=request,
+            generated_at=generated_at,
+            source_artifact_ref=source_artifact_ref,
+        )
+        if normalized.get("blocker"):
+            blocked_rows.append({"row_index": index, **normalized})
+        else:
+            normalized_retrospective_rows.append(normalized)
+
+    combined_rows = [*normalized_true_forward_rows, *normalized_retrospective_rows]
+    return {
+        "status": "ready" if normalized_retrospective_rows else "blocked",
+        "ledger_mode": "combined_paper_tracking_ledger",
+        "evidence_basis_policy": "mandatory_non_null_basis_with_true_forward_default_filters",
+        "headline_metric_filter_policy": "true_forward_queries_must_filter_evidence_basis_true_forward_tracking",
+        "pairing_key_policy": "control_group_id__rule_signature__symbol__signal_date",
+        "write_policy": "prepared_rows_only_no_database_write_without_runtime_writer",
+        "generated_at": generated_at,
+        "source_artifact_ref": source_artifact_ref,
+        "true_forward_count": len(normalized_true_forward_rows),
+        "retrospective_count": len(normalized_retrospective_rows),
+        "combined_row_count": len(combined_rows),
+        "blocked_row_count": len(blocked_rows),
+        "true_forward_rows": normalized_true_forward_rows,
+        "retrospective_rows": normalized_retrospective_rows,
+        "combined_rows": combined_rows,
+        "blocked_rows": blocked_rows,
+    }
+
+
+def filter_shortpick_combined_ledger_rows_by_evidence_basis(
+    rows: list[dict[str, Any]],
+    *,
+    evidence_basis: str = "true_forward_tracking",
+) -> dict[str, Any]:
+    """Filter combined-ledger rows by evidence basis for headline-safe queries."""
+
+    if evidence_basis not in SHORTPICK_LEDGER_EVIDENCE_BASIS_VALUES:
+        raise ValueError(f"unsupported shortpick combined-ledger evidence_basis: {evidence_basis}")
+    source_rows = [_dict(row) for row in rows if isinstance(row, dict)]
+    selected = [row for row in source_rows if str(row.get("evidence_basis") or "") == evidence_basis]
+    excluded = [row for row in source_rows if str(row.get("evidence_basis") or "") != evidence_basis]
+    return {
+        "status": "ready",
+        "query_policy": "basis_filtered_combined_ledger_query",
+        "evidence_basis": evidence_basis,
+        "source_count": len(source_rows),
+        "selected_count": len(selected),
+        "excluded_count": len(excluded),
+        "rows": selected,
+        "excluded_basis_counts": dict(sorted(Counter(str(row.get("evidence_basis") or "missing") for row in excluded).items())),
+    }
+
+
 def _rule_signature(payload: dict[str, Any]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -1326,6 +1421,133 @@ def _retrospective_forward_replay_request_id(payload: dict[str, Any]) -> str:
 def _true_forward_tracking_activation_id(payload: dict[str, Any]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return "shortpick-true-forward-activation:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+
+
+def _combined_ledger_true_forward_row(row: dict[str, Any], *, generated_at: str | None) -> dict[str, Any]:
+    evidence_basis = str(row.get("evidence_basis") or "true_forward_tracking")
+    if evidence_basis != "true_forward_tracking":
+        return {
+            "row_basis": "true_forward_tracking",
+            "evidence_basis": evidence_basis,
+            "blocker": "true_forward_input_row_has_non_true_forward_basis",
+        }
+    normalized = {
+        **row,
+        "evidence_basis": "true_forward_tracking",
+        "retrospective": False,
+        "retroactive_backfill_allowed": False,
+        "true_forward_tracking_eligible": True,
+        "combined_ledger_section": "true_forward",
+    }
+    pairing_key = _combined_ledger_pairing_key(normalized)
+    if pairing_key:
+        normalized["pairing_key"] = pairing_key
+        normalized["pairing_key_basis"] = "control_group_id__rule_signature__symbol__signal_date"
+    normalized["combined_ledger_row_id"] = _combined_ledger_row_id("true-forward", normalized)
+    if generated_at and not normalized.get("combined_ledger_materialized_at"):
+        normalized["combined_ledger_materialized_at"] = generated_at
+    return normalized
+
+
+def _combined_ledger_retrospective_row(
+    row: dict[str, Any],
+    *,
+    request: dict[str, Any],
+    generated_at: str | None,
+    source_artifact_ref: str | None,
+) -> dict[str, Any]:
+    control_group_id = str(row.get("control_group_id") or request.get("control_group_id") or "")
+    rule_signature = str(row.get("rule_signature") or request.get("rule_signature") or "")
+    rule_defined_at = _date_part(row.get("rule_defined_at") or request.get("rule_defined_at"))
+    signal_date = _date_part(row.get("signal_date") or row.get("run_date"))
+    symbol = str(row.get("symbol") or "")
+    blocker_base = {
+        "row_basis": "retrospective_forward_replay",
+        "control_group_id": control_group_id,
+        "rule_signature": rule_signature,
+        "rule_defined_at": rule_defined_at,
+        "signal_date": signal_date,
+        "symbol": symbol,
+    }
+
+    missing = [
+        field
+        for field, value in (
+            ("control_group_id", control_group_id),
+            ("rule_signature", rule_signature),
+            ("rule_defined_at", rule_defined_at),
+            ("signal_date", signal_date),
+            ("symbol", symbol),
+        )
+        if not value
+    ]
+    if missing:
+        return {**blocker_base, "missing_fields": missing, "blocker": "missing_required_combined_ledger_identity"}
+    if signal_date >= rule_defined_at:
+        return {**blocker_base, "blocker": "retrospective_signal_date_not_before_rule_defined_at"}
+
+    leakage_status = str(row.get("leakage_audit_status") or request.get("leakage_audit_status") or "not_run")
+    if leakage_status not in SHORTPICK_LEAKAGE_AUDIT_STATUSES:
+        return {
+            **blocker_base,
+            "leakage_audit_status": leakage_status,
+            "blocker": "unsupported_leakage_audit_status",
+        }
+
+    normalized = {
+        **row,
+        "control_group_id": control_group_id,
+        "rule_signature": rule_signature,
+        "rule_defined_at": rule_defined_at,
+        "signal_date": signal_date,
+        "symbol": symbol,
+        "evidence_basis": "retrospective_forward_replay",
+        "retrospective": True,
+        "true_forward_tracking_eligible": False,
+        "retroactive_backfill_allowed": True,
+        "source_feature_cutoff_policy": str(
+            row.get("source_feature_cutoff_policy")
+            or request.get("source_feature_cutoff_policy")
+            or "signal_date_available_inputs_only"
+        ),
+        "leakage_audit_status": leakage_status,
+        "leakage_audit_reasons": list(row.get("leakage_audit_reasons") or request.get("leakage_audit_reasons") or []),
+        "combined_ledger_section": "retrospective",
+        "headline_metric_eligible": False,
+        "paper_tracking_write_policy": "combined_ledger_backfill_only_with_evidence_basis",
+    }
+    pairing_key = _combined_ledger_pairing_key(normalized)
+    normalized["pairing_key"] = pairing_key
+    normalized["pairing_key_basis"] = "control_group_id__rule_signature__symbol__signal_date"
+    normalized["combined_ledger_row_id"] = _combined_ledger_row_id("retrospective", normalized)
+    if generated_at:
+        normalized["combined_ledger_materialized_at"] = generated_at
+    if source_artifact_ref:
+        normalized["source_artifact_ref"] = source_artifact_ref
+    return normalized
+
+
+def _combined_ledger_pairing_key(row: dict[str, Any]) -> str:
+    values = [
+        str(row.get("control_group_id") or ""),
+        str(row.get("rule_signature") or ""),
+        str(row.get("symbol") or ""),
+        _date_part(row.get("signal_date") or row.get("run_date")),
+    ]
+    return "|".join(values) if all(values) else ""
+
+
+def _combined_ledger_row_id(prefix: str, row: dict[str, Any]) -> str:
+    payload = {
+        "prefix": prefix,
+        "pairing_key": row.get("pairing_key") or _combined_ledger_pairing_key(row),
+        "evidence_basis": row.get("evidence_basis"),
+        "entry_price_source": row.get("entry_price_source"),
+        "tracking_group": row.get("tracking_group"),
+        "tracking_role": row.get("tracking_role"),
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return f"shortpick-combined-ledger-{prefix}:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
 
 
 def _strategy_status_display(value: Any) -> dict[str, str]:
