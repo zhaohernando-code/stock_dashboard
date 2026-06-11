@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round47_historical_evidence_aggregate_compat_ds_reviewed_ready_to_merge
+Status: round48_runtime_historical_gate_attempt_ds_reviewed_ready_to_merge
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -909,7 +909,7 @@ New implementation requirement items (status `not_started`, scoped for later run
 | P2.7 | Deprecated/archived display bucket plus regression guard | completed_partial_generation_wiring_pending | Round 29 added the paper-tracking governance partition; Round 30 moves evidence-based `retire_candidate` and `retired` rows out of the paper-tracking primary frontend table and latest simulated trade surface into a collapsed deprecated/archive bucket. Continued-advancement/generation wiring remains pending under P2.4 / later runtime rounds. |
 | P2.8 | Redundant/meaningless control inventory archival | completed_partial_inventory_decision_source_pending | Round 31 added an inventory-driven archival decision helper, generation exclusion, paper-tracking deprecated-bucket partitioning, API summary fields, and frontend status fallback for `inventory_archived`. No real control is archived until a durable inventory decision source supplies explicit `inventory_diagnostic_value` decisions with allowed reason codes. |
 | P3.7 | Labeled combined-ledger retrospective backfill with true-forward pairing | completed_discovery_materializer_pending_governance_replay_artifacts | Round 32 added a combined-ledger backfill preparation helper that materializes already-produced retrospective replay rows with mandatory `evidence_basis=retrospective_forward_replay`, `retrospective=true`, `rule_defined_at`, leakage-audit fields, deterministic `pairing_key`, and headline-safe true-forward basis filtering. Round 36 adds replay artifact rows that can feed this helper. Round 37 adds an artifact-only combined-ledger writer/CLI that persists labeled combined rows without writing the database. Round 41 wires runtime artifact-store discovery into `/shortpick-lab/paper-tracking` as a separate `combined_ledger` API block without merging retrospective rows into primary `items`; DeepSeek-reviewed hardening restricts combined-ledger artifact rows to `true_forward_tracking` or `retrospective_forward_replay`. Round 42 adds frontend types and a separate paper-tracking display block for `combined_ledger` rows with visible evidence-basis labels. Round 43 published and served-verified the frontend/API shape. Round 44 adds automatic discovery/materialization from ready governance replay artifacts; runtime currently has zero ready governance replay artifacts, so real combined rows remain pending. |
-| P3.8 | New credible control/comparison line build-out | completed_historical_evidence_roundtrip_pending_runtime_run_and_artifacts | Round 33 added a credible-control comparison-line build-out plan for the three registered P3 controls and the two registered P1 baselines. Round 34 added the historical-backtest runner and evidence artifact persistence path. Round 35 adds executable control-to-portfolio strategy mappings for the three registered P3 controls. Round 45 adds a CLI to generate the credible-control comparison request plan from paper-tracking JSON without executing jobs or writing rows. Round 46 lets the existing historical-backtest and retrospective-replay execution CLIs consume the Round 45 nested credible-control plan shape directly. Round 47 lets the credible-control planner consume the historical-backtest runner aggregate output field `evidence` directly as gate input. Historical gate evidence runtime execution, replay artifact execution, paper-ledger write, and frontend/runtime exposure remain pending. |
+| P3.8 | New credible control/comparison line build-out | blocked_runtime_historical_gate_needs_sharded_execution | Round 33 added a credible-control comparison-line build-out plan for the three registered P3 controls and the two registered P1 baselines. Round 34 added the historical-backtest runner and evidence artifact persistence path. Round 35 adds executable control-to-portfolio strategy mappings for the three registered P3 controls. Round 45 adds a CLI to generate the credible-control comparison request plan from paper-tracking JSON without executing jobs or writing rows. Round 46 lets the existing historical-backtest and retrospective-replay execution CLIs consume the Round 45 nested credible-control plan shape directly. Round 47 lets the credible-control planner consume the historical-backtest runner aggregate output field `evidence` directly as gate input. Round 48 generated a current runtime credible-control plan, but the full three-request historical gate execution was interrupted after several minutes without writing an artifact; the next runtime attempt must use sharded or more observable execution. Replay artifact execution, paper-ledger write, and frontend/runtime exposure remain pending. |
 
 These items remain blocked by the remaining runtime preconditions called out in earlier rounds: runtime/frontend wiring must exist before backfilled comparison rows are displayed as normal dashboard evidence. Round 34 removed the generic historical-backtest runner/artifact gap; Round 35 removed the missing P3 historical control-mapping gap for the three registered controls; Round 36 removes the retrospective replay runner/artifact gap without writing runtime ledger rows. Round 37 adds combined-ledger artifact materialization, but not DB/API/frontend consumption. Round 38 adds the `strategy_retirement:v1` artifact writer and aligns its schema with the existing retired-status authority check. Round 39 wires retirement artifact discovery into API governance projections and paper-tracking partitioning. Round 40 wires the same runtime retirement artifact source into active shortpick market-factor generation exclusion. Round 41 starts combined-ledger runtime/API consumption by exposing a separate artifact-backed `combined_ledger` block from paper tracking while deliberately keeping `items` as true-forward paper-tracking rows only.
 
@@ -1545,6 +1545,42 @@ DeepSeek review result:
 - Confirmation: unrelated evidence is not accepted because list items still must match by `rule_signature` or `control_group_id`, then pass the unchanged gate.
 - Nonblocking note: if both `artifacts` and `evidence` exist, the existing first-match order now checks `artifacts` first and `evidence` second. Runtime runner aggregates use `evidence`, so this is not a blocker.
 
+## Round 48 Runtime Historical Gate Attempt
+
+Status: runtime attempt documented; DeepSeek doc-honesty review passed; ready to merge.
+
+Round 48 scope:
+
+- Used the current local runtime `/shortpick-lab/paper-tracking` API response as the source paper-tracking snapshot.
+- Generated a current credible-control plan with `shortpick-governance-credible-control-plan`.
+- Attempted to execute the generated nested `historical_backtest_plan.requests` through `shortpick-governance-historical-backtest`.
+- This round did not change repository code and did not write database or paper-tracking rows.
+
+Runtime artifacts:
+
+- Paper-tracking snapshot: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/analytics/20260611-credible-control-runtime/paper-tracking.json`.
+- Credible-control plan: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/analytics/20260611-credible-control-runtime/credible-control-plan.json`.
+- Planned historical gate output directory: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/shortpick-governance-backtests/20260611T1433-runtime-gate`.
+
+Runtime result:
+
+- The generated plan returned `status=blocked`, `line_count=3`, `ready_line_count=0`, `blocked_line_count=3`, `historical_requests=3`, `retrospective_requests=3`, and `activation_count=3`.
+- The historical gate batch process was still CPU-active after several minutes but had not written any evidence artifact or output file content. It was terminated to avoid leaving an opaque long-running batch process.
+- The transient zero-byte `historical-backtest-evidence.json` file from the interrupted shell redirection was removed. The planned historical output directory remains empty.
+
+Remaining blockers after Round 48:
+
+- Historical gate execution must be rerun in a sharded or more observable mode, preferably one control request at a time with per-request timing and artifact checks.
+- Until ready historical evidence exists, no credible-control line may unlock retrospective replay or combined-ledger materialization.
+- Ready retrospective replay artifacts still need runtime production before combined-ledger materialization can produce non-empty rows.
+
+DeepSeek review result:
+
+- DeepSeek read-only doc-honesty review returned `PASS`.
+- Confirmation: the document clearly distinguishes successful plan generation from incomplete historical evidence generation.
+- Confirmation: it does not claim the runtime historical gate passed; it records `status=blocked`, `ready_line_count=0`, and the empty output directory.
+- Confirmation: the next blocker, sharded or more observable per-request historical gate execution, is reasonable.
+
 ## Validation To Run For This Planning Task
 
 
@@ -1623,7 +1659,7 @@ DeepSeek review result:
 | P2.7 deprecated display bucket + regression guard | completed_generation_wiring_pending_runtime_data_verification |
 | P2.8 redundant/meaningless control archival | completed_partial_inventory_decision_source_pending |
 | P3.7 labeled combined-ledger retrospective backfill + artifact writer + API source projection + frontend display | completed_discovery_materializer_pending_governance_replay_artifacts |
-| P3.8 new credible control/comparison line build-out | completed_historical_evidence_roundtrip_pending_runtime_run_and_artifacts |
+| P3.8 new credible control/comparison line build-out | blocked_runtime_historical_gate_needs_sharded_execution |
 | Runtime behavior changed | round31_inventory_archive_governance_path_published_runtime_verified |
 | Registry changed | completed |
 | Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_combined_ledger_backfill_preparation_credible_control_line_buildout_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
