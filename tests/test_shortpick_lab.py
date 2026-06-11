@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ashare_evidence.research_artifact_store import (
     artifact_root_from_database_url,
+    write_shortpick_control_inventory_archive_artifact_record,
     write_shortpick_strategy_retirement_artifact_record,
 )
 from tests.shortpick_lab_test_support import *
@@ -467,6 +468,33 @@ class ShortpickLabTests(ShortpickLabTestCase):
             },
             root=artifact_root_from_database_url(self.database_url),
         )
+        write_shortpick_control_inventory_archive_artifact_record(
+            {
+                "artifact_id": "shortpick-control-inventory-archive:generation-fixture",
+                "artifact_type": "shortpick_control_inventory_archive",
+                "status": "ready",
+                "decision_basis": "inventory_diagnostic_value",
+                "decision_log_ref": "DECISIONS.md#generation-inventory-archive-fixture",
+                "archive_decisions": [
+                    {
+                        "strategy_id": (
+                            "market_factor_control"
+                            "__market_factor_control_legacy_second_candidate"
+                            "__momentum_10d_turnover_legacy_second_candidate"
+                            "__next_close"
+                            "__2"
+                        ),
+                        "tracking_group": "market_factor_control",
+                        "role": "market_factor_control_legacy_second_candidate",
+                        "family": "momentum_10d_turnover_legacy_second_candidate",
+                        "entry_price_source": "next_close",
+                        "source_rank": 2,
+                        "archive_reason_code": "dormant_legacy_control",
+                    }
+                ],
+            },
+            root=artifact_root_from_database_url(self.database_url),
+        )
 
         with patch("ashare_evidence.shortpick_lab._sync_shortpick_market_factor_universe", return_value={"status": "skipped"}):
             with patch("ashare_evidence.shortpick_lab._shortpick_market_factor_contexts", return_value=(contexts, {})):
@@ -476,16 +504,24 @@ class ShortpickLabTests(ShortpickLabTestCase):
                     overlay = insert_shortpick_market_factor_overlay_candidates(session, run)
                     rows = session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all()
 
-        self.assertEqual(overlay["generation_governance"]["excluded_count"], 1)
+        self.assertEqual(overlay["generation_governance"]["excluded_count"], 3)
         self.assertEqual(overlay["generation_governance"]["retirement_artifact_source"]["artifact_count"], 3)
+        self.assertEqual(overlay["generation_governance"]["inventory_archive_artifact_source"]["artifact_count"], 1)
+        self.assertEqual(overlay["generation_governance"]["inventory_archive_decision_count"], 1)
+        excluded_strategy_ids = {item["strategy_id"] for item in overlay["generation_governance"]["excluded_items"]}
         self.assertEqual(
-            overlay["generation_governance"]["excluded_items"][0]["strategy_id"],
-            "frozen_strategy__frozen_paper_primary__frozen_paper_low_turnover_uptrend_v4__next_close__1",
+            excluded_strategy_ids,
+            {
+                "frozen_strategy__frozen_paper_primary__frozen_paper_low_turnover_uptrend_v4__next_close__1",
+                "market_factor_control__market_factor_control_cooldown_top1__momentum_10d_turnover_cooldown_rank__next_close__1",
+                "market_factor_control__market_factor_control_legacy_second_candidate__momentum_10d_turnover_legacy_second_candidate__next_close__2",
+            },
         )
         tracking_roles = [item["tracking_role"] for item in overlay["candidates"]]
         self.assertNotIn("frozen_paper_primary", tracking_roles)
         self.assertIn(SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE, tracking_roles)
-        self.assertIn(SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE, tracking_roles)
+        self.assertNotIn(SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE, tracking_roles)
+        self.assertNotIn(SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE, tracking_roles)
         self.assertTrue(rows)
         self.assertNotIn("market_factor_frozen_paper", [row.research_priority for row in rows])
 

@@ -57,6 +57,7 @@ from ashare_evidence.models import (
 from ashare_evidence.recommendation_selection import recommendation_recency_ordering
 from ashare_evidence.research_artifact_store import (
     artifact_root_from_database_url,
+    read_shortpick_control_inventory_archive_artifacts,
     read_shortpick_strategy_retirement_artifacts,
     write_shortpick_lab_artifact,
 )
@@ -70,9 +71,11 @@ from ashare_evidence.shortpick_strategy_governance import (
     apply_shortpick_repeated_exposure_limit_control,
     apply_shortpick_same_symbol_cooldown_control,
     build_shortpick_drawdown_reversal_filter_rule,
+    build_shortpick_redundant_control_archive_decisions,
     build_shortpick_repeated_exposure_limit_rule,
     build_shortpick_same_symbol_cooldown_rule,
     filter_shortpick_generation_eligible_items,
+    shortpick_control_inventory_archive_items_from_artifacts,
 )
 from ashare_evidence.stock_master import DEFAULT_AKSHARE_TIMEOUT_SECONDS, akshare_runtime_ready, resolve_stock_profile
 
@@ -2812,25 +2815,36 @@ def _shortpick_generation_governance_filter(
     candidate_specs: list[dict[str, Any]],
 ) -> dict[str, Any]:
     retirement_artifacts = _read_shortpick_generation_retirement_artifacts(session)
+    inventory_archive_artifacts = _read_shortpick_generation_inventory_archive_artifacts(session)
     status_recommendations = {
         "status": "ready",
         "source": "shortpick_strategy_retirement_artifact_store",
-        "decision_policy": "retired_requires_strategy_retirement_artifact_and_decision_log_ref",
+        "decision_policy": "deprecated_generation_statuses_read_from_governance_artifacts",
         "strategy_count": len(retirement_artifacts.get("artifacts") or []),
         "recommendations": [
             {
                 "strategy_id": str(artifact.get("strategy_id") or ""),
-                "recommended_status": "retired",
+                "recommended_status": _shortpick_generation_retirement_artifact_status(artifact),
                 "retirement_artifact_ref": {
                     "artifact_id": artifact.get("artifact_id"),
                     "decision_log_ref": artifact.get("decision_log_ref"),
                 },
             }
             for artifact in retirement_artifacts.get("artifacts") or []
-            if isinstance(artifact, dict) and _shortpick_generation_retirement_artifact_is_retired_authority(artifact)
+            if isinstance(artifact, dict) and _shortpick_generation_retirement_artifact_is_generation_authority(artifact)
         ],
     }
-    result = filter_shortpick_generation_eligible_items(candidate_specs, status_recommendations)
+    inventory_archive_decisions = build_shortpick_redundant_control_archive_decisions(
+        [
+            *_shortpick_generation_contract_inventory_archive_items(),
+            *shortpick_control_inventory_archive_items_from_artifacts(inventory_archive_artifacts),
+        ]
+    )
+    result = filter_shortpick_generation_eligible_items(
+        candidate_specs,
+        status_recommendations,
+        inventory_archive_decision_result=inventory_archive_decisions,
+    )
     return {
         **result,
         "retirement_artifact_source": {
@@ -2846,20 +2860,51 @@ def _shortpick_generation_governance_filter(
                 }
             ),
         },
+        "inventory_archive_artifact_source": {
+            "status": inventory_archive_artifacts.get("status"),
+            "source": inventory_archive_artifacts.get("source"),
+            "artifact_count": inventory_archive_artifacts.get("artifact_count", 0),
+            "ignored_count": inventory_archive_artifacts.get("ignored_count", 0),
+            "decision_count": sum(
+                len(artifact.get("archive_decisions") or [])
+                for artifact in inventory_archive_artifacts.get("artifacts") or []
+                if isinstance(artifact, dict)
+            ),
+        },
+        "inventory_archive_decision_count": inventory_archive_decisions.get("archived_count", 0),
+        "inventory_archive_blocked_count": inventory_archive_decisions.get("blocked_count", 0),
     }
 
 
-def _shortpick_generation_retirement_artifact_is_retired_authority(artifact: dict[str, Any]) -> bool:
+def _shortpick_generation_retirement_artifact_status(artifact: dict[str, Any]) -> str:
     explicit_status = str(
         artifact.get("recommended_status")
         or artifact.get("strategy_recommended_status")
         or artifact.get("retirement_status")
         or ""
     ).strip()
+    return explicit_status or "retired"
+
+
+def _shortpick_generation_retirement_artifact_is_generation_authority(artifact: dict[str, Any]) -> bool:
+    explicit_status = _shortpick_generation_retirement_artifact_status(artifact)
     return bool(
         artifact.get("strategy_id")
         and artifact.get("decision_log_ref")
-        and (not explicit_status or explicit_status == "retired")
+        and explicit_status in {"retire_candidate", "retired"}
+    )
+
+
+def _read_shortpick_generation_inventory_archive_artifacts(session: Session) -> dict[str, Any]:
+    return read_shortpick_control_inventory_archive_artifacts(root=_artifact_root(session))
+
+
+def _shortpick_generation_contract_inventory_archive_items() -> list[dict[str, Any]]:
+    contract = shortpick_market_factor_paper_control_contracts()
+    return (
+        list(contract.get("inventory_archive_decisions"))
+        if isinstance(contract.get("inventory_archive_decisions"), list)
+        else []
     )
 
 

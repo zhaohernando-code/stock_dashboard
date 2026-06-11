@@ -4,6 +4,7 @@ from __future__ import annotations
 from ashare_evidence.research_artifact_store import (
     artifact_root_from_database_url,
     write_shortpick_combined_ledger_backfill_artifact_record,
+    write_shortpick_control_inventory_archive_artifact_record,
     write_shortpick_strategy_retirement_artifact_record,
 )
 from tests.shortpick_lab_test_support import *
@@ -541,6 +542,102 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
         )
         self.assertEqual(payload["items"][0]["governance_status"], "retired")
         self.assertEqual(payload["items"][0]["governance_view_section"], "deprecated")
+
+    def test_paper_tracking_reads_inventory_archive_artifact_source_for_deprecated_bucket(self) -> None:
+        now = datetime(2026, 5, 14, 12, 0, tzinfo=UTC)
+        strategy_id = (
+            "market_factor_control"
+            "__market_factor_control_legacy_second_candidate"
+            "__momentum_10d_turnover_legacy_second_candidate"
+            "__next_close"
+            "__2"
+        )
+        with session_scope(self.database_url) as session:
+            run = ShortpickExperimentRun(
+                run_key="shortpick:2026-05-14:test-inventory-archive-source",
+                run_date=date(2026, 5, 14),
+                prompt_version="test",
+                information_mode=SHORTPICK_INFORMATION_MODE,
+                status="completed",
+                trigger_source="scheduled_cli",
+                triggered_by="scheduled_cli",
+                started_at=now,
+                completed_at=now,
+                model_config={},
+                summary_payload={"market_factor_overlay": {"frozen_paper_strategy": {"inserted": True, "gate_pass": True}}},
+            )
+            session.add(run)
+            session.flush()
+            session.add(
+                ShortpickCandidate(
+                    run_id=run.id,
+                    candidate_key="shortpick-market-factor:inventory-source:legacy-second:2",
+                    symbol="600183.SH",
+                    name="生益科技",
+                    normalized_theme="旧主线第二候选",
+                    horizon_trading_days=10,
+                    confidence=1.0,
+                    thesis="用于验证 inventory archive artifact source 接入。",
+                    catalysts=[],
+                    invalidation=[],
+                    risks=[],
+                    sources_payload=[],
+                    novelty_note=None,
+                    limitations=[],
+                    convergence_group="market_factor",
+                    research_priority="market_factor_control",
+                    parse_status="parsed",
+                    is_system_external=False,
+                    candidate_payload={
+                        "tracking_role": "market_factor_control_legacy_second_candidate",
+                        "baseline_family": "momentum_10d_turnover_legacy_second_candidate",
+                        "market_factor_overlay": {
+                            "family": "momentum_10d_turnover_legacy_second_candidate",
+                            "source_rank": 2,
+                            "entry_price_source": "next_close",
+                        },
+                    },
+                )
+            )
+
+        artifact_root = artifact_root_from_database_url(self.database_url)
+        write_shortpick_control_inventory_archive_artifact_record(
+            {
+                "artifact_id": "shortpick-control-inventory-archive:paper-tracking-fixture",
+                "artifact_type": "shortpick_control_inventory_archive",
+                "status": "ready",
+                "decision_basis": "inventory_diagnostic_value",
+                "decision_log_ref": "DECISIONS.md#inventory-archive-fixture",
+                "archive_decisions": [
+                    {
+                        "strategy_id": strategy_id,
+                        "tracking_group": "market_factor_control",
+                        "role": "market_factor_control_legacy_second_candidate",
+                        "family": "momentum_10d_turnover_legacy_second_candidate",
+                        "entry_price_source": "next_close",
+                        "source_rank": 2,
+                        "archive_reason_code": "dormant_legacy_control",
+                    }
+                ],
+            },
+            root=artifact_root,
+        )
+
+        client = TestClient(create_app(self.database_url, enable_background_ops_tick=False))
+        payload = client.get("/shortpick-lab/paper-tracking").json()
+        governance = payload["strategy_governance"]
+
+        self.assertEqual(governance["inventory_archive_artifact_source"]["artifact_count"], 1)
+        self.assertEqual(governance["inventory_archive_artifact_source"]["decision_count"], 1)
+        self.assertEqual(governance["inventory_archived_count"], 1)
+        self.assertEqual(governance["inventory_archived_strategy_ids"], [strategy_id])
+        self.assertEqual(governance["deprecated_count"], 1)
+        self.assertEqual(payload["items"][0]["governance_status"], "inventory_archived")
+        self.assertEqual(payload["items"][0]["governance_view_section"], "deprecated")
+        self.assertEqual(
+            payload["items"][0]["inventory_archive_decision"]["source_inventory_archive_artifact_id"],
+            "shortpick-control-inventory-archive:paper-tracking-fixture",
+        )
 
     def test_paper_tracking_exposes_combined_ledger_artifact_without_polluting_items(self) -> None:
         artifact_root = artifact_root_from_database_url(self.database_url)

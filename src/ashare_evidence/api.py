@@ -66,6 +66,7 @@ from ashare_evidence.policy_config_loader import build_policy_governance_summary
 from ashare_evidence.research_artifact_store import (
     artifact_root_from_database_url,
     read_shortpick_combined_ledger_backfill_artifacts,
+    read_shortpick_control_inventory_archive_artifacts,
     read_shortpick_strategy_retirement_artifacts,
 )
 from ashare_evidence.runtime_config import (
@@ -159,6 +160,7 @@ from ashare_evidence.shortpick_strategy_governance import (
     filter_shortpick_combined_ledger_rows_by_evidence_basis,
     partition_paper_tracking_rows_by_governance,
     project_shortpick_strategy_view_sections,
+    shortpick_control_inventory_archive_items_from_artifacts,
 )
 from ashare_evidence.simulation import (
     end_simulation_session,
@@ -829,6 +831,10 @@ def _shortpick_combined_ledger_backfill_artifacts_for_session(session: Session) 
     return read_shortpick_combined_ledger_backfill_artifacts(root=_artifact_root_for_session(session))
 
 
+def _shortpick_control_inventory_archive_artifacts_for_session(session: Session) -> dict[str, object]:
+    return read_shortpick_control_inventory_archive_artifacts(root=_artifact_root_for_session(session))
+
+
 def _artifact_root_for_session(session: Session) -> Path:
     bind = session.get_bind()
     database_url = bind.url.render_as_string(hide_password=False) if bind is not None else None
@@ -851,6 +857,27 @@ def _shortpick_retirement_artifact_source_summary(source: dict[str, object] | No
         "artifact_count": int(source.get("artifact_count") or len(artifacts)),
         "ignored_count": int(source.get("ignored_count") or 0),
         "strategy_ids": sorted({str(item.get("strategy_id") or "") for item in artifacts if item.get("strategy_id")}),
+    }
+
+
+def _shortpick_inventory_archive_artifact_source_summary(source: dict[str, object] | None) -> dict[str, object]:
+    if not isinstance(source, dict):
+        return {
+            "status": "not_configured",
+            "source": "shortpick_control_inventory_archive_artifact_store",
+            "artifact_count": 0,
+            "ignored_count": 0,
+            "artifact_ids": [],
+            "decision_count": 0,
+        }
+    artifacts = [item for item in source.get("artifacts") or [] if isinstance(item, dict)]
+    return {
+        "status": str(source.get("status") or "unknown"),
+        "source": str(source.get("source") or "shortpick_control_inventory_archive_artifact_store"),
+        "artifact_count": int(source.get("artifact_count") or len(artifacts)),
+        "ignored_count": int(source.get("ignored_count") or 0),
+        "artifact_ids": sorted(str(item.get("artifact_id") or "") for item in artifacts if item.get("artifact_id")),
+        "decision_count": sum(len(item.get("archive_decisions") or []) for item in artifacts),
     }
 
 
@@ -1332,8 +1359,17 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
         build_shortpick_strategy_retirement_evidence_packs({"items": items}),
         retirement_artifacts=retirement_artifacts,
     )
+    inventory_archive_artifacts = _shortpick_control_inventory_archive_artifacts_for_session(session)
+    contract_inventory_archive_items = (
+        market_control_contract.get("inventory_archive_decisions")
+        if isinstance(market_control_contract.get("inventory_archive_decisions"), list)
+        else []
+    )
     inventory_archive_decisions = build_shortpick_redundant_control_archive_decisions(
-        market_control_contract.get("inventory_archive_decisions") if isinstance(market_control_contract.get("inventory_archive_decisions"), list) else []
+        [
+            *contract_inventory_archive_items,
+            *shortpick_control_inventory_archive_items_from_artifacts(inventory_archive_artifacts),
+        ]
     )
     governance_partition = partition_paper_tracking_rows_by_governance(
         {"items": items},
@@ -1359,6 +1395,9 @@ def _build_shortpick_paper_tracking_ledger(session: Session) -> dict[str, object
             "deprecated_strategy_ids": governance_partition["deprecated_strategy_ids"],
             "retirement_artifact_source": _shortpick_retirement_artifact_source_summary(retirement_artifacts),
             "inventory_archive_policy": inventory_archive_decisions["decision_policy"],
+            "inventory_archive_artifact_source": _shortpick_inventory_archive_artifact_source_summary(
+                inventory_archive_artifacts
+            ),
             "inventory_archived_count": governance_partition["inventory_archived_count"],
             "inventory_archived_strategy_ids": inventory_archive_decisions["archived_strategy_ids"],
             "inventory_archive_blocked_count": inventory_archive_decisions["blocked_count"],

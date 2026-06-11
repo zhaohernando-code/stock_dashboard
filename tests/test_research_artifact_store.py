@@ -19,6 +19,7 @@ from ashare_evidence.research_artifact_store import (
     read_phase5_producer_contract_study_artifact,
     read_replay_alignment_artifact,
     read_shortpick_combined_ledger_backfill_artifacts,
+    read_shortpick_control_inventory_archive_artifacts,
     read_shortpick_strategy_retirement_artifacts,
     read_validation_metrics,
     resolve_backtest_artifact,
@@ -30,6 +31,7 @@ from ashare_evidence.research_artifact_store import (
     write_phase5_producer_contract_study_artifact,
     write_replay_alignment_artifact,
     write_shortpick_combined_ledger_backfill_artifact_record,
+    write_shortpick_control_inventory_archive_artifact_record,
     write_shortpick_lab_artifact,
     write_shortpick_strategy_retirement_artifact_record,
     write_validation_metrics,
@@ -122,6 +124,51 @@ class ResearchArtifactStoreTests(unittest.TestCase):
             self.assertEqual(source["artifact_count"], 1)
             self.assertEqual(source["ignored_count"], 2)
             self.assertEqual(source["artifacts"][0]["artifact_id"], "shortpick-retirement:fixture")
+
+    def test_shortpick_control_inventory_archive_source_reads_only_ready_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            ready = {
+                "artifact_id": "shortpick-control-inventory-archive:fixture",
+                "artifact_type": "shortpick_control_inventory_archive",
+                "status": "ready",
+                "decision_basis": "inventory_diagnostic_value",
+                "decision_log_ref": "DECISIONS.md#inventory-fixture",
+                "archive_decisions": [
+                    {
+                        "strategy_id": "market_factor_control__legacy__family__next_close__2",
+                        "tracking_group": "market_factor_control",
+                        "role": "legacy",
+                        "family": "family",
+                        "entry_price_source": "next_close",
+                        "source_rank": 2,
+                        "archive_reason_code": "dormant_legacy_control",
+                    }
+                ],
+            }
+            write_shortpick_control_inventory_archive_artifact_record(ready, root=root)
+            blocked = root / "shortpick_control_inventory_archives" / "blocked.json"
+            blocked.write_text(
+                json.dumps(
+                    {
+                        "artifact_id": "blocked-fixture",
+                        "artifact_type": "shortpick_control_inventory_archive",
+                        "status": "blocked",
+                        "decision_basis": "inventory_diagnostic_value",
+                        "archive_decisions": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            duplicate = root / "shortpick_control_inventory_archives" / "duplicate-ready.json"
+            duplicate.write_text(json.dumps(ready), encoding="utf-8")
+
+            source = read_shortpick_control_inventory_archive_artifacts(root=root)
+
+            self.assertEqual(source["status"], "ready")
+            self.assertEqual(source["artifact_count"], 1)
+            self.assertEqual(source["ignored_count"], 2)
+            self.assertEqual(source["artifacts"][0]["artifact_id"], "shortpick-control-inventory-archive:fixture")
 
     def test_shortpick_combined_ledger_source_reads_only_ready_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

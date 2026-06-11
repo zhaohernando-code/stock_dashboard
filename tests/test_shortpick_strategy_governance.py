@@ -351,15 +351,18 @@ def test_generation_filter_excludes_only_retired_strategies() -> None:
         status_result,
     )
 
-    assert result["decision_policy"] == "exclude_retired_and_inventory_archived_from_active_generation"
+    assert result["decision_policy"] == "exclude_deprecated_statuses_from_active_generation"
     assert result["input_count"] == 4
-    assert result["eligible_count"] == 3
-    assert result["excluded_count"] == 1
-    assert [item["strategy_id"] for item in result["excluded_items"]] == [retired["strategy_id"]]
+    assert result["eligible_count"] == 2
+    assert result["excluded_count"] == 2
+    assert [item["strategy_id"] for item in result["excluded_items"]] == [
+        retired["strategy_id"],
+        candidate["strategy_id"],
+    ]
     eligible_statuses = {item["strategy_id"]: item["governance_status"] for item in result["eligible_items"]}
-    assert eligible_statuses[candidate["strategy_id"]] == "retire_candidate"
     assert eligible_statuses[observed["strategy_id"]] == "observe"
     assert eligible_statuses[untracked["strategy_id"]] == "untracked"
+    assert result["excluded_items"][1]["reason"] == "retire_candidate_strategy_excluded_from_active_generation"
 
 
 def test_generation_filter_can_include_retired_for_archive_rebuild() -> None:
@@ -451,7 +454,7 @@ def test_generation_filter_excludes_inventory_archived_controls_separately_from_
         inventory_archive_decision_result=inventory,
     )
 
-    assert result["decision_policy"] == "exclude_retired_and_inventory_archived_from_active_generation"
+    assert result["decision_policy"] == "exclude_deprecated_statuses_from_active_generation"
     assert result["eligible_count"] == 1
     assert result["excluded_count"] == 1
     assert result["excluded_items"][0]["governance_status"] == "inventory_archived"
@@ -527,16 +530,15 @@ def test_strategy_view_projection_splits_retired_into_archive_only() -> None:
         }
     )
 
-    assert result["decision_policy"] == "retired_status_hidden_from_primary_view_and_kept_in_archive"
-    assert result["primary_count"] == 3
-    assert result["archive_count"] == 1
+    assert result["decision_policy"] == "deprecated_statuses_hidden_from_primary_view_and_kept_in_archive"
+    assert result["primary_count"] == 2
+    assert result["archive_count"] == 2
     assert [item["strategy_id"] for item in result["primary_items"]] == [
         "active-id",
         "observe-id",
-        "candidate-id",
     ]
-    assert result["archive_items"] == [
-        {
+    assert [item["strategy_id"] for item in result["archive_items"]] == ["candidate-id", "retired-id"]
+    assert result["archive_items"][1] == {
             "strategy_id": "retired-id",
             "recommended_status": "retired",
             "status_display": {
@@ -570,13 +572,12 @@ def test_strategy_view_projection_splits_retired_into_archive_only() -> None:
             "governance_archive_basis": None,
             "inventory_archive_decision": None,
             "view_section": "archive",
-        }
-    ]
+    }
     assert result["evidence_basis_section_policy"] == "separate_historical_retrospective_and_true_forward_sections"
     assert result["evidence_basis_sections"][0]["evidence_basis"] == "true_forward_tracking"
     assert result["evidence_basis_sections"][0]["item_count"] == 4
-    assert result["evidence_basis_sections"][0]["primary_count"] == 3
-    assert result["evidence_basis_sections"][0]["archive_count"] == 1
+    assert result["evidence_basis_sections"][0]["primary_count"] == 2
+    assert result["evidence_basis_sections"][0]["archive_count"] == 2
     assert "primary_horizon_summary" not in result["primary_items"][0]
     assert "retirement_artifact_ref" not in result["archive_items"][0]
 
@@ -663,7 +664,8 @@ def test_strategy_view_projection_adds_status_and_evidence_labels() -> None:
         }
     )
 
-    candidate, unknown = result["primary_items"]
+    candidate = result["archive_items"][0]
+    unknown = result["primary_items"][0]
     assert candidate["status_display"] == {
         "key": "retire_candidate",
         "label": "Retire candidate",

@@ -1215,6 +1215,15 @@ function PaperTrackingTab({
               <Text type="secondary">退役候选与已归档移出主表</Text>
             </div>
           </Col>
+          <Col xs={24} md={6}>
+            <div className="shortpick-metric">
+              <span>库存归档决策</span>
+              <strong>{Number(governance.inventory_archived_count ?? 0)}</strong>
+              <Text type="secondary">
+                artifact {Number((governance.inventory_archive_artifact_source as Record<string, unknown> | null | undefined)?.artifact_count ?? 0)}
+              </Text>
+            </div>
+          </Col>
         </Row>
         <Row gutter={[12, 12]} className="shortpick-frozen-metrics">
           <Col xs={24} md={6}>

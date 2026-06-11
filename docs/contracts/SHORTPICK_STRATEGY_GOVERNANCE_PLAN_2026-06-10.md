@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round55_plan_status_reconciled_ds_reviewed_ready_to_merge
+Status: round56_open_items_closed_ds_reviewed_ready_to_merge_publish
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -907,8 +907,8 @@ New implementation requirement items (status `not_started`, scoped for later run
 
 | ID | Work Item | Status | Notes |
 | --- | --- | --- | --- |
-| P2.7 | Deprecated/archived display bucket plus regression guard | completed_partial_generation_wiring_pending | Round 29 added the paper-tracking governance partition; Round 30 moves evidence-based `retire_candidate` and `retired` rows out of the paper-tracking primary frontend table and latest simulated trade surface into a collapsed deprecated/archive bucket. Continued-advancement/generation wiring remains pending under P2.4 / later runtime rounds. |
-| P2.8 | Redundant/meaningless control inventory archival | completed_partial_inventory_decision_source_pending | Round 31 added an inventory-driven archival decision helper, generation exclusion, paper-tracking deprecated-bucket partitioning, API summary fields, and frontend status fallback for `inventory_archived`. No real control is archived until a durable inventory decision source supplies explicit `inventory_diagnostic_value` decisions with allowed reason codes. |
+| P2.7 | Deprecated/archived display bucket plus regression guard | completed_generation_frontend_runtime_source_wired_pending_publish | Round 29 added the paper-tracking governance partition; Round 30 moves evidence-based `retire_candidate` and `retired` rows out of the paper-tracking primary frontend table and latest simulated trade surface into a collapsed deprecated/archive bucket. Round 56 closes continued-advancement/generation wiring: `retire_candidate`, `retired`, and `inventory_archived` are all treated as deprecated generation statuses and are excluded from active market-factor generation unless an explicit archive/diagnostic rebuild opt-in is passed. |
+| P2.8 | Redundant/meaningless control inventory archival | completed_durable_inventory_artifact_source_wired_pending_publish | Round 31 added an inventory-driven archival decision helper, generation exclusion, paper-tracking deprecated-bucket partitioning, API summary fields, and frontend status fallback for `inventory_archived`. Round 56 adds a durable `shortpick_control_inventory_archive` artifact source, reads it in both paper-tracking API projection and active generation governance, exposes artifact/decision counts to the frontend, and preserves the rule that only `decision_basis=inventory_diagnostic_value` with allowed reason codes can archive a redundant control. |
 | P3.7 | Labeled combined-ledger retrospective backfill with true-forward pairing | completed_filter_reselect_runtime_materialized_api_verified | Round 32 added a combined-ledger backfill preparation helper that materializes already-produced retrospective replay rows with mandatory `evidence_basis=retrospective_forward_replay`, `retrospective=true`, `rule_defined_at`, leakage-audit fields, deterministic `pairing_key`, and headline-safe true-forward basis filtering. Round 36 adds replay artifact rows that can feed this helper. Round 37 adds an artifact-only combined-ledger writer/CLI that persists labeled combined rows without writing the database. Round 41 wires runtime artifact-store discovery into `/shortpick-lab/paper-tracking` as a separate `combined_ledger` API block without merging retrospective rows into primary `items`; DeepSeek-reviewed hardening restricts combined-ledger artifact rows to `true_forward_tracking` or `retrospective_forward_replay`. Round 42 adds frontend types and a separate paper-tracking display block for `combined_ledger` rows with visible evidence-basis labels. Round 43 published and served-verified the frontend/API shape. Round 44 adds automatic discovery/materialization from ready governance replay artifacts. Round 51's 777-row overlay artifact was removed in Round 52. Round 53 materializes the corrected filter-and-reselect runtime combined ledger with 66 retrospective rows from three ready replay artifacts. |
 | P3.8 | New credible control/comparison line build-out | completed_historical_gate_ranked_pool_replay_and_combined_ledger_runtime_verified | Round 33 added a credible-control comparison-line build-out plan for the three registered P3 controls and the two registered P1 baselines. Round 34 added the historical-backtest runner and evidence artifact persistence path. Round 35 adds executable control-to-portfolio strategy mappings for the three registered P3 controls. Round 45 adds a CLI to generate the credible-control comparison request plan from paper-tracking JSON without executing jobs or writing rows. Round 46 lets the existing historical-backtest and retrospective-replay execution CLIs consume the Round 45 nested credible-control plan shape directly. Round 47 lets the credible-control planner consume the historical-backtest runner aggregate output field `evidence` directly as gate input. Round 48 generated a current runtime credible-control plan, but the full three-request historical gate execution was interrupted after several minutes without writing an artifact. Round 49 adds request selectors to the historical-backtest and retrospective-replay execution CLIs. Round 50 passed the three runtime historical gates. Round 53 regenerates replay from reconstructed frozen ranked pools and materializes a corrected combined-ledger artifact visible from the runtime API. Paper-ledger writes remain intentionally not used; true-forward tracking still starts only in real forward time. |
 
@@ -1902,6 +1902,38 @@ Acceptance criteria for Round 55:
 - Remaining `partial/pending` statuses distinguish real blockers from already-completed frontend/runtime view wiring.
 - This round remains documentation-only and does not claim new runtime behavior.
 
+## Round 56 - Close Open Governance Items
+
+Round 56 scope:
+
+- Close the remaining user-visible P2.7/P2.8 governance items without opening another broad analysis round.
+- Make deprecated strategy/control decisions affect both display and continued generation.
+- Add a durable runtime source for inventory-driven archival decisions so the frontend can show real archived-control counts.
+
+Implemented in Round 56:
+
+- `filter_shortpick_generation_eligible_items(...)` now treats `retire_candidate`, `retired`, and `inventory_archived` as deprecated generation statuses. `retire_candidate` no longer silently continues active generation; archive/diagnostic rebuilds can still opt in explicitly.
+- `project_shortpick_strategy_view_sections(...)` now sends all deprecated statuses, including `retire_candidate`, to the archive section.
+- Added durable `shortpick_control_inventory_archive` artifact read/write support under runtime artifact roots.
+- Added `shortpick_control_inventory_archive_items_from_artifacts(...)` so inventory artifact rows feed the existing diagnostic-value archival gates without duplicating decision logic.
+- Wired inventory archive artifacts into `/shortpick-lab/paper-tracking` and active market-factor generation governance.
+- Added frontend type fields and a visible paper-tracking metric for inventory archive decisions and artifact count.
+
+Verification in Round 56 before DeepSeek review:
+
+- `pytest -q tests/test_research_artifact_store.py::ResearchArtifactStoreTests::test_shortpick_control_inventory_archive_source_reads_only_ready_artifacts tests/test_shortpick_strategy_governance.py -k 'generation_filter or strategy_view_projection or inventory_archive' tests/test_shortpick_lab_paper_tracking.py -k 'inventory_archive or retirement_artifact_source' tests/test_shortpick_lab.py::ShortpickLabTests::test_market_factor_overlay_excludes_retired_generation_strategy tests/test_frontend_shortpick_static.py::FrontendShortpickStaticTests::test_shortpick_lab_is_independent_research_surface` passed.
+- `pytest -q tests/test_shortpick_strategy_governance.py tests/test_shortpick_lab_paper_tracking.py tests/test_research_artifact_store.py -k 'shortpick or inventory or generation_filter or strategy_view_projection'` passed.
+- `python3 -m compileall -q src/ashare_evidence` passed.
+- `npm run build` in `frontend/` passed.
+- DeepSeek flash diff review returned `PASS/MERGE`. Nonblocking observation: generation filtering and the source summary expose slightly different ready-artifact lists; this is harmless because filtering still uses only generation-authoritative `retire_candidate|retired` statuses, while the summary reports source visibility.
+
+Acceptance criteria for Round 56:
+
+- P2.7 no longer has continued-generation wiring pending.
+- P2.8 no longer depends on a missing real inventory decision source.
+- The paper-tracking page can show inventory archive counts from durable artifacts.
+- Runtime DB paper-tracking rows are not mutated by the code change; durable inventory decisions are supplied through artifacts.
+
 ## Validation To Run For This Planning Task
 
 
@@ -1977,15 +2009,16 @@ Acceptance criteria for Round 55:
 | Intent-clarification amendment (Round 28) | requirements_recorded_runtime_implementation_started |
 | Round 29 paper-tracking governance partition | completed_merged_plan_reconciled |
 | Round 30 frontend deprecated bucket | published_runtime_verified |
-| P2.7 deprecated display bucket + regression guard | completed_generation_wiring_pending_runtime_data_verification |
-| P2.8 redundant/meaningless control archival | completed_partial_inventory_decision_source_pending |
+| P2.7 deprecated display bucket + regression guard | completed_generation_frontend_runtime_source_wired_ds_reviewed_pending_publish |
+| P2.8 redundant/meaningless control archival | completed_durable_inventory_artifact_source_wired_ds_reviewed_pending_publish |
 | P3.7 labeled combined-ledger retrospective backfill + artifact writer + API source projection + frontend display | completed_filter_reselect_runtime_materialized_api_verified |
 | P3.8 new credible control/comparison line build-out | completed_historical_gate_ranked_pool_replay_and_combined_ledger_runtime_verified |
 | Round 54 true-forward control runtime wiring | completed_ds_reviewed_ready_to_merge |
 | Round 55 plan status reconciliation | completed_ds_reviewed_ready_to_merge |
-| Runtime behavior changed | round54_true_forward_control_generation_wired_tests_ds_reviewed_no_runtime_db_mutation_round55_docs_only |
+| Round 56 open governance items closeout | completed_ds_reviewed_pending_publish |
+| Runtime behavior changed | round56_deprecated_generation_statuses_excluded_and_inventory_archive_artifact_source_wired_no_runtime_db_mutation |
 | Registry changed | completed |
-| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_combined_ledger_backfill_preparation_credible_control_line_buildout_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_replay_feedback_source_wiring_and_round54_true_forward_control_runtime_generation |
-| Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_governance_projection_rendering_round30_deprecated_bucket_filtering_and_round31_inventory_archived_fallback |
-| Runtime data changed | corrected_replay_and_combined_ledger_artifacts_regenerated_in_round53_round54_and_round55_no_database_artifact_or_paper_tracking_writes |
-| DeepSeek plan review | round55_pass_merge |
+| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_combined_ledger_backfill_preparation_credible_control_line_buildout_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_replay_feedback_source_wiring_round54_true_forward_control_runtime_generation_and_round56_deprecated_generation_inventory_artifact_source |
+| Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_governance_projection_rendering_round30_deprecated_bucket_filtering_round31_inventory_archived_fallback_and_round56_inventory_archive_source_metric |
+| Runtime data changed | corrected_replay_and_combined_ledger_artifacts_regenerated_in_round53_round54_and_round55_no_database_artifact_or_paper_tracking_writes_round56_code_only_pending_runtime_inventory_artifact_publish |
+| DeepSeek plan review | round56_pass_merge |

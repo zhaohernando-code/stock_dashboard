@@ -224,6 +224,7 @@ def filter_shortpick_generation_eligible_items(
     status_recommendation_result: dict[str, Any],
     *,
     inventory_archive_decision_result: dict[str, Any] | None = None,
+    include_retire_candidate: bool = False,
     include_retired: bool = False,
     include_inventory_archived: bool = False,
 ) -> dict[str, Any]:
@@ -252,7 +253,16 @@ def filter_shortpick_generation_eligible_items(
             "governance_archive_basis": inventory_archive_decision.get("decision_basis") if inventory_archive_decision else None,
             "inventory_archive_decision": inventory_archive_decision,
         }
-        if governance_status == "retired" and not include_retired:
+        if governance_status == "retire_candidate" and not include_retire_candidate:
+            excluded_items.append(
+                {
+                    "strategy_id": strategy_id,
+                    "governance_status": governance_status,
+                    "reason": "retire_candidate_strategy_excluded_from_active_generation",
+                    "item": projected,
+                }
+            )
+        elif governance_status == "retired" and not include_retired:
             excluded_items.append(
                 {
                     "strategy_id": strategy_id,
@@ -275,7 +285,9 @@ def filter_shortpick_generation_eligible_items(
 
     return {
         "status": "ready",
-        "decision_policy": "exclude_retired_and_inventory_archived_from_active_generation",
+        "decision_policy": "exclude_deprecated_statuses_from_active_generation",
+        "deprecated_status_set": sorted(GOVERNANCE_DEPRECATED_VIEW_STATUSES),
+        "include_retire_candidate": include_retire_candidate,
         "include_retired": include_retired,
         "include_inventory_archived": include_inventory_archived,
         "input_count": len(items),
@@ -362,6 +374,32 @@ def build_shortpick_redundant_control_archive_decisions(
     }
 
 
+def shortpick_control_inventory_archive_items_from_artifacts(artifact_source: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Flatten durable inventory archive artifacts into decision input rows."""
+
+    items: list[dict[str, Any]] = []
+    for artifact in (artifact_source or {}).get("artifacts") or []:
+        if not isinstance(artifact, dict):
+            continue
+        artifact_id = str(artifact.get("artifact_id") or "")
+        artifact_decision_basis = str(artifact.get("decision_basis") or "")
+        for decision in artifact.get("archive_decisions") or []:
+            if not isinstance(decision, dict):
+                continue
+            items.append(
+                {
+                    **decision,
+                    "archive_action": decision.get("archive_action") or "archive",
+                    "decision_basis": decision.get("decision_basis") or artifact_decision_basis,
+                    "source_inventory_archive_artifact_id": artifact_id,
+                    "source_decision_log_ref": decision.get("decision_log_ref") or artifact.get("decision_log_ref"),
+                    "source_artifact_family": artifact.get("artifact_type"),
+                    "source_artifact_status": artifact.get("status"),
+                }
+            )
+    return items
+
+
 def project_shortpick_strategy_view_sections(
     status_recommendation_result: dict[str, Any],
     *,
@@ -401,7 +439,7 @@ def project_shortpick_strategy_view_sections(
             "inventory_archive_decision": inventory_archive_decision,
         }
         projected_strategy_ids.add(strategy_id)
-        if projected["recommended_status"] in {"retired", GOVERNANCE_INVENTORY_ARCHIVED_STATUS}:
+        if projected["recommended_status"] in GOVERNANCE_DEPRECATED_VIEW_STATUSES:
             archive_items.append({**projected, "view_section": "archive"})
         else:
             primary_items.append({**projected, "view_section": "primary"})
@@ -433,7 +471,8 @@ def project_shortpick_strategy_view_sections(
 
     return {
         "status": "ready",
-        "decision_policy": "retired_status_hidden_from_primary_view_and_kept_in_archive",
+        "decision_policy": "deprecated_statuses_hidden_from_primary_view_and_kept_in_archive",
+        "deprecated_status_set": sorted(GOVERNANCE_DEPRECATED_VIEW_STATUSES),
         "primary_count": len(primary_items),
         "archive_count": len(archive_items),
         "primary_items": primary_items,

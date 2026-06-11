@@ -193,6 +193,89 @@ def _is_ready_shortpick_strategy_retirement_artifact(payload: dict[str, Any]) ->
     )
 
 
+def write_shortpick_control_inventory_archive_artifact_record(
+    payload: dict[str, Any],
+    *,
+    root: Path | None = None,
+) -> Path:
+    artifact_id = str(payload.get("artifact_id") or "").strip()
+    if not artifact_id:
+        raise ValueError("shortpick control inventory archive artifact requires artifact_id")
+    target = artifact_path("shortpick_control_inventory_archive", artifact_id, root=root)
+    _ensure_artifact_write_allowed(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    return target
+
+
+def read_shortpick_control_inventory_archive_artifacts(
+    *,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    artifacts: list[dict[str, Any]] = []
+    ignored: list[dict[str, str]] = []
+    seen_artifact_ids: set[str] = set()
+    source_dirs = _shortpick_control_inventory_archive_artifact_dirs(root=root)
+    for directory in source_dirs:
+        if not directory.exists():
+            continue
+        for target in sorted(directory.glob("*.json")):
+            try:
+                payload = json.loads(target.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                ignored.append({"path": str(target), "reason": f"unreadable_json:{type(exc).__name__}"})
+                continue
+            if not isinstance(payload, dict):
+                ignored.append({"path": str(target), "reason": "payload_not_object"})
+                continue
+            if _is_ready_shortpick_control_inventory_archive_artifact(payload):
+                artifact_id = str(payload.get("artifact_id") or "")
+                if artifact_id in seen_artifact_ids:
+                    ignored.append({"path": str(target), "reason": "duplicate_artifact_id"})
+                    continue
+                seen_artifact_ids.add(artifact_id)
+                artifacts.append(dict(payload))
+            else:
+                ignored.append({"path": str(target), "reason": "not_ready_shortpick_control_inventory_archive_artifact"})
+    return {
+        "status": "ready",
+        "source": "shortpick_control_inventory_archive_artifact_store",
+        "source_dirs": [str(path) for path in source_dirs],
+        "artifact_count": len(artifacts),
+        "ignored_count": len(ignored),
+        "ignored": ignored,
+        "artifacts": artifacts,
+    }
+
+
+def _shortpick_control_inventory_archive_artifact_dirs(*, root: Path | None = None) -> tuple[Path, ...]:
+    if root is not None:
+        return (artifact_path("shortpick_control_inventory_archive", "__index__", root=root).parent,)
+    return tuple(
+        dict.fromkeys(
+            path.parent
+            for path in _core._read_paths(
+                "shortpick_control_inventory_archive",
+                "__index__",
+                default_artifact_root=DEFAULT_ARTIFACT_ROOT,
+                project_root=PROJECT_ROOT,
+            )
+        )
+    )
+
+
+def _is_ready_shortpick_control_inventory_archive_artifact(payload: dict[str, Any]) -> bool:
+    decisions = payload.get("archive_decisions")
+    return bool(
+        payload.get("status") in {"ready", "recorded"}
+        and payload.get("artifact_type") == "shortpick_control_inventory_archive"
+        and payload.get("artifact_id")
+        and payload.get("decision_basis") == "inventory_diagnostic_value"
+        and isinstance(decisions, list)
+        and all(isinstance(item, dict) and item.get("strategy_id") for item in decisions)
+    )
+
+
 def write_shortpick_combined_ledger_backfill_artifact_record(
     payload: dict[str, Any],
     *,
