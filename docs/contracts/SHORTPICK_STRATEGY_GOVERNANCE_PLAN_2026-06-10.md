@@ -1955,6 +1955,8 @@ Post-merge retrospective-control exit-track correction:
 - The `止盈止损` proxy remains visibly retrospective: it is derived from completed horizon returns because the combined-ledger artifacts do not contain a full daily high/low path, and it keeps retrospective evidence labels instead of mutating raw artifacts or true-forward paper rows.
 - DeepSeek read-only review found no blocking issues and said the change can merge; it recommended direct tests for take-profit and 10-day fallback proxy branches, which were added before merge.
 - Verification before merge: `pytest -q tests/test_shortpick_lab_paper_tracking.py -m runtime_integration`, `pytest -q tests/test_frontend_shortpick_paper_tracking_helpers.py tests/test_frontend_shortpick_static.py`, `ruff check src/ashare_evidence/api.py tests/test_shortpick_lab_paper_tracking.py`, `python3 -m compileall -q src/ashare_evidence/api.py`, and `git diff --check` passed.
+- Browser verification then exposed a frontend fallback leak: when a retrospective replay row had only a completed 1-day or 3-day horizon and no display exit track yet, the table still rendered the generic `1日/3日` fallback. A hotfix changed the frontend helper so retrospective rows without a meaningful display track show `等待窗口` and `收益 --`, while ordinary non-retrospective rows keep the old completed-horizon fallback. DeepSeek reviewed this hotfix and found no blocking issue.
+- Hotfix verification: `pytest -q tests/test_frontend_shortpick_paper_tracking_helpers.py tests/test_frontend_shortpick_static.py`, `pytest -q tests/test_shortpick_lab_paper_tracking.py -m runtime_integration`, `npm run build`, `ruff check`, and `git diff --check` passed.
 
 ## Validation To Run For This Planning Task
 
