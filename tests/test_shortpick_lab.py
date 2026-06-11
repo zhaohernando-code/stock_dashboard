@@ -1,10 +1,131 @@
 # ruff: noqa: F403,F405
 from __future__ import annotations
 
+from ashare_evidence.research_artifact_store import (
+    artifact_root_from_database_url,
+    write_shortpick_strategy_retirement_artifact_record,
+)
 from tests.shortpick_lab_test_support import *
 
 
 class ShortpickLabTests(ShortpickLabTestCase):
+    def test_market_factor_overlay_excludes_retired_generation_strategy(self) -> None:
+        now = datetime(2026, 5, 14, 12, 0, tzinfo=UTC)
+        contexts = [
+            {
+                "symbol": f"60000{index}.SH",
+                "name": f"测试{index}",
+                "latest_trade_day": "2026-05-14",
+                "close": 10.0 + index,
+                "amount": 500000000.0 - index * 1000000,
+                "turnover_rate": 0.4 + index * 0.01,
+                "return_1d": 0.01,
+                "return_5d": 0.03 + index * 0.001,
+                "return_10d": 0.08 + index * 0.001,
+                "return_20d": 0.12 + index * 0.001,
+                "abs_return_1d": 0.01,
+                "golden_cross_10_200": False,
+                "ma10": 11.0,
+                "ma200": 10.0,
+                "previous_ma10": 9.5,
+                "previous_ma200": 10.0,
+            }
+            for index in range(1, 6)
+        ]
+        with session_scope(self.database_url) as session:
+            for item in contexts:
+                ticker, _, exchange = item["symbol"].partition(".")
+                session.add(
+                    Stock(
+                        symbol=item["symbol"],
+                        ticker=ticker,
+                        exchange=exchange,
+                        name=item["name"],
+                        provider_symbol=item["symbol"],
+                        listed_date=date(2020, 1, 1),
+                        status="active",
+                        profile_payload={},
+                        license_tag="test",
+                        usage_scope="internal-test",
+                        redistribution_scope="none",
+                        source_uri=f"test://stock/{item['symbol']}",
+                        lineage_hash=compute_lineage_hash({"symbol": item["symbol"]}),
+                    )
+                )
+            run = ShortpickExperimentRun(
+                run_key="shortpick:2026-05-14:governance-filter",
+                run_date=date(2026, 5, 14),
+                prompt_version="test",
+                information_mode=SHORTPICK_INFORMATION_MODE,
+                status="running",
+                trigger_source="scheduled_cli",
+                triggered_by="test",
+                started_at=now,
+                completed_at=None,
+                model_config={},
+                summary_payload={},
+            )
+            session.add(run)
+            session.flush()
+            run_id = run.id
+
+        write_shortpick_strategy_retirement_artifact_record(
+            {
+                "artifact_id": "shortpick-retirement:generation-filter-fixture",
+                "status": "ready",
+                "artifact_family": "shortpick_strategy_retirement",
+                "schema_version": "v1",
+                "strategy_id": "frozen_strategy__frozen_paper_primary__frozen_paper_low_turnover_uptrend_v4__next_close__1",
+                "decision_log_ref": "DECISIONS.md#generation-filter-fixture",
+            },
+            root=artifact_root_from_database_url(self.database_url),
+        )
+        write_shortpick_strategy_retirement_artifact_record(
+            {
+                "artifact_id": "shortpick-retirement:generation-observe-fixture",
+                "status": "ready",
+                "artifact_family": "shortpick_strategy_retirement",
+                "schema_version": "v1",
+                "strategy_id": "market_factor_control__market_factor_control_offensive_top1__momentum_10d_turnover_rank__next_close__1",
+                "recommended_status": "observe",
+                "decision_log_ref": "DECISIONS.md#generation-observe-fixture",
+            },
+            root=artifact_root_from_database_url(self.database_url),
+        )
+        write_shortpick_strategy_retirement_artifact_record(
+            {
+                "artifact_id": "shortpick-retirement:generation-retire-candidate-fixture",
+                "status": "ready",
+                "artifact_family": "shortpick_strategy_retirement",
+                "schema_version": "v1",
+                "strategy_id": "market_factor_control__market_factor_control_cooldown_top1__momentum_10d_turnover_cooldown_rank__next_close__1",
+                "recommended_status": "retire_candidate",
+                "decision_log_ref": "DECISIONS.md#generation-retire-candidate-fixture",
+            },
+            root=artifact_root_from_database_url(self.database_url),
+        )
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_market_factor_universe", return_value={"status": "skipped"}):
+            with patch("ashare_evidence.shortpick_lab._shortpick_market_factor_contexts", return_value=(contexts, {})):
+                with session_scope(self.database_url) as session:
+                    run = session.get(ShortpickExperimentRun, run_id)
+                    assert run is not None
+                    overlay = insert_shortpick_market_factor_overlay_candidates(session, run)
+                    rows = session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all()
+
+        self.assertEqual(overlay["generation_governance"]["excluded_count"], 1)
+        self.assertEqual(overlay["generation_governance"]["retirement_artifact_source"]["artifact_count"], 3)
+        self.assertEqual(
+            overlay["generation_governance"]["excluded_items"][0]["strategy_id"],
+            "frozen_strategy__frozen_paper_primary__frozen_paper_low_turnover_uptrend_v4__next_close__1",
+        )
+        tracking_roles = [item["tracking_role"] for item in overlay["candidates"]]
+        self.assertNotIn("frozen_paper_primary", tracking_roles)
+        self.assertIn(SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE, tracking_roles)
+        self.assertIn(SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE, tracking_roles)
+        self.assertTrue(rows)
+        self.assertNotIn("market_factor_frozen_paper", [row.research_priority for row in rows])
+
     def test_run_builds_consensus_and_validation_without_polluting_main_pools(self) -> None:
         self._seed_daily_bars()
         executors = [
