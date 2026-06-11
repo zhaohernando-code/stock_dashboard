@@ -31,6 +31,14 @@ from ashare_evidence.shortpick_market_factor_study import (
     _trimmed_mean,
 )
 from ashare_evidence.shortpick_policy import SHORTPICK_FROZEN_STRATEGY_CONFIG
+from ashare_evidence.shortpick_strategy_governance import (
+    apply_shortpick_drawdown_reversal_filter_control,
+    apply_shortpick_repeated_exposure_limit_control,
+    apply_shortpick_same_symbol_cooldown_control,
+    build_shortpick_drawdown_reversal_filter_rule,
+    build_shortpick_repeated_exposure_limit_rule,
+    build_shortpick_same_symbol_cooldown_rule,
+)
 
 TRADING_DAYS_PER_YEAR = 252
 SHORTPICK_PORTFOLIO_BACKTEST_VERSION = "shortpick-portfolio-backtest-v1"
@@ -38,6 +46,14 @@ LEADING_PAPER_STRATEGY = "low_turnover_20d_uptrend_liquid_top120"
 LEADING_PAPER_MODE = "daily_rolling_5x10k"
 TOP3_EQUAL_WEIGHT_STRATEGY = "ret10_turnover_top3_market_positive_cooldown_equal_weight"
 GOLDEN_CROSS_STRATEGY = "momentum_volume_golden_cross_10_200"
+SAME_SYMBOL_COOLDOWN_CONTROL_BACKTEST_STRATEGY = "control_same_symbol_cooldown_low_turnover_uptrend"
+DRAWDOWN_REVERSAL_CONTROL_BACKTEST_STRATEGY = "control_drawdown_reversal_low_turnover_uptrend"
+REPEATED_EXPOSURE_CONTROL_BACKTEST_STRATEGY = "control_repeated_exposure_low_turnover_uptrend"
+P3_CONTROL_BACKTEST_STRATEGIES = {
+    SAME_SYMBOL_COOLDOWN_CONTROL_BACKTEST_STRATEGY,
+    DRAWDOWN_REVERSAL_CONTROL_BACKTEST_STRATEGY,
+    REPEATED_EXPOSURE_CONTROL_BACKTEST_STRATEGY,
+}
 _CONTROL_CONFIG = SHORTPICK_FROZEN_STRATEGY_CONFIG["controls"]
 _STRONG_BREADTH_RANK2_CONFIG = _CONTROL_CONFIG["strong_breadth_rank2"]
 STRONG_BREADTH_RANK2_STRATEGY = str(_STRONG_BREADTH_RANK2_CONFIG["strategy"])
@@ -71,6 +87,9 @@ BASE_STRATEGY_BY_VARIANT = {
     LOW_TURNOVER_UPTREND_PORTFOLIO_STRATEGY: LOW_TURNOVER_UPTREND_STRATEGY,
     QUIET_BREAKOUT_RANK2_STRATEGY: QUIET_BREAKOUT_BASE_STRATEGY,
     TOP3_EQUAL_WEIGHT_STRATEGY: "ret10_turnover",
+    SAME_SYMBOL_COOLDOWN_CONTROL_BACKTEST_STRATEGY: LOW_TURNOVER_UPTREND_STRATEGY,
+    DRAWDOWN_REVERSAL_CONTROL_BACKTEST_STRATEGY: LOW_TURNOVER_UPTREND_STRATEGY,
+    REPEATED_EXPOSURE_CONTROL_BACKTEST_STRATEGY: LOW_TURNOVER_UPTREND_STRATEGY,
 }
 SECOND_PICK_VARIANTS = {
     "ret10_turnover_second_market_positive_cooldown",
@@ -166,6 +185,16 @@ def build_shortpick_portfolio_backtest(
     regime_features = _regime_features_by_day(series_by_symbol, signal_days=signal_days, pool_limit=pool_limit)
     selections = {
         strategy: _apply_strategy_regime_filter(strategy, strategy_selections, regime_features)
+        for strategy, strategy_selections in selections.items()
+    }
+    selections = {
+        strategy: _apply_strategy_control_filter(
+            strategy,
+            strategy_selections,
+            series_by_symbol=series_by_symbol,
+            horizon_days=horizon_days,
+            entry_price_source=entry_price_source,
+        )
         for strategy, strategy_selections in selections.items()
     }
 
@@ -422,6 +451,8 @@ def _apply_strategy_regime_filter(
 
 
 def _strategy_regime_allows(strategy: str, features: dict[str, float]) -> bool:
+    if strategy in P3_CONTROL_BACKTEST_STRATEGIES:
+        return _strategy_regime_allows(LOW_TURNOVER_UPTREND_PORTFOLIO_STRATEGY, features)
     if strategy == "ret10_turnover_cooldown_market_positive":
         return float(features.get("universe_ret10_mean", -999.0)) >= 0.0
     if strategy == "ret10_turnover_cooldown_market_positive_cooldown":
@@ -450,6 +481,146 @@ def _strategy_regime_allows(strategy: str, features: dict[str, float]) -> bool:
             and float(features.get("pool_ret1_mean", 999.0)) <= 0.08
         )
     return True
+
+
+def _apply_strategy_control_filter(
+    strategy: str,
+    selections: dict[date, list[str]],
+    *,
+    series_by_symbol: dict[str, Any],
+    horizon_days: int,
+    entry_price_source: str,
+) -> dict[date, list[str]]:
+    if strategy not in P3_CONTROL_BACKTEST_STRATEGIES:
+        return selections
+    candidate_rows = _selection_candidate_rows(selections)
+    if strategy == SAME_SYMBOL_COOLDOWN_CONTROL_BACKTEST_STRATEGY:
+        result = apply_shortpick_same_symbol_cooldown_control(
+            candidate_rows,
+            _completed_outcome_rows(
+                series_by_symbol,
+                selections,
+                horizon_days=horizon_days,
+                entry_price_source=entry_price_source,
+            ),
+            rule=build_shortpick_same_symbol_cooldown_rule(),
+            evidence_basis="historical_backtest",
+        )
+        return _allowed_control_rows_to_selections(result["rows"], action_field="cooldown_action")
+    if strategy == DRAWDOWN_REVERSAL_CONTROL_BACKTEST_STRATEGY:
+        result = apply_shortpick_drawdown_reversal_filter_control(
+            candidate_rows,
+            _drawdown_reversal_feature_rows(series_by_symbol, selections),
+            rule=build_shortpick_drawdown_reversal_filter_rule(),
+            evidence_basis="historical_backtest",
+        )
+        return _allowed_control_rows_to_selections(result["rows"], action_field="filter_action")
+    result = apply_shortpick_repeated_exposure_limit_control(
+        candidate_rows,
+        candidate_rows,
+        rule=build_shortpick_repeated_exposure_limit_rule(),
+        evidence_basis="historical_backtest",
+    )
+    return _allowed_control_rows_to_selections(result["rows"], action_field="exposure_action")
+
+
+def _selection_candidate_rows(selections: dict[date, list[str]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for signal_day, symbols in sorted(selections.items()):
+        for rank, symbol in enumerate(symbols, start=1):
+            rows.append(
+                {
+                    "candidate_id": f"{signal_day.isoformat()}:{rank}:{symbol}",
+                    "signal_date": signal_day.isoformat(),
+                    "symbol": symbol,
+                    "candidate_rank": rank,
+                }
+            )
+    return rows
+
+
+def _allowed_control_rows_to_selections(rows: list[dict[str, Any]], *, action_field: str) -> dict[date, list[str]]:
+    selections: dict[date, list[str]] = defaultdict(list)
+    for row in rows:
+        if row.get(action_field) != "allowed":
+            continue
+        signal_day = date.fromisoformat(str(row["signal_date"]))
+        selections[signal_day].append(str(row["symbol"]))
+    return dict(selections)
+
+
+def _completed_outcome_rows(
+    series_by_symbol: dict[str, Any],
+    selections: dict[date, list[str]],
+    *,
+    horizon_days: int,
+    entry_price_source: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for signal_day, symbols in sorted(selections.items()):
+        for rank, symbol in enumerate(symbols, start=1):
+            series = series_by_symbol.get(symbol)
+            if series is None:
+                continue
+            signal_index = series.by_day.get(signal_day)
+            if signal_index is None:
+                continue
+            entry_index = _entry_index_for_signal(signal_index, entry_price_source)
+            exit_index = entry_index + horizon_days
+            if exit_index >= len(series.bars):
+                continue
+            entry_price = _entry_price(series.bars[entry_index], entry_price_source)
+            exit_close = float(series.bars[exit_index].close)
+            if not entry_price:
+                continue
+            rows.append(
+                {
+                    "candidate_id": f"{signal_day.isoformat()}:{rank}:{symbol}",
+                    "signal_date": signal_day.isoformat(),
+                    "symbol": symbol,
+                    "exit_date": series.bars[exit_index].day.isoformat(),
+                    "stock_return": round(exit_close / float(entry_price) - 1.0, 6),
+                    "candidate_rank": rank,
+                }
+            )
+    return rows
+
+
+def _drawdown_reversal_feature_rows(
+    series_by_symbol: dict[str, Any],
+    selections: dict[date, list[str]],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for signal_day, symbols in sorted(selections.items()):
+        for symbol in symbols:
+            series = series_by_symbol.get(symbol)
+            if series is None:
+                continue
+            index = series.by_day.get(signal_day)
+            if index is None:
+                continue
+            closes = [float(bar.close) for bar in series.bars[: index + 1] if float(bar.close) > 0]
+            if not closes:
+                continue
+            recent = closes[-10:]
+            ma20_window = closes[-20:]
+            high_window = closes[-60:]
+            close = closes[-1]
+            recent_high = max(recent) if recent else close
+            short_start = closes[-4] if len(closes) >= 4 else closes[0]
+            ma20 = sum(ma20_window) / len(ma20_window) if ma20_window else close
+            high = max(high_window) if high_window else close
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "feature_date": signal_day.isoformat(),
+                    "recent_drawdown_return": round(close / recent_high - 1.0, 6) if recent_high else None,
+                    "short_window_return": round(close / short_start - 1.0, 6) if short_start else None,
+                    "price_vs_ma20": round(close / ma20 - 1.0, 6) if ma20 else None,
+                    "high_level_reversal_return": round(close / high - 1.0, 6) if high else None,
+                }
+            )
+    return rows
 
 
 def _simulate_portfolio(
@@ -1117,6 +1288,24 @@ def _strategy_variant_contract() -> dict[str, dict[str, Any]]:
             "gate": "按原动量成交量候选顺序寻找第一个触发10/200日金叉的标的；没有触发则当日不交易。",
             "intent": "用长期趋势确认过滤短线动量候选，检验减少伪突破是否值得牺牲信号数量。",
         },
+        SAME_SYMBOL_COOLDOWN_CONTROL_BACKTEST_STRATEGY: {
+            "base_strategy": LOW_TURNOVER_UPTREND_STRATEGY,
+            "control_group_id": "control_same_symbol_cooldown:v1",
+            "control_mapping": "applies same-symbol cooldown to low-turnover uptrend historical candidates",
+            "intent": "验证近期同一标的亏损后暂停再买，是否降低重复踩坑和连续亏损。",
+        },
+        DRAWDOWN_REVERSAL_CONTROL_BACKTEST_STRATEGY: {
+            "base_strategy": LOW_TURNOVER_UPTREND_STRATEGY,
+            "control_group_id": "control_drawdown_reversal_filter:v1",
+            "control_mapping": "applies signal-date-or-prior drawdown/reversal filter to low-turnover uptrend historical candidates",
+            "intent": "验证信号日前已经出现明显回撤或破位的候选是否应被过滤。",
+        },
+        REPEATED_EXPOSURE_CONTROL_BACKTEST_STRATEGY: {
+            "base_strategy": LOW_TURNOVER_UPTREND_STRATEGY,
+            "control_group_id": "control_repeated_exposure_limit:v1",
+            "control_mapping": "applies repeated symbol exposure limit to low-turnover uptrend historical candidates",
+            "intent": "验证短窗口内同一标的反复入选是否增加拥挤和重复风险。",
+        },
     }
 
 
@@ -1143,6 +1332,9 @@ def _strategy_label(strategy: str) -> str:
         QUIET_BREAKOUT_RANK2_STRATEGY: "安静突破二候选",
         TOP3_EQUAL_WEIGHT_STRATEGY: "市场转正不过热时前三名等权",
         GOLDEN_CROSS_STRATEGY: "动量池10/200日金叉首位",
+        SAME_SYMBOL_COOLDOWN_CONTROL_BACKTEST_STRATEGY: "低换手趋势加同标的冷却",
+        DRAWDOWN_REVERSAL_CONTROL_BACKTEST_STRATEGY: "低换手趋势加回撤反转过滤",
+        REPEATED_EXPOSURE_CONTROL_BACKTEST_STRATEGY: "低换手趋势加重复暴露限制",
         "ret10_turnover_cooldown_diversified": "10日动量换手降追高分散首位",
         "combo": "短动量换手复合首位",
     }

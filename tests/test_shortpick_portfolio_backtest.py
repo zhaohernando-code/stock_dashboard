@@ -9,13 +9,17 @@ from pathlib import Path
 
 import pytest
 
+import ashare_evidence.shortpick_portfolio_backtest as portfolio_backtest
 import ashare_evidence.shortpick_strategy_backtest_runner as governance_backtest_runner
 from ashare_evidence.cli import main
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.lineage import compute_lineage_hash
 from ashare_evidence.models import MarketBar, Stock
 from ashare_evidence.shortpick_portfolio_backtest import (
+    DRAWDOWN_REVERSAL_CONTROL_BACKTEST_STRATEGY,
     LOW_TURNOVER_UPTREND_PORTFOLIO_STRATEGY,
+    REPEATED_EXPOSURE_CONTROL_BACKTEST_STRATEGY,
+    SAME_SYMBOL_COOLDOWN_CONTROL_BACKTEST_STRATEGY,
     STRONG_BREADTH_RANK2_STRATEGY,
     build_shortpick_portfolio_backtest,
 )
@@ -241,6 +245,7 @@ def test_governance_historical_backtest_runner_blocks_unmapped_control_request()
             end_date="2026-03-05",
             min_signal_symbol_count=3,
         )["requests"][0]
+        request.pop("portfolio_strategies")
 
         with session_scope(database_url) as session:
             evidence = run_shortpick_historical_backtest_request(
@@ -299,6 +304,128 @@ def test_governance_historical_backtest_runner_executes_explicit_strategy_mappin
         assert saved["artifact_id"] == evidence["artifact_id"]
         assert portfolio_payload["version"] == "shortpick-portfolio-backtest-v1"
         assert portfolio_payload["config"]["strategies"] == ["ret10_turnover_cooldown"]
+
+
+def test_governance_historical_backtest_runner_executes_generated_p3_control_mapping() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_url = f"sqlite:///{Path(temp_dir) / 'portfolio-backtest.db'}"
+        output_path = Path(temp_dir) / "p3-control-evidence.json"
+        init_database(database_url)
+        _seed_long_sample_fixture(database_url)
+        request = build_shortpick_historical_backtest_generation_requests(
+            [build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")],
+            start_date="2026-01-01",
+            end_date="2026-03-05",
+            min_signal_symbol_count=3,
+        )["requests"][0]
+
+        with session_scope(database_url) as session:
+            evidence = run_shortpick_historical_backtest_request(
+                session,
+                request,
+                evidence_output_path=output_path,
+            )
+
+        assert evidence["status"] == "ready"
+        assert evidence["gate_status"] == "passed"
+        assert evidence["leakage_audit_status"] == "passed"
+        assert evidence["portfolio_strategies"] == [SAME_SYMBOL_COOLDOWN_CONTROL_BACKTEST_STRATEGY]
+        portfolio_payload = json.loads(Path(evidence["portfolio_backtest_artifact_path"]).read_text(encoding="utf-8"))
+        assert portfolio_payload["config"]["strategies"] == [SAME_SYMBOL_COOLDOWN_CONTROL_BACKTEST_STRATEGY]
+        variant = portfolio_payload["config"]["strategy_variants"][SAME_SYMBOL_COOLDOWN_CONTROL_BACKTEST_STRATEGY]
+        assert variant["control_group_id"] == "control_same_symbol_cooldown:v1"
+
+
+def test_shortpick_portfolio_backtest_supports_registered_p3_control_strategy_mappings() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_url = f"sqlite:///{Path(temp_dir) / 'portfolio-backtest.db'}"
+        init_database(database_url)
+        _seed_long_sample_fixture(database_url)
+
+        with session_scope(database_url) as session:
+            payload = build_shortpick_portfolio_backtest(
+                session,
+                start_date=date(2026, 1, 1),
+                end_date=date(2026, 3, 5),
+                min_signal_symbol_count=3,
+                benchmark_mode="csi300",
+                strategies=(
+                    SAME_SYMBOL_COOLDOWN_CONTROL_BACKTEST_STRATEGY,
+                    DRAWDOWN_REVERSAL_CONTROL_BACKTEST_STRATEGY,
+                    REPEATED_EXPOSURE_CONTROL_BACKTEST_STRATEGY,
+                ),
+            )
+
+        assert payload["config"]["strategies"] == [
+            SAME_SYMBOL_COOLDOWN_CONTROL_BACKTEST_STRATEGY,
+            DRAWDOWN_REVERSAL_CONTROL_BACKTEST_STRATEGY,
+            REPEATED_EXPOSURE_CONTROL_BACKTEST_STRATEGY,
+        ]
+        for strategy in payload["config"]["strategies"]:
+            assert payload["config"]["strategy_variants"][strategy]["base_strategy"]
+            summary = payload["results"]["daily_rolling_5x10k"][strategy]["summary"]
+            assert isinstance(summary["trade_count"], int)
+
+
+def test_shortpick_portfolio_backtest_p3_control_mappings_invoke_control_helpers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_url = f"sqlite:///{Path(temp_dir) / 'portfolio-backtest.db'}"
+        init_database(database_url)
+        _seed_long_sample_fixture(database_url)
+        calls: list[tuple[str, int, str]] = []
+
+        def fake_same_symbol(
+            candidate_rows: list[dict[str, object]],
+            completed_outcome_rows: list[dict[str, object]],
+            **kwargs: object,
+        ) -> dict[str, object]:
+            calls.append(("same_symbol", len(completed_outcome_rows), str(kwargs.get("evidence_basis"))))
+            return {"rows": [{**row, "cooldown_action": "allowed"} for row in candidate_rows]}
+
+        def fake_drawdown(
+            candidate_rows: list[dict[str, object]],
+            signal_feature_rows: list[dict[str, object]],
+            **kwargs: object,
+        ) -> dict[str, object]:
+            calls.append(("drawdown", len(signal_feature_rows), str(kwargs.get("evidence_basis"))))
+            return {"rows": [{**row, "filter_action": "allowed"} for row in candidate_rows]}
+
+        def fake_exposure(
+            candidate_rows: list[dict[str, object]],
+            exposure_signal_rows: list[dict[str, object]],
+            **kwargs: object,
+        ) -> dict[str, object]:
+            calls.append(("repeated_exposure", len(exposure_signal_rows), str(kwargs.get("evidence_basis"))))
+            return {"rows": [{**row, "exposure_action": "allowed"} for row in candidate_rows]}
+
+        monkeypatch.setattr(portfolio_backtest, "apply_shortpick_same_symbol_cooldown_control", fake_same_symbol)
+        monkeypatch.setattr(portfolio_backtest, "apply_shortpick_drawdown_reversal_filter_control", fake_drawdown)
+        monkeypatch.setattr(portfolio_backtest, "apply_shortpick_repeated_exposure_limit_control", fake_exposure)
+
+        with session_scope(database_url) as session:
+            payload = build_shortpick_portfolio_backtest(
+                session,
+                start_date=date(2026, 1, 1),
+                end_date=date(2026, 3, 5),
+                min_signal_symbol_count=3,
+                benchmark_mode="csi300",
+                strategies=(
+                    SAME_SYMBOL_COOLDOWN_CONTROL_BACKTEST_STRATEGY,
+                    DRAWDOWN_REVERSAL_CONTROL_BACKTEST_STRATEGY,
+                    REPEATED_EXPOSURE_CONTROL_BACKTEST_STRATEGY,
+                ),
+            )
+
+        assert [item[0] for item in calls] == ["same_symbol", "drawdown", "repeated_exposure"]
+        assert all(item[1] > 0 for item in calls)
+        assert all(item[2] == "historical_backtest" for item in calls)
+        assert set(payload["results"]["daily_rolling_5x10k"]) == {
+            SAME_SYMBOL_COOLDOWN_CONTROL_BACKTEST_STRATEGY,
+            DRAWDOWN_REVERSAL_CONTROL_BACKTEST_STRATEGY,
+            REPEATED_EXPOSURE_CONTROL_BACKTEST_STRATEGY,
+        }
 
 
 def test_governance_historical_backtest_runner_blocks_leakage_window_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
