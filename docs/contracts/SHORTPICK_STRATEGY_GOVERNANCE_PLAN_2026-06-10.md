@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round36_retrospective_replay_runner_ds_reviewed_ready_to_merge
+Status: round37_combined_ledger_artifact_writer_ds_reviewed_ready_to_merge
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -908,10 +908,10 @@ New implementation requirement items (status `not_started`, scoped for later run
 | --- | --- | --- | --- |
 | P2.7 | Deprecated/archived display bucket plus regression guard | completed_partial_generation_wiring_pending | Round 29 added the paper-tracking governance partition; Round 30 moves evidence-based `retire_candidate` and `retired` rows out of the paper-tracking primary frontend table and latest simulated trade surface into a collapsed deprecated/archive bucket. Continued-advancement/generation wiring remains pending under P2.4 / later runtime rounds. |
 | P2.8 | Redundant/meaningless control inventory archival | completed_partial_inventory_decision_source_pending | Round 31 added an inventory-driven archival decision helper, generation exclusion, paper-tracking deprecated-bucket partitioning, API summary fields, and frontend status fallback for `inventory_archived`. No real control is archived until a durable inventory decision source supplies explicit `inventory_diagnostic_value` decisions with allowed reason codes. |
-| P3.7 | Labeled combined-ledger retrospective backfill with true-forward pairing | completed_partial_writer_pending | Round 32 added a combined-ledger backfill preparation helper that materializes already-produced retrospective replay rows with mandatory `evidence_basis=retrospective_forward_replay`, `retrospective=true`, `rule_defined_at`, leakage-audit fields, deterministic `pairing_key`, and headline-safe true-forward basis filtering. Round 36 adds replay artifact rows that can feed this helper. Runtime ledger writer remains pending. |
+| P3.7 | Labeled combined-ledger retrospective backfill with true-forward pairing | completed_partial_runtime_frontend_pending | Round 32 added a combined-ledger backfill preparation helper that materializes already-produced retrospective replay rows with mandatory `evidence_basis=retrospective_forward_replay`, `retrospective=true`, `rule_defined_at`, leakage-audit fields, deterministic `pairing_key`, and headline-safe true-forward basis filtering. Round 36 adds replay artifact rows that can feed this helper. Round 37 adds an artifact-only combined-ledger writer/CLI that persists labeled combined rows without writing the database. Runtime DB/API/frontend consumption remains pending. |
 | P3.8 | New credible control/comparison line build-out | completed_partial_replay_writer_pending | Round 33 added a credible-control comparison-line build-out plan for the three registered P3 controls and the two registered P1 baselines. Round 34 added the historical-backtest runner and evidence artifact persistence path. Round 35 adds executable control-to-portfolio strategy mappings for the three registered P3 controls. Retrospective replay, paper-ledger write, and frontend/runtime exposure remain pending. |
 
-These items remain blocked by the remaining runtime preconditions called out in earlier rounds: a real `strategy_retirement:v1` artifact writer, a paper-ledger writer, and runtime/frontend wiring must exist before any strategy is durably retired, hidden, or backfilled. Round 34 removed the generic historical-backtest runner/artifact gap; Round 35 removed the missing P3 historical control-mapping gap for the three registered controls; Round 36 removes the retrospective replay runner/artifact gap without writing runtime ledger rows.
+These items remain blocked by the remaining runtime preconditions called out in earlier rounds: a real `strategy_retirement:v1` artifact writer and runtime/frontend wiring must exist before any strategy is durably retired, hidden, or displayed from backfilled comparison rows. Round 34 removed the generic historical-backtest runner/artifact gap; Round 35 removed the missing P3 historical control-mapping gap for the three registered controls; Round 36 removes the retrospective replay runner/artifact gap without writing runtime ledger rows. Round 37 adds combined-ledger artifact materialization, but not DB/API/frontend consumption.
 
 ## Round 29 Review Result
 
@@ -1188,6 +1188,37 @@ Remaining blockers after Round 36:
 - Runtime combined-ledger writer remains pending before replay artifacts become durable paper-tracking rows.
 - Runtime/frontend exposure of new comparison lines remains pending until labeled retrospective rows exist in the combined ledger.
 
+## Round 37 Review Result
+
+Status: implementation completed locally; targeted tests passed; DeepSeek review passed; ready to merge.
+
+Round 37 scope:
+
+- Added `shortpick_combined_ledger_writer.py`, an artifact-only materialization layer for P3.7. It consumes one or more ready `shortpick_retrospective_forward_replay` artifacts and optional true-forward rows.
+- The writer delegates row normalization to `build_shortpick_combined_ledger_retrospective_backfill(...)`, then writes a `shortpick_combined_ledger_backfill` artifact with mandatory evidence-basis labels and true-forward headline filter metadata.
+- Added CLI command `shortpick-governance-combined-ledger-backfill --replay-artifact-path ... --output-path ...`.
+- The writer remains no-DB/no-paper-write: `write_policy=artifact_only_no_database_or_paper_tracking_write`; runtime API/frontend consumption remains a later task.
+- Added unit and CLI tests covering replay-artifact materialization, retrospective labels, true-forward filtering, and written artifact shape.
+
+Verification evidence before DeepSeek:
+
+- `pytest tests/test_shortpick_strategy_governance.py tests/test_shortpick_portfolio_backtest.py` passed (`101 passed`).
+- `python3 -m ruff check src/ashare_evidence/shortpick_combined_ledger_writer.py src/ashare_evidence/cli.py tests/test_shortpick_strategy_governance.py tests/test_shortpick_portfolio_backtest.py` passed.
+- `python3 -m compileall -q src/ashare_evidence/shortpick_combined_ledger_writer.py src/ashare_evidence/cli.py tests/test_shortpick_strategy_governance.py tests/test_shortpick_portfolio_backtest.py` passed.
+- `git diff --check` passed.
+
+DeepSeek review evidence:
+
+- Sharded DS review completed with final PASS / merge verdict.
+- Source/CLI shard confirmed the writer only writes JSON artifacts, records no-DB/no-paper-write policy, blocks unsupported or not-ready replay artifacts, and keeps retrospective rows behind evidence-basis filtering.
+- Test shard confirmed coverage for the basic materialization path, retrospective non-headline labels, true-forward filtering, and blocked replay rows not entering the combined ledger.
+- Plan shard confirmed the documentation is honest that DB/API/frontend consumption remains pending. Nonblocking follow-up: add broader multi-replay duplicate-edge tests if this artifact writer becomes a hot runtime path.
+
+Remaining blockers after Round 37:
+
+- Runtime API/frontend wiring remains pending before the new combined-ledger artifact is visible in the stock dashboard.
+- A separate durable strategy-retirement artifact writer remains pending before any strategy is durably hidden or retired from generation.
+
 ## Validation To Run For This Planning Task
 
 
@@ -1265,7 +1296,7 @@ Remaining blockers after Round 36:
 | Round 30 frontend deprecated bucket | published_runtime_verified |
 | P2.7 deprecated display bucket + regression guard | completed_partial_generation_wiring_pending |
 | P2.8 redundant/meaningless control archival | completed_partial_inventory_decision_source_pending |
-| P3.7 labeled combined-ledger retrospective backfill | completed_partial_writer_pending |
+| P3.7 labeled combined-ledger retrospective backfill + artifact writer | completed_partial_runtime_frontend_pending |
 | P3.8 new credible control/comparison line build-out | completed_partial_replay_writer_pending |
 | Runtime behavior changed | round31_inventory_archive_governance_path_published_runtime_verified |
 | Registry changed | completed |
