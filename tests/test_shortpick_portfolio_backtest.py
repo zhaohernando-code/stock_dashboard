@@ -634,3 +634,63 @@ def test_cli_governance_combined_ledger_backfill_materializes_replay_artifact() 
         assert saved["combined_rows"][0]["paper_tracking_write_policy"] == (
             "combined_ledger_backfill_only_with_evidence_basis"
         )
+
+
+def test_cli_governance_retirement_artifact_writes_ready_artifact() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        evidence_path = Path(temp_dir) / "evidence.json"
+        recommendation_path = Path(temp_dir) / "recommendations.json"
+        output_path = Path(temp_dir) / "retirement.json"
+        strategy_id = "strategy:test"
+        evidence = {
+            "packs": [
+                {
+                    "strategy_id": strategy_id,
+                    "evidence_basis": "true_forward_tracking",
+                    "historical_evidence": {"evidence_basis": "historical_backtest"},
+                }
+            ]
+        }
+        recommendations = {
+            "recommendations": [
+                {
+                    "strategy_id": strategy_id,
+                    "recommended_status": "retire_candidate",
+                    "reasons": ["historical_after_cost_excess_negative"],
+                }
+            ]
+        }
+        evidence_path.write_text(json.dumps(evidence, ensure_ascii=False), encoding="utf-8")
+        recommendation_path.write_text(json.dumps(recommendations, ensure_ascii=False), encoding="utf-8")
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = main(
+                [
+                    "shortpick-governance-retirement-artifact",
+                    "--evidence-pack-path",
+                    str(evidence_path),
+                    "--status-recommendation-path",
+                    str(recommendation_path),
+                    "--strategy-id",
+                    strategy_id,
+                    "--decision-log-ref",
+                    "docs/DECISIONS.md#2026-06-11-retirement",
+                    "--evidence-snapshot-ref",
+                    "output/shortpick/evidence.json",
+                    "--retired-at",
+                    "2026-06-11T12:00:00+08:00",
+                    "--output-path",
+                    str(output_path),
+                ]
+            )
+
+        assert exit_code == 0
+        rendered = json.loads(stdout.getvalue())
+        assert rendered["status"] == "ready"
+        assert rendered["artifact"]["path"] == str(output_path)
+        saved = json.loads(output_path.read_text(encoding="utf-8"))
+        assert saved["artifact_family"] == "shortpick_strategy_retirement"
+        assert saved["strategy_id"] == strategy_id
+        assert saved["retirement_reason_code"] == "persistent_negative_after_cost_excess"
+        assert saved["evidence_basis_refs"] == ["historical_backtest", "true_forward_tracking"]

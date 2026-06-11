@@ -28,6 +28,7 @@ from ashare_evidence.shortpick_strategy_governance import (
     project_shortpick_strategy_view_sections,
 )
 from ashare_evidence.shortpick_strategy_replay_runner import run_shortpick_retrospective_forward_replay_request
+from ashare_evidence.shortpick_strategy_retirement_writer import run_shortpick_strategy_retirement_artifact
 
 
 def test_retirement_evidence_pack_aggregates_forward_metrics_without_deciding_status() -> None:
@@ -239,6 +240,68 @@ def test_status_recommendation_requires_artifact_and_decision_log_for_retired() 
     assert recommendation["recommended_status"] == "retired"
     assert recommendation["retirement_artifact_ref"]["artifact_id"] == "shortpick-retirement-fixture"
     assert recommendation["reasons"] == ["strategy_retirement_artifact_and_decision_log_ref_present"]
+
+
+def test_strategy_retirement_writer_records_artifact_consumed_by_status_recommendation() -> None:
+    evidence = _evidence_from_returns(
+        [-0.10, -0.05, -0.04, -0.03, -0.02, -0.01, -0.09, -0.02, 0.01, 0.02],
+        historical_evidence={
+            "low_turnover_20d_uptrend_liquid_top120": {
+                "status": "ready",
+                "after_cost_excess_return": -0.03,
+                "evidence_basis": "historical_backtest",
+            }
+        },
+    )
+    recommendations = build_shortpick_strategy_status_recommendations(evidence)
+    strategy_id = evidence["packs"][0]["strategy_id"]
+
+    artifact = run_shortpick_strategy_retirement_artifact(
+        evidence,
+        recommendations,
+        strategy_id=strategy_id,
+        decision_log_ref="docs/DECISIONS.md#2026-06-11-retire-test",
+        evidence_snapshot_refs=["output/shortpick/evidence-pack.json"],
+        retired_at="2026-06-11T12:00:00+08:00",
+        replacement_guidance="Use registered cooldown and drawdown controls instead.",
+    )
+
+    assert artifact["status"] == "ready"
+    assert artifact["artifact_family"] == "shortpick_strategy_retirement"
+    assert artifact["schema_version"] == "v1"
+    assert artifact["strategy_id"] == strategy_id
+    assert artifact["strategy_status_before"] == "retire_candidate"
+    assert artifact["retirement_reason_code"] in {
+        "persistent_negative_after_cost_excess",
+        "tail_dependence_failure",
+    }
+    assert artifact["evidence_basis_refs"] == ["historical_backtest", "true_forward_tracking"]
+    assert "shortpick.strategy_retirement.recorded.v1" in artifact["event_refs"]
+
+    retired = build_shortpick_strategy_status_recommendations(
+        evidence,
+        retirement_artifacts={"artifacts": [artifact]},
+    )["recommendations"][0]
+    assert retired["recommended_status"] == "retired"
+    assert retired["retirement_artifact_ref"]["artifact_id"] == artifact["artifact_id"]
+
+
+def test_strategy_retirement_writer_blocks_non_retire_candidate() -> None:
+    evidence = _evidence_from_returns([0.02, 0.03, 0.01, 0.04, 0.02])
+    recommendations = build_shortpick_strategy_status_recommendations(evidence)
+    strategy_id = evidence["packs"][0]["strategy_id"]
+
+    artifact = run_shortpick_strategy_retirement_artifact(
+        evidence,
+        recommendations,
+        strategy_id=strategy_id,
+        decision_log_ref="docs/DECISIONS.md#2026-06-11-blocked",
+        evidence_snapshot_refs=["output/shortpick/evidence-pack.json"],
+        retired_at="2026-06-11T12:00:00+08:00",
+    )
+
+    assert artifact["status"] == "blocked"
+    assert artifact["blocker"] == "strategy_must_be_retire_candidate_before_retirement_artifact"
 
 
 def test_status_recommendation_keeps_weak_immature_or_missing_history_in_observe() -> None:

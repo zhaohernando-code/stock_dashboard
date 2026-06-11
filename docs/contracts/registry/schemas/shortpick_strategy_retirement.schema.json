@@ -4,6 +4,8 @@
   "title": "Shortpick Strategy Retirement",
   "type": "object",
   "required": [
+    "artifact_id",
+    "status",
     "artifact_family",
     "schema_version",
     "strategy_id",
@@ -20,6 +22,14 @@
   ],
   "additionalProperties": false,
   "properties": {
+    "artifact_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ready", "recorded"]
+    },
     "artifact_family": {
       "const": "shortpick_strategy_retirement"
     },
