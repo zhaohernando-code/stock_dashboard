@@ -9,6 +9,7 @@ from ashare_evidence.shortpick_strategy_governance import (
     apply_shortpick_drawdown_reversal_filter_control,
     apply_shortpick_repeated_exposure_limit_control,
     apply_shortpick_same_symbol_cooldown_control,
+    build_shortpick_combined_ledger_retrospective_backfill,
     build_shortpick_drawdown_reversal_filter_rule,
     build_shortpick_historical_backtest_generation_requests,
     build_shortpick_redundant_control_archive_decisions,
@@ -19,6 +20,7 @@ from ashare_evidence.shortpick_strategy_governance import (
     build_shortpick_strategy_retirement_evidence_packs,
     build_shortpick_strategy_status_recommendations,
     build_shortpick_true_forward_tracking_activation_plan,
+    filter_shortpick_combined_ledger_rows_by_evidence_basis,
     filter_shortpick_generation_eligible_items,
     partition_paper_tracking_rows_by_governance,
     project_shortpick_strategy_view_sections,
@@ -1574,6 +1576,166 @@ def test_true_forward_tracking_activation_plan_is_deterministic_and_validates_in
 
     with pytest.raises(ValueError, match="artifact_family_id must be non-empty"):
         build_shortpick_true_forward_tracking_activation_plan([rule], tracking_started_at="2026-06-11", artifact_family_id="")
+
+
+def test_combined_ledger_retrospective_backfill_labels_rows_and_pairing_key() -> None:
+    replay_request = {
+        "control_group_id": "control_same_symbol_cooldown:v1",
+        "rule_signature": "sha256:cooldown",
+        "rule_defined_at": "2026-06-10T09:00:00+08:00",
+        "source_feature_cutoff_policy": "signal_date_available_inputs_only",
+        "leakage_audit_status": "passed",
+        "leakage_audit_reasons": [],
+    }
+    true_forward = {
+        "signal_date": "2026-06-11",
+        "symbol": "002028.SZ",
+        "control_group_id": "control_same_symbol_cooldown:v1",
+        "rule_signature": "sha256:cooldown",
+        "tracking_group": "market_factor_control",
+    }
+    retrospective = {
+        "signal_date": "2026-05-26",
+        "symbol": "002028.SZ",
+        "name": "思源电气",
+        "tracking_group": "market_factor_control",
+        "validation_by_horizon": [{"horizon_days": 10, "status": "completed", "stock_return": 0.05}],
+    }
+
+    result = build_shortpick_combined_ledger_retrospective_backfill(
+        [retrospective],
+        true_forward_rows=[true_forward],
+        replay_request=replay_request,
+        generated_at="2026-06-11T10:00:00+08:00",
+        source_artifact_ref="output/shortpick/replay/control_same_symbol_cooldown.json",
+    )
+
+    assert result["status"] == "ready"
+    assert result["write_policy"] == "prepared_rows_only_no_database_write_without_runtime_writer"
+    assert result["headline_metric_filter_policy"] == "true_forward_queries_must_filter_evidence_basis_true_forward_tracking"
+    assert result["true_forward_count"] == 1
+    assert result["retrospective_count"] == 1
+    assert result["combined_row_count"] == 2
+    retro_row = result["retrospective_rows"][0]
+    assert retro_row["evidence_basis"] == "retrospective_forward_replay"
+    assert retro_row["retrospective"] is True
+    assert retro_row["true_forward_tracking_eligible"] is False
+    assert retro_row["headline_metric_eligible"] is False
+    assert retro_row["rule_defined_at"] == "2026-06-10"
+    assert retro_row["leakage_audit_status"] == "passed"
+    assert retro_row["source_feature_cutoff_policy"] == "signal_date_available_inputs_only"
+    assert retro_row["pairing_key"] == "control_same_symbol_cooldown:v1|sha256:cooldown|002028.SZ|2026-05-26"
+    assert retro_row["pairing_key_basis"] == "control_group_id__rule_signature__symbol__signal_date"
+    assert retro_row["combined_ledger_row_id"].startswith("shortpick-combined-ledger-retrospective:")
+    assert retro_row["source_artifact_ref"] == "output/shortpick/replay/control_same_symbol_cooldown.json"
+
+    true_forward_row = result["true_forward_rows"][0]
+    assert true_forward_row["evidence_basis"] == "true_forward_tracking"
+    assert true_forward_row["retrospective"] is False
+    assert true_forward_row["true_forward_tracking_eligible"] is True
+    assert true_forward_row["combined_ledger_row_id"].startswith("shortpick-combined-ledger-true-forward:")
+
+
+def test_combined_ledger_backfill_blocks_missing_identity_and_future_replay_rows() -> None:
+    result = build_shortpick_combined_ledger_retrospective_backfill(
+        [
+            {"signal_date": "2026-05-26", "symbol": "002028.SZ"},
+            {
+                "signal_date": "2026-06-10",
+                "symbol": "002028.SZ",
+                "control_group_id": "control_same_symbol_cooldown:v1",
+                "rule_signature": "sha256:cooldown",
+                "rule_defined_at": "2026-06-10",
+            },
+            {
+                "signal_date": "2026-05-26",
+                "symbol": "002028.SZ",
+                "control_group_id": "control_same_symbol_cooldown:v1",
+                "rule_signature": "sha256:cooldown",
+                "rule_defined_at": "2026-06-10",
+                "leakage_audit_status": "unchecked",
+            },
+        ]
+    )
+
+    assert result["status"] == "blocked"
+    assert result["retrospective_count"] == 0
+    assert [item["blocker"] for item in result["blocked_rows"]] == [
+        "missing_required_combined_ledger_identity",
+        "retrospective_signal_date_not_before_rule_defined_at",
+        "unsupported_leakage_audit_status",
+    ]
+    assert result["blocked_rows"][0]["missing_fields"] == [
+        "control_group_id",
+        "rule_signature",
+        "rule_defined_at",
+    ]
+
+
+def test_combined_ledger_basis_filter_defaults_to_true_forward_headline_rows() -> None:
+    result = build_shortpick_combined_ledger_retrospective_backfill(
+        [
+            {
+                "signal_date": "2026-05-26",
+                "symbol": "002028.SZ",
+                "control_group_id": "control_same_symbol_cooldown:v1",
+                "rule_signature": "sha256:cooldown",
+                "rule_defined_at": "2026-06-10",
+            }
+        ],
+        true_forward_rows=[
+            {
+                "signal_date": "2026-06-11",
+                "symbol": "002028.SZ",
+                "control_group_id": "control_same_symbol_cooldown:v1",
+                "rule_signature": "sha256:cooldown",
+            }
+        ],
+    )
+
+    filtered = filter_shortpick_combined_ledger_rows_by_evidence_basis(result["combined_rows"])
+
+    assert filtered["evidence_basis"] == "true_forward_tracking"
+    assert filtered["selected_count"] == 1
+    assert filtered["excluded_count"] == 1
+    assert filtered["excluded_basis_counts"] == {"retrospective_forward_replay": 1}
+    assert filtered["rows"][0]["retrospective"] is False
+
+
+def test_combined_ledger_basis_filter_rejects_unknown_basis() -> None:
+    with pytest.raises(ValueError, match="unsupported shortpick combined-ledger evidence_basis"):
+        filter_shortpick_combined_ledger_rows_by_evidence_basis([], evidence_basis="mixed")
+
+
+def test_combined_ledger_backfill_empty_inputs_are_explicitly_blocked() -> None:
+    result = build_shortpick_combined_ledger_retrospective_backfill([])
+
+    assert result["status"] == "blocked"
+    assert result["true_forward_count"] == 0
+    assert result["retrospective_count"] == 0
+    assert result["combined_row_count"] == 0
+    assert result["blocked_row_count"] == 0
+    assert result["write_policy"] == "prepared_rows_only_no_database_write_without_runtime_writer"
+
+
+def test_combined_ledger_backfill_blocks_non_true_forward_basis_in_true_forward_inputs() -> None:
+    result = build_shortpick_combined_ledger_retrospective_backfill(
+        [],
+        true_forward_rows=[
+            {
+                "signal_date": "2026-06-11",
+                "symbol": "002028.SZ",
+                "control_group_id": "control_same_symbol_cooldown:v1",
+                "rule_signature": "sha256:cooldown",
+                "evidence_basis": "retrospective_forward_replay",
+            }
+        ],
+    )
+
+    assert result["status"] == "blocked"
+    assert result["true_forward_count"] == 0
+    assert result["blocked_row_count"] == 1
+    assert result["blocked_rows"][0]["blocker"] == "true_forward_input_row_has_non_true_forward_basis"
 
 
 # --- Round 27 hardening: status-recommendation follow-ups (Round 6) ---

@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round31_redundant_control_inventory_archive_path_published_runtime_verified
+Status: round32_combined_ledger_backfill_preparation_ds_reviewed_pending_merge
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -908,7 +908,7 @@ New implementation requirement items (status `not_started`, scoped for later run
 | --- | --- | --- | --- |
 | P2.7 | Deprecated/archived display bucket plus regression guard | completed_partial_generation_wiring_pending | Round 29 added the paper-tracking governance partition; Round 30 moves evidence-based `retire_candidate` and `retired` rows out of the paper-tracking primary frontend table and latest simulated trade surface into a collapsed deprecated/archive bucket. Continued-advancement/generation wiring remains pending under P2.4 / later runtime rounds. |
 | P2.8 | Redundant/meaningless control inventory archival | completed_partial_inventory_decision_source_pending | Round 31 added an inventory-driven archival decision helper, generation exclusion, paper-tracking deprecated-bucket partitioning, API summary fields, and frontend status fallback for `inventory_archived`. No real control is archived until a durable inventory decision source supplies explicit `inventory_diagnostic_value` decisions with allowed reason codes. |
-| P3.7 | Labeled combined-ledger retrospective backfill with true-forward pairing | not_started | Persist retrospective backfill into the same ledger/table as true-forward rows with mandatory `evidence_basis`, `retrospective=true`, leakage-audit fields, and a `pairing_key`; guarantee true-forward queries and headline metrics filter by basis. Builds on the P3.4/P3.5 request builders and the P3.6 activation plan once runner and persistence exist. |
+| P3.7 | Labeled combined-ledger retrospective backfill with true-forward pairing | completed_partial_runner_writer_pending | Round 32 added a combined-ledger backfill preparation helper that materializes already-produced retrospective replay rows with mandatory `evidence_basis=retrospective_forward_replay`, `retrospective=true`, `rule_defined_at`, leakage-audit fields, deterministic `pairing_key`, and headline-safe true-forward basis filtering. It intentionally does not write database rows until the replay runner and runtime ledger writer exist. |
 | P3.8 | New credible control/comparison line build-out | not_started | Turn the P3.1-P3.3 control rules and the P1.3/P1.4 evaluation baselines into actually generated comparison lines on current data, gated through historical backtest before any paper-tracking backfill, per Decision B labeling. |
 
 These items remain blocked by the same precondition called out in earlier rounds: a real `strategy_retirement:v1` artifact writer, a backtest/replay runner, and runtime/frontend wiring must exist before any strategy is durably retired, hidden, or backfilled. Until then this amendment is contract-only.
@@ -1000,6 +1000,33 @@ Merge and publish evidence:
 - Runtime API check confirmed `strategy_governance.inventory_archive_policy=inventory_diagnostic_value_archive_separate_from_performance_retirement`, `deprecated_status_set` includes `inventory_archived`, and current real-data inventory archive count remains `0`.
 - Playwright CLI loaded the published frontend at `http://127.0.0.1:5173/?view=shortpick&shortpickTab=paper-tracking&symbol=002028.SZ`; the Short Pick Lab paper-tracking page rendered successfully.
 
+## Round 32 Review Result
+
+Status: implementation completed; DeepSeek review passed; merge pending.
+
+Round 32 scope:
+
+- Added `build_shortpick_combined_ledger_retrospective_backfill(...)` as a preparation/materialization layer for P3.7. It accepts already-produced retrospective replay rows plus optional true-forward rows and a replay request, then returns combined-ledger-ready rows without writing the database.
+- Retrospective rows are forced to `evidence_basis=retrospective_forward_replay`, `retrospective=true`, `true_forward_tracking_eligible=false`, `headline_metric_eligible=false`, and `paper_tracking_write_policy=combined_ledger_backfill_only_with_evidence_basis`.
+- The helper requires `control_group_id`, `rule_signature`, `rule_defined_at`, `signal_date`, and `symbol`; it blocks rows whose `signal_date` is not strictly before `rule_defined_at`, preserving the retrospective/true-forward boundary.
+- Each valid retrospective row gets a deterministic `pairing_key` using `control_group_id|rule_signature|symbol|signal_date` plus a deterministic `combined_ledger_row_id`.
+- Added `filter_shortpick_combined_ledger_rows_by_evidence_basis(...)` so headline/promotion/retirement queries can default to `evidence_basis=true_forward_tracking` and exclude retrospective rows by construction.
+
+DeepSeek result:
+
+- Blocking issues: none.
+- Merge recommendation: merge.
+- Key confirmations: the backfill preparation helper forces retrospective rows to `evidence_basis=retrospective_forward_replay`, `retrospective=true`, `rule_defined_at`, leakage-audit metadata, deterministic `pairing_key`, and no database write policy; it blocks rows whose `signal_date` is not strictly before `rule_defined_at`; and the basis-filter helper defaults headline-safe queries to `evidence_basis=true_forward_tracking`.
+- Nonblocking suggestions: add explicit tests for empty inputs and true-forward inputs with a non-true-forward basis, and consider later duplicate-`pairing_key` diagnostics for repeated backfills.
+- Follow-up applied before merge: added tests for empty input behavior and true-forward input rows carrying a retrospective basis. Duplicate pairing-key diagnostics remain a later hardening option because no runtime writer exists yet.
+
+Verification evidence before merge:
+
+- `PYTHONPATH=src python3 -m pytest tests/test_shortpick_strategy_governance.py` passed (`77 passed`).
+- `python3 -m ruff check src/ashare_evidence/shortpick_strategy_governance.py tests/test_shortpick_strategy_governance.py` passed.
+- `python3 -m compileall -q src/ashare_evidence/shortpick_strategy_governance.py tests/test_shortpick_strategy_governance.py` passed.
+- `git diff --check` passed.
+
 ## Validation To Run For This Planning Task
 
 
@@ -1077,11 +1104,11 @@ Merge and publish evidence:
 | Round 30 frontend deprecated bucket | published_runtime_verified |
 | P2.7 deprecated display bucket + regression guard | completed_partial_generation_wiring_pending |
 | P2.8 redundant/meaningless control archival | completed_partial_inventory_decision_source_pending |
-| P3.7 labeled combined-ledger retrospective backfill | not_started |
+| P3.7 labeled combined-ledger retrospective backfill | completed_partial_runner_writer_pending |
 | P3.8 new credible control/comparison line build-out | not_started |
 | Runtime behavior changed | round31_inventory_archive_governance_path_published_runtime_verified |
 | Registry changed | completed |
-| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
+| Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_combined_ledger_backfill_preparation_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
 | Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_governance_projection_rendering_round30_deprecated_bucket_filtering_and_round31_inventory_archived_fallback |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |
