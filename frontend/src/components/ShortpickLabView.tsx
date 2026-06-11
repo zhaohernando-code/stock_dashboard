@@ -24,6 +24,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type {
   ShortpickCandidateView,
+  ShortpickCombinedLedgerRow,
   ShortpickFeedbackGroup,
   ShortpickMarketFactorStudyResponse,
   ShortpickModelFeedbackItem,
@@ -81,6 +82,8 @@ import {
   sourceCredibilityLabel,
   strategyGovernanceStatusColor,
   strategyGovernanceStatusLabel,
+  strategyEvidenceBasisColor,
+  strategyEvidenceBasisLabel,
   statusColor,
   statusLabel,
   topicLabel,
@@ -1011,6 +1014,67 @@ function PaperTrackingTab({
   const latestMechanical5d = mechanical5dRows[0] ?? null;
   const latestMechanical10d = mechanical10dRows[0] ?? null;
   const waiting10dRows = enteredRows.filter((item) => !hasPaperTrackingMechanical10dExit(item));
+  const combinedLedger = tracking?.combined_ledger ?? null;
+  const combinedLedgerRows = combinedLedger?.rows ?? [];
+  const combinedLedgerVisible = Boolean(
+    combinedLedger
+    && (Number(combinedLedger.artifact_count ?? 0) > 0 || Number(combinedLedger.combined_row_count ?? 0) > 0 || Number(combinedLedger.ignored_count ?? 0) > 0)
+  );
+  const combinedLedgerColumns: ColumnsType<ShortpickCombinedLedgerRow> = [
+    {
+      title: "证据类型",
+      key: "evidence_basis",
+      render: (_, item) => (
+        <Space direction="vertical" size={0}>
+          <Tag color={strategyEvidenceBasisColor(item.evidence_basis)}>
+            {strategyEvidenceBasisLabel(item.evidence_basis)}
+          </Tag>
+          <Text type="secondary">{item.retrospective ? "后验回放" : "真实前向"}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: "标的 / 日期",
+      key: "symbol",
+      render: (_, item) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{item.name || "未命名"} · {item.symbol || "--"}</Text>
+          <Text type="secondary">信号 {item.signal_date || "--"} · 买入 {item.entry_date || "--"}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: "控制线",
+      key: "control",
+      render: (_, item) => (
+        <Space direction="vertical" size={0}>
+          <Text>{item.control_group_id || "未标注控制组"}</Text>
+          <Text type="secondary">规则 {shortHash(item.rule_signature || "") || "--"}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: "配对 / 来源",
+      key: "pairing",
+      render: (_, item) => (
+        <Space direction="vertical" size={0}>
+          <Text>{item.pairing_key || "未配对"}</Text>
+          <Text type="secondary">artifact {shortHash(item.source_combined_ledger_artifact_id || "") || "--"}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: "收益",
+      key: "returns",
+      align: "right",
+      render: (_, item) => (
+        <Space direction="vertical" size={0}>
+          <Text className={`value-${valueTone(item.stock_return)}`}>{formatPercent(item.stock_return)}</Text>
+          <Text type="secondary">超额 {formatPercent(item.excess_return)}</Text>
+        </Space>
+      ),
+    },
+  ];
   const columns: ColumnsType<ShortpickPaperTrackingItem> = [
     {
       title: "信号 / 买入",
@@ -1297,6 +1361,63 @@ function PaperTrackingTab({
           ),
         }]} />
       </Card>
+
+      {combinedLedgerVisible ? (
+        <Card
+          className="panel-card shortpick-paper-ledger-card"
+          title="组合 Ledger 回放对照"
+        >
+          <Alert
+            showIcon
+            type="info"
+            message="证据 basis 分区"
+            description="后验回放行仅来自 combined_ledger artifact；主表、晋级和退役 headline 默认仍只看真实前向 tracking。"
+          />
+          <Row gutter={[12, 12]} className="shortpick-frozen-metrics">
+            <Col xs={24} md={6}>
+              <div className="shortpick-metric">
+                <span>artifact 数</span>
+                <strong>{Number(combinedLedger?.artifact_count ?? 0)}</strong>
+                <Text type="secondary">忽略 {Number(combinedLedger?.ignored_count ?? 0)} 个</Text>
+              </div>
+            </Col>
+            <Col xs={24} md={6}>
+              <div className="shortpick-metric">
+                <span>组合行</span>
+                <strong>{Number(combinedLedger?.combined_row_count ?? combinedLedgerRows.length)}</strong>
+                <Text type="secondary">重复行 {Number(combinedLedger?.duplicate_row_count ?? 0)}</Text>
+              </div>
+            </Col>
+            <Col xs={24} md={6}>
+              <div className="shortpick-metric">
+                <span>真实前向</span>
+                <strong>{Number(combinedLedger?.true_forward_count ?? 0)}</strong>
+                <Text type="secondary">headline 允许 basis</Text>
+              </div>
+            </Col>
+            <Col xs={24} md={6}>
+              <div className="shortpick-metric">
+                <span>后验回放</span>
+                <strong>{Number(combinedLedger?.retrospective_count ?? 0)}</strong>
+                <Text type="secondary">不并入主表 items</Text>
+              </div>
+            </Col>
+          </Row>
+          {combinedLedgerRows.length ? (
+            <Table
+              className="shortpick-paper-ledger-table"
+              rowKey={(item) => item.combined_ledger_row_id}
+              size="middle"
+              columns={combinedLedgerColumns}
+              dataSource={combinedLedgerRows}
+              pagination={{ pageSize: 6 }}
+              scroll={{ x: 860 }}
+            />
+          ) : (
+            <Empty description="combined_ledger artifact 暂无可展示行。" />
+          )}
+        </Card>
+      ) : null}
 
       <Card
         className="panel-card shortpick-paper-ledger-card"

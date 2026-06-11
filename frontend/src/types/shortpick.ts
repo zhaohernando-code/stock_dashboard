@@ -511,6 +511,42 @@ export interface ShortpickPaperTrackingGovernanceSummary {
   deprecated_strategy_ids?: string[];
 }
 
+export interface ShortpickCombinedLedgerRow {
+  combined_ledger_row_id: string;
+  evidence_basis: "true_forward_tracking" | "retrospective_forward_replay" | string;
+  source_combined_ledger_artifact_id?: string | null;
+  pairing_key?: string | null;
+  control_group_id?: string | null;
+  rule_signature?: string | null;
+  symbol?: string | null;
+  name?: string | null;
+  signal_date?: string | null;
+  entry_date?: string | null;
+  entry_rule?: string | null;
+  entry_price_source?: string | null;
+  retrospective?: boolean | null;
+  headline_metric_eligible?: boolean | null;
+  stock_return?: number | null;
+  excess_return?: number | null;
+}
+
+export interface ShortpickCombinedLedgerProjection {
+  status?: string | null;
+  source?: string | null;
+  source_policy?: string | null;
+  headline_metric_filter_policy?: string | null;
+  artifact_count?: number | null;
+  ignored_count?: number | null;
+  duplicate_row_count?: number | null;
+  combined_row_count?: number | null;
+  true_forward_count?: number | null;
+  retrospective_count?: number | null;
+  basis_counts?: Record<string, number>;
+  rows?: ShortpickCombinedLedgerRow[];
+  true_forward_rows?: ShortpickCombinedLedgerRow[];
+  retrospective_rows?: ShortpickCombinedLedgerRow[];
+}
+
 export interface ShortpickPaperTrackingResponse {
   generated_at: string;
   current_status: string;
@@ -522,5 +558,6 @@ export interface ShortpickPaperTrackingResponse {
   latest_run?: Record<string, unknown> | null;
   summary: Record<string, unknown>;
   strategy_governance?: ShortpickPaperTrackingGovernanceSummary;
+  combined_ledger?: ShortpickCombinedLedgerProjection;
   items: ShortpickPaperTrackingItem[];
 }
