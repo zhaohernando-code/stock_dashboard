@@ -26,6 +26,7 @@ from ashare_evidence.shortpick_portfolio_backtest import (
 from ashare_evidence.shortpick_strategy_backtest_runner import run_shortpick_historical_backtest_request
 from ashare_evidence.shortpick_strategy_governance import (
     build_shortpick_historical_backtest_generation_requests,
+    build_shortpick_retrospective_forward_replay_requests,
     build_shortpick_same_symbol_cooldown_rule,
 )
 
@@ -529,3 +530,50 @@ def test_cli_governance_historical_backtest_runs_request_file() -> None:
         evidence_path = Path(rendered["evidence"][0]["artifact"]["path"])
         assert evidence_path.parent == output_dir
         assert json.loads(evidence_path.read_text(encoding="utf-8"))["gate_status"] == "passed"
+
+
+def test_cli_governance_retrospective_replay_runs_request_file() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        request_path = Path(temp_dir) / "request.json"
+        paper_tracking_path = Path(temp_dir) / "paper-tracking.json"
+        output_dir = Path(temp_dir) / "replay"
+        rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")
+        paper_tracking = {
+            "items": [
+                {
+                    "candidate_id": "a",
+                    "signal_date": "2026-05-20",
+                    "symbol": "002028.SZ",
+                    "validation_by_horizon": [
+                        {"horizon_days": 10, "status": "completed", "stock_return": -0.09, "exit_date": "2026-05-24"}
+                    ],
+                },
+                {"candidate_id": "b", "signal_date": "2026-05-26", "symbol": "002028.SZ"},
+            ]
+        }
+        request = build_shortpick_retrospective_forward_replay_requests([rule], paper_tracking)["requests"][0]
+        request_path.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
+        paper_tracking_path.write_text(json.dumps(paper_tracking, ensure_ascii=False), encoding="utf-8")
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = main(
+                [
+                    "shortpick-governance-retrospective-replay",
+                    "--request-path",
+                    str(request_path),
+                    "--paper-tracking-path",
+                    str(paper_tracking_path),
+                    "--output-dir",
+                    str(output_dir),
+                ]
+            )
+
+        assert exit_code == 0
+        rendered = json.loads(stdout.getvalue())
+        assert rendered["ready_count"] == 1
+        artifact_path = Path(rendered["artifacts"][0]["artifact"]["path"])
+        assert artifact_path.parent == output_dir
+        saved = json.loads(artifact_path.read_text(encoding="utf-8"))
+        assert saved["evidence_basis"] == "retrospective_forward_replay"
+        assert saved["paper_tracking_write_policy"] == "forbidden"

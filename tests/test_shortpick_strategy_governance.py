@@ -26,6 +26,7 @@ from ashare_evidence.shortpick_strategy_governance import (
     partition_paper_tracking_rows_by_governance,
     project_shortpick_strategy_view_sections,
 )
+from ashare_evidence.shortpick_strategy_replay_runner import run_shortpick_retrospective_forward_replay_request
 
 
 def test_retirement_evidence_pack_aggregates_forward_metrics_without_deciding_status() -> None:
@@ -1521,6 +1522,199 @@ def test_retrospective_forward_replay_requests_are_deterministic() -> None:
 
     assert first == second
     assert first["execution_policy"] == "request_plan_only_no_replay_execution_no_data_write"
+
+
+def test_retrospective_forward_replay_runner_applies_same_symbol_cooldown_and_prepares_rows() -> None:
+    rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")
+    paper_tracking = {
+        "items": [
+            {
+                "candidate_id": "loss",
+                "signal_date": "2026-05-20",
+                "symbol": "002028.SZ",
+                "name": "思源电气",
+                "validation_by_horizon": [
+                    {
+                        "horizon_days": 10,
+                        "status": "completed",
+                        "stock_return": -0.09,
+                        "exit_date": "2026-05-24",
+                    }
+                ],
+            },
+            {
+                "candidate_id": "blocked",
+                "signal_date": "2026-05-26",
+                "symbol": "002028.SZ",
+                "name": "思源电气",
+                "validation_by_horizon": [
+                    {
+                        "horizon_days": 10,
+                        "status": "completed",
+                        "stock_return": 0.05,
+                        "exit_date": "2026-06-05",
+                    }
+                ],
+            },
+            {"candidate_id": "future", "signal_date": "2026-06-10", "symbol": "002028.SZ"},
+        ]
+    }
+    request = build_shortpick_retrospective_forward_replay_requests(
+        [rule],
+        paper_tracking,
+        generated_at="2026-06-10T12:00:00+08:00",
+    )["requests"][0]
+
+    replay = run_shortpick_retrospective_forward_replay_request(request, paper_tracking)
+
+    assert replay["status"] == "ready"
+    assert replay["evidence_basis"] == "retrospective_forward_replay"
+    assert replay["retrospective"] is True
+    assert replay["paper_tracking_write_policy"] == "forbidden"
+    assert replay["true_forward_tracking_eligible"] is False
+    assert replay["input_candidate_count"] == 2
+    rows_by_id = {row["candidate_id"]: row for row in replay["rows"]}
+    assert rows_by_id["loss"]["cooldown_action"] == "allowed"
+    assert rows_by_id["blocked"]["cooldown_action"] == "blocked"
+    assert rows_by_id["blocked"]["leakage_audit_status"] == "passed"
+    assert rows_by_id["blocked"]["rule_defined_at"] == "2026-06-10"
+    assert rows_by_id["blocked"]["pairing_key"] == (
+        f"control_same_symbol_cooldown:v1|{rule['rule_signature']}|002028.SZ|2026-05-26"
+    )
+
+    prepared = build_shortpick_combined_ledger_retrospective_backfill(
+        replay["rows"],
+        replay_request=request,
+        source_artifact_ref="output/replay.json",
+    )
+    assert prepared["status"] == "ready"
+    assert prepared["retrospective_count"] == 2
+    assert all(row["evidence_basis"] == "retrospective_forward_replay" for row in prepared["retrospective_rows"])
+
+
+def test_retrospective_forward_replay_runner_blocks_windows_that_reach_rule_date() -> None:
+    request = {
+        "evidence_basis": "retrospective_forward_replay",
+        "retrospective": True,
+        "control_group_id": "control_same_symbol_cooldown:v1",
+        "rule_signature": "sha256:test",
+        "rule_defined_at": "2026-06-10",
+        "replay_start_date": "2026-05-08",
+        "replay_end_date": "2026-06-10",
+    }
+
+    replay = run_shortpick_retrospective_forward_replay_request(
+        request,
+        {"items": [{"candidate_id": "a", "signal_date": "2026-05-08", "symbol": "002028.SZ"}]},
+    )
+
+    assert replay["status"] == "blocked"
+    assert replay["blocker"] == "replay_window_must_end_before_rule_defined_at"
+    assert replay["leakage_audit_status"] == "blocked"
+
+
+def test_retrospective_forward_replay_runner_rejects_true_forward_or_headline_tampering() -> None:
+    request = {
+        "evidence_basis": "retrospective_forward_replay",
+        "retrospective": True,
+        "control_group_id": "control_same_symbol_cooldown:v1",
+        "rule_signature": "sha256:test",
+        "rule_defined_at": "2026-06-10",
+        "replay_start_date": "2026-05-08",
+        "replay_end_date": "2026-05-31",
+        "true_forward_tracking_eligible": True,
+    }
+
+    replay = run_shortpick_retrospective_forward_replay_request(
+        request,
+        {"items": [{"candidate_id": "a", "signal_date": "2026-05-20", "symbol": "002028.SZ"}]},
+    )
+
+    assert replay["status"] == "blocked"
+    assert replay["blocker"] == "request_must_not_be_true_forward_eligible"
+    assert replay["paper_tracking_write_policy"] == "forbidden"
+    assert replay["true_forward_tracking_eligible"] is False
+
+    headline_replay = run_shortpick_retrospective_forward_replay_request(
+        {**request, "true_forward_tracking_eligible": False, "headline_metric_eligible": True},
+        {"items": [{"candidate_id": "a", "signal_date": "2026-05-20", "symbol": "002028.SZ"}]},
+    )
+
+    assert headline_replay["status"] == "blocked"
+    assert headline_replay["blocker"] == "request_must_not_be_headline_metric_eligible"
+
+
+def test_retrospective_forward_replay_runner_limits_cooldown_auxiliary_rows_to_replay_scope() -> None:
+    rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")
+    request = {
+        "evidence_basis": "retrospective_forward_replay",
+        "retrospective": True,
+        "control_group_id": rule["control_group_id"],
+        "rule": rule,
+        "rule_signature": rule["rule_signature"],
+        "rule_defined_at": "2026-06-10",
+        "replay_start_date": "2026-05-20",
+        "replay_end_date": "2026-05-31",
+    }
+    paper_tracking = {
+        "items": [
+            {
+                "candidate_id": "before-window-loss",
+                "signal_date": "2026-05-10",
+                "symbol": "002028.SZ",
+                "validation_by_horizon": [
+                    {"horizon_days": 10, "status": "completed", "stock_return": -0.12, "exit_date": "2026-05-24"}
+                ],
+            },
+            {"candidate_id": "inside-window-candidate", "signal_date": "2026-05-26", "symbol": "002028.SZ"},
+        ]
+    }
+
+    replay = run_shortpick_retrospective_forward_replay_request(request, paper_tracking)
+
+    assert replay["status"] == "ready"
+    assert replay["input_candidate_count"] == 1
+    row = replay["rows"][0]
+    assert row["candidate_id"] == "inside-window-candidate"
+    assert row["cooldown_action"] == "allowed"
+    assert row["cooldown_blocker_events"] == []
+
+
+def test_retrospective_forward_replay_runner_limits_drawdown_features_to_replay_scope() -> None:
+    rule = build_shortpick_drawdown_reversal_filter_rule(rule_defined_at="2026-06-10")
+    request = {
+        "evidence_basis": "retrospective_forward_replay",
+        "retrospective": True,
+        "control_group_id": rule["control_group_id"],
+        "rule": rule,
+        "rule_signature": rule["rule_signature"],
+        "rule_defined_at": "2026-06-10",
+        "replay_start_date": "2026-05-20",
+        "replay_end_date": "2026-05-31",
+    }
+    paper_tracking = {
+        "items": [
+            {
+                "candidate_id": "before-window-feature",
+                "signal_date": "2026-05-10",
+                "symbol": "002028.SZ",
+                "drawdown_reversal_features": {
+                    "feature_date": "2026-05-10",
+                    "recent_drawdown_return": -0.20,
+                },
+            },
+            {"candidate_id": "inside-window-candidate", "signal_date": "2026-05-26", "symbol": "002028.SZ"},
+        ]
+    }
+
+    replay = run_shortpick_retrospective_forward_replay_request(request, paper_tracking)
+
+    assert replay["status"] == "ready"
+    assert replay["input_candidate_count"] == 1
+    row = replay["rows"][0]
+    assert row["candidate_id"] == "inside-window-candidate"
+    assert row["filter_action"] == "allowed"
+    assert row["feature_coverage_status"] == "missing"
 
 
 def test_true_forward_tracking_activation_plan_starts_no_earlier_than_rule_definition() -> None:
