@@ -577,3 +577,60 @@ def test_cli_governance_retrospective_replay_runs_request_file() -> None:
         saved = json.loads(artifact_path.read_text(encoding="utf-8"))
         assert saved["evidence_basis"] == "retrospective_forward_replay"
         assert saved["paper_tracking_write_policy"] == "forbidden"
+
+
+def test_cli_governance_combined_ledger_backfill_materializes_replay_artifact() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        replay_artifact_path = Path(temp_dir) / "replay.json"
+        output_path = Path(temp_dir) / "combined-ledger.json"
+        rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")
+        replay_artifact = {
+            "artifact_id": "shortpick-retrospective-forward-replay:test",
+            "artifact_type": "shortpick_retrospective_forward_replay",
+            "status": "ready",
+            "evidence_basis": "retrospective_forward_replay",
+            "retrospective": True,
+            "request": {
+                "control_group_id": rule["control_group_id"],
+                "rule_signature": rule["rule_signature"],
+                "rule_defined_at": "2026-06-10",
+            },
+            "rows": [
+                {
+                    "candidate_id": "a",
+                    "signal_date": "2026-05-20",
+                    "symbol": "002028.SZ",
+                    "control_group_id": rule["control_group_id"],
+                    "rule_signature": rule["rule_signature"],
+                    "rule_defined_at": "2026-06-10",
+                    "leakage_audit_status": "passed",
+                }
+            ],
+        }
+        replay_artifact_path.write_text(json.dumps(replay_artifact, ensure_ascii=False), encoding="utf-8")
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = main(
+                [
+                    "shortpick-governance-combined-ledger-backfill",
+                    "--replay-artifact-path",
+                    str(replay_artifact_path),
+                    "--generated-at",
+                    "2026-06-11T12:00:00+08:00",
+                    "--output-path",
+                    str(output_path),
+                ]
+            )
+
+        assert exit_code == 0
+        rendered = json.loads(stdout.getvalue())
+        assert rendered["status"] == "ready"
+        assert rendered["artifact"]["path"] == str(output_path)
+        saved = json.loads(output_path.read_text(encoding="utf-8"))
+        assert saved["artifact_type"] == "shortpick_combined_ledger_backfill"
+        assert saved["retrospective_count"] == 1
+        assert saved["combined_rows"][0]["evidence_basis"] == "retrospective_forward_replay"
+        assert saved["combined_rows"][0]["paper_tracking_write_policy"] == (
+            "combined_ledger_backfill_only_with_evidence_basis"
+        )

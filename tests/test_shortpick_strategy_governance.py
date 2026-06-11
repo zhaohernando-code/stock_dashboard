@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from ashare_evidence.shortpick_combined_ledger_writer import run_shortpick_combined_ledger_backfill_artifact
 from ashare_evidence.shortpick_strategy_governance import (
     SAME_SYMBOL_COOLDOWN_CONTROL_ID,
     apply_shortpick_drawdown_reversal_filter_control,
@@ -1715,6 +1716,51 @@ def test_retrospective_forward_replay_runner_limits_drawdown_features_to_replay_
     assert row["candidate_id"] == "inside-window-candidate"
     assert row["filter_action"] == "allowed"
     assert row["feature_coverage_status"] == "missing"
+
+
+def test_combined_ledger_backfill_writer_materializes_labeled_replay_rows() -> None:
+    rule = build_shortpick_same_symbol_cooldown_rule(rule_defined_at="2026-06-10")
+    paper_tracking = {
+        "items": [
+            {
+                "candidate_id": "loss",
+                "signal_date": "2026-05-20",
+                "symbol": "002028.SZ",
+                "validation_by_horizon": [
+                    {"horizon_days": 10, "status": "completed", "stock_return": -0.09, "exit_date": "2026-05-24"}
+                ],
+            },
+            {"candidate_id": "blocked", "signal_date": "2026-05-26", "symbol": "002028.SZ"},
+        ]
+    }
+    request = build_shortpick_retrospective_forward_replay_requests([rule], paper_tracking)["requests"][0]
+    replay = run_shortpick_retrospective_forward_replay_request(request, paper_tracking)
+
+    artifact = run_shortpick_combined_ledger_backfill_artifact(
+        [replay],
+        true_forward_rows=[
+            {
+                "candidate_id": "live",
+                "signal_date": "2026-06-11",
+                "symbol": "002028.SZ",
+                "control_group_id": rule["control_group_id"],
+                "rule_signature": rule["rule_signature"],
+            }
+        ],
+        generated_at="2026-06-11T12:00:00+08:00",
+    )
+
+    assert artifact["status"] == "ready"
+    assert artifact["write_policy"] == "artifact_only_no_database_or_paper_tracking_write"
+    assert artifact["true_forward_count"] == 1
+    assert artifact["retrospective_count"] == 2
+    assert artifact["combined_row_count"] == 3
+    retrospective_rows = artifact["retrospective_rows"]
+    assert all(row["evidence_basis"] == "retrospective_forward_replay" for row in retrospective_rows)
+    assert all(row["retrospective"] is True for row in retrospective_rows)
+    assert all(row["headline_metric_eligible"] is False for row in retrospective_rows)
+    assert all(row["source_artifact_ref"].startswith("shortpick-retrospective-forward-replay:") for row in retrospective_rows)
+    assert artifact["true_forward_rows"][0]["evidence_basis"] == "true_forward_tracking"
 
 
 def test_true_forward_tracking_activation_plan_starts_no_earlier_than_rule_definition() -> None:

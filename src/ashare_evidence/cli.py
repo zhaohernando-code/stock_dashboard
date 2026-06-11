@@ -57,6 +57,10 @@ from ashare_evidence.research_artifact_store import (
     write_phase5_producer_contract_study_artifact,
 )
 from ashare_evidence.services import get_latest_recommendation_summary, get_recommendation_trace
+from ashare_evidence.shortpick_combined_ledger_writer import (
+    load_shortpick_combined_ledger_inputs,
+    run_shortpick_combined_ledger_backfill_artifact,
+)
 from ashare_evidence.shortpick_lab import (
     retry_failed_shortpick_rounds,
     run_shortpick_experiment,
@@ -763,6 +767,21 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_governance_retrospective_replay.add_argument("--paper-tracking-path", required=True)
     shortpick_governance_retrospective_replay.add_argument("--output-dir", default=None)
 
+    shortpick_governance_combined_ledger_backfill = subparsers.add_parser(
+        "shortpick-governance-combined-ledger-backfill",
+        help="Materialize Short Pick retrospective replay artifacts into a labeled combined-ledger artifact.",
+    )
+    shortpick_governance_combined_ledger_backfill.add_argument("--database-url", default=None)
+    shortpick_governance_combined_ledger_backfill.add_argument(
+        "--replay-artifact-path",
+        action="append",
+        required=True,
+        help="Path to a shortpick_retrospective_forward_replay artifact. Repeat for multiple artifacts.",
+    )
+    shortpick_governance_combined_ledger_backfill.add_argument("--true-forward-path", default=None)
+    shortpick_governance_combined_ledger_backfill.add_argument("--generated-at", default=None)
+    shortpick_governance_combined_ledger_backfill.add_argument("--output-path", required=True)
+
     shortpick_strategy_slice_evidence = subparsers.add_parser(
         "shortpick-strategy-slice-evidence",
         help="Build offline trade-level strategy slice evidence for Short Pick Lab history analysis.",
@@ -1243,6 +1262,20 @@ def main(argv: list[str] | None = None) -> int:
             [dict(item) for item in requests if isinstance(item, dict)],
             dict(paper_tracking) if isinstance(paper_tracking, dict) else {},
             output_dir=args.output_dir,
+        )
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-governance-combined-ledger-backfill":
+        replay_artifacts, true_forward_rows = load_shortpick_combined_ledger_inputs(
+            args.replay_artifact_path,
+            true_forward_path=args.true_forward_path,
+        )
+        payload = run_shortpick_combined_ledger_backfill_artifact(
+            replay_artifacts,
+            true_forward_rows=true_forward_rows,
+            generated_at=args.generated_at,
+            output_path=args.output_path,
         )
         _print_json(payload)
         return 0
