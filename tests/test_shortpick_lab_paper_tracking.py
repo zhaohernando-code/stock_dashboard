@@ -1,7 +1,9 @@
 # ruff: noqa: F403,F405
 from __future__ import annotations
 
+from ashare_evidence.api import _shortpick_combined_ledger_exit_tracks
 from ashare_evidence.research_artifact_store import (
+    SHORTPICK_FILTER_RESELECT_SELECTION_POLICY,
     artifact_root_from_database_url,
     write_shortpick_combined_ledger_backfill_artifact_record,
     write_shortpick_control_inventory_archive_artifact_record,
@@ -32,6 +34,52 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
         self.assertEqual(risk_track["take_profit_pct"], paper_tracking_config["take_profit_pct"])
         self.assertEqual(contract["version"], SHORTPICK_FROZEN_STRATEGY_CONFIG["version"])
 
+    def test_retrospective_combined_ledger_tracks_take_profit_proxy(self) -> None:
+        tracks = _shortpick_combined_ledger_exit_tracks(
+            {
+                "evidence_basis": "retrospective_forward_replay",
+                "validation_by_horizon": [
+                    {"horizon_days": 1, "status": "completed", "exit_date": "2026-05-12", "stock_return": 0.02},
+                    {"horizon_days": 3, "status": "completed", "exit_date": "2026-05-14", "stock_return": 0.12},
+                    {"horizon_days": 5, "status": "completed", "exit_date": "2026-05-18", "stock_return": 0.09},
+                    {"horizon_days": 10, "status": "completed", "exit_date": "2026-05-25", "stock_return": 0.04},
+                ],
+            }
+        )
+
+        by_key = {track["key"]: track for track in tracks}
+        self.assertEqual(set(by_key), {"mechanical_5d", "mechanical_10d", "take_profit_stop_loss"})
+        self.assertNotIn("mechanical_1d", by_key)
+        self.assertNotIn("mechanical_3d", by_key)
+        self.assertEqual(by_key["take_profit_stop_loss"]["exit_trade_day"], "2026-05-14")
+        self.assertEqual(by_key["take_profit_stop_loss"]["stock_return"], 0.10)
+        self.assertEqual(
+            by_key["take_profit_stop_loss"]["exit_reason"],
+            "take_profit_10pct_touched_retrospective_horizon_proxy",
+        )
+
+    def test_retrospective_combined_ledger_tracks_ten_day_proxy_without_threshold_hit(self) -> None:
+        tracks = _shortpick_combined_ledger_exit_tracks(
+            {
+                "evidence_basis": "retrospective_forward_replay",
+                "validation_by_horizon": [
+                    {"horizon_days": 1, "status": "completed", "exit_date": "2026-05-12", "stock_return": 0.01},
+                    {"horizon_days": 3, "status": "completed", "exit_date": "2026-05-14", "stock_return": -0.02},
+                    {"horizon_days": 5, "status": "completed", "exit_date": "2026-05-18", "stock_return": 0.03},
+                    {"horizon_days": 10, "status": "completed", "exit_date": "2026-05-25", "stock_return": 0.04},
+                ],
+            }
+        )
+
+        by_key = {track["key"]: track for track in tracks}
+        self.assertEqual(set(by_key), {"mechanical_5d", "mechanical_10d", "take_profit_stop_loss"})
+        self.assertEqual(by_key["take_profit_stop_loss"]["exit_trade_day"], "2026-05-25")
+        self.assertEqual(by_key["take_profit_stop_loss"]["stock_return"], 0.04)
+        self.assertEqual(
+            by_key["take_profit_stop_loss"]["exit_reason"],
+            "max_10d_no_take_profit_stop_loss_retrospective_horizon_proxy",
+        )
+
     def test_market_factor_paper_controls_get_same_exit_tracks(self) -> None:
         contract = shortpick_market_factor_paper_control_contracts()
         self.assertEqual(
@@ -46,6 +94,9 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
                 SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
                 SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
                 SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
+                SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_CONTROL_ROLE,
+                SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_CONTROL_ROLE,
+                SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE,
                 SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
             ],
         )
@@ -59,6 +110,9 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
             SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
             SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
             SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
+            SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_CONTROL_ROLE,
+            SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_CONTROL_ROLE,
+            SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE,
             SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
         ):
             candidate = ShortpickCandidate(
@@ -648,6 +702,7 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
                 "artifact_type": "shortpick_combined_ledger_backfill",
                 "status": "ready",
                 "ledger_mode": "combined_paper_tracking_ledger",
+                "selection_policy": SHORTPICK_FILTER_RESELECT_SELECTION_POLICY,
                 "headline_metric_filter_policy": "true_forward_queries_must_filter_evidence_basis_true_forward_tracking",
                 "combined_rows": [
                     {
@@ -666,6 +721,20 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
                         "source_rank": 1,
                         "rule_defined_at": "2026-06-10",
                         "validation_by_horizon": [
+                            {
+                                "horizon_days": 1,
+                                "status": "completed",
+                                "entry_date": "2026-05-11",
+                                "exit_date": "2026-05-12",
+                                "stock_return": -0.01,
+                            },
+                            {
+                                "horizon_days": 3,
+                                "status": "completed",
+                                "entry_date": "2026-05-11",
+                                "exit_date": "2026-05-13",
+                                "stock_return": -0.09,
+                            },
                             {
                                 "horizon_days": 5,
                                 "status": "completed",
@@ -705,9 +774,29 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
         self.assertEqual(item["validation_status"], "completed")
         self.assertEqual(item["validation_horizon_days"], 10)
         self.assertEqual(item["stock_return"], 0.03)
+        self.assertNotIn(
+            "mechanical_1d",
+            [track["key"] for track in item["paper_tracking_exit_tracks"]],
+        )
+        self.assertNotIn(
+            "mechanical_3d",
+            [track["key"] for track in item["paper_tracking_exit_tracks"]],
+        )
         self.assertEqual(
-            [(track["key"], track["exit_trade_day"], track["stock_return"]) for track in item["paper_tracking_exit_tracks"]],
-            [("mechanical_5d", "2026-05-15", -0.05), ("mechanical_10d", "2026-05-22", 0.03)],
+            [
+                (track["key"], track["exit_trade_day"], track["stock_return"], track.get("exit_reason"))
+                for track in item["paper_tracking_exit_tracks"]
+            ],
+            [
+                ("mechanical_5d", "2026-05-15", -0.05, None),
+                ("mechanical_10d", "2026-05-22", 0.03, None),
+                (
+                    "take_profit_stop_loss",
+                    "2026-05-13",
+                    -0.08,
+                    "stop_loss_8pct_touched_retrospective_horizon_proxy",
+                ),
+            ],
         )
         self.assertEqual(payload["summary"]["retrospective_replay_signal_count"], 1)
         self.assertEqual(payload["summary"]["comparison_signal_count"], 1)

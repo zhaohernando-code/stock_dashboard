@@ -146,6 +146,7 @@ from ashare_evidence.shortpick_lab import (
     shortpick_market_factor_paper_control_contracts,
     validate_shortpick_run,
 )
+from ashare_evidence.shortpick_policy import shortpick_paper_tracking_config
 from ashare_evidence.shortpick_replay import (
     get_shortpick_replay_run,
     get_shortpick_replay_sources,
@@ -938,22 +939,93 @@ def _shortpick_combined_ledger_projection(source: dict[str, object] | None) -> d
     }
 
 
+def _shortpick_float_or_none(value: object) -> float | None:
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
+def _shortpick_combined_ledger_risk_exit_track(
+    row: dict[str, object],
+    completed_horizons: list[dict[str, object]],
+) -> dict[str, object] | None:
+    config = shortpick_paper_tracking_config()
+    stop_loss_pct = float(config.get("stop_loss_pct") or 0.08)
+    take_profit_pct = float(config.get("take_profit_pct") or 0.10)
+    max_holding_days = int(config.get("max_holding_trading_days") or 10)
+    eligible_horizons = sorted(
+        (
+            (_shortpick_int_or_zero(horizon.get("horizon_days")), horizon)
+            for horizon in completed_horizons
+            if 0 < _shortpick_int_or_zero(horizon.get("horizon_days")) <= max_holding_days
+        ),
+        key=lambda item: item[0],
+    )
+    for horizon_days, horizon in eligible_horizons:
+        stock_return = _shortpick_float_or_none(horizon.get("stock_return"))
+        if stock_return is None:
+            continue
+        exit_reason = ""
+        track_return = stock_return
+        if stock_return <= -stop_loss_pct:
+            exit_reason = "stop_loss_8pct_touched_retrospective_horizon_proxy"
+            track_return = -stop_loss_pct
+        elif stock_return >= take_profit_pct:
+            exit_reason = "take_profit_10pct_touched_retrospective_horizon_proxy"
+            track_return = take_profit_pct
+        if exit_reason:
+            return {
+                "key": "take_profit_stop_loss",
+                "label": "止盈止损",
+                "exit_trade_day": _paper_tracking_date_part(horizon.get("exit_date") or horizon.get("exit_at")),
+                "entry_trade_day": _paper_tracking_date_part(horizon.get("entry_date") or horizon.get("entry_at")),
+                "horizon_days": horizon_days,
+                "status": horizon.get("status"),
+                "stock_return": round(track_return, 6),
+                "excess_return": None,
+                "exit_reason": exit_reason,
+                "execution_assumption": "retrospective_horizon_return_threshold_proxy",
+                "source_horizon_days": horizon_days,
+                "evidence_basis": row.get("evidence_basis"),
+            }
+    ten_day = next((horizon for horizon_days, horizon in eligible_horizons if horizon_days == max_holding_days), None)
+    if ten_day is None:
+        return None
+    return {
+        "key": "take_profit_stop_loss",
+        "label": "止盈止损",
+        "exit_trade_day": _paper_tracking_date_part(ten_day.get("exit_date") or ten_day.get("exit_at")),
+        "entry_trade_day": _paper_tracking_date_part(ten_day.get("entry_date") or ten_day.get("entry_at")),
+        "horizon_days": max_holding_days,
+        "status": ten_day.get("status"),
+        "stock_return": ten_day.get("stock_return"),
+        "excess_return": ten_day.get("excess_return"),
+        "exit_reason": "max_10d_no_take_profit_stop_loss_retrospective_horizon_proxy",
+        "execution_assumption": "retrospective_10d_close_proxy",
+        "source_horizon_days": max_holding_days,
+        "evidence_basis": row.get("evidence_basis"),
+    }
+
+
 def _shortpick_combined_ledger_exit_tracks(row: dict[str, object]) -> list[dict[str, object]]:
     labels = {
-        1: "机械1日",
-        3: "机械3日",
         5: "机械5日",
         10: "机械10日",
-        20: "机械20日",
     }
+    completed_horizons = [
+        horizon
+        for horizon in row.get("validation_by_horizon") or []
+        if isinstance(horizon, dict) and str(horizon.get("status") or "") == "completed"
+    ]
     tracks: list[dict[str, object]] = []
-    for horizon in row.get("validation_by_horizon") or []:
-        if not isinstance(horizon, dict) or str(horizon.get("status") or "") != "completed":
-            continue
+    for horizon in completed_horizons:
         try:
             horizon_days = int(horizon.get("horizon_days") or 0)
         except (TypeError, ValueError):
             horizon_days = 0
+        if horizon_days not in {5, 10}:
+            continue
         key = f"mechanical_{horizon_days}d" if horizon_days else "mechanical_replay"
         tracks.append(
             {
@@ -968,6 +1040,9 @@ def _shortpick_combined_ledger_exit_tracks(row: dict[str, object]) -> list[dict[
                 "evidence_basis": row.get("evidence_basis"),
             }
         )
+    risk_track = _shortpick_combined_ledger_risk_exit_track(row, completed_horizons)
+    if risk_track is not None:
+        tracks.append(risk_track)
     return tracks
 
 

@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round56_open_items_closed_ds_reviewed_ready_to_merge_publish
+Status: exit_track_display_correction_ds_reviewed_ready_to_merge_publish
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -1948,6 +1948,14 @@ Post-merge paper-tracking record-group correction:
 - Paper-tracking rows now render the same record-group display field with `paperTrackingRecordGroupLabel(item)`, so retrospective replay rows show the concrete control name while preserving the underlying governance `tracking_group` for statistics and headline eligibility.
 - Verification: `pytest -q tests/test_frontend_shortpick_static.py tests/test_frontend_shortpick_paper_tracking_helpers.py`, `npm run build`, and `git diff --check` passed. A focused DeepSeek read-only review returned `PASS`.
 
+Post-merge retrospective-control exit-track correction:
+
+- The three retrospective filter-and-reselect controls keep only meaningful paper exit tracks in `纸面跟踪记录（正式策略与对照组）`: `机械5日`, `机械10日`, and `止盈止损`.
+- `机械1日` and `机械3日` are no longer projected as display tracks for these retrospective control rows. Shorter completed horizons can still inform the conservative `止盈止损` proxy trigger timing when they cross the configured paper risk thresholds.
+- The `止盈止损` proxy remains visibly retrospective: it is derived from completed horizon returns because the combined-ledger artifacts do not contain a full daily high/low path, and it keeps retrospective evidence labels instead of mutating raw artifacts or true-forward paper rows.
+- DeepSeek read-only review found no blocking issues and said the change can merge; it recommended direct tests for take-profit and 10-day fallback proxy branches, which were added before merge.
+- Verification before merge: `pytest -q tests/test_shortpick_lab_paper_tracking.py -m runtime_integration`, `pytest -q tests/test_frontend_shortpick_paper_tracking_helpers.py tests/test_frontend_shortpick_static.py`, `ruff check src/ashare_evidence/api.py tests/test_shortpick_lab_paper_tracking.py`, `python3 -m compileall -q src/ashare_evidence/api.py`, and `git diff --check` passed.
+
 ## Validation To Run For This Planning Task
 
 
@@ -2030,6 +2038,7 @@ Post-merge paper-tracking record-group correction:
 | Round 54 true-forward control runtime wiring | completed_ds_reviewed_ready_to_merge |
 | Round 55 plan status reconciliation | completed_ds_reviewed_ready_to_merge |
 | Round 56 open governance items closeout | published_runtime_verified |
+| Retrospective control exit-track display correction | ds_reviewed_ready_to_merge_publish |
 | Runtime behavior changed | round56_deprecated_generation_statuses_excluded_and_inventory_archive_artifact_source_wired_no_runtime_db_mutation_published_verified |
 | Registry changed | completed |
 | Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_combined_ledger_backfill_preparation_credible_control_line_buildout_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_replay_feedback_source_wiring_round54_true_forward_control_runtime_generation_and_round56_deprecated_generation_inventory_artifact_source |
