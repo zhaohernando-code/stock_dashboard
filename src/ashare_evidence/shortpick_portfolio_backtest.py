@@ -312,7 +312,7 @@ def _eligible_signal_days(
             continue
         for index, bar in enumerate(series.bars):
             if start_date <= bar.day <= end_date and index >= 20 and index + 6 < len(series.bars):
-                if _context_for_signal_day(series, bar.day) is not None:
+                if _context_for_signal_day(series, bar.day, include_golden_cross=False) is not None:
                     counts[bar.day] += 1
     return [day for day in sorted(counts) if counts[day] >= min_signal_symbol_count]
 
@@ -411,7 +411,7 @@ def _regime_features_by_day(
             context
             for symbol, series in series_by_symbol.items()
             if symbol not in INDEX_SYMBOLS
-            for context in [_context_for_signal_day(series, signal_day)]
+            for context in [_context_for_signal_day(series, signal_day, include_golden_cross=False)]
             if context is not None
         ]
         if not contexts:
