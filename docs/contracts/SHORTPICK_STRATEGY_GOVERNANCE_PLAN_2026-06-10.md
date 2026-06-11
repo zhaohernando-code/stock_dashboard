@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round28_intent_clarification_amendment_recorded
+Status: round30_deprecated_frontend_bucket_ds_reviewed_pending_merge_publish
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -878,7 +878,7 @@ DeepSeek result:
 
 ## Round 28 Intent-Clarification Amendment
 
-Status: requirements recorded; implementation not started.
+Status: requirements recorded; runtime implementation started in later rounds.
 
 This round does not change code, runtime, data, frontend, registry, or schemas. It records the project owner's clarified original intent so later implementation rounds do not drift from it. The owner confirmed three goals and resolved two open questions that the prior rounds had deliberately left to a decision.
 
@@ -906,12 +906,56 @@ New implementation requirement items (status `not_started`, scoped for later run
 
 | ID | Work Item | Status | Notes |
 | --- | --- | --- | --- |
-| P2.7 | Deprecated/archived display bucket plus regression guard | not_started | Move evidence-based `retire_candidate` and `retired` out of the primary frontend and out of continued advancement, retain their data, mark them deprecated, and block automatic re-promotion. Wires the existing read-only `filter_shortpick_generation_eligible_items` and `project_shortpick_strategy_view_sections` helpers into the real generation and frontend paths. |
+| P2.7 | Deprecated/archived display bucket plus regression guard | completed_partial_generation_wiring_pending | Round 29 added the paper-tracking governance partition; Round 30 moves evidence-based `retire_candidate` and `retired` rows out of the paper-tracking primary frontend table and latest simulated trade surface into a collapsed deprecated/archive bucket. Continued-advancement/generation wiring remains pending under P2.4 / later runtime rounds. |
 | P2.8 | Redundant/meaningless control inventory archival | not_started | Define an inventory-driven archival path for controls that are redundant or provide no unique diagnostic value, separate from the performance retirement gates, so they can leave the primary view without being mislabeled as performance failures. |
 | P3.7 | Labeled combined-ledger retrospective backfill with true-forward pairing | not_started | Persist retrospective backfill into the same ledger/table as true-forward rows with mandatory `evidence_basis`, `retrospective=true`, leakage-audit fields, and a `pairing_key`; guarantee true-forward queries and headline metrics filter by basis. Builds on the P3.4/P3.5 request builders and the P3.6 activation plan once runner and persistence exist. |
 | P3.8 | New credible control/comparison line build-out | not_started | Turn the P3.1-P3.3 control rules and the P1.3/P1.4 evaluation baselines into actually generated comparison lines on current data, gated through historical backtest before any paper-tracking backfill, per Decision B labeling. |
 
 These items remain blocked by the same precondition called out in earlier rounds: a real `strategy_retirement:v1` artifact writer, a backtest/replay runner, and runtime/frontend wiring must exist before any strategy is durably retired, hidden, or backfilled. Until then this amendment is contract-only.
+
+## Round 29 Review Result
+
+Status: completed DeepSeek review and merged before this Round 30 continuation.
+
+Round 29 scope:
+
+- Added `partition_paper_tracking_rows_by_governance(...)` and `GOVERNANCE_DEPRECATED_VIEW_STATUSES` to the Short Pick governance helper layer.
+- Wired the governance partition into `_build_shortpick_paper_tracking_ledger(...)`, annotating paper-tracking rows with `governance_status`, `governance_strategy_id`, `governance_view_section`, and a `strategy_governance` summary block.
+- Kept the change additive: no strategy was hidden, stopped, deleted, or backfilled in Round 29. The live ledger path passes no historical after-cost evidence, so deprecated count remains zero until governed evidence exists.
+- Added partition tests plus paper-tracking API regression assertions.
+
+Round 29 merge evidence:
+
+- Commit `5cfd0b0` (`Wire governance partition into primary paper-tracking ledger (Round 29)`) was merged into main by `e35c4f9`.
+- The plan document was not updated by that handoff round, so Round 30 records this durable status reconciliation.
+
+## Round 30 Review Result
+
+Status: completed DeepSeek review; merge and runtime publish pending.
+
+Round 30 scope:
+
+- Added frontend paper-tracking governance types for per-row governance fields and the `strategy_governance` summary.
+- Added frontend helper functions `primaryPaperTrackingRows(...)`, `deprecatedPaperTrackingRows(...)`, and `paperTrackingGovernanceViewSection(...)`.
+- The helper treats `governance_view_section=deprecated` and the fallback statuses `retire_candidate` / `retired` as deprecated, so a row cannot silently re-enter the primary frontend if the backend omits `governance_view_section`.
+- Updated `PaperTrackingTab` so the main table, mobile list, counts, mechanical exit metrics, and latest simulated trade surface use primary rows only.
+- Added a collapsed `已归档 / 废弃观察桶` table that retains deprecated row visibility without placing those rows in the primary surface.
+- Added regression tests proving helper-level primary/deprecated partitioning, status-only deprecated fallback, and latest simulated trade fallback away from archived rows.
+
+Verification evidence:
+
+- `PYTHONPATH=src python3 -m pytest tests/test_frontend_shortpick_paper_tracking_helpers.py tests/test_frontend_shortpick_static.py tests/test_shortpick_strategy_governance.py` passed (`72 passed`).
+- `npm --prefix frontend run build -- --mode production` passed.
+- `PYTHONPATH=src python3 -m unittest tests.test_shortpick_lab_paper_tracking` passed (`6 tests`).
+- `python3 -m ruff check tests/test_frontend_shortpick_paper_tracking_helpers.py tests/test_frontend_shortpick_static.py` passed.
+- `git diff --check` passed.
+
+DeepSeek result:
+
+- Initial review found no broad UI blocker but identified a real regression risk: if a row had `governance_status=retire_candidate` / `retired` but no `governance_view_section=deprecated`, the first implementation could leak it into the primary frontend.
+- Follow-up fix added status fallback classification and targeted tests for status-only deprecated rows plus latest simulated trade filtering.
+- DeepSeek rereview confirmed the blocker is fixed and found no remaining merge-blocking issue.
+- Nonblocking note retained: `latestPaperTrackingChoices(...)` and `latestFrozenPaperTrackingChoices(...)` assume their caller passes primary rows; production call sites now do that, and helper tests cover the intended calling contract.
 
 ## Validation To Run For This Planning Task
 
@@ -985,14 +1029,16 @@ These items remain blocked by the same precondition called out in earlier rounds
 | Round 26 DeepSeek review | completed |
 | Governance test hardening (Round 6/10/13 follow-ups) | completed |
 | Round 27 DeepSeek review | completed |
-| Intent-clarification amendment (Round 28) | requirements_recorded_implementation_not_started |
-| P2.7 deprecated display bucket + regression guard | not_started |
+| Intent-clarification amendment (Round 28) | requirements_recorded_runtime_implementation_started |
+| Round 29 paper-tracking governance partition | completed_merged_plan_reconciled |
+| Round 30 frontend deprecated bucket | completed_ds_reviewed_pending_merge_publish |
+| P2.7 deprecated display bucket + regression guard | completed_partial_generation_wiring_pending |
 | P2.8 redundant/meaningless control archival | not_started |
 | P3.7 labeled combined-ledger retrospective backfill | not_started |
 | P3.8 new credible control/comparison line build-out | not_started |
-| Runtime behavior changed | published_for_read_only_replay_feedback_projection_real_data_enrichment_and_replay_feedback_aggregate_ttl_cache |
+| Runtime behavior changed | frontend_user_visible_change_pending_merge_publish_for_round30 |
 | Registry changed | completed |
 | Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
-| Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_and_governance_projection_rendering |
+| Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_governance_projection_rendering_and_round30_deprecated_bucket_filtering |
 | Runtime data changed | not_started |
 | DeepSeek plan review | completed |

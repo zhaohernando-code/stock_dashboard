@@ -494,8 +494,21 @@ export interface ShortpickPaperTrackingItem {
   gate?: Record<string, unknown>;
   regime?: Record<string, unknown>;
   selection_score_components?: Record<string, unknown>;
+  governance_status?: string | null;
+  governance_strategy_id?: string | null;
+  governance_view_section?: "primary" | "deprecated" | string | null;
+  governance_recommendation?: Record<string, unknown>;
   created_at?: string | null;
   updated_at?: string | null;
+}
+
+export interface ShortpickPaperTrackingGovernanceSummary {
+  status?: string | null;
+  policy?: string | null;
+  deprecated_status_set?: string[];
+  primary_count?: number | null;
+  deprecated_count?: number | null;
+  deprecated_strategy_ids?: string[];
 }
 
 export interface ShortpickPaperTrackingResponse {
@@ -508,5 +521,6 @@ export interface ShortpickPaperTrackingResponse {
   market_control_contract?: Record<string, unknown>;
   latest_run?: Record<string, unknown> | null;
   summary: Record<string, unknown>;
+  strategy_governance?: ShortpickPaperTrackingGovernanceSummary;
   items: ShortpickPaperTrackingItem[];
 }
