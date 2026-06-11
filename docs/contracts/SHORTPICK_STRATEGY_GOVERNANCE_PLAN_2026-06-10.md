@@ -1,6 +1,6 @@
 # Short Pick Strategy Governance Plan 2026-06-10
 
-Status: round50_runtime_historical_gate_passed_ds_reviewed_ready_to_merge
+Status: round51_runtime_replay_combined_ledger_verified_ds_reviewed_ready_to_merge
 Owner: codex
 Created: 2026-06-10
 Scope: Short Pick Lab strategy retirement, retrospective replay, new diagnostic controls, and long-horizon evaluation governance
@@ -96,7 +96,7 @@ The next governance package should adopt four principles.
 | P3.2 | Drawdown/reversal filter control | completed_partial_runtime_wiring_pending | Added a deterministic rule builder and pure input-to-output filter helper. It uses only signal-date-or-prior technical feature snapshots, blocks on recent drawdown, short-window breakdown plus price-vs-MA weakness, or high-level reversal triggers, emits `rule_signature`, and labels evidence basis. Feature generation, historical/replay artifacts, true-forward wiring, and frontend display remain pending. |
 | P3.3 | Repeated exposure limit control | completed_partial_runtime_wiring_pending | Added a deterministic rule builder and pure input-to-output exposure-limit helper. It defaults to symbol grouping, supports explicit group fields such as symbol plus industry for later governed use, ignores same-day/future exposure rows, emits `rule_signature`, and labels evidence basis. Runtime generation wiring, historical/replay artifacts, true-forward tracking, and frontend display remain pending. |
 | P3.4 | Historical backtest generation | completed_partial_replay_writer_pending | Added a deterministic historical-backtest generation request builder. Round 34 added a gated runner and artifact persistence path. Round 35 adds explicit executable portfolio strategy mappings for the three registered P3 controls, so generated P3 historical requests can now run through the existing portfolio backtest instead of being blocked for missing mappings. |
-| P3.5 | Retrospective forward replay generation | completed_partial_writer_pending | Added a deterministic retrospective-forward-replay request builder. Round 36 adds a replay runner and artifact persistence path that consumes generated requests plus paper-tracking JSON, applies the registered P3 control logic only to signal dates strictly before `rule_defined_at`, labels output rows `evidence_basis=retrospective_forward_replay`, marks `retrospective=true`, and forbids paper-tracking writes. Runtime database writer remains pending. |
+| P3.5 | Retrospective forward replay generation | completed_runtime_artifacts_verified | Added a deterministic retrospective-forward-replay request builder. Round 36 adds a replay runner and artifact persistence path that consumes generated requests plus paper-tracking JSON, applies the registered P3 control logic only to signal dates strictly before `rule_defined_at`, labels output rows `evidence_basis=retrospective_forward_replay`, marks `retrospective=true`, and forbids paper-tracking writes. Round 51 generated ready runtime artifacts for all three credible-control lines under the served runtime artifact root. Runtime database writer remains intentionally not used. |
 | P3.6 | True forward tracking start | completed_partial_runtime_wiring_pending | Added a deterministic true-forward activation-plan helper. It allows only registered control IDs with `rule_signature` and `rule_defined_at`, sets `tracking_start_date` no earlier than both the requested start and rule definition date, labels `evidence_basis=true_forward_tracking`, forbids retroactive backfill, and does not write tracking rows. Runtime paper-ledger wiring remains pending. |
 
 ### P4 - Frontend And Reporting
@@ -908,8 +908,8 @@ New implementation requirement items (status `not_started`, scoped for later run
 | --- | --- | --- | --- |
 | P2.7 | Deprecated/archived display bucket plus regression guard | completed_partial_generation_wiring_pending | Round 29 added the paper-tracking governance partition; Round 30 moves evidence-based `retire_candidate` and `retired` rows out of the paper-tracking primary frontend table and latest simulated trade surface into a collapsed deprecated/archive bucket. Continued-advancement/generation wiring remains pending under P2.4 / later runtime rounds. |
 | P2.8 | Redundant/meaningless control inventory archival | completed_partial_inventory_decision_source_pending | Round 31 added an inventory-driven archival decision helper, generation exclusion, paper-tracking deprecated-bucket partitioning, API summary fields, and frontend status fallback for `inventory_archived`. No real control is archived until a durable inventory decision source supplies explicit `inventory_diagnostic_value` decisions with allowed reason codes. |
-| P3.7 | Labeled combined-ledger retrospective backfill with true-forward pairing | completed_discovery_materializer_pending_governance_replay_artifacts | Round 32 added a combined-ledger backfill preparation helper that materializes already-produced retrospective replay rows with mandatory `evidence_basis=retrospective_forward_replay`, `retrospective=true`, `rule_defined_at`, leakage-audit fields, deterministic `pairing_key`, and headline-safe true-forward basis filtering. Round 36 adds replay artifact rows that can feed this helper. Round 37 adds an artifact-only combined-ledger writer/CLI that persists labeled combined rows without writing the database. Round 41 wires runtime artifact-store discovery into `/shortpick-lab/paper-tracking` as a separate `combined_ledger` API block without merging retrospective rows into primary `items`; DeepSeek-reviewed hardening restricts combined-ledger artifact rows to `true_forward_tracking` or `retrospective_forward_replay`. Round 42 adds frontend types and a separate paper-tracking display block for `combined_ledger` rows with visible evidence-basis labels. Round 43 published and served-verified the frontend/API shape. Round 44 adds automatic discovery/materialization from ready governance replay artifacts; runtime currently has zero ready governance replay artifacts, so real combined rows remain pending. |
-| P3.8 | New credible control/comparison line build-out | completed_request_selector_wiring_pending_runtime_sharded_gate_execution | Round 33 added a credible-control comparison-line build-out plan for the three registered P3 controls and the two registered P1 baselines. Round 34 added the historical-backtest runner and evidence artifact persistence path. Round 35 adds executable control-to-portfolio strategy mappings for the three registered P3 controls. Round 45 adds a CLI to generate the credible-control comparison request plan from paper-tracking JSON without executing jobs or writing rows. Round 46 lets the existing historical-backtest and retrospective-replay execution CLIs consume the Round 45 nested credible-control plan shape directly. Round 47 lets the credible-control planner consume the historical-backtest runner aggregate output field `evidence` directly as gate input. Round 48 generated a current runtime credible-control plan, but the full three-request historical gate execution was interrupted after several minutes without writing an artifact. Round 49 adds request selectors to the historical-backtest and retrospective-replay execution CLIs so the next runtime attempt can run one control request at a time. Runtime sharded historical gate execution, replay artifact execution, paper-ledger write, and frontend/runtime exposure remain pending. |
+| P3.7 | Labeled combined-ledger retrospective backfill with true-forward pairing | completed_runtime_materialized_and_frontend_verified | Round 32 added a combined-ledger backfill preparation helper that materializes already-produced retrospective replay rows with mandatory `evidence_basis=retrospective_forward_replay`, `retrospective=true`, `rule_defined_at`, leakage-audit fields, deterministic `pairing_key`, and headline-safe true-forward basis filtering. Round 36 adds replay artifact rows that can feed this helper. Round 37 adds an artifact-only combined-ledger writer/CLI that persists labeled combined rows without writing the database. Round 41 wires runtime artifact-store discovery into `/shortpick-lab/paper-tracking` as a separate `combined_ledger` API block without merging retrospective rows into primary `items`; DeepSeek-reviewed hardening restricts combined-ledger artifact rows to `true_forward_tracking` or `retrospective_forward_replay`. Round 42 adds frontend types and a separate paper-tracking display block for `combined_ledger` rows with visible evidence-basis labels. Round 43 published and served-verified the frontend/API shape. Round 44 adds automatic discovery/materialization from ready governance replay artifacts. Round 51 produced ready runtime replay artifacts, materialized a ready combined-ledger artifact, verified API projection, and verified the served frontend block. |
+| P3.8 | New credible control/comparison line build-out | completed_historical_gate_replay_and_combined_ledger_runtime_verified | Round 33 added a credible-control comparison-line build-out plan for the three registered P3 controls and the two registered P1 baselines. Round 34 added the historical-backtest runner and evidence artifact persistence path. Round 35 adds executable control-to-portfolio strategy mappings for the three registered P3 controls. Round 45 adds a CLI to generate the credible-control comparison request plan from paper-tracking JSON without executing jobs or writing rows. Round 46 lets the existing historical-backtest and retrospective-replay execution CLIs consume the Round 45 nested credible-control plan shape directly. Round 47 lets the credible-control planner consume the historical-backtest runner aggregate output field `evidence` directly as gate input. Round 48 generated a current runtime credible-control plan, but the full three-request historical gate execution was interrupted after several minutes without writing an artifact. Round 49 adds request selectors to the historical-backtest and retrospective-replay execution CLIs. Round 50 passed the three runtime historical gates. Round 51 generated replay artifacts and a combined-ledger artifact visible in the runtime API and frontend. Paper-ledger writes remain intentionally not used; true-forward tracking still starts only in real forward time. |
 
 These items remain blocked by the remaining runtime preconditions called out in earlier rounds: runtime/frontend wiring must exist before backfilled comparison rows are displayed as normal dashboard evidence. Round 34 removed the generic historical-backtest runner/artifact gap; Round 35 removed the missing P3 historical control-mapping gap for the three registered controls; Round 36 removes the retrospective replay runner/artifact gap without writing runtime ledger rows. Round 37 adds combined-ledger artifact materialization, but not DB/API/frontend consumption. Round 38 adds the `strategy_retirement:v1` artifact writer and aligns its schema with the existing retired-status authority check. Round 39 wires retirement artifact discovery into API governance projections and paper-tracking partitioning. Round 40 wires the same runtime retirement artifact source into active shortpick market-factor generation exclusion. Round 41 starts combined-ledger runtime/API consumption by exposing a separate artifact-backed `combined_ledger` block from paper tracking while deliberately keeping `items` as true-forward paper-tracking rows only.
 
@@ -1665,6 +1665,60 @@ DeepSeek review result:
 - Confirmation: Round 50 documentation is honest: the 3/3 passed runtime historical gate only unlocks historical-gate status and does not claim paper-tracking writes, combined-ledger materialization, true-forward status changes, or frontend exposure.
 - Nonblocking suggestions addressed before merge: extracted `GOLDEN_CROSS_STRATEGY` in the market-factor study module and documented that hot paths should pass `include_golden_cross=False` when they do not read golden-cross fields.
 
+## Round 51 Runtime Replay And Combined-Ledger Completion
+
+Status: runtime replay artifacts generated; combined-ledger materialized; API and frontend verified; DeepSeek review passed; ready to merge.
+
+Round 51 scope:
+
+- Consumed the Round 50 historical-gate-passed credible-control plan.
+- Ran all three nested `retrospective_replay_plan.requests` through `shortpick-governance-retrospective-replay`.
+- Wrote ready `shortpick_retrospective_forward_replay` artifacts under the actually served runtime artifact root: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/runtime-artifacts/shortpick_retrospective_replays/`.
+- Ran `shortpick-governance-combined-ledger-materialize` against `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/runtime-artifacts`.
+- Wrote a ready `shortpick_combined_ledger_backfill` artifact under `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/runtime-artifacts/shortpick_combined_ledgers/`.
+- Verified the live backend `/shortpick-lab/paper-tracking` and served frontend page at `http://127.0.0.1:5173/shortpick-lab?tab=paper-tracking`.
+
+Runtime artifacts:
+
+- Replay aggregate stdout: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/analytics/20260611-credible-control-runtime/replay/retrospective-replay.runtime-artifacts.aggregate.json`.
+- Combined-ledger materialization stdout: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/analytics/20260611-credible-control-runtime/replay/combined-ledger-materialize.runtime-artifacts.aggregate.json`.
+- Runtime replay artifacts:
+  - `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/runtime-artifacts/shortpick_retrospective_replays/shortpick-retrospective-forward-replay-request:f5bd43aac9146f02.json`.
+  - `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/runtime-artifacts/shortpick_retrospective_replays/shortpick-retrospective-forward-replay-request:b714d0e13817d7d4.json`.
+  - `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/runtime-artifacts/shortpick_retrospective_replays/shortpick-retrospective-forward-replay-request:3a4186dff6c24b5e.json`.
+- Runtime combined-ledger artifact: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/runtime-artifacts/shortpick_combined_ledgers/shortpick-combined-ledger-backfill:c886e25ac71e2a36.json`.
+- Frontend verification screenshot: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/analytics/20260611-credible-control-runtime/replay/shortpick-paper-tracking-combined-ledger.png`.
+
+Runtime result:
+
+- Replay aggregate returned `status=ready`, `request_count=3`, `artifact_count=3`, `ready_count=3`, and `blocked_count=0`.
+- Each replay artifact had `input_candidate_count=260`, `replay_row_count=260`, `leakage_audit_status=passed`, `paper_tracking_write_policy=forbidden`, and `true_forward_tracking_eligible=false`.
+- Combined-ledger materialization returned `status=ready`, `artifact_count=3` from replay discovery, `combined_row_count=777`, `retrospective_count=777`, `true_forward_count=0`, and `blocked_row_count=3`.
+- The three blocked rows were duplicate `combined_ledger_row_id` rows removed by the materializer's duplicate guard. The dedup rate was `3 / 780`, about `0.38%`. There were no blocked replay sources.
+- The live backend returned `combined_ledger.status=ready`, `artifact_count=1`, `rows=777`, `retrospective_count=777`, and `true_forward_count=0`.
+- The served frontend rendered the `组合 Ledger 回放对照` block with `artifact 数 1`, `组合行 777`, `真实前向 0`, and `后验回放 777`, plus visible evidence-basis rows labeled `后验前向回放`.
+
+Scope guard:
+
+- This round wrote runtime artifacts only.
+- It did not write database rows.
+- It did not append primary paper-tracking rows.
+- It did not make retrospective rows headline-eligible.
+- It did not start true-forward tracking; true-forward tracking remains allowed only from real forward time after rule definition.
+
+Remaining blockers after Round 51:
+
+- True-forward credible-control tracking still needs the daily runtime generation path to emit real future rows from the registered rule start.
+- Promotion/retirement decisions must continue to default to true-forward rows and use retrospective rows only as supporting research evidence.
+
+DeepSeek review result:
+
+- DeepSeek read-only review returned `PASS/MERGE`.
+- Confirmation: Round 51 documentation is honest and does not claim database writes, primary paper-tracking writes, headline eligibility, or true-forward tracking.
+- Confirmation: the evidence chain is sufficient to move P3.5/P3.7/P3.8 to runtime verified: three ready replay artifacts, a ready combined-ledger artifact with 777 retrospective rows, live API projection, and served frontend rendering.
+- Confirmation: `blocked_row_count=3` is not blocking because the rows were duplicate `combined_ledger_row_id` rows removed by the materializer, with no blocked replay sources.
+- Nonblocking suggestion incorporated before merge: record the dedup rate so future runs can detect unexpected duplicate growth.
+
 ## Validation To Run For This Planning Task
 
 
@@ -1710,7 +1764,7 @@ DeepSeek review result:
 | Round 12 DeepSeek review | completed |
 | P3.4 historical backtest request builder + runner + P3 mappings | completed_partial_replay_writer_pending |
 | Round 13 DeepSeek review | completed |
-| P3.5 retrospective forward replay request builder + runner | completed_partial_writer_pending |
+| P3.5 retrospective forward replay request builder + runner | completed_runtime_artifacts_verified |
 | Round 14 DeepSeek review | completed |
 | P3.6 true forward tracking activation plan | completed_partial_runtime_wiring_pending |
 | Round 15 DeepSeek review | completed |
@@ -1742,11 +1796,11 @@ DeepSeek review result:
 | Round 30 frontend deprecated bucket | published_runtime_verified |
 | P2.7 deprecated display bucket + regression guard | completed_generation_wiring_pending_runtime_data_verification |
 | P2.8 redundant/meaningless control archival | completed_partial_inventory_decision_source_pending |
-| P3.7 labeled combined-ledger retrospective backfill + artifact writer + API source projection + frontend display | completed_discovery_materializer_pending_governance_replay_artifacts |
-| P3.8 new credible control/comparison line build-out | historical_gate_passed_runtime_replay_pending |
-| Runtime behavior changed | round31_inventory_archive_governance_path_published_runtime_verified |
+| P3.7 labeled combined-ledger retrospective backfill + artifact writer + API source projection + frontend display | completed_runtime_materialized_and_frontend_verified |
+| P3.8 new credible control/comparison line build-out | completed_historical_gate_replay_and_combined_ledger_runtime_verified |
+| Runtime behavior changed | round51_combined_ledger_runtime_artifacts_api_and_frontend_verified |
 | Registry changed | completed |
 | Strategy code changed | completed_for_read_only_governance_builder_status_layer_filter_view_projection_archive_same_symbol_cooldown_drawdown_reversal_repeated_exposure_helpers_historical_backtest_request_builder_retrospective_forward_replay_request_builder_true_forward_activation_plan_combined_ledger_backfill_preparation_credible_control_line_buildout_plan_status_label_projection_evidence_basis_sections_archive_summary_rows_leakage_coverage_notes_report_governance_projection_and_replay_feedback_source_wiring |
 | Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_governance_projection_rendering_round30_deprecated_bucket_filtering_and_round31_inventory_archived_fallback |
-| Runtime data changed | runtime_artifacts_created_no_database_or_paper_tracking_writes |
+| Runtime data changed | runtime_replay_and_combined_ledger_artifacts_created_no_database_or_paper_tracking_writes |
 | DeepSeek plan review | completed |
