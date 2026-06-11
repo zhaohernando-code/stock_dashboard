@@ -1685,6 +1685,59 @@ def test_retrospective_forward_replay_runner_applies_same_symbol_cooldown_and_pr
     assert all(row["evidence_basis"] == "retrospective_forward_replay" for row in prepared["retrospective_rows"])
 
 
+def test_retrospective_forward_replay_runner_uses_ranked_candidate_features_for_drawdown_reselect() -> None:
+    rule = build_shortpick_drawdown_reversal_filter_rule(rule_defined_at="2026-06-10")
+    paper_tracking = {
+        "items": [{"candidate_id": "frozen", "signal_date": "2026-05-26", "symbol": "002028.SZ"}],
+        "ranked_candidate_pools": [
+            {
+                "signal_date": "2026-05-26",
+                "candidates": [
+                    {
+                        "candidate_id": "rank1",
+                        "signal_date": "2026-05-26",
+                        "symbol": "002028.SZ",
+                        "candidate_rank": 1,
+                        "drawdown_reversal_features": {
+                            "feature_date": "2026-05-26",
+                            "recent_drawdown_return": -0.09,
+                        },
+                    },
+                    {
+                        "candidate_id": "rank2",
+                        "signal_date": "2026-05-26",
+                        "symbol": "300750.SZ",
+                        "candidate_rank": 2,
+                        "drawdown_reversal_features": {
+                            "feature_date": "2026-05-26",
+                            "recent_drawdown_return": -0.01,
+                            "short_window_return": 0.02,
+                            "price_vs_ma20": 0.03,
+                        },
+                    },
+                ],
+            }
+        ],
+    }
+    request = build_shortpick_retrospective_forward_replay_requests(
+        [rule],
+        paper_tracking,
+        generated_at="2026-06-10T12:00:00+08:00",
+    )["requests"][0]
+
+    replay = run_shortpick_retrospective_forward_replay_request(request, paper_tracking)
+
+    assert replay["status"] == "ready"
+    assert replay["selection_policy"] == "filter_ranked_pool_select_first_allowed"
+    assert replay["replay_row_count"] == 1
+    selected = replay["rows"][0]
+    assert selected["candidate_id"] == "rank2"
+    assert selected["candidate_rank"] == 2
+    assert selected["filter_action"] == "allowed"
+    assert selected["blocked_higher_ranked_candidates"][0]["candidate_id"] == "rank1"
+    assert selected["blocked_higher_ranked_candidates"][0]["filter_action"] == "blocked"
+
+
 def test_retrospective_forward_replay_runner_blocks_windows_that_reach_rule_date() -> None:
     request = {
         "evidence_basis": "retrospective_forward_replay",
