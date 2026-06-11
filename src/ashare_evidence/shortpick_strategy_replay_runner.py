@@ -446,7 +446,12 @@ def _completed_outcome_rows(paper_tracking: dict[str, Any], *, request: dict[str
 
 def _feature_rows(paper_tracking: dict[str, Any], *, request: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for item in paper_tracking.get("items") or []:
+    source_items = [
+        *[item for item in paper_tracking.get("items") or [] if isinstance(item, dict)],
+        *_ranked_candidate_source_rows(paper_tracking),
+    ]
+    seen: set[tuple[str, str, str]] = set()
+    for item in source_items:
         if not isinstance(item, dict):
             continue
         signal_date = _date_part(item.get("signal_date") or item.get("run_date"))
@@ -471,7 +476,9 @@ def _feature_rows(paper_tracking: dict[str, Any], *, request: dict[str, Any]) ->
                 "high_level_reversal_return",
             )
         )
-        if row["symbol"] and row["feature_date"] and has_feature_value:
+        key = (str(row["symbol"]), str(row["feature_date"]), signal_date)
+        if row["symbol"] and row["feature_date"] and has_feature_value and key not in seen:
+            seen.add(key)
             rows.append(row)
     return rows
 

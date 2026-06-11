@@ -24,6 +24,10 @@ from ashare_evidence.shortpick_portfolio_backtest import (
     STRONG_BREADTH_RANK2_STRATEGY,
     build_shortpick_portfolio_backtest,
 )
+from ashare_evidence.shortpick_ranked_pool_replay_input import (
+    RANKED_POOL_RECONSTRUCTION_POLICY,
+    enrich_shortpick_replay_paper_tracking_with_reconstructed_ranked_pools,
+)
 from ashare_evidence.shortpick_strategy_backtest_runner import run_shortpick_historical_backtest_request
 from ashare_evidence.shortpick_strategy_governance import (
     build_shortpick_historical_backtest_generation_requests,
@@ -171,12 +175,21 @@ def test_shortpick_portfolio_backtest_compares_daily_and_weekly_modes() -> None:
         assert payload["benchmark_references"]["000300.SH"]["available"] is True
         assert payload["benchmark_references"]["000905.SH"]["available"] is True
         assert payload["benchmark_references"]["000852.SH"]["available"] is True
-        assert payload["config"]["strategy_variants"]["ret10_turnover_cooldown_market_positive_cooldown"]["base_strategy"] == "ret10_turnover_cooldown"
+        assert (
+            payload["config"]["strategy_variants"]["ret10_turnover_cooldown_market_positive_cooldown"]["base_strategy"]
+            == "ret10_turnover_cooldown"
+        )
         assert payload["config"]["strategy_variants"]["ret10_turnover_second_market_positive_cooldown_stop8"]["stop_loss_pct"] == 0.08
         assert payload["config"]["strategy_variants"][STRONG_BREADTH_RANK2_STRATEGY]["candidate_rank"] == 2
         assert payload["config"]["strategy_variants"][LOW_TURNOVER_UPTREND_PORTFOLIO_STRATEGY]["candidate_rank"] == 1
-        assert payload["config"]["strategy_variants"]["ret10_turnover_top3_market_positive_cooldown_equal_weight"]["candidate_rank"] == "top3_equal_weight"
-        assert payload["config"]["strategy_variants"]["momentum_volume_golden_cross_10_200"]["technical_filter"] == "10日均线当日上穿200日均线"
+        assert (
+            payload["config"]["strategy_variants"]["ret10_turnover_top3_market_positive_cooldown_equal_weight"]["candidate_rank"]
+            == "top3_equal_weight"
+        )
+        assert (
+            payload["config"]["strategy_variants"]["momentum_volume_golden_cross_10_200"]["technical_filter"]
+            == "10日均线当日上穿200日均线"
+        )
         assert payload["comparison"]["recommended"]["mode"] in {"daily_rolling_5x10k", "weekly_concentrated_1x50k"}
         assert all(
             not trade["symbol"].startswith("688")
@@ -193,6 +206,63 @@ def test_shortpick_portfolio_backtest_compares_daily_and_weekly_modes() -> None:
         assert payload["production_evidence"]["checks"]
         assert "100" in payload["production_evidence"]["cost_stress"]
         assert "ret10" in payload["production_evidence"]["control_comparison"]["daily_rolling_controls"]
+
+
+def test_reconstructed_ranked_pool_replay_input_uses_frozen_low_turnover_ranking() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_url = f"sqlite:///{Path(temp_dir) / 'ranked-pool-replay.db'}"
+        init_database(database_url)
+        _seed_long_sample_fixture(database_url)
+
+        paper_tracking = {
+            "items": [
+                {
+                    "candidate_id": "frozen-primary",
+                    "signal_date": "2026-02-15",
+                    "symbol": "600001.SH",
+                    "tracking_role": "frozen_paper_primary",
+                }
+            ]
+        }
+        requests = [
+            {
+                "replay_start_date": "2026-02-01",
+                "replay_end_date": "2026-02-20",
+                "rule_defined_at": "2026-03-01",
+            }
+        ]
+
+        with session_scope(database_url) as session:
+            enriched = enrich_shortpick_replay_paper_tracking_with_reconstructed_ranked_pools(
+                session,
+                paper_tracking,
+                requests=requests,
+                rank_limit=3,
+                horizons=(1, 10),
+            )
+
+        reconstruction = enriched["ranked_candidate_pool_reconstruction"]
+        assert reconstruction["status"] == "ready"
+        assert reconstruction["policy"] == RANKED_POOL_RECONSTRUCTION_POLICY
+        assert reconstruction["ranking_family"] == "liquid_low_turnover_20d_uptrend"
+        assert reconstruction["baseline_family"] == "frozen_paper_low_turnover_uptrend_v4"
+        assert reconstruction["paper_tracking_write_policy"] == "forbidden"
+
+        pools = enriched["ranked_candidate_pools"]
+        assert len(pools) == 1
+        pool = pools[0]
+        assert pool["signal_date"] == "2026-02-15"
+        assert pool["pool_source"] == RANKED_POOL_RECONSTRUCTION_POLICY
+        assert pool["ranked_candidate_count"] >= 2
+        candidates = pool["candidates"]
+        assert [candidate["candidate_rank"] for candidate in candidates] == list(range(1, len(candidates) + 1))
+        assert all(candidate["ranking_family"] == "liquid_low_turnover_20d_uptrend" for candidate in candidates)
+        assert all(candidate["baseline_family"] == "frozen_paper_low_turnover_uptrend_v4" for candidate in candidates)
+        assert all(candidate["drawdown_reversal_features"]["feature_date"] == "2026-02-15" for candidate in candidates)
+        assert all(
+            any(row["horizon_days"] == 10 and row["status"] == "completed" for row in candidate["validation_by_horizon"])
+            for candidate in candidates
+        )
 
 
 def test_shortpick_portfolio_backtest_supports_next_open_and_same_day_proxy_entries() -> None:

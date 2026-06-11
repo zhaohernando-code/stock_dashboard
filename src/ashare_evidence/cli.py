@@ -74,6 +74,9 @@ from ashare_evidence.shortpick_portfolio_backtest import (
     build_shortpick_portfolio_backtest,
     write_shortpick_portfolio_backtest,
 )
+from ashare_evidence.shortpick_ranked_pool_replay_input import (
+    enrich_shortpick_replay_paper_tracking_with_reconstructed_ranked_pools,
+)
 from ashare_evidence.shortpick_replay import (
     refresh_shortpick_replay_feedback_cache,
     run_shortpick_historical_replay,
@@ -825,6 +828,7 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_governance_retrospective_replay.add_argument("--output-dir", default=None)
     shortpick_governance_retrospective_replay.add_argument("--request-id", action="append", default=None)
     shortpick_governance_retrospective_replay.add_argument("--control-group-id", action="append", default=None)
+    shortpick_governance_retrospective_replay.add_argument("--skip-ranked-pool-reconstruction", action="store_true")
 
     shortpick_governance_credible_control_plan = subparsers.add_parser(
         "shortpick-governance-credible-control-plan",
@@ -1370,6 +1374,13 @@ def main(argv: list[str] | None = None) -> int:
             request_ids=args.request_id,
             control_group_ids=args.control_group_id,
         )
+        if args.database_url and not args.skip_ranked_pool_reconstruction:
+            with session_scope(args.database_url) as session:
+                paper_tracking = enrich_shortpick_replay_paper_tracking_with_reconstructed_ranked_pools(
+                    session,
+                    dict(paper_tracking) if isinstance(paper_tracking, dict) else {},
+                    requests=requests,
+                )
         payload = run_shortpick_retrospective_forward_replay_requests(
             requests,
             dict(paper_tracking) if isinstance(paper_tracking, dict) else {},
