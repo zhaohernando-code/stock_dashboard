@@ -94,6 +94,19 @@ def test_publish_bootstraps_scheduled_refresh_when_launchagent_is_unloaded() -> 
     assert 'kickstart -k "gui/$(id -u)/$SCHEDULED_LABEL"' not in script
 
 
+def test_publish_restarts_runtime_launchagents_without_unload_load_race() -> None:
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert 'MAX_WAIT_SECONDS="${ASHARE_PUBLISH_MAX_WAIT_SECONDS:-180}"' in script
+    assert 'launchctl bootout "gui/$(id -u)" "$plist_path"' in script
+    assert 'launchctl bootstrap "gui/$(id -u)" "$plist_path"' in script
+    assert 'launchctl unload "$plist_path"' not in script
+    assert 'launchctl load "$plist_path"' not in script
+    assert script.index('launchctl bootout "gui/$(id -u)" "$plist_path"') < script.index(
+        'launchctl bootstrap "gui/$(id -u)" "$plist_path"'
+    )
+
+
 def test_publish_forces_scheduled_refresh_runatload_false() -> None:
     # RunAtLoad=true would fire a full ~50min phase5-daily-refresh on every
     # publish/reload (launchctl bootstrap), which holds the DB lock and times

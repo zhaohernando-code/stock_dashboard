@@ -11,7 +11,7 @@ CANONICAL_BASE_URL="${ASHARE_CANONICAL_BASE_URL:-https://hernando-zhao.cn/projec
 BACKEND_ENV_FILE="${ASHARE_LOCAL_BACKEND_ENV_FILE:-$HOME/.config/codex/ashare-dashboard.backend.env}"
 FRONTEND_ENV_FILE="${ASHARE_LOCAL_FRONTEND_ENV_FILE:-$HOME/.config/codex/ashare-dashboard.frontend.env}"
 RSYNC_BIN="${RSYNC_BIN:-rsync}"
-MAX_WAIT_SECONDS="${ASHARE_PUBLISH_MAX_WAIT_SECONDS:-30}"
+MAX_WAIT_SECONDS="${ASHARE_PUBLISH_MAX_WAIT_SECONDS:-180}"
 REFRESH_MODE="${ASHARE_PUBLISH_REFRESH_MODE:-sync}"
 REFRESH_TIMEOUT_SECONDS="${ASHARE_PUBLISH_REFRESH_TIMEOUT_SECONDS:-900}"
 BACKUP_MODE="${ASHARE_PUBLISH_BACKUP_MODE:-skip}"
@@ -300,9 +300,9 @@ restart_agent() {
 
   echo "[publish] Restarting $display_name (port $port)"
 
-  # Unload the job from launchd to prevent KeepAlive from restarting
-  # the process while we wait for the port to be released.
-  launchctl unload "$plist_path" 2>/dev/null || true
+  # Remove the job from the current GUI domain to prevent KeepAlive from
+  # racing a replacement process onto the same port while we wait for release.
+  launchctl bootout "gui/$(id -u)" "$plist_path" 2>/dev/null || true
 
   # Wait up to 5s for the old process to release the port.
   for _i in $(seq 1 50); do
@@ -316,7 +316,7 @@ restart_agent() {
   sleep 0.2
 
   # Re-add the job to launchd. RunAtLoad will trigger the start.
-  launchctl load "$plist_path" 2>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$plist_path"
 }
 
 BACKEND_PLIST="$HOME/Library/LaunchAgents/com.codex.ashare-dashboard.backend.plist"
