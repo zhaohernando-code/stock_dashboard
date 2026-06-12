@@ -178,6 +178,8 @@ DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
     },
 }
 
+AKSHARE_RUNTIME_STATUS_TIMEOUT_SECONDS = 2.0
+
 
 def _get_setting(session: Session, key: str) -> AppSetting | None:
     return session.scalar(select(AppSetting).where(AppSetting.setting_key == key))
@@ -550,7 +552,7 @@ def get_runtime_settings(session: Session, *, account_login: str | None = None) 
                 else runtimeStatus.get("missing_status_label", "需 Token")
             )
         elif provider_name == "akshare":
-            runtime_ready = akshare_runtime_ready()
+            runtime_ready = akshare_runtime_ready(timeout_seconds=AKSHARE_RUNTIME_STATUS_TIMEOUT_SECONDS)
             status_label = (
                 runtimeStatus.get("ready_status_label", "已接入")
                 if runtime_ready

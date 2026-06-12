@@ -5259,32 +5259,27 @@ def validate_recent_shortpick_runs(
     cutoff = datetime.now(UTC).date() - timedelta(days=max(1, int(days)))
     run_limit = max(1, min(int(limit), 100))
 
-    def _completed_validation_count() -> int:
-        return int(
-            session.scalar(
-                select(func.count())
-                .select_from(ShortpickValidationSnapshot)
-                .join(ShortpickCandidate, ShortpickValidationSnapshot.candidate_id == ShortpickCandidate.id)
-                .join(ShortpickExperimentRun, ShortpickCandidate.run_id == ShortpickExperimentRun.id)
-                .where(
-                    ShortpickExperimentRun.run_date >= cutoff,
-                    ShortpickValidationSnapshot.horizon_days.in_(target_horizons),
-                    ShortpickValidationSnapshot.status == "completed",
-                )
-            )
-            or 0
-        )
-
-    def _select_runs() -> list[ShortpickExperimentRun]:
+    def _select_runs(processed_run_ids: set[int]) -> list[ShortpickExperimentRun]:
         # latest_runs intentionally does NOT filter information_mode (unlike
         # pending_runs below): it covers the most recent completed runs across
         # all channels, including non-standard ones (e.g. replay), for catch-up.
+        latest_conditions = [
+            ShortpickExperimentRun.status == "completed",
+            ShortpickExperimentRun.run_date >= cutoff,
+        ]
+        pending_conditions = [
+            ShortpickExperimentRun.status == "completed",
+            ShortpickExperimentRun.information_mode == SHORTPICK_INFORMATION_MODE,
+            ShortpickExperimentRun.run_date >= cutoff,
+            ShortpickValidationSnapshot.horizon_days.in_(target_horizons),
+            ShortpickValidationSnapshot.status.in_(SHORTPICK_PENDING_VALIDATION_REFRESH_STATUSES),
+        ]
+        if processed_run_ids:
+            latest_conditions.append(ShortpickExperimentRun.id.notin_(processed_run_ids))
+            pending_conditions.append(ShortpickExperimentRun.id.notin_(processed_run_ids))
         latest_runs = session.scalars(
             select(ShortpickExperimentRun)
-            .where(
-                ShortpickExperimentRun.status == "completed",
-                ShortpickExperimentRun.run_date >= cutoff,
-            )
+            .where(*latest_conditions)
             .order_by(ShortpickExperimentRun.run_date.desc(), ShortpickExperimentRun.id.desc())
             .limit(run_limit)
         ).all()
@@ -5292,13 +5287,7 @@ def validate_recent_shortpick_runs(
             select(ShortpickExperimentRun)
             .join(ShortpickCandidate, ShortpickCandidate.run_id == ShortpickExperimentRun.id)
             .join(ShortpickValidationSnapshot, ShortpickValidationSnapshot.candidate_id == ShortpickCandidate.id)
-            .where(
-                ShortpickExperimentRun.status == "completed",
-                ShortpickExperimentRun.information_mode == SHORTPICK_INFORMATION_MODE,
-                ShortpickExperimentRun.run_date >= cutoff,
-                ShortpickValidationSnapshot.horizon_days.in_(target_horizons),
-                ShortpickValidationSnapshot.status.in_(SHORTPICK_PENDING_VALIDATION_REFRESH_STATUSES),
-            )
+            .where(*pending_conditions)
             .distinct()
             .order_by(ShortpickExperimentRun.run_date.asc(), ShortpickExperimentRun.id.asc())
             .limit(run_limit)
@@ -5310,18 +5299,16 @@ def validate_recent_shortpick_runs(
 
     # Re-validation loop: window data (stock + benchmark bars) often becomes
     # complete after the snapshot was first written as pending. Each pass
-    # syncs missing data and recomputes; passes after the first pick up newly
-    # eligible pending runs (the asc()/limit selection above only sees a slice
-    # at a time, so a single pass can leave just-eligible pending behind).
-    # Bounded by max_iter and by "no new completed this pass" so a genuinely
-    # data-less day cannot loop or re-fetch forever.
+    # excludes already-processed runs inside the SQL slice so older no-progress
+    # pending rows cannot keep later matured rows outside the limit forever.
+    # Bounded by max_iter and processed_run_ids so a genuinely data-less day
+    # cannot loop or re-fetch forever.
     max_iter = 10
     processed_run_ids: set[int] = set()
     refreshed: list[dict[str, Any]] = []
     refreshed_by_run: dict[int, dict[str, Any]] = {}
     for _iteration in range(max_iter):
-        completed_before = _completed_validation_count()
-        runs = [run for run in _select_runs() if run.id not in processed_run_ids]
+        runs = _select_runs(processed_run_ids)
         if not runs:
             break
         for run in runs:
@@ -5343,10 +5330,6 @@ def validate_recent_shortpick_runs(
             }
             refreshed.append(entry)
             refreshed_by_run[run.id] = entry
-        # Stop once a full pass produces no new completed snapshots: remaining
-        # pending are genuinely waiting on data the source does not have yet.
-        if _completed_validation_count() <= completed_before:
-            break
     return {
         "refreshed_run_count": len(refreshed_by_run),
         "days": max(1, int(days)),

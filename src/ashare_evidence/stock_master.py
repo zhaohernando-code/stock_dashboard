@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import date
 from functools import lru_cache
@@ -152,7 +154,34 @@ def _load_akshare_module() -> Any:
     return akshare
 
 
-def akshare_runtime_ready() -> bool:
+@lru_cache(maxsize=8)
+def _akshare_runtime_ready_subprocess(timeout_seconds: float) -> bool:
+    probe = """
+import akshare as akshare
+required_adapters = (
+    "stock_info_sz_name_code",
+    "stock_info_sh_name_code",
+    "stock_info_a_code_name",
+    "stock_individual_info_em",
+)
+raise SystemExit(0 if all(callable(getattr(akshare, adapter, None)) for adapter in required_adapters) else 1)
+"""
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-c", probe],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=max(0.1, float(timeout_seconds)),
+        )
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return False
+    return completed.returncode == 0
+
+
+def akshare_runtime_ready(*, timeout_seconds: float | None = None) -> bool:
+    if timeout_seconds is not None:
+        return _akshare_runtime_ready_subprocess(timeout_seconds)
     try:
         _load_akshare_module()
     except Exception:

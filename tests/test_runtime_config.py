@@ -99,10 +99,11 @@ class RuntimeConfigTests(unittest.TestCase):
 
     def test_akshare_runtime_status_reflects_real_adapter_readiness(self) -> None:
         with session_scope(self.database_url) as session:
-            with patch("ashare_evidence.runtime_config.akshare_runtime_ready", return_value=True):
+            with patch("ashare_evidence.runtime_config.akshare_runtime_ready", return_value=True) as ready:
                 payload = get_runtime_settings(session)
 
         source_view = next(item for item in payload["data_sources"] if item["provider_name"] == "akshare")
+        ready.assert_called_once_with(timeout_seconds=2.0)
         self.assertFalse(source_view["credential_required"])
         self.assertTrue(source_view["runtime_ready"])
         self.assertEqual(source_view["status_label"], "已接入")

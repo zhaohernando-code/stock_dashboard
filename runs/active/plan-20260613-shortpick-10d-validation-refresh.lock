@@ -1,0 +1,10 @@
+{
+  "pid": 68452,
+  "plan_path": "/Users/hernando_zhao/codex/worker-workspaces/stock_dashboard/20260613-fix-shortpick-10d-validation-refresh-d78369/plans/active/plan-20260613-shortpick-10d-validation-refresh.md",
+  "plan_id": "plan-20260613-shortpick-10d-validation-refresh",
+  "run_id": "2026-06-13-W-004",
+  "worktree_path": "/Users/hernando_zhao/codex/worker-workspaces/stock_dashboard/20260613-fix-shortpick-10d-validation-refresh-d78369",
+  "lock_phase": "worktree_registered",
+  "started_at": "2026-06-12T16:35:35Z",
+  "last_updated": "2026-06-12T16:50:00Z"
+}
