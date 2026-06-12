@@ -2,7 +2,7 @@
 schema_version: 1
 plan_id: "plan-20260613-shortpick-10d-validation-refresh"
 title: "Shortpick 10d Validation Refresh"
-status: "executing"
+status: "archived"
 created_at: "2026-06-13"
 source_request: "Fix why paper-tracking 10-day charts stop at 2026-05-25 while 2026-05-26 rows exist."
 target_repo: "/Users/hernando_zhao/codex/projects/stock_dashboard"
@@ -61,8 +61,8 @@ The runtime database shows 2026-05-26 paper-tracking rows exist, but their 10-da
 | W-001 | done | 1 | - | Fix recent validation refresh selection/termination and add focused regression coverage for old no-progress pending rows plus later matured pending rows. | Backend refresh logic plus regression test | test_pass | cmd:python3 -m pytest -q -m runtime_integration tests/test_shortpick_lab_validation.py | Implemented SQL-level processed-run exclusion and bounded catch-up; MiMo code review found no blocking/major issues; `python3 -m pytest -q -m runtime_integration tests/test_shortpick_lab_validation.py` passed, 17 passed in 1.87s. |
 | W-002 | done | 2 | W-001 | Run the default fast regression suite. | Default pytest gate result | test_pass | cmd:python3 -m pytest -q | MiMo run-plan review found no blocking/major issues; latest rerun after the W-004 runtime settings fix passed with 809 passed, 172 deselected, 6 subtests passed in 25.00s. |
 | W-003 | done | 3 | W-002 | Run the parameter/formula governance policy audit. | Policy audit gate result | command_exit_0 | cmd:PYTHONPATH=src python3 -m ashare_evidence.cli policy-audit --fail-on-new-unclassified --fail-on-direct-config-read --fail-on-formula-side-effects --fail-on-missing-config-lineage | MiMo run-plan review found no blocking/major issues; latest rerun after the W-004 runtime settings fix exited 0 with status `pass` and no direct_config_read, formula_side_effects, missing_config_lineage, or new_unclassified failures. |
-| W-004 | in_progress | 4 | W-003 | Publish verified source to the local runtime. | Runtime source updated under `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard` | command_exit_0 | cmd:ASHARE_PUBLISH_REFRESH_MODE=skip bash scripts/publish-local-runtime.sh | Publish exposed a runtime settings cold-path timeout in `/settings/runtime`; added a bounded AKShare readiness probe for settings display and reran gates. |
-| W-005 | pending | 5 | W-004 | Run runtime validation refresh and assert the 2026-05-26 10-day paper-tracking snapshots are completed in runtime data. | Runtime validation evidence for 2026-05-26 10-day completion | command_exit_0 | cmd:bash scripts/verify-shortpick-10d-runtime-refresh.sh |  |
+| W-004 | done | 4 | W-003 | Publish verified source to the local runtime. | Runtime source updated under `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard` | command_exit_0 | cmd:ASHARE_PUBLISH_REFRESH_MODE=skip bash scripts/publish-local-runtime.sh | Published commit `e7316f0770f6` to runtime; publish skipped data refresh as requested, backend/frontend health passed, release manifest written to `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260612T171514Z-e7316f0770f6/manifest.json`, deploy verification passed 19/19. |
+| W-005 | done | 5 | W-004 | Run runtime validation refresh and assert the 2026-05-26 10-day paper-tracking snapshots are completed in runtime data. | Runtime validation evidence for 2026-05-26 10-day completion | command_exit_0 | cmd:bash scripts/verify-shortpick-10d-runtime-refresh.sh | `bash scripts/verify-shortpick-10d-runtime-refresh.sh` exited 0, refreshed 85 runs using existing market data only, and printed PASS for completed 2026-05-26 10-day snapshots across all target paper-tracking roles; served `/shortpick-lab/paper-tracking` reports `mechanical_10d` latest_signal_date `2026-05-26`. |
 
 ## Acceptance Criteria & Validation Gates
 
@@ -107,6 +107,10 @@ The runtime database shows 2026-05-26 paper-tracking rows exist, but their 10-da
 - 2026-06-13: W-003 changed from in_progress to done after policy audit passed.
 - 2026-06-13: W-004 changed from pending to in_progress to publish verified source to runtime.
 - 2026-06-13: W-004 publish attempts exposed `/settings/runtime` timeout from AKShare cold import; added bounded settings-only readiness probe and refreshed W-002/W-003 gate evidence.
+- 2026-06-13: W-004 changed from in_progress to done after publish, release parity, and deploy verification passed.
+- 2026-06-13: W-005 changed from pending to in_progress to run runtime validation refresh and assert 2026-05-26 10-day completion.
+- 2026-06-13: W-005 changed from in_progress to done after runtime verification passed and served paper-tracking API reported mechanical_10d latest signal date 2026-05-26; plan status changed from executing to done.
+- 2026-06-13: Plan archived after all work items completed, all gates passed, runtime was published, and W-005 verification confirmed served API freshness.
 
 ## External Review Log
 
