@@ -476,7 +476,10 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     }));
   }
 
-  async function loadShellData(preferredSymbol?: string | null): Promise<string | null> {
+  async function loadShellData(
+    preferredSymbol?: string | null,
+    options?: { throwOnError?: boolean },
+  ): Promise<string | null> {
     setLoadingShell(true);
     setError(null);
     try {
@@ -507,7 +510,11 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       setSelectedSymbol(nextSymbol);
       return nextSymbol;
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "加载候选股失败。");
+      const messageText = loadError instanceof Error ? loadError.message : "加载候选股失败。";
+      if (options?.throwOnError) {
+        throw new Error(messageText);
+      }
+      setError(messageText);
       return null;
     } finally {
       setLoadingShell(false);
@@ -1039,6 +1046,25 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     }
   }
 
+  function applyWatchlistRemoval(symbol: string): string | null {
+    const nextWatchlist = watchlist.filter((item) => item.symbol !== symbol);
+    const nextSymbol = selectedSymbol === symbol ? nextWatchlist[0]?.symbol ?? null : selectedSymbol;
+    setWatchlist(nextWatchlist);
+    if (selectedSymbol === symbol) {
+      setSelectedSymbol(nextSymbol);
+      setDashboard(null);
+      setAnalysisAnswer(null);
+      setQuestionDraft("");
+      if (!nextSymbol) {
+        setOperations(null);
+        setSimulation(null);
+        setOperationsError(null);
+        setOperationsDetailSectionsLoaded([]);
+      }
+    }
+    return nextSymbol;
+  }
+
   async function handleConfirmRemoveWatchlist() {
     if (!pendingRemoval) return;
     const symbol = pendingRemoval.symbol;
@@ -1048,11 +1074,12 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     try {
       const response = await api.removeWatchlist(symbol);
       messageApi.success(`已移除 ${response.symbol}，当前剩余 ${response.active_count} 只自选股`);
-      const nextSymbol = selectedSymbol === symbol
-        ? candidateRows.find((item) => item.symbol !== symbol)?.symbol ?? null
-        : selectedSymbol;
       setPendingRemoval(null);
-      await reloadEverything(nextSymbol);
+      const nextSymbol = applyWatchlistRemoval(symbol);
+      void loadShellData(nextSymbol, { throwOnError: true }).catch((refreshError) => {
+        const messageText = refreshError instanceof Error ? refreshError.message : "关注池已移除，但刷新最新列表失败。";
+        messageApi.warning(messageText);
+      });
     } catch (mutationError) {
       const messageText = mutationError instanceof Error ? mutationError.message : "移除自选股失败。";
       setError(messageText);

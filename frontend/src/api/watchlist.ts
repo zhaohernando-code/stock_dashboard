@@ -1,4 +1,4 @@
-import { request } from "./core";
+import { request, watchlistMutationRequestBehavior } from "./core";
 import type { WatchlistMutationResponse, WatchlistDeleteResponse } from "../types";
 
 export function addWatchlist(symbol: string, name?: string): Promise<WatchlistMutationResponse> {
@@ -17,5 +17,5 @@ export function refreshWatchlist(symbol: string): Promise<WatchlistMutationRespo
 export function removeWatchlist(symbol: string): Promise<WatchlistDeleteResponse> {
   return request<WatchlistDeleteResponse>('/watchlist/' + encodeURIComponent(symbol), {
     method: "DELETE",
-  });
+  }, watchlistMutationRequestBehavior);
 }

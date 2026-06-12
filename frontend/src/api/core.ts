@@ -409,6 +409,11 @@ export type RequestBehavior = {
   attemptTimeoutMs?: number;
 };
 
+function formatSeconds(ms: number): string {
+  const seconds = ms / 1000;
+  return Number.isInteger(seconds) ? `${seconds}` : seconds.toFixed(1);
+}
+
 export async function request<T>(path: string, init?: RequestInit, behavior?: RequestBehavior): Promise<T> {
   const startedAt = Date.now();
   const betaAccessKey = getBetaAccessKey();
@@ -503,6 +508,15 @@ export async function request<T>(path: string, init?: RequestInit, behavior?: Re
         if (index < requestUrls.length - 1 && (isHtmlResponseError(error) || isRetryableNetworkError(error))) {
           continue;
         }
+        if (error instanceof DOMException && error.name === "AbortError") {
+          const elapsedMs = Date.now() - startedAt;
+          if (elapsedMs >= timeoutMs) {
+            throw new Error(`请求超时（>${formatSeconds(timeoutMs)}s）`);
+          }
+          throw new Error(
+            `本次连接等待超过 ${formatSeconds(attemptTimeout)}s，已等待约 ${formatSeconds(elapsedMs)}s。`,
+          );
+        }
         throw error;
       }
       finally {
@@ -515,7 +529,11 @@ export async function request<T>(path: string, init?: RequestInit, behavior?: Re
     );
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error(`请求超时（>${timeoutMs / 1000}s）`);
+      const elapsedMs = Date.now() - startedAt;
+      if (elapsedMs >= timeoutMs) {
+        throw new Error(`请求超时（>${formatSeconds(timeoutMs)}s）`);
+      }
+      throw new Error(`本次连接等待超过 ${formatSeconds(attemptTimeoutMsCap)}s，已等待约 ${formatSeconds(elapsedMs)}s。`);
     }
     throw error;
   }
@@ -531,4 +549,9 @@ export const manualResearchRequestBehavior: RequestBehavior = longRunningRequest
 export const operationsDashboardRequestBehavior: RequestBehavior = {
   timeoutMs: operationsDashboardTimeoutMs,
   attemptTimeoutMs: operationsDashboardAttemptTimeoutMs,
+};
+
+export const watchlistMutationRequestBehavior: RequestBehavior = {
+  timeoutMs: operationsDashboardTimeoutMs,
+  attemptTimeoutMs: operationsDashboardTimeoutMs,
 };

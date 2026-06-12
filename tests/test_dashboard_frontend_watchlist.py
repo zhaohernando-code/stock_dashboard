@@ -113,6 +113,24 @@ class DashboardFrontendAndWatchlistTests(DashboardViewTestCase):
         self.assertIn('window.addEventListener("focus", handleFocus);', main_source)
         self.assertIn('document.addEventListener("visibilitychange", handleVisibilityChange);', main_source)
 
+    def test_frontend_watchlist_remove_is_not_blocked_by_shell_reload_timeout(self) -> None:
+        frontend_root = Path(__file__).resolve().parents[1] / "frontend" / "src"
+        app_source = (frontend_root / "App.tsx").read_text(encoding="utf-8")
+        api_core_source = (frontend_root / "api" / "core.ts").read_text(encoding="utf-8")
+        api_watchlist_source = (frontend_root / "api" / "watchlist.ts").read_text(encoding="utf-8")
+        remove_body = app_source.split("async function handleConfirmRemoveWatchlist()", 1)[1].split(
+            "async function refreshManualResearchContext", 1,
+        )[0]
+
+        self.assertIn("function applyWatchlistRemoval(symbol: string): string | null", app_source)
+        self.assertIn("const nextWatchlist = watchlist.filter((item) => item.symbol !== symbol);", app_source)
+        self.assertIn("const nextSymbol = applyWatchlistRemoval(symbol);", remove_body)
+        self.assertIn("void loadShellData(nextSymbol, { throwOnError: true }).catch((refreshError) => {", remove_body)
+        self.assertNotIn("await reloadEverything(nextSymbol);", remove_body)
+        self.assertIn("watchlistMutationRequestBehavior", api_watchlist_source)
+        self.assertIn("attemptTimeoutMs: operationsDashboardTimeoutMs,", api_core_source)
+        self.assertIn("本次连接等待超过 ${formatSeconds(attemptTimeout)}s", api_core_source)
+
     def test_operations_dashboard_exposes_manual_research_queue(self) -> None:
         with session_scope(self.database_url) as session:
             seed_watchlist_fixture(session)
