@@ -283,7 +283,20 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
                 model_config={},
                 summary_payload={"market_factor_overlay": {"frozen_paper_strategy": {"inserted": True}}},
             )
-            session.add_all([seed_run, latest_run])
+            running_intraday_run = ShortpickExperimentRun(
+                run_key="shortpick-native-web-20260512-intraday-running-test",
+                run_date=date(2026, 5, 12),
+                prompt_version="test",
+                information_mode=SHORTPICK_INFORMATION_MODE,
+                status="running",
+                trigger_source="scheduled_intraday_cli",
+                triggered_by="scheduled_cli",
+                started_at=now + timedelta(days=1),
+                completed_at=None,
+                model_config={},
+                summary_payload={},
+            )
+            session.add_all([seed_run, latest_run, running_intraday_run])
             session.flush()
             candidate = ShortpickCandidate(
                 run_id=seed_run.id,

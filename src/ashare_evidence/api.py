@@ -1407,7 +1407,11 @@ def _build_shortpick_paper_tracking_ledger(
     frozen_at = date.fromisoformat(str(contract.get("frozen_at") or "2026-05-09"))
     latest_run = session.scalar(
         select(ShortpickExperimentRun)
-        .where(ShortpickExperimentRun.information_mode == SHORTPICK_INFORMATION_MODE)
+        .where(
+            ShortpickExperimentRun.information_mode == SHORTPICK_INFORMATION_MODE,
+            ShortpickExperimentRun.status == "completed",
+            ShortpickExperimentRun.trigger_source != "scheduled_intraday_cli",
+        )
         .order_by(ShortpickExperimentRun.run_date.desc(), ShortpickExperimentRun.id.desc())
         .limit(1)
     )
