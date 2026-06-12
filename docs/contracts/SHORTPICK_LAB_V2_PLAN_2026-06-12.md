@@ -1,6 +1,6 @@
 # Short Pick Lab V2 Plan
 
-Status: Reviewed, ready for implementation planning
+Status: Phase 3 complete, ready for candidate rule selection planning
 Owner: stock_dashboard
 Created: 2026-06-12
 Scope: planning contract only; not a runbook
@@ -84,11 +84,11 @@ These are planning-level families, not final strategy IDs.
 
 | Family | Status | Purpose |
 | --- | --- | --- |
-| Top1 or skip | Pending | Establish the strictest baseline: buy the highest-ranked candidate only if executable. |
-| TopN fallback | Pending | Test whether moving down the ranked list improves deployability without destroying selection quality. |
-| Fixed notional with lot rounding | Pending | Preserve a target cash-per-position idea while respecting 100-share lots. |
-| Position-cap utilization | Pending | Improve cash use under per-stock caps without explicitly favoring low nominal share price. |
-| Conservative cash reserve | Pending | Test whether lower utilization reduces drawdown or forced concentration. |
+| Top1 or skip | Done | Established the strictest baseline in the Phase 3 replay artifact: buy the highest-ranked candidate only if executable. |
+| TopN fallback | Done | Tested moving down the ranked list in the Phase 3 replay artifact. |
+| Fixed notional with lot rounding | Done | Tested fixed cash-per-position behavior with 100-share board-lot rounding. |
+| Position-cap utilization | Done | Tested cash use under per-position and account position caps. |
+| Conservative cash reserve | Done | Tested a fixed cash reserve configuration against drawdown and utilization. |
 
 `小股价加权` should not be treated as an investment thesis. If included, it should be framed as board-lot capital-utilization optimization and bounded by position caps, liquidity checks, and drawdown metrics.
 
@@ -101,8 +101,8 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 | Semantic mixing with v1 | Pending | Use separate v2 API, artifact, and ledger contracts; frontend reuse only for presentation primitives. |
 | Overfitting parameter grids | Pending | Use staged screening and promote only a few fixed, explainable configurations. |
 | Weak sample size | Pending | Require enough historical signal days and market-regime coverage before promoting any v2 rule. |
-| Slow replay execution | Pending | Reuse loaded fixed market series and candidate pools; keep replay offline/precomputed. |
-| Unclear skip/fallback attribution | Pending | Persist deterministic action reasons for each signal day. |
+| Slow replay execution | In progress | Phase 3 keeps replay offline/precomputed and reuses loaded series/candidate pools; runtime generation over 721 signal days completed in 93.90 seconds. Future API/UI must read the artifact, not run replay on demand. |
+| Unclear skip/fallback attribution | Done | Phase 3 artifact persists deterministic `buy_primary`, `buy_fallback`, and `skip` reason counts plus bounded decision samples. |
 | Low-price bias | Pending | Treat share-price effects as lot-rounding efficiency, not as selection alpha. |
 | Governance sprawl | Pending | Keep v2 parameters versioned and retire abandoned variants instead of mutating active rules. |
 | User-facing overclaim | Pending | Label v2 as paper research and account-path evidence, not production proof. |
@@ -113,7 +113,7 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 | --- | --- | --- |
 | 1. Planning contract | Done | Freeze the v2 scope, non-goals, risk list, and acceptance rules. |
 | 2. Historical replay design | Done | Defined the v2 replay artifact contract and limited rule-family matrix in `docs/contracts/SHORTPICK_LAB_V2_REPLAY_DESIGN_2026-06-12.md`, with schema `docs/contracts/registry/schemas/shortpick_v2_replay_artifact.schema.json`. |
-| 3. Replay artifact generation | Pending | Produce fixed historical results for selected rule families over adequate data. |
+| 3. Replay artifact generation | Done | Added offline generator `shortpick-v2-replay`, produced `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/shortpick-v2-replay-artifact-20260612.json`, and validated the artifact against `shortpick_v2_replay_artifact.schema.json` with 721 signal days, 761 trade days, and five fixed rule-family results. |
 | 4. Candidate rule selection | Pending | Choose a small set of v2 configurations based on replay evidence and governance rules. |
 | 5. Paper tracking contract | Pending | Define forward v2 ledger semantics starting from the v1-aligned tracking window. |
 | 6. Backend read model | Pending | Add separate v2 read APIs backed by precomputed artifacts or v2 ledger records. |
@@ -124,24 +124,24 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 
 | Rule | Status | Acceptance Criteria |
 | --- | --- | --- |
-| Separate semantic domain | Pending | V2 has distinct API/artifact/ledger contracts and does not overload v1 paper tracking. |
+| Separate semantic domain | In progress | Phase 3 has a distinct v2 artifact family and generator; separate read API and forward ledger remain later phases. |
 | Frontend-only reuse boundary | Pending | Shared UI components may be reused, but v2 does not read mutable v1 data projections directly. |
 | No delayed-buy option | Done | V2 action taxonomy excludes delayed entry. |
-| Account realism | Pending | Replay models total cash, 100-share board lots, position caps, cash release, buy skips, and exits. |
-| Historical-first promotion | Pending | User-visible v2 strategies are selected from historical replay evidence, not ad hoc UI parameters. |
+| Account realism | Done | Phase 3 replay models CNY 200,000 default cash, 100-share board lots, position caps, cash reserve, cash release, buy skips, and mechanical exits. |
+| Historical-first promotion | In progress | Historical replay evidence now exists; Phase 4 must select any user-visible v2 strategies from this evidence. |
 | Bounded promoted set | Pending | The first v2 UI shows a small governed set of configurations, not a parameter search surface. |
-| Replay data adequacy | Pending | Historical replay reports signal count, trade count, skipped count, market-regime coverage, and data gaps. |
-| Efficiency boundary | Pending | Page/API reads do not run heavy replay or fetch market data. |
-| Explainability | Pending | Each signal-day decision exposes buy/fallback/skip reason and account-state context. |
+| Replay data adequacy | In progress | Phase 3 artifact reports signal count, trade count, skipped count, trade-day count, coverage status, and data gaps; Phase 4 still needs explicit promotion thresholds. |
+| Efficiency boundary | In progress | Phase 3 replay is offline/precomputed; later API/page work must read artifacts without market fetches or dynamic replay. |
+| Explainability | Done | Phase 3 artifact exposes buy/fallback/skip reason counts and bounded account-state decision samples. |
 | Paper-tracking alignment | Pending | V2 forward tracking start policy is explicitly aligned with the existing paper-tracking start window where feasible. |
-| Research labeling | Pending | UI and artifacts avoid production-proof or investment-advice language. |
+| Research labeling | In progress | Phase 3 artifact is capped at `claim_ceiling=research_observation`; later UI must preserve the same no-overclaim language. |
 
 ## Open Decisions
 
 | Decision | Status | Notes |
 | --- | --- | --- |
 | Exact v2 start date | Pending | Planning assumption is alignment with existing paper tracking, currently observed from 2026-05-08. |
-| Initial promoted replay families | Pending | Start from top1-or-skip, TopN fallback, lot-rounded fixed notional, and capped utilization variants. |
+| Initial promoted replay families | In progress | Phase 3 replayed top1-or-skip, TopN fallback, lot-rounded fixed notional, capped utilization, and conservative cash reserve. Phase 4 must decide which, if any, are promoted. |
 | Minimum evidence threshold | Pending | Needs a threshold for signal days, completed trades, drawdown, skipped ratio, and regime coverage. |
 | Position and cash defaults | Pending | CNY 200,000 total cash is the planning default; exact caps remain to be selected by replay evidence. |
 | Parameter governance location | Pending | V2 tunables should enter the existing policy/config governance model before live-facing use. |
@@ -150,5 +150,5 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 
 | Reviewer | Status | Result |
 | --- | --- | --- |
-| Claude + Xiaomi MiMo | Done | Read-only review completed; result: no blocking issues. |
+| Claude + Xiaomi MiMo | Done | Read-only plan and Phase 3 implementation reviews completed; result: no remaining blocking issues after the empty-scope schema P1 was fixed and re-reviewed. |
 | Claude + DeepSeek | Done | Read-only review completed; result: no blocking issues. |

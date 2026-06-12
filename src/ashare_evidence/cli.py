@@ -74,6 +74,10 @@ from ashare_evidence.shortpick_portfolio_backtest import (
     build_shortpick_portfolio_backtest,
     write_shortpick_portfolio_backtest,
 )
+from ashare_evidence.shortpick_v2_replay import (
+    build_shortpick_v2_replay_artifact,
+    write_shortpick_v2_replay_artifact,
+)
 from ashare_evidence.shortpick_ranked_pool_replay_input import (
     enrich_shortpick_replay_paper_tracking_with_reconstructed_ranked_pools,
 )
@@ -808,6 +812,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     shortpick_portfolio_backtest.add_argument("--output", default=None)
 
+    shortpick_v2_replay = subparsers.add_parser(
+        "shortpick-v2-replay",
+        help="Generate the offline Short Pick Lab v2 account-constrained historical replay artifact.",
+    )
+    shortpick_v2_replay.add_argument("--database-url", default=None)
+    shortpick_v2_replay.add_argument("--start-date", default="2023-04-13")
+    shortpick_v2_replay.add_argument("--end-date", default="2026-05-08")
+    shortpick_v2_replay.add_argument("--initial-cash", type=float, default=200_000.0)
+    shortpick_v2_replay.add_argument(
+        "--entry-price-source",
+        choices=["next_close", "next_open", "same_close_proxy"],
+        default="next_close",
+    )
+    shortpick_v2_replay.add_argument("--horizon-days", type=int, default=5)
+    shortpick_v2_replay.add_argument("--pool-limit", type=int, default=40)
+    shortpick_v2_replay.add_argument("--rank-limit", type=int, default=6)
+    shortpick_v2_replay.add_argument("--cost-bps", type=float, default=20.0)
+    shortpick_v2_replay.add_argument("--stamp-tax-bps", type=float, default=5.0)
+    shortpick_v2_replay.add_argument("--min-signal-symbol-count", type=int, default=45)
+    shortpick_v2_replay.add_argument(
+        "--account-profile",
+        choices=["new_retail_cash_account", "unrestricted"],
+        default="new_retail_cash_account",
+    )
+    shortpick_v2_replay.add_argument("--output", default="output/shortpick-v2-replay-artifact.json")
+
     shortpick_governance_historical_backtest = subparsers.add_parser(
         "shortpick-governance-historical-backtest",
         help="Run Short Pick governance historical-backtest request plans into gated evidence artifacts.",
@@ -1340,6 +1370,35 @@ def main(argv: list[str] | None = None) -> int:
             path = write_shortpick_portfolio_backtest(payload, output_path=args.output)
             payload = {**payload, "artifact": {"path": str(path)}}
         _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-v2-replay":
+        with session_scope(args.database_url) as session:
+            payload = build_shortpick_v2_replay_artifact(
+                session,
+                start_date=date.fromisoformat(args.start_date),
+                end_date=date.fromisoformat(args.end_date),
+                initial_cash=args.initial_cash,
+                entry_price_source=args.entry_price_source,
+                horizon_days=args.horizon_days,
+                pool_limit=args.pool_limit,
+                rank_limit=args.rank_limit,
+                cost_bps=args.cost_bps,
+                stamp_tax_bps=args.stamp_tax_bps,
+                min_signal_symbol_count=args.min_signal_symbol_count,
+                account_profile=args.account_profile,
+            )
+        path = write_shortpick_v2_replay_artifact(payload, output_path=args.output)
+        _print_json(
+            {
+                "status": "ok",
+                "artifact_family": payload.get("artifact_family"),
+                "artifact_id": payload.get("artifact_id"),
+                "output_path": str(path),
+                "signal_day_count": (payload.get("data_scope") or {}).get("signal_day_count"),
+                "result_count": len(payload.get("results") or []),
+            }
+        )
         return 0
 
     if args.command == "shortpick-governance-historical-backtest":
