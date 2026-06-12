@@ -1,6 +1,6 @@
 # Short Pick Lab V2 Frontend Tab Run
 
-Status: Implemented; runtime publish verification pending
+Status: Complete; published runtime served UI/API verified
 Owner: stock_dashboard
 Created: 2026-06-12
 Source plan: `docs/contracts/SHORTPICK_LAB_V2_PLAN_2026-06-12.md`
@@ -59,7 +59,7 @@ Implement Phase 7 of the Short Pick Lab V2 plan: add a user-facing `试验田v2`
 | Research labeling | Done | UI shows research/evidence labels and avoids production/investment claims. |
 | Focused tests pass | Done | `python3 -m pytest -q tests/test_frontend_shortpick_static.py tests/test_frontend_mobile_static.py` passed. |
 | Required gates pass | Done | `npm run build`, default `pytest`, and policy audit passed before merge. |
-| Runtime verification | Pending | Published runtime served page/API verifies after merge. |
+| Runtime verification | Done | Published runtime served page/API verified after merge. |
 
 ## Implementation Evidence
 
@@ -72,6 +72,9 @@ Implement Phase 7 of the Short Pick Lab V2 plan: add a user-facing `试验田v2`
 | Frontend build/typecheck | `npm run build` passed; only the existing Vite chunk-size warning remains. |
 | Default Python regression | `808 passed, 171 deselected, 6 subtests passed in 30.11s`. |
 | Policy audit | PASS. |
+| Runtime publish | `publish-local-runtime.sh` built and synced `b62f2a9`; script timed out at backend health wait, then manual health checks confirmed backend/frontend recovered. |
+| Served API verification | `GET /health` returned 200; `GET /shortpick-lab-v2/paper-tracking` returned `contract_ready`; `GET /shortpick-lab-v2/historical-replay?sample_limit=1` returned `ready`. |
+| Served UI verification | Browser opened `http://127.0.0.1:5173/?view=shortpick-v2`; verified v2 header, `纸面追踪`, `历史回放`, `contract_ready`, `2026-05-08`, no v1 module labels, tab switch, browser back sync, and no console errors. |
 
 ## Review Plan
 
