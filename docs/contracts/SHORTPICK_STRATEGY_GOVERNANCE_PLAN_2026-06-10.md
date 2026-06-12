@@ -2018,7 +2018,11 @@ Verification before merge:
 
 Status:
 
-- Implementation is ready for merge, publish, and canonical browser verification.
+- Implementation merged at commit `0b61b5ed809e0046faf23cf91014eb4fc00eb2c8`.
+- Runtime publish completed. Release parity manifest: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260612T050544Z-0b61b5ed809e/manifest.json`.
+- Deploy verification passed `19/19`.
+- Canonical API verification after publish confirmed the raw latest run is still the pre-existing `2026-06-11` run with 10 database rows, including old market-factor controls. This code change intentionally does not mutate existing rows.
+- Canonical browser verification on `https://hernando-zhao.cn/projects/ashare-dashboard/?view=shortpick&shortpickTab=paper-tracking&symbol=002028.SZ` confirmed the latest simulated trade surface now shows `本轮当前策略候选（4 条，含对照组）`; expanding it shows current labels `冻结策略`, `冻结候选 v2`, `LLM纸面对照`, and `同池随机基线`, with no `动量换手`, `前三名等权`, `可执行风控版`, or `降追高` rows in that candidate container.
 
 
 - `git status --short --branch`
@@ -2107,4 +2111,4 @@ Status:
 | Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_governance_projection_rendering_round30_deprecated_bucket_filtering_round31_inventory_archived_fallback_and_round56_inventory_archive_source_metric |
 | Runtime data changed | corrected_replay_and_combined_ledger_artifacts_regenerated_in_round53_round54_and_round55_no_database_or_paper_tracking_writes_round56_added_runtime_inventory_archive_artifact_under_runtime_artifact_root |
 | DeepSeek plan review | round56_pass_merge |
-| Paper-tracking current-candidate governance fix | ds_reviewed_ready_to_merge_publish |
+| Paper-tracking current-candidate governance fix | published_runtime_verified |
