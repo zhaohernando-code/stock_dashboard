@@ -468,6 +468,18 @@ def _write_json(path: Path, payload: Any) -> None:
     _write_text(path, json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
 
 
+def _write_release_manifest(
+    manifest_path: Path,
+    output_root: Path,
+    manifest: dict[str, Any],
+    *,
+    update_latest_successful: bool = True,
+) -> None:
+    _write_json(manifest_path, manifest)
+    if update_latest_successful:
+        _write_json(output_root / "latest-successful.json", manifest)
+
+
 def _trailing_slash(url: str) -> str:
     return url if url.endswith("/") else f"{url}/"
 
@@ -509,6 +521,10 @@ def _timed_request_json(
     return payload, round(time.perf_counter() - started_at, 3)
 
 
+def _payload_size_bytes(payload: dict[str, Any]) -> int:
+    return len(json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8"))
+
+
 def _api_url(base_url: str, endpoint: str) -> str:
     return parse.urljoin(_trailing_slash(base_url), endpoint.lstrip("/"))
 
@@ -526,6 +542,7 @@ def warm_operations_api_endpoints(
     operations_sample_symbol: str | None,
     timeout: int,
     headers: dict[str, str],
+    warmup_payloads: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     warmups: dict[str, Any] = {}
     for endpoint in API_ENDPOINTS.values():
@@ -546,18 +563,117 @@ def warm_operations_api_endpoints(
             timeout=timeout,
             headers=headers,
         )
+        if warmup_payloads is not None:
+            warmup_payloads[endpoint] = {
+                "local_payload": local_payload,
+                "canonical_payload": canonical_payload,
+                "local_duration_seconds": local_duration_seconds,
+                "canonical_duration_seconds": canonical_duration_seconds,
+            }
         warmups[endpoint] = {
             "request_endpoint": request_endpoint,
             "local_url": local_url,
             "canonical_url": canonical_url,
             "local_duration_seconds": local_duration_seconds,
             "canonical_duration_seconds": canonical_duration_seconds,
-            "local_payload_bytes": len(json.dumps(local_payload, ensure_ascii=False, default=str).encode("utf-8")),
-            "canonical_payload_bytes": len(
-                json.dumps(canonical_payload, ensure_ascii=False, default=str).encode("utf-8")
-            ),
+            "local_payload_bytes": _payload_size_bytes(local_payload),
+            "canonical_payload_bytes": _payload_size_bytes(canonical_payload),
         }
     return warmups
+
+
+def _api_payload_pair_for_fingerprint(
+    *,
+    endpoint: str,
+    anonymous_opener,
+    canonical_opener,
+    local_url: str,
+    canonical_url: str,
+    timeout: int,
+    headers: dict[str, str],
+    warmup_payloads: dict[str, Any] | None,
+) -> dict[str, Any]:
+    is_operations_endpoint = endpoint.startswith("/dashboard/operations/")
+
+    def load_side(side: str, opener, url: str) -> tuple[dict[str, Any], float, str]:
+        payload_key = f"{side}_payload"
+        duration_key = f"{side}_duration_seconds"
+        if is_operations_endpoint and warmup_payloads is not None and payload_key in warmup_payloads:
+            return (
+                warmup_payloads[payload_key],
+                float(warmup_payloads.get(duration_key, 0.0)),
+                "warmup",
+            )
+        payload, duration_seconds = _timed_request_json(
+            opener,
+            url,
+            timeout=timeout,
+            headers=headers,
+        )
+        return payload, duration_seconds, "warmup_miss" if is_operations_endpoint else "fetch"
+
+    local_payload, local_duration_seconds, local_source = load_side("local", anonymous_opener, local_url)
+    canonical_payload, canonical_duration_seconds, canonical_source = load_side(
+        "canonical",
+        canonical_opener,
+        canonical_url,
+    )
+    return {
+        "local_payload": local_payload,
+        "canonical_payload": canonical_payload,
+        "local_duration_seconds": local_duration_seconds,
+        "canonical_duration_seconds": canonical_duration_seconds,
+        "local_source": local_source,
+        "canonical_source": canonical_source,
+    }
+
+
+def _record_api_fingerprint(
+    *,
+    endpoint: str,
+    slug: str,
+    request_endpoint: str,
+    local_url: str,
+    canonical_url: str,
+    local_payload: dict[str, Any],
+    canonical_payload: dict[str, Any],
+    local_duration_seconds: float,
+    canonical_duration_seconds: float,
+    local_source: str,
+    canonical_source: str,
+    artifact_root: Path,
+    snapshot_paths: dict[str, str],
+    api_fingerprints: dict[str, Any],
+) -> None:
+    local_snapshot_path = artifact_root / f"local-{slug}.json"
+    canonical_snapshot_path = artifact_root / f"canonical-{slug}.json"
+    _write_json(local_snapshot_path, local_payload)
+    _write_json(canonical_snapshot_path, canonical_payload)
+    snapshot_paths[f"local_{slug}"] = str(local_snapshot_path)
+    snapshot_paths[f"canonical_{slug}"] = str(canonical_snapshot_path)
+
+    local_normalized = normalize_payload_for_fingerprint(local_payload)
+    canonical_normalized = normalize_payload_for_fingerprint(canonical_payload)
+    local_fingerprint = fingerprint_payload(local_payload)
+    canonical_fingerprint = fingerprint_payload(canonical_payload)
+    api_fingerprints[endpoint] = {
+        "local_url": local_url,
+        "canonical_url": canonical_url,
+        "request_endpoint": request_endpoint,
+        "local_fingerprint": local_fingerprint,
+        "canonical_fingerprint": canonical_fingerprint,
+        "match": local_fingerprint == canonical_fingerprint,
+        "local_snapshot_path": str(local_snapshot_path),
+        "canonical_snapshot_path": str(canonical_snapshot_path),
+        "local_duration_seconds": local_duration_seconds,
+        "canonical_duration_seconds": canonical_duration_seconds,
+        "local_source": local_source,
+        "canonical_source": canonical_source,
+        "normalized_local_size": len(json.dumps(local_normalized, ensure_ascii=False)),
+        "normalized_canonical_size": len(json.dumps(canonical_normalized, ensure_ascii=False)),
+    }
+    if local_fingerprint != canonical_fingerprint:
+        raise ReleaseVerificationError(f"API fingerprint mismatch for {endpoint}")
 
 
 def _load_previous_successful_manifest(output_root: Path) -> dict[str, Any] | None:
@@ -696,6 +812,7 @@ def verify_release_parity(args: argparse.Namespace) -> Path:
         raise ReleaseVerificationError("Repo build assets do not match canonical served assets")
 
     api_headers = _build_api_headers(args.beta_access_header_name, args.beta_access_key)
+    api_warmup_payloads: dict[str, Any] = {}
     api_warmups = warm_operations_api_endpoints(
         anonymous_opener=anonymous_opener,
         canonical_opener=canonical_opener,
@@ -704,6 +821,7 @@ def verify_release_parity(args: argparse.Namespace) -> Path:
         operations_sample_symbol=args.operations_sample_symbol,
         timeout=args.operations_warmup_timeout_seconds,
         headers=api_headers,
+        warmup_payloads=api_warmup_payloads,
     )
     api_fingerprints: dict[str, Any] = {}
     snapshot_paths: dict[str, str] = {
@@ -718,48 +836,40 @@ def verify_release_parity(args: argparse.Namespace) -> Path:
         request_endpoint = endpoint_with_operations_sample_symbol(endpoint, args.operations_sample_symbol)
         local_url = _api_url(local_api_base_url, request_endpoint)
         canonical_url = _canonical_api_url(canonical_base_url, request_endpoint)
-        local_payload, local_duration_seconds = _timed_request_json(
-            anonymous_opener,
-            local_url,
+        payload_pair = _api_payload_pair_for_fingerprint(
+            endpoint=endpoint,
+            anonymous_opener=anonymous_opener,
+            canonical_opener=canonical_opener,
+            local_url=local_url,
+            canonical_url=canonical_url,
             timeout=args.timeout_seconds,
             headers=api_headers,
+            warmup_payloads=api_warmup_payloads.get(endpoint),
         )
-        canonical_payload, canonical_duration_seconds = _timed_request_json(
-            canonical_opener,
-            canonical_url,
-            timeout=args.timeout_seconds,
-            headers=api_headers,
+        local_payload = payload_pair["local_payload"]
+        canonical_payload = payload_pair["canonical_payload"]
+        _record_api_fingerprint(
+            endpoint=endpoint,
+            slug=slug,
+            request_endpoint=request_endpoint,
+            local_url=local_url,
+            canonical_url=canonical_url,
+            local_payload=local_payload,
+            canonical_payload=canonical_payload,
+            local_duration_seconds=payload_pair["local_duration_seconds"],
+            canonical_duration_seconds=payload_pair["canonical_duration_seconds"],
+            local_source=payload_pair["local_source"],
+            canonical_source=payload_pair["canonical_source"],
+            artifact_root=artifact_root,
+            snapshot_paths=snapshot_paths,
+            api_fingerprints=api_fingerprints,
         )
-        local_snapshot_path = artifact_root / f"local-{slug}.json"
-        canonical_snapshot_path = artifact_root / f"canonical-{slug}.json"
-        _write_json(local_snapshot_path, local_payload)
-        _write_json(canonical_snapshot_path, canonical_payload)
-        snapshot_paths[f"local_{slug}"] = str(local_snapshot_path)
-        snapshot_paths[f"canonical_{slug}"] = str(canonical_snapshot_path)
-
-        local_normalized = normalize_payload_for_fingerprint(local_payload)
-        canonical_normalized = normalize_payload_for_fingerprint(canonical_payload)
-        local_fingerprint = fingerprint_payload(local_payload)
-        canonical_fingerprint = fingerprint_payload(canonical_payload)
-        api_fingerprints[endpoint] = {
-            "local_url": local_url,
-            "canonical_url": canonical_url,
-            "request_endpoint": request_endpoint,
-            "local_fingerprint": local_fingerprint,
-            "canonical_fingerprint": canonical_fingerprint,
-            "match": local_fingerprint == canonical_fingerprint,
-            "local_snapshot_path": str(local_snapshot_path),
-            "canonical_snapshot_path": str(canonical_snapshot_path),
-            "local_duration_seconds": local_duration_seconds,
-            "canonical_duration_seconds": canonical_duration_seconds,
-            "normalized_local_size": len(json.dumps(local_normalized, ensure_ascii=False)),
-            "normalized_canonical_size": len(json.dumps(canonical_normalized, ensure_ascii=False)),
-        }
-        if local_fingerprint != canonical_fingerprint:
-            raise ReleaseVerificationError(f"API fingerprint mismatch for {endpoint}")
         if slug.startswith("dashboard-operations-"):
             local_operations_payload = merge_operations_audit_payload(local_operations_payload, local_payload)
-            canonical_operations_payload = merge_operations_audit_payload(canonical_operations_payload, canonical_payload)
+            canonical_operations_payload = merge_operations_audit_payload(
+                canonical_operations_payload,
+                canonical_payload,
+            )
 
     if local_operations_payload is None or canonical_operations_payload is None:
         raise ReleaseVerificationError("Operations payload was not captured during release verification")
@@ -828,8 +938,12 @@ def verify_release_parity(args: argparse.Namespace) -> Path:
         artifact_paths=snapshot_paths,
     )
     manifest_path = artifact_root / "manifest.json"
-    _write_json(manifest_path, manifest)
-    _write_json(output_root / "latest-successful.json", manifest)
+    _write_release_manifest(
+        manifest_path,
+        output_root,
+        manifest,
+        update_latest_successful=not getattr(args, "skip_latest_successful_update", False),
+    )
     return manifest_path
 
 
@@ -837,8 +951,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Verify repo/runtime/canonical release parity.")
     parser.add_argument("--repo-root", required=True)
     parser.add_argument("--runtime-root", required=True)
-    parser.add_argument("--local-frontend-url", default=os.getenv("ASHARE_LOCAL_FRONTEND_URL", "http://127.0.0.1:5173/"))
-    parser.add_argument("--local-api-base-url", default=os.getenv("ASHARE_LOCAL_API_BASE_URL", "http://127.0.0.1:8000/"))
+    parser.add_argument(
+        "--local-frontend-url",
+        default=os.getenv("ASHARE_LOCAL_FRONTEND_URL", "http://127.0.0.1:5173/"),
+    )
+    parser.add_argument(
+        "--local-api-base-url",
+        default=os.getenv("ASHARE_LOCAL_API_BASE_URL", "http://127.0.0.1:8000/"),
+    )
     parser.add_argument(
         "--canonical-base-url",
         default=os.getenv("ASHARE_CANONICAL_BASE_URL", "https://hernando-zhao.cn/projects/ashare-dashboard/"),
@@ -876,6 +996,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--operations-warmup-timeout-seconds",
         type=int,
         default=int(os.getenv("ASHARE_RELEASE_OPERATIONS_WARMUP_TIMEOUT_SECONDS", "90")),
+    )
+    parser.add_argument(
+        "--skip-latest-successful-update",
+        action="store_true",
+        help="Write only this release manifest; let the caller promote latest-successful after final deploy checks.",
     )
     return parser
 

@@ -15,10 +15,10 @@ fi
 FRONTEND_DIR="$REPO_ROOT/frontend"
 PORT="${ASHARE_LOCAL_FRONTEND_PORT:-5173}"
 CODEX_ROOT="${CODEX_ROOT:-$HOME/codex}"
-NODE_RUNNER="${CODEX_NODE_RUNNER:-$CODEX_ROOT/scripts/run-node-runtime.sh}"
+NODE_RESOLVER="${CODEX_NODE_RESOLVER:-$CODEX_ROOT/scripts/resolve-node-runtime.sh}"
 
-if [[ ! -x "$NODE_RUNNER" ]]; then
-  echo "Node runtime runner is not executable: $NODE_RUNNER" >&2
+if [[ ! -x "$NODE_RESOLVER" ]]; then
+  echo "Node runtime resolver is not executable: $NODE_RESOLVER" >&2
   exit 1
 fi
 
@@ -45,4 +45,8 @@ if [[ "$BOOT_BUILD" == "1" || "$BOOT_BUILD" == "true" || ! -f "$FRONTEND_DIR/dis
 else
   echo "[frontend] Reusing existing dist; set ASHARE_FRONTEND_BOOT_BUILD=1 to force a boot-time rebuild"
 fi
-exec "$NODE_RUNNER" "$REPO_ROOT/scripts/serve-frontend-dist.mjs" --root "$FRONTEND_DIR/dist" --host 127.0.0.1 --port "$PORT"
+exec "$NODE_RESOLVER" --no-default-requirements --exec \
+  "$REPO_ROOT/scripts/serve-frontend-dist.mjs" \
+  --root "$FRONTEND_DIR/dist" \
+  --host 127.0.0.1 \
+  --port "$PORT"

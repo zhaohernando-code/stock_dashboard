@@ -259,7 +259,7 @@ elif [[ "$BACKUP_MODE" == "source" ]]; then
       --exclude "frontend/node_modules" \
       "$RUNTIME_ROOT/" "$BACKUP_DIR/"
     echo "[publish] Backup saved: $BACKUP_DIR"
-    echo "[publish] Rollback: rsync -a --delete $BACKUP_DIR/ $RUNTIME_ROOT/"
+    echo "[publish] Rollback: rsync -a --delete --exclude data --exclude output $BACKUP_DIR/ $RUNTIME_ROOT/"
   else
     echo "[publish] Runtime empty — skipping backup (first publish?)"
   fi
@@ -293,10 +293,53 @@ rm -rf "$RUNTIME_ROOT/.git"
 
 echo "[publish] Restarting LaunchAgents"
 
+stale_process_pids() {
+  local process_pattern="$1"
+  if [[ -z "$process_pattern" ]]; then
+    return 0
+  fi
+  pgrep -f "$process_pattern" 2>/dev/null || true
+}
+
+wait_for_stale_processes_to_exit() {
+  local process_pattern="$1"
+  if [[ -z "$process_pattern" ]]; then
+    return 0
+  fi
+  for _i in $(seq 1 50); do
+    if [[ -z "$(stale_process_pids "$process_pattern")" ]]; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  return 1
+}
+
+kill_stale_runtime_processes() {
+  local display_name="$1"
+  local process_pattern="$2"
+  local pids
+  pids="$(stale_process_pids "$process_pattern")"
+  if [[ -z "$pids" ]]; then
+    return 0
+  fi
+
+  echo "[publish] Terminating stale $display_name process(es): $(echo "$pids" | tr '\n' ' ')"
+  echo "$pids" | xargs kill -TERM 2>/dev/null || true
+  wait_for_stale_processes_to_exit "$process_pattern" && return 0
+
+  pids="$(stale_process_pids "$process_pattern")"
+  if [[ -n "$pids" ]]; then
+    echo "[publish] Killing stale $display_name process(es): $(echo "$pids" | tr '\n' ' ')"
+    echo "$pids" | xargs kill -KILL 2>/dev/null || true
+  fi
+}
+
 restart_agent() {
   local plist_path="$1"
   local port="$2"
   local display_name="$3"
+  local process_pattern="$4"
 
   echo "[publish] Restarting $display_name (port $port)"
 
@@ -313,6 +356,10 @@ restart_agent() {
   # Hard-kill if something (e.g. a process launched outside launchd)
   # still holds the port.
   lsof -ti ":$port" | xargs kill -KILL 2>/dev/null || true
+  # Also remove stale children that did not bind the port. A prior failed
+  # LaunchAgent start can leave a uvicorn/node process alive but unreachable,
+  # which makes the served route intermittently fail with ECONNREFUSED.
+  kill_stale_runtime_processes "$display_name" "$process_pattern"
   sleep 0.2
 
   # Re-add the job to launchd. RunAtLoad will trigger the start.
@@ -322,8 +369,8 @@ restart_agent() {
 BACKEND_PLIST="$HOME/Library/LaunchAgents/com.codex.ashare-dashboard.backend.plist"
 FRONTEND_PLIST="$HOME/Library/LaunchAgents/com.codex.ashare-dashboard.frontend.plist"
 
-restart_agent "$BACKEND_PLIST" 8000 "backend"
-restart_agent "$FRONTEND_PLIST" 5173 "frontend"
+restart_agent "$BACKEND_PLIST" 8000 "backend" "uvicorn ashare_evidence.api:app .*--port 8000|start-local-backend.sh"
+restart_agent "$FRONTEND_PLIST" 5173 "frontend" "serve-frontend-dist.mjs .*--port 5173|start-local-frontend.sh"
 
 wait_for_health() {
   local url="$1"
@@ -386,7 +433,8 @@ if [[ "$VERIFY_MODE" == "canonical" ]]; then
       --expected-commit-sha "$COMMIT_SHA" \
       --release-output-root "$RUNTIME_ROOT/output/releases" \
       --operations-sample-symbol "$RELEASE_OPERATIONS_SAMPLE_SYMBOL" \
-      --operations-warmup-timeout-seconds "$RELEASE_OPERATIONS_WARMUP_TIMEOUT_SECONDS"
+      --operations-warmup-timeout-seconds "$RELEASE_OPERATIONS_WARMUP_TIMEOUT_SECONDS" \
+      --skip-latest-successful-update
   )"
 elif [[ "$VERIFY_MODE" == "local" ]]; then
   echo "[publish] Canonical release verifier skipped (ASHARE_PUBLISH_VERIFY_MODE=local)"
@@ -407,9 +455,6 @@ else
   echo "Use 'canonical' for full release verification or 'local' for auto deploys." >&2
   exit 1
 fi
-
-cp "$MANIFEST_PATH" "$RUNTIME_ROOT/output/releases/latest-successful.json"
-printf '%s\n' "$COMMIT_SHA" > "$RUNTIME_ROOT/output/releases/latest-successful.commit"
 
 echo "[publish] Triggering post-deploy data refresh"
 if [[ -f "$BACKEND_ENV_FILE" ]]; then
@@ -467,3 +512,6 @@ else
     echo "[publish] VERIFICATION FAILED — check output above"
     exit 1
 fi
+
+cp "$MANIFEST_PATH" "$RUNTIME_ROOT/output/releases/latest-successful.json"
+printf '%s\n' "$COMMIT_SHA" > "$RUNTIME_ROOT/output/releases/latest-successful.commit"

@@ -42,6 +42,19 @@ def test_publish_python_bin_covers_verifier_and_refresh() -> None:
     assert 'PYTHONPATH="$RUNTIME_ROOT/src" "$PYTHON_BIN" -m ashare_evidence.cli refresh-runtime-data' in script
 
 
+def test_local_backend_forces_operations_response_prewarm_by_default() -> None:
+    script = (REPO_ROOT / "scripts" / "start-local-backend.sh").read_text(encoding="utf-8")
+
+    assert 'FORCE_OPERATIONS_PREWARM="${ASHARE_LOCAL_FORCE_OPERATIONS_RESPONSE_PREWARM:-1}"' in script
+    assert 'if [[ "$FORCE_OPERATIONS_PREWARM" != "0" ]]; then' in script
+    assert "export ASHARE_DISABLE_OPERATIONS_RESPONSE_PREWARM=0" in script
+    assert 'export ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE="${ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE:-sync}"' in script
+    assert script.index('source "$ENV_FILE"') < script.index("export ASHARE_DISABLE_OPERATIONS_RESPONSE_PREWARM=0")
+    assert script.index("export ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE") < script.index(
+        'exec "$VENV_PATH/bin/python" -m uvicorn'
+    )
+
+
 def test_publish_installs_frontend_dependencies_before_build() -> None:
     script = SCRIPT_PATH.read_text(encoding="utf-8")
 
@@ -57,12 +70,23 @@ def test_local_frontend_uses_managed_static_dist_server() -> None:
     script = (REPO_ROOT / "scripts" / "start-local-frontend.sh").read_text(encoding="utf-8")
     server = (REPO_ROOT / "scripts" / "serve-frontend-dist.mjs").read_text(encoding="utf-8")
 
-    assert 'exec "$NODE_RUNNER" "$REPO_ROOT/scripts/serve-frontend-dist.mjs"' in script
-    assert '--root "$FRONTEND_DIR/dist" --host 127.0.0.1 --port "$PORT"' in script
+    assert 'NODE_RESOLVER="${CODEX_NODE_RESOLVER:-$CODEX_ROOT/scripts/resolve-node-runtime.sh}"' in script
+    assert 'exec "$NODE_RESOLVER" --no-default-requirements --exec \\' in script
+    assert '"$REPO_ROOT/scripts/serve-frontend-dist.mjs" \\' in script
+    assert '--root "$FRONTEND_DIR/dist" \\' in script
+    assert "--host 127.0.0.1 \\" in script
+    assert '--port "$PORT"' in script
     assert "npx vite preview" not in script
     assert "vite preview" not in script
     assert "createServer" in server
     assert 'path.join(root, "index.html")' in server
+
+
+def test_local_frontend_static_server_does_not_require_node_sqlite() -> None:
+    script = (REPO_ROOT / "scripts" / "start-local-frontend.sh").read_text(encoding="utf-8")
+
+    assert "--no-default-requirements" in script
+    assert "node:sqlite" not in script
 
 
 def test_publish_build_uses_same_frontend_env_as_runtime() -> None:
@@ -100,9 +124,16 @@ def test_publish_restarts_runtime_launchagents_without_unload_load_race() -> Non
     assert 'MAX_WAIT_SECONDS="${ASHARE_PUBLISH_MAX_WAIT_SECONDS:-180}"' in script
     assert 'launchctl bootout "gui/$(id -u)" "$plist_path"' in script
     assert 'launchctl bootstrap "gui/$(id -u)" "$plist_path"' in script
+    assert 'kill_stale_runtime_processes "$display_name" "$process_pattern"' in script
+    assert 'pgrep -f "$process_pattern"' in script
+    assert 'uvicorn ashare_evidence.api:app .*--port 8000|start-local-backend.sh' in script
+    assert 'serve-frontend-dist.mjs .*--port 5173|start-local-frontend.sh' in script
     assert 'launchctl unload "$plist_path"' not in script
     assert 'launchctl load "$plist_path"' not in script
     assert script.index('launchctl bootout "gui/$(id -u)" "$plist_path"') < script.index(
+        'kill_stale_runtime_processes "$display_name" "$process_pattern"'
+    )
+    assert script.index('kill_stale_runtime_processes "$display_name" "$process_pattern"') < script.index(
         'launchctl bootstrap "gui/$(id -u)" "$plist_path"'
     )
 
@@ -114,3 +145,25 @@ def test_publish_forces_scheduled_refresh_runatload_false() -> None:
     script = SCRIPT_PATH.read_text(encoding="utf-8")
 
     assert 'payload["RunAtLoad"] = False' in script
+
+
+def test_source_backup_rollback_hint_preserves_runtime_data_and_output() -> None:
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert 'echo "[publish] Rollback: rsync -a --delete --exclude data --exclude output $BACKUP_DIR/ $RUNTIME_ROOT/"' in script
+    assert 'echo "[publish] Rollback: rsync -a --delete $BACKUP_DIR/ $RUNTIME_ROOT/"' not in script
+
+
+def test_publish_marks_latest_successful_only_after_final_verification() -> None:
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    marker_write = 'printf \'%s\\n\' "$COMMIT_SHA" > "$RUNTIME_ROOT/output/releases/latest-successful.commit"'
+    manifest_copy = 'cp "$MANIFEST_PATH" "$RUNTIME_ROOT/output/releases/latest-successful.json"'
+    assert "--skip-latest-successful-update" in script
+    assert script.index("--skip-latest-successful-update") < script.index(
+        'echo "[publish] Triggering post-deploy data refresh"'
+    )
+    assert script.index('echo "[publish] Running deploy verification..."') < script.index(marker_write)
+    assert script.index('echo "[publish] VERIFICATION PASSED"') < script.index(marker_write)
+    assert script.index('echo "[publish] Running deploy verification..."') < script.index(manifest_copy)
+    assert script.index(manifest_copy) < script.index(marker_write)

@@ -891,7 +891,10 @@ def _recommendation_replay_payload(
         if entry_close in {None, 0} or latest_close is None:
             continue
 
-        entry_benchmark = benchmark_close_map.get(reviewed.as_of_data_time.date(), benchmark_close_map[benchmark_days[0]])
+        entry_benchmark = benchmark_close_map.get(
+            reviewed.as_of_data_time.date(),
+            benchmark_close_map[benchmark_days[0]],
+        )
         latest_benchmark = benchmark_close_map[benchmark_days[-1]]
         stock_return = latest_close / entry_close - 1
         benchmark_return = latest_benchmark / entry_benchmark - 1 if entry_benchmark else 0.0
@@ -1505,21 +1508,9 @@ def build_operations_detail(
             target_login=target_login,
         )
 
-    payload = build_operations_dashboard(
-        session,
-        sample_symbol=sample_symbol,
-        include_simulation_workspace=False,
-        target_login=target_login,
-    )
-    section_map = {
-        "portfolios": {"portfolios": _compact_operations_portfolios(payload.get("portfolios", []))},
-    }
-    if section not in section_map:
-        raise ValueError(f"Unsupported operations detail section: {section}")
     return {
         "section": section,
-        "generated_at": payload.get("overview", {}).get("generated_at"),
-        **section_map[section],
+        **_build_operations_portfolios_detail(session),
     }
 
 
@@ -1556,6 +1547,123 @@ def _build_operations_replay_detail(
         benchmark_close_map=benchmark_close_map,
         artifact_root=artifact_root,
     )
+
+
+def _load_operations_portfolios(session: Session) -> list[PaperPortfolio]:
+    return list(
+        session.scalars(
+            select(PaperPortfolio)
+            .options(
+                selectinload(PaperPortfolio.orders).selectinload(PaperOrder.fills),
+                selectinload(PaperPortfolio.orders).joinedload(PaperOrder.stock),
+                selectinload(PaperPortfolio.orders).joinedload(PaperOrder.portfolio),
+                selectinload(PaperPortfolio.orders)
+                .joinedload(PaperOrder.recommendation)
+                .joinedload(Recommendation.stock),
+            )
+            .order_by(PaperPortfolio.mode.asc(), PaperPortfolio.name.asc())
+        ).all()
+    )
+
+
+def _recommendation_replay_hit_rate(
+    session: Session,
+    *,
+    active_symbols: set[str],
+    price_history: dict[str, list[tuple[datetime, float]]],
+    benchmark_close_map: dict[date, float],
+) -> float:
+    benchmark_days = sorted(benchmark_close_map)
+    if not benchmark_days:
+        return 0.0
+
+    hit_count = 0
+    replay_count = 0
+    histories = _recommendation_histories(session)
+    for symbol, records in histories.items():
+        if symbol not in active_symbols or len(records) < 2:
+            continue
+        reviewed = records[1]
+        series = price_history.get(symbol, [])
+        entry_close = _close_on_or_before(series, reviewed.as_of_data_time.date())
+        latest_close = series[-1][1] if series else None
+        if entry_close in {None, 0} or latest_close is None:
+            continue
+
+        entry_benchmark = benchmark_close_map.get(
+            reviewed.as_of_data_time.date(),
+            benchmark_close_map[benchmark_days[0]],
+        )
+        latest_benchmark = benchmark_close_map[benchmark_days[-1]]
+        stock_return = latest_close / entry_close - 1
+        benchmark_return = latest_benchmark / entry_benchmark - 1 if entry_benchmark else 0.0
+        path_returns = [
+            close / entry_close - 1
+            for observed_at, close in series
+            if observed_at.date() >= reviewed.as_of_data_time.date()
+        ]
+        max_favorable_excursion = max(path_returns) if path_returns else stock_return
+        max_adverse_excursion = min(path_returns) if path_returns else stock_return
+        hit_status, _summary = _evaluate_replay(
+            direction=reviewed.direction,
+            stock_return=stock_return,
+            benchmark_return=benchmark_return,
+            max_favorable_excursion=max_favorable_excursion,
+            max_adverse_excursion=max_adverse_excursion,
+        )
+        replay_count += 1
+        if hit_status == "hit":
+            hit_count += 1
+    return hit_count / replay_count if replay_count else 0.0
+
+
+def _build_operations_portfolios_detail(session: Session) -> dict[str, Any]:
+    generated_at = datetime.now().astimezone()
+    active_symbols = set(active_watchlist_symbols(session))
+    artifact_root = _operations_artifact_root(session)
+    intraday_history, stock_names, intraday_points = _market_history(
+        session,
+        active_symbols,
+        timeframe=INTRADAY_MARKET_TIMEFRAME,
+    )
+    daily_history, daily_stock_names, daily_points = _market_history(session, active_symbols, timeframe="1d")
+    stock_names = {**daily_stock_names, **stock_names}
+    timeline_points = intraday_points or daily_points
+    if not timeline_points:
+        return {
+            "generated_at": generated_at,
+            "portfolios": [],
+        }
+
+    benchmark_close_map = _benchmark_close_map(
+        _distinct_trade_days(daily_points or timeline_points),
+        price_history=daily_history or intraday_history,
+        active_symbols=active_symbols,
+    )
+    replay_hit_rate = _recommendation_replay_hit_rate(
+        session,
+        active_symbols=active_symbols,
+        price_history=daily_history or intraday_history,
+        benchmark_close_map=benchmark_close_map,
+    )
+    portfolio_payloads = [
+        _portfolio_payload(
+            portfolio,
+            active_symbols=active_symbols,
+            stock_names=stock_names,
+            price_history=intraday_history or daily_history,
+            timeline_points=timeline_points,
+            benchmark_close_map=benchmark_close_map,
+            recommendation_hit_rate=replay_hit_rate,
+            market_data_timeframe=INTRADAY_MARKET_TIMEFRAME if intraday_points else "1d",
+            artifact_root=artifact_root,
+        )
+        for portfolio in _load_operations_portfolios(session)
+    ]
+    return {
+        "generated_at": generated_at,
+        "portfolios": _compact_operations_portfolios(portfolio_payloads),
+    }
 
 
 def _build_operations_section_detail(
@@ -1792,21 +1900,7 @@ def build_operations_dashboard(
         price_history=daily_history or intraday_history,
         active_symbols=active_symbols,
     )
-    portfolios = session.scalars(
-        select(PaperPortfolio)
-        .options(
-            selectinload(PaperPortfolio.orders)
-            .selectinload(PaperOrder.fills),
-            selectinload(PaperPortfolio.orders)
-            .joinedload(PaperOrder.stock),
-            selectinload(PaperPortfolio.orders)
-            .joinedload(PaperOrder.portfolio),
-            selectinload(PaperPortfolio.orders)
-            .joinedload(PaperOrder.recommendation)
-            .joinedload(Recommendation.stock),
-        )
-        .order_by(PaperPortfolio.mode.asc(), PaperPortfolio.name.asc())
-    ).all()
+    portfolios = _load_operations_portfolios(session)
 
     replay_items = _recommendation_replay_payload(
         session,

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from time import perf_counter
+from pathlib import Path
+from time import perf_counter, sleep
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -56,6 +57,18 @@ def test_database_init_adds_operations_market_bar_covering_index() -> None:
         rows = connection.execute(text("PRAGMA index_list('market_bars')")).mappings().all()
 
     assert any(row["name"] == "idx_market_bars_timeframe_stock_observed" for row in rows)
+
+
+def test_background_operations_tick_does_not_block_event_loop() -> None:
+    api_source = (Path(__file__).resolve().parents[1] / "src" / "ashare_evidence" / "api.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "def run_background_operations_tick() -> None:" in api_source
+    assert "await asyncio.to_thread(run_background_operations_tick)" in api_source
+    assert "run_operations_tick(session)" in api_source
+    assert "with session_factory() as session:" in api_source
+    assert "OPERATIONS_RESPONSE_CACHE_STALE_GRACE_SECONDS" in api_source
 
 
 def test_expired_projection_is_not_returned() -> None:
@@ -177,6 +190,96 @@ def test_operations_portfolios_detail_uses_prewarmed_response_cache(tmp_path) ->
 
     assert response.status_code == 200
     assert response.json()["section"] == "portfolios"
+
+
+def test_operations_replay_detail_uses_prewarmed_response_cache(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'operations-replay-cache.db'}"
+    init_database(database_url)
+    with session_scope(database_url) as session:
+        seed_watchlist_fixture(session, symbols=("600519.SH", "300750.SZ"))
+
+    client = TestClient(create_app(database_url, enable_background_ops_tick=False))
+    with patch.dict("os.environ", {"ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE": "sync"}), client:
+        with patch("ashare_evidence.api.build_operations_detail", side_effect=AssertionError("cache should satisfy request")):
+            response = client.get(
+                "/dashboard/operations/details?section=replay&sample_symbol=600519.SH",
+                headers={"X-HZ-User-Login": "root", "X-HZ-User-Role": "root"},
+            )
+
+    assert response.status_code == 200
+    assert response.json()["section"] == "replay"
+    assert "recommendation_replay" in response.json()
+
+
+def test_operations_detail_cache_expiry_rebuilds_payload(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'operations-detail-cache-expiry.db'}"
+    init_database(database_url)
+    with session_scope(database_url) as session:
+        seed_watchlist_fixture(session, symbols=("600519.SH", "300750.SZ"))
+
+    fresh_payload = {
+        "section": "replay",
+        "generated_at": "2026-06-13T00:00:00+08:00",
+        "recommendation_replay": [{"summary": "fresh payload after ttl expiry"}],
+    }
+
+    client = TestClient(create_app(database_url, enable_background_ops_tick=False))
+    with patch.dict("os.environ", {"ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE": "sync"}), client:
+        with (
+            patch("ashare_evidence.api.OPERATIONS_RESPONSE_CACHE_TTL_SECONDS", -2.0),
+            patch("ashare_evidence.api.OPERATIONS_RESPONSE_CACHE_STALE_GRACE_SECONDS", 0.0),
+            patch("ashare_evidence.api.build_operations_detail", return_value=fresh_payload) as build_detail,
+        ):
+            response = client.get(
+                "/dashboard/operations/details?section=replay&sample_symbol=600519.SH",
+                headers={"X-HZ-User-Login": "root", "X-HZ-User-Role": "root"},
+            )
+
+    assert response.status_code == 200
+    assert build_detail.call_count == 1
+    assert response.json()["recommendation_replay"][0]["summary"] == "fresh payload after ttl expiry"
+
+
+def test_operations_detail_soft_expiry_returns_stale_and_refreshes_in_background(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'operations-detail-soft-expiry.db'}"
+    init_database(database_url)
+    with session_scope(database_url) as session:
+        seed_watchlist_fixture(session, symbols=("600519.SH", "300750.SZ"))
+
+    fresh_payload = {
+        "section": "replay",
+        "generated_at": "2026-06-13T00:00:00+08:00",
+        "recommendation_replay": [{"summary": "fresh payload from background refresh"}],
+    }
+
+    client = TestClient(create_app(database_url, enable_background_ops_tick=False))
+    with patch.dict("os.environ", {"ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE": "sync"}), client:
+        with (
+            patch("ashare_evidence.api.OPERATIONS_RESPONSE_CACHE_TTL_SECONDS", -1.0),
+            patch("ashare_evidence.api.OPERATIONS_RESPONSE_CACHE_STALE_GRACE_SECONDS", 120.0),
+            patch("ashare_evidence.api.build_operations_detail", return_value=fresh_payload) as build_detail,
+        ):
+            response = client.get(
+                "/dashboard/operations/details?section=replay&sample_symbol=600519.SH",
+                headers={"X-HZ-User-Login": "root", "X-HZ-User-Role": "root"},
+            )
+            assert response.status_code == 200
+            assert response.json().get("recommendation_replay") != fresh_payload["recommendation_replay"]
+
+            deadline = perf_counter() + 2
+            refreshed_response = None
+            while perf_counter() < deadline:
+                refreshed_response = client.get(
+                    "/dashboard/operations/details?section=replay&sample_symbol=600519.SH",
+                    headers={"X-HZ-User-Login": "root", "X-HZ-User-Role": "root"},
+                )
+                if refreshed_response.json().get("recommendation_replay") == fresh_payload["recommendation_replay"]:
+                    break
+                sleep(0.01)
+
+    assert build_detail.call_count >= 1
+    assert refreshed_response is not None
+    assert refreshed_response.json()["recommendation_replay"][0]["summary"] == "fresh payload from background refresh"
 
 
 def test_operations_legacy_get_uses_prewarmed_response_cache(tmp_path) -> None:

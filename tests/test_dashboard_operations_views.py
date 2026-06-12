@@ -163,6 +163,36 @@ class DashboardOperationsViewTests(DashboardViewTestCase):
         self.assertEqual(launch_gates["组合回测产物绑定"]["status"], "warn")
         self.assertIn("verified=0", launch_gates["组合回测产物绑定"]["current_value"])
 
+    def test_portfolios_detail_uses_lightweight_builder_without_full_dashboard(self) -> None:
+        with session_scope(self.database_url) as session:
+            seed_watchlist_fixture(session)
+
+        with session_scope(self.database_url) as session:
+            expected_dashboard = build_operations_dashboard(
+                session,
+                sample_symbol="600519.SH",
+                include_simulation_workspace=False,
+            )
+
+        with session_scope(self.database_url) as session:
+            with patch(
+                "ashare_evidence.operations.build_operations_dashboard",
+                side_effect=AssertionError("portfolios detail should not build the full dashboard"),
+            ):
+                detail = build_operations_detail(
+                    session,
+                    section="portfolios",
+                    sample_symbol="600519.SH",
+                    target_login="root",
+                )
+
+        self.assertEqual(detail["section"], "portfolios")
+        self.assertIn("generated_at", detail)
+        self.assertIsInstance(detail["portfolios"], list)
+        self.assertEqual(detail["portfolios"], expected_dashboard["portfolios"])
+        self.assertTrue(all(portfolio["nav_history"] for portfolio in detail["portfolios"]))
+        self.assertTrue(all(portfolio["recent_orders"] for portfolio in detail["portfolios"]))
+
     def test_completed_improvement_plan_does_not_pass_replay_gate_without_formal_evidence(self) -> None:
         with session_scope(self.database_url) as session:
             seed_watchlist_fixture(session)

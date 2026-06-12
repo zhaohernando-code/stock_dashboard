@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from ashare_evidence.release_verifier import (
     API_ENDPOINTS,
     BANNED_USER_VISIBLE_TERMS,
     REQUIRED_TRACK_TERMS,
     ReleaseVerificationError,
+    _api_payload_pair_for_fingerprint,
+    _record_api_fingerprint,
     _request_text,
     audit_user_visible_operations_text,
     build_release_manifest,
@@ -16,6 +21,7 @@ from ashare_evidence.release_verifier import (
     fingerprint_payload,
     merge_operations_audit_payload,
     normalize_payload_for_fingerprint,
+    _write_release_manifest,
 )
 
 
@@ -253,6 +259,160 @@ class ReleaseVerifierTests(unittest.TestCase):
         ):
             _request_text(TimeoutOpener(), "http://127.0.0.1:8000/slow", timeout=3)
 
+    def test_operations_fingerprint_reuses_warmed_payloads_without_fetching_again(self) -> None:
+        warmup_payloads = {
+            "local_payload": {"section": "portfolios", "portfolios": []},
+            "canonical_payload": {"section": "portfolios", "portfolios": []},
+            "local_duration_seconds": 1.2,
+            "canonical_duration_seconds": 1.4,
+        }
+
+        with patch(
+            "ashare_evidence.release_verifier._timed_request_json",
+            side_effect=AssertionError("warmup payload should satisfy operations fingerprint"),
+        ):
+            payload_pair = _api_payload_pair_for_fingerprint(
+                endpoint="/dashboard/operations/details?section=portfolios",
+                anonymous_opener=object(),
+                canonical_opener=object(),
+                local_url="http://127.0.0.1:8000/dashboard/operations/details?section=portfolios",
+                canonical_url="https://example.test/api/dashboard/operations/details?section=portfolios",
+                timeout=20,
+                headers={},
+                warmup_payloads=warmup_payloads,
+            )
+
+        self.assertEqual(payload_pair["local_payload"], warmup_payloads["local_payload"])
+        self.assertEqual(payload_pair["canonical_payload"], warmup_payloads["canonical_payload"])
+        self.assertEqual(payload_pair["local_duration_seconds"], 1.2)
+        self.assertEqual(payload_pair["canonical_duration_seconds"], 1.4)
+        self.assertEqual(payload_pair["local_source"], "warmup")
+        self.assertEqual(payload_pair["canonical_source"], "warmup")
+
+    def test_operations_fingerprint_falls_back_once_per_missing_side(self) -> None:
+        calls: list[str] = []
+        local_url = "http://127.0.0.1:8000/dashboard/operations/details?section=portfolios"
+        canonical_url = "https://example.test/api/dashboard/operations/details?section=portfolios"
+
+        def fake_timed_request(
+            _opener,
+            url: str,
+            *,
+            timeout: int,
+            headers: dict[str, str],
+        ) -> tuple[dict[str, str], float]:
+            calls.append(url)
+            self.assertEqual(timeout, 20)
+            self.assertEqual(headers, {"X-Test": "1"})
+            return {"source": "fallback", "url": url}, 0.5
+
+        with patch("ashare_evidence.release_verifier._timed_request_json", side_effect=fake_timed_request):
+            payload_pair = _api_payload_pair_for_fingerprint(
+                endpoint="/dashboard/operations/details?section=portfolios",
+                anonymous_opener=object(),
+                canonical_opener=object(),
+                local_url=local_url,
+                canonical_url=canonical_url,
+                timeout=20,
+                headers={"X-Test": "1"},
+                warmup_payloads={
+                    "local_payload": {"source": "warmup"},
+                    "local_duration_seconds": 1.1,
+                },
+            )
+
+        self.assertEqual(calls, [canonical_url])
+        self.assertEqual(payload_pair["local_payload"], {"source": "warmup"})
+        self.assertEqual(payload_pair["canonical_payload"]["source"], "fallback")
+        self.assertEqual(payload_pair["local_source"], "warmup")
+        self.assertEqual(payload_pair["canonical_source"], "warmup_miss")
+
+        calls.clear()
+        with patch("ashare_evidence.release_verifier._timed_request_json", side_effect=fake_timed_request):
+            payload_pair = _api_payload_pair_for_fingerprint(
+                endpoint="/dashboard/operations/details?section=portfolios",
+                anonymous_opener=object(),
+                canonical_opener=object(),
+                local_url=local_url,
+                canonical_url=canonical_url,
+                timeout=20,
+                headers={"X-Test": "1"},
+                warmup_payloads={
+                    "canonical_payload": {"source": "warmup"},
+                    "canonical_duration_seconds": 1.3,
+                },
+            )
+
+        self.assertEqual(calls, [local_url])
+        self.assertEqual(payload_pair["local_payload"]["source"], "fallback")
+        self.assertEqual(payload_pair["canonical_payload"], {"source": "warmup"})
+        self.assertEqual(payload_pair["local_source"], "warmup_miss")
+        self.assertEqual(payload_pair["canonical_source"], "warmup")
+
+    def test_warmed_payload_fingerprint_mismatch_still_fails_and_writes_snapshots(self) -> None:
+        api_fingerprints: dict[str, dict[str, object]] = {}
+        snapshot_paths: dict[str, str] = {}
+        warmup_payloads = {
+            "local_payload": {"section": "portfolios", "portfolios": [{"portfolio_key": "local"}]},
+            "canonical_payload": {"section": "portfolios", "portfolios": [{"portfolio_key": "canonical"}]},
+            "local_duration_seconds": 1.2,
+            "canonical_duration_seconds": 1.4,
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact_root = Path(temp_dir)
+
+            with patch(
+                "ashare_evidence.release_verifier._timed_request_json",
+                side_effect=AssertionError("warmup payload should satisfy operations fingerprint"),
+            ):
+                payload_pair = _api_payload_pair_for_fingerprint(
+                    endpoint="/dashboard/operations/details?section=portfolios",
+                    anonymous_opener=object(),
+                    canonical_opener=object(),
+                    local_url="http://127.0.0.1:8000/dashboard/operations/details?section=portfolios",
+                    canonical_url="https://example.test/api/dashboard/operations/details?section=portfolios",
+                    timeout=20,
+                    headers={},
+                    warmup_payloads=warmup_payloads,
+                )
+
+            with self.assertRaisesRegex(
+                ReleaseVerificationError,
+                r"API fingerprint mismatch for /dashboard/operations/details\?section=portfolios",
+            ):
+                _record_api_fingerprint(
+                    endpoint="/dashboard/operations/details?section=portfolios",
+                    slug="dashboard-operations-portfolios",
+                    request_endpoint="/dashboard/operations/details?section=portfolios&sample_symbol=600519.SH",
+                    local_url="http://127.0.0.1:8000/dashboard/operations/details?section=portfolios",
+                    canonical_url="https://example.test/api/dashboard/operations/details?section=portfolios",
+                    local_payload=payload_pair["local_payload"],
+                    canonical_payload=payload_pair["canonical_payload"],
+                    local_duration_seconds=payload_pair["local_duration_seconds"],
+                    canonical_duration_seconds=payload_pair["canonical_duration_seconds"],
+                    local_source=payload_pair["local_source"],
+                    canonical_source=payload_pair["canonical_source"],
+                    artifact_root=artifact_root,
+                    snapshot_paths=snapshot_paths,
+                    api_fingerprints=api_fingerprints,
+                )
+
+            local_snapshot = Path(snapshot_paths["local_dashboard-operations-portfolios"])
+            canonical_snapshot = Path(snapshot_paths["canonical_dashboard-operations-portfolios"])
+            self.assertEqual(
+                json.loads(local_snapshot.read_text(encoding="utf-8"))["portfolios"][0]["portfolio_key"],
+                "local",
+            )
+            self.assertEqual(
+                json.loads(canonical_snapshot.read_text(encoding="utf-8"))["portfolios"][0]["portfolio_key"],
+                "canonical",
+            )
+            fingerprint = api_fingerprints["/dashboard/operations/details?section=portfolios"]
+            self.assertFalse(fingerprint["match"])
+            self.assertEqual(fingerprint["local_source"], "warmup")
+            self.assertEqual(fingerprint["canonical_source"], "warmup")
+
     def test_operations_text_audit_payload_merge_preserves_required_and_banned_terms(self) -> None:
         summary = {
             "overview": {
@@ -314,6 +474,36 @@ class ReleaseVerifierTests(unittest.TestCase):
             manifest["api_warmups"],
             {"/dashboard/operations/details?section=portfolios": {"local_duration_seconds": 12.3}},
         )
+
+    def test_write_release_manifest_can_skip_latest_successful_update(self) -> None:
+        manifest = {"status": "passed", "commit_sha": "candidate"}
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_root = Path(temp_dir)
+            manifest_path = output_root / "20260613T000000Z-candidate" / "manifest.json"
+
+            _write_release_manifest(
+                manifest_path,
+                output_root,
+                manifest,
+                update_latest_successful=False,
+            )
+
+            self.assertEqual(json.loads(manifest_path.read_text(encoding="utf-8")), manifest)
+            self.assertFalse((output_root / "latest-successful.json").exists())
+
+    def test_write_release_manifest_updates_latest_successful_by_default(self) -> None:
+        manifest = {"status": "passed", "commit_sha": "candidate"}
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_root = Path(temp_dir)
+            manifest_path = output_root / "20260613T000000Z-candidate" / "manifest.json"
+
+            _write_release_manifest(manifest_path, output_root, manifest)
+
+            self.assertEqual(json.loads(manifest_path.read_text(encoding="utf-8")), manifest)
+            self.assertEqual(
+                json.loads((output_root / "latest-successful.json").read_text(encoding="utf-8")),
+                manifest,
+            )
 
 
 if __name__ == "__main__":
