@@ -303,3 +303,58 @@ class ShortpickModelFeedbackResponse(BaseModel):
     models: list[ShortpickModelFeedbackItem] = Field(default_factory=list)
     model_groups: list[ShortpickModelFeedbackItem] = Field(default_factory=list)
     overall: dict[str, Any] = Field(default_factory=dict)
+
+
+class ShortpickV2ConfigReadout(BaseModel):
+    config_id: str
+    role: str
+    selection_rank: int | None = None
+    gate_status: str | None = None
+    reason: str | None = None
+    summary: dict[str, Any] = Field(default_factory=dict)
+    selection_summary: dict[str, Any] = Field(default_factory=dict)
+    reason_counts: dict[str, int] = Field(default_factory=dict)
+    decision_samples: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ShortpickV2HistoricalReplayResponse(BaseModel):
+    generated_at: datetime
+    status: str
+    claim_ceiling: str
+    evidence_basis: str
+    ui_language: str
+    data_disclaimer: str
+    source_artifacts: dict[str, Any] = Field(default_factory=dict)
+    data_scope: dict[str, Any] = Field(default_factory=dict)
+    selection_policy: dict[str, Any] = Field(default_factory=dict)
+    summary: dict[str, Any] = Field(default_factory=dict)
+    selected_configs: list[ShortpickV2ConfigReadout] = Field(default_factory=list)
+    baseline_configs: list[ShortpickV2ConfigReadout] = Field(default_factory=list)
+    holdout_configs: list[ShortpickV2ConfigReadout] = Field(default_factory=list)
+    rejected_configs: list[ShortpickV2ConfigReadout] = Field(default_factory=list)
+    leakage_audit: dict[str, Any] = Field(default_factory=dict)
+    research_labeling: dict[str, Any] = Field(default_factory=dict)
+    event_refs: list[str] = Field(default_factory=list)
+
+
+class ShortpickV2PaperTrackingResponse(BaseModel):
+    generated_at: datetime
+    status: str
+    current_status: str
+    current_message: str | None = None
+    claim_ceiling: str
+    evidence_basis: str
+    ui_language: str
+    data_disclaimer: str
+    source_contract_ref: str
+    source_artifacts: dict[str, Any] = Field(default_factory=dict)
+    tracking_window: dict[str, Any] = Field(default_factory=dict)
+    account_contract: dict[str, Any] = Field(default_factory=dict)
+    row_contract: dict[str, Any] = Field(default_factory=dict)
+    selected_configs: list[ShortpickV2ConfigReadout] = Field(default_factory=list)
+    baseline_configs: list[ShortpickV2ConfigReadout] = Field(default_factory=list)
+    records: list[dict[str, Any]] = Field(default_factory=list)
+    summary: dict[str, Any] = Field(default_factory=dict)
+    leakage_audit: dict[str, Any] = Field(default_factory=dict)
+    research_labeling: dict[str, Any] = Field(default_factory=dict)
+    event_refs: list[str] = Field(default_factory=list)
