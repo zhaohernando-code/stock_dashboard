@@ -124,6 +124,7 @@ class DashboardFrontendAndWatchlistTests(DashboardViewTestCase):
 
         self.assertIn("function applyWatchlistRemoval(symbol: string): string | null", app_source)
         self.assertIn("const nextWatchlist = watchlist.filter((item) => item.symbol !== symbol);", app_source)
+        self.assertIn("setCandidates((current) => current.filter((item) => item.symbol !== symbol));", app_source)
         self.assertIn("const nextSymbol = applyWatchlistRemoval(symbol);", remove_body)
         self.assertIn("void loadShellData(nextSymbol, { throwOnError: true }).catch((refreshError) => {", remove_body)
         self.assertNotIn("await reloadEverything(nextSymbol);", remove_body)

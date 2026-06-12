@@ -1050,6 +1050,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
     const nextWatchlist = watchlist.filter((item) => item.symbol !== symbol);
     const nextSymbol = selectedSymbol === symbol ? nextWatchlist[0]?.symbol ?? null : selectedSymbol;
     setWatchlist(nextWatchlist);
+    setCandidates((current) => current.filter((item) => item.symbol !== symbol));
     if (selectedSymbol === symbol) {
       setSelectedSymbol(nextSymbol);
       setDashboard(null);
