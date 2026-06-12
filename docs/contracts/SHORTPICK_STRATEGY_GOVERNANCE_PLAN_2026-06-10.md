@@ -2024,6 +2024,13 @@ Status:
 - Canonical API verification after publish confirmed the raw latest run is still the pre-existing `2026-06-11` run with 10 database rows, including old market-factor controls. This code change intentionally does not mutate existing rows.
 - Canonical browser verification on `https://hernando-zhao.cn/projects/ashare-dashboard/?view=shortpick&shortpickTab=paper-tracking&symbol=002028.SZ` confirmed the latest simulated trade surface now shows `本轮当前策略候选（4 条，含对照组）`; expanding it shows current labels `冻结策略`, `冻结候选 v2`, `LLM纸面对照`, and `同池随机基线`, with no `动量换手`, `前三名等权`, `可执行风控版`, or `降追高` rows in that candidate container.
 
+Follow-up correction:
+
+- The 4-row visible result was still incomplete. The latest completed daily run must contain the current full paper-tracking set, including the three P3 true-forward controls.
+- Runtime data for completed daily run `246` / signal date `2026-06-11` was rebuilt by replaying the current market-factor overlay generation and then refreshing validation snapshots with already-ingested market data only. The rebuilt run removed `19` old overlay candidates and inserted `6` current overlay candidates: frozen v1, frozen v2 open-entry, same-symbol cooldown, drawdown/reversal, repeated exposure, and random baseline. Together with the existing LLM paper control, the latest completed daily run now has `7` current paper-tracking roles.
+- A separate `2026-06-12` `scheduled_intraday_cli` run was observed in `running` state with no candidates. Paper-tracking `latest_run` now selects the latest `completed` non-intraday run so a running intraday shell cannot override the current daily paper batch.
+- Verification: `PYTHONPATH=src python3 -m unittest tests.test_shortpick_lab_paper_tracking tests.test_shortpick_lab tests.test_frontend_shortpick_static` passed (`45` tests). DeepSeek focused diff review returned `PASS`.
+
 
 - `git status --short --branch`
 - `PYTHONPATH=src python3 -m pytest tests/test_shortpick_strategy_governance.py`
@@ -2111,4 +2118,4 @@ Status:
 | Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_governance_projection_rendering_round30_deprecated_bucket_filtering_round31_inventory_archived_fallback_and_round56_inventory_archive_source_metric |
 | Runtime data changed | corrected_replay_and_combined_ledger_artifacts_regenerated_in_round53_round54_and_round55_no_database_or_paper_tracking_writes_round56_added_runtime_inventory_archive_artifact_under_runtime_artifact_root |
 | DeepSeek plan review | round56_pass_merge |
-| Paper-tracking current-candidate governance fix | published_runtime_verified |
+| Paper-tracking current-candidate governance fix | published_runtime_verified_followup_latest_run_completion_pending_publish |
