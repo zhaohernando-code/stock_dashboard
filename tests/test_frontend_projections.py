@@ -226,6 +226,34 @@ def test_home_shell_projection_materializes_account_shell_payload() -> None:
     assert payload["scheduled_refresh_status"] is None
 
 
+def test_dashboard_shell_overlays_live_watchlist_on_stale_projection(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'shell-projection.db'}"
+    init_database(database_url)
+    with session_scope(database_url) as session:
+        seed_watchlist_fixture(session, symbols=("600519.SH", "300750.SZ"))
+        refresh_frontend_projections(session, projection="home_shell", target_login="root")
+        session.commit()
+
+    client = TestClient(create_app(database_url, enable_background_ops_tick=False))
+    headers = {"X-HZ-User-Login": "root", "X-HZ-User-Role": "root"}
+    delete_response = client.delete("/watchlist/600519.SH", headers=headers)
+    shell_response = client.get("/dashboard/shell", headers=headers)
+
+    assert delete_response.status_code == 200
+    assert shell_response.status_code == 200
+    assert {item["symbol"] for item in shell_response.json()["watchlist"]["items"]} == {"300750.SZ"}
+
+    with session_scope(database_url) as session:
+        stale_payload = get_ready_frontend_projection_payload(
+            session,
+            home_shell_projection_key(target_login="root"),
+            target_login="root",
+        )
+
+    assert stale_payload is not None
+    assert {item["symbol"] for item in stale_payload["watchlist"]["items"]} == {"600519.SH", "300750.SZ"}
+
+
 def test_shortpick_model_feedback_projection_materializes_empty_feedback_payload() -> None:
     database_url = "sqlite:///:memory:"
     init_database(database_url)

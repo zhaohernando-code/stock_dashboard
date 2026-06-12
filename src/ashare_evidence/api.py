@@ -2549,6 +2549,13 @@ def create_app(
                 actor_role=access.actor_role,
             )
         projection = dict(projection)
+        projection["watchlist"] = list_watchlist_entries(
+            session,
+            target_login=access.target_login,
+            actor_login=access.actor_login,
+            actor_role=access.actor_role,
+            record_presence=False,
+        )
         projection["scheduled_refresh_status"] = get_scheduled_refresh_status()
         return projection
 
