@@ -106,8 +106,8 @@ import {
   hasPaperTrackingMechanical10dExit,
   hasPaperTrackingMechanical5dExit,
   hasPaperTrackingRiskExit,
+  latestCurrentPaperTrackingRoundRows,
   latestFrozenPaperTrackingChoices,
-  latestPaperTrackingChoices,
   latestPaperTrackingSignalDate,
   nextPendingEntryDate,
   paperTrackingAlertType,
@@ -1893,22 +1893,10 @@ function LatestSimulationTradeCard({
   const rows = primaryPaperTrackingRows(tracking?.items ?? []);
   const choiceLabel = paperTrackingChoiceLabel(latestRun);
   const frozenRows = latestFrozenPaperTrackingChoices(rows);
-  const fallbackRows = latestPaperTrackingChoices(rows, latestRun);
+  const fallbackRows = latestCurrentPaperTrackingRoundRows(rows, latestRun);
   // Default visible list is the frozen strategies (the formal tracking line).
   const choiceRows = frozenRows.length ? frozenRows : fallbackRows;
-  // "This round" full candidate set (all groups, incl. LLM/market/random
-  // controls): scope by latestRun.id so candidates from other runs that share
-  // a signal date are not mixed in. Fall back to the latest-signal-date set
-  // only when there is no latestRun.id.
-  const latestRunId = Number(latestRun?.id ?? 0);
-  const fullRoundRows = (latestRunId
-    ? rows.filter((item) => Number(item.run_id) === latestRunId)
-    : fallbackRows
-  ).slice().sort((left, right) => (
-    paperTrackingDisplayRank(left) - paperTrackingDisplayRank(right)
-    || Number(left.source_rank ?? 99) - Number(right.source_rank ?? 99)
-    || left.name.localeCompare(right.name, "zh-Hans-CN")
-  ));
+  const fullRoundRows = latestCurrentPaperTrackingRoundRows(rows, latestRun);
   const choiceSignalDate = choiceRows[0] ? paperTrackingSignalDate(choiceRows[0]) : latestPaperTrackingSignalDate(rows, latestRun);
   const choiceTimingText = paperTrackingChoiceTimingText(choiceLabel, choiceRows, latestRun);
   const frozenMetricItems = [
@@ -1996,7 +1984,7 @@ function LatestSimulationTradeCard({
           items={[
             {
               key: "full-round",
-              label: `本轮全部候选（${fullRoundRows.length} 条，含对照组）`,
+              label: `本轮当前策略候选（${fullRoundRows.length} 条，含对照组）`,
               children: (
                 <List
                   className="shortpick-choice-list"
