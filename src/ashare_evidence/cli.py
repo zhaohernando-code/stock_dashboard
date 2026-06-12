@@ -78,6 +78,10 @@ from ashare_evidence.shortpick_v2_replay import (
     build_shortpick_v2_replay_artifact,
     write_shortpick_v2_replay_artifact,
 )
+from ashare_evidence.shortpick_v2_rule_selection import (
+    build_shortpick_v2_rule_selection_artifact_from_path,
+    write_shortpick_v2_rule_selection_artifact,
+)
 from ashare_evidence.shortpick_ranked_pool_replay_input import (
     enrich_shortpick_replay_paper_tracking_with_reconstructed_ranked_pools,
 )
@@ -838,6 +842,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     shortpick_v2_replay.add_argument("--output", default="output/shortpick-v2-replay-artifact.json")
 
+    shortpick_v2_rule_selection = subparsers.add_parser(
+        "shortpick-v2-rule-selection",
+        help="Select bounded Short Pick Lab v2 rule candidates from a replay artifact.",
+    )
+    shortpick_v2_rule_selection.add_argument("--database-url", default=None, help=argparse.SUPPRESS)
+    shortpick_v2_rule_selection.add_argument("--replay-artifact", required=True)
+    shortpick_v2_rule_selection.add_argument("--output", default="output/shortpick-v2-rule-selection-artifact.json")
+    shortpick_v2_rule_selection.add_argument("--max-selected", type=int, default=2)
+    shortpick_v2_rule_selection.add_argument("--generated-at", default=None)
+
     shortpick_governance_historical_backtest = subparsers.add_parser(
         "shortpick-governance-historical-backtest",
         help="Run Short Pick governance historical-backtest request plans into gated evidence artifacts.",
@@ -1397,6 +1411,28 @@ def main(argv: list[str] | None = None) -> int:
                 "output_path": str(path),
                 "signal_day_count": (payload.get("data_scope") or {}).get("signal_day_count"),
                 "result_count": len(payload.get("results") or []),
+            }
+        )
+        return 0
+
+    if args.command == "shortpick-v2-rule-selection":
+        generated_at = datetime.fromisoformat(args.generated_at) if args.generated_at else None
+        payload = build_shortpick_v2_rule_selection_artifact_from_path(
+            args.replay_artifact,
+            max_selected=args.max_selected,
+            generated_at=generated_at,
+        )
+        path = write_shortpick_v2_rule_selection_artifact(payload, output_path=args.output)
+        _print_json(
+            {
+                "status": "ok",
+                "artifact_family": payload.get("artifact_family"),
+                "artifact_id": payload.get("artifact_id"),
+                "output_path": str(path),
+                "selected_config_ids": [item["config_id"] for item in payload.get("selected_configs") or []],
+                "baseline_config_ids": [item["config_id"] for item in payload.get("baseline_configs") or []],
+                "holdout_count": len(payload.get("holdout_configs") or []),
+                "rejected_count": len(payload.get("rejected_configs") or []),
             }
         )
         return 0

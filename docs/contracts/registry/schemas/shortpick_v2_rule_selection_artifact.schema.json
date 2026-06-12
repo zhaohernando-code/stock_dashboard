@@ -1,0 +1,406 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "shortpick_v2_rule_selection_artifact.schema.json",
+  "title": "Shortpick V2 Rule Selection Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_family",
+    "schema_version",
+    "artifact_id",
+    "generated_at",
+    "status",
+    "claim_ceiling",
+    "evidence_basis",
+    "source_plan_ref",
+    "source_replay_artifact",
+    "selection_policy",
+    "gate_results",
+    "selected_configs",
+    "baseline_configs",
+    "holdout_configs",
+    "rejected_configs",
+    "leakage_audit",
+    "research_labeling",
+    "event_refs"
+  ],
+  "properties": {
+    "artifact_family": {
+      "const": "shortpick_v2_rule_selection_artifact"
+    },
+    "schema_version": {
+      "const": "v1"
+    },
+    "artifact_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ready", "blocked"]
+    },
+    "claim_ceiling": {
+      "const": "research_observation"
+    },
+    "evidence_basis": {
+      "const": "historical_account_replay_selection"
+    },
+    "source_plan_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_replay_artifact": {
+      "$ref": "#/$defs/source_replay_artifact"
+    },
+    "selection_policy": {
+      "$ref": "#/$defs/selection_policy"
+    },
+    "gate_results": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/gate_result"
+      },
+      "minItems": 1
+    },
+    "selected_configs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/selection_row"
+      }
+    },
+    "baseline_configs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/selection_row"
+      }
+    },
+    "holdout_configs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/selection_row"
+      }
+    },
+    "rejected_configs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/selection_row"
+      }
+    },
+    "leakage_audit": {
+      "$ref": "#/$defs/leakage_audit"
+    },
+    "research_labeling": {
+      "$ref": "#/$defs/research_labeling"
+    },
+    "event_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "source_replay_artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "artifact_family",
+        "schema_version",
+        "path",
+        "status",
+        "claim_ceiling",
+        "evidence_basis",
+        "signal_day_count",
+        "trade_day_count"
+      ],
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact_family": {
+          "const": "shortpick_v2_replay_artifact"
+        },
+        "schema_version": {
+          "const": "v1"
+        },
+        "path": {
+          "type": ["string", "null"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["ready", "partial", "blocked"]
+        },
+        "claim_ceiling": {
+          "const": "research_observation"
+        },
+        "evidence_basis": {
+          "const": "historical_account_replay"
+        },
+        "signal_day_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "trade_day_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "selection_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_version",
+        "max_selected",
+        "required_config_ids",
+        "baseline_config_ids",
+        "gate_thresholds",
+        "ranking_order"
+      ],
+      "properties": {
+        "policy_version": {
+          "const": "shortpick_v2_rule_selection_v1"
+        },
+        "max_selected": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "required_config_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "baseline_config_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "gate_thresholds": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["number", "integer", "boolean", "string"]
+          },
+          "minProperties": 1
+        },
+        "ranking_order": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "gate_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "config_id",
+        "gate_status",
+        "checks",
+        "summary",
+        "reason"
+      ],
+      "properties": {
+        "config_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gate_status": {
+          "type": "string",
+          "enum": ["passed", "failed", "baseline_control"]
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/gate_check"
+          },
+          "minItems": 1
+        },
+        "summary": {
+          "$ref": "#/$defs/summary"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "gate_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check_id", "passed", "actual", "threshold", "direction"],
+      "properties": {
+        "check_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "actual": {
+          "type": ["number", "integer", "boolean", "string", "null"]
+        },
+        "threshold": {
+          "type": ["number", "integer", "boolean", "string", "null"]
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["gte", "lte", "gt", "present", "eq"]
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "signal_count",
+        "trade_count",
+        "skip_count",
+        "skip_ratio",
+        "fallback_trade_count",
+        "total_return",
+        "max_drawdown",
+        "mean_invested_ratio",
+        "turnover"
+      ],
+      "properties": {
+        "signal_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "trade_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skip_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skip_ratio": {
+          "type": "number",
+          "minimum": 0
+        },
+        "fallback_trade_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_return": {
+          "type": "number"
+        },
+        "max_drawdown": {
+          "type": "number"
+        },
+        "mean_invested_ratio": {
+          "type": "number",
+          "minimum": 0
+        },
+        "turnover": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "selection_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "config_id",
+        "role",
+        "selection_rank",
+        "gate_status",
+        "reason",
+        "summary"
+      ],
+      "properties": {
+        "config_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "enum": ["phase5_contract_candidate", "baseline_control", "holdout", "rejected"]
+        },
+        "selection_rank": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "gate_status": {
+          "type": "string",
+          "enum": ["passed", "failed", "baseline_control"]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "$ref": "#/$defs/summary"
+        }
+      }
+    },
+    "leakage_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "source_replay_leakage_status",
+        "used_only_replay_artifact",
+        "notes"
+      ],
+      "properties": {
+        "status": {
+          "const": "passed"
+        },
+        "source_replay_leakage_status": {
+          "const": "passed"
+        },
+        "used_only_replay_artifact": {
+          "const": true
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "research_labeling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_ceiling", "selected_role_label", "notes"],
+      "properties": {
+        "claim_ceiling": {
+          "const": "research_observation"
+        },
+        "selected_role_label": {
+          "const": "phase5_contract_candidate"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    }
+  }
+}
