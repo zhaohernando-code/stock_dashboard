@@ -105,7 +105,12 @@ const { TextArea } = Input;
 type ViewMode = "candidates" | "stock" | "operations" | "shortpick" | "settings";
 type StockTabKey = "signals" | "evidence" | "followup";
 
-const VIEW_MODES = new Set<ViewMode>(["candidates", "stock", "operations", "shortpick", "settings"]);
+const OPERATIONS_REVIEW_ENABLED = false;
+const VIEW_MODES = new Set<ViewMode>(
+  OPERATIONS_REVIEW_ENABLED
+    ? ["candidates", "stock", "operations", "shortpick", "settings"]
+    : ["candidates", "stock", "shortpick", "settings"],
+);
 const STOCK_TAB_KEYS = new Set<StockTabKey>(["signals", "evidence", "followup"]);
 const DEFAULT_VIEW: ViewMode = "shortpick";
 
@@ -278,7 +283,7 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
   const viewRef = useRef<ViewMode>(view);
   const canMutateWatchlist = true;
   const isRootUser = authContext?.actor_role === "root";
-  const canUseOperations = true;
+  const canUseOperations = OPERATIONS_REVIEW_ENABLED;
   const canUseSettings = true;
   const canUseManualResearch = true;
   const runtimeView = runtimeSettings ?? runtimeOverview;

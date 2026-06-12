@@ -1,5 +1,13 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-06-12T10:20:00+08:00] 运营复盘前端入口临时下线，后端与历史证据保留：
+
+项目所有者明确“运营复盘”模块当前已经不再使用，本轮只在前端层面临时移除用户入口。实现边界是：关闭 `operations` view 的可用路由集合与桌面/移动导航入口；直接访问 `?view=operations` 回落到默认试验田视图；保留后端 API、投影、历史数据、组件代码和测试资产，避免把临时前端下线误做成数据删除或后端能力退役。
+
+恢复条件
+- 若后续重新启用运营复盘，需要先确认它仍是用户可见工作流，再打开前端入口开关，重跑前端 build、路由静态回归、runtime publish 和 canonical browser 验收。
+- 在重新启用前，不应从其他入口新增运营复盘的可见按钮、移动底栏项或 URL-backed view。
+
 [2026-06-10T16:10:00+08:00] Short Pick governance intent clarification: deprecated display bucket and labeled combined-ledger backfill:
 
 项目所有者明确了短投治理的初心，并拍板了此前各轮刻意留待决策的两个问题，记录到 `docs/contracts/SHORTPICK_STRATEGY_GOVERNANCE_PLAN_2026-06-10.md` 的 Round 28 修订段。本条为耐久决策，后续实现轮不得偏移。

@@ -242,6 +242,9 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         route_source = (frontend_root / "utils" / "route.ts").read_text(encoding="utf-8")
 
         self.assertIn('const DEFAULT_VIEW: ViewMode = "shortpick";', app_source)
+        self.assertIn("const OPERATIONS_REVIEW_ENABLED = false;", app_source)
+        self.assertIn('    : ["candidates", "stock", "shortpick", "settings"],', app_source)
+        self.assertIn("const canUseOperations = OPERATIONS_REVIEW_ENABLED;", app_source)
         self.assertIn('return rawView && VIEW_MODES.has(rawView as ViewMode) ? (rawView as ViewMode) : DEFAULT_VIEW;', app_source)
         self.assertIn('writeWorkbenchRoute({', app_source)
         self.assertIn('view,', app_source)
