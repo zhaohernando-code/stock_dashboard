@@ -577,3 +577,58 @@ export interface ShortpickPaperTrackingResponse {
   combined_ledger?: ShortpickCombinedLedgerProjection;
   items: ShortpickPaperTrackingItem[];
 }
+
+export interface ShortpickV2ConfigReadout {
+  config_id: string;
+  role: string;
+  selection_rank?: number | null;
+  gate_status?: string | null;
+  reason?: string | null;
+  summary: Record<string, unknown>;
+  selection_summary: Record<string, unknown>;
+  reason_counts: Record<string, number>;
+  decision_samples: Record<string, unknown>[];
+}
+
+export interface ShortpickV2HistoricalReplayResponse {
+  generated_at: string;
+  status: string;
+  claim_ceiling: string;
+  evidence_basis: string;
+  ui_language: string;
+  data_disclaimer: string;
+  source_artifacts: Record<string, Record<string, unknown>>;
+  data_scope: Record<string, unknown>;
+  selection_policy: Record<string, unknown>;
+  summary: Record<string, unknown>;
+  selected_configs: ShortpickV2ConfigReadout[];
+  baseline_configs: ShortpickV2ConfigReadout[];
+  holdout_configs: ShortpickV2ConfigReadout[];
+  rejected_configs: ShortpickV2ConfigReadout[];
+  leakage_audit: Record<string, unknown>;
+  research_labeling: Record<string, unknown>;
+  event_refs: string[];
+}
+
+export interface ShortpickV2PaperTrackingResponse {
+  generated_at: string;
+  status: string;
+  current_status: string;
+  current_message?: string | null;
+  claim_ceiling: string;
+  evidence_basis: string;
+  ui_language: string;
+  data_disclaimer: string;
+  source_contract_ref: string;
+  source_artifacts: Record<string, Record<string, unknown>>;
+  tracking_window: Record<string, unknown>;
+  account_contract: Record<string, unknown>;
+  row_contract: Record<string, unknown>;
+  selected_configs: ShortpickV2ConfigReadout[];
+  baseline_configs: ShortpickV2ConfigReadout[];
+  records: Record<string, unknown>[];
+  summary: Record<string, unknown>;
+  leakage_audit: Record<string, unknown>;
+  research_labeling: Record<string, unknown>;
+  event_refs: string[];
+}

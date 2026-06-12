@@ -1124,6 +1124,32 @@ body[data-theme="dark"] {
   font-weight: 700;
 }
 
+.shortpick-v2-header .ant-card-body {
+  display: grid;
+  gap: 12px;
+}
+
+.shortpick-v2-header .shortpick-header-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.shortpick-v2-tabs .ant-tabs-nav {
+  margin-bottom: 12px;
+}
+
+.shortpick-v2-tab-body {
+  gap: 12px;
+}
+
+.shortpick-v2-config-table table,
+.shortpick-v2-reference-collapse table {
+  min-width: 760px;
+}
+
 .suggestion-stat-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

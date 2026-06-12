@@ -12,9 +12,9 @@ import type {
   StockDashboardResponse,
 } from "../../types";
 
-export type MobileTabKey = "home" | "stock" | "operations" | "shortpick" | "settings";
+export type MobileTabKey = "home" | "stock" | "operations" | "shortpick" | "shortpick-v2" | "settings";
 export type MobileStockPanelKey = "advice" | "evidence" | "risk" | "question";
-export type MobileViewMode = "candidates" | "stock" | "operations" | "shortpick" | "settings";
+export type MobileViewMode = "candidates" | "stock" | "operations" | "shortpick" | "shortpick-v2" | "settings";
 
 export interface MobileAppShellProps {
   activeView: MobileViewMode;

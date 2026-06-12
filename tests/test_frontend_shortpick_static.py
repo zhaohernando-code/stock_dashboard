@@ -3,6 +3,52 @@ from pathlib import Path
 
 
 class FrontendShortpickStaticTests(unittest.TestCase):
+    def test_shortpick_v2_tab_uses_separate_read_only_surface(self) -> None:
+        frontend_root = Path(__file__).resolve().parents[1] / "frontend" / "src"
+        app_source = (frontend_root / "App.tsx").read_text(encoding="utf-8")
+        mobile_source = (frontend_root / "components" / "mobile" / "MobileAppShell.tsx").read_text(encoding="utf-8")
+        mobile_types_source = (frontend_root / "components" / "mobile" / "types.ts").read_text(encoding="utf-8")
+        common_types_source = (frontend_root / "types" / "common.ts").read_text(encoding="utf-8")
+        api_source = (frontend_root / "api" / "shortpick.ts").read_text(encoding="utf-8")
+        api_index_source = (frontend_root / "api" / "index.ts").read_text(encoding="utf-8")
+        component_source = (frontend_root / "components" / "ShortpickLabV2View.tsx").read_text(encoding="utf-8")
+
+        self.assertIn('label: "试验田v2"', app_source)
+        self.assertIn('key: "shortpick-v2"', app_source)
+        self.assertIn("<ShortpickLabV2View />", app_source)
+        self.assertIn('"shortpick-v2"', common_types_source)
+        self.assertIn('"shortpick-v2"', mobile_types_source)
+        self.assertIn('label: "v2"', mobile_source)
+        self.assertIn("<ShortpickLabV2View />", mobile_source)
+
+        self.assertIn("getShortpickV2PaperTracking", api_source)
+        self.assertIn("getShortpickV2HistoricalReplay", api_source)
+        self.assertIn("/shortpick-lab-v2/paper-tracking", api_source)
+        self.assertIn("/shortpick-lab-v2/historical-replay", api_source)
+        self.assertIn("getShortpickV2PaperTracking", api_index_source)
+        self.assertIn("getShortpickV2HistoricalReplay", api_index_source)
+
+        self.assertIn('type ShortpickV2Tab = "paper-tracking" | "historical-replay";', component_source)
+        self.assertIn('label: "纸面追踪"', component_source)
+        self.assertIn('label: "历史回放"', component_source)
+        self.assertIn('readRouteParam("shortpickV2Tab")', component_source)
+        self.assertIn('writeWorkbenchRoute({ view: "shortpick-v2", shortpickV2Tab: nextTab }, "push");', component_source)
+        self.assertIn('window.addEventListener("popstate", handlePopState);', component_source)
+        self.assertIn('window.removeEventListener("popstate", handlePopState);', component_source)
+        self.assertIn("contract_ready", component_source)
+        self.assertIn("2026-05-08", component_source)
+        self.assertIn("delay_buy", component_source)
+        self.assertIn("research_observation", component_source)
+        self.assertIn("getShortpickV2PaperTracking", component_source)
+        self.assertIn("getShortpickV2HistoricalReplay", component_source)
+        self.assertNotIn("getShortpickPaperTracking", component_source)
+        self.assertNotIn("getShortpickReplayRuns", component_source)
+        self.assertNotIn("getShortpickValidationQueue", component_source)
+        self.assertNotIn("getShortpickModelFeedback", component_source)
+        self.assertNotIn("LLM历史验证", component_source)
+        self.assertNotIn("LLM模型反馈", component_source)
+        self.assertNotIn("最新模拟交易", component_source)
+
     def test_shortpick_lab_is_independent_research_surface(self) -> None:
         frontend_root = Path(__file__).resolve().parents[1] / "frontend" / "src"
         app_source = (frontend_root / "App.tsx").read_text(encoding="utf-8")
@@ -243,7 +289,7 @@ class FrontendShortpickStaticTests(unittest.TestCase):
 
         self.assertIn('const DEFAULT_VIEW: ViewMode = "shortpick";', app_source)
         self.assertIn("const OPERATIONS_REVIEW_ENABLED = false;", app_source)
-        self.assertIn('    : ["candidates", "stock", "shortpick", "settings"],', app_source)
+        self.assertIn('    : ["candidates", "stock", "shortpick", "shortpick-v2", "settings"],', app_source)
         self.assertIn("const canUseOperations = OPERATIONS_REVIEW_ENABLED;", app_source)
         self.assertIn('return rawView && VIEW_MODES.has(rawView as ViewMode) ? (rawView as ViewMode) : DEFAULT_VIEW;', app_source)
         self.assertIn('writeWorkbenchRoute({', app_source)

@@ -1,6 +1,6 @@
 # Short Pick Lab V2 Plan
 
-Status: Phase 6 complete, ready for frontend tab planning
+Status: Phase 7 implementation and gates complete; pending runtime publish verification
 Owner: stock_dashboard
 Created: 2026-06-12
 Scope: planning contract only; not a runbook
@@ -25,8 +25,8 @@ The new area must preserve useful validated stock-selection evidence from the ex
 
 | Module | Status | Requirement |
 | --- | --- | --- |
-| 纸面追踪 | In progress | Backend read API is ready with a contract-ready empty projection or v2 ledger artifact rows; frontend module remains Phase 7. |
-| 历史回放 | In progress | Backend read API is ready from precomputed Phase 3/4 artifacts; frontend module remains Phase 7. |
+| 纸面追踪 | Done | Backend read API is ready with a contract-ready empty projection or v2 ledger artifact rows; Phase 7 frontend reads it through the separate v2 page. |
+| 历史回放 | Done | Backend read API is ready from precomputed Phase 3/4 artifacts; Phase 7 frontend reads it through the separate v2 page. |
 
 The v2 domain must answer a different question from v1:
 
@@ -47,11 +47,11 @@ The existing Short Pick Lab structure is already carrying multiple research, fee
 
 | Non-goal | Status | Rationale |
 | --- | --- | --- |
-| Do not retrofit existing Short Pick Lab paper tracking into v2 | Pending | Existing v1 evidence must remain interpretable under its original contract. |
+| Do not retrofit existing Short Pick Lab paper tracking into v2 | Done | Existing v1 evidence remains under its original contract; v2 uses separate read APIs and frontend state. |
 | Do not add delayed buying as an execution option | Done | Delayed entry has weak explanatory value and confounds signal quality with timing. |
-| Do not expose a large interactive parameter grid in the first v2 UI | Pending | Governance cost and user confusion would be too high. |
-| Do not present v2 as investment advice or production trading automation | Pending | V2 is research and paper validation only. |
-| Do not run v2 replay dynamically from page loads | Pending | Heavy replay belongs in offline/precomputed artifacts; UI/API should be read-only. |
+| Do not expose a large interactive parameter grid in the first v2 UI | Done | Phase 7 shows promoted/baseline/holdout readouts only; no parameter controls are exposed. |
+| Do not present v2 as investment advice or production trading automation | Done | Phase 7 preserves research and read-only labeling. |
+| Do not run v2 replay dynamically from page loads | Done | Phase 7 calls read APIs only and has no replay generation or market-refresh action. |
 
 ## Solution Direction
 
@@ -61,9 +61,9 @@ The first implementation should separate three layers:
 
 | Layer | Status | Contract |
 | --- | --- | --- |
-| Candidate source layer | Pending | Reads historical and forward candidate pools from existing evidence, but only through a v2 projection contract. |
-| Execution simulation layer | Pending | Applies cash, board-lot, position, fallback, and exit rules to produce account-level trades and NAV. |
-| Presentation layer | Pending | Shows only selected v2 configurations, paper decisions, replay summaries, and risk notes. |
+| Candidate source layer | Done | Reads fixed historical and forward candidate evidence through v2 artifact/read contracts, not v1 mutable UI projections. |
+| Execution simulation layer | Done | Phase 3 artifacts apply cash, board-lot, position, fallback, and exit rules to produce account-level trades and NAV. |
+| Presentation layer | Done | Phase 7 shows only selected v2 configurations, paper decisions, replay summaries, and risk notes. |
 
 The default capital profile should start from CNY 200,000 and model board-lot execution explicitly. If Top 1 is not executable under the fixed rules, the strategy may either use a pre-declared fallback candidate or skip the signal. It must not delay the buy to a later day.
 
@@ -71,11 +71,11 @@ The default capital profile should start from CNY 200,000 and model board-lot ex
 
 | Principle | Status | Requirement |
 | --- | --- | --- |
-| Fixed before measured | Pending | Execution rules must be declared before measuring outcomes. |
-| Few promoted variants | Pending | The v2 UI should show a small selected set, not the full search grid. |
-| Explainable actions | Pending | Every buy, fallback, skip, and exit must have a deterministic reason. |
-| Candidate quality and account path stay separate | Pending | Candidate-level forward returns must not be mixed with account-level NAV claims. |
-| Reuse fixed data, not live computation | Pending | Daily bars, candidate pools, and derived fixed inputs should be loaded once per replay artifact where possible. |
+| Fixed before measured | Done | Phase 3/4/5 fixed replay, selection, and paper-ledger contracts before Phase 7 presentation. |
+| Few promoted variants | Done | Phase 7 shows selected, baseline, holdout, and rejected readouts without exposing the full search grid. |
+| Explainable actions | Done | Phase 3/5/6 artifacts and read APIs expose deterministic buy, fallback, skip, and reason fields. |
+| Candidate quality and account path stay separate | Done | Phase 7 separates historical account replay and paper account path readouts from v1 candidate-level evidence. |
+| Reuse fixed data, not live computation | Done | Phase 7 reads precomputed artifacts through v2 APIs and does not trigger replay or refresh work. |
 | No delayed entry | Done | The action set is buy candidate, buy fallback, or skip. |
 
 ## Initial Rule Families
@@ -99,13 +99,13 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 | Risk | Status | Mitigation |
 | --- | --- | --- |
 | Semantic mixing with v1 | Done | Phase 5 defines a separate v2 paper ledger contract/schema, and Phase 6 adds separate `shortpick-lab-v2` read APIs that do not infer v2 account state from v1 paper tracking. |
-| Overfitting parameter grids | In progress | Phase 4 uses fixed gates and a risk-first selector over the Phase 3 replay artifact; later UI must not expose the full parameter grid. |
+| Overfitting parameter grids | Done | Phase 4 uses fixed gates and a risk-first selector over the Phase 3 replay artifact; Phase 7 does not expose the full parameter grid. |
 | Weak sample size | Pending | Require enough historical signal days and market-regime coverage before promoting any v2 rule. |
-| Slow replay execution | In progress | Phase 3 keeps replay offline/precomputed and reuses loaded series/candidate pools; Phase 6 read APIs load artifacts only and do not run replay on demand. Phase 7 UI must keep the same boundary. |
+| Slow replay execution | Done | Phase 3 keeps replay offline/precomputed, Phase 6 read APIs load artifacts only, and Phase 7 UI reads without dynamic replay. |
 | Unclear skip/fallback attribution | Done | Phase 3 artifact persists deterministic `buy_primary`, `buy_fallback`, and `skip` reason counts plus bounded decision samples. |
 | Low-price bias | Pending | Treat share-price effects as lot-rounding efficiency, not as selection alpha. |
 | Governance sprawl | In progress | Phase 4 records fixed selection policy `shortpick_v2_rule_selection_v1`; later paper-tracking parameters still need governed placement before live-facing use. |
-| User-facing overclaim | In progress | Phase 6 read APIs return `claim_ceiling=research_observation`, evidence-basis labels, and paper/research disclaimers; frontend copy remains Phase 7. |
+| User-facing overclaim | Done | Phase 6 read APIs return `claim_ceiling=research_observation`, evidence-basis labels, and paper/research disclaimers; Phase 7 preserves those labels in the UI. |
 
 ## Landing Flow
 
@@ -117,7 +117,7 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 | 4. Candidate rule selection | Done | Added offline selector `shortpick-v2-rule-selection`, produced `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/shortpick-v2-rule-selection-artifact-20260612.json`, and selected `conservative_cash_reserve_60k_top5_v1` plus `fixed_notional_40k_top5_v1` as Phase 5 contract candidates. `top1_or_skip_v1` remains the strict baseline/control. |
 | 5. Paper tracking contract | Done | Defined forward v2 paper ledger semantics in `docs/contracts/SHORTPICK_LAB_V2_PAPER_TRACKING_CONTRACT_2026-06-12.md` with schema `docs/contracts/registry/schemas/shortpick_v2_paper_tracking_ledger.schema.json`, using the v1-aligned `2026-05-08` start window and rejecting delayed-entry actions. |
 | 6. Backend read model | Done | Added separate `shortpick-lab-v2` read APIs for paper tracking and historical replay, backed by precomputed Phase 3/4 artifacts or v2 ledger artifacts. Missing v2 paper ledger returns a contract-ready empty projection instead of v1-derived rows. |
-| 7. Frontend tab | Pending | Add `试验田v2` with only `纸面追踪` and `历史回放`. |
+| 7. Frontend tab | Done | Added `试验田v2` with only `纸面追踪` and `历史回放`, backed by separate v2 frontend API calls and static coverage. |
 | 8. Verification and publish | Pending | Verify served UI/API behavior only after code changes are implemented. |
 
 ## Acceptance Rules
@@ -125,16 +125,16 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 | Rule | Status | Acceptance Criteria |
 | --- | --- | --- |
 | Separate semantic domain | Done | Phase 3/4/5 define distinct v2 replay, rule-selection, and paper-ledger artifact contracts; Phase 6 exposes separate `shortpick-lab-v2` read APIs. |
-| Frontend-only reuse boundary | In progress | Backend v2 read APIs avoid mutable v1 data projections; Phase 7 frontend may reuse layout/components without sharing v1 data interfaces. |
+| Frontend-only reuse boundary | Done | Backend v2 read APIs avoid mutable v1 data projections; Phase 7 frontend reuses shell/layout only while keeping separate v2 APIs, types, and view state. |
 | No delayed-buy option | Done | V2 action taxonomy excludes delayed entry. |
 | Account realism | Done | Phase 3 replay models CNY 200,000 default cash, 100-share board lots, position caps, cash reserve, cash release, buy skips, and mechanical exits. |
 | Historical-first promotion | Done | Phase 4 selected candidates from the fixed Phase 3 replay artifact only, without UI parameters, DB writes, model calls, or manual overrides. |
 | Bounded promoted set | Done | Phase 4 selected two configurations for Phase 5 contract design and retained the remaining passing config as a holdout. |
 | Replay data adequacy | In progress | Phase 3 artifact reports signal count, trade count, skipped count, trade-day count, coverage status, and data gaps; Phase 4 still needs explicit promotion thresholds. |
-| Efficiency boundary | In progress | Phase 3 replay is offline/precomputed, and Phase 6 read APIs load artifacts without market fetches or dynamic replay. Phase 7 page work must keep this boundary. |
+| Efficiency boundary | Done | Phase 3 replay is offline/precomputed, Phase 6 read APIs load artifacts without market fetches or dynamic replay, and Phase 7 only reads those APIs. |
 | Explainability | Done | Phase 3 artifact exposes buy/fallback/skip reason counts and bounded account-state decision samples. |
 | Paper-tracking alignment | Done | Phase 5 contract fixes the v2 forward tracking start policy at the v1-aligned `2026-05-08` window and requires explicit source-gap records instead of silent date shifts. |
-| Research labeling | In progress | Phase 3/4 artifacts, Phase 5 contract, and Phase 6 read APIs are capped at `claim_ceiling=research_observation`; UI must preserve the same no-overclaim language. |
+| Research labeling | Done | Phase 3/4 artifacts, Phase 5 contract, Phase 6 read APIs, and Phase 7 UI are capped at `claim_ceiling=research_observation` or equivalent read-only research language. |
 
 ## Open Decisions
 
@@ -150,5 +150,5 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 
 | Reviewer | Status | Result |
 | --- | --- | --- |
-| Claude + Xiaomi MiMo | Done | Read-only plan, Phase 3, Phase 4, Phase 5, and Phase 6 reviews completed; result: no remaining blocking issues. |
+| Claude + Xiaomi MiMo | Done | Read-only plan, Phase 3, Phase 4, Phase 5, Phase 6, and Phase 7 frontend reviews completed; result: no remaining blocking issues. |
 | Claude + DeepSeek | Done | Read-only review completed; result: no blocking issues. |

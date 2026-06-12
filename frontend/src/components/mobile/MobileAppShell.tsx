@@ -14,11 +14,13 @@ import { MobileStockDetail } from "./MobileStockDetail";
 import { MobileOperations } from "./MobileOperations";
 import { MobileSettings } from "./MobileSettings";
 import { ShortpickLabView } from "../ShortpickLabView";
+import { ShortpickLabV2View } from "../ShortpickLabV2View";
 
 function tabForView(view: MobileAppShellProps["activeView"], canUseOperations: boolean, canUseSettings: boolean): MobileTabKey {
   if (view === "stock") return "stock";
   if (view === "operations") return canUseOperations ? "operations" : "home";
   if (view === "shortpick") return "shortpick";
+  if (view === "shortpick-v2") return "shortpick-v2";
   if (view === "settings") return canUseSettings ? "settings" : "home";
   return "home";
 }
@@ -34,6 +36,7 @@ export function MobileAppShell(props: MobileAppShellProps) {
       { key: "stock", label: "单票", icon: <LineChartOutlined /> },
       ...(props.canUseOperations ? [{ key: "operations", label: "复盘", icon: <BarChartOutlined /> }] : []),
       { key: "shortpick", label: "试验", icon: <ExperimentOutlined /> },
+      { key: "shortpick-v2", label: "v2", icon: <ExperimentOutlined /> },
       ...(props.canUseSettings ? [{ key: "settings", label: "设置", icon: <SettingOutlined /> }] : []),
     ] as Array<{ key: MobileTabKey; label: string; icon: React.ReactNode }>),
     [props.canUseOperations, props.canUseSettings],
@@ -149,6 +152,11 @@ export function MobileAppShell(props: MobileAppShellProps) {
             {activeTab === "shortpick" ? (
               <main className="mobile-page mobile-page-shortpick">
                 <ShortpickLabView canTrigger={props.isRootUser} />
+              </main>
+            ) : null}
+            {activeTab === "shortpick-v2" ? (
+              <main className="mobile-page mobile-page-shortpick">
+                <ShortpickLabV2View />
               </main>
             ) : null}
             {activeTab === "settings" ? <MobileSettings {...mobileProps} /> : null}

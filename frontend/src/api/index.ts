@@ -44,6 +44,8 @@ import {
   getShortpickReplaySources,
   getShortpickRun,
   getShortpickRuns,
+  getShortpickV2HistoricalReplay,
+  getShortpickV2PaperTracking,
   getShortpickValidationQueue,
   retryShortpickFailedRounds,
   validateShortpickRun,
@@ -119,4 +121,6 @@ export const api = {
   getShortpickReplayCandidates,
   getShortpickReplaySources,
   getShortpickReplayFeedback,
+  getShortpickV2PaperTracking,
+  getShortpickV2HistoricalReplay,
 };
