@@ -18,6 +18,16 @@ export type PaperTrackingExitStateFilter = "" | "mechanical_5d_done" | "mechanic
 export type FrozenPaperTrackingGroup = "frozen_strategy" | "frozen_strategy_v2";
 export type PaperTrackingEffectExitTrackKey = "mechanical_5d" | "mechanical_10d" | "take_profit_stop_loss";
 
+const CURRENT_PAPER_TRACKING_STRATEGY_ROLES = new Set([
+  "frozen_paper_primary",
+  "market_factor_control_low_turnover_uptrend_next_open_entry",
+  "llm_paper_control_primary",
+  "market_factor_control_random_pool",
+  "market_factor_control_same_symbol_cooldown_low_turnover_uptrend",
+  "market_factor_control_drawdown_reversal_low_turnover_uptrend",
+  "market_factor_control_repeated_exposure_low_turnover_uptrend",
+]);
+
 export interface PaperTrackingEffectObservation {
   rowKey: string;
   strategyLabel: string;
@@ -108,6 +118,15 @@ export function deprecatedPaperTrackingRows(rows: ShortpickPaperTrackingItem[]):
   return rows.filter((item) => paperTrackingGovernanceViewSection(item) === "deprecated");
 }
 
+export function isCurrentPaperTrackingStrategyRow(item: ShortpickPaperTrackingItem): boolean {
+  if (paperTrackingGovernanceViewSection(item) === "deprecated") return false;
+  if (item.tracking_role && CURRENT_PAPER_TRACKING_STRATEGY_ROLES.has(item.tracking_role)) return true;
+  return item.tracking_group === "frozen_strategy"
+    || item.tracking_group === "frozen_strategy_v2"
+    || item.tracking_group === "llm_paper_control"
+    || item.tracking_group === "market_random_control";
+}
+
 export function paperTrackingChoiceLabel(latestRun?: Record<string, unknown> | null): "跟踪中" | "待入场" {
   const now = new Date();
   const day = now.getDay();
@@ -189,6 +208,27 @@ export function latestPaperTrackingChoices(rows: ShortpickPaperTrackingItem[], l
   const latestDate = source.reduce((value, item) => (paperTrackingSignalDate(item) > value ? paperTrackingSignalDate(item) : value), "");
   return source
     .filter((item) => paperTrackingSignalDate(item) === latestDate)
+    .sort((left, right) => (
+      paperTrackingDisplayRank(left) - paperTrackingDisplayRank(right)
+      || Number(left.source_rank ?? 99) - Number(right.source_rank ?? 99)
+      || left.name.localeCompare(right.name, "zh-Hans-CN")
+    ));
+}
+
+export function latestCurrentPaperTrackingRoundRows(
+  rows: ShortpickPaperTrackingItem[],
+  latestRun?: Record<string, unknown> | null,
+): ShortpickPaperTrackingItem[] {
+  const currentRows = primaryPaperTrackingRows(rows).filter(isCurrentPaperTrackingStrategyRow);
+  if (!currentRows.length) return [];
+  const latestRunId = Number(latestRun?.id ?? 0);
+  const latestRunDate = typeof latestRun?.run_date === "string" ? latestRun.run_date : "";
+  const scoped = currentRows.filter((item) => (
+    latestRunId ? Number(item.run_id) === latestRunId : latestRunDate ? item.run_date === latestRunDate : false
+  ));
+  const source = scoped.length ? scoped : latestPaperTrackingChoices(currentRows, latestRun);
+  return source
+    .slice()
     .sort((left, right) => (
       paperTrackingDisplayRank(left) - paperTrackingDisplayRank(right)
       || Number(left.source_rank ?? 99) - Number(right.source_rank ?? 99)

@@ -134,6 +134,73 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
                     symbol: "300002.SZ",
                   },
                 ];
+                const currentRoundRows = [
+                  {
+                    run_id: 30,
+                    run_date: "2026-06-30",
+                    tracking_group: "frozen_strategy",
+                    tracking_role: "frozen_paper_primary",
+                    signal_date: "2026-06-30",
+                    source_rank: 1,
+                    name: "冻结",
+                    symbol: "600001.SH",
+                  },
+                  {
+                    run_id: 30,
+                    run_date: "2026-06-30",
+                    tracking_group: "market_factor_control",
+                    tracking_role: "market_factor_control_offensive_top1",
+                    selection_label: "动量换手第1名",
+                    signal_date: "2026-06-30",
+                    source_rank: 1,
+                    name: "旧动量",
+                    symbol: "600002.SH",
+                  },
+                  {
+                    run_id: 30,
+                    run_date: "2026-06-30",
+                    tracking_group: "market_factor_control",
+                    tracking_role: "market_factor_control_top3_equal_weight",
+                    selection_label: "前三名等权组合",
+                    signal_date: "2026-06-30",
+                    source_rank: 2,
+                    name: "旧Top3",
+                    symbol: "600003.SH",
+                  },
+                  {
+                    run_id: 30,
+                    run_date: "2026-06-30",
+                    tracking_group: "market_factor_control",
+                    tracking_role: "market_factor_control_same_symbol_cooldown_low_turnover_uptrend",
+                    control_label: "同股冷却过滤",
+                    signal_date: "2026-06-30",
+                    source_rank: 1,
+                    name: "冷却",
+                    symbol: "600004.SH",
+                  },
+                  {
+                    run_id: 30,
+                    run_date: "2026-06-30",
+                    tracking_group: "market_factor_control",
+                    tracking_role: "market_factor_control_cooldown_top1",
+                    control_label: "同股冷却过滤",
+                    signal_date: "2026-06-30",
+                    source_rank: 1,
+                    name: "旧冷却误标",
+                    symbol: "600006.SH",
+                  },
+                  {
+                    run_id: 30,
+                    run_date: "2026-06-30",
+                    tracking_group: "market_random_control",
+                    tracking_role: "market_factor_control_random_pool",
+                    selection_label: "同池随机基线",
+                    signal_date: "2026-06-30",
+                    source_rank: 13,
+                    name: "随机",
+                    symbol: "600005.SH",
+                  },
+                ];
                 const replayRow = {
                   tracking_group: "market_factor_control",
                   control_label: "同股冷却过滤",
@@ -206,6 +273,8 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
                   latestVisibleNames: helpers.latestPaperTrackingChoices(latestRows, { id: 20, run_date: "2026-06-20" }).map((item) => item.name),
                   frozenVisibleNames: helpers.latestFrozenPaperTrackingChoices(latestRows).map((item) => item.name),
                   allArchivedChoices: helpers.latestPaperTrackingChoices([{ ...latestRows[0], governance_status: "inventory_archived" }], { id: 20, run_date: "2026-06-20" }).length,
+                  currentRoundNames: helpers.latestCurrentPaperTrackingRoundRows(currentRoundRows, { id: 30, run_date: "2026-06-30" }).map((item) => item.name),
+                  currentRoundLabels: helpers.latestCurrentPaperTrackingRoundRows(currentRoundRows, { id: 30, run_date: "2026-06-30" }).map((item) => helpers.paperTrackingRecordGroupLabel(item)),
                   replayRecordGroupLabel: helpers.paperTrackingRecordGroupLabel(replayRow),
                   replayGroupFilterMatches: helpers.paperTrackingGroupFilterMatches(replayRow, "同股冷却过滤"),
                   immatureReplayExitText: helpers.paperTrackingExitText(immatureReplayRow),
@@ -248,6 +317,8 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
         self.assertEqual(payload["latestVisibleNames"], ["仍可显示"])
         self.assertEqual(payload["frozenVisibleNames"], ["仍可显示"])
         self.assertEqual(payload["allArchivedChoices"], 0)
+        self.assertEqual(payload["currentRoundNames"], ["冻结", "冷却", "随机"])
+        self.assertEqual(payload["currentRoundLabels"], ["冻结策略", "同股冷却过滤", "同池随机基线"])
         self.assertEqual(payload["replayRecordGroupLabel"], "同股冷却过滤")
         self.assertTrue(payload["replayGroupFilterMatches"])
         self.assertEqual(payload["immatureReplayExitText"], "等待窗口")

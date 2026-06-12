@@ -135,6 +135,13 @@ class ShortpickLabTests(ShortpickLabTestCase):
         self.assertEqual(p3_summary["inserted_candidate_count"], 3)
 
         by_role = {item["tracking_role"]: item for item in overlay["candidates"]}
+        self.assertEqual(overlay["current_generation_scope"]["decision_policy"], "current_paper_tracking_generation_role_allowlist")
+        self.assertGreaterEqual(overlay["current_generation_scope"]["excluded_count"], 1)
+        self.assertNotIn(SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE, by_role)
+        self.assertNotIn(SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE, by_role)
+        self.assertNotIn(SHORTPICK_MARKET_FACTOR_TOP3_EQUAL_WEIGHT_CONTROL_ROLE, by_role)
+        self.assertNotIn(SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE, by_role)
+        self.assertIn(SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE, by_role)
         self.assertEqual(by_role[SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_CONTROL_ROLE]["symbol"], "600001.SH")
         self.assertEqual(by_role[SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE]["symbol"], "600001.SH")
         drawdown_summary = by_role[SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_CONTROL_ROLE]
@@ -504,7 +511,12 @@ class ShortpickLabTests(ShortpickLabTestCase):
                     overlay = insert_shortpick_market_factor_overlay_candidates(session, run)
                     rows = session.scalars(select(ShortpickCandidate).where(ShortpickCandidate.run_id == run_id)).all()
 
-        self.assertEqual(overlay["generation_governance"]["excluded_count"], 3)
+        self.assertGreaterEqual(overlay["current_generation_scope"]["excluded_count"], 1)
+        current_scope_roles = {item["tracking_role"] for item in overlay["current_generation_scope"]["excluded_items"]}
+        self.assertIn(SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE, current_scope_roles)
+        self.assertIn(SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE, current_scope_roles)
+        self.assertIn(SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE, current_scope_roles)
+        self.assertEqual(overlay["generation_governance"]["excluded_count"], 1)
         self.assertEqual(overlay["generation_governance"]["retirement_artifact_source"]["artifact_count"], 3)
         self.assertEqual(overlay["generation_governance"]["inventory_archive_artifact_source"]["artifact_count"], 1)
         self.assertEqual(overlay["generation_governance"]["inventory_archive_decision_count"], 1)
@@ -513,13 +525,11 @@ class ShortpickLabTests(ShortpickLabTestCase):
             excluded_strategy_ids,
             {
                 "frozen_strategy__frozen_paper_primary__frozen_paper_low_turnover_uptrend_v4__next_close__1",
-                "market_factor_control__market_factor_control_cooldown_top1__momentum_10d_turnover_cooldown_rank__next_close__1",
-                "market_factor_control__market_factor_control_legacy_second_candidate__momentum_10d_turnover_legacy_second_candidate__next_close__2",
             },
         )
         tracking_roles = [item["tracking_role"] for item in overlay["candidates"]]
         self.assertNotIn("frozen_paper_primary", tracking_roles)
-        self.assertIn(SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE, tracking_roles)
+        self.assertNotIn(SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE, tracking_roles)
         self.assertNotIn(SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE, tracking_roles)
         self.assertNotIn(SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE, tracking_roles)
         self.assertTrue(rows)

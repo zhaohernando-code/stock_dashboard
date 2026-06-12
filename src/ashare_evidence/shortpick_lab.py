@@ -258,6 +258,14 @@ SHORTPICK_MARKET_FACTOR_PAPER_CONTROL_ROLES = {
     SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_CONTROL_ROLE,
     SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE,
 }
+SHORTPICK_CURRENT_PAPER_TRACKING_GENERATION_ROLES = {
+    "frozen_paper_primary",
+    SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_CONTROL_ROLE,
+    SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE,
+}
 SHORTPICK_MARKET_FACTOR_BREADTH10_THRESHOLD = float(_SHORTPICK_MARKET_FACTOR_CONFIG["breadth10_threshold"])
 SHORTPICK_MARKET_FACTOR_POOL_RET10_THRESHOLD = float(_SHORTPICK_MARKET_FACTOR_CONFIG["pool_ret10_threshold"])
 SHORTPICK_MARKET_FACTOR_EXCLUDED_SYMBOLS = {
@@ -342,6 +350,91 @@ def shortpick_llm_paper_control_contract() -> dict[str, Any]:
 
 
 def shortpick_market_factor_paper_control_contracts() -> dict[str, Any]:
+    controls = [
+        {
+            "role": SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE,
+            "label": "动量换手第1名",
+            "selection_rule": "动量成交量Top40池内，按10日涨幅排名与换手率排名相加后取第1名。",
+        },
+        {
+            "role": SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE,
+            "label": "降追高第1名",
+            "selection_rule": "同一Top40池内，用10日涨幅和换手率排序，同时扣减当日涨幅排名，取第1名。",
+        },
+        {
+            "role": SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE,
+            "label": "同池随机基线",
+            "selection_rule": "同一Top40池内，用运行日期和股票代码做确定性哈希，提前固定1只，不看结果。",
+        },
+        {
+            "role": SHORTPICK_MARKET_FACTOR_TOP3_EQUAL_WEIGHT_CONTROL_ROLE,
+            "label": "前三名等权组合",
+            "selection_rule": "市场转正且候选池不过热时，按10日动量与换手排序取前3名；每日纸面资金在3只之间等权分配。",
+            "allocation_rule": "同一信号日等权观察；每只候选仍按同一入场口径和三条退出轨道记录。",
+        },
+        {
+            "role": SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE,
+            "label": "10/200日金叉过滤",
+            "selection_rule": "按原动量成交量Top40候选顺序，选择第一个在信号日出现10日均线上穿200日均线的标的；没有触发则不出信号。",
+        },
+        {
+            "role": SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
+            "label": "旧主线：第二候选三轨",
+            "selection_rule": "保留原冻结主线作为对照：在市场转正且候选池不过热时，取10日动量与换手排序的第2名。",
+        },
+        {
+            "role": SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
+            "label": "强广度低追高二候选",
+            "selection_rule": "动量成交量Top40池内，仅在全市场10日上涨占比不低于55%、Top40池10日平均涨幅不低于6%、Top40池1日平均涨幅不高于6%时，按10日涨幅、成交额、换手率综合排序并扣减当日涨幅，取第2名。",
+        },
+        {
+            "role": SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
+            "label": "可执行风控版",
+            "selection_rule": "沿用冻结低换手上升趋势排序，但排除信号日涨幅达到9.5%及以上的候选，再取第1名；用于并行观察非涨停追高过滤后的可执行表现。",
+        },
+        {
+            "role": SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
+            "label": "冻结候选 v2：次日开盘买入",
+            "selection_rule": "沿用冻结 v1 的低换手上升趋势第1名，只把入场价格从次一交易日收盘改为次一交易日开盘；若次日开盘价接近涨停，则不假设开盘可成交。",
+            "entry_rule": "次一交易日开盘买入；开盘直接接近涨停时标记为不可假设成交。",
+        },
+        {
+            "role": SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_CONTROL_ROLE,
+            "label": "同股亏损冷却版",
+            "selection_rule": "从冻结低换手上升趋势排名池开始，过滤同一control过去已完成的同股负收益冷却窗口，再买入原始排名最高的可通过候选。",
+            "evidence_basis": SHORTPICK_P3_CONTROL_EVIDENCE_BASIS,
+            "selection_policy": SHORTPICK_P3_CONTROL_SELECTION_POLICY,
+        },
+        {
+            "role": SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_CONTROL_ROLE,
+            "label": "回撤反转过滤版",
+            "selection_rule": "从冻结低换手上升趋势排名池开始，只用信号日及以前的技术特征过滤近期回撤、短窗跌破和高位回落，再买入原始排名最高的可通过候选。",
+            "evidence_basis": SHORTPICK_P3_CONTROL_EVIDENCE_BASIS,
+            "selection_policy": SHORTPICK_P3_CONTROL_SELECTION_POLICY,
+        },
+        {
+            "role": SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE,
+            "label": "重复暴露限制版",
+            "selection_rule": "从冻结低换手上升趋势排名池开始，过滤同一control近期已重复暴露的股票，再买入原始排名最高的可通过候选。",
+            "evidence_basis": SHORTPICK_P3_CONTROL_EVIDENCE_BASIS,
+            "selection_policy": SHORTPICK_P3_CONTROL_SELECTION_POLICY,
+        },
+        {
+            "role": SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
+            "label": "14点同日买入版",
+            "selection_rule": "交易日下午用实时行情替代当日收盘价，沿用冻结低换手上升趋势选股规则；推荐生成后再读取一次当前价作为纸面买入价。",
+            "entry_rule": "信号日盘中当前价买入；若当前价接近涨停，则跳过该候选，不假设可以买入。",
+            "target_publish_time": str(_SHORTPICK_INTRADAY_SAME_DAY_CONFIG["target_publish_time"]),
+        },
+    ]
+    current_controls = [
+        control for control in controls if str(control.get("role") or "") in SHORTPICK_CURRENT_PAPER_TRACKING_GENERATION_ROLES
+    ]
+    archived_controls = [
+        {**control, "generation_scope": "archived_diagnostic"}
+        for control in controls
+        if str(control.get("role") or "") not in SHORTPICK_CURRENT_PAPER_TRACKING_GENERATION_ROLES
+    ]
     return {
         "status": "paper_control_tracking",
         "version": str(_SHORTPICK_CONTROL_CONFIG["market_factor_control_version"]),
@@ -349,83 +442,10 @@ def shortpick_market_factor_paper_control_contracts() -> dict[str, Any]:
         "mode": "和冻结策略使用同一个动量成交量Top40候选池，每个规则每天最多提前固定1只；所有持有天数均按交易日计算。",
         "monitoring_rule": "和冻结策略使用同一入场口径与三条退出轨道，用于判断冻结策略是否强过同池简单选法。",
         "monitoring_tracks": shortpick_frozen_paper_strategy_contract()["monitoring_tracks"],
-        "controls": [
-            {
-                "role": SHORTPICK_MARKET_FACTOR_OFFENSIVE_TOP1_CONTROL_ROLE,
-                "label": "动量换手第1名",
-                "selection_rule": "动量成交量Top40池内，按10日涨幅排名与换手率排名相加后取第1名。",
-            },
-            {
-                "role": SHORTPICK_MARKET_FACTOR_COOLDOWN_TOP1_CONTROL_ROLE,
-                "label": "降追高第1名",
-                "selection_rule": "同一Top40池内，用10日涨幅和换手率排序，同时扣减当日涨幅排名，取第1名。",
-            },
-            {
-                "role": SHORTPICK_MARKET_FACTOR_RANDOM_POOL_CONTROL_ROLE,
-                "label": "同池随机基线",
-                "selection_rule": "同一Top40池内，用运行日期和股票代码做确定性哈希，提前固定1只，不看结果。",
-            },
-            {
-                "role": SHORTPICK_MARKET_FACTOR_TOP3_EQUAL_WEIGHT_CONTROL_ROLE,
-                "label": "前三名等权组合",
-                "selection_rule": "市场转正且候选池不过热时，按10日动量与换手排序取前3名；每日纸面资金在3只之间等权分配。",
-                "allocation_rule": "同一信号日等权观察；每只候选仍按同一入场口径和三条退出轨道记录。",
-            },
-            {
-                "role": SHORTPICK_MARKET_FACTOR_GOLDEN_CROSS_CONTROL_ROLE,
-                "label": "10/200日金叉过滤",
-                "selection_rule": "按原动量成交量Top40候选顺序，选择第一个在信号日出现10日均线上穿200日均线的标的；没有触发则不出信号。",
-            },
-            {
-                "role": SHORTPICK_MARKET_FACTOR_LEGACY_SECOND_CONTROL_ROLE,
-                "label": "旧主线：第二候选三轨",
-                "selection_rule": "保留原冻结主线作为对照：在市场转正且候选池不过热时，取10日动量与换手排序的第2名。",
-            },
-            {
-                "role": SHORTPICK_MARKET_FACTOR_STRONG_BREADTH_RANK2_CONTROL_ROLE,
-                "label": "强广度低追高二候选",
-                "selection_rule": "动量成交量Top40池内，仅在全市场10日上涨占比不低于55%、Top40池10日平均涨幅不低于6%、Top40池1日平均涨幅不高于6%时，按10日涨幅、成交额、换手率综合排序并扣减当日涨幅，取第2名。",
-            },
-            {
-                "role": SHORTPICK_MARKET_FACTOR_NO_LIMIT_CHASE_LOW_TURNOVER_CONTROL_ROLE,
-                "label": "可执行风控版",
-                "selection_rule": "沿用冻结低换手上升趋势排序，但排除信号日涨幅达到9.5%及以上的候选，再取第1名；用于并行观察非涨停追高过滤后的可执行表现。",
-            },
-            {
-                "role": SHORTPICK_MARKET_FACTOR_OPEN_ENTRY_LOW_TURNOVER_CONTROL_ROLE,
-                "label": "冻结候选 v2：次日开盘买入",
-                "selection_rule": "沿用冻结 v1 的低换手上升趋势第1名，只把入场价格从次一交易日收盘改为次一交易日开盘；若次日开盘价接近涨停，则不假设开盘可成交。",
-                "entry_rule": "次一交易日开盘买入；开盘直接接近涨停时标记为不可假设成交。",
-            },
-            {
-                "role": SHORTPICK_MARKET_FACTOR_SAME_SYMBOL_COOLDOWN_LOW_TURNOVER_CONTROL_ROLE,
-                "label": "同股亏损冷却版",
-                "selection_rule": "从冻结低换手上升趋势排名池开始，过滤同一control过去已完成的同股负收益冷却窗口，再买入原始排名最高的可通过候选。",
-                "evidence_basis": SHORTPICK_P3_CONTROL_EVIDENCE_BASIS,
-                "selection_policy": SHORTPICK_P3_CONTROL_SELECTION_POLICY,
-            },
-            {
-                "role": SHORTPICK_MARKET_FACTOR_DRAWDOWN_REVERSAL_LOW_TURNOVER_CONTROL_ROLE,
-                "label": "回撤反转过滤版",
-                "selection_rule": "从冻结低换手上升趋势排名池开始，只用信号日及以前的技术特征过滤近期回撤、短窗跌破和高位回落，再买入原始排名最高的可通过候选。",
-                "evidence_basis": SHORTPICK_P3_CONTROL_EVIDENCE_BASIS,
-                "selection_policy": SHORTPICK_P3_CONTROL_SELECTION_POLICY,
-            },
-            {
-                "role": SHORTPICK_MARKET_FACTOR_REPEATED_EXPOSURE_LOW_TURNOVER_CONTROL_ROLE,
-                "label": "重复暴露限制版",
-                "selection_rule": "从冻结低换手上升趋势排名池开始，过滤同一control近期已重复暴露的股票，再买入原始排名最高的可通过候选。",
-                "evidence_basis": SHORTPICK_P3_CONTROL_EVIDENCE_BASIS,
-                "selection_policy": SHORTPICK_P3_CONTROL_SELECTION_POLICY,
-            },
-            {
-                "role": SHORTPICK_MARKET_FACTOR_INTRADAY_SAME_DAY_CONTROL_ROLE,
-                "label": "14点同日买入版",
-                "selection_rule": "交易日下午用实时行情替代当日收盘价，沿用冻结低换手上升趋势选股规则；推荐生成后再读取一次当前价作为纸面买入价。",
-                "entry_rule": "信号日盘中当前价买入；若当前价接近涨停，则跳过该候选，不假设可以买入。",
-                "target_publish_time": str(_SHORTPICK_INTRADAY_SAME_DAY_CONFIG["target_publish_time"]),
-            },
-        ],
+        "current_generation_roles": sorted(SHORTPICK_CURRENT_PAPER_TRACKING_GENERATION_ROLES),
+        "controls": current_controls,
+        "archived_controls": archived_controls,
+        "archive_policy": "old_market_factor_diagnostics_are_kept_as_archived_history_not_default_generation",
         "scope_note": "单票分析当前覆盖不足，且历史LLM过滤/硬否决没有证明增益；暂不升入冻结真实跟踪，只保留为后续研究方向。",
     }
 
@@ -2766,6 +2786,10 @@ def insert_shortpick_market_factor_overlay_candidates(session: Session, run: Sho
                 "score": golden_item.get("_market_factor_score"),
             }
         )
+    inserted, current_generation_scope = _apply_shortpick_current_generation_scope(
+        session,
+        inserted,
+    )
     inserted, generation_governance = _apply_shortpick_generation_governance_to_inserted_candidates(
         session,
         inserted,
@@ -2799,6 +2823,7 @@ def insert_shortpick_market_factor_overlay_candidates(session: Session, run: Sho
         },
         "p3_true_forward_controls": p3_true_forward_controls,
         "market_factor_paper_controls": shortpick_market_factor_paper_control_contracts(),
+        "current_generation_scope": current_generation_scope,
         "generation_governance": generation_governance,
         "regime": regime,
         "market_data_sync": universe_sync,
@@ -2937,6 +2962,64 @@ def _apply_shortpick_generation_governance_to_inserted_candidates(
             session.delete(candidate)
     session.flush()
     return [item for item in inserted if int(item.get("candidate_id") or 0) not in excluded_candidate_ids], generation_governance
+
+
+def _apply_shortpick_current_generation_scope(
+    session: Session,
+    inserted: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Keep daily generation aligned with the governed paper-tracking surface."""
+
+    candidate_ids = [int(item["candidate_id"]) for item in inserted if item.get("candidate_id") is not None]
+    if not candidate_ids:
+        return inserted, {
+            "status": "ready",
+            "decision_policy": "current_paper_tracking_generation_role_allowlist",
+            "allowed_tracking_roles": sorted(SHORTPICK_CURRENT_PAPER_TRACKING_GENERATION_ROLES),
+            "input_count": 0,
+            "kept_count": 0,
+            "excluded_count": 0,
+            "excluded_items": [],
+        }
+    candidates = session.scalars(
+        select(ShortpickCandidate)
+        .where(ShortpickCandidate.id.in_(candidate_ids))
+        .order_by(ShortpickCandidate.id.asc())
+    ).all()
+    candidate_by_id = {int(candidate.id): candidate for candidate in candidates}
+    kept: list[dict[str, Any]] = []
+    excluded_items: list[dict[str, Any]] = []
+    for item in inserted:
+        tracking_role = str(item.get("tracking_role") or "")
+        if tracking_role in SHORTPICK_CURRENT_PAPER_TRACKING_GENERATION_ROLES:
+            kept.append(item)
+            continue
+        candidate_id = int(item.get("candidate_id") or 0)
+        excluded_items.append(
+            {
+                "candidate_id": candidate_id or None,
+                "symbol": item.get("symbol"),
+                "name": item.get("name"),
+                "tracking_role": tracking_role,
+                "baseline_family": item.get("baseline_family"),
+                "source_rank": item.get("source_rank"),
+                "reason": "not_in_current_paper_tracking_generation_scope",
+            }
+        )
+        candidate = candidate_by_id.get(candidate_id)
+        if candidate is not None:
+            session.delete(candidate)
+    if excluded_items:
+        session.flush()
+    return kept, {
+        "status": "ready",
+        "decision_policy": "current_paper_tracking_generation_role_allowlist",
+        "allowed_tracking_roles": sorted(SHORTPICK_CURRENT_PAPER_TRACKING_GENERATION_ROLES),
+        "input_count": len(inserted),
+        "kept_count": len(kept),
+        "excluded_count": len(excluded_items),
+        "excluded_items": excluded_items,
+    }
 
 
 def _shortpick_generation_candidate_spec_from_candidate(candidate: ShortpickCandidate) -> dict[str, Any]:

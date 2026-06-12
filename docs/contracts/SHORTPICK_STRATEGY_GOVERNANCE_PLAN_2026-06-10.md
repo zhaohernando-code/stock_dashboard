@@ -1994,6 +1994,32 @@ Status:
 - Canonical API verification after publish: `/shortpick-lab/paper-tracking/summary` returned `200` in `4.217s`, `12137` bytes, `items=[]`, and combined-ledger count keys only; `/shortpick-lab/paper-tracking` returned `200` in `6.775s`, `2738365` bytes, and `337` items without truncation.
 - Canonical browser verification passed on `https://hernando-zhao.cn/projects/ashare-dashboard/?view=shortpick&shortpickTab=paper-tracking&symbol=002028.SZ`: `累计纸面收益` defaults to `冻结策略`; `策略退出效果排名` defaults to `均值`; metric options include `均值`, `中位收益`, and `胜率`; chart click links table filters and exposes `清除图表联动筛选`, and clearing returns the record-group filter to the unscoped state.
 
+## Paper-Tracking Current-Candidate Governance Fix - 2026-06-12
+
+Issue:
+
+- The latest simulated trade card still used every primary row from the latest run for the expandable "this round" candidate list.
+- The runtime latest run already contained several old market-factor controls marked `observe` / `primary`, so the frontend displayed retired or no-longer-advanced controls such as offensive top1, cooldown top1, top3 equal-weight, and no-limit chase in the same surface as current paper-tracking strategies.
+- This was broader than the chart issue: the chart had moved to the current strategy set, but the latest-candidate list used a different projection.
+
+Fix:
+
+- Added a current paper-tracking strategy allowlist helper for the latest-candidate surface. Market-factor controls must now match a current `tracking_role`; display labels such as `同股冷却过滤` are no longer enough to enter the current candidate list.
+- Renamed the expandable label to `本轮当前策略候选（...，含对照组）` so the UI no longer implies it is showing every historical/diagnostic candidate in the raw run.
+- Tightened the daily market-factor overlay generation path with a current-generation role allowlist. Old market-factor controls remain in the contract as `archived_controls` / diagnostic history, but ordinary future generation no longer inserts them into the default paper-tracking candidate batch.
+- Existing runtime database rows are not mutated by this code change. The current frontend hides old rows immediately; future ordinary runs should stop inserting those old controls by default.
+
+Verification before merge:
+
+- `PYTHONPATH=src python3 -m unittest tests.test_shortpick_lab tests.test_shortpick_lab_paper_tracking tests.test_frontend_shortpick_static` passed (`45` tests).
+- `python3 -m py_compile src/ashare_evidence/shortpick_lab.py && git diff --check` passed.
+- Frontend production build passed with the canonical `frontend/node_modules` symlinked into the worktree for verification.
+- DeepSeek first frontend shard returned `PASS/MERGE`. A focused diff review found one P1 risk: `paperTrackingStrategyFilterKey` could act as a bypass if an old strategy carried a P3 label. The code was changed so current-candidate inclusion depends on explicit current role/group allowlists, and a regression fixture was added for an old role carrying `同股冷却过滤`. DeepSeek focused re-review returned `PASS`.
+
+Status:
+
+- Implementation is ready for merge, publish, and canonical browser verification.
+
 
 - `git status --short --branch`
 - `PYTHONPATH=src python3 -m pytest tests/test_shortpick_strategy_governance.py`
@@ -2081,3 +2107,4 @@ Status:
 | Frontend helper code changed | completed_for_strategy_status_evidence_basis_label_helpers_governance_projection_rendering_round30_deprecated_bucket_filtering_round31_inventory_archived_fallback_and_round56_inventory_archive_source_metric |
 | Runtime data changed | corrected_replay_and_combined_ledger_artifacts_regenerated_in_round53_round54_and_round55_no_database_or_paper_tracking_writes_round56_added_runtime_inventory_archive_artifact_under_runtime_artifact_root |
 | DeepSeek plan review | round56_pass_merge |
+| Paper-tracking current-candidate governance fix | ds_reviewed_ready_to_merge_publish |
