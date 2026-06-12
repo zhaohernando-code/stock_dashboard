@@ -112,7 +112,7 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 | Phase | Status | Outcome |
 | --- | --- | --- |
 | 1. Planning contract | Done | Freeze the v2 scope, non-goals, risk list, and acceptance rules. |
-| 2. Historical replay design | Pending | Define the v2 replay artifact contract and the limited rule-family matrix. |
+| 2. Historical replay design | Done | Defined the v2 replay artifact contract and limited rule-family matrix in `docs/contracts/SHORTPICK_LAB_V2_REPLAY_DESIGN_2026-06-12.md`, with schema `docs/contracts/registry/schemas/shortpick_v2_replay_artifact.schema.json`. |
 | 3. Replay artifact generation | Pending | Produce fixed historical results for selected rule families over adequate data. |
 | 4. Candidate rule selection | Pending | Choose a small set of v2 configurations based on replay evidence and governance rules. |
 | 5. Paper tracking contract | Pending | Define forward v2 ledger semantics starting from the v1-aligned tracking window. |
