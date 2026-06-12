@@ -1,0 +1,484 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "shortpick_v2_paper_tracking_ledger.schema.json",
+  "title": "Shortpick V2 Paper Tracking Ledger",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_family",
+    "schema_version",
+    "ledger_id",
+    "generated_at",
+    "status",
+    "claim_ceiling",
+    "evidence_basis",
+    "source_contract_ref",
+    "source_selection_artifact",
+    "tracking_window",
+    "account_contract",
+    "row_contract",
+    "records",
+    "summary",
+    "leakage_audit",
+    "research_labeling",
+    "event_refs"
+  ],
+  "properties": {
+    "artifact_family": {
+      "const": "shortpick_v2_paper_tracking_ledger"
+    },
+    "schema_version": {
+      "const": "v1"
+    },
+    "ledger_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["contract_ready", "active", "blocked"]
+    },
+    "claim_ceiling": {
+      "const": "research_observation"
+    },
+    "evidence_basis": {
+      "const": "true_forward_tracking"
+    },
+    "source_contract_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_selection_artifact": {
+      "$ref": "#/$defs/source_selection_artifact"
+    },
+    "tracking_window": {
+      "$ref": "#/$defs/tracking_window"
+    },
+    "account_contract": {
+      "$ref": "#/$defs/account_contract"
+    },
+    "row_contract": {
+      "$ref": "#/$defs/row_contract"
+    },
+    "records": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/paper_record"
+      }
+    },
+    "summary": {
+      "$ref": "#/$defs/summary"
+    },
+    "leakage_audit": {
+      "$ref": "#/$defs/leakage_audit"
+    },
+    "research_labeling": {
+      "$ref": "#/$defs/research_labeling"
+    },
+    "event_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "source_selection_artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "artifact_family",
+        "schema_version",
+        "path",
+        "selected_config_ids",
+        "baseline_config_ids",
+        "holdout_config_ids",
+        "rejected_config_ids",
+        "claim_ceiling"
+      ],
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact_family": {
+          "const": "shortpick_v2_rule_selection_artifact"
+        },
+        "schema_version": {
+          "const": "v1"
+        },
+        "path": {
+          "type": ["string", "null"]
+        },
+        "selected_config_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "conservative_cash_reserve_60k_top5_v1",
+              "fixed_notional_40k_top5_v1"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "baseline_config_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["top1_or_skip_v1"]
+          },
+          "uniqueItems": true
+        },
+        "holdout_config_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["top3_fallback_v1"]
+          },
+          "uniqueItems": true
+        },
+        "rejected_config_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["position_cap_utilization_top5_v1"]
+          },
+          "uniqueItems": true
+        },
+        "claim_ceiling": {
+          "const": "research_observation"
+        }
+      }
+    },
+    "tracking_window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start_date",
+        "start_policy",
+        "source_gap_policy",
+        "backfill_policy"
+      ],
+      "properties": {
+        "start_date": {
+          "const": "2026-05-08"
+        },
+        "start_policy": {
+          "const": "v1_aligned_forward_window"
+        },
+        "source_gap_policy": {
+          "const": "record_source_gap_or_not_observed_without_shifting_start_date"
+        },
+        "backfill_policy": {
+          "const": "historical_replay_rows_must_not_be_backfilled_as_true_forward_tracking"
+        }
+      }
+    },
+    "account_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "initial_cash",
+        "currency",
+        "board_lot_size",
+        "account_profile",
+        "selected_config_ids",
+        "baseline_config_ids"
+      ],
+      "properties": {
+        "initial_cash": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "currency": {
+          "const": "CNY"
+        },
+        "board_lot_size": {
+          "type": "integer",
+          "minimum": 100
+        },
+        "account_profile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "selected_config_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "conservative_cash_reserve_60k_top5_v1",
+              "fixed_notional_40k_top5_v1"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "baseline_config_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["top1_or_skip_v1"]
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "row_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowed_signal_actions",
+        "forbidden_signal_actions",
+        "entry_policy",
+        "source_gap_policy"
+      ],
+      "properties": {
+        "allowed_signal_actions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["buy_primary", "buy_fallback", "skip"]
+          },
+          "minItems": 3,
+          "uniqueItems": true
+        },
+        "forbidden_signal_actions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["delay_buy", "later_buy", "retry_buy", "discretionary_buy"]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "entry_policy": {
+          "const": "declared_entry_date_only_fallback_or_skip_no_delayed_entry"
+        },
+        "source_gap_policy": {
+          "const": "record_source_gap_or_not_observed"
+        }
+      }
+    },
+    "paper_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_id",
+        "config_id",
+        "config_role",
+        "signal_date",
+        "decision_date",
+        "decision_action",
+        "reason",
+        "selected_rank",
+        "symbol",
+        "entry_trade_date",
+        "entry_price_source",
+        "quantity",
+        "board_lot_size",
+        "cash_before",
+        "cash_after",
+        "position_state",
+        "evidence_basis",
+        "source_state",
+        "validation_status",
+        "exit_trade_date",
+        "exit_reason",
+        "notes"
+      ],
+      "properties": {
+        "record_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "config_id": {
+          "type": "string",
+          "enum": [
+            "conservative_cash_reserve_60k_top5_v1",
+            "fixed_notional_40k_top5_v1",
+            "top1_or_skip_v1"
+          ]
+        },
+        "config_role": {
+          "type": "string",
+          "enum": ["phase5_contract_candidate", "baseline_control"]
+        },
+        "signal_date": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decision_date": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decision_action": {
+          "type": "string",
+          "enum": ["buy_primary", "buy_fallback", "skip"]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "selected_rank": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "symbol": {
+          "type": ["string", "null"]
+        },
+        "entry_trade_date": {
+          "type": ["string", "null"]
+        },
+        "entry_price_source": {
+          "type": ["string", "null"],
+          "enum": ["next_close", "next_open", "same_close_proxy", null]
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "board_lot_size": {
+          "type": "integer",
+          "minimum": 100
+        },
+        "cash_before": {
+          "type": "number"
+        },
+        "cash_after": {
+          "type": "number"
+        },
+        "position_state": {
+          "type": "string",
+          "enum": ["not_opened", "open", "closed", "blocked", "source_gap"]
+        },
+        "evidence_basis": {
+          "const": "true_forward_tracking"
+        },
+        "source_state": {
+          "type": "string",
+          "enum": ["observed", "source_gap", "not_observed"]
+        },
+        "validation_status": {
+          "type": "string",
+          "enum": ["pending_entry", "open", "closed", "skipped", "source_gap", "blocked"]
+        },
+        "exit_trade_date": {
+          "type": ["string", "null"]
+        },
+        "exit_reason": {
+          "type": ["string", "null"]
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_count",
+        "buy_count",
+        "skip_count",
+        "source_gap_count",
+        "open_position_count",
+        "closed_position_count"
+      ],
+      "properties": {
+        "record_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "buy_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skip_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_gap_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "open_position_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "closed_position_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "leakage_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "source_selection_artifact_required",
+        "used_only_signal_day_or_earlier_data",
+        "notes"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["not_run", "passed", "blocked"]
+        },
+        "source_selection_artifact_required": {
+          "const": true
+        },
+        "used_only_signal_day_or_earlier_data": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "research_labeling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_ceiling", "evidence_basis", "prohibited_claims", "notes"],
+      "properties": {
+        "claim_ceiling": {
+          "const": "research_observation"
+        },
+        "evidence_basis": {
+          "const": "true_forward_tracking"
+        },
+        "prohibited_claims": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["production_ready", "investment_advice", "automated_trading"]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    }
+  }
+}

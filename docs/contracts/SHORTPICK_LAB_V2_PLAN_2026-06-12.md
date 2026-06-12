@@ -1,6 +1,6 @@
 # Short Pick Lab V2 Plan
 
-Status: Phase 4 complete, ready for paper tracking contract planning
+Status: Phase 5 complete, ready for backend read model planning
 Owner: stock_dashboard
 Created: 2026-06-12
 Scope: planning contract only; not a runbook
@@ -98,7 +98,7 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 
 | Risk | Status | Mitigation |
 | --- | --- | --- |
-| Semantic mixing with v1 | Pending | Use separate v2 API, artifact, and ledger contracts; frontend reuse only for presentation primitives. |
+| Semantic mixing with v1 | In progress | Phase 5 defines a separate v2 paper ledger contract/schema and forbids writing or mutating the existing v1 paper ledger; separate read API remains Phase 6. |
 | Overfitting parameter grids | In progress | Phase 4 uses fixed gates and a risk-first selector over the Phase 3 replay artifact; later UI must not expose the full parameter grid. |
 | Weak sample size | Pending | Require enough historical signal days and market-regime coverage before promoting any v2 rule. |
 | Slow replay execution | In progress | Phase 3 keeps replay offline/precomputed and reuses loaded series/candidate pools; runtime generation over 721 signal days completed in 93.90 seconds. Future API/UI must read the artifact, not run replay on demand. |
@@ -115,7 +115,7 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 | 2. Historical replay design | Done | Defined the v2 replay artifact contract and limited rule-family matrix in `docs/contracts/SHORTPICK_LAB_V2_REPLAY_DESIGN_2026-06-12.md`, with schema `docs/contracts/registry/schemas/shortpick_v2_replay_artifact.schema.json`. |
 | 3. Replay artifact generation | Done | Added offline generator `shortpick-v2-replay`, produced `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/shortpick-v2-replay-artifact-20260612.json`, and validated the artifact against `shortpick_v2_replay_artifact.schema.json` with 721 signal days, 761 trade days, and five fixed rule-family results. |
 | 4. Candidate rule selection | Done | Added offline selector `shortpick-v2-rule-selection`, produced `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/shortpick-v2-rule-selection-artifact-20260612.json`, and selected `conservative_cash_reserve_60k_top5_v1` plus `fixed_notional_40k_top5_v1` as Phase 5 contract candidates. `top1_or_skip_v1` remains the strict baseline/control. |
-| 5. Paper tracking contract | Pending | Define forward v2 ledger semantics starting from the v1-aligned tracking window. |
+| 5. Paper tracking contract | Done | Defined forward v2 paper ledger semantics in `docs/contracts/SHORTPICK_LAB_V2_PAPER_TRACKING_CONTRACT_2026-06-12.md` with schema `docs/contracts/registry/schemas/shortpick_v2_paper_tracking_ledger.schema.json`, using the v1-aligned `2026-05-08` start window and rejecting delayed-entry actions. |
 | 6. Backend read model | Pending | Add separate v2 read APIs backed by precomputed artifacts or v2 ledger records. |
 | 7. Frontend tab | Pending | Add `试验田v2` with only `纸面追踪` and `历史回放`. |
 | 8. Verification and publish | Pending | Verify served UI/API behavior only after code changes are implemented. |
@@ -124,7 +124,7 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 
 | Rule | Status | Acceptance Criteria |
 | --- | --- | --- |
-| Separate semantic domain | In progress | Phase 3 has a distinct v2 artifact family and generator; separate read API and forward ledger remain later phases. |
+| Separate semantic domain | In progress | Phase 3/4/5 now define distinct v2 replay, rule-selection, and paper-ledger artifact contracts; separate read API remains Phase 6. |
 | Frontend-only reuse boundary | Pending | Shared UI components may be reused, but v2 does not read mutable v1 data projections directly. |
 | No delayed-buy option | Done | V2 action taxonomy excludes delayed entry. |
 | Account realism | Done | Phase 3 replay models CNY 200,000 default cash, 100-share board lots, position caps, cash reserve, cash release, buy skips, and mechanical exits. |
@@ -133,22 +133,22 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 | Replay data adequacy | In progress | Phase 3 artifact reports signal count, trade count, skipped count, trade-day count, coverage status, and data gaps; Phase 4 still needs explicit promotion thresholds. |
 | Efficiency boundary | In progress | Phase 3 replay is offline/precomputed; later API/page work must read artifacts without market fetches or dynamic replay. |
 | Explainability | Done | Phase 3 artifact exposes buy/fallback/skip reason counts and bounded account-state decision samples. |
-| Paper-tracking alignment | Pending | V2 forward tracking start policy is explicitly aligned with the existing paper-tracking start window where feasible. |
+| Paper-tracking alignment | Done | Phase 5 contract fixes the v2 forward tracking start policy at the v1-aligned `2026-05-08` window and requires explicit source-gap records instead of silent date shifts. |
 | Research labeling | In progress | Phase 3 and Phase 4 artifacts are capped at `claim_ceiling=research_observation`; later paper contract and UI must preserve the same no-overclaim language. |
 
 ## Open Decisions
 
 | Decision | Status | Notes |
 | --- | --- | --- |
-| Exact v2 start date | Pending | Planning assumption is alignment with existing paper tracking, currently observed from 2026-05-08. |
+| Exact v2 start date | Done | Phase 5 contract fixes the initial v2 paper-tracking start policy at `2026-05-08`, with source gaps recorded explicitly. |
 | Initial promoted replay families | Done | Phase 4 selected `conservative_cash_reserve_60k_top5_v1` and `fixed_notional_40k_top5_v1` as Phase 5 contract candidates; `top1_or_skip_v1` is retained as baseline/control. |
 | Minimum evidence threshold | In progress | Phase 4 fixed first thresholds for signal count, trade count, skip ratio, return, drawdown, invested ratio, turnover, reason counts, and leakage audit; Phase 5 still needs forward tracking acceptance thresholds. |
 | Position and cash defaults | Pending | CNY 200,000 total cash is the planning default; exact caps remain to be selected by replay evidence. |
-| Parameter governance location | Pending | V2 tunables should enter the existing policy/config governance model before live-facing use. |
+| Parameter governance location | In progress | Phase 4/5 contracts name fixed policy/schema versions; live-facing parameter governance still needs placement before API/UI activation. |
 
 ## Review Status
 
 | Reviewer | Status | Result |
 | --- | --- | --- |
-| Claude + Xiaomi MiMo | Done | Read-only plan, Phase 3 implementation, and Phase 4 implementation reviews completed; result: no remaining blocking issues. |
+| Claude + Xiaomi MiMo | Done | Read-only plan, Phase 3, Phase 4, and Phase 5 reviews completed; result: no remaining blocking issues. |
 | Claude + DeepSeek | Done | Read-only review completed; result: no blocking issues. |
