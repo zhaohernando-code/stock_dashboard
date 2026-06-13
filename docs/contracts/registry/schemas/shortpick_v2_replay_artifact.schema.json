@@ -98,7 +98,12 @@
         "stock_like_series_count",
         "account_profile",
         "coverage_status",
-        "coverage_notes"
+        "coverage_notes",
+        "market_reference_mode",
+        "market_reference_date_from",
+        "market_reference_date_to",
+        "market_reference_sample_count",
+        "market_reference_total_return"
       ],
       "properties": {
         "signal_date_from": {
@@ -132,6 +137,22 @@
           "items": {
             "type": "string"
           }
+        },
+        "market_reference_mode": {
+          "const": "eligible_universe_equal_weight_close_to_close"
+        },
+        "market_reference_date_from": {
+          "type": ["string", "null"]
+        },
+        "market_reference_date_to": {
+          "type": ["string", "null"]
+        },
+        "market_reference_sample_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "market_reference_total_return": {
+          "type": ["number", "null"]
         }
       }
     },
@@ -481,6 +502,9 @@
         "fallback_trade_count",
         "final_nav",
         "total_return",
+        "annualization_trade_day_count",
+        "market_reference_total_return",
+        "market_excess_total_return",
         "max_drawdown",
         "mean_invested_ratio",
         "max_position_count",
@@ -508,6 +532,16 @@
         },
         "total_return": {
           "type": "number"
+        },
+        "annualization_trade_day_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "market_reference_total_return": {
+          "type": ["number", "null"]
+        },
+        "market_excess_total_return": {
+          "type": ["number", "null"]
         },
         "max_drawdown": {
           "type": "number"

@@ -283,6 +283,7 @@ def build_shortpick_v2_replay_artifact_from_series(
         if stock_like_series_count is not None
         else len([symbol for symbol in series_by_symbol if symbol not in INDEX_SYMBOLS])
     )
+    market_reference = _market_reference_summary(series_by_symbol, signal_days=signal_days)
     results = [
         _simulate_rule_config(
             series_by_symbol,
@@ -295,6 +296,7 @@ def build_shortpick_v2_replay_artifact_from_series(
             horizon_days=horizon_days,
             cost_bps=cost_bps,
             stamp_tax_bps=stamp_tax_bps,
+            market_reference_total_return=market_reference["total_return"],
         )
         for config in rule_configs
     ]
@@ -317,6 +319,11 @@ def build_shortpick_v2_replay_artifact_from_series(
             "account_profile": account_profile,
             "coverage_status": _coverage_status(signal_days, trade_days, stock_like_series_count),
             "coverage_notes": coverage_notes or ["Synthetic or caller-supplied fixed daily bars; no refresh performed."],
+            "market_reference_mode": market_reference["mode"],
+            "market_reference_date_from": market_reference["date_from"],
+            "market_reference_date_to": market_reference["date_to"],
+            "market_reference_sample_count": market_reference["sample_count"],
+            "market_reference_total_return": market_reference["total_return"],
         },
         "input_contracts": {
             "candidate_source": {
@@ -430,6 +437,7 @@ def _simulate_rule_config(
     horizon_days: int,
     cost_bps: float,
     stamp_tax_bps: float,
+    market_reference_total_return: float | None,
 ) -> dict[str, Any]:
     entries_by_day, pre_entry_decisions, pre_entry_counts = _prepare_signal_entries(
         series_by_symbol,
@@ -536,6 +544,12 @@ def _simulate_rule_config(
         if float(point["nav"]) > 0
     ]
     result_status = "ready" if signal_days else "blocked"
+    total_return = round(final_nav / float(initial_cash) - 1.0, 6) if initial_cash else 0.0
+    market_excess_total_return = (
+        None
+        if market_reference_total_return is None
+        else round(total_return - market_reference_total_return, 6)
+    )
     return {
         "config_id": config.config_id,
         "status": result_status,
@@ -545,7 +559,10 @@ def _simulate_rule_config(
             "skip_count": skip_count,
             "fallback_trade_count": fallback_trade_count,
             "final_nav": round(final_nav, 6),
-            "total_return": round(final_nav / float(initial_cash) - 1.0, 6) if initial_cash else 0.0,
+            "total_return": total_return,
+            "annualization_trade_day_count": len(trade_days),
+            "market_reference_total_return": market_reference_total_return,
+            "market_excess_total_return": market_excess_total_return,
             "max_drawdown": _max_drawdown([float(point["nav"]) for point in timeline]) or 0.0,
             "mean_invested_ratio": round(sum(invested_ratios) / len(invested_ratios), 6) if invested_ratios else 0.0,
             "max_position_count": max((int(point["open_position_count"]) for point in timeline), default=0),
@@ -878,6 +895,44 @@ def _validate_rule_configs(rule_configs: tuple[ShortpickV2RuleConfig, ...]) -> N
             raise ValueError(f"{config.config_id} disables fallback but has rank limit {config.candidate_rank_limit}")
         if config.board_lot_size < DEFAULT_BOARD_LOT_SIZE:
             raise ValueError(f"{config.config_id} board_lot_size must be at least {DEFAULT_BOARD_LOT_SIZE}")
+
+
+def _market_reference_summary(series_by_symbol: dict[str, Any], *, signal_days: list[date]) -> dict[str, Any]:
+    mode = "eligible_universe_equal_weight_close_to_close"
+    if not signal_days:
+        return {
+            "mode": mode,
+            "date_from": None,
+            "date_to": None,
+            "sample_count": 0,
+            "total_return": None,
+        }
+    start_day = signal_days[0]
+    end_day = signal_days[-1]
+    returns: list[float] = []
+    for symbol, series in series_by_symbol.items():
+        if symbol in INDEX_SYMBOLS:
+            continue
+        start_close = _close_on_day(series, start_day)
+        end_close = _close_on_day(series, end_day)
+        if start_close is None or end_close is None or start_close <= 0:
+            continue
+        returns.append(end_close / start_close - 1.0)
+    return {
+        "mode": mode,
+        "date_from": start_day.isoformat(),
+        "date_to": end_day.isoformat(),
+        "sample_count": len(returns),
+        "total_return": round(sum(returns) / len(returns), 6) if returns else None,
+    }
+
+
+def _close_on_day(series: Any, day: date) -> float | None:
+    index = series.by_day.get(day) if series is not None else None
+    if index is None:
+        return None
+    close = getattr(series.bars[index], "close", None)
+    return float(close) if close is not None else None
 
 
 def _coverage_status(signal_days: list[date], trade_days: list[date], stock_like_series_count: int) -> str:

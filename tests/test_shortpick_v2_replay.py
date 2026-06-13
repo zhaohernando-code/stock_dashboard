@@ -115,6 +115,11 @@ def test_shortpick_v2_topn_fallback_buys_candidate_without_delayed_entry() -> No
 
     result = artifact["results"][0]  # type: ignore[index]
     decision = result["decision_samples"][0]  # type: ignore[index]
+    assert artifact["data_scope"]["market_reference_mode"] == "eligible_universe_equal_weight_close_to_close"  # type: ignore[index]
+    assert artifact["data_scope"]["market_reference_sample_count"] == 2  # type: ignore[index]
+    assert artifact["data_scope"]["market_reference_total_return"] == 0.0  # type: ignore[index]
+    assert result["summary"]["market_reference_total_return"] == 0.0  # type: ignore[index]
+    assert result["summary"]["market_excess_total_return"] is not None  # type: ignore[index]
     assert decision["action"] == "buy_fallback"
     assert decision["selected_rank"] == 2
     assert decision["symbol"] == "600002.SH"
@@ -216,10 +221,13 @@ def test_shortpick_v2_empty_signal_scope_keeps_blocked_result_entry() -> None:
 
     assert artifact["status"] == "blocked"
     assert artifact["data_scope"]["coverage_status"] == "blocked"  # type: ignore[index]
+    assert artifact["data_scope"]["market_reference_sample_count"] == 0  # type: ignore[index]
+    assert artifact["data_scope"]["market_reference_total_return"] is None  # type: ignore[index]
     assert len(artifact["results"]) == 1  # type: ignore[arg-type]
     result = artifact["results"][0]  # type: ignore[index]
     assert result["status"] == "blocked"
     assert result["summary"]["signal_count"] == 0  # type: ignore[index]
+    assert result["summary"]["market_reference_total_return"] is None  # type: ignore[index]
     assert result["decision_samples"] == []
 
 
