@@ -1,6 +1,6 @@
 # Short Pick Lab V2 Plan
 
-Status: Complete through Phase 8; published runtime served UI/API verified
+Status: Complete through Phase 8; Phase 9 qualification gate amendment in progress
 Owner: stock_dashboard
 Created: 2026-06-12
 Scope: planning contract only; not a runbook
@@ -67,6 +67,19 @@ The first implementation should separate three layers:
 
 The default capital profile should start from CNY 200,000 and model board-lot execution explicitly. If Top 1 is not executable under the fixed rules, the strategy may either use a pre-declared fallback candidate or skip the signal. It must not delay the buy to a later day.
 
+## 2026-06-13 Qualification Gate Amendment
+
+The project owner added a stricter v2 promotion rule after reviewing current replay results: any strategy that does not beat the declared market reference is unqualified, and annualized return below 30% is not worth considering for v2 promotion or paper tracking.
+
+This amendment supersedes the original Phase 4 promotion result for current candidate status. The 2026-06-12 Phase 4 output remains a historical record, but `conservative_cash_reserve_60k_top5_v1` and `fixed_notional_40k_top5_v1` are no longer current v2 paper-tracking candidates unless a later governed selection artifact passes the v2 qualification gates.
+
+| Gate | Status | Requirement |
+| --- | --- | --- |
+| Explicit market reference | Done | Rule selection v2 fails closed when replay results lack a declared market reference return. |
+| Market outperformance | Done | Non-baseline configs must have total return strictly above the declared market reference return. |
+| Annualized return floor | Done | Non-baseline configs must have annualized return at least 30%. |
+| Baseline separation | Done | `top1_or_skip_v1` may remain as baseline/control even when it fails promotion gates, but it cannot be labeled as a promoted candidate. |
+
 ## Strategy Design Principles
 
 | Principle | Status | Requirement |
@@ -106,6 +119,7 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 | Low-price bias | Done | V2 treats share-price effects as board-lot execution efficiency and does not expose low-price weighting as alpha or a UI parameter. |
 | Governance sprawl | Done | Phase 4/5 fixed selection policy and schema versions; Phase 6/7 expose read-only APIs/UI without mutable parameter controls. |
 | User-facing overclaim | Done | Phase 6 read APIs return `claim_ceiling=research_observation`, evidence-basis labels, and paper/research disclaimers; Phase 7 preserves those labels in the UI. |
+| Underperforming market reference | Done | Phase 9 adds `shortpick_v2_rule_selection_v2`; strategies missing market reference evidence, failing market excess, or below 30% annualized are blocked from current candidate status. |
 
 ## Landing Flow
 
@@ -114,11 +128,12 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 | 1. Planning contract | Done | Freeze the v2 scope, non-goals, risk list, and acceptance rules. |
 | 2. Historical replay design | Done | Defined the v2 replay artifact contract and limited rule-family matrix in `docs/contracts/SHORTPICK_LAB_V2_REPLAY_DESIGN_2026-06-12.md`, with schema `docs/contracts/registry/schemas/shortpick_v2_replay_artifact.schema.json`. |
 | 3. Replay artifact generation | Done | Added offline generator `shortpick-v2-replay`, produced `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/shortpick-v2-replay-artifact-20260612.json`, and validated the artifact against `shortpick_v2_replay_artifact.schema.json` with 721 signal days, 761 trade days, and five fixed rule-family results. |
-| 4. Candidate rule selection | Done | Added offline selector `shortpick-v2-rule-selection`, produced `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/shortpick-v2-rule-selection-artifact-20260612.json`, and selected `conservative_cash_reserve_60k_top5_v1` plus `fixed_notional_40k_top5_v1` as Phase 5 contract candidates. `top1_or_skip_v1` remains the strict baseline/control. |
+| 4. Candidate rule selection | Done | Added offline selector `shortpick-v2-rule-selection`, produced `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/shortpick-v2-rule-selection-artifact-20260612.json`, and initially selected `conservative_cash_reserve_60k_top5_v1` plus `fixed_notional_40k_top5_v1` under the v1 policy. This remains a historical record only after the Phase 9 gate amendment. `top1_or_skip_v1` remains the strict baseline/control. |
 | 5. Paper tracking contract | Done | Defined forward v2 paper ledger semantics in `docs/contracts/SHORTPICK_LAB_V2_PAPER_TRACKING_CONTRACT_2026-06-12.md` with schema `docs/contracts/registry/schemas/shortpick_v2_paper_tracking_ledger.schema.json`, using the v1-aligned `2026-05-08` start window and rejecting delayed-entry actions. |
 | 6. Backend read model | Done | Added separate `shortpick-lab-v2` read APIs for paper tracking and historical replay, backed by precomputed Phase 3/4 artifacts or v2 ledger artifacts. Missing v2 paper ledger returns a contract-ready empty projection instead of v1-derived rows. |
 | 7. Frontend tab | Done | Added `试验田v2` with only `纸面追踪` and `历史回放`, backed by separate v2 frontend API calls and static coverage. |
 | 8. Verification and publish | Done | Published runtime source/dist for `b62f2a9`; verified backend health, v2 served APIs, frontend asset match, and served `试验田v2` UI behavior. |
+| 9. Qualification gate amendment | In progress | Backfilled local runtime benchmark index bars, added `shortpick_v2_rule_selection_v2` gates for explicit market reference, market outperformance, and at least 30% annualized return, and changed read models so no current config is shown as selected when the gate blocks all candidates. |
 
 ## Acceptance Rules
 
@@ -130,19 +145,20 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 | Account realism | Done | Phase 3 replay models CNY 200,000 default cash, 100-share board lots, position caps, cash reserve, cash release, buy skips, and mechanical exits. |
 | Historical-first promotion | Done | Phase 4 selected candidates from the fixed Phase 3 replay artifact only, without UI parameters, DB writes, model calls, or manual overrides. |
 | Bounded promoted set | Done | Phase 4 selected two configurations for Phase 5 contract design and retained the remaining passing config as a holdout. |
+| Market and annualized qualification | In progress | Current selection policy requires explicit market reference evidence, total return strictly above that reference, and annualized return at least 30%; current low-return v2 results are blocked rather than promoted. |
 | Replay data adequacy | Done | Phase 3 artifact reports signal count, trade count, skipped count, trade-day count, coverage status, and data gaps; Phase 4 applies explicit promotion thresholds. |
 | Efficiency boundary | Done | Phase 3 replay is offline/precomputed, Phase 6 read APIs load artifacts without market fetches or dynamic replay, and Phase 7 only reads those APIs. |
 | Explainability | Done | Phase 3 artifact exposes buy/fallback/skip reason counts and bounded account-state decision samples. |
 | Paper-tracking alignment | Done | Phase 5 contract fixes the v2 forward tracking start policy at the v1-aligned `2026-05-08` window and requires explicit source-gap records instead of silent date shifts. |
 | Research labeling | Done | Phase 3/4 artifacts, Phase 5 contract, Phase 6 read APIs, and Phase 7 UI are capped at `claim_ceiling=research_observation` or equivalent read-only research language. |
-| Runtime verification | Done | Served backend returned `200 /health`, v2 paper tracking returned `contract_ready` with `2026-05-08`, v2 replay returned `ready`, and Browser verification confirmed the v2 page/tabs render without v1 module labels or console errors. |
+| Runtime verification | Done | Served backend returned `200 /health`, v2 paper tracking returned `contract_ready` with `2026-05-08`, v2 replay returned `ready`, and Browser verification confirmed the v2 page/tabs render without v1 module labels or console errors. Phase 9 runtime re-verification is pending until the amendment is merged and published. |
 
 ## Open Decisions
 
 | Decision | Status | Notes |
 | --- | --- | --- |
 | Exact v2 start date | Done | Phase 5 contract fixes the initial v2 paper-tracking start policy at `2026-05-08`, with source gaps recorded explicitly. |
-| Initial promoted replay families | Done | Phase 4 selected `conservative_cash_reserve_60k_top5_v1` and `fixed_notional_40k_top5_v1` as Phase 5 contract candidates; `top1_or_skip_v1` is retained as baseline/control. |
+| Initial promoted replay families | Done | Phase 4 selected `conservative_cash_reserve_60k_top5_v1` and `fixed_notional_40k_top5_v1` under policy v1; policy v2 supersedes that current-candidate status, so no non-baseline config is currently qualified until a later governed artifact passes the market and annualized gates. |
 | Minimum evidence threshold | Done | Phase 4 fixed first thresholds for signal count, trade count, skip ratio, return, drawdown, invested ratio, turnover, reason counts, and leakage audit; forward tracking remains read-only contract observation until rows exist. |
 | Position and cash defaults | Done | V2 uses CNY 200,000 default cash; promoted configs fix the cash reserve/notional and position-cap behavior selected from replay evidence. |
 | Parameter governance location | Done | Current live-facing scope is read-only and governed by fixed Phase 4/5 policy/schema versions; no mutable UI/API parameter surface is active. |

@@ -168,7 +168,7 @@
       ],
       "properties": {
         "policy_version": {
-          "const": "shortpick_v2_rule_selection_v1"
+          "const": "shortpick_v2_rule_selection_v2"
         },
         "max_selected": {
           "type": "integer",
@@ -277,6 +277,10 @@
         "skip_ratio",
         "fallback_trade_count",
         "total_return",
+        "annualization_trade_day_count",
+        "annualized_return",
+        "market_reference_total_return",
+        "market_excess_total_return",
         "max_drawdown",
         "mean_invested_ratio",
         "turnover"
@@ -304,6 +308,19 @@
         },
         "total_return": {
           "type": "number"
+        },
+        "annualization_trade_day_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "annualized_return": {
+          "type": ["number", "null"]
+        },
+        "market_reference_total_return": {
+          "type": ["number", "null"]
+        },
+        "market_excess_total_return": {
+          "type": ["number", "null"]
         },
         "max_drawdown": {
           "type": "number"

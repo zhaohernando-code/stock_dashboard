@@ -123,11 +123,12 @@
           "items": {
             "type": "string",
             "enum": [
+              "top3_fallback_v1",
               "conservative_cash_reserve_60k_top5_v1",
+              "position_cap_utilization_top5_v1",
               "fixed_notional_40k_top5_v1"
             ]
           },
-          "minItems": 1,
           "uniqueItems": true
         },
         "baseline_config_ids": {
@@ -142,7 +143,12 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["top3_fallback_v1"]
+            "enum": [
+              "top3_fallback_v1",
+              "conservative_cash_reserve_60k_top5_v1",
+              "position_cap_utilization_top5_v1",
+              "fixed_notional_40k_top5_v1"
+            ]
           },
           "uniqueItems": true
         },
@@ -150,7 +156,12 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["position_cap_utilization_top5_v1"]
+            "enum": [
+              "top3_fallback_v1",
+              "conservative_cash_reserve_60k_top5_v1",
+              "position_cap_utilization_top5_v1",
+              "fixed_notional_40k_top5_v1"
+            ]
           },
           "uniqueItems": true
         },
@@ -215,11 +226,12 @@
           "items": {
             "type": "string",
             "enum": [
+              "top3_fallback_v1",
               "conservative_cash_reserve_60k_top5_v1",
+              "position_cap_utilization_top5_v1",
               "fixed_notional_40k_top5_v1"
             ]
           },
-          "minItems": 1,
           "uniqueItems": true
         },
         "baseline_config_ids": {
@@ -305,6 +317,8 @@
           "enum": [
             "conservative_cash_reserve_60k_top5_v1",
             "fixed_notional_40k_top5_v1",
+            "top3_fallback_v1",
+            "position_cap_utilization_top5_v1",
             "top1_or_skip_v1"
           ]
         },

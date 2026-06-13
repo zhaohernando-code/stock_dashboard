@@ -14,18 +14,20 @@ SHORTPICK_V2_CLAIM_CEILING = "research_observation"
 SHORTPICK_V2_REPLAY_EVIDENCE_BASIS = "historical_account_replay"
 SHORTPICK_V2_SELECTION_EVIDENCE_BASIS = "historical_account_replay_selection"
 SHORTPICK_V2_PAPER_EVIDENCE_BASIS = "true_forward_tracking"
-SHORTPICK_V2_RULE_SELECTION_POLICY_VERSION = "shortpick_v2_rule_selection_v1"
+SHORTPICK_V2_RULE_SELECTION_POLICY_VERSION = "shortpick_v2_rule_selection_v2"
 SHORTPICK_V2_PAPER_CONTRACT_REF = "docs/contracts/SHORTPICK_LAB_V2_PAPER_TRACKING_CONTRACT_2026-06-12.md"
 SHORTPICK_V2_TRACKING_START_DATE = "2026-05-08"
 SHORTPICK_V2_DEFAULT_INITIAL_CASH = 200_000.0
 SHORTPICK_V2_DEFAULT_BOARD_LOT_SIZE = 100
-SHORTPICK_V2_SELECTED_CONFIG_IDS = (
-    "conservative_cash_reserve_60k_top5_v1",
-    "fixed_notional_40k_top5_v1",
-)
+SHORTPICK_V2_SELECTED_CONFIG_IDS: tuple[str, ...] = ()
 SHORTPICK_V2_BASELINE_CONFIG_IDS = ("top1_or_skip_v1",)
-SHORTPICK_V2_HOLDOUT_CONFIG_IDS = ("top3_fallback_v1",)
-SHORTPICK_V2_REJECTED_CONFIG_IDS = ("position_cap_utilization_top5_v1",)
+SHORTPICK_V2_HOLDOUT_CONFIG_IDS: tuple[str, ...] = ()
+SHORTPICK_V2_REJECTED_CONFIG_IDS = (
+    "top3_fallback_v1",
+    "fixed_notional_40k_top5_v1",
+    "position_cap_utilization_top5_v1",
+    "conservative_cash_reserve_60k_top5_v1",
+)
 SHORTPICK_V2_ALLOWED_ACTIONS = ("buy_primary", "buy_fallback", "skip")
 SHORTPICK_V2_FORBIDDEN_ACTIONS = ("delay_buy", "later_buy", "retry_buy", "discretionary_buy")
 
@@ -96,7 +98,7 @@ def build_shortpick_v2_historical_replay_read_model(
     data_scope = replay_artifact.get("data_scope") if isinstance(replay_artifact.get("data_scope"), dict) else {}
     return {
         "generated_at": _now_iso(),
-        "status": "ready",
+        "status": str(selection_artifact.get("status") or "blocked"),
         "claim_ceiling": SHORTPICK_V2_CLAIM_CEILING,
         "evidence_basis": SHORTPICK_V2_SELECTION_EVIDENCE_BASIS,
         "ui_language": "试验田v2历史回放仅展示预计算账户路径研究观察。",
@@ -186,15 +188,24 @@ def _contract_ready_paper_tracking_read_model(
 ) -> dict[str, Any]:
     selected_configs = _paper_config_readouts(selection_artifact.get("selected_configs"))
     baseline_configs = _paper_config_readouts(selection_artifact.get("baseline_configs"))
+    is_blocked = not selected_configs
     payload: dict[str, Any] = {
         "generated_at": _now_iso(),
-        "status": "contract_ready",
-        "current_status": "contract_ready",
-        "current_message": "V2 paper tracking writer has not produced true-forward rows yet.",
+        "status": "blocked" if is_blocked else "contract_ready",
+        "current_status": "blocked" if is_blocked else "contract_ready",
+        "current_message": (
+            "No v2 config currently qualifies under market-outperformance and annualized-return gates."
+            if is_blocked
+            else "V2 paper tracking writer has not produced true-forward rows yet."
+        ),
         "claim_ceiling": SHORTPICK_V2_CLAIM_CEILING,
         "evidence_basis": SHORTPICK_V2_PAPER_EVIDENCE_BASIS,
         "ui_language": "试验田v2纸面追踪仅展示账户路径纸面研究证据。",
-        "data_disclaimer": "当前为空投影：已固定候选配置，但没有真实前向 v2 paper ledger rows。",
+        "data_disclaimer": (
+            "当前为空投影：没有通过大盘超额收益和 30% 年化门槛的 v2 候选配置。"
+            if is_blocked
+            else "当前为空投影：已固定候选配置，但没有真实前向 v2 paper ledger rows。"
+        ),
         "source_contract_ref": SHORTPICK_V2_PAPER_CONTRACT_REF,
         "source_artifacts": {
             "rule_selection": _artifact_ref(selection_artifact, selection_path),
@@ -222,7 +233,11 @@ def _contract_ready_paper_tracking_read_model(
             "status": "passed",
             "read_model_policy": "no_v1_paper_tracking_fallback_no_dynamic_replay",
             "notes": [
-                "Missing v2 paper ledger is represented as contract_ready empty records.",
+                (
+                    "Missing v2 paper ledger is represented as blocked empty records when no config qualifies."
+                    if is_blocked
+                    else "Missing v2 paper ledger is represented as contract_ready empty records."
+                ),
                 "Rows are not inferred from the existing Short Pick Lab v1 paper tracking ledger.",
             ],
         },
@@ -231,7 +246,11 @@ def _contract_ready_paper_tracking_read_model(
             ui_language="试验田v2纸面追踪仅展示账户路径纸面研究证据。",
         ),
         "event_refs": [
-            "shortpick_v2.phase6.backend_read_model.paper_tracking_contract_ready",
+            (
+                "shortpick_v2.phase6.backend_read_model.paper_tracking_blocked"
+                if is_blocked
+                else "shortpick_v2.phase6.backend_read_model.paper_tracking_contract_ready"
+            ),
             str(selection_artifact.get("artifact_id") or ""),
         ],
     }
@@ -339,19 +358,21 @@ def _validate_replay_artifact(artifact: dict[str, Any]) -> None:
 def _validate_rule_selection_artifact(artifact: dict[str, Any]) -> None:
     _require_field(artifact, "artifact_family", SHORTPICK_V2_RULE_SELECTION_ARTIFACT_FAMILY, "rule selection")
     _require_field(artifact, "schema_version", SHORTPICK_V2_SCHEMA_VERSION, "rule selection")
-    _require_field(artifact, "status", "ready", "rule selection")
+    if artifact.get("status") not in {"ready", "blocked"}:
+        raise ValueError("rule selection status must be ready or blocked")
     _require_field(artifact, "claim_ceiling", SHORTPICK_V2_CLAIM_CEILING, "rule selection")
     _require_field(artifact, "evidence_basis", SHORTPICK_V2_SELECTION_EVIDENCE_BASIS, "rule selection")
     policy = artifact.get("selection_policy") if isinstance(artifact.get("selection_policy"), dict) else {}
     if policy.get("policy_version") != SHORTPICK_V2_RULE_SELECTION_POLICY_VERSION:
-        raise ValueError("rule selection policy_version must be shortpick_v2_rule_selection_v1")
+        raise ValueError(f"rule selection policy_version must be {SHORTPICK_V2_RULE_SELECTION_POLICY_VERSION}")
     leakage = artifact.get("leakage_audit") if isinstance(artifact.get("leakage_audit"), dict) else {}
     if leakage.get("status") != "passed":
         raise ValueError("rule selection leakage_audit.status must be passed")
-    _require_section_config_ids(artifact, "selected_configs", SHORTPICK_V2_SELECTED_CONFIG_IDS)
+    required_config_ids = tuple(policy.get("required_config_ids") or _all_phase6_config_ids())
+    if set(required_config_ids) != set(_all_phase6_config_ids()):
+        raise ValueError("rule selection required_config_ids must match the v2 config universe")
     _require_section_config_ids(artifact, "baseline_configs", SHORTPICK_V2_BASELINE_CONFIG_IDS)
-    _require_section_config_ids(artifact, "holdout_configs", SHORTPICK_V2_HOLDOUT_CONFIG_IDS)
-    _require_section_config_ids(artifact, "rejected_configs", SHORTPICK_V2_REJECTED_CONFIG_IDS)
+    _validate_rule_selection_sections(artifact, required_config_ids=required_config_ids)
 
 
 def _validate_replay_selection_alignment(
@@ -379,15 +400,16 @@ def _validate_paper_tracking_ledger_artifact(artifact: dict[str, Any]) -> None:
     records = artifact.get("records")
     if not isinstance(records, list):
         raise ValueError("paper tracking ledger records must be a list")
+    active_config_ids = _ledger_active_config_ids(artifact)
     for record in records:
         if not isinstance(record, dict):
             raise ValueError("paper tracking ledger record must be an object")
-        _validate_paper_tracking_record(record)
+        _validate_paper_tracking_record(record, active_config_ids=active_config_ids)
 
 
-def _validate_paper_tracking_record(record: dict[str, Any]) -> None:
+def _validate_paper_tracking_record(record: dict[str, Any], *, active_config_ids: tuple[str, ...]) -> None:
     config_id = str(record.get("config_id") or "")
-    if config_id not in _active_paper_config_ids():
+    if config_id not in active_config_ids:
         raise ValueError(f"paper tracking record config_id is not active for Phase 6: {config_id}")
     action = str(record.get("decision_action") or "")
     if action not in SHORTPICK_V2_ALLOWED_ACTIONS:
@@ -428,6 +450,42 @@ def _require_section_config_ids(
     actual = _section_config_ids(artifact.get(section))
     if actual != expected:
         raise ValueError(f"rule selection {section} must be {list(expected)}")
+
+
+def _validate_rule_selection_sections(
+    artifact: dict[str, Any],
+    *,
+    required_config_ids: tuple[str, ...],
+) -> None:
+    section_expectations = {
+        "selected_configs": ("phase5_contract_candidate", "passed"),
+        "baseline_configs": ("baseline_control", "baseline_control"),
+        "holdout_configs": ("holdout", "passed"),
+        "rejected_configs": ("rejected", "failed"),
+    }
+    seen: list[str] = []
+    for section, (expected_role, expected_gate_status) in section_expectations.items():
+        rows = artifact.get(section)
+        if not isinstance(rows, list):
+            raise ValueError(f"rule selection {section} must be a list")
+        for row in rows:
+            if not isinstance(row, dict):
+                raise ValueError(f"rule selection {section} rows must be objects")
+            config_id = str(row.get("config_id") or "")
+            seen.append(config_id)
+            if row.get("role") != expected_role:
+                raise ValueError(f"rule selection {section} role must be {expected_role}")
+            if row.get("gate_status") != expected_gate_status:
+                raise ValueError(f"rule selection {section} gate_status must be {expected_gate_status}")
+    if len(seen) != len(set(seen)):
+        raise ValueError("rule selection config ids must not be duplicated across sections")
+    if set(seen) != set(required_config_ids):
+        raise ValueError("rule selection sections must cover every required v2 config exactly once")
+    selected_ids = _section_config_ids(artifact.get("selected_configs"))
+    if selected_ids and artifact.get("status") != "ready":
+        raise ValueError("rule selection with selected configs must be ready")
+    if not selected_ids and artifact.get("status") != "blocked":
+        raise ValueError("rule selection without selected configs must be blocked")
 
 
 def _section_config_ids(rows: object) -> tuple[str, ...]:
@@ -565,6 +623,19 @@ def _bounded_sample_limit(sample_limit: int) -> int:
 
 def _active_paper_config_ids() -> tuple[str, ...]:
     return (*SHORTPICK_V2_SELECTED_CONFIG_IDS, *SHORTPICK_V2_BASELINE_CONFIG_IDS)
+
+
+def _ledger_active_config_ids(artifact: dict[str, Any]) -> tuple[str, ...]:
+    account_contract = artifact.get("account_contract") if isinstance(artifact.get("account_contract"), dict) else {}
+    selected = account_contract.get("selected_config_ids")
+    baseline = account_contract.get("baseline_config_ids")
+    if isinstance(selected, list) or isinstance(baseline, list):
+        return tuple(
+            str(config_id)
+            for config_id in [*(selected or []), *(baseline or [])]
+            if isinstance(config_id, str) and config_id
+        )
+    return _active_paper_config_ids()
 
 
 def _all_phase6_config_ids() -> tuple[str, ...]:

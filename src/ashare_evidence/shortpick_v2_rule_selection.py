@@ -8,7 +8,7 @@ from typing import Any
 
 SHORTPICK_V2_RULE_SELECTION_ARTIFACT_FAMILY = "shortpick_v2_rule_selection_artifact"
 SHORTPICK_V2_RULE_SELECTION_SCHEMA_VERSION = "v1"
-SHORTPICK_V2_RULE_SELECTION_POLICY_VERSION = "shortpick_v2_rule_selection_v1"
+SHORTPICK_V2_RULE_SELECTION_POLICY_VERSION = "shortpick_v2_rule_selection_v2"
 SHORTPICK_V2_RULE_SELECTION_SOURCE_PLAN_REF = (
     "docs/contracts/SHORTPICK_LAB_V2_PLAN_2026-06-12.md#phase-4-candidate-rule-selection"
 )
@@ -26,6 +26,8 @@ REQUIRED_CONFIG_IDS = (
 )
 RANKING_ORDER = (
     "max_drawdown_desc",
+    "annualized_return_desc",
+    "market_excess_total_return_desc",
     "total_return_desc",
     "skip_ratio_asc",
     "turnover_asc",
@@ -39,6 +41,9 @@ class SelectionThresholds:
     trade_count_min: int = 180
     skip_ratio_max: float = 0.60
     total_return_min_exclusive: float = 0.0
+    annualized_return_min: float = 0.30
+    market_reference_required: bool = True
+    market_excess_total_return_min_exclusive: float = 0.0
     max_drawdown_min: float = -0.35
     mean_invested_ratio_min: float = 0.25
     turnover_max: float = 80.0
@@ -50,6 +55,9 @@ class SelectionThresholds:
             "trade_count_min": self.trade_count_min,
             "skip_ratio_max": self.skip_ratio_max,
             "total_return_min_exclusive": self.total_return_min_exclusive,
+            "annualized_return_min": self.annualized_return_min,
+            "market_reference_required": self.market_reference_required,
+            "market_excess_total_return_min_exclusive": self.market_excess_total_return_min_exclusive,
             "max_drawdown_min": self.max_drawdown_min,
             "mean_invested_ratio_min": self.mean_invested_ratio_min,
             "turnover_max": self.turnover_max,
@@ -76,8 +84,14 @@ def build_shortpick_v2_rule_selection_artifact(
 
     generated_at = generated_at or datetime.now(UTC)
     results_by_config = _results_by_config(replay_artifact)
+    selection_context = _selection_context(replay_artifact)
     gate_results = [
-        _gate_result(config_id, results_by_config[config_id], thresholds=thresholds)
+        _gate_result(
+            config_id,
+            results_by_config[config_id],
+            thresholds=thresholds,
+            selection_context=selection_context,
+        )
         for config_id in sorted(results_by_config)
     ]
     gate_by_config = {item["config_id"]: item for item in gate_results}
@@ -87,7 +101,10 @@ def build_shortpick_v2_rule_selection_artifact(
             role="baseline_control",
             selection_rank=None,
             gate_result=gate_by_config[config_id],
-            reason="Retained as the strict Top1-or-skip control; not promoted because Phase 4 keeps a bounded candidate set.",
+            reason=(
+                "Retained as the strict Top1-or-skip control; "
+                "not promoted because Phase 4 keeps a bounded candidate set."
+            ),
         )
         for config_id in BASELINE_CONFIG_IDS
         if config_id in gate_by_config
@@ -171,7 +188,10 @@ def build_shortpick_v2_rule_selection_artifact(
             "selected_role_label": "phase5_contract_candidate",
             "notes": [
                 "Selected configurations are candidates for Phase 5 contract design only.",
-                "This artifact does not start paper tracking, create a ledger, expose an API, or claim production readiness.",
+                (
+                    "This artifact does not start paper tracking, create a ledger, expose an API, "
+                    "or claim production readiness."
+                ),
             ],
         },
         "event_refs": [
@@ -239,14 +259,52 @@ def _results_by_config(replay_artifact: dict[str, Any]) -> dict[str, dict[str, A
     return output
 
 
-def _gate_result(config_id: str, replay_result: dict[str, Any], *, thresholds: SelectionThresholds) -> dict[str, Any]:
-    summary = _selection_summary(replay_result)
+def _gate_result(
+    config_id: str,
+    replay_result: dict[str, Any],
+    *,
+    thresholds: SelectionThresholds,
+    selection_context: dict[str, Any],
+) -> dict[str, Any]:
+    summary = _selection_summary(replay_result, selection_context=selection_context)
     reason_counts = replay_result.get("reason_counts") if isinstance(replay_result.get("reason_counts"), dict) else {}
+    has_market_reference = summary["market_reference_total_return"] is not None
+    market_reference_passed = has_market_reference or not thresholds.market_reference_required
+    market_excess_passed = (
+        summary["market_excess_total_return"] is not None
+        and summary["market_excess_total_return"] > thresholds.market_excess_total_return_min_exclusive
+    )
+    if not thresholds.market_reference_required and not has_market_reference:
+        market_excess_passed = True
     checks = [
-        _check("result_status_ready", replay_result.get("status"), "ready", replay_result.get("status") == "ready", "eq"),
-        _check("signal_count", summary["signal_count"], thresholds.signal_count_min, summary["signal_count"] >= thresholds.signal_count_min, "gte"),
-        _check("trade_count", summary["trade_count"], thresholds.trade_count_min, summary["trade_count"] >= thresholds.trade_count_min, "gte"),
-        _check("skip_ratio", summary["skip_ratio"], thresholds.skip_ratio_max, summary["skip_ratio"] <= thresholds.skip_ratio_max, "lte"),
+        _check(
+            "result_status_ready",
+            replay_result.get("status"),
+            "ready",
+            replay_result.get("status") == "ready",
+            "eq",
+        ),
+        _check(
+            "signal_count",
+            summary["signal_count"],
+            thresholds.signal_count_min,
+            summary["signal_count"] >= thresholds.signal_count_min,
+            "gte",
+        ),
+        _check(
+            "trade_count",
+            summary["trade_count"],
+            thresholds.trade_count_min,
+            summary["trade_count"] >= thresholds.trade_count_min,
+            "gte",
+        ),
+        _check(
+            "skip_ratio",
+            summary["skip_ratio"],
+            thresholds.skip_ratio_max,
+            summary["skip_ratio"] <= thresholds.skip_ratio_max,
+            "lte",
+        ),
         _check(
             "total_return",
             summary["total_return"],
@@ -254,7 +312,35 @@ def _gate_result(config_id: str, replay_result: dict[str, Any], *, thresholds: S
             summary["total_return"] > thresholds.total_return_min_exclusive,
             "gt",
         ),
-        _check("max_drawdown", summary["max_drawdown"], thresholds.max_drawdown_min, summary["max_drawdown"] >= thresholds.max_drawdown_min, "gte"),
+        _check(
+            "annualized_return",
+            summary["annualized_return"],
+            thresholds.annualized_return_min,
+            summary["annualized_return"] is not None
+            and summary["annualized_return"] >= thresholds.annualized_return_min,
+            "gte",
+        ),
+        _check(
+            "market_reference_total_return",
+            summary["market_reference_total_return"],
+            thresholds.market_reference_required,
+            market_reference_passed,
+            "present",
+        ),
+        _check(
+            "market_excess_total_return",
+            summary["market_excess_total_return"],
+            thresholds.market_excess_total_return_min_exclusive,
+            market_excess_passed,
+            "gt",
+        ),
+        _check(
+            "max_drawdown",
+            summary["max_drawdown"],
+            thresholds.max_drawdown_min,
+            summary["max_drawdown"] >= thresholds.max_drawdown_min,
+            "gte",
+        ),
         _check(
             "mean_invested_ratio",
             summary["mean_invested_ratio"],
@@ -262,7 +348,13 @@ def _gate_result(config_id: str, replay_result: dict[str, Any], *, thresholds: S
             summary["mean_invested_ratio"] >= thresholds.mean_invested_ratio_min,
             "gte",
         ),
-        _check("turnover", summary["turnover"], thresholds.turnover_max, summary["turnover"] <= thresholds.turnover_max, "lte"),
+        _check(
+            "turnover",
+            summary["turnover"],
+            thresholds.turnover_max,
+            summary["turnover"] <= thresholds.turnover_max,
+            "lte",
+        ),
         _check("reason_counts", bool(reason_counts), True, bool(reason_counts), "present"),
     ]
     failed = [check["check_id"] for check in checks if not check["passed"]]
@@ -284,20 +376,66 @@ def _gate_result(config_id: str, replay_result: dict[str, Any], *, thresholds: S
     }
 
 
-def _selection_summary(replay_result: dict[str, Any]) -> dict[str, Any]:
+def _selection_context(replay_artifact: dict[str, Any]) -> dict[str, Any]:
+    data_scope = replay_artifact.get("data_scope") if isinstance(replay_artifact.get("data_scope"), dict) else {}
+    trade_day_count = _int(data_scope.get("trade_day_count")) or _int(data_scope.get("signal_day_count"))
+    return {
+        "annualization_trade_day_count": trade_day_count,
+        "market_reference_total_return": _first_float(
+            data_scope,
+            (
+                "market_reference_total_return",
+                "benchmark_total_return",
+                "eligible_universe_equal_weight_total_return",
+                "universe_equal_weight_total_return",
+            ),
+        ),
+    }
+
+
+def _selection_summary(replay_result: dict[str, Any], *, selection_context: dict[str, Any]) -> dict[str, Any]:
     summary = replay_result.get("summary") if isinstance(replay_result.get("summary"), dict) else {}
     signal_count = _int(summary.get("signal_count"))
     skip_count = _int(summary.get("skip_count"))
     skip_ratio = _float(summary.get("skipped_ratio"))
     if skip_ratio is None:
         skip_ratio = skip_count / signal_count if signal_count > 0 else 1.0
+    total_return = _float(summary.get("total_return")) or 0.0
+    annualization_trade_day_count = _int(
+        summary.get("annualization_trade_day_count")
+        or selection_context.get("annualization_trade_day_count")
+    )
+    annualized_return = _annualized_return(
+        total_return=total_return,
+        trade_day_count=annualization_trade_day_count,
+    )
+    market_reference_total_return = _first_float(
+        summary,
+        (
+            "market_reference_total_return",
+            "benchmark_total_return",
+            "eligible_universe_equal_weight_total_return",
+            "universe_equal_weight_total_return",
+        ),
+    )
+    if market_reference_total_return is None:
+        market_reference_total_return = _float(selection_context.get("market_reference_total_return"))
+    market_excess_total_return = (
+        None
+        if market_reference_total_return is None
+        else round(total_return - market_reference_total_return, 6)
+    )
     return {
         "signal_count": signal_count,
         "trade_count": _int(summary.get("trade_count")),
         "skip_count": skip_count,
         "skip_ratio": round(float(skip_ratio), 6),
         "fallback_trade_count": _int(summary.get("fallback_trade_count")),
-        "total_return": _float(summary.get("total_return")) or 0.0,
+        "total_return": total_return,
+        "annualization_trade_day_count": annualization_trade_day_count,
+        "annualized_return": annualized_return,
+        "market_reference_total_return": market_reference_total_return,
+        "market_excess_total_return": market_excess_total_return,
         "max_drawdown": _float(summary.get("max_drawdown")) or 0.0,
         "mean_invested_ratio": _float(summary.get("mean_invested_ratio")) or 0.0,
         "turnover": _float(summary.get("turnover")) or 0.0,
@@ -322,10 +460,12 @@ def _selection_row(
     }
 
 
-def _ranking_key(gate_result: dict[str, Any]) -> tuple[float, float, float, float, int, str]:
+def _ranking_key(gate_result: dict[str, Any]) -> tuple[float, float, float, float, float, float, int, str]:
     summary = gate_result["summary"]
     return (
         -float(summary["max_drawdown"]),
+        -float(summary["annualized_return"] or float("-inf")),
+        -float(summary["market_excess_total_return"] or float("-inf")),
         -float(summary["total_return"]),
         float(summary["skip_ratio"]),
         float(summary["turnover"]),
@@ -337,7 +477,10 @@ def _ranking_key(gate_result: dict[str, Any]) -> tuple[float, float, float, floa
 def _selected_reason(selection_rank: int, config_id: str) -> str:
     if selection_rank == 1:
         return "Selected by risk-first ranking among gate-passing configs; best drawdown profile in the bounded set."
-    return f"Selected by risk-first ranking among gate-passing configs after higher-ranked candidates; config_id={config_id}."
+    return (
+        "Selected by risk-first ranking among gate-passing configs after higher-ranked candidates; "
+        f"config_id={config_id}."
+    )
 
 
 def _source_replay_artifact(replay_artifact: dict[str, Any], replay_artifact_path: str | Path | None) -> dict[str, Any]:
@@ -384,3 +527,17 @@ def _float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _first_float(source: dict[str, Any], keys: tuple[str, ...]) -> float | None:
+    for key in keys:
+        value = _float(source.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _annualized_return(*, total_return: float, trade_day_count: int) -> float | None:
+    if trade_day_count <= 0 or total_return <= -1.0:
+        return None
+    return round(((1.0 + total_return) ** (252.0 / trade_day_count)) - 1.0, 6)

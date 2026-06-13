@@ -6,7 +6,6 @@ from pathlib import Path
 
 import jsonschema
 
-
 SCHEMA_PATH = Path("docs/contracts/registry/schemas/shortpick_v2_paper_tracking_ledger.schema.json")
 CONTRACT_PATH = Path("docs/contracts/SHORTPICK_LAB_V2_PAPER_TRACKING_CONTRACT_2026-06-12.md")
 
@@ -33,13 +32,15 @@ def _base_ledger() -> dict[str, object]:
             "artifact_family": "shortpick_v2_rule_selection_artifact",
             "schema_version": "v1",
             "path": "/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/shortpick-v2-rule-selection-artifact-20260612.json",
-            "selected_config_ids": [
-                "conservative_cash_reserve_60k_top5_v1",
-                "fixed_notional_40k_top5_v1",
-            ],
+            "selected_config_ids": [],
             "baseline_config_ids": ["top1_or_skip_v1"],
-            "holdout_config_ids": ["top3_fallback_v1"],
-            "rejected_config_ids": ["position_cap_utilization_top5_v1"],
+            "holdout_config_ids": [],
+            "rejected_config_ids": [
+                "top3_fallback_v1",
+                "fixed_notional_40k_top5_v1",
+                "position_cap_utilization_top5_v1",
+                "conservative_cash_reserve_60k_top5_v1",
+            ],
             "claim_ceiling": "research_observation",
         },
         "tracking_window": {
@@ -53,10 +54,7 @@ def _base_ledger() -> dict[str, object]:
             "currency": "CNY",
             "board_lot_size": 100,
             "account_profile": "new_retail_cash_account",
-            "selected_config_ids": [
-                "conservative_cash_reserve_60k_top5_v1",
-                "fixed_notional_40k_top5_v1",
-            ],
+            "selected_config_ids": [],
             "baseline_config_ids": ["top1_or_skip_v1"],
         },
         "row_contract": {
@@ -185,12 +183,12 @@ def test_shortpick_v2_paper_tracking_schema_rejects_delayed_entry_action() -> No
 def test_shortpick_v2_paper_tracking_schema_rejects_unselected_active_config() -> None:
     ledger = _base_ledger()
     row = copy.deepcopy(_buy_row())
-    row["config_id"] = "top3_fallback_v1"
+    row["config_id"] = "legacy_v1_equal_notional"
     ledger["records"] = [row]
 
     errors = list(jsonschema.Draft202012Validator(_schema()).iter_errors(ledger))
     assert errors
-    assert any("top3_fallback_v1" in str(error.message) for error in errors)
+    assert any("legacy_v1_equal_notional" in str(error.message) for error in errors)
 
 
 def test_shortpick_v2_paper_tracking_contract_contains_required_boundaries() -> None:

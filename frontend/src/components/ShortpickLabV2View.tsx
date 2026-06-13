@@ -235,7 +235,11 @@ function ShortpickV2PaperTab({
           <>
             <Alert
               showIcon
-              type={tracking?.status === "contract_ready" ? "info" : "success"}
+              type={
+                tracking?.status === "blocked"
+                  ? "warning"
+                  : tracking?.status === "contract_ready" ? "info" : "success"
+              }
               message={tracking?.current_status || "等待 v2 纸面追踪"}
               description={tracking?.current_message || tracking?.data_disclaimer || "暂无 v2 paper ledger rows。"}
             />
@@ -262,7 +266,9 @@ function ShortpickV2PaperTab({
               </div>
             </div>
             <Space wrap className="inline-tags">
-              {allowedActions.map((action) => <Tag key={action} color={actionColor(action)}>{actionLabel(action)}</Tag>)}
+              {allowedActions.map((action) => (
+                <Tag key={action} color={actionColor(action)}>{actionLabel(action)}</Tag>
+              ))}
               {forbiddenActions.includes("delay_buy") ? <Tag color="red">不允许延迟买入</Tag> : null}
               <Tag color="green">{tracking?.evidence_basis || "true_forward_tracking"}</Tag>
             </Space>
@@ -270,7 +276,7 @@ function ShortpickV2PaperTab({
         )}
       </Card>
 
-      <Card className="panel-card" title="已固化配置">
+      <Card className="panel-card" title={selectedRows.length ? "已固化配置" : "合格配置与基线"}>
         <ConfigSummaryTable rows={[...selectedRows, ...baselineRows]} loading={loading} />
       </Card>
 
@@ -284,7 +290,13 @@ function ShortpickV2PaperTab({
             pagination={{ pageSize: 20 }}
           />
         ) : (
-          <Empty description="contract_ready：已固定配置，暂无真实前向 v2 纸面行。" />
+          <Empty
+            description={
+              tracking?.status === "blocked"
+                ? "blocked：暂无通过大盘超额和 30% 年化门槛的 v2 候选配置。"
+                : "contract_ready：已固定配置，暂无真实前向 v2 纸面行。"
+            }
+          />
         )}
       </Card>
     </div>
@@ -382,6 +394,7 @@ function ShortpickV2ReplayTab({
               </div>
             </div>
             <Space wrap className="inline-tags">
+              <Tag color={statusColor(replay?.status)}>{replay?.status || "blocked"}</Tag>
               <Tag color="green">{replay?.claim_ceiling || "research_observation"}</Tag>
               <Tag color="blue">{replay?.evidence_basis || "historical_account_replay_selection"}</Tag>
               <Tag>生成 {formatDate(replay?.generated_at)}</Tag>
@@ -394,7 +407,7 @@ function ShortpickV2ReplayTab({
         )}
       </Card>
 
-      <Card className="panel-card" title="推广配置与基线">
+      <Card className="panel-card" title={selectedRows.length ? "推广配置与基线" : "合格配置与基线"}>
         <ConfigSummaryTable rows={[...selectedRows, ...baselineRows]} loading={loading} />
       </Card>
 

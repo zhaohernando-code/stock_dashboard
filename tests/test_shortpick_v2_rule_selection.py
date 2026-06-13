@@ -25,24 +25,28 @@ def _result(
     max_drawdown: float,
     mean_invested_ratio: float,
     turnover: float,
+    market_reference_total_return: float | None = None,
 ) -> dict[str, object]:
     signal_count = 721
+    summary = {
+        "signal_count": signal_count,
+        "trade_count": trade_count,
+        "skip_count": skip_count,
+        "fallback_trade_count": fallback_trade_count,
+        "final_nav": 200_000 * (1 + total_return),
+        "total_return": total_return,
+        "max_drawdown": max_drawdown,
+        "mean_invested_ratio": mean_invested_ratio,
+        "max_position_count": 5,
+        "turnover": turnover,
+        "skipped_ratio": round(skip_count / signal_count, 6),
+    }
+    if market_reference_total_return is not None:
+        summary["market_reference_total_return"] = market_reference_total_return
     return {
         "config_id": config_id,
         "status": "ready",
-        "summary": {
-            "signal_count": signal_count,
-            "trade_count": trade_count,
-            "skip_count": skip_count,
-            "fallback_trade_count": fallback_trade_count,
-            "final_nav": 200_000 * (1 + total_return),
-            "total_return": total_return,
-            "max_drawdown": max_drawdown,
-            "mean_invested_ratio": mean_invested_ratio,
-            "max_position_count": 5,
-            "turnover": turnover,
-            "skipped_ratio": round(skip_count / signal_count, 6),
-        },
+        "summary": summary,
         "reason_counts": {
             "action:buy_primary": max(trade_count - fallback_trade_count, 0),
             "action:buy_fallback": fallback_trade_count,
@@ -128,7 +132,71 @@ def _replay_artifact() -> dict[str, object]:
     }
 
 
-def test_shortpick_v2_rule_selection_selects_bounded_risk_first_candidates() -> None:
+def _qualified_replay_artifact() -> dict[str, object]:
+    market_reference_total_return = 0.45
+    return {
+        **_replay_artifact(),
+        "results": [
+            _result(
+                "top1_or_skip_v1",
+                trade_count=212,
+                skip_count=509,
+                fallback_trade_count=0,
+                total_return=0.35,
+                max_drawdown=-0.308438,
+                mean_invested_ratio=0.352473,
+                turnover=52.105779,
+                market_reference_total_return=market_reference_total_return,
+            ),
+            _result(
+                "top3_fallback_v1",
+                trade_count=352,
+                skip_count=369,
+                fallback_trade_count=143,
+                total_return=1.25,
+                max_drawdown=-0.327548,
+                mean_invested_ratio=0.526949,
+                turnover=79.638865,
+                market_reference_total_return=market_reference_total_return,
+            ),
+            _result(
+                "fixed_notional_40k_top5_v1",
+                trade_count=398,
+                skip_count=323,
+                fallback_trade_count=126,
+                total_return=1.35,
+                max_drawdown=-0.325321,
+                mean_invested_ratio=0.421972,
+                turnover=62.040153,
+                market_reference_total_return=market_reference_total_return,
+            ),
+            _result(
+                "position_cap_utilization_top5_v1",
+                trade_count=372,
+                skip_count=349,
+                fallback_trade_count=156,
+                total_return=1.4,
+                max_drawdown=-0.382083,
+                mean_invested_ratio=0.525921,
+                turnover=75.0798,
+                market_reference_total_return=market_reference_total_return,
+            ),
+            _result(
+                "conservative_cash_reserve_60k_top5_v1",
+                trade_count=363,
+                skip_count=358,
+                fallback_trade_count=139,
+                total_return=1.45,
+                max_drawdown=-0.261957,
+                mean_invested_ratio=0.386994,
+                turnover=59.527422,
+                market_reference_total_return=market_reference_total_return,
+            ),
+        ],
+    }
+
+
+def test_shortpick_v2_rule_selection_blocks_missing_market_reference_and_annualized_floor() -> None:
     artifact = build_shortpick_v2_rule_selection_artifact(
         _replay_artifact(),
         replay_artifact_path="/tmp/replay.json",
@@ -137,6 +205,29 @@ def test_shortpick_v2_rule_selection_selects_bounded_risk_first_candidates() -> 
 
     assert artifact["artifact_family"] == "shortpick_v2_rule_selection_artifact"
     assert artifact["claim_ceiling"] == "research_observation"
+    assert artifact["status"] == "blocked"
+    assert artifact["selected_configs"] == []
+    assert [item["config_id"] for item in artifact["baseline_configs"]] == ["top1_or_skip_v1"]
+    assert {item["config_id"] for item in artifact["rejected_configs"]} == {
+        "conservative_cash_reserve_60k_top5_v1",
+        "fixed_notional_40k_top5_v1",
+        "position_cap_utilization_top5_v1",
+        "top3_fallback_v1",
+    }
+    conservative = next(
+        item for item in artifact["gate_results"] if item["config_id"] == "conservative_cash_reserve_60k_top5_v1"
+    )
+    failed_checks = {check["check_id"] for check in conservative["checks"] if not check["passed"]}
+    assert {"annualized_return", "market_reference_total_return", "market_excess_total_return"} <= failed_checks
+
+
+def test_shortpick_v2_rule_selection_selects_bounded_risk_first_candidates_when_qualified() -> None:
+    artifact = build_shortpick_v2_rule_selection_artifact(
+        _qualified_replay_artifact(),
+        replay_artifact_path="/tmp/replay.json",
+        generated_at=datetime(2026, 6, 12, 9, 0, tzinfo=UTC),
+    )
+
     assert artifact["status"] == "ready"
     assert [item["config_id"] for item in artifact["selected_configs"]] == [
         "conservative_cash_reserve_60k_top5_v1",
@@ -156,7 +247,7 @@ def test_shortpick_v2_rule_selection_selects_bounded_risk_first_candidates() -> 
 
 def test_shortpick_v2_rule_selection_respects_max_selected() -> None:
     artifact = build_shortpick_v2_rule_selection_artifact(
-        _replay_artifact(),
+        _qualified_replay_artifact(),
         max_selected=1,
         generated_at=datetime(2026, 6, 12, 9, 0, tzinfo=UTC),
     )
@@ -197,7 +288,7 @@ def test_shortpick_v2_rule_selection_schema_and_writer(tmp_path: Path) -> None:
         )
     )
     artifact = build_shortpick_v2_rule_selection_artifact(
-        _replay_artifact(),
+        _qualified_replay_artifact(),
         replay_artifact_path=tmp_path / "replay.json",
         generated_at=datetime(2026, 6, 12, 9, 0, tzinfo=UTC),
     )

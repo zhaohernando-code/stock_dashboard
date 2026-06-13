@@ -28,24 +28,28 @@ def _result(
     max_drawdown: float,
     mean_invested_ratio: float,
     turnover: float,
+    market_reference_total_return: float | None = None,
 ) -> dict[str, object]:
     signal_count = 721
+    summary = {
+        "signal_count": signal_count,
+        "trade_count": trade_count,
+        "skip_count": skip_count,
+        "fallback_trade_count": fallback_trade_count,
+        "final_nav": 200_000 * (1 + total_return),
+        "total_return": total_return,
+        "max_drawdown": max_drawdown,
+        "mean_invested_ratio": mean_invested_ratio,
+        "max_position_count": 5,
+        "turnover": turnover,
+        "skipped_ratio": round(skip_count / signal_count, 6),
+    }
+    if market_reference_total_return is not None:
+        summary["market_reference_total_return"] = market_reference_total_return
     return {
         "config_id": config_id,
         "status": "ready",
-        "summary": {
-            "signal_count": signal_count,
-            "trade_count": trade_count,
-            "skip_count": skip_count,
-            "fallback_trade_count": fallback_trade_count,
-            "final_nav": 200_000 * (1 + total_return),
-            "total_return": total_return,
-            "max_drawdown": max_drawdown,
-            "mean_invested_ratio": mean_invested_ratio,
-            "max_position_count": 5,
-            "turnover": turnover,
-            "skipped_ratio": round(skip_count / signal_count, 6),
-        },
+        "summary": summary,
         "reason_counts": {
             "action:buy_primary": max(trade_count - fallback_trade_count, 0),
             "action:buy_fallback": fallback_trade_count,
@@ -155,11 +159,80 @@ def _replay_artifact() -> dict[str, object]:
     }
 
 
-def _write_v2_artifacts(tmp_path: Path, monkeypatch) -> tuple[Path, Path, Path]:
+def _qualified_replay_artifact() -> dict[str, object]:
+    market_reference_total_return = 0.45
+    return {
+        **_replay_artifact(),
+        "results": [
+            _result(
+                "top1_or_skip_v1",
+                trade_count=212,
+                skip_count=509,
+                fallback_trade_count=0,
+                total_return=0.35,
+                max_drawdown=-0.308438,
+                mean_invested_ratio=0.352473,
+                turnover=52.105779,
+                market_reference_total_return=market_reference_total_return,
+            ),
+            _result(
+                "top3_fallback_v1",
+                trade_count=352,
+                skip_count=369,
+                fallback_trade_count=143,
+                total_return=1.25,
+                max_drawdown=-0.327548,
+                mean_invested_ratio=0.526949,
+                turnover=79.638865,
+                market_reference_total_return=market_reference_total_return,
+            ),
+            _result(
+                "fixed_notional_40k_top5_v1",
+                trade_count=398,
+                skip_count=323,
+                fallback_trade_count=126,
+                total_return=1.35,
+                max_drawdown=-0.325321,
+                mean_invested_ratio=0.421972,
+                turnover=62.040153,
+                market_reference_total_return=market_reference_total_return,
+            ),
+            _result(
+                "position_cap_utilization_top5_v1",
+                trade_count=372,
+                skip_count=349,
+                fallback_trade_count=156,
+                total_return=1.4,
+                max_drawdown=-0.382083,
+                mean_invested_ratio=0.525921,
+                turnover=75.0798,
+                market_reference_total_return=market_reference_total_return,
+            ),
+            _result(
+                "conservative_cash_reserve_60k_top5_v1",
+                trade_count=363,
+                skip_count=358,
+                fallback_trade_count=139,
+                total_return=1.45,
+                max_drawdown=-0.261957,
+                mean_invested_ratio=0.386994,
+                turnover=59.527422,
+                market_reference_total_return=market_reference_total_return,
+            ),
+        ],
+    }
+
+
+def _write_v2_artifacts(
+    tmp_path: Path,
+    monkeypatch,
+    *,
+    replay: dict[str, object] | None = None,
+) -> tuple[Path, Path, Path]:
     replay_path = tmp_path / "shortpick-v2-replay.json"
     selection_path = tmp_path / "shortpick-v2-rule-selection.json"
     missing_ledger_path = tmp_path / "missing-paper-ledger.json"
-    replay = _replay_artifact()
+    replay = replay or _replay_artifact()
     selection = build_shortpick_v2_rule_selection_artifact(
         replay,
         replay_artifact_path=replay_path,
@@ -181,17 +254,18 @@ def test_shortpick_v2_historical_replay_read_model_uses_selected_precomputed_art
 
     payload = build_shortpick_v2_historical_replay_read_model(sample_limit=1)
 
-    assert payload["status"] == "ready"
+    assert payload["status"] == "blocked"
     assert payload["claim_ceiling"] == "research_observation"
     assert payload["evidence_basis"] == "historical_account_replay_selection"
-    assert [item["config_id"] for item in payload["selected_configs"]] == [
+    assert payload["selected_configs"] == []
+    assert [item["config_id"] for item in payload["baseline_configs"]] == ["top1_or_skip_v1"]
+    assert payload["holdout_configs"] == []
+    assert {item["config_id"] for item in payload["rejected_configs"]} == {
         "conservative_cash_reserve_60k_top5_v1",
         "fixed_notional_40k_top5_v1",
-    ]
-    assert [item["config_id"] for item in payload["baseline_configs"]] == ["top1_or_skip_v1"]
-    assert [item["config_id"] for item in payload["holdout_configs"]] == ["top3_fallback_v1"]
-    assert [item["config_id"] for item in payload["rejected_configs"]] == ["position_cap_utilization_top5_v1"]
-    assert len(payload["selected_configs"][0]["decision_samples"]) == 1
+        "position_cap_utilization_top5_v1",
+        "top3_fallback_v1",
+    }
     assert payload["leakage_audit"]["read_model_policy"] == "read_only_precomputed_artifacts_no_dynamic_replay"
 
 
@@ -203,16 +277,15 @@ def test_shortpick_v2_paper_tracking_returns_contract_ready_empty_projection(
 
     payload = build_shortpick_v2_paper_tracking_read_model(include_records=True)
 
-    assert payload["status"] == "contract_ready"
+    assert payload["status"] == "blocked"
+    assert payload["current_status"] == "blocked"
     assert payload["evidence_basis"] == "true_forward_tracking"
     assert payload["records"] == []
     assert payload["source_artifacts"]["paper_ledger"]["status"] == "missing"
     assert payload["source_artifacts"]["paper_ledger"]["path"] == str(missing_ledger_path)
-    assert [item["config_id"] for item in payload["selected_configs"]] == [
-        "conservative_cash_reserve_60k_top5_v1",
-        "fixed_notional_40k_top5_v1",
-    ]
+    assert payload["selected_configs"] == []
     assert payload["baseline_configs"][0]["config_id"] == "top1_or_skip_v1"
+    assert "No v2 config currently qualifies" in payload["current_message"]
     assert payload["tracking_window"]["start_date"] == "2026-05-08"
     assert payload["row_contract"]["allowed_signal_actions"] == ["buy_primary", "buy_fallback", "skip"]
     assert "delay_buy" in payload["row_contract"]["forbidden_signal_actions"]
@@ -222,7 +295,7 @@ def test_shortpick_v2_paper_tracking_reads_existing_v2_ledger_artifact(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _, _, ledger_path = _write_v2_artifacts(tmp_path, monkeypatch)
+    _, _, ledger_path = _write_v2_artifacts(tmp_path, monkeypatch, replay=_qualified_replay_artifact())
     ledger = {
         "artifact_family": "shortpick_v2_paper_tracking_ledger",
         "schema_version": "v1",
@@ -312,10 +385,10 @@ def test_shortpick_v2_read_api_routes_return_v2_payloads(tmp_path: Path, monkeyp
     paper_response = client.get("/shortpick-lab-v2/paper-tracking/summary")
 
     assert replay_response.status_code == 200
-    assert replay_response.json()["selected_configs"][0]["config_id"] == "conservative_cash_reserve_60k_top5_v1"
-    assert replay_response.json()["selected_configs"][0]["decision_samples"][0]["action"] == "buy_primary"
+    assert replay_response.json()["status"] == "blocked"
+    assert replay_response.json()["selected_configs"] == []
     assert paper_response.status_code == 200
-    assert paper_response.json()["status"] == "contract_ready"
+    assert paper_response.json()["status"] == "blocked"
     assert paper_response.json()["summary"]["record_count"] == 0
 
 

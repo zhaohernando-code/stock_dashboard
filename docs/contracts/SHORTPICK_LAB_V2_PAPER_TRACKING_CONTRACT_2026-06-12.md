@@ -1,6 +1,6 @@
 # Short Pick Lab V2 Paper Tracking Contract
 
-Status: Contract draft ready for producer implementation
+Status: Contract draft ready for producer implementation; current selection blocked by v2 qualification gates
 Owner: stock_dashboard
 Created: 2026-06-12
 Source plan: `docs/contracts/SHORTPICK_LAB_V2_PLAN_2026-06-12.md`
@@ -21,18 +21,32 @@ This is a contract only. It does not write paper-tracking rows, backfill histori
 | --- | --- |
 | Replay artifact | `shortpick_v2_replay_artifact` from Phase 3 |
 | Rule selection artifact | `shortpick_v2_rule_selection_artifact` from Phase 4 |
-| Selection policy | `shortpick_v2_rule_selection_v1` |
+| Selection policy | `shortpick_v2_rule_selection_v2` |
 | Claim ceiling | `research_observation` until true forward tracking has enough evidence |
 
-Only Phase 4-selected configurations are eligible for the first v2 forward ledger:
+Only configurations selected by the current governed rule-selection artifact are eligible for v2 forward ledger rows. Under `shortpick_v2_rule_selection_v2`, there are currently no non-baseline paper-tracking candidates because the existing replay results do not clear the market-outperformance and 30% annualized gates.
 
 | Ledger role | Config ID | Write policy |
 | --- | --- | --- |
-| Phase 5 contract candidate | `conservative_cash_reserve_60k_top5_v1` | Eligible for future v2 paper rows after writer implementation. |
-| Phase 5 contract candidate | `fixed_notional_40k_top5_v1` | Eligible for future v2 paper rows after writer implementation. |
+| Phase 5 contract candidate | None | No non-baseline config is eligible until a later governed selection artifact passes policy v2. |
 | Baseline/control | `top1_or_skip_v1` | May be tracked as a labeled baseline/control, not as a promoted candidate. |
+| Rejected under policy v2 | `conservative_cash_reserve_60k_top5_v1` | Historical Phase 4 v1 candidate only; not eligible for current v2 paper rows. |
+| Rejected under policy v2 | `fixed_notional_40k_top5_v1` | Historical Phase 4 v1 candidate only; not eligible for current v2 paper rows. |
+| Rejected under policy v2 | `top3_fallback_v1` | Not eligible for current v2 paper rows. |
+| Rejected under policy v2 | `position_cap_utilization_top5_v1` | Not eligible for current v2 paper rows. |
 
-`top3_fallback_v1` remains a Phase 4 holdout and `position_cap_utilization_top5_v1` remains rejected. They must not be written as active v2 paper-tracking candidates unless a later governed selection artifact changes the config scope.
+Rejected or historical-candidate configs must not be written as active v2 paper-tracking candidates unless a later governed selection artifact changes the config scope.
+
+## Qualification Gates
+
+The current selection policy fails closed unless each promoted non-baseline config has explicit replay evidence for:
+
+| Gate | Required value |
+| --- | --- |
+| Market reference | Present in the replay-derived selection summary. |
+| Market excess | Strategy total return is strictly above the declared market reference return. |
+| Annualized return | At least 30%. |
+| Existing replay gates | Signal count, trade count, skip ratio, drawdown, invested ratio, turnover, reason-count, and leakage audit gates remain required. |
 
 ## Tracking Window
 
@@ -116,6 +130,7 @@ The future writer or projection must fail closed when:
 - a row uses any action outside `buy_primary`, `buy_fallback`, or `skip`;
 - a row attempts delayed or discretionary later-day entry;
 - selected configs do not match the governed Phase 4 selection artifact;
+- the current selection artifact has no non-baseline configs passing market-outperformance and 30% annualized gates;
 - `2026-05-08` alignment is silently shifted;
 - v1 paper-tracking rows are written or mutated as v2 rows;
 - claim labels imply production proof or investment advice.
