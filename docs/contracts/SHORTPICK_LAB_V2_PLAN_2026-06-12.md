@@ -1,6 +1,6 @@
 # Short Pick Lab V2 Plan
 
-Status: Complete through Phase 8; Phase 9 qualification gate amendment in progress
+Status: Complete through Phase 9; published runtime served API verified
 Owner: stock_dashboard
 Created: 2026-06-12
 Scope: planning contract only; not a runbook
@@ -133,7 +133,7 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 | 6. Backend read model | Done | Added separate `shortpick-lab-v2` read APIs for paper tracking and historical replay, backed by precomputed Phase 3/4 artifacts or v2 ledger artifacts. Missing v2 paper ledger returns a contract-ready empty projection instead of v1-derived rows. |
 | 7. Frontend tab | Done | Added `试验田v2` with only `纸面追踪` and `历史回放`, backed by separate v2 frontend API calls and static coverage. |
 | 8. Verification and publish | Done | Published runtime source/dist for `b62f2a9`; verified backend health, v2 served APIs, frontend asset match, and served `试验田v2` UI behavior. |
-| 9. Qualification gate amendment | In progress | Backfilled local runtime benchmark index bars, added `shortpick_v2_rule_selection_v2` gates for explicit market reference, market outperformance, and at least 30% annualized return, and changed read models so no current config is shown as selected when the gate blocks all candidates. |
+| 9. Qualification gate amendment | Done | Backfilled local runtime benchmark index bars, added `shortpick_v2_rule_selection_v2` gates for explicit market reference, market outperformance, and at least 30% annualized return, regenerated runtime v2 replay/selection artifacts with market reference `+41.8444%`, and changed read models so no current config is shown as selected when the gate blocks all candidates. |
 
 ## Acceptance Rules
 
@@ -145,13 +145,13 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 | Account realism | Done | Phase 3 replay models CNY 200,000 default cash, 100-share board lots, position caps, cash reserve, cash release, buy skips, and mechanical exits. |
 | Historical-first promotion | Done | Phase 4 selected candidates from the fixed Phase 3 replay artifact only, without UI parameters, DB writes, model calls, or manual overrides. |
 | Bounded promoted set | Done | Phase 4 selected two configurations for Phase 5 contract design and retained the remaining passing config as a holdout. |
-| Market and annualized qualification | In progress | Current selection policy requires explicit market reference evidence, total return strictly above that reference, and annualized return at least 30%; current low-return v2 results are blocked rather than promoted. |
+| Market and annualized qualification | Done | Current selection policy requires explicit market reference evidence, total return strictly above that reference, and annualized return at least 30%; current low-return v2 results are blocked rather than promoted. |
 | Replay data adequacy | Done | Phase 3 artifact reports signal count, trade count, skipped count, trade-day count, coverage status, and data gaps; Phase 4 applies explicit promotion thresholds. |
 | Efficiency boundary | Done | Phase 3 replay is offline/precomputed, Phase 6 read APIs load artifacts without market fetches or dynamic replay, and Phase 7 only reads those APIs. |
 | Explainability | Done | Phase 3 artifact exposes buy/fallback/skip reason counts and bounded account-state decision samples. |
 | Paper-tracking alignment | Done | Phase 5 contract fixes the v2 forward tracking start policy at the v1-aligned `2026-05-08` window and requires explicit source-gap records instead of silent date shifts. |
 | Research labeling | Done | Phase 3/4 artifacts, Phase 5 contract, Phase 6 read APIs, and Phase 7 UI are capped at `claim_ceiling=research_observation` or equivalent read-only research language. |
-| Runtime verification | Done | Served backend returned `200 /health`, v2 paper tracking returned `contract_ready` with `2026-05-08`, v2 replay returned `ready`, and Browser verification confirmed the v2 page/tabs render without v1 module labels or console errors. Phase 9 runtime re-verification is pending until the amendment is merged and published. |
+| Runtime verification | Done | Phase 8 served backend returned `200 /health`, v2 paper tracking returned `contract_ready` with `2026-05-08`, v2 replay returned `ready`, and Browser verification confirmed the v2 page/tabs render without v1 module labels or console errors. Phase 9 published commit `9fbe6f2`, regenerated v2 runtime artifacts, verified v2 historical replay API returns `blocked` with selected count `0` and market reference `+41.8444%`, verified v2 paper tracking API returns `blocked`, and confirmed the public route no longer returns the prior `ECONNREFUSED 127.0.0.1:5173` error. |
 
 ## Open Decisions
 
