@@ -13,12 +13,14 @@ from ashare_evidence.shortpick_v2_rule_selection import build_shortpick_v2_rule_
 from ashare_evidence.shortpick_v2_strategy_search import (
     H10_MA_ACCEL_CANDIDATE_SOURCE_IDS,
     H10_MA_ACCEL_REFINE_CANDIDATE_SOURCE_IDS,
+    H10_EXIT_CANDIDATE_SOURCE_IDS,
     H10_QUIET_CANDIDATE_SOURCE_IDS,
     H10_ROBUST_CANDIDATE_SOURCE_IDS,
     H10_STRENGTH_CANDIDATE_SOURCE_IDS,
     NEXT_ROUND_CANDIDATE_SOURCE_IDS,
     REFINED_ROUND_CANDIDATE_SOURCE_IDS,
     StrategySearchCandidateSource,
+    build_h10_exit_strategy_search_candidate_sources,
     build_h10_ma_accel_refine_strategy_search_candidate_sources,
     build_h10_ma_accel_strategy_search_candidate_sources,
     build_h10_quiet_strategy_search_candidate_sources,
@@ -202,6 +204,12 @@ def test_shortpick_v2_strategy_search_cli_parser_accepts_h10_ma_accel_refine_bat
     assert args.candidate_batch == "h10_ma_accel_refine"
 
 
+def test_shortpick_v2_strategy_search_cli_parser_accepts_h10_exit_batch() -> None:
+    args = cli_module.build_parser().parse_args(["shortpick-v2-strategy-search", "--candidate-batch", "h10_exit"])
+
+    assert args.candidate_batch == "h10_exit"
+
+
 def test_h10_quiet_strategy_search_requires_ten_day_horizon() -> None:
     days = [date(2026, 1, 1) + timedelta(days=index) for index in range(8)]
     series_by_symbol = {
@@ -342,6 +350,34 @@ def test_h10_ma_accel_refine_strategy_search_requires_ten_day_horizon() -> None:
         )
 
 
+def test_h10_exit_strategy_search_requires_ten_day_horizon() -> None:
+    days = [date(2026, 1, 1) + timedelta(days=index) for index in range(8)]
+    series_by_symbol = {
+        "600001.SH": _series("600001.SH", [10, 11, 12, 12, 13, 14, 14, 15]),
+        "600002.SH": _series("600002.SH", [19, 20, 21, 21, 22, 22, 23, 24]),
+    }
+    control = StrategySearchCandidateSource(
+        source_id="low_turnover_20d_uptrend_liquid_top120",
+        source_ref="market_only_reconstruction:low_turnover_20d_uptrend_liquid_top120:v1",
+        selections={days[2]: ["600001.SH"]},
+    )
+
+    with pytest.raises(ValueError, match="h10_exit requires horizon_days=10"):
+        build_shortpick_v2_strategy_search_artifact_from_series(
+            series_by_symbol,
+            signal_days=[days[2]],
+            trade_days=days[2:7],
+            candidate_sources=(control,),
+            start_date=days[0],
+            end_date=days[6],
+            initial_cash=20_000.0,
+            horizon_days=2,
+            account_profile="new_retail_cash_account",
+            candidate_batch="h10_exit",
+            generated_at=datetime(2026, 6, 15, 3, 0, tzinfo=UTC),
+        )
+
+
 def test_h10_ma_accel_refine_sources_use_refine_rule_configs() -> None:
     expected_suffixes = [
         "fixed_notional_35k_top5_h10_ma_accel_refine_v1",
@@ -383,6 +419,65 @@ def test_h10_ma_accel_refine_seed_matches_v3_volume_confirm() -> None:
     assert _h10_ma_accel_score(pool, eligible, source_id=seed_source_id, **comparison_kwargs) == pytest.approx(
         _h10_ma_accel_score(pool, eligible, source_id=v3_source_id, **comparison_kwargs)
     )
+
+
+def test_h10_exit_sources_use_dynamic_exit_rule_configs() -> None:
+    configs = _rule_configs_for_source("ma_accel_volume_confirm_exit_seed_h10_v1")
+    exit_policies = [config.to_artifact()["exit_policy"] for config in configs]
+
+    assert [config.target_notional for config in configs] == [
+        40_000.0,
+        45_000.0,
+        40_000.0,
+        45_000.0,
+        40_000.0,
+        45_000.0,
+        40_000.0,
+        45_000.0,
+    ]
+    assert exit_policies[0]["dynamic_exit_triggers"] == []
+    assert exit_policies[2]["dynamic_exit_triggers"] == ["stop_loss"]
+    assert exit_policies[4]["dynamic_exit_triggers"] == ["stop_loss", "take_profit"]
+    assert exit_policies[6]["dynamic_exit_triggers"] == ["stop_loss", "trailing_stop"]
+
+
+def test_h10_exit_strategy_search_merges_dynamic_exit_tracks() -> None:
+    days = [date(2026, 1, 1) + timedelta(days=index) for index in range(16)]
+    series_by_symbol = {
+        "600001.SH": _series("600001.SH", [10 + index * 0.1 for index in range(16)]),
+    }
+    control = StrategySearchCandidateSource(
+        source_id="low_turnover_20d_uptrend_liquid_top120",
+        source_ref="market_only_reconstruction:low_turnover_20d_uptrend_liquid_top120:v1",
+        selections={days[2]: ["600001.SH"]},
+    )
+    exit_source = StrategySearchCandidateSource(
+        source_id="ma_accel_volume_confirm_exit_seed_h10_v1",
+        source_ref="market_only_reconstruction:shortpick_v2_h10_exit_round:test",
+        selections={days[2]: ["600001.SH"]},
+    )
+
+    artifact = build_shortpick_v2_strategy_search_artifact_from_series(
+        series_by_symbol,
+        signal_days=[days[2]],
+        trade_days=days[2:],
+        candidate_sources=(control, exit_source),
+        start_date=days[0],
+        end_date=days[-1],
+        initial_cash=20_000.0,
+        horizon_days=10,
+        account_profile="new_retail_cash_account",
+        candidate_batch="h10_exit",
+        generated_at=datetime(2026, 6, 15, 3, 0, tzinfo=UTC),
+    )
+
+    assert artifact["input_contracts"]["exit_model"]["exit_tracks"] == [  # type: ignore[index]
+        "mechanical_horizon_exit",
+        "limit_down_blocked_exit",
+        "close_stop_loss_exit",
+        "close_take_profit_exit",
+        "close_trailing_stop_exit",
+    ]
 
 
 def test_next_strategy_search_candidate_sources_include_expected_batch_ids() -> None:
@@ -533,4 +628,26 @@ def test_h10_ma_accel_refine_strategy_search_candidate_sources_include_expected_
     assert [source.source_id for source in sources] == [
         "low_turnover_20d_uptrend_liquid_top120",
         *H10_MA_ACCEL_REFINE_CANDIDATE_SOURCE_IDS,
+    ]
+
+
+def test_h10_exit_strategy_search_candidate_sources_include_expected_batch_ids() -> None:
+    days = [date(2025, 1, 1) + timedelta(days=index) for index in range(150)]
+    series_by_symbol = {
+        "000300.SH": _series("000300.SH", [100 + index * 0.10 for index in range(150)]),
+        "600001.SH": _series("600001.SH", [10 + index * 0.04 for index in range(150)]),
+        "600002.SH": _series("600002.SH", [12 + index * 0.05 for index in range(150)]),
+        "600003.SH": _series("600003.SH", [15 + index * 0.03 for index in range(150)]),
+    }
+
+    sources = build_h10_exit_strategy_search_candidate_sources(
+        series_by_symbol,
+        signal_days=days[125:130],
+        pool_limit=40,
+        rank_limit=6,
+    )
+
+    assert [source.source_id for source in sources] == [
+        "low_turnover_20d_uptrend_liquid_top120",
+        *H10_EXIT_CANDIDATE_SOURCE_IDS,
     ]

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+
+import jsonschema
+import pytest
 
 import ashare_evidence.cli as cli_module
 from ashare_evidence.shortpick_market_factor_study import _Bar, _Series
@@ -78,6 +82,23 @@ def _artifact_for_rules(rule_configs: tuple[ShortpickV2RuleConfig, ...]) -> dict
     )
 
 
+def _dynamic_exit_artifact(rule: ShortpickV2RuleConfig, prices: list[float]) -> dict[str, object]:
+    days = [date(2026, 1, 1) + timedelta(days=index) for index in range(len(prices))]
+    return build_shortpick_v2_replay_artifact_from_series(
+        {"600001.SH": _series("600001.SH", prices)},
+        signal_days=[days[1]],
+        trade_days=days[1:],
+        selections={days[1]: ["600001.SH"]},
+        start_date=days[0],
+        end_date=days[-1],
+        initial_cash=20_000.0,
+        horizon_days=4,
+        account_profile="new_retail_cash_account",
+        rule_configs=(rule,),
+        generated_at=datetime(2026, 6, 15, 8, 0, tzinfo=UTC),
+    )
+
+
 def test_shortpick_v2_topn_fallback_buys_candidate_without_delayed_entry() -> None:
     rule = ShortpickV2RuleConfig(
         config_id="test_top2_fallback",
@@ -115,7 +136,9 @@ def test_shortpick_v2_topn_fallback_buys_candidate_without_delayed_entry() -> No
 
     result = artifact["results"][0]  # type: ignore[index]
     decision = result["decision_samples"][0]  # type: ignore[index]
-    assert artifact["data_scope"]["market_reference_mode"] == "eligible_universe_equal_weight_close_to_close"  # type: ignore[index]
+    assert artifact["data_scope"]["market_reference_mode"] == (  # type: ignore[index]
+        "eligible_universe_equal_weight_close_to_close"
+    )
     assert artifact["data_scope"]["market_reference_sample_count"] == 2  # type: ignore[index]
     assert artifact["data_scope"]["market_reference_total_return"] == 0.0  # type: ignore[index]
     assert result["summary"]["market_reference_total_return"] == 0.0  # type: ignore[index]
@@ -126,7 +149,98 @@ def test_shortpick_v2_topn_fallback_buys_candidate_without_delayed_entry() -> No
     assert decision["quantity"] >= 100
     assert result["summary"]["fallback_trade_count"] == 1  # type: ignore[index]
     assert result["reason_counts"]["candidate_reject:insufficient_cash"] == 1  # type: ignore[index]
-    assert {item["action"] for item in result["decision_samples"]} <= {"buy_primary", "buy_fallback", "skip"}  # type: ignore[index]
+    assert {item["action"] for item in result["decision_samples"]} <= {  # type: ignore[index]
+        "buy_primary",
+        "buy_fallback",
+        "skip",
+    }
+
+
+def test_shortpick_v2_close_stop_loss_exits_before_horizon_and_validates_schema() -> None:
+    rule = ShortpickV2RuleConfig(
+        config_id="test_fixed_notional_stop_loss",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=1,
+        fallback_enabled=False,
+        target_mode="fixed_notional",
+        target_notional=10_000.0,
+        stop_loss_pct=0.08,
+        allowed_actions=("buy_primary", "skip"),
+    )
+    artifact = _dynamic_exit_artifact(rule, [10.0, 10.0, 10.0, 9.7, 9.1, 9.0, 12.0, 12.0])
+    schema = json.loads(
+        Path("docs/contracts/registry/schemas/shortpick_v2_replay_artifact.schema.json").read_text(encoding="utf-8")
+    )
+
+    jsonschema.Draft202012Validator(schema).validate(artifact)
+    assert artifact["rule_matrix"][0]["exit_policy"]["dynamic_exit_triggers"] == ["stop_loss"]  # type: ignore[index]
+    assert artifact["input_contracts"]["exit_model"]["exit_tracks"] == [  # type: ignore[index]
+        "mechanical_horizon_exit",
+        "limit_down_blocked_exit",
+        "close_stop_loss_exit",
+    ]
+    result = artifact["results"][0]  # type: ignore[index]
+    assert result["reason_counts"]["exit:stop_loss"] == 1
+    assert result["summary"]["dynamic_exit_count"] == 1  # type: ignore[index]
+    assert result["summary"]["exit_reason_counts"] == {"stop_loss": 1}  # type: ignore[index]
+    assert result["summary"]["open_position_count"] == 0  # type: ignore[index]
+
+
+def test_shortpick_v2_close_take_profit_exits_before_horizon() -> None:
+    rule = ShortpickV2RuleConfig(
+        config_id="test_fixed_notional_take_profit",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=1,
+        fallback_enabled=False,
+        target_mode="fixed_notional",
+        target_notional=10_000.0,
+        take_profit_pct=0.08,
+        allowed_actions=("buy_primary", "skip"),
+    )
+
+    artifact = _dynamic_exit_artifact(rule, [10.0, 10.0, 10.0, 10.5, 10.9, 11.0, 9.0, 9.0])
+    result = artifact["results"][0]  # type: ignore[index]
+
+    assert result["reason_counts"]["exit:take_profit"] == 1
+    assert result["summary"]["dynamic_exit_count"] == 1  # type: ignore[index]
+    assert result["summary"]["exit_reason_counts"] == {"take_profit": 1}  # type: ignore[index]
+
+
+def test_shortpick_v2_close_trailing_stop_exits_after_activation() -> None:
+    rule = ShortpickV2RuleConfig(
+        config_id="test_fixed_notional_trailing_stop",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=1,
+        fallback_enabled=False,
+        target_mode="fixed_notional",
+        target_notional=10_000.0,
+        trailing_stop_pct=0.05,
+        trailing_activation_pct=0.08,
+        allowed_actions=("buy_primary", "skip"),
+    )
+
+    artifact = _dynamic_exit_artifact(rule, [10.0, 10.0, 10.0, 11.0, 10.3, 10.2, 12.0, 12.0])
+    result = artifact["results"][0]  # type: ignore[index]
+
+    assert result["reason_counts"]["exit:trailing_stop"] == 1
+    assert result["summary"]["dynamic_exit_count"] == 1  # type: ignore[index]
+    assert result["summary"]["exit_reason_counts"] == {"trailing_stop": 1}  # type: ignore[index]
+
+
+def test_shortpick_v2_trailing_exit_requires_stop_and_activation_pair() -> None:
+    rule = ShortpickV2RuleConfig(
+        config_id="test_invalid_trailing",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=1,
+        fallback_enabled=False,
+        target_mode="fixed_notional",
+        target_notional=10_000.0,
+        trailing_stop_pct=0.06,
+        allowed_actions=("buy_primary", "skip"),
+    )
+
+    with pytest.raises(ValueError, match="trailing exit requires both stop and activation pct"):
+        _artifact_for_rules((rule,))
 
 
 def test_shortpick_v2_top1_rule_skips_instead_of_using_fallback() -> None:

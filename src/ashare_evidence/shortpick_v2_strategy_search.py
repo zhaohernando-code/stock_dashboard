@@ -65,6 +65,7 @@ STRATEGY_SEARCH_BATCH_H10_ROBUST = "h10_robust"
 STRATEGY_SEARCH_BATCH_H10_STRENGTH = "h10_strength"
 STRATEGY_SEARCH_BATCH_H10_MA_ACCEL = "h10_ma_accel"
 STRATEGY_SEARCH_BATCH_H10_MA_ACCEL_REFINE = "h10_ma_accel_refine"
+STRATEGY_SEARCH_BATCH_H10_EXIT = "h10_exit"
 STRATEGY_SEARCH_BATCHES = (
     STRATEGY_SEARCH_BATCH_INITIAL,
     STRATEGY_SEARCH_BATCH_NEXT,
@@ -74,6 +75,7 @@ STRATEGY_SEARCH_BATCHES = (
     STRATEGY_SEARCH_BATCH_H10_STRENGTH,
     STRATEGY_SEARCH_BATCH_H10_MA_ACCEL,
     STRATEGY_SEARCH_BATCH_H10_MA_ACCEL_REFINE,
+    STRATEGY_SEARCH_BATCH_H10_EXIT,
 )
 NEXT_ROUND_CANDIDATE_SOURCE_IDS = (
     "trend_low_vol_breakout_v1",
@@ -142,6 +144,9 @@ H10_MA_ACCEL_REFINE_CANDIDATE_SOURCE_IDS = (
     "ma_accel_volume_confirm_market_gated_h10_v4",
     "ma_accel_volume_confirm_rs_weighted_h10_v4",
     "ma_accel_volume_confirm_pullback_band_h10_v4",
+)
+H10_EXIT_CANDIDATE_SOURCE_IDS = (
+    "ma_accel_volume_confirm_exit_seed_h10_v1",
 )
 H10_QUIET_RULE_CONFIGS = (
     ShortpickV2RuleConfig(
@@ -342,6 +347,92 @@ H10_MA_ACCEL_REFINE_RULE_CONFIGS = (
         allowed_actions=("buy_primary", "buy_fallback", "skip"),
     ),
 )
+H10_EXIT_RULE_CONFIGS = (
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_40k_top5_h10_exit_baseline_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=40_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_45k_top5_h10_exit_baseline_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=45_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_40k_top5_stop8_h10_exit_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=40_000.0,
+        stop_loss_pct=0.08,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_45k_top5_stop8_h10_exit_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=45_000.0,
+        stop_loss_pct=0.08,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_40k_top5_stop8_take12_h10_exit_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=40_000.0,
+        stop_loss_pct=0.08,
+        take_profit_pct=0.12,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_45k_top5_stop8_take12_h10_exit_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=45_000.0,
+        stop_loss_pct=0.08,
+        take_profit_pct=0.12,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_40k_top5_stop8_trail6_after10_h10_exit_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=40_000.0,
+        stop_loss_pct=0.08,
+        trailing_stop_pct=0.06,
+        trailing_activation_pct=0.10,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_45k_top5_stop8_trail6_after10_h10_exit_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=45_000.0,
+        stop_loss_pct=0.08,
+        trailing_stop_pct=0.06,
+        trailing_activation_pct=0.10,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -473,6 +564,13 @@ def _build_strategy_search_candidate_sources(
         )
     if candidate_batch == STRATEGY_SEARCH_BATCH_H10_MA_ACCEL_REFINE:
         return build_h10_ma_accel_refine_strategy_search_candidate_sources(
+            series_by_symbol,
+            signal_days=signal_days,
+            pool_limit=pool_limit,
+            rank_limit=rank_limit,
+        )
+    if candidate_batch == STRATEGY_SEARCH_BATCH_H10_EXIT:
+        return build_h10_exit_strategy_search_candidate_sources(
             series_by_symbol,
             signal_days=signal_days,
             pool_limit=pool_limit,
@@ -873,6 +971,49 @@ def build_h10_ma_accel_refine_strategy_search_candidate_sources(
     )
 
 
+def build_h10_exit_strategy_search_candidate_sources(
+    series_by_symbol: dict[str, Any],
+    *,
+    signal_days: list[date],
+    pool_limit: int,
+    rank_limit: int,
+) -> tuple[StrategySearchCandidateSource, ...]:
+    effective_rank_limit = max(
+        rank_limit,
+        max(config.candidate_rank_limit for config in H10_EXIT_RULE_CONFIGS),
+    )
+    control_selections = _build_low_turnover_uptrend_candidate_pool(
+        series_by_symbol,
+        signal_days=signal_days,
+        pool_limit=pool_limit,
+        rank_limit=effective_rank_limit,
+    )
+    regime_features = _regime_features_by_day(series_by_symbol, signal_days=signal_days, pool_limit=pool_limit)
+    h10_exit_selections = _build_h10_ma_accel_batch_selections(
+        series_by_symbol,
+        signal_days=signal_days,
+        source_ids=H10_EXIT_CANDIDATE_SOURCE_IDS,
+        regime_features=regime_features,
+        pool_limit=pool_limit,
+        rank_limit=effective_rank_limit,
+    )
+    return (
+        StrategySearchCandidateSource(
+            source_id=CONTROL_CANDIDATE_SOURCE_ID,
+            source_ref=SHORTPICK_V2_REPLAY_CANDIDATE_SOURCE_REF,
+            selections=control_selections,
+        ),
+        *(
+            StrategySearchCandidateSource(
+                source_id=source_id,
+                source_ref=f"market_only_reconstruction:shortpick_v2_h10_exit_round:{source_id}",
+                selections=h10_exit_selections[source_id],
+            )
+            for source_id in H10_EXIT_CANDIDATE_SOURCE_IDS
+        ),
+    )
+
+
 def build_shortpick_v2_strategy_search_artifact_from_series(
     series_by_symbol: dict[str, Any],
     *,
@@ -1009,6 +1150,8 @@ def _rule_configs_for_source(source_id: str) -> tuple[ShortpickV2RuleConfig, ...
         return tuple(_prefixed_rule_config(source_id, config) for config in H10_MA_ACCEL_RULE_CONFIGS)
     if source_id in H10_MA_ACCEL_REFINE_CANDIDATE_SOURCE_IDS:
         return tuple(_prefixed_rule_config(source_id, config) for config in H10_MA_ACCEL_REFINE_RULE_CONFIGS)
+    if source_id in H10_EXIT_CANDIDATE_SOURCE_IDS:
+        return tuple(_prefixed_rule_config(source_id, config) for config in H10_EXIT_RULE_CONFIGS)
     return tuple(_prefixed_rule_config(source_id, config) for config in DEFAULT_SHORTPICK_V2_RULE_CONFIGS)
 
 
@@ -1025,6 +1168,10 @@ def _prefixed_rule_config(source_id: str, config: ShortpickV2RuleConfig) -> Shor
         max_position_count=config.max_position_count,
         max_position_pct=config.max_position_pct,
         board_lot_size=config.board_lot_size,
+        stop_loss_pct=config.stop_loss_pct,
+        take_profit_pct=config.take_profit_pct,
+        trailing_stop_pct=config.trailing_stop_pct,
+        trailing_activation_pct=config.trailing_activation_pct,
     )
 
 
@@ -1064,6 +1211,9 @@ def _merge_child_artifacts(
         ),
         "allowed_evidence_basis": ["historical_backtest", "market_only_reconstruction"],
     }
+    exit_model = dict(input_contracts.get("exit_model") or {})
+    exit_model["exit_tracks"] = _merged_exit_tracks(child_artifacts)
+    input_contracts["exit_model"] = exit_model
     template["input_contracts"] = input_contracts
     data_scope = dict(template.get("data_scope") or {})
     coverage_notes = list(data_scope.get("coverage_notes") or [])
@@ -1082,6 +1232,16 @@ def _merge_child_artifacts(
     )
     _validate_merged_artifact(template)
     return template
+
+
+def _merged_exit_tracks(child_artifacts: list[dict[str, Any]]) -> list[str]:
+    tracks: list[str] = []
+    for child in child_artifacts:
+        exit_model = (child.get("input_contracts") or {}).get("exit_model") or {}
+        for track in exit_model.get("exit_tracks") or []:
+            if track not in tracks:
+                tracks.append(str(track))
+    return tracks
 
 
 def _build_h10_quiet_batch_selections(
@@ -1996,7 +2156,7 @@ def _h10_ma_accel_candidate_allows(
             and float(item["close_position"]) >= 0.50
             and turnover <= 4.50
         )
-    if source_id == "ma_accel_volume_confirm_seed_h10_v4":
+    if source_id in {"ma_accel_volume_confirm_seed_h10_v4", "ma_accel_volume_confirm_exit_seed_h10_v1"}:
         return (
             breadth10 >= 0.45
             and market_ret20 >= -0.06
@@ -2142,7 +2302,7 @@ def _h10_ma_accel_score(
         )
     if source_id == "ma_accel_volume_confirm_h10_v3":
         return base_score + min(float(item["amount_ratio20"]) / 2.5, 1.2) + float(item["close_position"])
-    if source_id == "ma_accel_volume_confirm_seed_h10_v4":
+    if source_id in {"ma_accel_volume_confirm_seed_h10_v4", "ma_accel_volume_confirm_exit_seed_h10_v1"}:
         return base_score + min(float(item["amount_ratio20"]) / 2.5, 1.2) + float(item["close_position"])
     if source_id == "ma_accel_volume_confirm_dense_guard_h10_v4":
         return (
@@ -2778,6 +2938,8 @@ def _validate_strategy_search_batch_horizon(*, candidate_batch: str, horizon_day
         raise ValueError("candidate_batch h10_ma_accel requires horizon_days=10")
     if candidate_batch == STRATEGY_SEARCH_BATCH_H10_MA_ACCEL_REFINE and horizon_days != 10:
         raise ValueError("candidate_batch h10_ma_accel_refine requires horizon_days=10")
+    if candidate_batch == STRATEGY_SEARCH_BATCH_H10_EXIT and horizon_days != 10:
+        raise ValueError("candidate_batch h10_exit requires horizon_days=10")
 
 
 def _strategy_search_artifact_id(

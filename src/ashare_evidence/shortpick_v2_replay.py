@@ -46,6 +46,7 @@ DEFAULT_COST_BPS = 20.0
 DEFAULT_STAMP_TAX_BPS = 5.0
 DEFAULT_DECISION_SAMPLE_LIMIT = 40
 VALID_ACTIONS = {"buy_primary", "buy_fallback", "skip"}
+DYNAMIC_EXIT_REASONS = {"stop_loss", "take_profit", "trailing_stop"}
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,10 @@ class ShortpickV2RuleConfig:
     max_position_count: int = DEFAULT_MAX_POSITION_COUNT
     max_position_pct: float = DEFAULT_MAX_POSITION_PCT
     board_lot_size: int = DEFAULT_BOARD_LOT_SIZE
+    stop_loss_pct: float | None = None
+    take_profit_pct: float | None = None
+    trailing_stop_pct: float | None = None
+    trailing_activation_pct: float | None = None
 
     @property
     def fallback_max_rank(self) -> int:
@@ -92,7 +97,27 @@ class ShortpickV2RuleConfig:
                 "max_position_pct": self.max_position_pct,
                 "same_symbol_exposure_cap": True,
             },
+            "exit_policy": {
+                "mechanical_horizon_exit": True,
+                "dynamic_exit_triggers": self.dynamic_exit_triggers,
+                "stop_loss_pct": self.stop_loss_pct,
+                "take_profit_pct": self.take_profit_pct,
+                "trailing_stop_pct": self.trailing_stop_pct,
+                "trailing_activation_pct": self.trailing_activation_pct,
+                "price_basis": "daily_close",
+            },
         }
+
+    @property
+    def dynamic_exit_triggers(self) -> list[str]:
+        triggers: list[str] = []
+        if self.stop_loss_pct is not None:
+            triggers.append("stop_loss")
+        if self.take_profit_pct is not None:
+            triggers.append("take_profit")
+        if self.trailing_stop_pct is not None:
+            triggers.append("trailing_stop")
+        return triggers
 
 
 @dataclass(frozen=True)
@@ -121,6 +146,7 @@ class _OpenPosition:
     shares: int
     entry_price: float
     cost_basis: float
+    peak_close: float
 
 
 @dataclass(frozen=True)
@@ -318,7 +344,8 @@ def build_shortpick_v2_replay_artifact_from_series(
             "stock_like_series_count": stock_like_series_count,
             "account_profile": account_profile,
             "coverage_status": _coverage_status(signal_days, trade_days, stock_like_series_count),
-            "coverage_notes": coverage_notes or ["Synthetic or caller-supplied fixed daily bars; no refresh performed."],
+            "coverage_notes": coverage_notes
+            or ["Synthetic or caller-supplied fixed daily bars; no refresh performed."],
             "market_reference_mode": market_reference["mode"],
             "market_reference_date_from": market_reference["date_from"],
             "market_reference_date_to": market_reference["date_to"],
@@ -352,7 +379,9 @@ def build_shortpick_v2_replay_artifact_from_series(
             "cost_model": {
                 "cost_bps": cost_bps,
                 "stamp_tax_bps": stamp_tax_bps,
-                "description": "Cost bps are applied on both buy and sell notional; stamp tax bps apply on sell notional.",
+                "description": (
+                    "Cost bps are applied on both buy and sell notional; stamp tax bps apply on sell notional."
+                ),
             },
             "entry_model": {
                 "entry_price_source": entry_price_source,
@@ -363,8 +392,11 @@ def build_shortpick_v2_replay_artifact_from_series(
             },
             "exit_model": {
                 "holding_days": horizon_days,
-                "exit_tracks": ["mechanical_horizon_exit", "limit_down_blocked_exit"],
-                "unfillable_exit_policy": "If the horizon exit is a one-price limit-down bar, keep the position open.",
+                "exit_tracks": _exit_tracks(rule_configs),
+                "unfillable_exit_policy": (
+                    "If a mechanical or dynamic close-based exit is a one-price limit-down bar, keep the "
+                    "position open and retry exit evaluation on later trade days."
+                ),
             },
         },
         "rule_matrix": [config.to_artifact() for config in rule_configs],
@@ -460,16 +492,24 @@ def _simulate_rule_config(
     total_buy_value = 0.0
     total_sell_value = 0.0
     blocked_exit_count = 0
+    exit_reason_counts: Counter[str] = Counter()
 
     for current_day in active_days:
         still_open: list[_OpenPosition] = []
         for position in open_positions:
-            if current_day < position.planned_exit_day:
-                still_open.append(position)
-                continue
             series = series_by_symbol.get(position.symbol)
             current_index = series.by_day.get(current_day) if series is not None else None
             if series is None or current_index is None:
+                still_open.append(position)
+                continue
+            close = float(series.bars[current_index].close)
+            position.peak_close = max(position.peak_close, close)
+            exit_reason = (
+                "mechanical_horizon"
+                if current_day >= position.planned_exit_day
+                else _dynamic_exit_reason(position, close=close, current_day=current_day, config=config)
+            )
+            if exit_reason is None:
                 still_open.append(position)
                 continue
             if _exit_is_unfillable_limit_down(series, current_index):
@@ -477,11 +517,11 @@ def _simulate_rule_config(
                 reason_counts["blocked_exit:limit_down"] += 1
                 still_open.append(position)
                 continue
-            close = float(series.bars[current_index].close)
             proceeds = position.shares * close * (1.0 - sell_cost_rate)
             cash += proceeds
             total_sell_value += proceeds
-            reason_counts["exit:mechanical_horizon"] += 1
+            reason_counts[f"exit:{exit_reason}"] += 1
+            exit_reason_counts[exit_reason] += 1
         open_positions = still_open
 
         for signal_entry in sorted(entries_by_day.get(current_day, []), key=lambda item: item.signal_day):
@@ -571,6 +611,10 @@ def _simulate_rule_config(
             "final_market_value": round(final_market_value, 6),
             "open_position_count": len(open_positions),
             "blocked_exit_count": blocked_exit_count,
+            "dynamic_exit_count": sum(
+                count for reason, count in exit_reason_counts.items() if reason in DYNAMIC_EXIT_REASONS
+            ),
+            "exit_reason_counts": dict(sorted(exit_reason_counts.items())),
             "total_buy_value": round(total_buy_value, 6),
             "total_sell_value": round(total_sell_value, 6),
             "skipped_ratio": round(skip_count / len(signal_days), 6) if signal_days else 0.0,
@@ -754,6 +798,7 @@ def _evaluate_signal_entry(
                 shares=shares,
                 entry_price=candidate.entry_price,
                 cost_basis=cash_spent,
+                peak_close=candidate.entry_price,
             ),
             rejected_reasons=tuple(rejected_reasons),
         )
@@ -851,6 +896,31 @@ def _shares_from_cash(
     return shares, cash_spent
 
 
+def _dynamic_exit_reason(
+    position: _OpenPosition,
+    *,
+    close: float,
+    current_day: date,
+    config: ShortpickV2RuleConfig,
+) -> str | None:
+    if current_day <= position.entry_day or position.entry_price <= 0 or close <= 0:
+        return None
+    return_since_entry = close / position.entry_price - 1.0
+    if config.stop_loss_pct is not None and return_since_entry <= -float(config.stop_loss_pct):
+        return "stop_loss"
+    if config.take_profit_pct is not None and return_since_entry >= float(config.take_profit_pct):
+        return "take_profit"
+    if (
+        config.trailing_stop_pct is not None
+        and config.trailing_activation_pct is not None
+        and position.peak_close > 0
+        and position.peak_close / position.entry_price - 1.0 >= float(config.trailing_activation_pct)
+        and close / position.peak_close - 1.0 <= -float(config.trailing_stop_pct)
+    ):
+        return "trailing_stop"
+    return None
+
+
 def _nav_and_market_value(
     series_by_symbol: dict[str, Any],
     open_positions: list[_OpenPosition],
@@ -895,6 +965,28 @@ def _validate_rule_configs(rule_configs: tuple[ShortpickV2RuleConfig, ...]) -> N
             raise ValueError(f"{config.config_id} disables fallback but has rank limit {config.candidate_rank_limit}")
         if config.board_lot_size < DEFAULT_BOARD_LOT_SIZE:
             raise ValueError(f"{config.config_id} board_lot_size must be at least {DEFAULT_BOARD_LOT_SIZE}")
+        _validate_rule_config_exit_policy(config)
+
+
+def _validate_rule_config_exit_policy(config: ShortpickV2RuleConfig) -> None:
+    for field_name in ("stop_loss_pct", "take_profit_pct", "trailing_stop_pct", "trailing_activation_pct"):
+        value = getattr(config, field_name)
+        if value is not None and not 0.0 < float(value) < 1.0:
+            raise ValueError(f"{config.config_id} {field_name} must be between 0 and 1")
+    if (config.trailing_stop_pct is None) != (config.trailing_activation_pct is None):
+        raise ValueError(f"{config.config_id} trailing exit requires both stop and activation pct")
+
+
+def _exit_tracks(rule_configs: tuple[ShortpickV2RuleConfig, ...]) -> list[str]:
+    tracks = ["mechanical_horizon_exit", "limit_down_blocked_exit"]
+    trigger_to_track = {
+        "stop_loss": "close_stop_loss_exit",
+        "take_profit": "close_take_profit_exit",
+        "trailing_stop": "close_trailing_stop_exit",
+    }
+    for trigger in sorted({trigger for config in rule_configs for trigger in config.dynamic_exit_triggers}):
+        tracks.append(trigger_to_track[trigger])
+    return tracks
 
 
 def _market_reference_summary(series_by_symbol: dict[str, Any], *, signal_days: list[date]) -> dict[str, Any]:

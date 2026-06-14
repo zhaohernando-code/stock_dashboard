@@ -356,7 +356,8 @@
         "fallback_policy",
         "lot_policy",
         "cash_policy",
-        "position_policy"
+        "position_policy",
+        "exit_policy"
       ],
       "properties": {
         "config_id": {
@@ -445,6 +446,58 @@
               "maximum": 1
             }
           }
+        },
+        "exit_policy": {
+          "$ref": "#/$defs/exit_policy"
+        }
+      }
+    },
+    "exit_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mechanical_horizon_exit",
+        "dynamic_exit_triggers",
+        "stop_loss_pct",
+        "take_profit_pct",
+        "trailing_stop_pct",
+        "trailing_activation_pct",
+        "price_basis"
+      ],
+      "properties": {
+        "mechanical_horizon_exit": {
+          "const": true
+        },
+        "dynamic_exit_triggers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["stop_loss", "take_profit", "trailing_stop"]
+          },
+          "uniqueItems": true
+        },
+        "stop_loss_pct": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1
+        },
+        "take_profit_pct": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1
+        },
+        "trailing_stop_pct": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1
+        },
+        "trailing_activation_pct": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1
+        },
+        "price_basis": {
+          "const": "daily_close"
         }
       }
     },
