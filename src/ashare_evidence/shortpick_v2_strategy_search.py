@@ -66,6 +66,7 @@ STRATEGY_SEARCH_BATCH_H10_STRENGTH = "h10_strength"
 STRATEGY_SEARCH_BATCH_H10_MA_ACCEL = "h10_ma_accel"
 STRATEGY_SEARCH_BATCH_H10_MA_ACCEL_REFINE = "h10_ma_accel_refine"
 STRATEGY_SEARCH_BATCH_H10_EXIT = "h10_exit"
+STRATEGY_SEARCH_BATCH_H10_ENTRY_QUALITY = "h10_entry_quality"
 STRATEGY_SEARCH_BATCHES = (
     STRATEGY_SEARCH_BATCH_INITIAL,
     STRATEGY_SEARCH_BATCH_NEXT,
@@ -76,6 +77,7 @@ STRATEGY_SEARCH_BATCHES = (
     STRATEGY_SEARCH_BATCH_H10_MA_ACCEL,
     STRATEGY_SEARCH_BATCH_H10_MA_ACCEL_REFINE,
     STRATEGY_SEARCH_BATCH_H10_EXIT,
+    STRATEGY_SEARCH_BATCH_H10_ENTRY_QUALITY,
 )
 NEXT_ROUND_CANDIDATE_SOURCE_IDS = (
     "trend_low_vol_breakout_v1",
@@ -147,6 +149,18 @@ H10_MA_ACCEL_REFINE_CANDIDATE_SOURCE_IDS = (
 )
 H10_EXIT_CANDIDATE_SOURCE_IDS = (
     "ma_accel_volume_confirm_exit_seed_h10_v1",
+)
+H10_ENTRY_QUALITY_CANDIDATE_SOURCE_IDS = (
+    "ma_accel_quality_rerank_h10_v5",
+    "ma_accel_regime_fill_h10_v5",
+    "ma_accel_early_inflection_h10_v5",
+    "ma_accel_vol_squeeze_breakout_h10_v5",
+    "ma_accel_volume_convergence_h10_v5",
+    "ma_accel_industry_leader_h10_v5",
+    "ma_accel_pullback_vol_calibrated_h10_v5",
+    "ma_accel_range_contraction_h10_v5",
+    "ma_accel_slope_acceleration_h10_v5",
+    "ma_accel_gap_hold_h10_v5",
 )
 H10_QUIET_RULE_CONFIGS = (
     ShortpickV2RuleConfig(
@@ -433,6 +447,44 @@ H10_EXIT_RULE_CONFIGS = (
         allowed_actions=("buy_primary", "buy_fallback", "skip"),
     ),
 )
+H10_ENTRY_QUALITY_RULE_CONFIGS = (
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_35k_top5_h10_entry_quality_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=35_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_40k_top5_h10_entry_quality_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=40_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_45k_top5_h10_entry_quality_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=45_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_50k_top5_h10_entry_quality_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=50_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -571,6 +623,13 @@ def _build_strategy_search_candidate_sources(
         )
     if candidate_batch == STRATEGY_SEARCH_BATCH_H10_EXIT:
         return build_h10_exit_strategy_search_candidate_sources(
+            series_by_symbol,
+            signal_days=signal_days,
+            pool_limit=pool_limit,
+            rank_limit=rank_limit,
+        )
+    if candidate_batch == STRATEGY_SEARCH_BATCH_H10_ENTRY_QUALITY:
+        return build_h10_entry_quality_strategy_search_candidate_sources(
             series_by_symbol,
             signal_days=signal_days,
             pool_limit=pool_limit,
@@ -1014,6 +1073,49 @@ def build_h10_exit_strategy_search_candidate_sources(
     )
 
 
+def build_h10_entry_quality_strategy_search_candidate_sources(
+    series_by_symbol: dict[str, Any],
+    *,
+    signal_days: list[date],
+    pool_limit: int,
+    rank_limit: int,
+) -> tuple[StrategySearchCandidateSource, ...]:
+    effective_rank_limit = max(
+        rank_limit,
+        max(config.candidate_rank_limit for config in H10_ENTRY_QUALITY_RULE_CONFIGS),
+    )
+    control_selections = _build_low_turnover_uptrend_candidate_pool(
+        series_by_symbol,
+        signal_days=signal_days,
+        pool_limit=pool_limit,
+        rank_limit=effective_rank_limit,
+    )
+    regime_features = _regime_features_by_day(series_by_symbol, signal_days=signal_days, pool_limit=pool_limit)
+    entry_quality_selections = _build_h10_ma_accel_batch_selections(
+        series_by_symbol,
+        signal_days=signal_days,
+        source_ids=H10_ENTRY_QUALITY_CANDIDATE_SOURCE_IDS,
+        regime_features=regime_features,
+        pool_limit=pool_limit,
+        rank_limit=effective_rank_limit,
+    )
+    return (
+        StrategySearchCandidateSource(
+            source_id=CONTROL_CANDIDATE_SOURCE_ID,
+            source_ref=SHORTPICK_V2_REPLAY_CANDIDATE_SOURCE_REF,
+            selections=control_selections,
+        ),
+        *(
+            StrategySearchCandidateSource(
+                source_id=source_id,
+                source_ref=f"market_only_reconstruction:shortpick_v2_h10_entry_quality_round:{source_id}",
+                selections=entry_quality_selections[source_id],
+            )
+            for source_id in H10_ENTRY_QUALITY_CANDIDATE_SOURCE_IDS
+        ),
+    )
+
+
 def build_shortpick_v2_strategy_search_artifact_from_series(
     series_by_symbol: dict[str, Any],
     *,
@@ -1152,6 +1254,8 @@ def _rule_configs_for_source(source_id: str) -> tuple[ShortpickV2RuleConfig, ...
         return tuple(_prefixed_rule_config(source_id, config) for config in H10_MA_ACCEL_REFINE_RULE_CONFIGS)
     if source_id in H10_EXIT_CANDIDATE_SOURCE_IDS:
         return tuple(_prefixed_rule_config(source_id, config) for config in H10_EXIT_RULE_CONFIGS)
+    if source_id in H10_ENTRY_QUALITY_CANDIDATE_SOURCE_IDS:
+        return tuple(_prefixed_rule_config(source_id, config) for config in H10_ENTRY_QUALITY_RULE_CONFIGS)
     return tuple(_prefixed_rule_config(source_id, config) for config in DEFAULT_SHORTPICK_V2_RULE_CONFIGS)
 
 
@@ -2037,7 +2141,7 @@ def _rank_h10_ma_accel_contexts(
         ),
         reverse=True,
     )
-    if source_id == "ma_accel_sector_tailwind_h10_v3":
+    if source_id in {"ma_accel_sector_tailwind_h10_v3", "ma_accel_industry_leader_h10_v5"}:
         ranked = _dedupe_industry(ranked, max_per_industry=2)
     return ranked
 
@@ -2053,6 +2157,9 @@ def _h10_ma_accel_candidate_allows(
     market_ret60: float,
 ) -> bool:
     breadth10 = float(regime_features.get("universe_breadth10", 0.0))
+    universe_ret10_mean = float(regime_features.get("universe_ret10_mean", 0.0))
+    pool_ret1_mean = float(regime_features.get("pool_ret1_mean", 0.0))
+    pool_ret10_mean = float(regime_features.get("pool_ret10_mean", 0.0))
     close = float(item["close"])
     ma20 = float(item["ma20"] or 0.0)
     ma60 = float(item["ma60"] or 0.0)
@@ -2063,10 +2170,21 @@ def _h10_ma_accel_candidate_allows(
     drawdown20 = float(item["drawdown20"])
     volatility20 = float(item["volatility20"])
     volatility60 = float(item["volatility60"])
+    amount_ratio5 = float(item.get("amount_ratio5") or 0.0)
     amount_ratio20 = float(item["amount_ratio20"])
+    amount_ratio60 = float(item.get("amount_ratio60") or 0.0)
     turnover = float(item["turnover_rate"])
     ma20_slope = float(item["ma20_slope"])
+    ma20_slope_5d = float(item.get("ma20_slope_5d") or 0.0)
+    ma20_slope_5d_prev = float(item.get("ma20_slope_5d_prev") or 0.0)
     ma50_slope = float(item["ma50_slope"])
+    close_position = float(item.get("close_position") or 0.0)
+    close_position_ma5 = float(item.get("close_position_ma5") or 0.0)
+    range20 = float(item.get("range20") or 0.0)
+    range60 = float(item.get("range60") or 0.0)
+    low = float(item.get("low") or close)
+    open_gap = float(item.get("open_gap") or 0.0)
+    previous_return_1d = float(item.get("previous_return_1d") or 0.0)
     industry = str(item["industry"])
     industry_ret20 = industry_returns20.get(industry, 0.0)
     industry_ret60 = industry_returns60.get(industry, 0.0)
@@ -2079,6 +2197,24 @@ def _h10_ma_accel_candidate_allows(
         or float(item["amount"]) < 5_000_000.0
     ):
         return False
+    trend_base_allows = (
+        breadth10 >= 0.45
+        and market_ret20 >= -0.06
+        and close > ma20 > ma60
+        and ret20 >= 0.04
+        and ret60 > 0.0
+        and drawdown20 > -0.13
+        and volatility20 <= volatility60 * 1.25
+        and ma20_slope > 0.0
+        and ma20_slope >= ma50_slope * 1.02
+        and turnover <= 4.50
+    )
+    seed_base_allows = (
+        trend_base_allows
+        and -0.02 <= ret1 < 0.08
+        and 1.00 <= amount_ratio20 <= 3.50
+        and close_position >= 0.50
+    )
     if source_id == "ma_accel_momentum_loose_vol_h10_v3":
         return (
             breadth10 >= 0.45
@@ -2157,20 +2293,103 @@ def _h10_ma_accel_candidate_allows(
             and turnover <= 4.50
         )
     if source_id in {"ma_accel_volume_confirm_seed_h10_v4", "ma_accel_volume_confirm_exit_seed_h10_v1"}:
+        return seed_base_allows
+    if source_id == "ma_accel_quality_rerank_h10_v5":
+        return seed_base_allows
+    if source_id == "ma_accel_regime_fill_h10_v5":
+        return (
+            breadth10 >= 0.58
+            and pool_ret10_mean >= 0.04
+            and pool_ret1_mean <= 0.08
+            and universe_ret10_mean >= 0.0
+            and market_ret20 >= -0.02
+            and close > ma20 > ma60
+            and 0.03 <= ret20 <= 0.14
+            and ret60 > market_ret60
+            and ret1 < 0.06
+            and drawdown20 > -0.10
+            and volatility20 <= volatility60 * 1.15
+            and ma20_slope > 0.0
+            and ma50_slope >= -0.003
+            and 0.80 <= amount_ratio20 <= 2.80
+            and turnover <= 3.50
+        )
+    if source_id == "ma_accel_early_inflection_h10_v5":
         return (
             breadth10 >= 0.45
-            and market_ret20 >= -0.06
-            and close > ma20 > ma60
-            and ret20 >= 0.04
-            and ret60 > 0.0
-            and -0.02 <= ret1 < 0.08
-            and drawdown20 > -0.13
-            and volatility20 <= volatility60 * 1.25
+            and market_ret20 >= -0.05
+            and close > ma20 * 0.99
+            and ma20 > ma60 * 0.995
+            and 0.015 <= ret20 <= 0.08
+            and ret60 > -0.02
+            and -0.015 <= ret1 <= 0.04
+            and -0.10 <= drawdown20 <= -0.01
+            and volatility20 <= volatility60 * 1.15
             and ma20_slope > 0.0
-            and ma20_slope >= ma50_slope * 1.02
-            and 1.00 <= amount_ratio20 <= 3.50
-            and float(item["close_position"]) >= 0.50
-            and turnover <= 4.50
+            and ma50_slope >= -0.003
+            and 0.90 <= amount_ratio20 <= 2.50
+            and turnover <= 4.0
+        )
+    if source_id == "ma_accel_vol_squeeze_breakout_h10_v5":
+        return (
+            seed_base_allows
+            and volatility20 >= volatility60 * 0.45
+            and volatility20 <= volatility60 * 0.95
+            and range60 > 0.0
+            and range20 <= range60 * 0.92
+        )
+    if source_id == "ma_accel_volume_convergence_h10_v5":
+        amount_ratio_sync = _safe_ratio(amount_ratio5, amount_ratio20)
+        return (
+            seed_base_allows
+            and amount_ratio5 >= 1.05
+            and amount_ratio20 >= 1.10
+            and amount_ratio60 >= 0.95
+            and 0.65 <= amount_ratio_sync <= 1.75
+        )
+    if source_id == "ma_accel_industry_leader_h10_v5":
+        return (
+            seed_base_allows
+            and industry_ret20 >= market_ret20 + 0.02
+            and industry_ret60 >= market_ret60
+            and ret20 >= industry_ret20 + 0.03
+            and ret60 >= industry_ret60 + 0.02
+        )
+    if source_id == "ma_accel_pullback_vol_calibrated_h10_v5":
+        return (
+            trend_base_allows
+            and -0.04 <= ret1 <= 0.025
+            and close >= ma20 * 0.97
+            and low <= ma20 * 1.015
+            and close_position >= 0.55
+            and abs(drawdown20) <= volatility20 * 3.20
+            and 0.80 <= amount_ratio20 <= 3.50
+            and amount_ratio5 <= 2.50
+        )
+    if source_id == "ma_accel_range_contraction_h10_v5":
+        return (
+            seed_base_allows
+            and range60 > 0.0
+            and range20 <= range60 * 0.90
+            and close_position >= 0.60
+            and close_position_ma5 >= 0.55
+            and amount_ratio20 >= 1.00
+        )
+    if source_id == "ma_accel_slope_acceleration_h10_v5":
+        return (
+            seed_base_allows
+            and ma20_slope_5d > 0.0
+            and ma20_slope_5d_prev > 0.0
+            and ma20_slope_5d >= ma20_slope_5d_prev * 1.03
+        )
+    if source_id == "ma_accel_gap_hold_h10_v5":
+        return (
+            trend_base_allows
+            and previous_return_1d >= 0.06
+            and open_gap >= 0.005
+            and -0.02 <= ret1 <= 0.05
+            and close_position >= 0.60
+            and amount_ratio20 >= 1.00
         )
     if source_id == "ma_accel_volume_confirm_dense_guard_h10_v4":
         return (
@@ -2287,7 +2506,24 @@ def _h10_ma_accel_score(
     industry = str(item["industry"])
     industry_ret20 = industry_returns20.get(industry, 0.0)
     industry_ret60 = industry_returns60.get(industry, 0.0)
+    ret1 = float(item.get("return_1d") or 0.0)
+    ret20 = float(item.get("return_20d") or 0.0)
+    ret60 = float(item.get("return_60d") or 0.0)
     base_score = _base_ma_accel_score(pool, item, market_ret20=market_ret20, market_ret60=market_ret60)
+    amount_ratio5 = float(item.get("amount_ratio5") or 0.0)
+    amount_ratio20 = float(item.get("amount_ratio20") or 0.0)
+    amount_ratio60 = float(item.get("amount_ratio60") or 0.0)
+    close_position = float(item.get("close_position") or 0.0)
+    close_position_ma5 = float(item.get("close_position_ma5") or 0.0)
+    range20 = max(float(item.get("range20") or 0.0), 0.001)
+    range60 = max(float(item.get("range60") or 0.0), 0.001)
+    volatility20 = max(float(item.get("volatility20") or 0.0), 0.001)
+    volatility60 = max(float(item.get("volatility60") or 0.0), 0.001)
+    ma20 = max(float(item.get("ma20") or 0.0), 0.001)
+    close = float(item.get("close") or 0.0)
+    ma20_slope_5d = float(item.get("ma20_slope_5d") or 0.0)
+    ma20_slope_5d_prev = float(item.get("ma20_slope_5d_prev") or 0.0)
+    open_gap = float(item.get("open_gap") or 0.0)
     if source_id == "ma_accel_momentum_loose_vol_h10_v3":
         return base_score + _percentile_by(pool, "drawdown20", item)
     if source_id == "ma_accel_dense_rank_h10_v3":
@@ -2304,6 +2540,63 @@ def _h10_ma_accel_score(
         return base_score + min(float(item["amount_ratio20"]) / 2.5, 1.2) + float(item["close_position"])
     if source_id in {"ma_accel_volume_confirm_seed_h10_v4", "ma_accel_volume_confirm_exit_seed_h10_v1"}:
         return base_score + min(float(item["amount_ratio20"]) / 2.5, 1.2) + float(item["close_position"])
+    if source_id == "ma_accel_quality_rerank_h10_v5":
+        overheat_penalty = 0.0
+        overheat_penalty += max(close / ma20 - 1.12, 0.0) * 4.0
+        overheat_penalty += max(ret20 - 0.18, 0.0) * 3.0
+        overheat_penalty += max(amount_ratio20 - 2.8, 0.0) * 0.25
+        overheat_penalty += max(ret1 - 0.06, 0.0) * 4.0
+        volume_target = _target_pullback_score(amount_ratio20, target=1.8, width=1.0)
+        return base_score + volume_target + close_position + _inverse_percentile_by(pool, "return_1d", item) - overheat_penalty
+    if source_id == "ma_accel_regime_fill_h10_v5":
+        return (
+            ret20 / volatility20
+            + 0.5 * max(ret60 - market_ret60, 0.0)
+            + _inverse_percentile_by(pool, "turnover_rate", item)
+            + _inverse_percentile_by(pool, "return_1d", item)
+            + close_position
+        )
+    if source_id == "ma_accel_early_inflection_h10_v5":
+        return (
+            min(float(item.get("ma20_slope") or 0.0) * 20.0, 1.5)
+            + _target_pullback_score(float(item["drawdown20"]), target=-0.045, width=0.08)
+            + _inverse_percentile_by(pool, "return_1d", item)
+            + _inverse_percentile_by(pool, "volatility20", item)
+        )
+    if source_id == "ma_accel_vol_squeeze_breakout_h10_v5":
+        squeeze_bonus = max(0.0, 1.0 - volatility20 / volatility60)
+        range_bonus = max(0.0, 1.0 - range20 / range60)
+        return base_score + 2.0 * squeeze_bonus + range_bonus + close_position
+    if source_id == "ma_accel_volume_convergence_h10_v5":
+        volume_floor = min(amount_ratio5, amount_ratio20, amount_ratio60)
+        amount_sync = 1.0 - min(abs(amount_ratio5 - amount_ratio20) / max(amount_ratio5, amount_ratio20, 0.001), 1.0)
+        return base_score + min(volume_floor / 2.8, 1.2) + amount_sync + close_position
+    if source_id == "ma_accel_industry_leader_h10_v5":
+        relative_rows20 = [
+            float(row.get("return_20d") or 0.0) - industry_returns20.get(str(row.get("industry")), 0.0)
+            for row in pool
+        ]
+        relative_rows60 = [
+            float(row.get("return_60d") or 0.0) - industry_returns60.get(str(row.get("industry")), 0.0)
+            for row in pool
+        ]
+        relative20 = ret20 - industry_ret20
+        relative60 = ret60 - industry_ret60
+        return base_score + _percentile_value(relative_rows20, relative20) + 0.5 * _percentile_value(
+            relative_rows60, relative60
+        )
+    if source_id == "ma_accel_pullback_vol_calibrated_h10_v5":
+        ma20_proximity = max(0.0, 1.0 - abs(close / ma20 - 1.0) / 0.035)
+        drawdown_fit = max(0.0, 1.0 - abs(float(item["drawdown20"])) / max(volatility20 * 3.2, 0.001))
+        return base_score + ma20_proximity + 0.5 * close_position + 0.5 * drawdown_fit
+    if source_id == "ma_accel_range_contraction_h10_v5":
+        range_compression = max(0.0, 1.0 - range20 / range60)
+        return base_score + 1.5 * range_compression + close_position + 0.5 * close_position_ma5
+    if source_id == "ma_accel_slope_acceleration_h10_v5":
+        slope_delta = max(ma20_slope_5d - ma20_slope_5d_prev, 0.0)
+        return base_score + min(slope_delta * 20.0, 1.5) + _percentile_by(pool, "ma20_slope_5d", item)
+    if source_id == "ma_accel_gap_hold_h10_v5":
+        return base_score + min(open_gap * 8.0, 1.5) + close_position + min(amount_ratio20 / 2.5, 1.2)
     if source_id == "ma_accel_volume_confirm_dense_guard_h10_v4":
         return (
             base_score
@@ -2587,6 +2880,8 @@ def _next_round_context(series: Any, signal_day: date) -> dict[str, Any] | None:
     ma120 = _mean_window(closes, 120)
     window_index = len(closes) - 1
     ma20_prev = _mean_at(closes, window_index - 1, 20)
+    ma20_prev5 = _mean_at(closes, window_index - 5, 20)
+    ma20_prev10 = _mean_at(closes, window_index - 10, 20)
     ma50_prev = _mean_at(closes, window_index - 5, 50)
     amount_ma5 = _mean_window(amounts, 5)
     amount_ma20 = _mean_window(amounts, 20)
@@ -2600,6 +2895,11 @@ def _next_round_context(series: Any, signal_day: date) -> dict[str, Any] | None:
     range20 = _mean_window(ranges, 20)
     range60 = _mean_window(ranges, 60)
     return_1d = latest.close / previous.close - 1.0
+    close_positions = [_close_position(bar.low, bar.high, bar.close) for bar in window_bars]
+    ma20_slope_5d = 0.0 if ma20_prev5 is None or ma20 is None else ma20 / ma20_prev5 - 1.0
+    ma20_slope_5d_prev = (
+        0.0 if ma20_prev10 is None or ma20_prev5 is None else ma20_prev5 / ma20_prev10 - 1.0
+    )
     return {
         "symbol": series.symbol,
         "industry": series.industry,
@@ -2621,6 +2921,8 @@ def _next_round_context(series: Any, signal_day: date) -> dict[str, Any] | None:
         "ma60": ma60,
         "ma120": ma120,
         "ma20_slope": 0.0 if ma20_prev is None or ma20 is None else ma20 / ma20_prev - 1.0,
+        "ma20_slope_5d": ma20_slope_5d,
+        "ma20_slope_5d_prev": ma20_slope_5d_prev,
         "ma50_slope": 0.0 if ma50_prev is None or ma50 is None else ma50 / ma50_prev - 1.0,
         "high20": high20,
         "high60": high60,
@@ -2640,6 +2942,7 @@ def _next_round_context(series: Any, signal_day: date) -> dict[str, Any] | None:
         "amount_ratio60": _safe_ratio(latest.amount, amount_ma60),
         "turnover_rate": latest.turnover or 0.0,
         "close_position": _close_position(latest.low, latest.high, latest.close),
+        "close_position_ma5": _mean_window(close_positions, 5) or 0.0,
         "previous_return_1d": (
             previous.close / series.bars[index - 2].close - 1.0
             if index >= 2 and series.bars[index - 2].close
@@ -2940,6 +3243,8 @@ def _validate_strategy_search_batch_horizon(*, candidate_batch: str, horizon_day
         raise ValueError("candidate_batch h10_ma_accel_refine requires horizon_days=10")
     if candidate_batch == STRATEGY_SEARCH_BATCH_H10_EXIT and horizon_days != 10:
         raise ValueError("candidate_batch h10_exit requires horizon_days=10")
+    if candidate_batch == STRATEGY_SEARCH_BATCH_H10_ENTRY_QUALITY and horizon_days != 10:
+        raise ValueError("candidate_batch h10_entry_quality requires horizon_days=10")
 
 
 def _strategy_search_artifact_id(

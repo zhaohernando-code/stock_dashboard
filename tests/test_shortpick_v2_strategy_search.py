@@ -11,6 +11,7 @@ import ashare_evidence.cli as cli_module
 from ashare_evidence.shortpick_market_factor_study import _Bar, _Series
 from ashare_evidence.shortpick_v2_rule_selection import build_shortpick_v2_rule_selection_artifact
 from ashare_evidence.shortpick_v2_strategy_search import (
+    H10_ENTRY_QUALITY_CANDIDATE_SOURCE_IDS,
     H10_MA_ACCEL_CANDIDATE_SOURCE_IDS,
     H10_MA_ACCEL_REFINE_CANDIDATE_SOURCE_IDS,
     H10_EXIT_CANDIDATE_SOURCE_IDS,
@@ -20,6 +21,7 @@ from ashare_evidence.shortpick_v2_strategy_search import (
     NEXT_ROUND_CANDIDATE_SOURCE_IDS,
     REFINED_ROUND_CANDIDATE_SOURCE_IDS,
     StrategySearchCandidateSource,
+    build_h10_entry_quality_strategy_search_candidate_sources,
     build_h10_exit_strategy_search_candidate_sources,
     build_h10_ma_accel_refine_strategy_search_candidate_sources,
     build_h10_ma_accel_strategy_search_candidate_sources,
@@ -93,7 +95,9 @@ def _ma_accel_item(**overrides: object) -> dict[str, object]:
         "symbol": "600001.SH",
         "industry": "test",
         "amount": 10_000_000.0,
+        "open_gap": 0.01,
         "close": 11.0,
+        "low": 10.8,
         "ma20": 10.5,
         "ma60": 10.0,
         "ma120": 9.5,
@@ -101,13 +105,21 @@ def _ma_accel_item(**overrides: object) -> dict[str, object]:
         "return_20d": 0.08,
         "return_60d": 0.16,
         "drawdown20": -0.05,
+        "range20": 0.03,
+        "range60": 0.04,
         "volatility20": 0.04,
         "volatility60": 0.05,
+        "amount_ratio5": 1.3,
         "amount_ratio20": 1.8,
+        "amount_ratio60": 1.1,
         "turnover_rate": 2.0,
         "ma20_slope": 0.02,
+        "ma20_slope_5d": 0.05,
+        "ma20_slope_5d_prev": 0.03,
         "ma50_slope": 0.01,
         "close_position": 0.7,
+        "close_position_ma5": 0.65,
+        "previous_return_1d": 0.07,
     }
     item.update(overrides)
     return item
@@ -208,6 +220,14 @@ def test_shortpick_v2_strategy_search_cli_parser_accepts_h10_exit_batch() -> Non
     args = cli_module.build_parser().parse_args(["shortpick-v2-strategy-search", "--candidate-batch", "h10_exit"])
 
     assert args.candidate_batch == "h10_exit"
+
+
+def test_shortpick_v2_strategy_search_cli_parser_accepts_h10_entry_quality_batch() -> None:
+    args = cli_module.build_parser().parse_args(
+        ["shortpick-v2-strategy-search", "--candidate-batch", "h10_entry_quality"]
+    )
+
+    assert args.candidate_batch == "h10_entry_quality"
 
 
 def test_h10_quiet_strategy_search_requires_ten_day_horizon() -> None:
@@ -378,6 +398,34 @@ def test_h10_exit_strategy_search_requires_ten_day_horizon() -> None:
         )
 
 
+def test_h10_entry_quality_strategy_search_requires_ten_day_horizon() -> None:
+    days = [date(2026, 1, 1) + timedelta(days=index) for index in range(8)]
+    series_by_symbol = {
+        "600001.SH": _series("600001.SH", [10, 11, 12, 12, 13, 14, 14, 15]),
+        "600002.SH": _series("600002.SH", [19, 20, 21, 21, 22, 22, 23, 24]),
+    }
+    control = StrategySearchCandidateSource(
+        source_id="low_turnover_20d_uptrend_liquid_top120",
+        source_ref="market_only_reconstruction:low_turnover_20d_uptrend_liquid_top120:v1",
+        selections={days[2]: ["600001.SH"]},
+    )
+
+    with pytest.raises(ValueError, match="h10_entry_quality requires horizon_days=10"):
+        build_shortpick_v2_strategy_search_artifact_from_series(
+            series_by_symbol,
+            signal_days=[days[2]],
+            trade_days=days[2:7],
+            candidate_sources=(control,),
+            start_date=days[0],
+            end_date=days[6],
+            initial_cash=20_000.0,
+            horizon_days=2,
+            account_profile="new_retail_cash_account",
+            candidate_batch="h10_entry_quality",
+            generated_at=datetime(2026, 6, 15, 3, 0, tzinfo=UTC),
+        )
+
+
 def test_h10_ma_accel_refine_sources_use_refine_rule_configs() -> None:
     expected_suffixes = [
         "fixed_notional_35k_top5_h10_ma_accel_refine_v1",
@@ -418,6 +466,71 @@ def test_h10_ma_accel_refine_seed_matches_v3_volume_confirm() -> None:
         )
     assert _h10_ma_accel_score(pool, eligible, source_id=seed_source_id, **comparison_kwargs) == pytest.approx(
         _h10_ma_accel_score(pool, eligible, source_id=v3_source_id, **comparison_kwargs)
+    )
+
+
+def test_h10_entry_quality_sources_use_fixed_entry_quality_rule_configs() -> None:
+    expected_suffixes = [
+        "fixed_notional_35k_top5_h10_entry_quality_v1",
+        "fixed_notional_40k_top5_h10_entry_quality_v1",
+        "fixed_notional_45k_top5_h10_entry_quality_v1",
+        "fixed_notional_50k_top5_h10_entry_quality_v1",
+    ]
+
+    for source_id in H10_ENTRY_QUALITY_CANDIDATE_SOURCE_IDS:
+        configs = _rule_configs_for_source(source_id)
+
+        assert [config.config_id for config in configs] == [
+            f"{source_id}__{suffix}" for suffix in expected_suffixes
+        ]
+        assert [config.target_notional for config in configs] == [35_000.0, 40_000.0, 45_000.0, 50_000.0]
+        assert {config.candidate_rank_limit for config in configs} == {5}
+        assert {config.allowed_actions for config in configs} == {("buy_primary", "buy_fallback", "skip")}
+
+
+def test_h10_entry_quality_rerank_keeps_seed_filter_and_penalizes_overheated_entry() -> None:
+    comparison_kwargs = {
+        "regime_features": {
+            "universe_breadth10": 0.50,
+            "universe_ret10_mean": 0.02,
+            "pool_ret1_mean": 0.03,
+            "pool_ret10_mean": 0.05,
+        },
+        "industry_returns20": {"test": 0.05},
+        "industry_returns60": {"test": 0.10},
+        "market_ret20": 0.01,
+        "market_ret60": 0.03,
+    }
+    normal = _ma_accel_item()
+    overheated = _ma_accel_item(
+        symbol="600002.SH",
+        close=12.5,
+        return_1d=0.07,
+        return_20d=0.20,
+        amount_ratio20=3.2,
+    )
+    pool = [normal, overheated]
+
+    for item in (normal, overheated):
+        assert _h10_ma_accel_candidate_allows(
+            item,
+            source_id="ma_accel_quality_rerank_h10_v5",
+            **comparison_kwargs,
+        ) == _h10_ma_accel_candidate_allows(
+            item,
+            source_id="ma_accel_volume_confirm_seed_h10_v4",
+            **comparison_kwargs,
+        )
+    assert _h10_ma_accel_score(
+        pool,
+        overheated,
+        source_id="ma_accel_quality_rerank_h10_v5",
+        **comparison_kwargs,
+    ) < _h10_ma_accel_score(
+        pool,
+        overheated,
+        source_id="ma_accel_volume_confirm_seed_h10_v4",
+        **comparison_kwargs,
     )
 
 
@@ -650,4 +763,26 @@ def test_h10_exit_strategy_search_candidate_sources_include_expected_batch_ids()
     assert [source.source_id for source in sources] == [
         "low_turnover_20d_uptrend_liquid_top120",
         *H10_EXIT_CANDIDATE_SOURCE_IDS,
+    ]
+
+
+def test_h10_entry_quality_strategy_search_candidate_sources_include_expected_batch_ids() -> None:
+    days = [date(2025, 1, 1) + timedelta(days=index) for index in range(150)]
+    series_by_symbol = {
+        "000300.SH": _series("000300.SH", [100 + index * 0.10 for index in range(150)]),
+        "600001.SH": _series("600001.SH", [10 + index * 0.04 for index in range(150)]),
+        "600002.SH": _series("600002.SH", [12 + index * 0.05 for index in range(150)]),
+        "600003.SH": _series("600003.SH", [15 + index * 0.03 for index in range(150)]),
+    }
+
+    sources = build_h10_entry_quality_strategy_search_candidate_sources(
+        series_by_symbol,
+        signal_days=days[125:130],
+        pool_limit=40,
+        rank_limit=6,
+    )
+
+    assert [source.source_id for source in sources] == [
+        "low_turnover_20d_uptrend_liquid_top120",
+        *H10_ENTRY_QUALITY_CANDIDATE_SOURCE_IDS,
     ]
