@@ -21,7 +21,7 @@ First batch should favor daily-bar feasible strategies from the MiMo, DeepSeek, 
 Selection remains governed by the existing market-outperformance and annualized-return >= 30% gates.
 Runtime DB reads are allowed for the real-data batch; DB writes are out of scope.
 Major risks: overfitting, insufficient data fields for event strategies, long runtime, and accidental promotion claims.
-Approval state: executing via plan-run-loop; W-001 is complete and W-002 is pending.
+Approval state: executing via plan-run-loop; W-001 and W-002 are complete, W-003 is pending.
 
 ## Goal
 
@@ -69,7 +69,7 @@ The local capacity assessment showed that a single v2 replay currently takes abo
 | ID | Status | Order | Depends On | Task | Deliverable | Acceptance Type | Acceptance Spec | Evidence |
 |----|--------|-------|------------|------|-------------|-----------------|-----------------|----------|
 | W-001 | done | 1 | - | Implement the reusable v2 strategy-search batch producer and CLI entrypoint while preserving no-delayed-buy and existing control configs; focused tests must cover parser registration. | `src/ashare_evidence/shortpick_v2_strategy_search.py`, CLI parser/handler, and focused tests | test_pass | cmd:PYTHONPATH=src python3 -m pytest -q tests/test_shortpick_v2_strategy_search.py tests/test_shortpick_v2_replay.py tests/test_shortpick_v2_rule_selection.py | Focused pytest passed: 15 passed in 2.78s; MiMo code review PASS with no blocking/major findings; plan validator passed. |
-| W-002 | pending | 2 | W-001 | Run the first real-data strategy-search batch against the local runtime DB with bounded fixed configurations and produce a schema-compatible replay artifact. | `output/shortpick-v2-strategy-search-replay-artifact.json` | file_contains | path:output/shortpick-v2-strategy-search-replay-artifact.json \| pattern:"artifact_family": "shortpick_v2_replay_artifact" | |
+| W-002 | done | 2 | W-001 | Run the first real-data strategy-search batch against the local runtime DB with bounded fixed configurations and produce a schema-compatible replay artifact. | `output/shortpick-v2-strategy-search-replay-artifact.json` | file_contains | path:output/shortpick-v2-strategy-search-replay-artifact.json \| pattern:"artifact_family": "shortpick_v2_replay_artifact" | Real-data CLI completed in 207.36s with 30 results, 721 signal days, schema validation passed, file contains check passed, MiMo summary review found no blocking/major issues. Best total return was 0.340899, below market reference 0.418444. |
 | W-003 | pending | 3 | W-002 | Apply the existing v2 rule-selection gate to the strategy-search replay artifact and retain blocked/no-qualified outcomes if gates fail. | `output/shortpick-v2-strategy-search-selection-artifact.json` | file_contains | path:output/shortpick-v2-strategy-search-selection-artifact.json \| pattern:"selection_policy" | |
 | W-004 | pending | 4 | W-003 | Record the first-round outcome and next decision boundary in the v2 contract without promoting unqualified strategies. | `docs/contracts/SHORTPICK_LAB_V2_PLAN_2026-06-12.md` status/evidence update | file_contains | path:docs/contracts/SHORTPICK_LAB_V2_PLAN_2026-06-12.md \| pattern:Strategy search batch outcome | |
 
@@ -115,6 +115,8 @@ The local capacity assessment showed that a single v2 replay currently takes abo
 | 2026-06-14T11:22:00+08:00 | Codex | Incorporated MiMo plan-review findings, strengthened artifact acceptance evidence, and marked the reviewed plan approved for execution under the user's current instruction. |
 | 2026-06-14T11:24:00+08:00 | Codex | Started plan-run-loop execution; changed plan status from approved to executing and W-001 from pending to in_progress. |
 | 2026-06-14T11:31:00+08:00 | Codex | Completed W-001; added strategy-search producer, CLI entrypoint, focused tests, MiMo code review evidence, and passing focused pytest evidence. |
+| 2026-06-14T13:24:35+08:00 | Codex | Started W-002; changed W-002 from pending to in_progress for the first real-data strategy-search batch. |
+| 2026-06-14T13:37:00+08:00 | Codex | Completed W-002; generated the first real-data strategy-search replay artifact, validated schema/content, and recorded that all 30 tested configs still underperformed the market reference. |
 
 ## External Review Log
 
