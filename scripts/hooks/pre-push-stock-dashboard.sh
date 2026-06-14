@@ -4,7 +4,13 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
-if [ "$(basename "$repo_root")" != "stock_dashboard" ]; then
+common_git_dir="$(git rev-parse --git-common-dir)"
+if [[ "$common_git_dir" != /* ]]; then
+  common_git_dir="$repo_root/$common_git_dir"
+fi
+common_project_root="$(dirname "$common_git_dir")"
+
+if [ "$(basename "$repo_root")" != "stock_dashboard" ] && [ "$(basename "$common_project_root")" != "stock_dashboard" ]; then
   exit 0
 fi
 
@@ -25,6 +31,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     fi
   fi
 done
+
+# Git exports repository-local environment variables to hooks. Clear them before
+# running tests so nested temporary git repositories are evaluated on their own.
+unset $(git rev-parse --local-env-vars)
 
 echo "pre-push: checking agent and hook constraints"
 bash scripts/check-agent-constraints.sh

@@ -61,11 +61,17 @@ STRATEGY_SEARCH_BATCH_INITIAL = "initial"
 STRATEGY_SEARCH_BATCH_NEXT = "next"
 STRATEGY_SEARCH_BATCH_REFINED = "refined"
 STRATEGY_SEARCH_BATCH_H10_QUIET = "h10_quiet"
+STRATEGY_SEARCH_BATCH_H10_ROBUST = "h10_robust"
+STRATEGY_SEARCH_BATCH_H10_STRENGTH = "h10_strength"
+STRATEGY_SEARCH_BATCH_H10_MA_ACCEL = "h10_ma_accel"
 STRATEGY_SEARCH_BATCHES = (
     STRATEGY_SEARCH_BATCH_INITIAL,
     STRATEGY_SEARCH_BATCH_NEXT,
     STRATEGY_SEARCH_BATCH_REFINED,
     STRATEGY_SEARCH_BATCH_H10_QUIET,
+    STRATEGY_SEARCH_BATCH_H10_ROBUST,
+    STRATEGY_SEARCH_BATCH_H10_STRENGTH,
+    STRATEGY_SEARCH_BATCH_H10_MA_ACCEL,
 )
 NEXT_ROUND_CANDIDATE_SOURCE_IDS = (
     "trend_low_vol_breakout_v1",
@@ -97,6 +103,35 @@ H10_QUIET_CANDIDATE_SOURCE_IDS = (
     "quiet_breakout_rank2to6_mtw_or_breadth65",
     "quiet_breakout_rank2to6_poolhot10_not_thu",
     "quiet_breakout_rank2to6_poolhot10_mtw_ret5_0_10",
+)
+H10_ROBUST_CANDIDATE_SOURCE_IDS = (
+    "relative_strength_low_vol_h10_v1",
+    "low_turnover_breadth_rank2to5_h10_v1",
+    "uptrend_red_day_pullback_h10_v1",
+    "leader_pullback_sector_excess_h10_v1",
+    "breakout_retest_confirm_h10_v1",
+    "vol_adjusted_low_turnover_h10_v1",
+    "ma_acceleration_low_vol_h10_v1",
+    "quiet_breakout_robust_rank2to6_h10_v1",
+    "volume_absorption_low_range_h10_v1",
+)
+H10_STRENGTH_CANDIDATE_SOURCE_IDS = (
+    "h10_sector_rs_new_high_volume_v1",
+    "h10_market_thrust_top_rs_v1",
+    "h10_first_pullback_after_sector_breakout_v1",
+    "h10_volume_acceleration_continuation_v1",
+    "h10_limit_up_absorption_followthrough_v1",
+    "h10_gap_strength_followthrough_v1",
+    "uptrend_red_day_pullback_index_gated_h10_v2",
+    "ma_acceleration_momentum_h10_v2",
+)
+H10_MA_ACCEL_CANDIDATE_SOURCE_IDS = (
+    "ma_accel_momentum_loose_vol_h10_v3",
+    "ma_accel_dense_rank_h10_v3",
+    "ma_accel_red_day_entry_h10_v3",
+    "ma_accel_sector_tailwind_h10_v3",
+    "ma_accel_volume_confirm_h10_v3",
+    "ma_accel_low_breadth_contrarian_h10_v3",
 )
 H10_QUIET_RULE_CONFIGS = (
     ShortpickV2RuleConfig(
@@ -142,6 +177,120 @@ H10_QUIET_RULE_CONFIGS = (
         fallback_enabled=True,
         target_mode="fixed_notional",
         target_notional=90_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+)
+H10_ROBUST_RULE_CONFIGS = (
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_40k_top5_h10_robust_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=40_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_50k_top5_h10_robust_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=50_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_60k_top5_h10_robust_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=60_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_70k_top5_h10_robust_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=70_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+)
+H10_STRENGTH_RULE_CONFIGS = (
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_40k_top5_h10_strength_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=40_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_50k_top5_h10_strength_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=50_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_60k_top5_h10_strength_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=60_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_70k_top5_h10_strength_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=70_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+)
+H10_MA_ACCEL_RULE_CONFIGS = (
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_30k_top5_h10_ma_accel_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=30_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_40k_top5_h10_ma_accel_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=40_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_50k_top5_h10_ma_accel_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=50_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_60k_top5_h10_ma_accel_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=60_000.0,
         allowed_actions=("buy_primary", "buy_fallback", "skip"),
     ),
 )
@@ -248,6 +397,27 @@ def _build_strategy_search_candidate_sources(
         )
     if candidate_batch == STRATEGY_SEARCH_BATCH_H10_QUIET:
         return build_h10_quiet_strategy_search_candidate_sources(
+            series_by_symbol,
+            signal_days=signal_days,
+            pool_limit=pool_limit,
+            rank_limit=rank_limit,
+        )
+    if candidate_batch == STRATEGY_SEARCH_BATCH_H10_ROBUST:
+        return build_h10_robust_strategy_search_candidate_sources(
+            series_by_symbol,
+            signal_days=signal_days,
+            pool_limit=pool_limit,
+            rank_limit=rank_limit,
+        )
+    if candidate_batch == STRATEGY_SEARCH_BATCH_H10_STRENGTH:
+        return build_h10_strength_strategy_search_candidate_sources(
+            series_by_symbol,
+            signal_days=signal_days,
+            pool_limit=pool_limit,
+            rank_limit=rank_limit,
+        )
+    if candidate_batch == STRATEGY_SEARCH_BATCH_H10_MA_ACCEL:
+        return build_h10_ma_accel_strategy_search_candidate_sources(
             series_by_symbol,
             signal_days=signal_days,
             pool_limit=pool_limit,
@@ -476,6 +646,135 @@ def build_h10_quiet_strategy_search_candidate_sources(
     )
 
 
+def build_h10_robust_strategy_search_candidate_sources(
+    series_by_symbol: dict[str, Any],
+    *,
+    signal_days: list[date],
+    pool_limit: int,
+    rank_limit: int,
+) -> tuple[StrategySearchCandidateSource, ...]:
+    effective_rank_limit = max(rank_limit, max(config.candidate_rank_limit for config in H10_ROBUST_RULE_CONFIGS))
+    control_selections = _build_low_turnover_uptrend_candidate_pool(
+        series_by_symbol,
+        signal_days=signal_days,
+        pool_limit=pool_limit,
+        rank_limit=max(effective_rank_limit, 6),
+    )
+    quiet_base = _build_strategy_selections(
+        series_by_symbol,
+        signal_days=signal_days,
+        strategy=QUIET_BREAKOUT_BASE_STRATEGY,
+        pool_limit=pool_limit,
+        rank_limit=max(effective_rank_limit, 6),
+    )
+    regime_features = _regime_features_by_day(series_by_symbol, signal_days=signal_days, pool_limit=pool_limit)
+    h10_robust_selections = _build_h10_robust_batch_selections(
+        series_by_symbol,
+        signal_days=signal_days,
+        source_ids=H10_ROBUST_CANDIDATE_SOURCE_IDS,
+        control_selections=control_selections,
+        quiet_base_selections=quiet_base,
+        regime_features=regime_features,
+        pool_limit=pool_limit,
+        rank_limit=effective_rank_limit,
+    )
+    return (
+        StrategySearchCandidateSource(
+            source_id=CONTROL_CANDIDATE_SOURCE_ID,
+            source_ref=SHORTPICK_V2_REPLAY_CANDIDATE_SOURCE_REF,
+            selections=control_selections,
+        ),
+        *(
+            StrategySearchCandidateSource(
+                source_id=source_id,
+                source_ref=f"market_only_reconstruction:shortpick_v2_h10_robust_round:{source_id}",
+                selections=h10_robust_selections[source_id],
+            )
+            for source_id in H10_ROBUST_CANDIDATE_SOURCE_IDS
+        ),
+    )
+
+
+def build_h10_strength_strategy_search_candidate_sources(
+    series_by_symbol: dict[str, Any],
+    *,
+    signal_days: list[date],
+    pool_limit: int,
+    rank_limit: int,
+) -> tuple[StrategySearchCandidateSource, ...]:
+    effective_rank_limit = max(rank_limit, max(config.candidate_rank_limit for config in H10_STRENGTH_RULE_CONFIGS))
+    control_selections = _build_low_turnover_uptrend_candidate_pool(
+        series_by_symbol,
+        signal_days=signal_days,
+        pool_limit=pool_limit,
+        rank_limit=effective_rank_limit,
+    )
+    regime_features = _regime_features_by_day(series_by_symbol, signal_days=signal_days, pool_limit=pool_limit)
+    h10_strength_selections = _build_h10_strength_batch_selections(
+        series_by_symbol,
+        signal_days=signal_days,
+        source_ids=H10_STRENGTH_CANDIDATE_SOURCE_IDS,
+        regime_features=regime_features,
+        pool_limit=pool_limit,
+        rank_limit=effective_rank_limit,
+    )
+    return (
+        StrategySearchCandidateSource(
+            source_id=CONTROL_CANDIDATE_SOURCE_ID,
+            source_ref=SHORTPICK_V2_REPLAY_CANDIDATE_SOURCE_REF,
+            selections=control_selections,
+        ),
+        *(
+            StrategySearchCandidateSource(
+                source_id=source_id,
+                source_ref=f"market_only_reconstruction:shortpick_v2_h10_strength_round:{source_id}",
+                selections=h10_strength_selections[source_id],
+            )
+            for source_id in H10_STRENGTH_CANDIDATE_SOURCE_IDS
+        ),
+    )
+
+
+def build_h10_ma_accel_strategy_search_candidate_sources(
+    series_by_symbol: dict[str, Any],
+    *,
+    signal_days: list[date],
+    pool_limit: int,
+    rank_limit: int,
+) -> tuple[StrategySearchCandidateSource, ...]:
+    effective_rank_limit = max(rank_limit, max(config.candidate_rank_limit for config in H10_MA_ACCEL_RULE_CONFIGS))
+    control_selections = _build_low_turnover_uptrend_candidate_pool(
+        series_by_symbol,
+        signal_days=signal_days,
+        pool_limit=pool_limit,
+        rank_limit=effective_rank_limit,
+    )
+    regime_features = _regime_features_by_day(series_by_symbol, signal_days=signal_days, pool_limit=pool_limit)
+    h10_ma_accel_selections = _build_h10_ma_accel_batch_selections(
+        series_by_symbol,
+        signal_days=signal_days,
+        source_ids=H10_MA_ACCEL_CANDIDATE_SOURCE_IDS,
+        regime_features=regime_features,
+        pool_limit=pool_limit,
+        rank_limit=effective_rank_limit,
+    )
+    return (
+        StrategySearchCandidateSource(
+            source_id=CONTROL_CANDIDATE_SOURCE_ID,
+            source_ref=SHORTPICK_V2_REPLAY_CANDIDATE_SOURCE_REF,
+            selections=control_selections,
+        ),
+        *(
+            StrategySearchCandidateSource(
+                source_id=source_id,
+                source_ref=f"market_only_reconstruction:shortpick_v2_h10_ma_accel_round:{source_id}",
+                selections=h10_ma_accel_selections[source_id],
+            )
+            for source_id in H10_MA_ACCEL_CANDIDATE_SOURCE_IDS
+        ),
+    )
+
+
 def build_shortpick_v2_strategy_search_artifact_from_series(
     series_by_symbol: dict[str, Any],
     *,
@@ -604,6 +903,12 @@ def _rule_configs_for_source(source_id: str) -> tuple[ShortpickV2RuleConfig, ...
         )
     if source_id in H10_QUIET_CANDIDATE_SOURCE_IDS:
         return tuple(_prefixed_rule_config(source_id, config) for config in H10_QUIET_RULE_CONFIGS)
+    if source_id in H10_ROBUST_CANDIDATE_SOURCE_IDS:
+        return tuple(_prefixed_rule_config(source_id, config) for config in H10_ROBUST_RULE_CONFIGS)
+    if source_id in H10_STRENGTH_CANDIDATE_SOURCE_IDS:
+        return tuple(_prefixed_rule_config(source_id, config) for config in H10_STRENGTH_RULE_CONFIGS)
+    if source_id in H10_MA_ACCEL_CANDIDATE_SOURCE_IDS:
+        return tuple(_prefixed_rule_config(source_id, config) for config in H10_MA_ACCEL_RULE_CONFIGS)
     return tuple(_prefixed_rule_config(source_id, config) for config in DEFAULT_SHORTPICK_V2_RULE_CONFIGS)
 
 
@@ -756,6 +1061,916 @@ def _h10_quiet_source_symbols(
 
 def _h10_pool_hot(regime_features: dict[str, float]) -> bool:
     return float(regime_features.get("pool_ret1_mean", 0.0)) >= 0.10
+
+
+def _build_h10_robust_batch_selections(
+    series_by_symbol: dict[str, Any],
+    *,
+    signal_days: list[date],
+    source_ids: tuple[str, ...],
+    control_selections: dict[date, list[str]],
+    quiet_base_selections: dict[date, list[str]],
+    regime_features: dict[date, dict[str, float]],
+    pool_limit: int,
+    rank_limit: int,
+) -> dict[str, dict[date, list[str]]]:
+    selections_by_source: dict[str, dict[date, list[str]]] = {source_id: {} for source_id in source_ids}
+    for signal_day in signal_days:
+        contexts = _next_round_contexts(series_by_symbol, signal_day)
+        context_by_symbol = {str(context["symbol"]): context for context in contexts}
+        industry_returns = _industry_return_map(contexts, "return_20d")
+        index_context = (
+            _next_round_context(series_by_symbol["000300.SH"], signal_day)
+            if "000300.SH" in series_by_symbol
+            else None
+        )
+        market_ret20 = float(index_context.get("return_20d") or 0.0) if index_context else 0.0
+        market_ret60 = float(index_context.get("return_60d") or 0.0) if index_context else 0.0
+        features = regime_features.get(signal_day) or {}
+        control_symbols = [symbol for symbol in control_selections.get(signal_day, []) if symbol in context_by_symbol]
+        quiet_symbols = [symbol for symbol in quiet_base_selections.get(signal_day, []) if symbol in context_by_symbol]
+        for source_id in source_ids:
+            ranked = _rank_h10_robust_contexts(
+                contexts,
+                context_by_symbol=context_by_symbol,
+                control_symbols=control_symbols,
+                quiet_symbols=quiet_symbols,
+                source_id=source_id,
+                regime_features=features,
+                industry_returns=industry_returns,
+                market_ret20=market_ret20,
+                market_ret60=market_ret60,
+                pool_limit=pool_limit,
+            )
+            selections_by_source[source_id][signal_day] = [str(item["symbol"]) for item in ranked[:rank_limit]]
+    return selections_by_source
+
+
+def _rank_h10_robust_contexts(
+    contexts: list[dict[str, Any]],
+    *,
+    context_by_symbol: dict[str, dict[str, Any]],
+    control_symbols: list[str],
+    quiet_symbols: list[str],
+    source_id: str,
+    regime_features: dict[str, float],
+    industry_returns: dict[str, float],
+    market_ret20: float,
+    market_ret60: float,
+    pool_limit: int,
+) -> list[dict[str, Any]]:
+    if source_id == "low_turnover_breadth_rank2to5_h10_v1":
+        pool = [context_by_symbol[symbol] for symbol in control_symbols[1:]]
+    elif source_id == "quiet_breakout_robust_rank2to6_h10_v1":
+        pool = [context_by_symbol[symbol] for symbol in quiet_symbols[1:]]
+    else:
+        pool = sorted(
+            contexts,
+            key=lambda item: (float(item["amount"]), float(item["return_20d"])),
+            reverse=True,
+        )[: max(pool_limit, 180)]
+    candidates = [
+        item
+        for item in pool
+        if _h10_robust_candidate_allows(
+            item,
+            source_id=source_id,
+            regime_features=regime_features,
+            industry_returns=industry_returns,
+            market_ret20=market_ret20,
+            market_ret60=market_ret60,
+        )
+    ]
+    ranked = sorted(
+        candidates,
+        key=lambda item: _h10_robust_score(
+            pool,
+            item,
+            source_id=source_id,
+            regime_features=regime_features,
+            industry_returns=industry_returns,
+            market_ret20=market_ret20,
+            market_ret60=market_ret60,
+        ),
+        reverse=True,
+    )
+    if source_id in {
+        "leader_pullback_sector_excess_h10_v1",
+        "relative_strength_low_vol_h10_v1",
+    }:
+        ranked = _dedupe_industry(ranked, max_per_industry=1)
+    return ranked
+
+
+def _h10_robust_candidate_allows(
+    item: dict[str, Any],
+    *,
+    source_id: str,
+    regime_features: dict[str, float],
+    industry_returns: dict[str, float],
+    market_ret20: float,
+    market_ret60: float,
+) -> bool:
+    breadth10 = float(regime_features.get("universe_breadth10", 0.0))
+    universe_ret10_mean = float(regime_features.get("universe_ret10_mean", 0.0))
+    pool_ret1_mean = float(regime_features.get("pool_ret1_mean", 0.0))
+    pool_ret10_mean = float(regime_features.get("pool_ret10_mean", 0.0))
+    close = float(item["close"])
+    ma20 = float(item["ma20"] or 0.0)
+    ma50 = float(item["ma50"] or 0.0)
+    ma60 = float(item["ma60"] or 0.0)
+    ma120 = float(item["ma120"] or 0.0)
+    ret1 = float(item["return_1d"])
+    ret5 = float(item["return_5d"])
+    ret10 = float(item["return_10d"])
+    ret20 = float(item["return_20d"])
+    ret60 = float(item["return_60d"])
+    drawdown20 = float(item["drawdown20"])
+    volatility20 = float(item["volatility20"])
+    volatility60 = float(item["volatility60"])
+    amount_ratio20 = float(item["amount_ratio20"])
+    amount_ratio60 = float(item["amount_ratio60"])
+    turnover = float(item["turnover_rate"])
+    industry_ret20 = industry_returns.get(str(item["industry"]), 0.0)
+    if ret1 >= 0.095 or close <= 0 or float(item["amount"]) < 5_000_000.0:
+        return False
+    if source_id == "relative_strength_low_vol_h10_v1":
+        return (
+            universe_ret10_mean >= 0.0
+            and close > ma50
+            and ret60 > market_ret60 + 0.03
+            and float(item["return_120d"]) > 0.0
+            and float(item["drawdown60"]) > -0.22
+            and drawdown20 > -0.10
+            and volatility20 <= volatility60 * 1.05
+            and ret5 < 0.12
+            and turnover <= 2.5
+        )
+    if source_id == "low_turnover_breadth_rank2to5_h10_v1":
+        return (
+            breadth10 >= 0.55
+            and pool_ret1_mean <= 0.08
+            and close > ma50
+            and ret20 > 0.0
+            and ret60 > 0.0
+            and drawdown20 > -0.10
+            and volatility20 <= volatility60 * 1.10
+            and turnover <= 1.5
+        )
+    if source_id == "uptrend_red_day_pullback_h10_v1":
+        return (
+            breadth10 >= 0.50
+            and close > ma50
+            and ma20 > ma50
+            and ret20 >= 0.05
+            and ret60 > 0.0
+            and -0.05 <= ret1 <= 0.0
+            and close >= ma20 * 0.96
+            and drawdown20 > -0.08
+            and float(item["amount_ratio5"]) >= 0.80
+            and amount_ratio20 <= 1.6
+        )
+    if source_id == "leader_pullback_sector_excess_h10_v1":
+        return (
+            breadth10 >= 0.52
+            and close > ma60
+            and ret60 > market_ret60
+            and industry_ret20 > market_ret20
+            and -0.12 <= drawdown20 <= -0.015
+            and close >= ma20 * 0.96
+            and close <= float(item["ma30"] or ma20) * 1.08
+            and ret1 > 0.0
+            and amount_ratio20 <= 1.4
+        )
+    if source_id == "breakout_retest_confirm_h10_v1":
+        return (
+            breadth10 >= 0.50
+            and close > ma20 > ma60
+            and -0.06 <= ret5 <= 0.08
+            and close >= float(item["high20"]) * 0.94
+            and float(item["low10"]) >= ma20 * 0.94
+            and ret1 > 0.0
+            and amount_ratio20 >= 1.05
+            and drawdown20 > -0.10
+        )
+    if source_id == "vol_adjusted_low_turnover_h10_v1":
+        return (
+            breadth10 >= 0.50
+            and close > ma50
+            and ret20 >= 0.05
+            and ret60 > 0.0
+            and drawdown20 > -0.10
+            and volatility60 > 0.0
+            and volatility20 <= volatility60 * 1.05
+            and turnover <= 1.5
+        )
+    if source_id == "ma_acceleration_low_vol_h10_v1":
+        return (
+            breadth10 >= 0.50
+            and close > ma20 > ma60 > ma120
+            and ret20 >= 0.05
+            and ret60 > 0.0
+            and drawdown20 > -0.10
+            and volatility20 <= volatility60 * 1.05
+            and float(item["ma20_slope"]) > 0.0
+            and float(item["ma50_slope"]) > 0.0
+            and float(item["ma20_slope"]) >= float(item["ma50_slope"]) * 1.1
+            and turnover <= 2.0
+        )
+    if source_id == "quiet_breakout_robust_rank2to6_h10_v1":
+        return (
+            (breadth10 >= 0.55 or pool_ret10_mean >= 0.06)
+            and pool_ret1_mean <= 0.08
+            and 0.0 <= ret5 <= 0.10
+            and ret1 <= 0.04
+            and ret10 > 0.02
+            and drawdown20 > -0.10
+            and volatility20 <= volatility60 * 1.05
+        )
+    if source_id == "volume_absorption_low_range_h10_v1":
+        return (
+            breadth10 >= 0.50
+            and close > ma50
+            and amount_ratio60 >= 2.0
+            and float(item["range20"]) <= float(item["range60"]) * 0.90
+            and float(item["close_position"]) >= 0.60
+            and float(item["ma50_slope"]) >= -0.01
+            and ret1 > -0.01
+            and drawdown20 > -0.10
+        )
+    return False
+
+
+def _h10_robust_score(
+    pool: list[dict[str, Any]],
+    item: dict[str, Any],
+    *,
+    source_id: str,
+    regime_features: dict[str, float],
+    industry_returns: dict[str, float],
+    market_ret20: float,
+    market_ret60: float,
+) -> float:
+    del regime_features
+    industry_ret20 = industry_returns.get(str(item["industry"]), 0.0)
+    ret20 = float(item["return_20d"])
+    ret60 = float(item["return_60d"])
+    volatility20 = max(float(item["volatility20"]), 0.001)
+    volatility60 = max(float(item["volatility60"]), 0.001)
+    rs20 = ret20 - market_ret20
+    rs60 = ret60 - market_ret60
+    if source_id == "relative_strength_low_vol_h10_v1":
+        return rs60 + 0.5 * rs20 + _inverse_percentile_by(pool, "volatility20", item)
+    if source_id == "low_turnover_breadth_rank2to5_h10_v1":
+        return ret60 / volatility60 + 0.5 * ret20 + _inverse_percentile_by(pool, "turnover_rate", item)
+    if source_id == "uptrend_red_day_pullback_h10_v1":
+        return ret20 + 0.5 * ret60 + _inverse_percentile_by(pool, "drawdown20", item)
+    if source_id == "leader_pullback_sector_excess_h10_v1":
+        return (
+            _percentile_value([industry_returns.get(str(row["industry"]), 0.0) for row in pool], industry_ret20)
+            + _percentile_by(pool, "return_60d", item)
+            + _inverse_percentile_by(pool, "drawdown20", item)
+            + max(float(item["return_1d"]), 0.0)
+        )
+    if source_id == "breakout_retest_confirm_h10_v1":
+        return (
+            _percentile_by(pool, "return_60d", item)
+            + _inverse_percentile_by(pool, "drawdown20", item)
+            + min(float(item["amount_ratio20"]) / 2.5, 1.2)
+        )
+    if source_id == "vol_adjusted_low_turnover_h10_v1":
+        return ret60 / volatility60 + 0.5 * ret20 + _inverse_percentile_by(pool, "turnover_rate", item)
+    if source_id == "ma_acceleration_low_vol_h10_v1":
+        return (
+            ret20 / volatility20
+            + float(item["ma20_slope"]) * 10.0
+            + _inverse_percentile_by(pool, "drawdown20", item)
+        )
+    if source_id == "quiet_breakout_robust_rank2to6_h10_v1":
+        return (
+            ret20
+            + _inverse_percentile_by(pool, "return_1d", item)
+            + _inverse_percentile_by(pool, "volatility20", item)
+        )
+    if source_id == "volume_absorption_low_range_h10_v1":
+        return (
+            min(float(item["amount_ratio60"]) / 4.0, 2.0)
+            + float(item["close_position"])
+            + _inverse_percentile_by(pool, "range20", item)
+            + max(ret20, 0.0)
+        )
+    return 0.0
+
+
+def _dedupe_industry(rows: list[dict[str, Any]], *, max_per_industry: int) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    output: list[dict[str, Any]] = []
+    for row in rows:
+        industry = str(row.get("industry") or "unknown")
+        if counts.get(industry, 0) >= max_per_industry:
+            continue
+        counts[industry] = counts.get(industry, 0) + 1
+        output.append(row)
+    return output
+
+
+def _build_h10_strength_batch_selections(
+    series_by_symbol: dict[str, Any],
+    *,
+    signal_days: list[date],
+    source_ids: tuple[str, ...],
+    regime_features: dict[date, dict[str, float]],
+    pool_limit: int,
+    rank_limit: int,
+) -> dict[str, dict[date, list[str]]]:
+    selections_by_source: dict[str, dict[date, list[str]]] = {source_id: {} for source_id in source_ids}
+    for signal_day in signal_days:
+        contexts = _next_round_contexts(series_by_symbol, signal_day)
+        industry_returns20 = _industry_return_map(contexts, "return_20d")
+        industry_returns60 = _industry_return_map(contexts, "return_60d")
+        index_context = (
+            _next_round_context(series_by_symbol["000300.SH"], signal_day)
+            if "000300.SH" in series_by_symbol
+            else None
+        )
+        market_ret20 = float(index_context.get("return_20d") or 0.0) if index_context else 0.0
+        market_ret60 = float(index_context.get("return_60d") or 0.0) if index_context else 0.0
+        market_above_ma60 = (
+            bool(index_context)
+            and float(index_context.get("ma60") or 0.0) > 0.0
+            and float(index_context.get("close") or 0.0) > float(index_context.get("ma60") or 0.0)
+        )
+        features = regime_features.get(signal_day) or {}
+        for source_id in source_ids:
+            ranked = _rank_h10_strength_contexts(
+                contexts,
+                source_id=source_id,
+                regime_features=features,
+                industry_returns20=industry_returns20,
+                industry_returns60=industry_returns60,
+                market_ret20=market_ret20,
+                market_ret60=market_ret60,
+                market_above_ma60=market_above_ma60,
+                pool_limit=pool_limit,
+            )
+            selections_by_source[source_id][signal_day] = [str(item["symbol"]) for item in ranked[:rank_limit]]
+    return selections_by_source
+
+
+def _rank_h10_strength_contexts(
+    contexts: list[dict[str, Any]],
+    *,
+    source_id: str,
+    regime_features: dict[str, float],
+    industry_returns20: dict[str, float],
+    industry_returns60: dict[str, float],
+    market_ret20: float,
+    market_ret60: float,
+    market_above_ma60: bool,
+    pool_limit: int,
+) -> list[dict[str, Any]]:
+    pool = sorted(
+        contexts,
+        key=lambda item: (float(item["amount"]), float(item["return_20d"])),
+        reverse=True,
+    )[: max(pool_limit, 220)]
+    candidates = [
+        item
+        for item in pool
+        if _h10_strength_candidate_allows(
+            item,
+            source_id=source_id,
+            regime_features=regime_features,
+            industry_returns20=industry_returns20,
+            industry_returns60=industry_returns60,
+            market_ret20=market_ret20,
+            market_ret60=market_ret60,
+            market_above_ma60=market_above_ma60,
+        )
+    ]
+    ranked = sorted(
+        candidates,
+        key=lambda item: _h10_strength_score(
+            pool,
+            item,
+            source_id=source_id,
+            regime_features=regime_features,
+            industry_returns20=industry_returns20,
+            industry_returns60=industry_returns60,
+            market_ret20=market_ret20,
+            market_ret60=market_ret60,
+        ),
+        reverse=True,
+    )
+    if source_id in {
+        "h10_sector_rs_new_high_volume_v1",
+        "h10_first_pullback_after_sector_breakout_v1",
+        "h10_gap_strength_followthrough_v1",
+    }:
+        ranked = _dedupe_industry(ranked, max_per_industry=2)
+    return ranked
+
+
+def _h10_strength_candidate_allows(
+    item: dict[str, Any],
+    *,
+    source_id: str,
+    regime_features: dict[str, float],
+    industry_returns20: dict[str, float],
+    industry_returns60: dict[str, float],
+    market_ret20: float,
+    market_ret60: float,
+    market_above_ma60: bool,
+) -> bool:
+    breadth10 = float(regime_features.get("universe_breadth10", 0.0))
+    universe_ret10_mean = float(regime_features.get("universe_ret10_mean", 0.0))
+    pool_ret10_mean = float(regime_features.get("pool_ret10_mean", 0.0))
+    close = float(item["close"])
+    ma20 = float(item["ma20"] or 0.0)
+    ma50 = float(item["ma50"] or 0.0)
+    ma60 = float(item["ma60"] or 0.0)
+    ma120 = float(item["ma120"] or 0.0)
+    ret1 = float(item["return_1d"])
+    ret3 = float(item["return_3d"])
+    ret5 = float(item["return_5d"])
+    ret10 = float(item["return_10d"])
+    ret20 = float(item["return_20d"])
+    ret60 = float(item["return_60d"])
+    drawdown20 = float(item["drawdown20"])
+    volatility20 = float(item["volatility20"])
+    volatility60 = float(item["volatility60"])
+    amount_ratio5 = float(item["amount_ratio5"])
+    amount_ratio20 = float(item["amount_ratio20"])
+    turnover = float(item["turnover_rate"])
+    close_position = float(item["close_position"])
+    industry = str(item["industry"])
+    industry_ret20 = industry_returns20.get(industry, 0.0)
+    industry_ret60 = industry_returns60.get(industry, 0.0)
+    if ret1 >= 0.095 or close <= 0.0 or ma20 <= 0.0 or ma60 <= 0.0 or float(item["amount"]) < 5_000_000.0:
+        return False
+    if source_id == "h10_sector_rs_new_high_volume_v1":
+        return (
+            breadth10 >= 0.48
+            and market_ret20 >= -0.04
+            and close > ma20 > ma60
+            and ret20 >= max(0.08, market_ret20 + 0.05)
+            and ret60 >= market_ret60 + 0.06
+            and industry_ret20 >= market_ret20 + 0.03
+            and industry_ret60 >= market_ret60 + 0.02
+            and (close >= float(item["high20_prev"]) * 0.995 or drawdown20 > -0.025)
+            and 1.20 <= amount_ratio20 <= 4.00
+            and 0.0 < ret1 < 0.08
+            and close_position >= 0.55
+        )
+    if source_id == "h10_market_thrust_top_rs_v1":
+        return (
+            breadth10 >= 0.60
+            and universe_ret10_mean >= 0.01
+            and pool_ret10_mean >= 0.03
+            and market_ret20 >= -0.03
+            and close > ma20
+            and ret20 >= 0.10
+            and ret60 >= max(0.08, market_ret60 + 0.05)
+            and 0.0 < ret1 < 0.08
+            and amount_ratio20 >= 0.90
+            and drawdown20 > -0.12
+        )
+    if source_id == "h10_first_pullback_after_sector_breakout_v1":
+        return (
+            breadth10 >= 0.50
+            and industry_ret20 >= market_ret20 + 0.04
+            and industry_ret60 >= market_ret60
+            and close > ma60
+            and ret20 >= 0.10
+            and ret60 >= 0.08
+            and -0.04 <= ret1 <= 0.005
+            and close >= ma20 * 0.98
+            and -0.10 <= drawdown20 <= -0.005
+            and amount_ratio5 >= 0.70
+            and amount_ratio20 <= 2.20
+        )
+    if source_id == "h10_volume_acceleration_continuation_v1":
+        return (
+            breadth10 >= 0.50
+            and close > ma20 > ma60
+            and ret5 >= 0.03
+            and ret10 >= 0.06
+            and ret20 >= 0.12
+            and ret60 > 0.0
+            and 0.0 < ret1 < 0.08
+            and amount_ratio5 >= 1.15
+            and 1.10 <= amount_ratio20 <= 5.00
+            and close_position >= 0.55
+            and drawdown20 > -0.10
+        )
+    if source_id == "h10_limit_up_absorption_followthrough_v1":
+        return (
+            breadth10 >= 0.45
+            and float(item["previous_return_1d"]) >= 0.085
+            and -0.02 <= ret1 <= 0.08
+            and close >= ma20 * 0.97
+            and close_position >= 0.55
+            and 1.10 <= amount_ratio20 <= 5.00
+            and ret3 < 0.28
+            and drawdown20 > -0.12
+        )
+    if source_id == "h10_gap_strength_followthrough_v1":
+        return (
+            breadth10 >= 0.48
+            and float(item["open_gap"]) >= 0.015
+            and 0.0 < ret1 < 0.08
+            and close_position >= 0.65
+            and 1.20 <= amount_ratio20 <= 5.00
+            and close > ma20
+            and ret20 >= 0.08
+            and ret60 > 0.0
+            and drawdown20 > -0.08
+            and industry_ret20 > market_ret20
+        )
+    if source_id == "uptrend_red_day_pullback_index_gated_h10_v2":
+        return (
+            market_above_ma60
+            and market_ret20 >= -0.03
+            and breadth10 >= 0.52
+            and close > ma50
+            and ma20 > ma50
+            and ret20 >= 0.05
+            and ret60 > 0.0
+            and -0.05 <= ret1 <= 0.0
+            and close >= ma20 * 0.96
+            and drawdown20 > -0.08
+            and amount_ratio5 >= 0.80
+            and amount_ratio20 <= 1.60
+        )
+    if source_id == "ma_acceleration_momentum_h10_v2":
+        return (
+            breadth10 >= 0.50
+            and market_ret20 >= -0.05
+            and close > ma20 > ma60 > ma120
+            and ret20 >= 0.05
+            and ret60 > 0.0
+            and ret1 < 0.08
+            and drawdown20 > -0.12
+            and volatility20 <= volatility60 * 1.20
+            and float(item["ma20_slope"]) > 0.0
+            and float(item["ma50_slope"]) > 0.0
+            and float(item["ma20_slope"]) >= float(item["ma50_slope"]) * 1.05
+            and turnover <= 3.50
+        )
+    return False
+
+
+def _h10_strength_score(
+    pool: list[dict[str, Any]],
+    item: dict[str, Any],
+    *,
+    source_id: str,
+    regime_features: dict[str, float],
+    industry_returns20: dict[str, float],
+    industry_returns60: dict[str, float],
+    market_ret20: float,
+    market_ret60: float,
+) -> float:
+    breadth10 = float(regime_features.get("universe_breadth10", 0.0))
+    industry = str(item["industry"])
+    industry_ret20 = industry_returns20.get(industry, 0.0)
+    industry_ret60 = industry_returns60.get(industry, 0.0)
+    ret20 = float(item["return_20d"])
+    ret60 = float(item["return_60d"])
+    volatility20 = max(float(item["volatility20"]), 0.001)
+    volatility60 = max(float(item["volatility60"]), 0.001)
+    rs20 = ret20 - market_ret20
+    rs60 = ret60 - market_ret60
+    if source_id == "h10_sector_rs_new_high_volume_v1":
+        return (
+            _percentile_value([industry_returns20.get(str(row["industry"]), 0.0) for row in pool], industry_ret20)
+            + _percentile_value([industry_returns60.get(str(row["industry"]), 0.0) for row in pool], industry_ret60)
+            + _percentile_by(pool, "return_60d", item)
+            + min(float(item["amount_ratio20"]) / 3.0, 1.5)
+            + float(item["close_position"])
+        )
+    if source_id == "h10_market_thrust_top_rs_v1":
+        return rs60 + rs20 + breadth10 + _percentile_by(pool, "return_20d", item) + float(item["close_position"])
+    if source_id == "h10_first_pullback_after_sector_breakout_v1":
+        return (
+            _percentile_value([industry_returns20.get(str(row["industry"]), 0.0) for row in pool], industry_ret20)
+            + rs60
+            + _target_pullback_score(float(item["drawdown20"]), target=-0.04, width=0.08)
+            + _inverse_percentile_by(pool, "amount_ratio20", item)
+        )
+    if source_id == "h10_volume_acceleration_continuation_v1":
+        return (
+            ret20
+            + 0.5 * float(item["return_10d"])
+            + min(float(item["amount_ratio5"]) / 2.0, 1.5)
+            + float(item["close_position"])
+        )
+    if source_id == "h10_limit_up_absorption_followthrough_v1":
+        return (
+            float(item["previous_return_1d"])
+            + max(float(item["return_1d"]), 0.0)
+            + min(float(item["amount_ratio20"]) / 3.0, 1.5)
+            + float(item["close_position"])
+        )
+    if source_id == "h10_gap_strength_followthrough_v1":
+        return (
+            min(float(item["open_gap"]) * 10.0, 1.0)
+            + float(item["close_position"])
+            + rs20
+            + _percentile_value([industry_returns20.get(str(row["industry"]), 0.0) for row in pool], industry_ret20)
+        )
+    if source_id == "uptrend_red_day_pullback_index_gated_h10_v2":
+        return ret20 + 0.5 * ret60 + _target_pullback_score(float(item["drawdown20"]), target=-0.035, width=0.08)
+    if source_id == "ma_acceleration_momentum_h10_v2":
+        return (
+            ret20 / volatility20
+            + 0.5 * ret60 / volatility60
+            + float(item["ma20_slope"]) * 10.0
+            + _percentile_by(pool, "return_20d", item)
+        )
+    return 0.0
+
+
+def _target_pullback_score(value: float, *, target: float, width: float) -> float:
+    if width <= 0.0:
+        return 0.0
+    return max(0.0, 1.0 - abs(value - target) / width)
+
+
+def _build_h10_ma_accel_batch_selections(
+    series_by_symbol: dict[str, Any],
+    *,
+    signal_days: list[date],
+    source_ids: tuple[str, ...],
+    regime_features: dict[date, dict[str, float]],
+    pool_limit: int,
+    rank_limit: int,
+) -> dict[str, dict[date, list[str]]]:
+    selections_by_source: dict[str, dict[date, list[str]]] = {source_id: {} for source_id in source_ids}
+    for signal_day in signal_days:
+        contexts = _next_round_contexts(series_by_symbol, signal_day)
+        industry_returns20 = _industry_return_map(contexts, "return_20d")
+        industry_returns60 = _industry_return_map(contexts, "return_60d")
+        index_context = (
+            _next_round_context(series_by_symbol["000300.SH"], signal_day)
+            if "000300.SH" in series_by_symbol
+            else None
+        )
+        market_ret20 = float(index_context.get("return_20d") or 0.0) if index_context else 0.0
+        market_ret60 = float(index_context.get("return_60d") or 0.0) if index_context else 0.0
+        features = regime_features.get(signal_day) or {}
+        for source_id in source_ids:
+            ranked = _rank_h10_ma_accel_contexts(
+                contexts,
+                source_id=source_id,
+                regime_features=features,
+                industry_returns20=industry_returns20,
+                industry_returns60=industry_returns60,
+                market_ret20=market_ret20,
+                market_ret60=market_ret60,
+                pool_limit=pool_limit,
+            )
+            selections_by_source[source_id][signal_day] = [str(item["symbol"]) for item in ranked[:rank_limit]]
+    return selections_by_source
+
+
+def _rank_h10_ma_accel_contexts(
+    contexts: list[dict[str, Any]],
+    *,
+    source_id: str,
+    regime_features: dict[str, float],
+    industry_returns20: dict[str, float],
+    industry_returns60: dict[str, float],
+    market_ret20: float,
+    market_ret60: float,
+    pool_limit: int,
+) -> list[dict[str, Any]]:
+    pool = sorted(
+        contexts,
+        key=lambda item: (float(item["amount"]), float(item["return_20d"])),
+        reverse=True,
+    )[: max(pool_limit, 260)]
+    candidates = [
+        item
+        for item in pool
+        if _h10_ma_accel_candidate_allows(
+            item,
+            source_id=source_id,
+            regime_features=regime_features,
+            industry_returns20=industry_returns20,
+            industry_returns60=industry_returns60,
+            market_ret20=market_ret20,
+            market_ret60=market_ret60,
+        )
+    ]
+    ranked = sorted(
+        candidates,
+        key=lambda item: _h10_ma_accel_score(
+            pool,
+            item,
+            source_id=source_id,
+            regime_features=regime_features,
+            industry_returns20=industry_returns20,
+            industry_returns60=industry_returns60,
+            market_ret20=market_ret20,
+            market_ret60=market_ret60,
+        ),
+        reverse=True,
+    )
+    if source_id == "ma_accel_sector_tailwind_h10_v3":
+        ranked = _dedupe_industry(ranked, max_per_industry=2)
+    return ranked
+
+
+def _h10_ma_accel_candidate_allows(
+    item: dict[str, Any],
+    *,
+    source_id: str,
+    regime_features: dict[str, float],
+    industry_returns20: dict[str, float],
+    industry_returns60: dict[str, float],
+    market_ret20: float,
+    market_ret60: float,
+) -> bool:
+    breadth10 = float(regime_features.get("universe_breadth10", 0.0))
+    close = float(item["close"])
+    ma20 = float(item["ma20"] or 0.0)
+    ma60 = float(item["ma60"] or 0.0)
+    ma120 = float(item["ma120"] or 0.0)
+    ret1 = float(item["return_1d"])
+    ret20 = float(item["return_20d"])
+    ret60 = float(item["return_60d"])
+    drawdown20 = float(item["drawdown20"])
+    volatility20 = float(item["volatility20"])
+    volatility60 = float(item["volatility60"])
+    amount_ratio20 = float(item["amount_ratio20"])
+    turnover = float(item["turnover_rate"])
+    ma20_slope = float(item["ma20_slope"])
+    ma50_slope = float(item["ma50_slope"])
+    industry = str(item["industry"])
+    industry_ret20 = industry_returns20.get(industry, 0.0)
+    industry_ret60 = industry_returns60.get(industry, 0.0)
+    if (
+        ret1 >= 0.095
+        or close <= 0.0
+        or ma20 <= 0.0
+        or ma60 <= 0.0
+        or volatility60 <= 0.0
+        or float(item["amount"]) < 5_000_000.0
+    ):
+        return False
+    if source_id == "ma_accel_momentum_loose_vol_h10_v3":
+        return (
+            breadth10 >= 0.45
+            and market_ret20 >= -0.06
+            and close > ma20 > ma60 > ma120
+            and ret20 >= 0.04
+            and ret60 > 0.0
+            and ret1 < 0.08
+            and drawdown20 > -0.15
+            and volatility20 <= volatility60 * 1.30
+            and ma20_slope > 0.0
+            and ma50_slope > 0.0
+            and ma20_slope >= ma50_slope * 1.02
+            and turnover <= 5.0
+        )
+    if source_id == "ma_accel_dense_rank_h10_v3":
+        return (
+            breadth10 >= 0.40
+            and market_ret20 >= -0.08
+            and close > ma20 > ma60
+            and ret20 >= 0.03
+            and ret60 > -0.02
+            and ret1 < 0.08
+            and drawdown20 > -0.15
+            and volatility20 <= volatility60 * 1.35
+            and ma20_slope > 0.0
+            and ma50_slope >= -0.005
+            and 0.70 <= amount_ratio20 <= 4.50
+            and turnover <= 5.50
+        )
+    if source_id == "ma_accel_red_day_entry_h10_v3":
+        return (
+            breadth10 >= 0.45
+            and market_ret20 >= -0.06
+            and close > ma20 * 0.98
+            and ma20 > ma60
+            and ret20 >= 0.04
+            and ret60 > 0.0
+            and -0.03 <= ret1 <= 0.0
+            and drawdown20 > -0.12
+            and volatility20 <= volatility60 * 1.25
+            and ma20_slope > 0.0
+            and ma20_slope >= ma50_slope * 1.02
+            and turnover <= 4.0
+        )
+    if source_id == "ma_accel_sector_tailwind_h10_v3":
+        return (
+            breadth10 >= 0.45
+            and market_ret20 >= -0.06
+            and close > ma20 > ma60
+            and ret20 >= 0.05
+            and ret60 > 0.0
+            and ret1 < 0.08
+            and drawdown20 > -0.13
+            and volatility20 <= volatility60 * 1.25
+            and ma20_slope > 0.0
+            and ma20_slope >= ma50_slope * 1.02
+            and industry_ret20 >= market_ret20 + 0.02
+            and industry_ret60 >= market_ret60
+            and turnover <= 4.50
+        )
+    if source_id == "ma_accel_volume_confirm_h10_v3":
+        return (
+            breadth10 >= 0.45
+            and market_ret20 >= -0.06
+            and close > ma20 > ma60
+            and ret20 >= 0.04
+            and ret60 > 0.0
+            and -0.02 <= ret1 < 0.08
+            and drawdown20 > -0.13
+            and volatility20 <= volatility60 * 1.25
+            and ma20_slope > 0.0
+            and ma20_slope >= ma50_slope * 1.02
+            and 1.00 <= amount_ratio20 <= 3.50
+            and float(item["close_position"]) >= 0.50
+            and turnover <= 4.50
+        )
+    if source_id == "ma_accel_low_breadth_contrarian_h10_v3":
+        return (
+            0.40 <= breadth10 <= 0.58
+            and market_ret20 >= -0.03
+            and close > ma20 > ma60
+            and ret20 >= 0.06
+            and ret60 > 0.0
+            and ret1 < 0.06
+            and drawdown20 > -0.10
+            and volatility20 <= volatility60 * 1.20
+            and ma20_slope > 0.0
+            and ma20_slope >= ma50_slope * 1.05
+            and turnover <= 4.0
+        )
+    return False
+
+
+def _h10_ma_accel_score(
+    pool: list[dict[str, Any]],
+    item: dict[str, Any],
+    *,
+    source_id: str,
+    regime_features: dict[str, float],
+    industry_returns20: dict[str, float],
+    industry_returns60: dict[str, float],
+    market_ret20: float,
+    market_ret60: float,
+) -> float:
+    breadth10 = float(regime_features.get("universe_breadth10", 0.0))
+    industry = str(item["industry"])
+    industry_ret20 = industry_returns20.get(industry, 0.0)
+    industry_ret60 = industry_returns60.get(industry, 0.0)
+    base_score = _base_ma_accel_score(pool, item, market_ret20=market_ret20, market_ret60=market_ret60)
+    if source_id == "ma_accel_momentum_loose_vol_h10_v3":
+        return base_score + _percentile_by(pool, "drawdown20", item)
+    if source_id == "ma_accel_dense_rank_h10_v3":
+        return base_score + 0.5 * breadth10 + _percentile_by(pool, "drawdown20", item)
+    if source_id == "ma_accel_red_day_entry_h10_v3":
+        return base_score + _inverse_percentile_by(pool, "return_1d", item) + _percentile_by(pool, "drawdown20", item)
+    if source_id == "ma_accel_sector_tailwind_h10_v3":
+        return (
+            base_score
+            + _percentile_value([industry_returns20.get(str(row["industry"]), 0.0) for row in pool], industry_ret20)
+            + _percentile_value([industry_returns60.get(str(row["industry"]), 0.0) for row in pool], industry_ret60)
+        )
+    if source_id == "ma_accel_volume_confirm_h10_v3":
+        return base_score + min(float(item["amount_ratio20"]) / 2.5, 1.2) + float(item["close_position"])
+    if source_id == "ma_accel_low_breadth_contrarian_h10_v3":
+        return (
+            base_score
+            + _percentile_by(pool, "drawdown20", item)
+            + max(float(item["return_20d"]) - market_ret20, 0.0)
+        )
+    return base_score
+
+
+def _base_ma_accel_score(
+    pool: list[dict[str, Any]],
+    item: dict[str, Any],
+    *,
+    market_ret20: float,
+    market_ret60: float,
+) -> float:
+    volatility20 = max(float(item["volatility20"]), 0.001)
+    volatility60 = max(float(item["volatility60"]), 0.001)
+    ret20 = float(item["return_20d"])
+    ret60 = float(item["return_60d"])
+    return (
+        ret20 / volatility20
+        + 0.5 * ret60 / volatility60
+        + max(ret20 - market_ret20, 0.0)
+        + 0.5 * max(ret60 - market_ret60, 0.0)
+        + float(item["ma20_slope"]) * 10.0
+        + _percentile_by(pool, "return_20d", item)
+    )
 
 
 def _build_next_round_batch_selections(
@@ -1000,6 +2215,7 @@ def _next_round_context(series: Any, signal_day: date) -> dict[str, Any] | None:
         "high": latest.high,
         "low": latest.low,
         "close": latest.close,
+        "open_gap": latest.open / previous.close - 1.0 if previous.close > 0 else 0.0,
         "return_1d": return_1d,
         "return_3d": _return_window(closes, 3),
         "return_5d": _return_window(closes, 5),
@@ -1322,6 +2538,12 @@ def _validate_merged_artifact(payload: dict[str, Any]) -> None:
 def _validate_strategy_search_batch_horizon(*, candidate_batch: str, horizon_days: int) -> None:
     if candidate_batch == STRATEGY_SEARCH_BATCH_H10_QUIET and horizon_days != 10:
         raise ValueError("candidate_batch h10_quiet requires horizon_days=10")
+    if candidate_batch == STRATEGY_SEARCH_BATCH_H10_ROBUST and horizon_days != 10:
+        raise ValueError("candidate_batch h10_robust requires horizon_days=10")
+    if candidate_batch == STRATEGY_SEARCH_BATCH_H10_STRENGTH and horizon_days != 10:
+        raise ValueError("candidate_batch h10_strength requires horizon_days=10")
+    if candidate_batch == STRATEGY_SEARCH_BATCH_H10_MA_ACCEL and horizon_days != 10:
+        raise ValueError("candidate_batch h10_ma_accel requires horizon_days=10")
 
 
 def _strategy_search_artifact_id(

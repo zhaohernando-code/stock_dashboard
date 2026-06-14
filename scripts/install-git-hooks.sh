@@ -2,8 +2,8 @@
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
+mkdir -p "$repo_root/../../.githooks"
 shared_hooks="$(realpath "$repo_root/../../.githooks")"
-mkdir -p "$shared_hooks"
 
 git config core.hooksPath ../../.githooks
 
