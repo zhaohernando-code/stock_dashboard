@@ -33,10 +33,17 @@ RANKING_ORDER = (
     "turnover_asc",
     "trade_count_desc",
 )
+SELECTION_THRESHOLD_PROFILE_STANDARD = "standard"
+SELECTION_THRESHOLD_PROFILE_SPARSE_HIGH_CONFIDENCE = "sparse_high_confidence"
+SELECTION_THRESHOLD_PROFILES = (
+    SELECTION_THRESHOLD_PROFILE_STANDARD,
+    SELECTION_THRESHOLD_PROFILE_SPARSE_HIGH_CONFIDENCE,
+)
 
 
 @dataclass(frozen=True)
 class SelectionThresholds:
+    threshold_profile: str = SELECTION_THRESHOLD_PROFILE_STANDARD
     signal_count_min: int = 300
     trade_count_min: int = 180
     skip_ratio_max: float = 0.60
@@ -51,6 +58,7 @@ class SelectionThresholds:
 
     def to_artifact(self) -> dict[str, Any]:
         return {
+            "threshold_profile": self.threshold_profile,
             "signal_count_min": self.signal_count_min,
             "trade_count_min": self.trade_count_min,
             "skip_ratio_max": self.skip_ratio_max,
@@ -67,6 +75,14 @@ class SelectionThresholds:
 
 
 DEFAULT_SELECTION_THRESHOLDS = SelectionThresholds()
+SPARSE_HIGH_CONFIDENCE_SELECTION_THRESHOLDS = SelectionThresholds(
+    threshold_profile=SELECTION_THRESHOLD_PROFILE_SPARSE_HIGH_CONFIDENCE,
+    skip_ratio_max=0.75,
+)
+SELECTION_THRESHOLDS_BY_PROFILE = {
+    SELECTION_THRESHOLD_PROFILE_STANDARD: DEFAULT_SELECTION_THRESHOLDS,
+    SELECTION_THRESHOLD_PROFILE_SPARSE_HIGH_CONFIDENCE: SPARSE_HIGH_CONFIDENCE_SELECTION_THRESHOLDS,
+}
 
 
 def build_shortpick_v2_rule_selection_artifact(
@@ -205,14 +221,18 @@ def build_shortpick_v2_rule_selection_artifact_from_path(
     replay_artifact_path: str | Path,
     *,
     max_selected: int = DEFAULT_MAX_SELECTED,
+    threshold_profile: str = SELECTION_THRESHOLD_PROFILE_STANDARD,
     generated_at: datetime | None = None,
 ) -> dict[str, Any]:
     path = Path(replay_artifact_path)
     replay_artifact = json.loads(path.read_text(encoding="utf-8"))
+    if threshold_profile not in SELECTION_THRESHOLD_PROFILES:
+        raise ValueError(f"threshold_profile must be one of {sorted(SELECTION_THRESHOLD_PROFILES)}")
     return build_shortpick_v2_rule_selection_artifact(
         replay_artifact,
         replay_artifact_path=path,
         max_selected=max_selected,
+        thresholds=SELECTION_THRESHOLDS_BY_PROFILE[threshold_profile],
         generated_at=generated_at,
     )
 

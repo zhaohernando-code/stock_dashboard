@@ -9,6 +9,8 @@ import pytest
 
 import ashare_evidence.cli as cli_module
 from ashare_evidence.shortpick_v2_rule_selection import (
+    SELECTION_THRESHOLD_PROFILE_SPARSE_HIGH_CONFIDENCE,
+    SELECTION_THRESHOLD_PROFILE_STANDARD,
     build_shortpick_v2_rule_selection_artifact,
     build_shortpick_v2_rule_selection_artifact_from_path,
     write_shortpick_v2_rule_selection_artifact,
@@ -261,6 +263,91 @@ def test_shortpick_v2_rule_selection_respects_max_selected() -> None:
     ]
 
 
+def test_shortpick_v2_rule_selection_sparse_profile_allows_high_confidence_sparse_candidates(
+    tmp_path: Path,
+) -> None:
+    market_reference_total_return = 0.45
+    replay = {
+        **_replay_artifact(),
+        "results": [
+            _result(
+                "top1_or_skip_v1",
+                trade_count=212,
+                skip_count=509,
+                fallback_trade_count=0,
+                total_return=0.35,
+                max_drawdown=-0.308438,
+                mean_invested_ratio=0.352473,
+                turnover=52.105779,
+                market_reference_total_return=market_reference_total_return,
+            ),
+            _result(
+                "top3_fallback_v1",
+                trade_count=190,
+                skip_count=531,
+                fallback_trade_count=4,
+                total_return=2.5,
+                max_drawdown=-0.12,
+                mean_invested_ratio=0.45,
+                turnover=73.0,
+                market_reference_total_return=market_reference_total_return,
+            ),
+            _result(
+                "fixed_notional_40k_top5_v1",
+                trade_count=170,
+                skip_count=551,
+                fallback_trade_count=0,
+                total_return=2.5,
+                max_drawdown=-0.12,
+                mean_invested_ratio=0.45,
+                turnover=73.0,
+                market_reference_total_return=market_reference_total_return,
+            ),
+            _result(
+                "position_cap_utilization_top5_v1",
+                trade_count=190,
+                skip_count=531,
+                fallback_trade_count=0,
+                total_return=2.5,
+                max_drawdown=-0.40,
+                mean_invested_ratio=0.45,
+                turnover=73.0,
+                market_reference_total_return=market_reference_total_return,
+            ),
+            _result(
+                "conservative_cash_reserve_60k_top5_v1",
+                trade_count=190,
+                skip_count=531,
+                fallback_trade_count=0,
+                total_return=2.5,
+                max_drawdown=-0.12,
+                mean_invested_ratio=0.45,
+                turnover=83.0,
+                market_reference_total_return=market_reference_total_return,
+            ),
+        ],
+    }
+    replay_path = tmp_path / "sparse-replay.json"
+    replay_path.write_text(json.dumps(replay, ensure_ascii=False), encoding="utf-8")
+
+    standard = build_shortpick_v2_rule_selection_artifact_from_path(
+        replay_path,
+        threshold_profile=SELECTION_THRESHOLD_PROFILE_STANDARD,
+        generated_at=datetime(2026, 6, 12, 9, 0, tzinfo=UTC),
+    )
+    sparse = build_shortpick_v2_rule_selection_artifact_from_path(
+        replay_path,
+        threshold_profile=SELECTION_THRESHOLD_PROFILE_SPARSE_HIGH_CONFIDENCE,
+        generated_at=datetime(2026, 6, 12, 9, 0, tzinfo=UTC),
+    )
+
+    assert standard["selected_configs"] == []
+    assert sparse["status"] == "ready"
+    assert sparse["selection_policy"]["gate_thresholds"]["threshold_profile"] == "sparse_high_confidence"
+    assert sparse["selection_policy"]["gate_thresholds"]["skip_ratio_max"] == 0.75
+    assert [item["config_id"] for item in sparse["selected_configs"]] == ["top3_fallback_v1"]
+
+
 def test_shortpick_v2_rule_selection_requires_passed_source_leakage_audit() -> None:
     replay = _replay_artifact()
     replay["leakage_audit"] = {"status": "failed"}
@@ -313,3 +400,15 @@ def test_shortpick_v2_rule_selection_from_path_and_cli_parser(tmp_path: Path) ->
     )
     assert args.output == "output/shortpick-v2-rule-selection-artifact.json"
     assert args.max_selected == 2
+    assert args.threshold_profile == "standard"
+
+    sparse_args = cli_module.build_parser().parse_args(
+        [
+            "shortpick-v2-rule-selection",
+            "--replay-artifact",
+            str(replay_path),
+            "--threshold-profile",
+            "sparse_high_confidence",
+        ]
+    )
+    assert sparse_args.threshold_profile == "sparse_high_confidence"
