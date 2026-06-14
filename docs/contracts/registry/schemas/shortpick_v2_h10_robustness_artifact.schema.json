@@ -1,0 +1,331 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "shortpick_v2_h10_robustness_artifact.schema.json",
+  "title": "Shortpick V2 H10 Robustness Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_family",
+    "schema_version",
+    "artifact_id",
+    "generated_at",
+    "status",
+    "claim_ceiling",
+    "evidence_basis",
+    "source_plan_ref",
+    "source_replay_artifact",
+    "source_selection_artifact",
+    "analysis_scope",
+    "analysis_policy",
+    "analyzed_configs",
+    "period_reset_results",
+    "parameter_stability",
+    "risk_flags",
+    "recommendation",
+    "leakage_audit",
+    "event_refs"
+  ],
+  "properties": {
+    "artifact_family": {
+      "const": "shortpick_v2_h10_robustness_artifact"
+    },
+    "schema_version": {
+      "const": "v1"
+    },
+    "artifact_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ready", "blocked"]
+    },
+    "claim_ceiling": {
+      "const": "research_observation"
+    },
+    "evidence_basis": {
+      "const": "historical_account_replay_robustness"
+    },
+    "source_plan_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_replay_artifact": {
+      "$ref": "#/$defs/source_artifact"
+    },
+    "source_selection_artifact": {
+      "$ref": "#/$defs/source_artifact"
+    },
+    "analysis_scope": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["candidate_batch", "signal_day_count", "trade_day_count", "analyzed_config_count"],
+      "properties": {
+        "candidate_batch": {
+          "const": "h10_quiet"
+        },
+        "signal_day_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "trade_day_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "analyzed_config_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "analysis_policy": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["period_reset_policy", "trade_contribution_policy", "promotion_policy"],
+      "properties": {
+        "period_reset_policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trade_contribution_policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "promotion_policy": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "analyzed_configs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/analyzed_config"
+      }
+    },
+    "period_reset_results": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["yearly", "quarterly"],
+      "properties": {
+        "yearly": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "quarterly": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "parameter_stability": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["rows", "notes"],
+      "properties": {
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "risk_flags": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/risk_flag"
+      }
+    },
+    "recommendation": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["status", "notes"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["candidate_requires_forward_tracking", "not_ready_for_paper_tracking", "blocked"]
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "leakage_audit": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["passed", "failed"]
+        }
+      }
+    },
+    "event_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "source_artifact": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "artifact_id",
+        "artifact_family",
+        "schema_version",
+        "status",
+        "claim_ceiling",
+        "evidence_basis",
+        "path"
+      ],
+      "properties": {
+        "artifact_id": {
+          "type": "string"
+        },
+        "artifact_family": {
+          "type": "string"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "claim_ceiling": {
+          "type": "string"
+        },
+        "evidence_basis": {
+          "type": "string"
+        },
+        "path": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "analyzed_config": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "config_id",
+        "role",
+        "source_id",
+        "summary",
+        "source_replay_consistency",
+        "trade_contribution_stress"
+      ],
+      "properties": {
+        "config_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "source_replay_consistency": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["status"],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": ["passed", "failed"]
+            }
+          }
+        },
+        "trade_contribution_stress": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/trade_contribution_stress"
+          }
+        }
+      }
+    },
+    "trade_contribution_stress": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "remove_top_winner_count",
+        "total_return_proxy",
+        "annualized_return_proxy",
+        "market_excess_total_return_proxy",
+        "method"
+      ],
+      "properties": {
+        "remove_top_winner_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "removed_pnl": {
+          "type": "number"
+        },
+        "total_return_proxy": {
+          "type": "number"
+        },
+        "annualized_return_proxy": {
+          "type": ["number", "null"]
+        },
+        "market_excess_total_return_proxy": {
+          "type": ["number", "null"]
+        },
+        "method": {
+          "const": "post_hoc_trade_pnl_subtraction_not_resimulated"
+        }
+      }
+    },
+    "risk_flag": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["flag_id", "severity", "message"],
+      "properties": {
+        "flag_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["low", "medium", "high"]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}
