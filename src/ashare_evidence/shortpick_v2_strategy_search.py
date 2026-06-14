@@ -64,6 +64,7 @@ STRATEGY_SEARCH_BATCH_H10_QUIET = "h10_quiet"
 STRATEGY_SEARCH_BATCH_H10_ROBUST = "h10_robust"
 STRATEGY_SEARCH_BATCH_H10_STRENGTH = "h10_strength"
 STRATEGY_SEARCH_BATCH_H10_MA_ACCEL = "h10_ma_accel"
+STRATEGY_SEARCH_BATCH_H10_MA_ACCEL_REFINE = "h10_ma_accel_refine"
 STRATEGY_SEARCH_BATCHES = (
     STRATEGY_SEARCH_BATCH_INITIAL,
     STRATEGY_SEARCH_BATCH_NEXT,
@@ -72,6 +73,7 @@ STRATEGY_SEARCH_BATCHES = (
     STRATEGY_SEARCH_BATCH_H10_ROBUST,
     STRATEGY_SEARCH_BATCH_H10_STRENGTH,
     STRATEGY_SEARCH_BATCH_H10_MA_ACCEL,
+    STRATEGY_SEARCH_BATCH_H10_MA_ACCEL_REFINE,
 )
 NEXT_ROUND_CANDIDATE_SOURCE_IDS = (
     "trend_low_vol_breakout_v1",
@@ -132,6 +134,14 @@ H10_MA_ACCEL_CANDIDATE_SOURCE_IDS = (
     "ma_accel_sector_tailwind_h10_v3",
     "ma_accel_volume_confirm_h10_v3",
     "ma_accel_low_breadth_contrarian_h10_v3",
+)
+H10_MA_ACCEL_REFINE_CANDIDATE_SOURCE_IDS = (
+    "ma_accel_volume_confirm_seed_h10_v4",
+    "ma_accel_volume_confirm_dense_guard_h10_v4",
+    "ma_accel_volume_confirm_quality_h10_v4",
+    "ma_accel_volume_confirm_market_gated_h10_v4",
+    "ma_accel_volume_confirm_rs_weighted_h10_v4",
+    "ma_accel_volume_confirm_pullback_band_h10_v4",
 )
 H10_QUIET_RULE_CONFIGS = (
     ShortpickV2RuleConfig(
@@ -294,6 +304,44 @@ H10_MA_ACCEL_RULE_CONFIGS = (
         allowed_actions=("buy_primary", "buy_fallback", "skip"),
     ),
 )
+H10_MA_ACCEL_REFINE_RULE_CONFIGS = (
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_35k_top5_h10_ma_accel_refine_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=35_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_40k_top5_h10_ma_accel_refine_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=40_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_45k_top5_h10_ma_accel_refine_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=45_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+    ShortpickV2RuleConfig(
+        config_id="fixed_notional_50k_top5_h10_ma_accel_refine_v1",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=5,
+        fallback_enabled=True,
+        target_mode="fixed_notional",
+        target_notional=50_000.0,
+        allowed_actions=("buy_primary", "buy_fallback", "skip"),
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -418,6 +466,13 @@ def _build_strategy_search_candidate_sources(
         )
     if candidate_batch == STRATEGY_SEARCH_BATCH_H10_MA_ACCEL:
         return build_h10_ma_accel_strategy_search_candidate_sources(
+            series_by_symbol,
+            signal_days=signal_days,
+            pool_limit=pool_limit,
+            rank_limit=rank_limit,
+        )
+    if candidate_batch == STRATEGY_SEARCH_BATCH_H10_MA_ACCEL_REFINE:
+        return build_h10_ma_accel_refine_strategy_search_candidate_sources(
             series_by_symbol,
             signal_days=signal_days,
             pool_limit=pool_limit,
@@ -775,6 +830,49 @@ def build_h10_ma_accel_strategy_search_candidate_sources(
     )
 
 
+def build_h10_ma_accel_refine_strategy_search_candidate_sources(
+    series_by_symbol: dict[str, Any],
+    *,
+    signal_days: list[date],
+    pool_limit: int,
+    rank_limit: int,
+) -> tuple[StrategySearchCandidateSource, ...]:
+    effective_rank_limit = max(
+        rank_limit,
+        max(config.candidate_rank_limit for config in H10_MA_ACCEL_REFINE_RULE_CONFIGS),
+    )
+    control_selections = _build_low_turnover_uptrend_candidate_pool(
+        series_by_symbol,
+        signal_days=signal_days,
+        pool_limit=pool_limit,
+        rank_limit=effective_rank_limit,
+    )
+    regime_features = _regime_features_by_day(series_by_symbol, signal_days=signal_days, pool_limit=pool_limit)
+    h10_ma_accel_selections = _build_h10_ma_accel_batch_selections(
+        series_by_symbol,
+        signal_days=signal_days,
+        source_ids=H10_MA_ACCEL_REFINE_CANDIDATE_SOURCE_IDS,
+        regime_features=regime_features,
+        pool_limit=pool_limit,
+        rank_limit=effective_rank_limit,
+    )
+    return (
+        StrategySearchCandidateSource(
+            source_id=CONTROL_CANDIDATE_SOURCE_ID,
+            source_ref=SHORTPICK_V2_REPLAY_CANDIDATE_SOURCE_REF,
+            selections=control_selections,
+        ),
+        *(
+            StrategySearchCandidateSource(
+                source_id=source_id,
+                source_ref=f"market_only_reconstruction:shortpick_v2_h10_ma_accel_refine_round:{source_id}",
+                selections=h10_ma_accel_selections[source_id],
+            )
+            for source_id in H10_MA_ACCEL_REFINE_CANDIDATE_SOURCE_IDS
+        ),
+    )
+
+
 def build_shortpick_v2_strategy_search_artifact_from_series(
     series_by_symbol: dict[str, Any],
     *,
@@ -909,6 +1007,8 @@ def _rule_configs_for_source(source_id: str) -> tuple[ShortpickV2RuleConfig, ...
         return tuple(_prefixed_rule_config(source_id, config) for config in H10_STRENGTH_RULE_CONFIGS)
     if source_id in H10_MA_ACCEL_CANDIDATE_SOURCE_IDS:
         return tuple(_prefixed_rule_config(source_id, config) for config in H10_MA_ACCEL_RULE_CONFIGS)
+    if source_id in H10_MA_ACCEL_REFINE_CANDIDATE_SOURCE_IDS:
+        return tuple(_prefixed_rule_config(source_id, config) for config in H10_MA_ACCEL_REFINE_RULE_CONFIGS)
     return tuple(_prefixed_rule_config(source_id, config) for config in DEFAULT_SHORTPICK_V2_RULE_CONFIGS)
 
 
@@ -1896,6 +1996,105 @@ def _h10_ma_accel_candidate_allows(
             and float(item["close_position"]) >= 0.50
             and turnover <= 4.50
         )
+    if source_id == "ma_accel_volume_confirm_seed_h10_v4":
+        return (
+            breadth10 >= 0.45
+            and market_ret20 >= -0.06
+            and close > ma20 > ma60
+            and ret20 >= 0.04
+            and ret60 > 0.0
+            and -0.02 <= ret1 < 0.08
+            and drawdown20 > -0.13
+            and volatility20 <= volatility60 * 1.25
+            and ma20_slope > 0.0
+            and ma20_slope >= ma50_slope * 1.02
+            and 1.00 <= amount_ratio20 <= 3.50
+            and float(item["close_position"]) >= 0.50
+            and turnover <= 4.50
+        )
+    if source_id == "ma_accel_volume_confirm_dense_guard_h10_v4":
+        return (
+            breadth10 >= 0.42
+            and market_ret20 >= -0.06
+            and close > ma20 > ma60
+            and ret20 >= 0.035
+            and ret60 > 0.0
+            and -0.02 <= ret1 < 0.08
+            and drawdown20 > -0.14
+            and volatility20 <= volatility60 * 1.28
+            and ma20_slope > 0.0
+            and ma20_slope >= ma50_slope * 1.01
+            and 0.90 <= amount_ratio20 <= 3.80
+            and float(item["close_position"]) >= 0.48
+            and turnover <= 4.80
+        )
+    if source_id == "ma_accel_volume_confirm_quality_h10_v4":
+        return (
+            breadth10 >= 0.45
+            and market_ret20 >= -0.06
+            and close > ma20 > ma60
+            and ret20 >= 0.05
+            and ret60 > 0.02
+            and -0.01 <= ret1 < 0.06
+            and drawdown20 > -0.12
+            and volatility20 <= volatility60 * 1.20
+            and ma20_slope > 0.0
+            and ma20_slope >= ma50_slope * 1.03
+            and 1.10 <= amount_ratio20 <= 3.20
+            and float(item["close_position"]) >= 0.60
+            and turnover <= 4.20
+        )
+    if source_id == "ma_accel_volume_confirm_market_gated_h10_v4":
+        return (
+            breadth10 >= 0.45
+            and market_ret20 >= -0.03
+            and close > ma20 > ma60
+            and ret20 >= 0.04
+            and ret60 > 0.0
+            and -0.02 <= ret1 < 0.08
+            and drawdown20 > -0.13
+            and volatility20 <= volatility60 * 1.25
+            and ma20_slope > 0.0
+            and ma20_slope >= ma50_slope * 1.02
+            and 1.00 <= amount_ratio20 <= 3.50
+            and float(item["close_position"]) >= 0.50
+            and turnover <= 4.50
+        )
+    if source_id == "ma_accel_volume_confirm_rs_weighted_h10_v4":
+        return (
+            breadth10 >= 0.42
+            and market_ret20 >= -0.06
+            and close > ma20 > ma60
+            and ret20 >= 0.04
+            and ret60 > 0.0
+            and ret20 - market_ret20 >= 0.05
+            and ret60 - market_ret60 >= 0.03
+            and -0.02 <= ret1 < 0.08
+            and drawdown20 > -0.13
+            and volatility20 <= volatility60 * 1.25
+            and ma20_slope > 0.0
+            and ma20_slope >= ma50_slope * 1.02
+            and 1.00 <= amount_ratio20 <= 3.50
+            and float(item["close_position"]) >= 0.50
+            and turnover <= 4.50
+        )
+    if source_id == "ma_accel_volume_confirm_pullback_band_h10_v4":
+        return (
+            breadth10 >= 0.45
+            and market_ret20 >= -0.06
+            and close > ma20 * 0.99
+            and ma20 > ma60
+            and ret20 >= 0.04
+            and ret60 > 0.0
+            and -0.025 <= ret1 <= 0.025
+            and drawdown20 > -0.12
+            and volatility20 <= volatility60 * 1.25
+            and ma20_slope > 0.0
+            and ma20_slope >= ma50_slope * 1.02
+            and 1.00 <= amount_ratio20 <= 3.50
+            and float(item["close_position"]) >= 0.45
+            and turnover <= 4.50
+        )
     if source_id == "ma_accel_low_breadth_contrarian_h10_v3":
         return (
             0.40 <= breadth10 <= 0.58
@@ -1943,6 +2142,39 @@ def _h10_ma_accel_score(
         )
     if source_id == "ma_accel_volume_confirm_h10_v3":
         return base_score + min(float(item["amount_ratio20"]) / 2.5, 1.2) + float(item["close_position"])
+    if source_id == "ma_accel_volume_confirm_seed_h10_v4":
+        return base_score + min(float(item["amount_ratio20"]) / 2.5, 1.2) + float(item["close_position"])
+    if source_id == "ma_accel_volume_confirm_dense_guard_h10_v4":
+        return (
+            base_score
+            + min(float(item["amount_ratio20"]) / 2.8, 1.2)
+            + float(item["close_position"])
+            + _percentile_by(pool, "drawdown20", item)
+        )
+    if source_id == "ma_accel_volume_confirm_quality_h10_v4":
+        return (
+            base_score
+            + min(float(item["amount_ratio20"]) / 2.2, 1.2)
+            + 1.2 * float(item["close_position"])
+            + _percentile_by(pool, "return_20d", item)
+        )
+    if source_id == "ma_accel_volume_confirm_market_gated_h10_v4":
+        return base_score + min(float(item["amount_ratio20"]) / 2.5, 1.2) + float(item["close_position"])
+    if source_id == "ma_accel_volume_confirm_rs_weighted_h10_v4":
+        return (
+            base_score
+            + min(float(item["amount_ratio20"]) / 2.5, 1.2)
+            + float(item["close_position"])
+            + max(float(item["return_20d"]) - market_ret20, 0.0)
+            + 0.5 * max(float(item["return_60d"]) - market_ret60, 0.0)
+        )
+    if source_id == "ma_accel_volume_confirm_pullback_band_h10_v4":
+        return (
+            base_score
+            + min(float(item["amount_ratio20"]) / 2.5, 1.2)
+            + _inverse_percentile_by(pool, "return_1d", item)
+            + _percentile_by(pool, "drawdown20", item)
+        )
     if source_id == "ma_accel_low_breadth_contrarian_h10_v3":
         return (
             base_score
@@ -2544,6 +2776,8 @@ def _validate_strategy_search_batch_horizon(*, candidate_batch: str, horizon_day
         raise ValueError("candidate_batch h10_strength requires horizon_days=10")
     if candidate_batch == STRATEGY_SEARCH_BATCH_H10_MA_ACCEL and horizon_days != 10:
         raise ValueError("candidate_batch h10_ma_accel requires horizon_days=10")
+    if candidate_batch == STRATEGY_SEARCH_BATCH_H10_MA_ACCEL_REFINE and horizon_days != 10:
+        raise ValueError("candidate_batch h10_ma_accel_refine requires horizon_days=10")
 
 
 def _strategy_search_artifact_id(
