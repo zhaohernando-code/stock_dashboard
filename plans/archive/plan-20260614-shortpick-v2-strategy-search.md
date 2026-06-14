@@ -2,7 +2,7 @@
 schema_version: 1
 plan_id: "plan-20260614-shortpick-v2-strategy-search"
 title: "Shortpick V2 Strategy Search"
-status: "executing"
+status: "archived"
 created_at: "2026-06-14"
 source_request: "Use reviewed-plan-generator and plan-run-loop to turn the v2 strategy discussion into an audited batch backtest and selection workflow."
 target_repo: "/Users/hernando_zhao/codex/projects/stock_dashboard"
@@ -21,7 +21,7 @@ First batch should favor daily-bar feasible strategies from the MiMo, DeepSeek, 
 Selection remains governed by the existing market-outperformance and annualized-return >= 30% gates.
 Runtime DB reads are allowed for the real-data batch; DB writes are out of scope.
 Major risks: overfitting, insufficient data fields for event strategies, long runtime, and accidental promotion claims.
-Approval state: executing via plan-run-loop; W-001, W-002, and W-003 are complete, W-004 is pending.
+Approval state: all work items complete via plan-run-loop; plan archived and merge closeout is pending.
 
 ## Goal
 
@@ -71,7 +71,7 @@ The local capacity assessment showed that a single v2 replay currently takes abo
 | W-001 | done | 1 | - | Implement the reusable v2 strategy-search batch producer and CLI entrypoint while preserving no-delayed-buy and existing control configs; focused tests must cover parser registration. | `src/ashare_evidence/shortpick_v2_strategy_search.py`, CLI parser/handler, and focused tests | test_pass | cmd:PYTHONPATH=src python3 -m pytest -q tests/test_shortpick_v2_strategy_search.py tests/test_shortpick_v2_replay.py tests/test_shortpick_v2_rule_selection.py | Focused pytest passed: 15 passed in 2.78s; MiMo code review PASS with no blocking/major findings; plan validator passed. |
 | W-002 | done | 2 | W-001 | Run the first real-data strategy-search batch against the local runtime DB with bounded fixed configurations and produce a schema-compatible replay artifact. | `output/shortpick-v2-strategy-search-replay-artifact.json` | file_contains | path:output/shortpick-v2-strategy-search-replay-artifact.json \| pattern:"artifact_family": "shortpick_v2_replay_artifact" | Real-data CLI completed in 207.36s with 30 results, 721 signal days, schema validation passed, file contains check passed, MiMo summary review found no blocking/major issues. Best total return was 0.340899, below market reference 0.418444. |
 | W-003 | done | 3 | W-002 | Apply the existing v2 rule-selection gate to the strategy-search replay artifact and retain blocked/no-qualified outcomes if gates fail. | `output/shortpick-v2-strategy-search-selection-artifact.json` | file_contains | path:output/shortpick-v2-strategy-search-selection-artifact.json \| pattern:"selection_policy" | Rule-selection CLI exited 0, artifact contains `selection_policy`, JSON Schema validation passed, and the governed result is `status=blocked` with 0 selected, 1 baseline, 0 holdout, and 29 rejected configs. |
-| W-004 | pending | 4 | W-003 | Record the first-round outcome and next decision boundary in the v2 contract without promoting unqualified strategies. | `docs/contracts/SHORTPICK_LAB_V2_PLAN_2026-06-12.md` status/evidence update | file_contains | path:docs/contracts/SHORTPICK_LAB_V2_PLAN_2026-06-12.md \| pattern:Strategy search batch outcome | |
+| W-004 | done | 4 | W-003 | Record the first-round outcome and next decision boundary in the v2 contract without promoting unqualified strategies. | `docs/contracts/SHORTPICK_LAB_V2_PLAN_2026-06-12.md` status/evidence update | file_contains | path:docs/contracts/SHORTPICK_LAB_V2_PLAN_2026-06-12.md \| pattern:Strategy search batch outcome | Contract contains `Strategy search batch outcome`, records 0 selected configs and no-promotion boundary, and MiMo documentation review passed with no blocking/major issues. |
 
 ## Acceptance Criteria & Validation Gates
 
@@ -119,6 +119,9 @@ The local capacity assessment showed that a single v2 replay currently takes abo
 | 2026-06-14T13:37:00+08:00 | Codex | Completed W-002; generated the first real-data strategy-search replay artifact, validated schema/content, and recorded that all 30 tested configs still underperformed the market reference. |
 | 2026-06-14T13:39:07+08:00 | Codex | Started W-003; changed W-003 from pending to in_progress for governed rule selection on the strategy-search replay artifact. |
 | 2026-06-14T13:48:29+08:00 | Codex | Completed W-003; generated the governed selection artifact and retained the expected blocked/no-qualified outcome because no tested config cleared market-excess and 30% annualized gates. |
+| 2026-06-14T13:53:12+08:00 | Codex | Started W-004; changed W-004 from pending to in_progress for v2 contract outcome documentation. |
+| 2026-06-14T13:59:03+08:00 | Codex | Completed W-004; documented the strategy-search batch outcome in the v2 contract, preserved no-promotion language, and changed plan status from executing to done. |
+| 2026-06-14T14:00:17+08:00 | Codex | Archived the completed schema-v1 plan under `plans/archive/` for merge closeout. |
 
 ## External Review Log
 

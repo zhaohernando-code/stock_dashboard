@@ -1,6 +1,6 @@
 # Short Pick Lab V2 Plan
 
-Status: Complete through Phase 9; published runtime served API verified
+Status: Complete through Phase 10; published runtime served API verified through Phase 9
 Owner: stock_dashboard
 Created: 2026-06-12
 Scope: planning contract only; not a runbook
@@ -80,6 +80,25 @@ This amendment supersedes the original Phase 4 promotion result for current cand
 | Annualized return floor | Done | Non-baseline configs must have annualized return at least 30%. |
 | Baseline separation | Done | `top1_or_skip_v1` may remain as baseline/control even when it fails promotion gates, but it cannot be labeled as a promoted candidate. |
 
+## 2026-06-14 Strategy search batch outcome
+
+The first bounded v2 strategy-search batch tested 30 daily-bar-feasible candidate-source and execution-config combinations under the existing v2 account constraints: CNY 200,000 capital, 100-share board lots, no delayed buying, and fallback-or-skip execution only.
+
+| Item | Outcome |
+| --- | --- |
+| Replay artifact | `output/shortpick-v2-strategy-search-replay-artifact.json` |
+| Selection artifact | `output/shortpick-v2-strategy-search-selection-artifact.json` |
+| Signal days | 721 |
+| Result count | 30 |
+| Market reference total return | `+41.8444%` |
+| Best tested total return | `+34.0899%` from `quiet_breakout_rank2__fixed_notional_40k_top5_v1` |
+| Best tested annualized return | `+10.2012%` |
+| Governed selection result | `status=blocked`, 0 selected configs, 1 baseline config, 0 holdout configs, 29 rejected configs |
+
+No configuration from this batch qualifies for v2 paper-tracking promotion. The current decision boundary remains strict: a non-baseline strategy must have explicit market-reference evidence, total return strictly above that reference, and annualized return at least 30% before it can be treated as a current v2 candidate.
+
+The outcome also means the first batch did not find enough value in execution-only variations or daily-bar-only candidate-source variations. The next strategy iteration should change the selection thesis or add a governed data domain before another large replay batch; simply choosing the least-bad parameter set from this batch is not acceptable.
+
 ## Strategy Design Principles
 
 | Principle | Status | Requirement |
@@ -120,6 +139,7 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 | Governance sprawl | Done | Phase 4/5 fixed selection policy and schema versions; Phase 6/7 expose read-only APIs/UI without mutable parameter controls. |
 | User-facing overclaim | Done | Phase 6 read APIs return `claim_ceiling=research_observation`, evidence-basis labels, and paper/research disclaimers; Phase 7 preserves those labels in the UI. |
 | Underperforming market reference | Done | Phase 9 adds `shortpick_v2_rule_selection_v2`; strategies missing market reference evidence, failing market excess, or below 30% annualized are blocked from current candidate status. |
+| First strategy-search batch underqualified | Done | Phase 10 records that 30 tested configs produced 0 selected strategies under the market-outperformance and annualized-return gates, so no batch result is promoted. |
 
 ## Landing Flow
 
@@ -134,6 +154,7 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 | 7. Frontend tab | Done | Added `试验田v2` with only `纸面追踪` and `历史回放`, backed by separate v2 frontend API calls and static coverage. |
 | 8. Verification and publish | Done | Published runtime source/dist for `b62f2a9`; verified backend health, v2 served APIs, frontend asset match, and served `试验田v2` UI behavior. |
 | 9. Qualification gate amendment | Done | Backfilled local runtime benchmark index bars, added `shortpick_v2_rule_selection_v2` gates for explicit market reference, market outperformance, and at least 30% annualized return, regenerated runtime v2 replay/selection artifacts with market reference `+41.8444%`, and changed read models so no current config is shown as selected when the gate blocks all candidates. |
+| 10. Strategy search batch outcome | Done | Added a bounded first strategy-search batch with 30 daily-bar-feasible combinations. The governed selector returned `status=blocked` with 0 selected configs; the best result still trailed the `+41.8444%` market reference and remained below the 30% annualized floor, so no strategy is promoted. |
 
 ## Acceptance Rules
 
@@ -146,6 +167,7 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 | Historical-first promotion | Done | Phase 4 selected candidates from the fixed Phase 3 replay artifact only, without UI parameters, DB writes, model calls, or manual overrides. |
 | Bounded promoted set | Done | Phase 4 selected two configurations for Phase 5 contract design and retained the remaining passing config as a holdout. |
 | Market and annualized qualification | Done | Current selection policy requires explicit market reference evidence, total return strictly above that reference, and annualized return at least 30%; current low-return v2 results are blocked rather than promoted. |
+| Strategy search batch outcome | Done | Phase 10 records the first bounded strategy-search batch result, including replay and selection artifact paths, best tested return, market reference, selected count, and the no-promotion decision. |
 | Replay data adequacy | Done | Phase 3 artifact reports signal count, trade count, skipped count, trade-day count, coverage status, and data gaps; Phase 4 applies explicit promotion thresholds. |
 | Efficiency boundary | Done | Phase 3 replay is offline/precomputed, Phase 6 read APIs load artifacts without market fetches or dynamic replay, and Phase 7 only reads those APIs. |
 | Explainability | Done | Phase 3 artifact exposes buy/fallback/skip reason counts and bounded account-state decision samples. |
@@ -162,6 +184,7 @@ Dynamic action selection should not be part of the first promoted v2 rules. If l
 | Minimum evidence threshold | Done | Phase 4 fixed first thresholds for signal count, trade count, skip ratio, return, drawdown, invested ratio, turnover, reason counts, and leakage audit; forward tracking remains read-only contract observation until rows exist. |
 | Position and cash defaults | Done | V2 uses CNY 200,000 default cash; promoted configs fix the cash reserve/notional and position-cap behavior selected from replay evidence. |
 | Parameter governance location | Done | Current live-facing scope is read-only and governed by fixed Phase 4/5 policy/schema versions; no mutable UI/API parameter surface is active. |
+| Next strategy-search direction | Blocked | Phase 10 found no qualified strategy in the first bounded batch. A later plan must either change the stock-selection thesis or add a governed data domain before another large search; no current batch result may be promoted. |
 
 ## Review Status
 
