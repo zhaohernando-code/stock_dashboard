@@ -2,7 +2,7 @@
 schema_version: 1
 plan_id: "plan-20260615-h10-parameter-significance"
 title: "H10 Parameter Significance"
-status: "approved"
+status: "executing"
 created_at: "2026-06-15"
 source_request: "Continue from the current strong H10 quiet strategy and use a reviewed plan/run loop to validate whether important parameters, except the already-narrowed H10 horizon, have statistical or logical support."
 target_repo: "/Users/hernando_zhao/codex/worker-workspaces/20260614-shortpick-v2-robust-strategy-search-42e/20260615-h10-param-significance-adbc6f"
@@ -82,7 +82,7 @@ The next useful step is therefore not a broad new search, but a controlled ablat
 
 | ID | Status | Order | Depends On | Task | Deliverable | Acceptance Type | Acceptance Spec | Evidence |
 |----|--------|-------|------------|------|-------------|-----------------|-----------------|----------|
-| W-001 | pending | 1 | - | Add the H10 parameter-significance artifact builder, CLI, schemas if needed, and focused tests. | Parameter-significance artifact code and tests covering fixed H10 scope, ablation families, support labels, sparse-sample downgrade, and no-promotion semantics | test_pass | cmd:python3 -m pytest tests/test_shortpick_v2_h10_parameter_significance.py tests/test_shortpick_v2_strategy_search.py -q |  |
+| W-001 | done | 1 | - | Add the H10 parameter-significance artifact builder, CLI, schemas if needed, and focused tests. | Parameter-significance artifact code and tests covering fixed H10 scope, ablation families, support labels, sparse-sample downgrade, and no-promotion semantics | test_pass | cmd:python3 -m pytest tests/test_shortpick_v2_h10_parameter_significance.py tests/test_shortpick_v2_strategy_search.py -q | Exit 0; 42 passed in 0.72s; MiMo code review found no blocking/major issues. |
 | W-002 | pending | 2 | W-001 | Run the real-data H10 parameter-significance artifact against the runtime DB. | Runtime parameter-significance JSON artifact under `output/` | command_exit_0 | cmd:PYTHONPATH=src python3 -m ashare_evidence.cli shortpick-v2-h10-parameter-significance --database-url sqlite:////Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/ashare_dashboard.db --horizon-days 10 --initial-cash 200000 --output output/shortpick-v2-h10-parameter-significance-artifact.json |  |
 | W-003 | pending | 3 | W-002 | Validate the generated parameter-significance artifact with machine-checkable structure and content gates. | Artifact validation command/result covering support labels, sample counts, period blocks, fixed H10, and no-promotion semantics | command_exit_0 | cmd:PYTHONPATH=src python3 -m ashare_evidence.cli shortpick-v2-h10-parameter-significance-validate --artifact output/shortpick-v2-h10-parameter-significance-artifact.json |  |
 | W-004 | pending | 4 | W-003 | Record the interpretation and governance outcome for each tested parameter. | Durable docs/run notes describing supported, inconclusive, and rejected parameters without paper-tracking promotion | file_contains | path:docs/archive/SHORTPICK_LAB_V2_H10_PARAMETER_SIGNIFICANCE_RUN_2026-06-15.md \| pattern:supported parameters; inconclusive parameters; rejected parameters |  |
@@ -134,6 +134,8 @@ The next useful step is therefore not a broad new search, but a controlled ablat
 | 2026-06-15T12:18:00+08:00 | Codex | Accepted MiMo round 1 feedback: added artifact validation work item, minimum sample/block fields, sparse-sample downgrade rule, stricter doc acceptance pattern, and explicit 90k diagnostic-only interpretation. |
 | 2026-06-15T12:28:00+08:00 | Codex | Accepted MiMo round 2 minor feedback by making the sparse-sample downgrade boundary an explicit W-001 test requirement. |
 | 2026-06-15T12:35:00+08:00 | Codex | Set plan status to approved after MiMo round 2 reported no blocking or major findings and the user had requested plan-then-run execution. |
+| 2026-06-15T12:55:00+08:00 | Codex | W-001 status changed from pending to in_progress; plan status changed from approved to executing for the run-loop. |
+| 2026-06-15T13:07:00+08:00 | Codex | W-001 status changed from in_progress to done after adding the parameter-significance artifact/CLI/validator/tests and passing the focused pytest gate. |
 
 ## External Review Log
 

@@ -101,6 +101,11 @@ from ashare_evidence.shortpick_v2_h10_execution_decomposition import (
     build_shortpick_v2_h10_execution_decomposition_artifact,
     write_shortpick_v2_h10_execution_decomposition_artifact,
 )
+from ashare_evidence.shortpick_v2_h10_parameter_significance import (
+    build_shortpick_v2_h10_parameter_significance_artifact,
+    validate_shortpick_v2_h10_parameter_significance_artifact,
+    write_shortpick_v2_h10_parameter_significance_artifact,
+)
 from ashare_evidence.shortpick_v2_h10_robustness import (
     build_shortpick_v2_h10_robustness_artifact,
     write_shortpick_v2_h10_robustness_artifact,
@@ -243,6 +248,7 @@ def _should_initialize_database(database_url: str | None) -> bool:
 NO_DB_COMMANDS = {
     "shortpick-governance-credible-control-plan",
     "shortpick-v2-h10-artifact-validate",
+    "shortpick-v2-h10-parameter-significance-validate",
 }
 
 
@@ -988,6 +994,41 @@ def build_parser() -> argparse.ArgumentParser:
         default="output/shortpick-v2-h10-quiet-execution-decomposition-artifact.json",
     )
 
+    shortpick_v2_h10_parameter_significance = subparsers.add_parser(
+        "shortpick-v2-h10-parameter-significance",
+        help="Generate parameter significance diagnostics for the h10 quiet champion line.",
+    )
+    shortpick_v2_h10_parameter_significance.add_argument("--database-url", default=None)
+    shortpick_v2_h10_parameter_significance.add_argument("--start-date", default="2023-04-13")
+    shortpick_v2_h10_parameter_significance.add_argument("--end-date", default="2026-05-08")
+    shortpick_v2_h10_parameter_significance.add_argument("--initial-cash", type=float, default=200_000.0)
+    shortpick_v2_h10_parameter_significance.add_argument(
+        "--entry-price-source",
+        choices=["next_close", "next_open", "same_close_proxy"],
+        default="next_close",
+    )
+    shortpick_v2_h10_parameter_significance.add_argument("--horizon-days", type=int, default=10)
+    shortpick_v2_h10_parameter_significance.add_argument("--pool-limit", type=int, default=40)
+    shortpick_v2_h10_parameter_significance.add_argument("--rank-limit", type=int, default=6)
+    shortpick_v2_h10_parameter_significance.add_argument("--cost-bps", type=float, default=20.0)
+    shortpick_v2_h10_parameter_significance.add_argument("--stamp-tax-bps", type=float, default=5.0)
+    shortpick_v2_h10_parameter_significance.add_argument("--min-signal-symbol-count", type=int, default=45)
+    shortpick_v2_h10_parameter_significance.add_argument(
+        "--account-profile",
+        choices=["new_retail_cash_account", "unrestricted"],
+        default="new_retail_cash_account",
+    )
+    shortpick_v2_h10_parameter_significance.add_argument(
+        "--output",
+        default="output/shortpick-v2-h10-parameter-significance-artifact.json",
+    )
+
+    shortpick_v2_h10_parameter_significance_validate = subparsers.add_parser(
+        "shortpick-v2-h10-parameter-significance-validate",
+        help="Validate h10 quiet parameter significance artifact structure and governance labels.",
+    )
+    shortpick_v2_h10_parameter_significance_validate.add_argument("--artifact", required=True)
+
     shortpick_v2_h10_artifact_validate = subparsers.add_parser(
         "shortpick-v2-h10-artifact-validate",
         help="Validate h10 quiet robustness and execution decomposition artifacts.",
@@ -1683,6 +1724,46 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
         return 0
+
+    if args.command == "shortpick-v2-h10-parameter-significance":
+        with session_scope(args.database_url) as session:
+            payload = build_shortpick_v2_h10_parameter_significance_artifact(
+                session,
+                start_date=date.fromisoformat(args.start_date),
+                end_date=date.fromisoformat(args.end_date),
+                initial_cash=args.initial_cash,
+                entry_price_source=args.entry_price_source,
+                horizon_days=args.horizon_days,
+                pool_limit=args.pool_limit,
+                rank_limit=args.rank_limit,
+                cost_bps=args.cost_bps,
+                stamp_tax_bps=args.stamp_tax_bps,
+                min_signal_symbol_count=args.min_signal_symbol_count,
+                account_profile=args.account_profile,
+            )
+        path = write_shortpick_v2_h10_parameter_significance_artifact(payload, output_path=args.output)
+        support_counts: dict[str, int] = {}
+        for row in payload.get("parameter_rows") or []:
+            label = str(row.get("support_label") or "unknown")
+            support_counts[label] = support_counts.get(label, 0) + 1
+        _print_json(
+            {
+                "status": "ok",
+                "artifact_family": payload.get("artifact_family"),
+                "artifact_id": payload.get("artifact_id"),
+                "output_path": str(path),
+                "horizon_days": (payload.get("analysis_scope") or {}).get("horizon_days"),
+                "parameter_row_count": len(payload.get("parameter_rows") or []),
+                "support_counts": support_counts,
+                "recommendation_status": (payload.get("recommendation") or {}).get("status"),
+            }
+        )
+        return 0
+
+    if args.command == "shortpick-v2-h10-parameter-significance-validate":
+        payload = validate_shortpick_v2_h10_parameter_significance_artifact(artifact_path=args.artifact)
+        _print_json(payload)
+        return 0 if payload.get("status") == "passed" else 1
 
     if args.command == "shortpick-v2-h10-artifact-validate":
         payload = validate_shortpick_v2_h10_artifacts(
