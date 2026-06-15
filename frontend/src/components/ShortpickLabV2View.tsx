@@ -2,7 +2,6 @@ import {
   Alert,
   Button,
   Card,
-  Collapse,
   Empty,
   Progress,
   Skeleton,
@@ -14,7 +13,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { ReloadOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type {
   ShortpickV2ConfigReadout,
@@ -62,20 +61,6 @@ function configRoleColor(role?: string | null): string {
   if (role === "baseline_control") return "blue";
   if (role === "holdout") return "gold";
   if (role === "rejected") return "red";
-  return "default";
-}
-
-function actionLabel(action?: string | null): string {
-  if (action === "buy_primary") return "买入首选";
-  if (action === "buy_fallback") return "买入候补";
-  if (action === "skip") return "不买";
-  return action ? "未识别动作" : "未记录";
-}
-
-function actionColor(action?: string | null): string {
-  if (action === "buy_primary") return "green";
-  if (action === "buy_fallback") return "cyan";
-  if (action === "skip") return "gold";
   return "default";
 }
 
@@ -433,54 +418,6 @@ function ShortpickV2ReplayTab({
   const baselineRows = replay?.baseline_configs ?? [];
   const holdoutRows = replay?.holdout_configs ?? [];
   const rejectedRows = replay?.rejected_configs ?? [];
-  const samples = useMemo(
-    () => selectedRows.flatMap((config) => (
-      config.decision_samples.map((sample) => ({ ...sample, config_id: config.config_id }))
-    )),
-    [selectedRows],
-  );
-  const sampleColumns: ColumnsType<Record<string, unknown>> = [
-    {
-      title: "信号日",
-      key: "signal_date",
-      render: (_, item) => <Text>{String(item.signal_date ?? "--")}</Text>,
-    },
-    {
-      title: "配置",
-      key: "config",
-      render: (_, item) => <Text>{configReadableLabel(String(item.config_id ?? ""))}</Text>,
-    },
-    {
-      title: "动作 / 原因",
-      key: "action",
-      render: (_, item) => (
-        <Space direction="vertical" size={0}>
-          <Tag color={actionColor(String(item.action ?? ""))}>{actionLabel(String(item.action ?? ""))}</Tag>
-          <Text type="secondary">{reasonLabel(String(item.reason ?? ""))}</Text>
-        </Space>
-      ),
-    },
-    {
-      title: "标的 / 排名",
-      key: "symbol",
-      render: (_, item) => (
-        <Space direction="vertical" size={0}>
-          <Text>{String(item.symbol ?? "--")}</Text>
-          <Text type="secondary">入选位置 {displayValue(item.selected_rank, "无")}</Text>
-        </Space>
-      ),
-    },
-    {
-      title: "资金 / 数量",
-      key: "cash",
-      render: (_, item) => (
-        <Space direction="vertical" size={0}>
-          <Text>后 {formatNumber(typeof item.cash_after === "number" ? item.cash_after : null)}</Text>
-          <Text type="secondary">数量 {formatNumber(typeof item.quantity === "number" ? item.quantity : null)}</Text>
-        </Space>
-      ),
-    },
-  ];
   return (
     <div className="panel-stack shortpick-v2-tab-body">
       <Card
@@ -528,31 +465,9 @@ function ShortpickV2ReplayTab({
         <ConfigSummaryTable rows={[...selectedRows, ...baselineRows]} loading={loading} />
       </Card>
 
-      <Collapse
-        className="shortpick-v2-reference-collapse"
-        items={[
-          {
-            key: "holdout",
-            label: "留出与未采用配置",
-            children: <ConfigSummaryTable rows={[...holdoutRows, ...rejectedRows]} loading={loading} />,
-          },
-          {
-            key: "samples",
-            label: "决策样本",
-            children: samples.length ? (
-              <Table
-                rowKey={(_item, index) => `decision-sample-${index ?? 0}`}
-                size="small"
-                columns={sampleColumns}
-                dataSource={samples}
-                pagination={false}
-              />
-            ) : (
-              <Empty description="暂无决策样本" />
-            ),
-          },
-        ]}
-      />
+      <Card className="panel-card" title="留出与未采用配置统计">
+        <ConfigSummaryTable rows={[...holdoutRows, ...rejectedRows]} loading={loading} />
+      </Card>
     </div>
   );
 }
@@ -583,7 +498,7 @@ export function ShortpickLabV2View() {
     setReplayLoading(true);
     setError(null);
     try {
-      const result = await api.getShortpickV2HistoricalReplay(5);
+      const result = await api.getShortpickV2HistoricalReplay(0);
       setHistoricalReplay(result.data);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "加载 v2 历史回放失败。");

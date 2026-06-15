@@ -276,7 +276,7 @@ export function getShortpickV2PaperTracking() {
   }))();
 }
 
-export function getShortpickV2HistoricalReplay(sampleLimit = 5) {
+export function getShortpickV2HistoricalReplay(sampleLimit = 0) {
   const query = new URLSearchParams();
   query.set("sample_limit", String(sampleLimit));
   return (async () => ({

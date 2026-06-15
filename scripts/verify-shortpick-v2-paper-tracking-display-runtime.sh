@@ -152,6 +152,11 @@ if true_forward_count > 0 and not any(
 for row in rows:
     if not isinstance(row, dict):
         fail("paper_display.table.rows contains a non-object row")
+    row_signal_date = str(row.get("signal_date") or row.get("signal_date_text") or "")
+    if not row_signal_date:
+        fail("paper_display.table.rows contains a row without signal_date")
+    if parse_iso_day(row_signal_date, "paper_display.table.rows.signal_date") < parse_iso_day(start, "coverage_start"):
+        fail(f"paper_display.table.rows contains a row before {start}: {row_signal_date}")
     if row.get("tracking_tag") == "真实前向" and row.get("note") and "回放" in str(row.get("note")):
         fail("true-forward row note must not describe the row as replay")
 
@@ -170,7 +175,7 @@ print(
 PY
 
 step "Fetching served v2 historical-replay API"
-curl -fsS "$API_BASE_URL/shortpick-lab-v2/historical-replay?sample_limit=5" -o "$REPLAY_API_PAYLOAD_FILE"
+curl -fsS "$API_BASE_URL/shortpick-lab-v2/historical-replay?sample_limit=0" -o "$REPLAY_API_PAYLOAD_FILE"
 ASHARE_SHORTPICK_V2_REPLAY_API_PAYLOAD_FILE="$REPLAY_API_PAYLOAD_FILE" "$PYTHON_BIN" - <<'PY'
 from __future__ import annotations
 
@@ -210,8 +215,6 @@ if not selected_configs:
     fail("historical replay selected_configs must not be empty")
 if not baseline_configs:
     fail("historical replay baseline_configs must not be empty")
-if not any(require_list(row.get("decision_samples"), "decision_samples") for row in selected_configs if isinstance(row, dict)):
-    fail("historical replay selected configs must include decision samples for the served tab")
 print("served historical replay API verification passed")
 PY
 
@@ -320,12 +323,14 @@ check_visible_text(
         "入选配置",
         "覆盖状态",
         "回放来源",
-        "决策样本",
         "研究观察",
         "历史账户回放筛选",
         "已记录来源",
     ],
 )
+for forbidden_replay_detail in ("决策样本", "标的 / 排名", "资金 / 数量", "入选位置"):
+    if forbidden_replay_detail in replay_text:
+        fail(f"served historical replay tab leaked concrete replay detail text: {forbidden_replay_detail}")
 
 print("served page visible-text verification passed for paper and historical replay tabs")
 PY

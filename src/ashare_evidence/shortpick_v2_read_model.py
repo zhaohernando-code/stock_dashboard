@@ -593,9 +593,9 @@ def _paper_display_replay_cache_key(
 
         bind = session.get_bind()
         database_identity = str(getattr(bind, "url", "unknown"))
-        count_value, latest_observed_at = session.execute(
-            select(func.count(MarketBar.id), func.max(MarketBar.observed_at)).where(MarketBar.timeframe == "1d")
-        ).one()
+        latest_observed_at = session.execute(
+            select(func.max(MarketBar.observed_at)).where(MarketBar.timeframe == "1d")
+        ).scalar_one()
     except Exception:
         coverage = _empty_paper_display_coverage()
         coverage["source_status"] = "market_data_read_error"
@@ -604,7 +604,6 @@ def _paper_display_replay_cache_key(
     return (
         database_identity,
         tuple(active_config_ids),
-        int(count_value or 0),
         latest_observed_at.isoformat() if hasattr(latest_observed_at, "isoformat") else str(latest_observed_at or ""),
     )
 
@@ -623,12 +622,9 @@ def _build_paper_display_replay_rows_from_session(
         return [], coverage
 
     from ashare_evidence.market_rules import ACCOUNT_PROFILE_NEW_RETAIL_CASH, filter_account_eligible_series
-    from ashare_evidence.shortpick_market_factor_study import (
-        ENTRY_PRICE_SOURCE_NEXT_CLOSE,
-        INDEX_SYMBOLS,
-        _load_daily_series,
-    )
+    from ashare_evidence.shortpick_market_factor_study import ENTRY_PRICE_SOURCE_NEXT_CLOSE, INDEX_SYMBOLS
     from ashare_evidence.shortpick_portfolio_backtest import _trade_days
+    from ashare_evidence.shortpick_ranked_pool_replay_input import _load_daily_series_for_replay_window
     from ashare_evidence.shortpick_v2_replay import (
         DEFAULT_COST_BPS,
         DEFAULT_STAMP_TAX_BPS,
@@ -637,7 +633,18 @@ def _build_paper_display_replay_rows_from_session(
     from ashare_evidence.shortpick_v2_strategy_search import build_h10_quiet_champion_strategy_search_candidate_sources
 
     start_date = date.fromisoformat(SHORTPICK_V2_TRACKING_START_DATE)
-    raw_series_by_symbol = _load_daily_series(session)
+    latest_market_day = _latest_daily_market_bar_day(session)
+    if latest_market_day is None or latest_market_day < start_date:
+        coverage["source_status"] = "no_market_data_after_start"
+        coverage["source_status_label"] = "本地行情库没有覆盖 2026-05-08 之后的数据"
+        coverage["coverage_end"] = latest_market_day.isoformat() if latest_market_day is not None else None
+        coverage["latest_source_signal_date"] = coverage["coverage_end"]
+        return [], coverage
+    raw_series_by_symbol = _load_daily_series_for_replay_window(
+        session,
+        start_date=start_date - timedelta(days=260),
+        end_date=latest_market_day + timedelta(days=80),
+    )
     series_by_symbol, account_eligibility = filter_account_eligible_series(
         raw_series_by_symbol,
         account_profile=ACCOUNT_PROFILE_NEW_RETAIL_CASH,
@@ -650,6 +657,7 @@ def _build_paper_display_replay_rows_from_session(
         coverage["coverage_end"] = latest_bar_day.isoformat() if latest_bar_day is not None else None
         coverage["latest_source_signal_date"] = coverage["coverage_end"]
         return [], coverage
+    latest_bar_day = min(latest_bar_day, latest_market_day)
 
     available_signal_days = _trade_days(
         series_by_symbol,
@@ -1145,6 +1153,21 @@ def _latest_series_day(series_by_symbol: dict[str, Any]) -> date | None:
     return max(days) if days else None
 
 
+def _latest_daily_market_bar_day(session: Any) -> date | None:
+    from sqlalchemy import func, select
+
+    from ashare_evidence.models import MarketBar
+
+    latest_observed_at = session.execute(
+        select(func.max(MarketBar.observed_at)).where(MarketBar.timeframe == "1d")
+    ).scalar_one()
+    if latest_observed_at is None:
+        return None
+    if hasattr(latest_observed_at, "date"):
+        return latest_observed_at.date()
+    return None
+
+
 def _stock_display_text(symbol: str, *, symbol_names: dict[str, str]) -> str:
     if not symbol:
         return "无"
@@ -1335,6 +1358,17 @@ def _validate_paper_tracking_record(record: dict[str, Any], *, active_config_ids
     config_id = str(record.get("config_id") or "")
     if config_id not in active_config_ids:
         raise ValueError(f"paper tracking record config_id is not active for Phase 6: {config_id}")
+    signal_date = str(record.get("signal_date") or "")
+    try:
+        signal_day = date.fromisoformat(signal_date)
+    except ValueError as exc:
+        raise ValueError(f"paper tracking record signal_date must be ISO date: {signal_date}") from exc
+    tracking_start = date.fromisoformat(SHORTPICK_V2_TRACKING_START_DATE)
+    if signal_day < tracking_start:
+        raise ValueError(
+            f"paper tracking record signal_date must be on or after {SHORTPICK_V2_TRACKING_START_DATE}: "
+            f"{signal_date}"
+        )
     action = str(record.get("decision_action") or "")
     if action not in SHORTPICK_V2_ALLOWED_ACTIONS:
         raise ValueError(f"paper tracking record decision_action is not allowed: {action}")

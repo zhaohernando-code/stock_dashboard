@@ -641,6 +641,7 @@ def test_shortpick_v2_historical_replay_read_model_uses_selected_precomputed_art
     assert payload["evidence_basis"] == "historical_account_replay_selection"
     assert payload["selected_configs"] == []
     assert [item["config_id"] for item in payload["baseline_configs"]] == ["top1_or_skip_v1"]
+    assert len(payload["baseline_configs"][0]["decision_samples"]) == 1
     assert payload["holdout_configs"] == []
     assert {item["config_id"] for item in payload["rejected_configs"]} == {
         "conservative_cash_reserve_60k_top5_v1",
@@ -649,6 +650,10 @@ def test_shortpick_v2_historical_replay_read_model_uses_selected_precomputed_art
         "top3_fallback_v1",
     }
     assert payload["leakage_audit"]["read_model_policy"] == "read_only_precomputed_artifacts_no_dynamic_replay"
+
+    summary_only_payload = build_shortpick_v2_historical_replay_read_model(sample_limit=0)
+    assert summary_only_payload["baseline_configs"][0]["decision_samples"] == []
+    assert summary_only_payload["summary"]["decision_sample_limit"] == 0
 
 
 def test_shortpick_v2_paper_tracking_returns_contract_ready_empty_projection(
@@ -732,6 +737,62 @@ def test_shortpick_v2_paper_tracking_display_replays_since_start_with_session(
     assert payload["summary"]["replay_record_count"] == coverage["replay_row_count"]
     assert display["table"]["rows"]
     assert {row["tracking_tag"] for row in display["table"]["rows"]} == {"回放"}
+
+
+def test_shortpick_v2_paper_tracking_display_avoids_full_daily_series_loader(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _write_v2_artifacts(tmp_path, monkeypatch)
+    _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
+    database_path = tmp_path / "paper-display-windowed.db"
+    database_url = f"sqlite:///{database_path}"
+    init_database(database_url)
+    _seed_v2_paper_display_market_fixture(database_url)
+
+    import ashare_evidence.shortpick_market_factor_study as market_factor_study
+
+    def _fail_full_loader(*args, **kwargs):
+        raise AssertionError("paper display must not load the full daily market table")
+
+    monkeypatch.setattr(market_factor_study, "_load_daily_series", _fail_full_loader)
+
+    with session_scope(database_url) as session:
+        payload = build_shortpick_v2_paper_tracking_read_model(include_records=True, session=session)
+
+    coverage = payload["paper_display"]["coverage"]
+    assert coverage["coverage_start"] == "2026-05-08"
+    assert coverage["coverage_end"] == "2026-06-15"
+    assert coverage["source_status"] != "replay_generation_error"
+    assert coverage["row_or_gap_accounting_passed"] is True
+    assert payload["paper_display"]["table"]["rows"]
+
+
+def test_shortpick_v2_paper_tracking_window_loader_filters_market_bars_by_date(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "paper-display-window-filter.db"
+    database_url = f"sqlite:///{database_path}"
+    init_database(database_url)
+    _seed_v2_paper_display_market_fixture(database_url)
+
+    from ashare_evidence.shortpick_ranked_pool_replay_input import _load_daily_series_for_replay_window
+
+    start = date(2026, 5, 8)
+    end = date(2026, 5, 12)
+    with session_scope(database_url) as session:
+        series_by_symbol = _load_daily_series_for_replay_window(session, start_date=start, end_date=end)
+
+    bar_days = {
+        bar.day
+        for series in series_by_symbol.values()
+        for bar in series.bars
+    }
+    assert bar_days
+    assert min(bar_days) >= start
+    assert max(bar_days) <= end
+    assert date(2026, 5, 7) not in bar_days
+    assert date(2026, 5, 13) not in bar_days
 
 
 def test_shortpick_v2_paper_tracking_display_uses_readable_chinese_text(
@@ -882,6 +943,21 @@ def test_shortpick_v2_paper_tracking_reads_existing_v2_ledger_artifact(
     assert payload["records"][0]["decision_action"] == "buy_primary"
     assert payload["records"][0]["evidence_basis"] == "true_forward_tracking"
     assert payload["paper_display"]["coverage"]["true_forward_record_count"] == 1
+
+
+def test_shortpick_v2_paper_tracking_rejects_ledger_records_before_tracking_start(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, selection_path, ledger_path = _write_v2_artifacts(tmp_path, monkeypatch, replay=_qualified_replay_artifact())
+    ledger = _valid_v2_paper_ledger(selection_path)
+    ledger["records"][0]["record_id"] = "shortpick_v2:test:2026-05-07:conservative"
+    ledger["records"][0]["signal_date"] = "2026-05-07"
+    ledger["records"][0]["decision_date"] = "2026-05-07"
+    ledger_path.write_text(json.dumps(ledger, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="signal_date must be on or after 2026-05-08"):
+        build_shortpick_v2_paper_tracking_read_model(include_records=True)
 
 
 def test_shortpick_v2_paper_tracking_rejects_h10_fixed90_active_ledger_config(

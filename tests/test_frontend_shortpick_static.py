@@ -24,6 +24,7 @@ class FrontendShortpickStaticTests(unittest.TestCase):
 
         self.assertIn("getShortpickV2PaperTracking", api_source)
         self.assertIn("getShortpickV2HistoricalReplay", api_source)
+        self.assertIn("getShortpickV2HistoricalReplay(sampleLimit = 0)", api_source)
         self.assertIn("/shortpick-lab-v2/paper-tracking", api_source)
         self.assertIn("/shortpick-lab-v2/historical-replay", api_source)
         self.assertIn("getShortpickV2PaperTracking", api_index_source)
@@ -40,6 +41,8 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("不允许延迟买入", component_source)
         self.assertIn("getShortpickV2PaperTracking", component_source)
         self.assertIn("getShortpickV2HistoricalReplay", component_source)
+        self.assertIn("api.getShortpickV2HistoricalReplay(0)", component_source)
+        self.assertNotIn("api.getShortpickV2HistoricalReplay(5)", component_source)
         self.assertNotIn("getShortpickPaperTracking", component_source)
         self.assertNotIn("getShortpickReplayRuns", component_source)
         self.assertNotIn("getShortpickValidationQueue", component_source)
@@ -84,7 +87,12 @@ class FrontendShortpickStaticTests(unittest.TestCase):
             component_source.index("function ShortpickV2ReplayTab"):
             component_source.index("export function ShortpickLabV2View")
         ]
-        self.assertIn('rowKey={(_item, index) => `decision-sample-${index ?? 0}`}', replay_tab_source)
+        self.assertIn("历史回放核心读数", replay_tab_source)
+        self.assertIn("留出与未采用配置统计", replay_tab_source)
+        self.assertNotIn("decision_samples", replay_tab_source)
+        self.assertNotIn("sampleColumns", replay_tab_source)
+        self.assertNotIn("decision-sample", replay_tab_source)
+        self.assertNotIn("决策样本", replay_tab_source)
         for visible_text_match in (
             "contract_ready",
             "research_observation",

@@ -15,10 +15,10 @@ review_rounds: 3
 ## Compaction-Resistant Summary
 
 Goal: make `试验田v2 -> 纸面追踪` look and read like v1 paper tracking, while clearly labeling catch-up rows with `signal_date >= 2026-05-08` as `回放`.
-Hard scope: no new strategy search, no delayed buy, no fixed90 promotion, no true-forward claim for replay rows, no extra v2 modules.
+Hard scope: paper details are limited to the 2026-05-08-to-current window; `历史回放` shows aggregate statistics only; no new strategy search, delayed buy, fixed90 promotion, or true-forward claim for replay rows.
 Key dependencies: existing H10 fixed85/fixed80 governance, v2 read model, v1 paper-tracking UI structure, runtime publish path.
-Major risks: confusing historical/replay rows with real paper performance, leaking raw field names/config IDs into the UI, and validating only fixtures instead of the served route.
-Approval state: MiMo round 1 passed after minor clarifications. Codex round 1 findings are accepted and resolved. The plan is executing W-001 under the user's explicit implementation request.
+Major risks: confusing historical/replay rows with real paper performance, leaking raw field names/config IDs into the UI, accidental full-history runtime reads, and validating only fixtures instead of the served route.
+Approval state: MiMo/Codex findings through W-003 are dispositioned; W-003 is executing under the user's explicit continuation request.
 
 ## Goal
 
@@ -42,6 +42,8 @@ The current v2 paper-tracking page exposes contract/config/read-model fields and
 | SRC-008 | Because this is live-facing, publish to runtime and verify the real served route/API before closeout. | W-003 | covered | in-scope | Runtime verification script runs relevant gates, publishes with refresh skipped, checks served `/shortpick-lab-v2/paper-tracking`, and verifies the browser route under `/projects/ashare-dashboard/`. |
 | SRC-009 | Keep `/shortpick-lab-v2/paper-tracking` response compatible for existing consumers while adding display fields. | W-001,W-002,W-003 | covered | in-scope | Tests assert existing top-level fields and summary fields remain present, new display fields are additive/optional, summary endpoint still omits heavy rows where intended, and frontend types match backend schema. |
 | SRC-010 | Schema/deployment-risk work requires Codex escalation evidence in addition to MiMo. | W-001,W-002,W-003 | covered | in-scope | Codex plan review plus W-001/W-003 run/code escalation reviews are recorded with no unresolved blocking or major findings before merge. |
+| SRC-011 | `纸面追踪` should only display detailed results from signal date `2026-05-08` through the current available date, and the backend display path should not read the full historical daily market table to produce that bounded display. | W-003 | covered | in-scope | Backend uses a bounded market-bar window for the paper display replay projection; tests fail if the full daily-series loader is used; runtime verifier confirms coverage starts at `2026-05-08` and the API returns promptly after publish. |
+| SRC-012 | `历史回放` should not display concrete decision/detail rows; it should show statistical/summary readouts only. | W-003 | covered | in-scope | Frontend removes decision-sample/detail table rendering from the historical replay tab; static and served-page checks prove `决策样本`/sample detail tables are absent while aggregate statistics remain visible. |
 
 ## Production Path Fidelity
 
@@ -52,14 +54,16 @@ The current v2 paper-tracking page exposes contract/config/read-model fields and
 | PF-003 | Backend projection builds catch-up rows from existing local data/artifacts without refreshing market data, calling models, or writing paper-ledger rows. | Focused backend tests and runtime verification script that runs read-only checks. | Shortpick V2 read model/projection builder | fixture data may be generated only for deterministic edge cases; runtime verification must not rely on those fixtures and must not create ledger rows | controlled_simulation | Tests verify no ledger mutation is required, replay evidence labels are explicit, and the runtime check proves the real published path returns replay rows or a readable gap state without raw errors. |
 | PF-004 | Frontend converts backend fields into readable Chinese rather than exposing internal field names. | Static tests and built bundle/browser inspection. | `ShortpickLabV2View` | none | matches_product_path | Visible text uses Chinese labels for status, evidence, actions, strategy, and row tags; raw status/config identifiers and snake_case/key-shaped strings are absent from user-facing paper-tab strings. |
 | PF-005 | Closeout follows project policy for live-facing changes. | Pre-push hook plus explicit runtime verification after merge/main push. | Git hooks, publish script, runtime services | none | matches_product_path | Default pytest, policy audit, task branch push, merge to main, origin/main push, plan archive, run archive, final-main runtime publish, and final-main runtime verification are recorded. |
+| PF-006 | User opens `试验田v2 -> 历史回放` and expects a statistics-only summary, not a detailed replay table. | Static frontend test plus served browser text check after publish. | `ShortpickLabV2View` | none | matches_product_path | The historical replay tab renders aggregate cards/config summary only; visible page text excludes `决策样本`, per-sample detail columns, and raw sample/detail identifiers. |
 
 ## Scope
 
 ### In Scope
 
 - Add or extend a v2 paper-tracking projection that supplies readable display data for latest simulated trade, strategy explanation, chart inputs, and table rows.
-- Add replay-tagged catch-up rows from signal date `2026-05-08` through the latest available source date, while preserving true-forward/replay separation.
+- Add replay-tagged catch-up rows from signal date `2026-05-08` through the latest available source date, while preserving true-forward/replay separation and avoiding full-history market reads for this bounded display.
 - Update the v2 paper-tracking frontend to follow the v1 section structure and remove raw field-shaped visible content.
+- Keep the `历史回放` tab statistics-only by removing concrete decision/detail-row rendering from that tab.
 - Add tests for backend projection, frontend static/readability checks, and served runtime verification.
 - Publish the committed live-facing changes and verify the real served route/API before merging closeout.
 
@@ -86,7 +90,7 @@ The current v2 paper-tracking page exposes contract/config/read-model fields and
 |----|--------|-------|------------|------|-------------|-----------------|-----------------|----------|
 | W-001 | done | 1 | - | Build the v2 paper-tracking display projection, including replay-tagged catch-up rows, inclusive window coverage metadata, additive API fields, and readable summaries while preserving H10 governance boundaries. | Backend read model/schema/tests for latest trade, strategy explanation, chart/table data, replay tags, true-forward separation, inclusive coverage, and API compatibility | test_pass | cmd:PYTHONPATH=src python3 -m pytest -q tests/test_shortpick_v2_read_model_api.py tests/test_shortpick_v2_paper_tracking_contract.py | Passed 22 tests on 2026-06-15T13:05Z; also passed replay/strategy-search compatibility tests with 48 tests. MiMo code review had no blocker/major and two accepted minor cleanups were applied. Codex escalation code review had no blocker/major. |
 | W-002 | done | 2 | W-001 | Rework the `试验田v2` paper tab to use the v1-style display structure and Chinese-readable labels, with no raw field-shaped visible content. | `frontend/src/components/ShortpickLabV2View.tsx`, types/helpers/static tests; no CSS change was needed. | test_pass | cmd:python3 -m pytest -q tests/test_frontend_shortpick_static.py && cd frontend && npm run build | Passed 6 static tests and frontend build on 2026-06-15T13:24Z. MiMo code review had no blocker; rowKey, fallback-column, and replay visible-text guard recommendations were accepted and applied. |
-| W-003 | in_progress | 3 | W-001,W-002 | Create the live-facing closeout verifier, dry-run it before merge, then perform archive, task-branch push, main merge/push, final-main publish, and final served verification. The verifier must assert the runtime commit stamp equals the expected commit, `coverage_start == 2026-05-08`, inclusive row-or-gap coverage through the latest available source date using explicit coverage date arrays, separated replay/true-forward counts, and no snake_case/key-shaped visible strings on the served paper tab. | New runtime verification script, pre-merge dry-run evidence, served API/browser evidence from final `origin/main`, archived run doc, archived plan, task branch push, main merge/push | command_exit_0 | cmd:bash scripts/verify-shortpick-v2-paper-tracking-display-runtime.sh | |
+| W-003 | in_progress | 3 | W-001,W-002 | Create the live-facing closeout verifier, fix release-blocking display/runtime defects found by the verifier, dry-run it before merge, then perform archive, task-branch push, main merge/push, final-main publish, and final served verification. The verifier must assert the runtime commit stamp equals the expected commit, `coverage_start == 2026-05-08`, inclusive row-or-gap coverage through the latest available source date using explicit coverage date arrays, separated replay/true-forward counts, no full-history market read for the paper display projection, no concrete historical replay detail table, and no snake_case/key-shaped visible strings on the served v2 tabs. | New runtime verification script, bounded paper-display market read, statistics-only historical replay tab, pre-merge dry-run evidence, served API/browser evidence from final `origin/main`, archived run doc, archived plan, task branch push, main merge/push | command_exit_0 | cmd:bash scripts/verify-shortpick-v2-paper-tracking-display-runtime.sh | |
 
 ## Acceptance Criteria & Validation Gates
 
@@ -94,6 +98,8 @@ The current v2 paper-tracking page exposes contract/config/read-model fields and
 
 - `试验田v2 -> 纸面追踪` opens with v1-like sections: `最新模拟交易`, `策略说明`, chart content, and a table.
 - Rows from `2026-05-08` through the latest available source date appear when data is available and carry visible `回放` tags.
+- Backend paper display projection reads only a bounded window required for the `2026-05-08`-to-current display, not the full historical market table.
+- `试验田v2 -> 历史回放` shows statistical/summary values only and does not render concrete decision-sample/detail rows.
 - Coverage evidence includes `coverage_start = 2026-05-08`, `coverage_end`, `latest_source_signal_date`, replay row count, gap count, and proof that every available source signal date in the inclusive window produced either a replay display row or a readable gap.
 - Replay-tagged rows are not described as true-forward paper performance and do not increase true-forward paper-ledger counts.
 - The paper tab does not expose raw field-shaped strings or config identifiers as the primary visible language.
@@ -116,6 +122,8 @@ The current v2 paper-tracking page exposes contract/config/read-model fields and
 - `PYTHONPATH=src python3 -m pytest -q tests/test_shortpick_v2_read_model_api.py tests/test_shortpick_v2_paper_tracking_contract.py`
 - `python3 -m pytest -q tests/test_frontend_shortpick_static.py`
 - `cd frontend && npm run build`
+- A focused backend regression test proves the paper display projection does not call the full daily-series loader.
+- A focused frontend static test proves the historical replay tab does not render decision-sample/detail rows.
 - If parameters/formulas are touched, run the policy audit command from `AGENTS.md`; otherwise record why it is not required before push.
 - `bash scripts/verify-shortpick-v2-paper-tracking-display-runtime.sh` after `origin/main` points at the final merged commit.
 - Project pre-push hook on task branch and main push.
@@ -128,6 +136,8 @@ The current v2 paper-tracking page exposes contract/config/read-model fields and
 - Risk: source data after `2026-05-08` is incomplete. Mitigation: show readable gap/empty state and keep the start anchor fixed.
 - Risk: additive display fields accidentally break existing API consumers. Mitigation: keep existing response fields stable and add compatibility tests for full and summary endpoints.
 - Risk: large frontend component edits regress v1. Mitigation: keep changes scoped to `ShortpickLabV2View` and v2 types/helpers, with existing v1 tests still run through project pre-push.
+- Risk: bounded paper-display replay accidentally uses offline backtest input loaders and blocks runtime on the large market database. Mitigation: use a bounded market-bar window and add a regression test that fails if the full daily-series loader is invoked.
+- Risk: historical replay becomes a second detailed backtest screen. Mitigation: remove the decision-sample table from the tab and verify only summary/statistical readouts remain visible.
 
 ## Open Questions
 
@@ -149,6 +159,9 @@ The current v2 paper-tracking page exposes contract/config/read-model fields and
 | 9 | 2026-06-15 | Accepted W-003 MiMo run-plan findings: added pre-merge dry-run, runtime commit-stamp assertion, explicit coverage-array row-or-gap checks, and generic served-page snake_case checks. | Codex |
 | 10 | 2026-06-15 | Accepted W-003 MiMo code-review findings: browser verification now covers both v2 tabs, true-forward table consistency is asserted when relevant, visible English technical fallback copy was removed, and snake_case scanning has an explicit allowlist escape hatch. | Codex |
 | 11 | 2026-06-15 | Accepted W-003 Codex escalation review finding: verifier now directly checks historical replay API data load and requires data-dependent replay-tab page text, closing the empty-shell false-pass risk. | Codex |
+| 12 | 2026-06-15 | Accepted user clarification: paper tracking details are bounded to the `2026-05-08`-to-current display window, backend display generation must avoid full historical market reads, and historical replay must become statistics-only with no concrete decision/detail rows. | Codex |
+| 13 | 2026-06-15 | Accepted W-003 Codex implementation review findings: true-forward ledger records now reject dates before `2026-05-08`, verifier checks final table row dates, window-loader date filtering has direct test coverage, and historical replay keeps `sample_limit=1` API compatibility while the UI requests `sample_limit=0`. | Codex |
+| 14 | 2026-06-15 | Completed W-003 fix review pass with MiMo: bounded paper-display reads, statistics-only historical replay, row-level verifier checks, and API compatibility tests have no unresolved blocking/major/material findings. | Codex |
 
 ## External Review Log
 
@@ -179,6 +192,12 @@ The current v2 paper-tracking page exposes contract/config/read-model fields and
 | 3 | MiMo | Generic snake_case visible-text checks may need a future controlled escape hatch. | major | accepted | The check remains strict by default and now supports `ASHARE_VERIFY_ALLOWED_VISIBLE_SNAKE_CASE` for explicit allowlisted exceptions. | W-003,SRC-005 |
 | 3 | Codex | Historical replay browser checks could false-pass on static shell text if the historical replay API failed. | major | accepted | The verifier now curls `/shortpick-lab-v2/historical-replay?sample_limit=5`, asserts positive selected configs/baselines/decision samples and expected evidence basis, then requires data-dependent replay-tab text such as `历史账户回放筛选` and `已记录来源`. | W-003,SRC-007 |
 | 3 | Codex | Final evidence should record actual URL if page URL is overridden and ensure expected commit equals the published runtime commit. | minor | accepted | The run doc will record the actual page URL and commit used by the pre-merge and final verifier runs. | W-003,PF-001 |
+| 3 | MiMo | User clarification is adequately reflected: paper display is bounded to the 2026-05-08-to-current window, full-history market reads are release-blocking, and historical replay is statistics-only. | note | accepted | No blocking or major issue. Minor suggestion to list passive source rows in the run doc is non-blocking because W-003 already copies its direct source coverage and preserves the earlier W-001/W-002 evidence. | SRC-011,SRC-012,W-003,PF-006 |
+| 3 | Codex | Existing true-forward ledger rows could still contain `signal_date < 2026-05-08`, leaking pre-anchor details into the paper table even after replay rows were bounded. | major | accepted | `_validate_paper_tracking_record` now requires ISO `signal_date` on or after `2026-05-08`; a regression test writes a `2026-05-07` ledger row and asserts the read model rejects it. | SRC-004,SRC-011,W-003 |
+| 3 | Codex | Runtime verifier checked coverage arrays but not the final `paper_display.table.rows`, so a display-row leak before `2026-05-08` could pass. | major | accepted | The verifier now checks every final table row has a signal date and that it is not before `coverage_start`. | SRC-004,SRC-011,W-003 |
+| 3 | Codex | The no-full-loader regression test did not directly prove the bounded replay-window SQL helper filters market bars by date. | minor | accepted | Added a direct helper test that seeds out-of-window market bars and asserts the loaded bar days are within the requested window. | SRC-011,W-003 |
+| 3 | Codex | Moving the served historical replay path to `sample_limit=0` weakened explicit compatibility coverage for clients that still request detail samples. | minor | accepted | The read-model test now asserts `sample_limit=1` still returns one decision sample while `sample_limit=0` returns no samples and records a zero limit in summary. | SRC-009,SRC-012,W-003 |
+| 3 | MiMo | Final W-003 fix review found no unresolved blocker, major, or material minor issue after the Codex findings were addressed. | note | accepted | MiMo confirmed the `2026-05-08` floor, statistics-only UI request, sample-limit compatibility, bounded-window loader test, and runtime row-date/detail-text verifier checks. | SRC-009,SRC-011,SRC-012,W-003,PF-006 |
 
 ## User Review Notes
 
