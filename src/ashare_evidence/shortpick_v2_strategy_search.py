@@ -61,6 +61,7 @@ STRATEGY_SEARCH_BATCH_INITIAL = "initial"
 STRATEGY_SEARCH_BATCH_NEXT = "next"
 STRATEGY_SEARCH_BATCH_REFINED = "refined"
 STRATEGY_SEARCH_BATCH_H10_QUIET = "h10_quiet"
+STRATEGY_SEARCH_BATCH_H10_QUIET_CHAMPION = "h10_quiet_champion"
 STRATEGY_SEARCH_BATCH_H10_ROBUST = "h10_robust"
 STRATEGY_SEARCH_BATCH_H10_STRENGTH = "h10_strength"
 STRATEGY_SEARCH_BATCH_H10_MA_ACCEL = "h10_ma_accel"
@@ -72,6 +73,7 @@ STRATEGY_SEARCH_BATCHES = (
     STRATEGY_SEARCH_BATCH_NEXT,
     STRATEGY_SEARCH_BATCH_REFINED,
     STRATEGY_SEARCH_BATCH_H10_QUIET,
+    STRATEGY_SEARCH_BATCH_H10_QUIET_CHAMPION,
     STRATEGY_SEARCH_BATCH_H10_ROBUST,
     STRATEGY_SEARCH_BATCH_H10_STRENGTH,
     STRATEGY_SEARCH_BATCH_H10_MA_ACCEL,
@@ -109,6 +111,14 @@ H10_QUIET_CANDIDATE_SOURCE_IDS = (
     "quiet_breakout_rank2to6_mtw_or_breadth65",
     "quiet_breakout_rank2to6_poolhot10_not_thu",
     "quiet_breakout_rank2to6_poolhot10_mtw_ret5_0_10",
+)
+H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS = (
+    "quiet_breakout_rank2_poolhot10_mtw",
+    "quiet_breakout_rank2_poolhot09_mtw",
+    "quiet_breakout_rank2_poolhot11_mtw",
+    "quiet_breakout_rank2_poolhot12_mtw",
+    "quiet_breakout_rank2_poolhot10_mt",
+    "quiet_breakout_rank2_poolhot10_tw",
 )
 H10_ROBUST_CANDIDATE_SOURCE_IDS = (
     "relative_strength_low_vol_h10_v1",
@@ -593,6 +603,13 @@ def _build_strategy_search_candidate_sources(
             pool_limit=pool_limit,
             rank_limit=rank_limit,
         )
+    if candidate_batch == STRATEGY_SEARCH_BATCH_H10_QUIET_CHAMPION:
+        return build_h10_quiet_champion_strategy_search_candidate_sources(
+            series_by_symbol,
+            signal_days=signal_days,
+            pool_limit=pool_limit,
+            rank_limit=rank_limit,
+        )
     if candidate_batch == STRATEGY_SEARCH_BATCH_H10_ROBUST:
         return build_h10_robust_strategy_search_candidate_sources(
             series_by_symbol,
@@ -854,6 +871,52 @@ def build_h10_quiet_strategy_search_candidate_sources(
                 selections=h10_quiet_selections[source_id],
             )
             for source_id in H10_QUIET_CANDIDATE_SOURCE_IDS
+        ),
+    )
+
+
+def build_h10_quiet_champion_strategy_search_candidate_sources(
+    series_by_symbol: dict[str, Any],
+    *,
+    signal_days: list[date],
+    pool_limit: int,
+    rank_limit: int,
+) -> tuple[StrategySearchCandidateSource, ...]:
+    effective_rank_limit = max(rank_limit, max(config.candidate_rank_limit for config in H10_QUIET_RULE_CONFIGS))
+    quiet_base = _build_strategy_selections(
+        series_by_symbol,
+        signal_days=signal_days,
+        strategy=QUIET_BREAKOUT_BASE_STRATEGY,
+        pool_limit=pool_limit,
+        rank_limit=max(effective_rank_limit, 6),
+    )
+    regime_features = _regime_features_by_day(series_by_symbol, signal_days=signal_days, pool_limit=pool_limit)
+    champion_selections = _build_h10_quiet_batch_selections(
+        series_by_symbol,
+        signal_days=signal_days,
+        source_ids=H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS,
+        quiet_base_selections=quiet_base,
+        regime_features=regime_features,
+        rank_limit=effective_rank_limit,
+    )
+    return (
+        StrategySearchCandidateSource(
+            source_id=CONTROL_CANDIDATE_SOURCE_ID,
+            source_ref=SHORTPICK_V2_REPLAY_CANDIDATE_SOURCE_REF,
+            selections=_build_low_turnover_uptrend_candidate_pool(
+                series_by_symbol,
+                signal_days=signal_days,
+                pool_limit=pool_limit,
+                rank_limit=effective_rank_limit,
+            ),
+        ),
+        *(
+            StrategySearchCandidateSource(
+                source_id=source_id,
+                source_ref=f"market_only_reconstruction:shortpick_v2_h10_quiet_champion_round:{source_id}",
+                selections=champion_selections[source_id],
+            )
+            for source_id in H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS
         ),
     )
 
@@ -1242,7 +1305,7 @@ def _rule_configs_for_source(source_id: str) -> tuple[ShortpickV2RuleConfig, ...
             for config in DEFAULT_SHORTPICK_V2_RULE_CONFIGS
             if config.config_id in REFINED_ROUND_RULE_CONFIG_IDS
         )
-    if source_id in H10_QUIET_CANDIDATE_SOURCE_IDS:
+    if source_id in H10_QUIET_CANDIDATE_SOURCE_IDS or source_id in H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS:
         return tuple(_prefixed_rule_config(source_id, config) for config in H10_QUIET_RULE_CONFIGS)
     if source_id in H10_ROBUST_CANDIDATE_SOURCE_IDS:
         return tuple(_prefixed_rule_config(source_id, config) for config in H10_ROBUST_RULE_CONFIGS)
@@ -1400,18 +1463,22 @@ def _h10_quiet_source_symbols(
             )
         ):
             return []
-    elif not _h10_pool_hot(regime_features):
+    elif not _h10_pool_hot(regime_features, threshold=_h10_pool_hot_threshold(source_id)):
         return []
-    elif source_id in {
-        "quiet_breakout_rank2_poolhot10_mtw",
-        "quiet_breakout_rank2to6_poolhot10_mtw",
-        "quiet_breakout_rank2to6_poolhot10_mtw_ret5_0_10",
-    } and signal_day.weekday() not in {0, 1, 2}:
+    allowed_weekdays = _h10_quiet_allowed_weekdays(source_id)
+    if allowed_weekdays is not None and signal_day.weekday() not in allowed_weekdays:
         return []
     elif source_id == "quiet_breakout_rank2to6_poolhot10_not_thu" and signal_day.weekday() == 3:
         return []
 
-    if source_id == "quiet_breakout_rank2_poolhot10_mtw":
+    if source_id in {
+        "quiet_breakout_rank2_poolhot10_mtw",
+        "quiet_breakout_rank2_poolhot09_mtw",
+        "quiet_breakout_rank2_poolhot11_mtw",
+        "quiet_breakout_rank2_poolhot12_mtw",
+        "quiet_breakout_rank2_poolhot10_mt",
+        "quiet_breakout_rank2_poolhot10_tw",
+    }:
         return base_symbols[1:2] if len(base_symbols) >= 2 else []
     symbols = base_symbols[1 : 1 + rank_limit] if len(base_symbols) >= 2 else []
     if source_id == "quiet_breakout_rank2to6_poolhot10_mtw_ret5_0_10":
@@ -1423,8 +1490,35 @@ def _h10_quiet_source_symbols(
     return symbols
 
 
-def _h10_pool_hot(regime_features: dict[str, float]) -> bool:
-    return float(regime_features.get("pool_ret1_mean", 0.0)) >= 0.10
+def _h10_pool_hot(regime_features: dict[str, float], *, threshold: float = 0.10) -> bool:
+    return float(regime_features.get("pool_ret1_mean", 0.0)) >= threshold
+
+
+def _h10_pool_hot_threshold(source_id: str) -> float:
+    if "poolhot09" in source_id:
+        return 0.09
+    if "poolhot11" in source_id:
+        return 0.11
+    if "poolhot12" in source_id:
+        return 0.12
+    return 0.10
+
+
+def _h10_quiet_allowed_weekdays(source_id: str) -> set[int] | None:
+    if source_id.endswith("_mt"):
+        return {0, 1}
+    if source_id.endswith("_tw"):
+        return {1, 2}
+    if source_id in {
+        "quiet_breakout_rank2_poolhot10_mtw",
+        "quiet_breakout_rank2_poolhot09_mtw",
+        "quiet_breakout_rank2_poolhot11_mtw",
+        "quiet_breakout_rank2_poolhot12_mtw",
+        "quiet_breakout_rank2to6_poolhot10_mtw",
+        "quiet_breakout_rank2to6_poolhot10_mtw_ret5_0_10",
+    }:
+        return {0, 1, 2}
+    return None
 
 
 def _build_h10_robust_batch_selections(
@@ -3233,6 +3327,8 @@ def _validate_merged_artifact(payload: dict[str, Any]) -> None:
 def _validate_strategy_search_batch_horizon(*, candidate_batch: str, horizon_days: int) -> None:
     if candidate_batch == STRATEGY_SEARCH_BATCH_H10_QUIET and horizon_days != 10:
         raise ValueError("candidate_batch h10_quiet requires horizon_days=10")
+    if candidate_batch == STRATEGY_SEARCH_BATCH_H10_QUIET_CHAMPION and horizon_days != 10:
+        raise ValueError("candidate_batch h10_quiet_champion requires horizon_days=10")
     if candidate_batch == STRATEGY_SEARCH_BATCH_H10_ROBUST and horizon_days != 10:
         raise ValueError("candidate_batch h10_robust requires horizon_days=10")
     if candidate_batch == STRATEGY_SEARCH_BATCH_H10_STRENGTH and horizon_days != 10:

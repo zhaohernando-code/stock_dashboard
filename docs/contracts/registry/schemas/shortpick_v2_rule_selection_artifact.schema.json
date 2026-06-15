@@ -16,6 +16,7 @@
     "source_replay_artifact",
     "selection_policy",
     "gate_results",
+    "benchmark_configs",
     "selected_configs",
     "baseline_configs",
     "holdout_configs",
@@ -67,6 +68,12 @@
       "minItems": 1
     },
     "selected_configs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/selection_row"
+      }
+    },
+    "benchmark_configs": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/selection_row"
@@ -163,6 +170,7 @@
         "max_selected",
         "required_config_ids",
         "baseline_config_ids",
+        "benchmark_config_ids",
         "gate_thresholds",
         "ranking_order"
       ],
@@ -184,6 +192,14 @@
           "uniqueItems": true
         },
         "baseline_config_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "benchmark_config_ids": {
           "type": "array",
           "items": {
             "type": "string",
@@ -353,7 +369,7 @@
         },
         "role": {
           "type": "string",
-          "enum": ["phase5_contract_candidate", "baseline_control", "holdout", "rejected"]
+          "enum": ["phase5_contract_candidate", "benchmark_control", "baseline_control", "holdout", "rejected"]
         },
         "selection_rank": {
           "type": ["integer", "null"],

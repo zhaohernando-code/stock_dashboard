@@ -1,5 +1,20 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-06-15T09:50:24+08:00] Short Pick Lab V2 h10 quiet champion is the mandatory benchmark line:
+
+项目所有者明确：后续 `试验田v2` 策略搜索必须以 10 日交易日口径的 quiet champion 为对标标准，不能因为长上下文丢失重新回到无边界的大方向发散。当前固化的主 benchmark 是 `quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1`（历史简称 `quiet_r2_poolhot10_mtw__fixed85_top5_v1`），保守资金影子是 `quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1`（历史简称 `quiet_r2_poolhot10_mtw__fixed80_top5_v1`）。
+
+固化依据
+- 已知 fixed85 历史读数：总收益约 `+271.2%`，年化约 `53.96%`，市场超额约 `+229.4%`，最大回撤约 `-11.9%`，交易约 `190` 次，skip 约 `73.65%`。
+- 已知 fixed80 历史读数：总收益约 `+257.2%`，年化约 `52.03%`，最大回撤约 `-11.9%`，交易约 `192` 次。
+- `rank2to6`、`breadth65`、`not_thu`、`ma_accel`、dynamic exit、entry quality 等方向已经产生负面或明显弱于 benchmark 的证据；后续只能作为负面对照或诊断，不再作为主线替代方向。
+
+执行约定
+- 10 日 horizon 是主验收口径；不引入延迟买入，动作只有候补买入或不买。
+- skip ratio 是资金利用率/机会频率指标，不再作为淘汰 quiet champion 的硬门槛；但交易次数、跑赢大盘、年化 `>= 30%`、最大回撤、同窗对标 fixed85/fixed80 仍是硬约束。
+- 新候选只有在同窗口、同费用、同 20w 初始资金、同 100 股手数约束下明显优于 fixed85/fixed80，才允许替换主 benchmark。轻微领先但增加复杂规则的候选不得替换。
+- 下一轮只做 quiet champion 附近窄网格：资金档 `75k/80k/85k/90k`、pool-hot 阈值 `0.09/0.10/0.11/0.12`、交易日 `MTW/Mon-Tue/Tue-Wed`、rank2-only 与 fallback 诊断；禁止为了降低 skip ratio 放宽到 rank2-6、breadth65、周四/周五或重新打开 ma_accel/dynamic-exit 大方向。
+
 [2026-06-13T10:18:42+08:00] Short Pick Lab V2 qualification must beat market reference and clear 30% annualized:
 
 项目所有者明确：任何跑不赢大盘的策略都不合格；鉴于股票高风险，年化收益低于 30% 的策略不进入考虑范围。该约定适用于 `试验田v2` 的历史回放晋级、纸面追踪候选和后续参数治理，不能只作为前端展示提示。

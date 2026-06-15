@@ -9,6 +9,10 @@ import pytest
 
 import ashare_evidence.cli as cli_module
 from ashare_evidence.shortpick_v2_rule_selection import (
+    H10_QUIET_BENCHMARK_CONFIG_IDS,
+    H10_QUIET_CAPITAL_SHADOW_CONFIG_ID,
+    H10_QUIET_CHAMPION_CONFIG_ID,
+    SELECTION_THRESHOLD_PROFILE_H10_QUIET_CHAMPION,
     SELECTION_THRESHOLD_PROFILE_SPARSE_HIGH_CONFIDENCE,
     SELECTION_THRESHOLD_PROFILE_STANDARD,
     build_shortpick_v2_rule_selection_artifact,
@@ -346,6 +350,77 @@ def test_shortpick_v2_rule_selection_sparse_profile_allows_high_confidence_spars
     assert sparse["selection_policy"]["gate_thresholds"]["threshold_profile"] == "sparse_high_confidence"
     assert sparse["selection_policy"]["gate_thresholds"]["skip_ratio_max"] == 0.75
     assert [item["config_id"] for item in sparse["selected_configs"]] == ["top3_fallback_v1"]
+
+
+def test_shortpick_v2_rule_selection_h10_quiet_champion_profile_freezes_benchmarks(
+    tmp_path: Path,
+) -> None:
+    market_reference_total_return = 0.418444
+    replay = {
+        **_qualified_replay_artifact(),
+        "results": [
+            *_qualified_replay_artifact()["results"],
+            _result(
+                H10_QUIET_CHAMPION_CONFIG_ID,
+                trade_count=190,
+                skip_count=531,
+                fallback_trade_count=0,
+                total_return=2.712,
+                max_drawdown=-0.119,
+                mean_invested_ratio=0.18,
+                turnover=76.67,
+                market_reference_total_return=market_reference_total_return,
+            ),
+            _result(
+                H10_QUIET_CAPITAL_SHADOW_CONFIG_ID,
+                trade_count=192,
+                skip_count=529,
+                fallback_trade_count=0,
+                total_return=2.572,
+                max_drawdown=-0.119,
+                mean_invested_ratio=0.18,
+                turnover=73.02,
+                market_reference_total_return=market_reference_total_return,
+            ),
+            _result(
+                "quiet_breakout_rank2to6_mtw_or_breadth65__fixed_notional_80k_top5_h10_v1",
+                trade_count=211,
+                skip_count=510,
+                fallback_trade_count=0,
+                total_return=2.05,
+                max_drawdown=-0.2228,
+                mean_invested_ratio=0.22,
+                turnover=78.0,
+                market_reference_total_return=market_reference_total_return,
+            ),
+        ],
+    }
+    replay_path = tmp_path / "h10-quiet-replay.json"
+    replay_path.write_text(json.dumps(replay, ensure_ascii=False), encoding="utf-8")
+
+    artifact = build_shortpick_v2_rule_selection_artifact_from_path(
+        replay_path,
+        threshold_profile=SELECTION_THRESHOLD_PROFILE_H10_QUIET_CHAMPION,
+        generated_at=datetime(2026, 6, 15, 9, 50, tzinfo=UTC),
+    )
+
+    assert artifact["status"] == "ready"
+    assert artifact["selection_policy"]["benchmark_config_ids"] == list(H10_QUIET_BENCHMARK_CONFIG_IDS)
+    assert [item["config_id"] for item in artifact["benchmark_configs"]] == list(H10_QUIET_BENCHMARK_CONFIG_IDS)
+    assert {item["role"] for item in artifact["benchmark_configs"]} == {"benchmark_control"}
+    assert artifact["selection_policy"]["gate_thresholds"]["threshold_profile"] == "h10_quiet_champion"
+    assert artifact["selection_policy"]["gate_thresholds"]["skip_ratio_max"] == 1.0
+    assert artifact["selection_policy"]["gate_thresholds"]["max_drawdown_min"] == -0.18
+    assert [item["config_id"] for item in artifact["selected_configs"]] == [
+        H10_QUIET_CHAMPION_CONFIG_ID,
+        H10_QUIET_CAPITAL_SHADOW_CONFIG_ID,
+    ]
+    weak_breadth = next(
+        item
+        for item in artifact["rejected_configs"]
+        if item["config_id"] == "quiet_breakout_rank2to6_mtw_or_breadth65__fixed_notional_80k_top5_h10_v1"
+    )
+    assert "max_drawdown" in weak_breadth["reason"]
 
 
 def test_shortpick_v2_rule_selection_requires_passed_source_leakage_audit() -> None:

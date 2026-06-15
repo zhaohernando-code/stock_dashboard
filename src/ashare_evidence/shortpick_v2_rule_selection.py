@@ -17,6 +17,12 @@ REQUIRED_REPLAY_EVIDENCE_BASIS = "historical_account_replay"
 REQUIRED_REPLAY_CLAIM_CEILING = "research_observation"
 DEFAULT_MAX_SELECTED = 2
 BASELINE_CONFIG_IDS = ("top1_or_skip_v1",)
+H10_QUIET_CHAMPION_CONFIG_ID = "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1"
+H10_QUIET_CAPITAL_SHADOW_CONFIG_ID = "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1"
+H10_QUIET_BENCHMARK_CONFIG_IDS = (
+    H10_QUIET_CHAMPION_CONFIG_ID,
+    H10_QUIET_CAPITAL_SHADOW_CONFIG_ID,
+)
 REQUIRED_CONFIG_IDS = (
     "top1_or_skip_v1",
     "top3_fallback_v1",
@@ -35,15 +41,19 @@ RANKING_ORDER = (
 )
 SELECTION_THRESHOLD_PROFILE_STANDARD = "standard"
 SELECTION_THRESHOLD_PROFILE_SPARSE_HIGH_CONFIDENCE = "sparse_high_confidence"
+SELECTION_THRESHOLD_PROFILE_H10_QUIET_CHAMPION = "h10_quiet_champion"
 SELECTION_THRESHOLD_PROFILES = (
     SELECTION_THRESHOLD_PROFILE_STANDARD,
     SELECTION_THRESHOLD_PROFILE_SPARSE_HIGH_CONFIDENCE,
+    SELECTION_THRESHOLD_PROFILE_H10_QUIET_CHAMPION,
 )
 
 
 @dataclass(frozen=True)
 class SelectionThresholds:
     threshold_profile: str = SELECTION_THRESHOLD_PROFILE_STANDARD
+    required_config_ids: tuple[str, ...] = REQUIRED_CONFIG_IDS
+    benchmark_config_ids: tuple[str, ...] = ()
     signal_count_min: int = 300
     trade_count_min: int = 180
     skip_ratio_max: float = 0.60
@@ -79,9 +89,18 @@ SPARSE_HIGH_CONFIDENCE_SELECTION_THRESHOLDS = SelectionThresholds(
     threshold_profile=SELECTION_THRESHOLD_PROFILE_SPARSE_HIGH_CONFIDENCE,
     skip_ratio_max=0.75,
 )
+H10_QUIET_CHAMPION_SELECTION_THRESHOLDS = SelectionThresholds(
+    threshold_profile=SELECTION_THRESHOLD_PROFILE_H10_QUIET_CHAMPION,
+    required_config_ids=(*REQUIRED_CONFIG_IDS, *H10_QUIET_BENCHMARK_CONFIG_IDS),
+    benchmark_config_ids=H10_QUIET_BENCHMARK_CONFIG_IDS,
+    skip_ratio_max=1.0,
+    max_drawdown_min=-0.18,
+    mean_invested_ratio_min=0.0,
+)
 SELECTION_THRESHOLDS_BY_PROFILE = {
     SELECTION_THRESHOLD_PROFILE_STANDARD: DEFAULT_SELECTION_THRESHOLDS,
     SELECTION_THRESHOLD_PROFILE_SPARSE_HIGH_CONFIDENCE: SPARSE_HIGH_CONFIDENCE_SELECTION_THRESHOLDS,
+    SELECTION_THRESHOLD_PROFILE_H10_QUIET_CHAMPION: H10_QUIET_CHAMPION_SELECTION_THRESHOLDS,
 }
 
 
@@ -96,7 +115,10 @@ def build_shortpick_v2_rule_selection_artifact(
     """Select a bounded set of v2 execution configs from a Phase 3 replay artifact."""
     if max_selected < 1:
         raise ValueError("max_selected must be at least 1")
-    _validate_replay_artifact_for_selection(replay_artifact)
+    _validate_replay_artifact_for_selection(
+        replay_artifact,
+        required_config_ids=thresholds.required_config_ids,
+    )
 
     generated_at = generated_at or datetime.now(UTC)
     results_by_config = _results_by_config(replay_artifact)
@@ -123,6 +145,20 @@ def build_shortpick_v2_rule_selection_artifact(
             ),
         )
         for config_id in BASELINE_CONFIG_IDS
+        if config_id in gate_by_config
+    ]
+    benchmark_configs = [
+        _selection_row(
+            config_id=config_id,
+            role="benchmark_control",
+            selection_rank=None,
+            gate_result=gate_by_config[config_id],
+            reason=(
+                "Retained as a mandatory h10 quiet benchmark; later candidates must be compared against this "
+                "same-window replay row before any replacement decision."
+            ),
+        )
+        for config_id in thresholds.benchmark_config_ids
         if config_id in gate_by_config
     ]
     eligible = [
@@ -180,12 +216,14 @@ def build_shortpick_v2_rule_selection_artifact(
         "selection_policy": {
             "policy_version": SHORTPICK_V2_RULE_SELECTION_POLICY_VERSION,
             "max_selected": max_selected,
-            "required_config_ids": list(REQUIRED_CONFIG_IDS),
+            "required_config_ids": list(thresholds.required_config_ids),
             "baseline_config_ids": list(BASELINE_CONFIG_IDS),
+            "benchmark_config_ids": list(thresholds.benchmark_config_ids),
             "gate_thresholds": thresholds.to_artifact(),
             "ranking_order": list(RANKING_ORDER),
         },
         "gate_results": gate_results,
+        "benchmark_configs": benchmark_configs,
         "selected_configs": selected_configs,
         "baseline_configs": baseline_configs,
         "holdout_configs": holdout_configs,
@@ -204,6 +242,11 @@ def build_shortpick_v2_rule_selection_artifact(
             "selected_role_label": "phase5_contract_candidate",
             "notes": [
                 "Selected configurations are candidates for Phase 5 contract design only.",
+                (
+                    "When present, benchmark_config_ids are the mandatory comparison baseline for later "
+                    "Short Pick Lab v2 strategy-search rounds; broad search results cannot replace them without "
+                    "strict same-window replay evidence."
+                ),
                 (
                     "This artifact does not start paper tracking, create a ledger, expose an API, "
                     "or claim production readiness."
@@ -244,7 +287,11 @@ def write_shortpick_v2_rule_selection_artifact(payload: dict[str, Any], *, outpu
     return path
 
 
-def _validate_replay_artifact_for_selection(replay_artifact: dict[str, Any]) -> None:
+def _validate_replay_artifact_for_selection(
+    replay_artifact: dict[str, Any],
+    *,
+    required_config_ids: tuple[str, ...],
+) -> None:
     if replay_artifact.get("artifact_family") != REQUIRED_REPLAY_ARTIFACT_FAMILY:
         raise ValueError("source replay artifact must be shortpick_v2_replay_artifact")
     if replay_artifact.get("schema_version") != "v1":
@@ -258,7 +305,7 @@ def _validate_replay_artifact_for_selection(replay_artifact: dict[str, Any]) -> 
     if (replay_artifact.get("leakage_audit") or {}).get("status") != "passed":
         raise ValueError("source replay artifact leakage_audit.status must be passed")
     results_by_config = _results_by_config(replay_artifact)
-    missing = sorted(set(REQUIRED_CONFIG_IDS) - set(results_by_config))
+    missing = sorted(set(required_config_ids) - set(results_by_config))
     if missing:
         raise ValueError(f"source replay artifact is missing required v2 configs: {missing}")
 

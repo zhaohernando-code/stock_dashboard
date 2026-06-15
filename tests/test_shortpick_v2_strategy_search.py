@@ -16,6 +16,7 @@ from ashare_evidence.shortpick_v2_strategy_search import (
     H10_MA_ACCEL_REFINE_CANDIDATE_SOURCE_IDS,
     H10_EXIT_CANDIDATE_SOURCE_IDS,
     H10_QUIET_CANDIDATE_SOURCE_IDS,
+    H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS,
     H10_ROBUST_CANDIDATE_SOURCE_IDS,
     H10_STRENGTH_CANDIDATE_SOURCE_IDS,
     NEXT_ROUND_CANDIDATE_SOURCE_IDS,
@@ -25,6 +26,7 @@ from ashare_evidence.shortpick_v2_strategy_search import (
     build_h10_exit_strategy_search_candidate_sources,
     build_h10_ma_accel_refine_strategy_search_candidate_sources,
     build_h10_ma_accel_strategy_search_candidate_sources,
+    build_h10_quiet_champion_strategy_search_candidate_sources,
     build_h10_quiet_strategy_search_candidate_sources,
     build_h10_robust_strategy_search_candidate_sources,
     build_h10_strength_strategy_search_candidate_sources,
@@ -190,6 +192,14 @@ def test_shortpick_v2_strategy_search_cli_parser_accepts_h10_quiet_batch() -> No
     assert args.candidate_batch == "h10_quiet"
 
 
+def test_shortpick_v2_strategy_search_cli_parser_accepts_h10_quiet_champion_batch() -> None:
+    args = cli_module.build_parser().parse_args(
+        ["shortpick-v2-strategy-search", "--candidate-batch", "h10_quiet_champion"]
+    )
+
+    assert args.candidate_batch == "h10_quiet_champion"
+
+
 def test_shortpick_v2_strategy_search_cli_parser_accepts_h10_robust_batch() -> None:
     args = cli_module.build_parser().parse_args(["shortpick-v2-strategy-search", "--candidate-batch", "h10_robust"])
 
@@ -254,6 +264,34 @@ def test_h10_quiet_strategy_search_requires_ten_day_horizon() -> None:
             horizon_days=2,
             account_profile="new_retail_cash_account",
             candidate_batch="h10_quiet",
+            generated_at=datetime(2026, 6, 14, 3, 0, tzinfo=UTC),
+        )
+
+
+def test_h10_quiet_champion_strategy_search_requires_ten_day_horizon() -> None:
+    days = [date(2026, 1, 1) + timedelta(days=index) for index in range(8)]
+    series_by_symbol = {
+        "600001.SH": _series("600001.SH", [10, 11, 12, 12, 13, 14, 14, 15]),
+        "600002.SH": _series("600002.SH", [19, 20, 21, 21, 22, 22, 23, 24]),
+    }
+    control = StrategySearchCandidateSource(
+        source_id="low_turnover_20d_uptrend_liquid_top120",
+        source_ref="market_only_reconstruction:low_turnover_20d_uptrend_liquid_top120:v1",
+        selections={days[2]: ["600001.SH"]},
+    )
+
+    with pytest.raises(ValueError, match="h10_quiet_champion requires horizon_days=10"):
+        build_shortpick_v2_strategy_search_artifact_from_series(
+            series_by_symbol,
+            signal_days=[days[2]],
+            trade_days=days[2:7],
+            candidate_sources=(control,),
+            start_date=days[0],
+            end_date=days[6],
+            initial_cash=20_000.0,
+            horizon_days=2,
+            account_profile="new_retail_cash_account",
+            candidate_batch="h10_quiet_champion",
             generated_at=datetime(2026, 6, 14, 3, 0, tzinfo=UTC),
         )
 
@@ -653,6 +691,27 @@ def test_h10_quiet_strategy_search_candidate_sources_include_expected_batch_ids(
     assert [source.source_id for source in sources] == [
         "low_turnover_20d_uptrend_liquid_top120",
         *H10_QUIET_CANDIDATE_SOURCE_IDS,
+    ]
+
+
+def test_h10_quiet_champion_strategy_search_candidate_sources_include_expected_batch_ids() -> None:
+    days = [date(2025, 1, 1) + timedelta(days=index) for index in range(140)]
+    series_by_symbol = {
+        "000300.SH": _series("000300.SH", [100 + index * 0.15 for index in range(140)]),
+        "600001.SH": _series("600001.SH", [10 + index * 0.04 for index in range(140)]),
+        "600002.SH": _series("600002.SH", [12 + index * 0.05 for index in range(140)]),
+    }
+
+    sources = build_h10_quiet_champion_strategy_search_candidate_sources(
+        series_by_symbol,
+        signal_days=days[125:130],
+        pool_limit=40,
+        rank_limit=6,
+    )
+
+    assert [source.source_id for source in sources] == [
+        "low_turnover_20d_uptrend_liquid_top120",
+        *H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS,
     ]
 
 
