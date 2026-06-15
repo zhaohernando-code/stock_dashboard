@@ -113,8 +113,8 @@ H10_QUIET_CANDIDATE_SOURCE_IDS = (
     "quiet_breakout_rank2to6_poolhot10_mtw_ret5_0_10",
 )
 H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS = (
-    "quiet_breakout_rank1_poolhot10_mtw",
     "quiet_breakout_rank2_poolhot10_mtw",
+    "quiet_breakout_rank1_poolhot10_mtw",
     "quiet_breakout_rank3_poolhot10_mtw",
     "quiet_breakout_rank4_poolhot10_mtw",
     "quiet_breakout_rank5_poolhot10_mtw",
