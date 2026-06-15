@@ -364,6 +364,7 @@ def _build_config_robustness(
         "industry_concentration": simulation["industry_concentration"],
         "top_winning_trades": simulation["top_winning_trades"],
         "top_losing_trades": simulation["top_losing_trades"],
+        "reason_counts": simulation["reason_counts"],
     }
 
 
@@ -1188,12 +1189,14 @@ def _parameter_stability(replay_artifact: dict[str, Any], selection_artifact: di
         summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
         rule = rule_by_config.get(config_id) or {}
         cash_policy = rule.get("cash_policy") if isinstance(rule.get("cash_policy"), dict) else {}
+        lot_policy = rule.get("lot_policy") if isinstance(rule.get("lot_policy"), dict) else {}
         rows.append(
             {
                 "config_id": config_id,
                 "role": role_by_config.get(config_id, "unselected"),
                 "source_id": _source_id_for_config(config_id),
                 "target_notional": _optional_float(cash_policy.get("target_notional")),
+                "board_lot_size": _optional_int(lot_policy.get("board_lot_size")),
                 "total_return": _optional_float(summary.get("total_return")),
                 "annualized_return": _annualized_return(
                     total_return=float(summary.get("total_return") or 0.0),

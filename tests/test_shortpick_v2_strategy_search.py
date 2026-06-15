@@ -17,6 +17,7 @@ from ashare_evidence.shortpick_v2_strategy_search import (
     H10_EXIT_CANDIDATE_SOURCE_IDS,
     H10_QUIET_CANDIDATE_SOURCE_IDS,
     H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS,
+    H10_QUIET_RULE_CONFIGS,
     H10_ROBUST_CANDIDATE_SOURCE_IDS,
     H10_STRENGTH_CANDIDATE_SOURCE_IDS,
     NEXT_ROUND_CANDIDATE_SOURCE_IDS,
@@ -462,6 +463,19 @@ def test_h10_entry_quality_strategy_search_requires_ten_day_horizon() -> None:
             candidate_batch="h10_entry_quality",
             generated_at=datetime(2026, 6, 15, 3, 0, tzinfo=UTC),
         )
+
+
+def test_h10_quiet_rule_configs_include_execution_decomposition_targets() -> None:
+    config_by_id = {config.config_id: config for config in H10_QUIET_RULE_CONFIGS}
+
+    assert config_by_id["fixed_notional_80k_top5_h10_v1"].target_notional == 80_000.0
+    assert config_by_id["fixed_notional_85k_top5_h10_v1"].target_notional == 85_000.0
+    assert config_by_id["fixed_notional_90k_top5_h10_v1"].target_notional == 90_000.0
+    assert {
+        config_by_id["fixed_notional_80k_top5_h10_v1"].board_lot_size,
+        config_by_id["fixed_notional_85k_top5_h10_v1"].board_lot_size,
+        config_by_id["fixed_notional_90k_top5_h10_v1"].board_lot_size,
+    } == {100}
 
 
 def test_h10_ma_accel_refine_sources_use_refine_rule_configs() -> None:

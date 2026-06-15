@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "shortpick_v2_h10_execution_decomposition_artifact.schema.json",
+  "title": "Shortpick V2 H10 Execution Decomposition Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_family",
+    "schema_version",
+    "artifact_id",
+    "generated_at",
+    "status",
+    "claim_ceiling",
+    "evidence_basis",
+    "source_robustness_artifact",
+    "analysis_scope",
+    "decomposition_policy",
+    "config_decompositions",
+    "pairwise_funding_effects",
+    "event_refs"
+  ],
+  "properties": {
+    "artifact_family": {
+      "const": "shortpick_v2_h10_execution_decomposition_artifact"
+    },
+    "schema_version": {
+      "const": "v1"
+    },
+    "artifact_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ready", "blocked"]
+    },
+    "claim_ceiling": {
+      "const": "research_observation"
+    },
+    "evidence_basis": {
+      "const": "historical_account_replay_execution_decomposition"
+    },
+    "source_robustness_artifact": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["artifact_id", "artifact_family", "schema_version", "status"]
+    },
+    "analysis_scope": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["config_ids", "decomposed_config_count", "missing_config_ids"]
+    },
+    "decomposition_policy": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["promotion_policy"]
+    },
+    "config_decompositions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/config_decomposition"
+      }
+    },
+    "pairwise_funding_effects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "event_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "config_decomposition": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "config_id",
+        "role",
+        "diagnostic_only",
+        "board_lot",
+        "cash_deployment",
+        "turnover_skip",
+        "winner_concentration",
+        "funding_effect_vs_fixed85"
+      ],
+      "properties": {
+        "config_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "diagnostic_only": {
+          "type": "boolean"
+        },
+        "board_lot": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["board_lot_size", "board_lot_block_count", "insufficient_cash_count"]
+        },
+        "cash_deployment": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["initial_cash", "mean_invested_ratio", "cash_drag_proxy", "total_buy_value"]
+        },
+        "turnover_skip": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["turnover", "trade_count", "skip_count", "skipped_ratio", "fallback_trade_count"]
+        },
+        "winner_concentration": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["largest_symbol_abs_pnl_share", "top_winner_net_pnl"]
+        },
+        "funding_effect_vs_fixed85": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["total_return_delta", "turnover_delta", "skip_count_delta"]
+        }
+      }
+    }
+  }
+}

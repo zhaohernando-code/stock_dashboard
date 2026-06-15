@@ -78,6 +78,10 @@ from ashare_evidence.shortpick_v2_replay import (
     build_shortpick_v2_replay_artifact,
     write_shortpick_v2_replay_artifact,
 )
+from ashare_evidence.shortpick_v2_h10_execution_decomposition import (
+    build_shortpick_v2_h10_execution_decomposition_artifact,
+    write_shortpick_v2_h10_execution_decomposition_artifact,
+)
 from ashare_evidence.shortpick_v2_h10_robustness import (
     build_shortpick_v2_h10_robustness_artifact,
     write_shortpick_v2_h10_robustness_artifact,
@@ -941,6 +945,44 @@ def build_parser() -> argparse.ArgumentParser:
         default="output/shortpick-v2-h10-quiet-robustness-artifact.json",
     )
 
+    shortpick_v2_h10_execution_decomposition = subparsers.add_parser(
+        "shortpick-v2-h10-execution-decomposition",
+        help="Generate execution decomposition diagnostics for h10 quiet fixed80/fixed85/90k configs.",
+    )
+    shortpick_v2_h10_execution_decomposition.add_argument("--database-url", default=None)
+    shortpick_v2_h10_execution_decomposition.add_argument(
+        "--replay-artifact",
+        default="output/shortpick-v2-h10-quiet-strategy-search-replay-artifact.json",
+    )
+    shortpick_v2_h10_execution_decomposition.add_argument(
+        "--selection-artifact",
+        default="output/shortpick-v2-h10-quiet-sparse-selection-artifact.json",
+    )
+    shortpick_v2_h10_execution_decomposition.add_argument("--start-date", default="2023-04-13")
+    shortpick_v2_h10_execution_decomposition.add_argument("--end-date", default="2026-05-08")
+    shortpick_v2_h10_execution_decomposition.add_argument("--initial-cash", type=float, default=200_000.0)
+    shortpick_v2_h10_execution_decomposition.add_argument(
+        "--entry-price-source",
+        choices=["next_close", "next_open", "same_close_proxy"],
+        default="next_close",
+    )
+    shortpick_v2_h10_execution_decomposition.add_argument("--horizon-days", type=int, default=10)
+    shortpick_v2_h10_execution_decomposition.add_argument("--pool-limit", type=int, default=40)
+    shortpick_v2_h10_execution_decomposition.add_argument("--rank-limit", type=int, default=6)
+    shortpick_v2_h10_execution_decomposition.add_argument("--cost-bps", type=float, default=20.0)
+    shortpick_v2_h10_execution_decomposition.add_argument("--stamp-tax-bps", type=float, default=5.0)
+    shortpick_v2_h10_execution_decomposition.add_argument("--min-signal-symbol-count", type=int, default=45)
+    shortpick_v2_h10_execution_decomposition.add_argument("--max-holdout-configs", type=int, default=10)
+    shortpick_v2_h10_execution_decomposition.add_argument(
+        "--account-profile",
+        choices=["new_retail_cash_account", "unrestricted"],
+        default="new_retail_cash_account",
+    )
+    shortpick_v2_h10_execution_decomposition.add_argument(
+        "--output",
+        default="output/shortpick-v2-h10-quiet-execution-decomposition-artifact.json",
+    )
+
     shortpick_governance_historical_backtest = subparsers.add_parser(
         "shortpick-governance-historical-backtest",
         help="Run Short Pick governance historical-backtest request plans into gated evidence artifacts.",
@@ -1590,6 +1632,38 @@ def main(argv: list[str] | None = None) -> int:
                 "analyzed_config_count": (payload.get("analysis_scope") or {}).get("analyzed_config_count"),
                 "high_risk_flag_count": sum(1 for flag in risk_flags if flag.get("severity") == "high"),
                 "risk_flag_count": len(risk_flags),
+            }
+        )
+        return 0
+
+    if args.command == "shortpick-v2-h10-execution-decomposition":
+        with session_scope(args.database_url) as session:
+            payload = build_shortpick_v2_h10_execution_decomposition_artifact(
+                session,
+                replay_artifact_path=args.replay_artifact,
+                selection_artifact_path=args.selection_artifact,
+                start_date=date.fromisoformat(args.start_date),
+                end_date=date.fromisoformat(args.end_date),
+                initial_cash=args.initial_cash,
+                entry_price_source=args.entry_price_source,
+                horizon_days=args.horizon_days,
+                pool_limit=args.pool_limit,
+                rank_limit=args.rank_limit,
+                cost_bps=args.cost_bps,
+                stamp_tax_bps=args.stamp_tax_bps,
+                min_signal_symbol_count=args.min_signal_symbol_count,
+                account_profile=args.account_profile,
+                max_holdout_configs=args.max_holdout_configs,
+            )
+        path = write_shortpick_v2_h10_execution_decomposition_artifact(payload, output_path=args.output)
+        _print_json(
+            {
+                "status": "ok",
+                "artifact_family": payload.get("artifact_family"),
+                "artifact_id": payload.get("artifact_id"),
+                "output_path": str(path),
+                "decomposed_config_count": (payload.get("analysis_scope") or {}).get("decomposed_config_count"),
+                "missing_config_ids": (payload.get("analysis_scope") or {}).get("missing_config_ids"),
             }
         )
         return 0

@@ -9,6 +9,11 @@ import jsonschema
 
 import ashare_evidence.cli as cli_module
 from ashare_evidence.shortpick_market_factor_study import _Bar, _Series
+from ashare_evidence.shortpick_v2_h10_execution_decomposition import (
+    SHORTPICK_V2_H10_EXECUTION_DECOMPOSITION_ARTIFACT_FAMILY,
+    build_shortpick_v2_h10_execution_decomposition_artifact_from_robustness_artifact,
+    write_shortpick_v2_h10_execution_decomposition_artifact,
+)
 from ashare_evidence.shortpick_v2_h10_robustness import (
     DIAGNOSTIC_ANALYSIS_ROLE,
     H10_QUIET_DIAGNOSTIC_CONFIG_IDS,
@@ -338,6 +343,104 @@ def test_shortpick_v2_h10_robustness_analyzes_benchmarks_before_selected_and_dia
     )
 
 
+def test_shortpick_v2_h10_execution_decomposition_artifact_covers_funding_dimensions(
+    tmp_path: Path,
+) -> None:
+    days = [date(2026, 1, 1) + timedelta(days=index) for index in range(60)]
+    series_by_symbol = {
+        "600001.SH": _series("600001.SH", [10.0 + index * 0.12 for index in range(60)]),
+        "600002.SH": _series("600002.SH", [14.0 + index * 0.03 for index in range(60)]),
+    }
+    signal_days = days[5:25]
+    trade_days = days[5:45]
+    selections = {signal_day: ["600001.SH", "600002.SH"] for signal_day in signal_days}
+    control_source = StrategySearchCandidateSource(
+        source_id=CONTROL_CANDIDATE_SOURCE_ID,
+        source_ref="market_only_reconstruction:low_turnover_20d_uptrend_liquid_top120:v1",
+        selections=selections,
+    )
+    source_id = H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS[0]
+    champion_source = StrategySearchCandidateSource(
+        source_id=source_id,
+        source_ref=f"market_only_reconstruction:shortpick_v2_h10_quiet_champion_round:{source_id}",
+        selections=selections,
+    )
+    replay_artifact = build_shortpick_v2_strategy_search_artifact_from_series(
+        series_by_symbol,
+        signal_days=signal_days,
+        trade_days=trade_days,
+        candidate_sources=(control_source, champion_source),
+        start_date=days[0],
+        end_date=days[44],
+        initial_cash=200_000.0,
+        horizon_days=10,
+        account_profile="new_retail_cash_account",
+        candidate_batch="h10_quiet_champion",
+        generated_at=datetime(2026, 6, 15, 8, 0, tzinfo=UTC),
+    )
+    selected_config_id = f"{source_id}__fixed_notional_70k_top5_h10_v1"
+    robustness_artifact = build_shortpick_v2_h10_robustness_artifact_from_series(
+        series_by_symbol,
+        signal_days=signal_days,
+        trade_days=trade_days,
+        candidate_sources=(control_source, champion_source),
+        replay_artifact=replay_artifact,
+        selection_artifact=_selection_artifact_with_benchmarks(
+            replay_artifact,
+            selected_config_id,
+            benchmark_config_ids=H10_QUIET_BENCHMARK_CONFIG_IDS,
+        ),
+        start_date=days[0],
+        end_date=days[44],
+        initial_cash=200_000.0,
+        horizon_days=10,
+        generated_at=datetime(2026, 6, 15, 10, 0, tzinfo=UTC),
+    )
+
+    artifact = build_shortpick_v2_h10_execution_decomposition_artifact_from_robustness_artifact(
+        robustness_artifact,
+        generated_at=datetime(2026, 6, 15, 11, 0, tzinfo=UTC),
+    )
+
+    assert artifact["artifact_family"] == SHORTPICK_V2_H10_EXECUTION_DECOMPOSITION_ARTIFACT_FAMILY
+    assert artifact["status"] == "ready"
+    assert artifact["analysis_scope"]["missing_config_ids"] == []
+    rows_by_config = {row["config_id"]: row for row in artifact["config_decompositions"]}
+    assert set(rows_by_config) == {
+        H10_QUIET_CAPITAL_SHADOW_CONFIG_ID,
+        H10_QUIET_CHAMPION_CONFIG_ID,
+        H10_QUIET_DIAGNOSTIC_CONFIG_IDS[0],
+    }
+    assert rows_by_config[H10_QUIET_CAPITAL_SHADOW_CONFIG_ID]["target_notional"] == 80_000.0
+    assert rows_by_config[H10_QUIET_CHAMPION_CONFIG_ID]["target_notional"] == 85_000.0
+    assert rows_by_config[H10_QUIET_DIAGNOSTIC_CONFIG_IDS[0]]["target_notional"] == 90_000.0
+    diagnostic = rows_by_config[H10_QUIET_DIAGNOSTIC_CONFIG_IDS[0]]
+    assert diagnostic["diagnostic_only"] is True
+    assert diagnostic["role"] == DIAGNOSTIC_ANALYSIS_ROLE
+    for row in rows_by_config.values():
+        assert row["board_lot"]["board_lot_size"] == 100
+        assert "cash_drag_proxy" in row["cash_deployment"]
+        assert "skip_reason_counts" in row["turnover_skip"]
+        assert "top_winner_net_pnl" in row["winner_concentration"]
+        assert "turnover_delta" in row["funding_effect_vs_fixed85"]
+    assert {row["config_id"] for row in artifact["pairwise_funding_effects"]} == {
+        H10_QUIET_CAPITAL_SHADOW_CONFIG_ID,
+        H10_QUIET_DIAGNOSTIC_CONFIG_IDS[0],
+    }
+
+    schema = json.loads(
+        Path(
+            "docs/contracts/registry/schemas/shortpick_v2_h10_execution_decomposition_artifact.schema.json"
+        ).read_text(encoding="utf-8")
+    )
+    jsonschema.Draft202012Validator(schema).validate(artifact)
+    output_path = write_shortpick_v2_h10_execution_decomposition_artifact(
+        artifact,
+        output_path=tmp_path / "execution-decomposition.json",
+    )
+    assert json.loads(output_path.read_text(encoding="utf-8"))["artifact_id"] == artifact["artifact_id"]
+
+
 def test_shortpick_v2_h10_robustness_risk_targets_benchmarks_when_available() -> None:
     selected_config_id = "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_70k_top5_h10_v1"
     diagnostic_config_id = H10_QUIET_DIAGNOSTIC_CONFIG_IDS[0]
@@ -374,6 +477,15 @@ def test_shortpick_v2_h10_robustness_cli_parser_defaults_to_h10_quiet_artifacts(
     assert args.selection_artifact == "output/shortpick-v2-h10-quiet-sparse-selection-artifact.json"
     assert args.horizon_days == 10
     assert args.output == "output/shortpick-v2-h10-quiet-robustness-artifact.json"
+
+
+def test_shortpick_v2_h10_execution_decomposition_cli_parser_defaults_to_h10_quiet_artifacts() -> None:
+    args = cli_module.build_parser().parse_args(["shortpick-v2-h10-execution-decomposition"])
+
+    assert args.replay_artifact == "output/shortpick-v2-h10-quiet-strategy-search-replay-artifact.json"
+    assert args.selection_artifact == "output/shortpick-v2-h10-quiet-sparse-selection-artifact.json"
+    assert args.horizon_days == 10
+    assert args.output == "output/shortpick-v2-h10-quiet-execution-decomposition-artifact.json"
 
 
 def _risk_result(config_id: str, *, role: str) -> dict[str, object]:
