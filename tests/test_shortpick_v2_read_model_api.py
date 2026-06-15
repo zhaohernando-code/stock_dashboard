@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from ashare_evidence.api import create_app
-from ashare_evidence.db import init_database
+from ashare_evidence.db import init_database, session_scope
+from ashare_evidence.lineage import compute_lineage_hash
+from ashare_evidence.models import MarketBar, Stock
 from ashare_evidence.shortpick_v2_h10_paper_governance import (
     ENTRY_POLICY,
     FIXED90_POLICY,
@@ -35,6 +37,94 @@ from ashare_evidence.shortpick_v2_read_model import (
     build_shortpick_v2_paper_tracking_read_model,
 )
 from ashare_evidence.shortpick_v2_rule_selection import build_shortpick_v2_rule_selection_artifact
+
+
+def _lineage(payload: object, uri: str) -> dict[str, str]:
+    return {
+        "license_tag": "test",
+        "usage_scope": "internal-test",
+        "redistribution_scope": "none",
+        "source_uri": uri,
+        "lineage_hash": compute_lineage_hash(payload),
+    }
+
+
+def _business_days(start: date, end: date) -> list[date]:
+    days: list[date] = []
+    cursor = start
+    while cursor <= end:
+        if cursor.weekday() < 5:
+            days.append(cursor)
+        cursor += timedelta(days=1)
+    return days
+
+
+def _seed_v2_paper_display_market_fixture(
+    database_url: str,
+    *,
+    end_date: date = date(2026, 6, 15),
+) -> None:
+    days = _business_days(date(2026, 4, 1), end_date)
+    symbols = [
+        (f"600{index:03d}.SH", f"测试主板{index:03d}", "fixture", 8.0 + index * 0.12)
+        for index in range(50)
+    ]
+    symbols.extend(
+        [
+            ("000300.SH", "沪深300", "benchmark", 100.0),
+            ("000905.SH", "中证500", "benchmark", 120.0),
+            ("000852.SH", "中证1000", "benchmark", 80.0),
+        ]
+    )
+    with session_scope(database_url) as session:
+        for symbol, name, industry, base_price in symbols:
+            ticker, _, exchange = symbol.partition(".")
+            stock = Stock(
+                symbol=symbol,
+                ticker=ticker,
+                exchange=exchange,
+                name=name,
+                provider_symbol=symbol,
+                listed_date=date(2020, 1, 1),
+                status="active",
+                profile_payload={"industry": industry},
+                **_lineage({"symbol": symbol}, f"test://stock/{symbol}"),
+            )
+            session.add(stock)
+            session.flush()
+            for day_index, observed_day in enumerate(days):
+                pulse = 1.15 if observed_day >= date(2026, 5, 8) and observed_day.weekday() in {0, 1, 2} else 1.0
+                close_price = (base_price + day_index * (0.04 + (day_index % 3) * 0.005)) * pulse
+                open_price = close_price * 0.99
+                session.add(
+                    MarketBar(
+                        bar_key=f"v2-paper-display-{symbol}-{observed_day.isoformat()}",
+                        stock_id=stock.id,
+                        timeframe="1d",
+                        observed_at=datetime(
+                            observed_day.year,
+                            observed_day.month,
+                            observed_day.day,
+                            7,
+                            0,
+                            tzinfo=UTC,
+                        ),
+                        open_price=open_price,
+                        high_price=close_price * 1.03,
+                        low_price=close_price * 0.97,
+                        close_price=close_price,
+                        volume=1_000_000 + day_index * 100 + len(symbol),
+                        amount=(1_000_000 + day_index * 100 + len(symbol)) * close_price,
+                        turnover_rate=0.8 + (day_index % 10) * 0.02,
+                        total_mv=1_000_000_000 + day_index * 100_000,
+                        circ_mv=900_000_000 + day_index * 100_000,
+                        raw_payload={},
+                        **_lineage(
+                            {"symbol": symbol, "day": observed_day.isoformat()},
+                            f"test://bar/{symbol}/{observed_day.isoformat()}",
+                        ),
+                    )
+                )
 
 
 def _result(
@@ -605,6 +695,176 @@ def test_shortpick_v2_paper_tracking_projects_h10_governance_without_backfilled_
     assert "历史回放不计为纸面追踪收益" in payload["data_disclaimer"]
 
 
+def test_shortpick_v2_paper_tracking_display_replays_since_start_with_session(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _write_v2_artifacts(tmp_path, monkeypatch)
+    _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
+    database_path = tmp_path / "paper-display.db"
+    database_url = f"sqlite:///{database_path}"
+    init_database(database_url)
+    _seed_v2_paper_display_market_fixture(database_url)
+
+    with session_scope(database_url) as session:
+        payload = build_shortpick_v2_paper_tracking_read_model(include_records=True, session=session)
+
+    assert payload["summary"]["record_count"] == 0
+    assert payload["summary"]["true_forward_record_count"] == 0
+    display = payload["paper_display"]
+    assert display["latest_trade"]["title"] == "最新模拟交易"
+    assert display["strategy_explanation"]["title"] == "策略说明"
+    assert {chart["title"] for chart in display["charts"]} == {"覆盖情况", "动作分布"}
+    assert [column["label"] for column in display["table"]["columns"]][:4] == [
+        "信号日",
+        "记录类型",
+        "策略",
+        "动作",
+    ]
+    coverage = display["coverage"]
+    assert coverage["coverage_start"] == "2026-05-08"
+    assert coverage["coverage_end"] == "2026-06-15"
+    assert coverage["latest_source_signal_date"] == "2026-06-15"
+    assert "2026-05-08" in coverage["available_source_signal_dates"]
+    assert coverage["row_or_gap_accounting_passed"] is True
+    assert coverage["row_or_gap_config_accounting_passed"] is True
+    assert coverage["available_source_signal_config_count"] == len(coverage["available_source_signal_dates"]) * 2
+    assert payload["summary"]["replay_record_count"] == coverage["replay_row_count"]
+    assert display["table"]["rows"]
+    assert {row["tracking_tag"] for row in display["table"]["rows"]} == {"回放"}
+
+
+def test_shortpick_v2_paper_tracking_display_uses_readable_chinese_text(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _write_v2_artifacts(tmp_path, monkeypatch)
+    _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
+    database_path = tmp_path / "paper-display-readable.db"
+    database_url = f"sqlite:///{database_path}"
+    init_database(database_url)
+    _seed_v2_paper_display_market_fixture(database_url)
+
+    with session_scope(database_url) as session:
+        payload = build_shortpick_v2_paper_tracking_read_model(include_records=True, session=session)
+
+    display = payload["paper_display"]
+    visible_table_rows = [
+        {
+            "记录类型": row["tracking_tag"],
+            "策略": row["strategy_text"],
+            "动作": row["action_text"],
+            "原因": row["reason_text"],
+            "标的": row["stock_text"],
+            "说明": row["note"],
+        }
+        for row in display["table"]["rows"]
+    ]
+    visible_text = json.dumps(
+        [
+            display["latest_trade"],
+            display["strategy_explanation"],
+            display["charts"],
+            display["table"]["columns"],
+            visible_table_rows,
+            display["table"]["rows"],
+        ],
+        ensure_ascii=False,
+    )
+    for forbidden in (
+        "config_id",
+        "decision_action",
+        "buy_primary",
+        "buy_fallback",
+        "fixed_notional",
+        "paper_tracking",
+        "source_gap",
+    ):
+        assert forbidden not in visible_text
+    assert "回放" in visible_text
+    assert "不允许延迟买入" in visible_text
+
+
+def test_shortpick_v2_paper_tracking_display_handles_missing_h10_source_as_gap(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _write_v2_artifacts(tmp_path, monkeypatch)
+    _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
+    database_path = tmp_path / "paper-display-missing-source.db"
+    database_url = f"sqlite:///{database_path}"
+    init_database(database_url)
+    _seed_v2_paper_display_market_fixture(database_url)
+
+    import ashare_evidence.shortpick_v2_strategy_search as strategy_search
+
+    monkeypatch.setattr(
+        strategy_search,
+        "build_h10_quiet_champion_strategy_search_candidate_sources",
+        lambda *args, **kwargs: (),
+    )
+
+    with session_scope(database_url) as session:
+        payload = build_shortpick_v2_paper_tracking_read_model(include_records=True, session=session)
+
+    coverage = payload["paper_display"]["coverage"]
+    assert coverage["source_status"] == "missing_h10_replay_source"
+    assert coverage["row_or_gap_accounting_passed"] is True
+    assert coverage["source_gap_count"] > 0
+    assert payload["summary"]["record_count"] == 0
+    assert payload["paper_display"]["table"]["rows"][0]["action_text"] == "数据缺口"
+
+
+def test_shortpick_v2_paper_tracking_display_not_limited_to_default_decision_samples(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _write_v2_artifacts(tmp_path, monkeypatch)
+    _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
+    database_path = tmp_path / "paper-display-long-window.db"
+    database_url = f"sqlite:///{database_path}"
+    init_database(database_url)
+    _seed_v2_paper_display_market_fixture(database_url, end_date=date(2026, 8, 31))
+
+    with session_scope(database_url) as session:
+        payload = build_shortpick_v2_paper_tracking_read_model(include_records=True, session=session)
+
+    coverage = payload["paper_display"]["coverage"]
+    assert len(coverage["available_source_signal_dates"]) > 40
+    assert coverage["coverage_end"] == "2026-08-31"
+    assert coverage["row_or_gap_accounting_passed"] is True
+    assert coverage["row_or_gap_config_accounting_passed"] is True
+    assert coverage["available_source_signal_config_count"] == len(coverage["available_source_signal_dates"]) * 2
+
+
+def test_shortpick_v2_paper_tracking_display_replay_error_does_not_break_read_model(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _write_v2_artifacts(tmp_path, monkeypatch)
+    _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
+    database_path = tmp_path / "paper-display-error.db"
+    database_url = f"sqlite:///{database_path}"
+    init_database(database_url)
+    _seed_v2_paper_display_market_fixture(database_url)
+
+    import ashare_evidence.shortpick_v2_replay as replay
+
+    def _raise_replay_error(*args, **kwargs):
+        raise RuntimeError("fixture replay failure")
+
+    monkeypatch.setattr(replay, "build_shortpick_v2_replay_artifact_from_series", _raise_replay_error)
+
+    with session_scope(database_url) as session:
+        payload = build_shortpick_v2_paper_tracking_read_model(include_records=True, session=session)
+
+    coverage = payload["paper_display"]["coverage"]
+    assert payload["status"] == "contract_ready"
+    assert payload["summary"]["record_count"] == 0
+    assert coverage["source_status"] == "replay_generation_error"
+    assert payload["paper_display"]["table"]["rows"] == []
+
+
 def test_shortpick_v2_paper_tracking_reads_existing_v2_ledger_artifact(
     tmp_path: Path,
     monkeypatch,
@@ -621,6 +881,7 @@ def test_shortpick_v2_paper_tracking_reads_existing_v2_ledger_artifact(
     assert payload["summary"]["record_count"] == 1
     assert payload["records"][0]["decision_action"] == "buy_primary"
     assert payload["records"][0]["evidence_basis"] == "true_forward_tracking"
+    assert payload["paper_display"]["coverage"]["true_forward_record_count"] == 1
 
 
 def test_shortpick_v2_paper_tracking_rejects_h10_fixed90_active_ledger_config(
@@ -667,6 +928,8 @@ def test_shortpick_v2_read_api_routes_return_v2_payloads(tmp_path: Path, monkeyp
     assert paper_response.status_code == 200
     assert paper_response.json()["status"] == "blocked"
     assert paper_response.json()["summary"]["record_count"] == 0
+    assert paper_response.json()["paper_display"]["table"]["rows"] == []
+    assert paper_response.json()["paper_display"]["coverage"]["source_status"] == "summary_rows_omitted"
 
 
 def test_shortpick_v2_read_api_preserves_h10_paper_governance_projection(
@@ -687,6 +950,8 @@ def test_shortpick_v2_read_api_preserves_h10_paper_governance_projection(
     assert body["status"] == "contract_ready"
     assert body["summary"]["record_count"] == 0
     assert body["records"] == []
+    assert body["paper_display"]["table"]["rows"] == []
+    assert body["paper_display"]["coverage"]["source_status"] == "summary_rows_omitted"
     assert body["paper_governance"]["selected_config_ids"] == list(H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS)
     assert body["paper_governance"]["paper_tracking_status"] == PAPER_TRACKING_STATUS
 

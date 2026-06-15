@@ -354,6 +354,7 @@ class ShortpickV2PaperTrackingResponse(BaseModel):
     selected_configs: list[ShortpickV2ConfigReadout] = Field(default_factory=list)
     baseline_configs: list[ShortpickV2ConfigReadout] = Field(default_factory=list)
     paper_governance: dict[str, Any] = Field(default_factory=dict)
+    paper_display: dict[str, Any] = Field(default_factory=dict)
     records: list[dict[str, Any]] = Field(default_factory=list)
     summary: dict[str, Any] = Field(default_factory=dict)
     leakage_audit: dict[str, Any] = Field(default_factory=dict)

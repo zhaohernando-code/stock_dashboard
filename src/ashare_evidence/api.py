@@ -2302,9 +2302,10 @@ def create_app(
     @app.get("/shortpick-lab-v2/paper-tracking", response_model=ShortpickV2PaperTrackingResponse)
     def shortpick_v2_paper_tracking(
         access: StockAccessContext = Depends(require_stock_access),
+        session: Session = Depends(get_session),
     ) -> dict[str, object]:
         try:
-            return build_shortpick_v2_paper_tracking_read_model(include_records=True)
+            return build_shortpick_v2_paper_tracking_read_model(include_records=True, session=session)
         except LookupError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
@@ -2313,9 +2314,10 @@ def create_app(
     @app.get("/shortpick-lab-v2/paper-tracking/summary", response_model=ShortpickV2PaperTrackingResponse)
     def shortpick_v2_paper_tracking_summary(
         access: StockAccessContext = Depends(require_stock_access),
+        session: Session = Depends(get_session),
     ) -> dict[str, object]:
         try:
-            return build_shortpick_v2_paper_tracking_read_model(include_records=False)
+            return build_shortpick_v2_paper_tracking_read_model(include_records=False, session=session)
         except LookupError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:

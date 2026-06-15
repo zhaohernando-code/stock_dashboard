@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
-from datetime import UTC, datetime
+import threading
+import time
+from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -78,6 +81,15 @@ SHORTPICK_V2_H10_PAPER_GOVERNANCE_ARTIFACT_CANDIDATES = (
     Path("output/shortpick-v2-h10-paper-governance-artifact.json"),
 )
 SHORTPICK_V2_DECISION_SAMPLE_LIMIT_MAX = 40
+SHORTPICK_V2_PAPER_DISPLAY_REPLAY_ROW_LIMIT = 240
+SHORTPICK_V2_PAPER_DISPLAY_MIN_SIGNAL_SYMBOL_COUNT = 45
+SHORTPICK_V2_PAPER_DISPLAY_SOURCE_ID = "quiet_breakout_rank2_poolhot10_mtw"
+SHORTPICK_V2_PAPER_DISPLAY_SOURCE_LABEL = "安静突破 Rank2：热度池达标时取第 2 名，周一、周二、周三触发"
+SHORTPICK_V2_PAPER_DISPLAY_CACHE_TTL_SECONDS = float(
+    os.getenv("ASHARE_SHORTPICK_V2_PAPER_DISPLAY_CACHE_TTL_SECONDS", "300")
+)
+_paper_display_replay_cache_lock = threading.Lock()
+_paper_display_replay_cache: dict[tuple[Any, ...], tuple[float, list[dict[str, Any]], dict[str, Any]]] = {}
 
 
 def build_shortpick_v2_historical_replay_read_model(
@@ -174,6 +186,7 @@ def build_shortpick_v2_historical_replay_read_model(
 def build_shortpick_v2_paper_tracking_read_model(
     *,
     include_records: bool = True,
+    session: Any | None = None,
     rule_selection_artifact_path: str | Path | None = None,
     ledger_artifact_path: str | Path | None = None,
     paper_governance_artifact_path: str | Path | None = None,
@@ -213,6 +226,7 @@ def build_shortpick_v2_paper_tracking_read_model(
             paper_governance_artifact=paper_governance_artifact,
             governance_path=governance_path,
             include_records=include_records,
+            session=session,
         )
     return _contract_ready_paper_tracking_read_model(
         selection_artifact=selection_artifact,
@@ -221,6 +235,7 @@ def build_shortpick_v2_paper_tracking_read_model(
         paper_governance_artifact=paper_governance_artifact,
         governance_path=governance_path,
         include_records=include_records,
+        session=session,
     )
 
 
@@ -232,6 +247,7 @@ def _contract_ready_paper_tracking_read_model(
     paper_governance_artifact: dict[str, Any] | None,
     governance_path: Path,
     include_records: bool,
+    session: Any | None,
 ) -> dict[str, Any]:
     paper_governance = _paper_governance_projection(paper_governance_artifact, governance_path)
     selected_configs = (
@@ -241,6 +257,27 @@ def _contract_ready_paper_tracking_read_model(
     )
     baseline_configs = _paper_config_readouts(selection_artifact.get("baseline_configs"))
     is_blocked = not selected_configs
+    summary = {
+        "record_count": 0,
+        "buy_count": 0,
+        "skip_count": 0,
+        "source_gap_count": 0,
+        "selected_config_count": len(selected_configs),
+        "baseline_config_count": len(baseline_configs),
+        "tracking_start_date": SHORTPICK_V2_TRACKING_START_DATE,
+        "paper_governance_status": paper_governance.get("recommendation_status") if paper_governance else None,
+        "paper_tracking_status": paper_governance.get("paper_tracking_status") if paper_governance else None,
+    }
+    paper_display = _paper_tracking_display_projection(
+        records=[],
+        selected_configs=selected_configs,
+        baseline_configs=baseline_configs,
+        paper_governance=paper_governance,
+        summary=summary,
+        session=session,
+        include_display_rows=include_records,
+    )
+    _merge_paper_display_summary(summary, paper_display)
     payload: dict[str, Any] = {
         "generated_at": _now_iso(),
         "status": "blocked" if is_blocked else "contract_ready",
@@ -298,17 +335,8 @@ def _contract_ready_paper_tracking_read_model(
         "selected_configs": selected_configs,
         "baseline_configs": baseline_configs,
         "paper_governance": paper_governance,
-        "summary": {
-            "record_count": 0,
-            "buy_count": 0,
-            "skip_count": 0,
-            "source_gap_count": 0,
-            "selected_config_count": len(selected_configs),
-            "baseline_config_count": len(baseline_configs),
-            "tracking_start_date": SHORTPICK_V2_TRACKING_START_DATE,
-            "paper_governance_status": paper_governance.get("recommendation_status") if paper_governance else None,
-            "paper_tracking_status": paper_governance.get("paper_tracking_status") if paper_governance else None,
-        },
+        "paper_display": paper_display,
+        "summary": summary,
         "leakage_audit": {
             "status": "passed",
             "read_model_policy": "no_v1_paper_tracking_fallback_no_dynamic_replay",
@@ -349,6 +377,7 @@ def _paper_tracking_ledger_read_model(
     paper_governance_artifact: dict[str, Any] | None,
     governance_path: Path,
     include_records: bool,
+    session: Any | None,
 ) -> dict[str, Any]:
     records = [record for record in ledger_artifact.get("records") or [] if isinstance(record, dict)]
     paper_governance = _paper_governance_projection(paper_governance_artifact, governance_path)
@@ -358,6 +387,17 @@ def _paper_tracking_ledger_read_model(
         else _paper_config_readouts(selection_artifact.get("selected_configs"))
     )
     baseline_configs = _paper_config_readouts(selection_artifact.get("baseline_configs"))
+    summary = dict(ledger_artifact.get("summary") or _records_summary(records))
+    paper_display = _paper_tracking_display_projection(
+        records=records,
+        selected_configs=selected_configs,
+        baseline_configs=baseline_configs,
+        paper_governance=paper_governance,
+        summary=summary,
+        session=session,
+        include_display_rows=include_records,
+    )
+    _merge_paper_display_summary(summary, paper_display)
     payload: dict[str, Any] = {
         "generated_at": _now_iso(),
         "status": str(ledger_artifact.get("status") or "active"),
@@ -389,7 +429,8 @@ def _paper_tracking_ledger_read_model(
         "selected_configs": selected_configs,
         "baseline_configs": baseline_configs,
         "paper_governance": paper_governance,
-        "summary": ledger_artifact.get("summary") or _records_summary(records),
+        "paper_display": paper_display,
+        "summary": summary,
         "leakage_audit": ledger_artifact.get("leakage_audit")
         or {
             "status": "passed",
@@ -405,6 +446,745 @@ def _paper_tracking_ledger_read_model(
     if include_records:
         payload["records"] = records
     return payload
+
+
+def _paper_tracking_display_projection(
+    *,
+    records: list[dict[str, Any]],
+    selected_configs: list[dict[str, Any]],
+    baseline_configs: list[dict[str, Any]],
+    paper_governance: dict[str, Any],
+    summary: dict[str, Any],
+    session: Any | None,
+    include_display_rows: bool,
+) -> dict[str, Any]:
+    true_forward_rows = [_paper_display_row_from_ledger(record) for record in records] if include_display_rows else []
+    if include_display_rows:
+        replay_rows, coverage = _paper_display_replay_rows_from_session(
+            session=session,
+            active_config_ids=_paper_display_active_config_ids(selected_configs),
+        )
+    else:
+        replay_rows = []
+        coverage = _empty_paper_display_coverage()
+        coverage["source_status"] = "summary_rows_omitted"
+        coverage["source_status_label"] = "摘要接口不返回明细行，也不执行回放重算"
+    coverage["true_forward_record_count"] = len(records)
+    internal_display_rows = _sorted_display_rows([*true_forward_rows, *replay_rows])[
+        :SHORTPICK_V2_PAPER_DISPLAY_REPLAY_ROW_LIMIT
+    ]
+    table_rows = _paper_display_visible_rows(internal_display_rows) if include_display_rows else []
+    action_counts = _display_action_counts(internal_display_rows)
+    latest_trade = _latest_display_trade(internal_display_rows)
+    status_label = "纸面追踪运行中" if records else "等待真实前向记录"
+    if not selected_configs:
+        status_label = "暂未进入纸面追踪"
+    return {
+        "title": "试验田v2纸面追踪",
+        "status_label": status_label,
+        "subtitle": "这里展示的是纸面追踪主视图；2026-05-08 起补齐的历史区间统一标记为“回放”。",
+        "latest_trade": latest_trade,
+        "strategy_explanation": _paper_display_strategy_explanation(
+            selected_configs=selected_configs,
+            baseline_configs=baseline_configs,
+            paper_governance=paper_governance,
+        ),
+        "charts": [
+            {
+                "title": "覆盖情况",
+                "subtitle": "回放行用于补齐观察窗口，不计入真实前向纸面收益。",
+                "kind": "bar",
+                "data": [
+                    {"name": "真实前向记录", "value": int(coverage.get("true_forward_record_count") or 0)},
+                    {"name": "回放展示行", "value": int(coverage.get("replay_row_count") or 0)},
+                    {"name": "数据缺口行", "value": int(coverage.get("source_gap_count") or 0)},
+                ],
+            },
+            {
+                "title": "动作分布",
+                "subtitle": "只允许当天买入首选、当天买入候补或不买入；没有延迟买入。",
+                "kind": "bar",
+                "data": [
+                    {"name": "买入首选", "value": action_counts.get("buy_primary", 0)},
+                    {"name": "买入候补", "value": action_counts.get("buy_fallback", 0)},
+                    {"name": "不买入", "value": action_counts.get("skip", 0)},
+                    {"name": "数据缺口", "value": action_counts.get("source_gap", 0)},
+                ],
+            },
+        ],
+        "table": {
+            "title": "模拟交易明细",
+            "columns": [
+                {"key": "signal_date", "label": "信号日"},
+                {"key": "tracking_tag", "label": "记录类型"},
+                {"key": "strategy_text", "label": "策略"},
+                {"key": "action_text", "label": "动作"},
+                {"key": "stock_text", "label": "标的"},
+                {"key": "selected_rank_text", "label": "入选位置"},
+                {"key": "quantity_text", "label": "数量"},
+                {"key": "cash_after_text", "label": "剩余现金"},
+                {"key": "note", "label": "说明"},
+            ],
+            "rows": table_rows,
+            "empty_text": "暂无可展示的纸面追踪记录。",
+        },
+        "coverage": coverage,
+        "summary_cards": [
+            {"label": "真实前向记录", "value": str(int(summary.get("record_count") or 0))},
+            {"label": "回放展示行", "value": str(int(coverage.get("replay_row_count") or 0))},
+            {"label": "覆盖起点", "value": str(coverage.get("coverage_start") or SHORTPICK_V2_TRACKING_START_DATE)},
+            {"label": "最新来源信号日", "value": str(coverage.get("latest_source_signal_date") or "暂无")},
+        ],
+    }
+
+
+def _paper_display_replay_rows_from_session(
+    *,
+    session: Any | None,
+    active_config_ids: tuple[str, ...],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    if session is None:
+        coverage = _empty_paper_display_coverage()
+        coverage["source_status"] = "no_market_data_session"
+        coverage["source_status_label"] = "未连接本地行情库，无法生成回放补齐行"
+        return [], coverage
+    cache_key = _paper_display_replay_cache_key(session, active_config_ids)
+    if isinstance(cache_key, tuple):
+        now = time.monotonic()
+        with _paper_display_replay_cache_lock:
+            cached = _paper_display_replay_cache.get(cache_key)
+            if cached is not None and now - cached[0] <= SHORTPICK_V2_PAPER_DISPLAY_CACHE_TTL_SECONDS:
+                return copy.deepcopy(cached[1]), copy.deepcopy(cached[2])
+    else:
+        return [], cache_key
+
+    try:
+        rows, coverage = _build_paper_display_replay_rows_from_session(
+            session=session,
+            active_config_ids=active_config_ids,
+        )
+    except Exception:
+        coverage = _empty_paper_display_coverage()
+        coverage["source_status"] = "replay_generation_error"
+        coverage["source_status_label"] = "回放展示生成失败；真实前向记录不受影响，请稍后重试或检查本地行情库"
+        return [], coverage
+
+    now = time.monotonic()
+    with _paper_display_replay_cache_lock:
+        expired_cache_keys = [
+            existing_key
+            for existing_key, cached in _paper_display_replay_cache.items()
+            if now - cached[0] > SHORTPICK_V2_PAPER_DISPLAY_CACHE_TTL_SECONDS
+        ]
+        for existing_key in expired_cache_keys:
+            _paper_display_replay_cache.pop(existing_key, None)
+        _paper_display_replay_cache[cache_key] = (now, copy.deepcopy(rows), copy.deepcopy(coverage))
+    return rows, coverage
+
+
+def _paper_display_replay_cache_key(
+    session: Any,
+    active_config_ids: tuple[str, ...],
+) -> tuple[Any, ...] | dict[str, Any]:
+    try:
+        from sqlalchemy import func, select
+
+        from ashare_evidence.models import MarketBar
+
+        bind = session.get_bind()
+        database_identity = str(getattr(bind, "url", "unknown"))
+        count_value, latest_observed_at = session.execute(
+            select(func.count(MarketBar.id), func.max(MarketBar.observed_at)).where(MarketBar.timeframe == "1d")
+        ).one()
+    except Exception:
+        coverage = _empty_paper_display_coverage()
+        coverage["source_status"] = "market_data_read_error"
+        coverage["source_status_label"] = "读取本地行情库失败，无法生成回放补齐行"
+        return coverage
+    return (
+        database_identity,
+        tuple(active_config_ids),
+        int(count_value or 0),
+        latest_observed_at.isoformat() if hasattr(latest_observed_at, "isoformat") else str(latest_observed_at or ""),
+    )
+
+
+def _build_paper_display_replay_rows_from_session(
+    *,
+    session: Any,
+    active_config_ids: tuple[str, ...],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    coverage = _empty_paper_display_coverage()
+    coverage["true_forward_record_count"] = 0
+    rule_configs = _paper_display_rule_configs(active_config_ids)
+    if not rule_configs:
+        coverage["source_status"] = "no_active_h10_config"
+        coverage["source_status_label"] = "当前没有可进入纸面观察的 H10 候选策略"
+        return [], coverage
+
+    from ashare_evidence.market_rules import ACCOUNT_PROFILE_NEW_RETAIL_CASH, filter_account_eligible_series
+    from ashare_evidence.shortpick_market_factor_study import (
+        ENTRY_PRICE_SOURCE_NEXT_CLOSE,
+        INDEX_SYMBOLS,
+        _load_daily_series,
+    )
+    from ashare_evidence.shortpick_portfolio_backtest import _trade_days
+    from ashare_evidence.shortpick_v2_replay import (
+        DEFAULT_COST_BPS,
+        DEFAULT_STAMP_TAX_BPS,
+        build_shortpick_v2_replay_artifact_from_series,
+    )
+    from ashare_evidence.shortpick_v2_strategy_search import build_h10_quiet_champion_strategy_search_candidate_sources
+
+    start_date = date.fromisoformat(SHORTPICK_V2_TRACKING_START_DATE)
+    raw_series_by_symbol = _load_daily_series(session)
+    series_by_symbol, account_eligibility = filter_account_eligible_series(
+        raw_series_by_symbol,
+        account_profile=ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+        include_index_symbols=INDEX_SYMBOLS,
+    )
+    latest_bar_day = _latest_series_day(series_by_symbol)
+    if latest_bar_day is None or latest_bar_day < start_date:
+        coverage["source_status"] = "no_market_data_after_start"
+        coverage["source_status_label"] = "本地行情库没有覆盖 2026-05-08 之后的数据"
+        coverage["coverage_end"] = latest_bar_day.isoformat() if latest_bar_day is not None else None
+        coverage["latest_source_signal_date"] = coverage["coverage_end"]
+        return [], coverage
+
+    available_signal_days = _trade_days(
+        series_by_symbol,
+        start_date=start_date,
+        end_date=latest_bar_day,
+        min_symbol_count=SHORTPICK_V2_PAPER_DISPLAY_MIN_SIGNAL_SYMBOL_COUNT,
+    )
+    coverage["coverage_end"] = (
+        available_signal_days[-1].isoformat() if available_signal_days else latest_bar_day.isoformat()
+    )
+    coverage["latest_source_signal_date"] = coverage["coverage_end"]
+    coverage["available_source_signal_dates"] = [day.isoformat() for day in available_signal_days]
+    coverage["available_source_signal_day_count"] = len(available_signal_days)
+    coverage["source_status"] = "ready" if available_signal_days else "no_eligible_signal_days"
+    coverage["source_status_label"] = (
+        "已读取本地行情库生成回放覆盖"
+        if available_signal_days
+        else "本地行情库存在数据，但没有达到策略可用的信号日"
+    )
+    coverage["account_profile_label"] = str(account_eligibility.get("account_profile_label") or "新开户普通现金账户")
+    if not available_signal_days:
+        return [], coverage
+
+    candidate_sources = build_h10_quiet_champion_strategy_search_candidate_sources(
+        series_by_symbol,
+        signal_days=available_signal_days,
+        pool_limit=40,
+        rank_limit=6,
+    )
+    display_source = next(
+        (source for source in candidate_sources if source.source_id == SHORTPICK_V2_PAPER_DISPLAY_SOURCE_ID),
+        None,
+    )
+    if display_source is None:
+        coverage["source_status"] = "missing_h10_replay_source"
+        coverage["source_status_label"] = "缺少 H10 安静突破回放源，已按数据缺口保留信号日"
+        rows = [
+            _paper_display_gap_row(
+                signal_date,
+                config.config_id,
+                reason_text="缺少 H10 安静突破回放源，无法生成当天动作判断。",
+                note="该信号日保留为覆盖缺口，避免把源缺失误读成策略结果。",
+            )
+            for signal_date in coverage["available_source_signal_dates"]
+            for config in rule_configs
+        ]
+        _finalize_paper_display_coverage(
+            coverage,
+            rows,
+            active_config_ids=tuple(config.config_id for config in rule_configs),
+        )
+        return rows, coverage
+    replay_artifact = build_shortpick_v2_replay_artifact_from_series(
+        series_by_symbol,
+        signal_days=available_signal_days,
+        trade_days=_trade_days(
+            series_by_symbol,
+            start_date=start_date,
+            end_date=latest_bar_day + timedelta(days=80),
+            min_symbol_count=SHORTPICK_V2_PAPER_DISPLAY_MIN_SIGNAL_SYMBOL_COUNT,
+        ),
+        selections=display_source.selections,
+        start_date=start_date,
+        end_date=latest_bar_day,
+        initial_cash=SHORTPICK_V2_DEFAULT_INITIAL_CASH,
+        entry_price_source=ENTRY_PRICE_SOURCE_NEXT_CLOSE,
+        horizon_days=10,
+        pool_limit=40,
+        rank_limit=6,
+        cost_bps=DEFAULT_COST_BPS,
+        stamp_tax_bps=DEFAULT_STAMP_TAX_BPS,
+        account_profile=str(account_eligibility.get("account_profile") or ACCOUNT_PROFILE_NEW_RETAIL_CASH),
+        stock_like_series_count=len([symbol for symbol in series_by_symbol if symbol not in INDEX_SYMBOLS]),
+        coverage_notes=["纸面追踪显示投影只读生成，不刷新行情、不写入 ledger。"],
+        rule_configs=rule_configs,
+        decision_sample_limit=len(available_signal_days),
+    )
+    rows = _paper_display_rows_from_replay_artifact(
+        replay_artifact,
+        active_config_ids=tuple(config.config_id for config in rule_configs),
+        available_signal_dates=coverage["available_source_signal_dates"],
+        symbol_names={
+            symbol: str(getattr(series, "name", "") or symbol)
+            for symbol, series in series_by_symbol.items()
+        },
+    )
+    _finalize_paper_display_coverage(
+        coverage,
+        rows,
+        active_config_ids=tuple(config.config_id for config in rule_configs),
+    )
+    return rows, coverage
+
+
+def _paper_display_rows_from_replay_artifact(
+    replay_artifact: dict[str, Any],
+    *,
+    active_config_ids: tuple[str, ...],
+    available_signal_dates: list[str],
+    symbol_names: dict[str, str],
+) -> list[dict[str, Any]]:
+    result_by_config = _replay_results_by_config(replay_artifact)
+    rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for config_id in active_config_ids:
+        result = result_by_config.get(config_id) or {}
+        for decision in result.get("decision_samples") or []:
+            if not isinstance(decision, dict):
+                continue
+            signal_date = str(decision.get("signal_date") or "")
+            if not signal_date or signal_date not in available_signal_dates:
+                continue
+            seen.add((signal_date, config_id))
+            rows.append(_paper_display_row_from_replay_decision(decision, config_id, symbol_names=symbol_names))
+    for signal_date in available_signal_dates:
+        for config_id in active_config_ids:
+            if (signal_date, config_id) in seen:
+                continue
+            rows.append(_paper_display_gap_row(signal_date, config_id))
+    return rows
+
+
+def _finalize_paper_display_coverage(
+    coverage: dict[str, Any],
+    rows: list[dict[str, Any]],
+    *,
+    active_config_ids: tuple[str, ...],
+) -> None:
+    replay_dates = sorted(
+        {str(row.get("signal_date") or "") for row in rows if row.get("source_state") != "source_gap"}
+    )
+    gap_dates = sorted({str(row.get("signal_date") or "") for row in rows if row.get("source_state") == "source_gap"})
+    row_pairs = {
+        (str(row.get("signal_date") or ""), str(row.get("config_id") or ""))
+        for row in rows
+        if row.get("signal_date") and row.get("config_id")
+    }
+    expected_pairs = {
+        (str(signal_date), config_id)
+        for signal_date in coverage.get("available_source_signal_dates") or []
+        for config_id in active_config_ids
+    }
+    coverage["covered_signal_dates"] = replay_dates
+    coverage["gap_signal_dates"] = gap_dates
+    coverage["replay_row_count"] = len(
+        [row for row in rows if row.get("tracking_tag") == "回放" and row.get("source_state") != "source_gap"]
+    )
+    coverage["source_gap_count"] = len([row for row in rows if row.get("source_state") == "source_gap"])
+    coverage["row_or_gap_accounting_passed"] = set(coverage["available_source_signal_dates"]) <= (
+        set(replay_dates) | set(gap_dates)
+    )
+    coverage["available_source_signal_config_count"] = len(expected_pairs)
+    coverage["row_or_gap_config_accounting_passed"] = expected_pairs <= row_pairs
+
+
+def _paper_display_row_from_replay_decision(
+    decision: dict[str, Any],
+    config_id: str,
+    *,
+    symbol_names: dict[str, str],
+) -> dict[str, Any]:
+    action = str(decision.get("action") or "skip")
+    symbol = str(decision.get("symbol") or "")
+    quantity = _optional_int(decision.get("quantity"))
+    cash_before = _optional_float(decision.get("cash_before"))
+    cash_after = _optional_float(decision.get("cash_after"))
+    signal_date = str(decision.get("signal_date") or "")
+    return {
+        "row_id": f"replay:{signal_date}:{config_id}",
+        "signal_date": signal_date,
+        "signal_date_text": signal_date or "未知日期",
+        "tracking_tag": "回放",
+        "tracking_tag_tone": "warning",
+        "config_id": config_id,
+        "strategy_text": _paper_config_label(config_id),
+        "action": action,
+        "action_text": _paper_action_label(action),
+        "reason_text": _paper_reason_label(str(decision.get("reason") or "")),
+        "stock_text": _stock_display_text(symbol, symbol_names=symbol_names),
+        "selected_rank_text": _rank_display_text(decision.get("selected_rank")),
+        "quantity": quantity,
+        "quantity_text": _quantity_text(quantity),
+        "cash_before": cash_before,
+        "cash_before_text": _format_cny(cash_before),
+        "cash_after": cash_after,
+        "cash_after_text": _format_cny(cash_after),
+        "source_state": "observed",
+        "note": "回放补齐行：只用于观察 2026-05-08 以来策略会如何动作，不计入真实前向纸面收益。",
+    }
+
+
+def _paper_display_gap_row(
+    signal_date: str,
+    config_id: str,
+    *,
+    reason_text: str = "本地数据不足以生成完整入场或持有期回放。",
+    note: str = "该信号日保留为覆盖缺口，避免把缺失数据误读成策略结果。",
+) -> dict[str, Any]:
+    return {
+        "row_id": f"replay-gap:{signal_date}:{config_id}",
+        "signal_date": signal_date,
+        "signal_date_text": signal_date,
+        "tracking_tag": "回放",
+        "tracking_tag_tone": "warning",
+        "config_id": config_id,
+        "strategy_text": _paper_config_label(config_id),
+        "action": "source_gap",
+        "action_text": "数据缺口",
+        "reason_text": reason_text,
+        "stock_text": "无",
+        "selected_rank_text": "无",
+        "quantity": 0,
+        "quantity_text": "0 股",
+        "cash_before": None,
+        "cash_before_text": "暂无",
+        "cash_after": None,
+        "cash_after_text": "暂无",
+        "source_state": "source_gap",
+        "note": note,
+    }
+
+
+def _paper_display_row_from_ledger(record: dict[str, Any]) -> dict[str, Any]:
+    action = str(record.get("decision_action") or "skip")
+    symbol = str(record.get("symbol") or "")
+    quantity = _optional_int(record.get("quantity"))
+    cash_before = _optional_float(record.get("cash_before"))
+    cash_after = _optional_float(record.get("cash_after"))
+    signal_date = str(record.get("signal_date") or "")
+    return {
+        "row_id": str(record.get("record_id") or f"ledger:{signal_date}:{record.get('config_id') or ''}"),
+        "signal_date": signal_date,
+        "signal_date_text": signal_date or "未知日期",
+        "tracking_tag": "真实前向",
+        "tracking_tag_tone": "success",
+        "config_id": str(record.get("config_id") or ""),
+        "strategy_text": _paper_config_label(str(record.get("config_id") or "")),
+        "action": action,
+        "action_text": _paper_action_label(action),
+        "reason_text": _paper_reason_label(str(record.get("reason") or "")),
+        "stock_text": _stock_display_text(symbol, symbol_names={}),
+        "selected_rank_text": _rank_display_text(record.get("selected_rank")),
+        "quantity": quantity,
+        "quantity_text": _quantity_text(quantity),
+        "cash_before": cash_before,
+        "cash_before_text": _format_cny(cash_before),
+        "cash_after": cash_after,
+        "cash_after_text": _format_cny(cash_after),
+        "source_state": str(record.get("source_state") or "observed"),
+        "note": "真实前向纸面记录：来自 v2 paper ledger。",
+    }
+
+
+def _paper_display_strategy_explanation(
+    *,
+    selected_configs: list[dict[str, Any]],
+    baseline_configs: list[dict[str, Any]],
+    paper_governance: dict[str, Any],
+) -> dict[str, Any]:
+    selected_labels = [_paper_config_label(str(row.get("config_id") or "")) for row in selected_configs]
+    baseline_labels = [_paper_config_label(str(row.get("config_id") or "")) for row in baseline_configs]
+    if not selected_labels:
+        selected_text = "当前没有通过治理门槛并进入纸面观察的 v2 候选策略。"
+    else:
+        selected_text = "；".join(selected_labels)
+    risk_text = "H10 候选仍带有开放风险，必须继续用真实前向记录验证。"
+    if paper_governance.get("high_risk_flag_count"):
+        risk_text = "H10 候选仍有高风险标记，当前只能作为未来观察，不是生产可用结论。"
+    return {
+        "title": "策略说明",
+        "items": [
+            {
+                "label": "选股策略",
+                "value": SHORTPICK_V2_PAPER_DISPLAY_SOURCE_LABEL,
+            },
+            {
+                "label": "买入策略",
+                "value": (
+                    "20 万初始资金；8.5 万方案和 8 万方案分别按目标金额买入，必须满足 100 股整手；"
+                    "首选买不了时只允许当天候补，否则不买。"
+                ),
+            },
+            {
+                "label": "当前观察策略",
+                "value": selected_text,
+            },
+            {
+                "label": "对照策略",
+                "value": "；".join(baseline_labels) if baseline_labels else "暂无对照策略。",
+            },
+            {
+                "label": "禁止动作",
+                "value": "不允许延迟买入、隔天补买、重试买入；9 万方案仅保留诊断，不进入纸面追踪。",
+            },
+            {
+                "label": "证据口径",
+                "value": "带“回放”标签的记录只用于补齐观察窗口，不计入真实前向纸面收益。",
+            },
+            {
+                "label": "风险提示",
+                "value": risk_text,
+            },
+        ],
+    }
+
+
+def _paper_display_rule_configs(active_config_ids: tuple[str, ...]) -> tuple[Any, ...]:
+    from ashare_evidence.shortpick_v2_replay import ShortpickV2RuleConfig
+
+    configs: list[Any] = []
+    for config_id in active_config_ids:
+        target_notional = _paper_config_target_notional(config_id)
+        if target_notional is None:
+            continue
+        configs.append(
+            ShortpickV2RuleConfig(
+                config_id=config_id,
+                family="fixed_notional_lot_rounding",
+                candidate_rank_limit=5,
+                fallback_enabled=True,
+                target_mode="fixed_notional",
+                target_notional=target_notional,
+                allowed_actions=("buy_primary", "buy_fallback", "skip"),
+            )
+        )
+    return tuple(configs)
+
+
+def _paper_display_active_config_ids(selected_configs: list[dict[str, Any]]) -> tuple[str, ...]:
+    allowed = set(H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS)
+    return tuple(
+        config_id
+        for config_id in (str(row.get("config_id") or "") for row in selected_configs)
+        if config_id in allowed
+    )
+
+
+def _paper_config_target_notional(config_id: str) -> float | None:
+    if config_id == H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS[0]:
+        return 85_000.0
+    if config_id == H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS[1]:
+        return 80_000.0
+    return None
+
+
+def _paper_config_label(config_id: str) -> str:
+    labels = {
+        H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS[0]: "8.5 万目标买入方案",
+        H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS[1]: "8 万目标买入方案",
+        "top1_or_skip_v1": "首位候选对照策略",
+        "conservative_cash_reserve_60k_top5_v1": "保留 6 万现金的旧候选策略",
+        "fixed_notional_40k_top5_v1": "4 万目标买入旧候选策略",
+    }
+    return labels.get(config_id, "未命名策略")
+
+
+def _paper_action_label(action: str) -> str:
+    return {
+        "buy_primary": "买入首选",
+        "buy_fallback": "买入候补",
+        "skip": "不买入",
+        "source_gap": "数据缺口",
+        "not_observed": "未观察",
+    }.get(action, "未识别动作")
+
+
+def _paper_reason_label(reason: str) -> str:
+    return {
+        "bought_primary": "首选标的满足资金和整手要求。",
+        "bought_fallback": "首选不满足要求，改买当天候补标的。",
+        "insufficient_cash": "可用现金不足，无法买满一手。",
+        "board_lot_minimum": "不足 100 股整手要求。",
+        "cash_reserve": "触发现金保留约束。",
+        "position_count_cap": "持仓数量已经达到上限。",
+        "position_value_cap": "单一标的仓位上限已满。",
+        "limit_up_unfillable": "入场日涨停不可成交。",
+        "no_ranked_candidates": "当天没有满足 H10 安静突破条件的候选。",
+        "no_executable_candidate": "当天候选都不满足买入约束。",
+    }.get(reason, "按既定规则完成判断。")
+
+
+def _latest_display_trade(display_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    buys = [row for row in display_rows if row.get("action") in {"buy_primary", "buy_fallback"}]
+    row = buys[0] if buys else (display_rows[0] if display_rows else None)
+    if row is None:
+        return {
+            "title": "最新模拟交易",
+            "tag": "暂无记录",
+            "summary": "暂无可展示的模拟交易。",
+            "items": [],
+        }
+    return {
+        "title": "最新模拟交易",
+        "tag": row.get("tracking_tag"),
+        "summary": f"{row.get('signal_date_text')}：{row.get('action_text')}，{row.get('stock_text')}。",
+        "items": [
+            {"label": "信号日", "value": row.get("signal_date_text")},
+            {"label": "记录类型", "value": row.get("tracking_tag")},
+            {"label": "策略", "value": row.get("strategy_text")},
+            {"label": "动作", "value": row.get("action_text")},
+            {"label": "标的", "value": row.get("stock_text")},
+            {"label": "数量", "value": row.get("quantity_text")},
+            {"label": "剩余现金", "value": row.get("cash_after_text")},
+        ],
+        "note": row.get("note"),
+    }
+
+
+def _paper_display_visible_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    visible_rows: list[dict[str, Any]] = []
+    for index, row in enumerate(rows, start=1):
+        visible_rows.append(
+            {
+                "row_key": f"paper-display-row-{index}",
+                "signal_date": row.get("signal_date"),
+                "signal_date_text": row.get("signal_date_text"),
+                "tracking_tag": row.get("tracking_tag"),
+                "tracking_tag_tone": row.get("tracking_tag_tone"),
+                "strategy_text": row.get("strategy_text"),
+                "action_text": row.get("action_text"),
+                "reason_text": row.get("reason_text"),
+                "stock_text": row.get("stock_text"),
+                "selected_rank_text": row.get("selected_rank_text"),
+                "quantity_text": row.get("quantity_text"),
+                "cash_before_text": row.get("cash_before_text"),
+                "cash_after_text": row.get("cash_after_text"),
+                "note": row.get("note"),
+            }
+        )
+    return visible_rows
+
+
+def _sorted_display_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        rows,
+        key=lambda row: (
+            str(row.get("signal_date") or ""),
+            str(row.get("tracking_tag") or ""),
+            str(row.get("row_id") or ""),
+        ),
+        reverse=True,
+    )
+
+
+def _display_action_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        action = str(row.get("action") or "unknown")
+        counts[action] = counts.get(action, 0) + 1
+    return counts
+
+
+def _merge_paper_display_summary(summary: dict[str, Any], paper_display: dict[str, Any]) -> None:
+    coverage = paper_display.get("coverage") if isinstance(paper_display.get("coverage"), dict) else {}
+    summary["true_forward_record_count"] = int(summary.get("record_count") or 0)
+    summary["replay_record_count"] = int(coverage.get("replay_row_count") or 0)
+    summary["display_source_gap_count"] = int(coverage.get("source_gap_count") or 0)
+    summary["coverage_start"] = coverage.get("coverage_start")
+    summary["coverage_end"] = coverage.get("coverage_end")
+    summary["latest_source_signal_date"] = coverage.get("latest_source_signal_date")
+    summary["row_or_gap_accounting_passed"] = coverage.get("row_or_gap_accounting_passed")
+    summary["row_or_gap_config_accounting_passed"] = coverage.get("row_or_gap_config_accounting_passed")
+
+
+def _empty_paper_display_coverage() -> dict[str, Any]:
+    return {
+        "coverage_start": SHORTPICK_V2_TRACKING_START_DATE,
+        "coverage_end": None,
+        "latest_source_signal_date": None,
+        "source_status": "not_loaded",
+        "source_status_label": "尚未生成回放覆盖",
+        "account_profile_label": "新开户普通现金账户",
+        "available_source_signal_dates": [],
+        "available_source_signal_day_count": 0,
+        "covered_signal_dates": [],
+        "gap_signal_dates": [],
+        "replay_row_count": 0,
+        "source_gap_count": 0,
+        "true_forward_record_count": 0,
+        "row_or_gap_accounting_passed": False,
+        "available_source_signal_config_count": 0,
+        "row_or_gap_config_accounting_passed": False,
+    }
+
+
+def _latest_series_day(series_by_symbol: dict[str, Any]) -> date | None:
+    days = [
+        bar.day
+        for symbol, series in series_by_symbol.items()
+        if symbol and getattr(series, "bars", None)
+        for bar in series.bars
+    ]
+    return max(days) if days else None
+
+
+def _stock_display_text(symbol: str, *, symbol_names: dict[str, str]) -> str:
+    if not symbol:
+        return "无"
+    name = symbol_names.get(symbol)
+    if name and name != symbol:
+        return f"{name}（{symbol}）"
+    return symbol
+
+
+def _rank_display_text(value: object) -> str:
+    rank = _optional_int(value)
+    return "无" if rank is None else f"第 {rank} 位"
+
+
+def _quantity_text(value: int | None) -> str:
+    return "0 股" if value is None else f"{value} 股"
+
+
+def _format_cny(value: float | None) -> str:
+    if value is None:
+        return "暂无"
+    return f"{value:,.0f} 元"
+
+
+def _optional_int(value: object) -> int | None:
+    try:
+        if value is None:
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_float(value: object) -> float | None:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _resolve_artifact_path(

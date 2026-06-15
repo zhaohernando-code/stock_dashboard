@@ -295,6 +295,7 @@ def build_shortpick_v2_replay_artifact_from_series(
     stock_like_series_count: int | None = None,
     coverage_notes: list[str] | None = None,
     rule_configs: tuple[ShortpickV2RuleConfig, ...] = DEFAULT_SHORTPICK_V2_RULE_CONFIGS,
+    decision_sample_limit: int = DEFAULT_DECISION_SAMPLE_LIMIT,
     generated_at: datetime | None = None,
 ) -> dict[str, Any]:
     if entry_price_source not in ENTRY_PRICE_SOURCES:
@@ -323,6 +324,7 @@ def build_shortpick_v2_replay_artifact_from_series(
             cost_bps=cost_bps,
             stamp_tax_bps=stamp_tax_bps,
             market_reference_total_return=market_reference["total_return"],
+            decision_sample_limit=decision_sample_limit,
         )
         for config in rule_configs
     ]
@@ -470,6 +472,7 @@ def _simulate_rule_config(
     cost_bps: float,
     stamp_tax_bps: float,
     market_reference_total_return: float | None,
+    decision_sample_limit: int,
 ) -> dict[str, Any]:
     entries_by_day, pre_entry_decisions, pre_entry_counts = _prepare_signal_entries(
         series_by_symbol,
@@ -620,7 +623,7 @@ def _simulate_rule_config(
             "skipped_ratio": round(skip_count / len(signal_days), 6) if signal_days else 0.0,
         },
         "reason_counts": dict(sorted(reason_counts.items())),
-        "decision_samples": sorted(decisions, key=lambda item: item["signal_date"])[:DEFAULT_DECISION_SAMPLE_LIMIT],
+        "decision_samples": sorted(decisions, key=lambda item: item["signal_date"])[: max(0, decision_sample_limit)],
         "detail_refs": {
             "nav_timeline": "phase3-envelope-summary-only:nav_timeline_not_emitted",
             "trades": "phase3-envelope-summary-only:trade_table_not_emitted",
