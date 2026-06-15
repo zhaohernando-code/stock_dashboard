@@ -2,7 +2,7 @@
 schema_version: 1
 plan_id: "plan-20260615-h10-quiet-benchmark-robustness"
 title: "H10 Quiet Benchmark Robustness"
-status: "reviewed"
+status: "executing"
 created_at: "2026-06-15"
 source_request: "Use reviewed-plan-generator and plan-run-loop for the next Short Pick Lab V2 development: pause broad strategy search, prioritize fixed85/fixed80 benchmark-focused robustness, then funds execution decomposition and 90k boundary diagnostics."
 target_repo: "/Users/hernando_zhao/codex/worker-workspaces/stock_dashboard/20260614-shortpick-v2-robust-strategy-search-42e199"
@@ -20,7 +20,7 @@ Inputs: fixed85/fixed80 are mandatory benchmarks; 90k is diagnostic only; 70/75k
 Key work: make robustness analyze benchmark configs directly, add funds/execution decomposition for 80/85/90k, validate real runtime artifacts, and document the decision.
 Dependencies: existing h10 quiet champion replay/selection artifacts and runtime SQLite DB.
 Major risks: overfitting, winner concentration, weak-year dependence, turnover-gate drift, and confusing retrospective replay with true forward tracking.
-Approval state: reviewed plan, not approved for implementation.
+Approval state: approved by user on 2026-06-15 and executing W-001.
 
 ## Goal
 
@@ -78,7 +78,7 @@ The current robustness artifact primarily flagged 70k/75k because risk-first sel
 
 | ID | Status | Order | Depends On | Task | Deliverable | Acceptance Type | Acceptance Spec | Evidence |
 |----|--------|-------|------------|------|-------------|-----------------|-----------------|----------|
-| W-001 | pending | 1 | - | Make h10 robustness benchmark-focused so fixed85/fixed80 are primary analyzed configs, with 90k allowed only as a diagnostic row. | Robustness code/tests supporting benchmark configs and diagnostic config inclusion | test_pass | cmd:python3 -m pytest tests/test_shortpick_v2_h10_robustness.py tests/test_shortpick_v2_rule_selection.py -q |  |
+| W-001 | done | 1 | - | Make h10 robustness benchmark-focused so fixed85/fixed80 are primary analyzed configs, with 90k allowed only as a diagnostic row. | Robustness code/tests supporting benchmark configs and diagnostic config inclusion | test_pass | cmd:python3 -m pytest tests/test_shortpick_v2_h10_robustness.py tests/test_shortpick_v2_rule_selection.py -q | MiMo run-plan/code reviews passed; pytest `tests/test_shortpick_v2_h10_robustness.py tests/test_shortpick_v2_rule_selection.py -q` passed with 14 tests. |
 | W-002 | pending | 2 | W-001 | Add funds/execution decomposition for fixed80/fixed85/90k quiet champion configs. | Execution decomposition artifact/report code, artifact validation support, and focused tests | test_pass | cmd:python3 -m pytest tests/test_shortpick_v2_h10_robustness.py tests/test_shortpick_v2_strategy_search.py -q |  |
 | W-003 | pending | 3 | W-002 | Run real-data benchmark-focused robustness and execution decomposition against the runtime DB. | Runtime output artifacts under `output/` for benchmark robustness and execution decomposition | command_exit_0 | cmd:bash -lc 'PYTHONPATH=src python3 -m ashare_evidence.cli shortpick-v2-h10-robustness --database-url sqlite:////Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/ashare_dashboard.db --replay-artifact output/shortpick-v2-h10-quiet-champion-replay-artifact.json --selection-artifact output/shortpick-v2-h10-quiet-champion-selection-artifact.json --horizon-days 10 --initial-cash 200000 --output output/shortpick-v2-h10-quiet-benchmark-robustness-artifact.json && PYTHONPATH=src python3 -m ashare_evidence.cli shortpick-v2-h10-execution-decomposition --database-url sqlite:////Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/ashare_dashboard.db --replay-artifact output/shortpick-v2-h10-quiet-champion-replay-artifact.json --selection-artifact output/shortpick-v2-h10-quiet-champion-selection-artifact.json --horizon-days 10 --initial-cash 200000 --output output/shortpick-v2-h10-quiet-execution-decomposition-artifact.json' |  |
 | W-004 | pending | 4 | W-003 | Validate generated robustness and execution decomposition artifacts with machine-checkable structure/content gates. | Artifact validation command/result covering both runtime JSON outputs | command_exit_0 | cmd:PYTHONPATH=src python3 -m ashare_evidence.cli shortpick-v2-h10-artifact-validate --robustness-artifact output/shortpick-v2-h10-quiet-benchmark-robustness-artifact.json --execution-artifact output/shortpick-v2-h10-quiet-execution-decomposition-artifact.json |  |
@@ -126,6 +126,8 @@ The current robustness artifact primarily flagged 70k/75k because risk-first sel
 | 2026-06-15T10:37:55+08:00 | Codex | Drafted schema-v1 plan for h10 quiet fixed85/fixed80 benchmark-focused robustness and execution diagnostics. |
 | 2026-06-15T10:49:30+08:00 | Codex | Incorporated MiMo round 1 feedback: added artifact validation work, tightened final doc evidence, and kept existing test-file gates after confirming files exist. |
 | 2026-06-15T10:58:10+08:00 | Codex | Completed MiMo round 2 review and marked the plan reviewed with no blocking or major findings. |
+| 2026-06-15T11:05:00+08:00 | Codex | User approved the reviewed plan; set plan to executing and W-001 to in_progress. |
+| 2026-06-15T11:40:00+08:00 | Codex | Completed W-001: benchmark-first h10 robustness analysis, diagnostic-only 90k inclusion, focused tests, MiMo reviews, and W-001 pytest gate. |
 
 ## External Review Log
 
@@ -142,4 +144,4 @@ The current robustness artifact primarily flagged 70k/75k because risk-first sel
 ## User Review Notes
 
 - User requested future development use `reviewed-plan-generator` and `plan-run-loop`.
-- This plan is reviewed but not yet approved for implementation; plan-run-loop should only execute after explicit approval of this reviewed plan.
+- User approved execution with "批准" on 2026-06-15; plan-run-loop execution is active.

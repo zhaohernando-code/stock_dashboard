@@ -32,7 +32,10 @@ from ashare_evidence.shortpick_v2_replay import (
     _nav_and_market_value,
     _prepare_signal_entries,
 )
-from ashare_evidence.shortpick_v2_rule_selection import SHORTPICK_V2_RULE_SELECTION_ARTIFACT_FAMILY
+from ashare_evidence.shortpick_v2_rule_selection import (
+    H10_QUIET_BENCHMARK_CONFIG_IDS,
+    SHORTPICK_V2_RULE_SELECTION_ARTIFACT_FAMILY,
+)
 from ashare_evidence.shortpick_v2_strategy_search import (
     CONTROL_CANDIDATE_SOURCE_ID,
     H10_QUIET_CANDIDATE_SOURCE_IDS,
@@ -54,6 +57,11 @@ H10_QUIET_ROBUSTNESS_SOURCE_IDS = (
     *H10_QUIET_CANDIDATE_SOURCE_IDS,
     *H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS,
 )
+H10_QUIET_DIAGNOSTIC_CONFIG_IDS = (
+    "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1",
+)
+BENCHMARK_ANALYSIS_ROLES = {"benchmark_control"}
+DIAGNOSTIC_ANALYSIS_ROLE = "diagnostic_boundary"
 
 
 @dataclass(frozen=True)
@@ -768,6 +776,10 @@ def _analysis_configs(
         if isinstance(row, dict) and row.get("config_id")
     }
     rows = []
+    benchmark_rows = selection_artifact.get("benchmark_configs") or []
+    rows.extend(benchmark_rows)
+    if benchmark_rows:
+        rows.extend(_diagnostic_config_rows(results_by_config))
     rows.extend(selection_artifact.get("selected_configs") or [])
     rows.extend((selection_artifact.get("holdout_configs") or [])[:max_holdout_configs])
     rows.extend(selection_artifact.get("baseline_configs") or [])
@@ -794,8 +806,21 @@ def _analysis_configs(
         )
         seen.add(config_id)
     if not configs:
-        raise ValueError("selection artifact does not provide analyzable selected, holdout, or baseline configs")
+        raise ValueError("selection artifact does not provide analyzable benchmark, selected, holdout, or baseline configs")
     return configs
+
+
+def _diagnostic_config_rows(results_by_config: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "config_id": config_id,
+            "role": DIAGNOSTIC_ANALYSIS_ROLE,
+            "selection_rank": None,
+            "reason": "Diagnostic boundary row only; not eligible for paper-tracking promotion in h10 robustness.",
+        }
+        for config_id in H10_QUIET_DIAGNOSTIC_CONFIG_IDS
+        if config_id in results_by_config
+    ]
 
 
 def _rule_config_from_artifact(row: dict[str, Any]) -> ShortpickV2RuleConfig:
@@ -1044,7 +1069,7 @@ def _risk_flags(
     market_reference_total_return: float | None,
 ) -> list[dict[str, Any]]:
     flags: list[dict[str, Any]] = []
-    selected_ids = {result["config_id"] for result in full_results if result["role"] == "phase5_contract_candidate"}
+    risk_target_ids = _risk_target_config_ids(full_results)
     for result in full_results:
         if result["source_replay_consistency"]["status"] != "passed":
             flags.append(
@@ -1056,7 +1081,7 @@ def _risk_flags(
                 }
             )
         largest_symbol_share = float(result["symbol_concentration"]["largest_abs_pnl_share"])
-        if result["config_id"] in selected_ids and largest_symbol_share >= 0.35:
+        if result["config_id"] in risk_target_ids and largest_symbol_share >= 0.35:
             flags.append(
                 {
                     "flag_id": "symbol_concentration_high",
@@ -1074,7 +1099,7 @@ def _risk_flags(
             market_excess_failed = (
                 market_reference_total_return is not None and market_excess is not None and market_excess <= 0
             )
-            if result["config_id"] in selected_ids and (
+            if result["config_id"] in risk_target_ids and (
                 annualized_failed
                 or market_excess_failed
             ):
@@ -1091,7 +1116,7 @@ def _risk_flags(
                 )
                 break
     for row in period_reset_results.get("yearly") or []:
-        if row["config_id"] not in selected_ids:
+        if row["config_id"] not in risk_target_ids:
             continue
         summary = row["summary"]
         annualized = _optional_float(summary.get("annualized_return"))
@@ -1123,6 +1148,22 @@ def _risk_flags(
     return flags
 
 
+def _risk_target_config_ids(full_results: list[dict[str, Any]]) -> set[str]:
+    benchmark_ids = {
+        str(result["config_id"])
+        for result in full_results
+        if str(result.get("role") or "") in BENCHMARK_ANALYSIS_ROLES
+        and str(result.get("config_id") or "") in H10_QUIET_BENCHMARK_CONFIG_IDS
+    }
+    if benchmark_ids:
+        return benchmark_ids
+    return {
+        str(result["config_id"])
+        for result in full_results
+        if str(result.get("role") or "") == "phase5_contract_candidate"
+    }
+
+
 def _parameter_stability(replay_artifact: dict[str, Any], selection_artifact: dict[str, Any]) -> dict[str, Any]:
     role_by_config = {
         str(row.get("config_id")): str(row.get("role"))
@@ -1130,6 +1171,8 @@ def _parameter_stability(replay_artifact: dict[str, Any], selection_artifact: di
         for row in selection_artifact.get(key) or []
         if isinstance(row, dict)
     }
+    for config_id in H10_QUIET_DIAGNOSTIC_CONFIG_IDS:
+        role_by_config.setdefault(config_id, DIAGNOSTIC_ANALYSIS_ROLE)
     rule_by_config = {
         str(row.get("config_id")): row
         for row in replay_artifact.get("rule_matrix") or []
