@@ -74,30 +74,6 @@ from ashare_evidence.shortpick_portfolio_backtest import (
     build_shortpick_portfolio_backtest,
     write_shortpick_portfolio_backtest,
 )
-from ashare_evidence.shortpick_v2_replay import (
-    build_shortpick_v2_replay_artifact,
-    write_shortpick_v2_replay_artifact,
-)
-from ashare_evidence.shortpick_v2_h10_execution_decomposition import (
-    build_shortpick_v2_h10_execution_decomposition_artifact,
-    write_shortpick_v2_h10_execution_decomposition_artifact,
-)
-from ashare_evidence.shortpick_v2_h10_robustness import (
-    build_shortpick_v2_h10_robustness_artifact,
-    write_shortpick_v2_h10_robustness_artifact,
-)
-from ashare_evidence.shortpick_v2_rule_selection import (
-    SELECTION_THRESHOLD_PROFILE_STANDARD,
-    SELECTION_THRESHOLD_PROFILES,
-    build_shortpick_v2_rule_selection_artifact_from_path,
-    write_shortpick_v2_rule_selection_artifact,
-)
-from ashare_evidence.shortpick_v2_strategy_search import (
-    STRATEGY_SEARCH_BATCHES,
-    STRATEGY_SEARCH_BATCH_INITIAL,
-    build_shortpick_v2_strategy_search_artifact,
-    write_shortpick_v2_strategy_search_artifact,
-)
 from ashare_evidence.shortpick_ranked_pool_replay_input import (
     enrich_shortpick_replay_paper_tracking_with_reconstructed_ranked_pools,
 )
@@ -120,6 +96,31 @@ from ashare_evidence.shortpick_strategy_retirement_writer import (
     run_shortpick_strategy_retirement_artifact,
 )
 from ashare_evidence.shortpick_strategy_slices import build_shortpick_strategy_slice_evidence
+from ashare_evidence.shortpick_v2_h10_artifact_validation import validate_shortpick_v2_h10_artifacts
+from ashare_evidence.shortpick_v2_h10_execution_decomposition import (
+    build_shortpick_v2_h10_execution_decomposition_artifact,
+    write_shortpick_v2_h10_execution_decomposition_artifact,
+)
+from ashare_evidence.shortpick_v2_h10_robustness import (
+    build_shortpick_v2_h10_robustness_artifact,
+    write_shortpick_v2_h10_robustness_artifact,
+)
+from ashare_evidence.shortpick_v2_replay import (
+    build_shortpick_v2_replay_artifact,
+    write_shortpick_v2_replay_artifact,
+)
+from ashare_evidence.shortpick_v2_rule_selection import (
+    SELECTION_THRESHOLD_PROFILE_STANDARD,
+    SELECTION_THRESHOLD_PROFILES,
+    build_shortpick_v2_rule_selection_artifact_from_path,
+    write_shortpick_v2_rule_selection_artifact,
+)
+from ashare_evidence.shortpick_v2_strategy_search import (
+    STRATEGY_SEARCH_BATCH_INITIAL,
+    STRATEGY_SEARCH_BATCHES,
+    build_shortpick_v2_strategy_search_artifact,
+    write_shortpick_v2_strategy_search_artifact,
+)
 from ashare_evidence.simulation import restart_simulation_session, step_simulation_session
 from ashare_evidence.stock_master import DEFAULT_AKSHARE_TIMEOUT_SECONDS
 from ashare_evidence.watchlist import active_watchlist_symbols, refresh_watchlist_symbol
@@ -238,7 +239,11 @@ def _should_initialize_database(database_url: str | None) -> bool:
     return not Path(database_url.removeprefix("sqlite:///")).exists()
 
 
-PLAN_ONLY_COMMANDS = {"shortpick-governance-credible-control-plan"}
+# Commands in this set are pure file/plan commands and may omit --database-url.
+NO_DB_COMMANDS = {
+    "shortpick-governance-credible-control-plan",
+    "shortpick-v2-h10-artifact-validate",
+}
 
 
 def _governance_requests_from_payload(
@@ -983,6 +988,17 @@ def build_parser() -> argparse.ArgumentParser:
         default="output/shortpick-v2-h10-quiet-execution-decomposition-artifact.json",
     )
 
+    shortpick_v2_h10_artifact_validate = subparsers.add_parser(
+        "shortpick-v2-h10-artifact-validate",
+        help="Validate h10 quiet robustness and execution decomposition artifacts.",
+    )
+    shortpick_v2_h10_artifact_validate.add_argument("--robustness-artifact", required=True)
+    shortpick_v2_h10_artifact_validate.add_argument("--execution-artifact", required=True)
+    shortpick_v2_h10_artifact_validate.add_argument(
+        "--schema-root",
+        default="docs/contracts/registry/schemas",
+    )
+
     shortpick_governance_historical_backtest = subparsers.add_parser(
         "shortpick-governance-historical-backtest",
         help="Run Short Pick governance historical-backtest request plans into gated evidence artifacts.",
@@ -1120,7 +1136,7 @@ def main(argv: list[str] | None = None) -> int:
         return governance_exit_code
     if args.command == "phase5-local-cycle-step":
         return handle_phase5_local_cycle_step_command(args)
-    if args.command not in PLAN_ONLY_COMMANDS and _should_initialize_database(args.database_url):
+    if args.command not in NO_DB_COMMANDS and _should_initialize_database(args.database_url):
         init_database(args.database_url)
     if args.command == "latest":
         with session_scope(args.database_url) as session:
@@ -1667,6 +1683,15 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
         return 0
+
+    if args.command == "shortpick-v2-h10-artifact-validate":
+        payload = validate_shortpick_v2_h10_artifacts(
+            robustness_artifact_path=args.robustness_artifact,
+            execution_artifact_path=args.execution_artifact,
+            schema_root=args.schema_root,
+        )
+        _print_json(payload)
+        return 0 if payload.get("status") == "passed" else 1
 
     if args.command == "shortpick-governance-historical-backtest":
         request_payload = json.loads(Path(args.request_path).read_text(encoding="utf-8"))
