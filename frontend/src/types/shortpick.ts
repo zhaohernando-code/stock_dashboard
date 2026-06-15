@@ -610,6 +610,78 @@ export interface ShortpickV2HistoricalReplayResponse {
   event_refs: string[];
 }
 
+export interface ShortpickV2PaperDisplayTextItem {
+  label: string;
+  value?: string | number | null;
+}
+
+export interface ShortpickV2PaperDisplayLatestTrade {
+  title?: string;
+  tag?: string | null;
+  summary?: string | null;
+  items?: ShortpickV2PaperDisplayTextItem[];
+  note?: string | null;
+}
+
+export interface ShortpickV2PaperDisplayStrategyExplanation {
+  title?: string;
+  items?: ShortpickV2PaperDisplayTextItem[];
+}
+
+export interface ShortpickV2PaperDisplayChartPoint {
+  name: string;
+  value: number;
+}
+
+export interface ShortpickV2PaperDisplayChart {
+  title?: string;
+  subtitle?: string;
+  kind?: string;
+  data?: ShortpickV2PaperDisplayChartPoint[];
+}
+
+export interface ShortpickV2PaperDisplayTableColumn {
+  key: string;
+  label: string;
+}
+
+export interface ShortpickV2PaperDisplayTableRow {
+  row_key?: string;
+  signal_date?: string;
+  signal_date_text?: string;
+  tracking_tag?: string;
+  tracking_tag_tone?: string;
+  strategy_text?: string;
+  action_text?: string;
+  reason_text?: string;
+  stock_text?: string;
+  selected_rank_text?: string;
+  quantity_text?: string;
+  cash_before_text?: string;
+  cash_after_text?: string;
+  note?: string;
+  [key: string]: unknown;
+}
+
+export interface ShortpickV2PaperDisplayTable {
+  title?: string;
+  columns?: ShortpickV2PaperDisplayTableColumn[];
+  rows?: ShortpickV2PaperDisplayTableRow[];
+  empty_text?: string;
+}
+
+export interface ShortpickV2PaperDisplay {
+  title?: string;
+  status_label?: string;
+  subtitle?: string;
+  latest_trade?: ShortpickV2PaperDisplayLatestTrade;
+  strategy_explanation?: ShortpickV2PaperDisplayStrategyExplanation;
+  charts?: ShortpickV2PaperDisplayChart[];
+  table?: ShortpickV2PaperDisplayTable;
+  coverage?: Record<string, unknown>;
+  summary_cards?: ShortpickV2PaperDisplayTextItem[];
+}
+
 export interface ShortpickV2PaperTrackingResponse {
   generated_at: string;
   status: string;
@@ -627,6 +699,7 @@ export interface ShortpickV2PaperTrackingResponse {
   selected_configs: ShortpickV2ConfigReadout[];
   baseline_configs: ShortpickV2ConfigReadout[];
   paper_governance: Record<string, unknown>;
+  paper_display?: ShortpickV2PaperDisplay;
   records: Record<string, unknown>[];
   summary: Record<string, unknown>;
   leakage_audit: Record<string, unknown>;

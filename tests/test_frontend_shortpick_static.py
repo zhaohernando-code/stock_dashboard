@@ -1,3 +1,4 @@
+import re
 import unittest
 from pathlib import Path
 
@@ -35,10 +36,8 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn('writeWorkbenchRoute({ view: "shortpick-v2", shortpickV2Tab: nextTab }, "push");', component_source)
         self.assertIn('window.addEventListener("popstate", handlePopState);', component_source)
         self.assertIn('window.removeEventListener("popstate", handlePopState);', component_source)
-        self.assertIn("contract_ready", component_source)
         self.assertIn("2026-05-08", component_source)
-        self.assertIn("delay_buy", component_source)
-        self.assertIn("research_observation", component_source)
+        self.assertIn("不允许延迟买入", component_source)
         self.assertIn("getShortpickV2PaperTracking", component_source)
         self.assertIn("getShortpickV2HistoricalReplay", component_source)
         self.assertNotIn("getShortpickPaperTracking", component_source)
@@ -47,7 +46,57 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertNotIn("getShortpickModelFeedback", component_source)
         self.assertNotIn("LLM历史验证", component_source)
         self.assertNotIn("LLM模型反馈", component_source)
-        self.assertNotIn("最新模拟交易", component_source)
+        self.assertIn("const display = tracking?.paper_display;", component_source)
+        self.assertIn('title={latestTrade?.title || "最新模拟交易"}', component_source)
+        self.assertIn('title={strategyExplanation?.title || "策略说明"}', component_source)
+        self.assertIn("PaperDisplayChartCard", component_source)
+        self.assertIn("paperDisplayTableColumns", component_source)
+        self.assertIn('title={table?.title || "模拟交易明细"}', component_source)
+        self.assertIn("回放补齐不计入真实前向收益", component_source)
+        self.assertIn("最新来源信号日", component_source)
+        self.assertIn("数据缺口", component_source)
+
+        paper_tab_source = component_source[
+            component_source.index("function ShortpickV2PaperTab"):
+            component_source.index("function ShortpickV2ReplayTab")
+        ]
+        for forbidden in (
+            "v2 Paper Ledger Rows",
+            "blocked：",
+            "contract_ready：",
+            "tracking?.current_status",
+            "tracking?.claim_ceiling",
+            "tracking?.evidence_basis",
+            "tracking?.row_contract",
+            "tracking?.records",
+            "item.config_id",
+            "item.decision_action",
+        ):
+            self.assertNotIn(forbidden, paper_tab_source)
+        for visible_text_match in ("contract_ready", "research_observation", "decision_action", "config_id"):
+            self.assertNotRegex(paper_tab_source, rf">[^<\n{{}}]*{visible_text_match}[^<\n{{}}]*<")
+        visible_text_fragments = re.findall(r">([^<\n{}]+)<", paper_tab_source)
+        for visible_text in visible_text_fragments:
+            self.assertNotRegex(visible_text, r"[a-z]+_[a-z_]+")
+        self.assertIn('rowKey={(_item, index) => `paper-display-row-${index ?? 0}`}', paper_tab_source)
+
+        replay_tab_source = component_source[
+            component_source.index("function ShortpickV2ReplayTab"):
+            component_source.index("export function ShortpickLabV2View")
+        ]
+        self.assertIn('rowKey={(_item, index) => `decision-sample-${index ?? 0}`}', replay_tab_source)
+        for visible_text_match in (
+            "contract_ready",
+            "research_observation",
+            "true_forward_tracking",
+            "historical_account_replay",
+            "decision_action",
+            "config_id",
+        ):
+            self.assertNotRegex(replay_tab_source, rf">[^<\n{{}}]*{visible_text_match}[^<\n{{}}]*<")
+        replay_visible_text_fragments = re.findall(r">([^<\n{}]+)<", replay_tab_source)
+        for visible_text in replay_visible_text_fragments:
+            self.assertNotRegex(visible_text, r"[a-z]+_[a-z_]+")
 
     def test_shortpick_lab_is_independent_research_surface(self) -> None:
         frontend_root = Path(__file__).resolve().parents[1] / "frontend" / "src"
