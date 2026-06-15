@@ -36,6 +36,7 @@ from ashare_evidence.shortpick_v2_rule_selection import SHORTPICK_V2_RULE_SELECT
 from ashare_evidence.shortpick_v2_strategy_search import (
     CONTROL_CANDIDATE_SOURCE_ID,
     H10_QUIET_CANDIDATE_SOURCE_IDS,
+    H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS,
     STRATEGY_SEARCH_BATCH_H10_QUIET,
     StrategySearchCandidateSource,
     build_h10_quiet_strategy_search_candidate_sources,
@@ -49,6 +50,10 @@ SHORTPICK_V2_H10_ROBUSTNESS_SOURCE_PLAN_REF = (
 SHORTPICK_V2_REPLAY_ARTIFACT_FAMILY = "shortpick_v2_replay_artifact"
 DEFAULT_MAX_HOLDOUT_CONFIGS = 10
 DEFAULT_TOP_TRADE_LIMIT = 8
+H10_QUIET_ROBUSTNESS_SOURCE_IDS = (
+    *H10_QUIET_CANDIDATE_SOURCE_IDS,
+    *H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS,
+)
 
 
 @dataclass(frozen=True)
@@ -817,7 +822,7 @@ def _source_id_for_config(config_id: str) -> str:
     if "__" not in config_id:
         return CONTROL_CANDIDATE_SOURCE_ID
     source_id, _ = config_id.split("__", 1)
-    if source_id not in H10_QUIET_CANDIDATE_SOURCE_IDS:
+    if source_id not in H10_QUIET_ROBUSTNESS_SOURCE_IDS:
         raise ValueError(f"config_id {config_id} is not an h10 quiet source config")
     return source_id
 
@@ -1121,7 +1126,7 @@ def _risk_flags(
 def _parameter_stability(replay_artifact: dict[str, Any], selection_artifact: dict[str, Any]) -> dict[str, Any]:
     role_by_config = {
         str(row.get("config_id")): str(row.get("role"))
-        for key in ("selected_configs", "holdout_configs", "baseline_configs", "rejected_configs")
+        for key in ("benchmark_configs", "selected_configs", "holdout_configs", "baseline_configs", "rejected_configs")
         for row in selection_artifact.get(key) or []
         if isinstance(row, dict)
     }

@@ -5,6 +5,7 @@
 - Runtime DB: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/ashare_dashboard.db`
 - Replay artifact: `output/shortpick-v2-h10-quiet-champion-replay-artifact.json`
 - Selection artifact: `output/shortpick-v2-h10-quiet-champion-selection-artifact.json`
+- Robustness artifact: `output/shortpick-v2-h10-quiet-champion-robustness-artifact.json`
 - Candidate batch: `h10_quiet_champion`
 - Horizon: 10 trading days
 - Initial cash: 200000
@@ -44,3 +45,22 @@ Initial interpretation:
 ## Current Decision
 
 Keep fixed85 and fixed80 as mandatory benchmark rows. Continue only with quiet champion local sensitivity checks; do not reopen broad ma-accel, dynamic-exit, entry-quality, rank2-to-6, breadth65, or weekday-relaxation directions unless a future same-window replay explicitly beats the benchmark.
+
+## Robustness Follow-Up
+
+`shortpick-v2-h10-robustness` was run against the replay and selection artifacts after extending its allowlist to understand the `h10_quiet_champion` microgrid source ids. It analyzed 5 configs: selected 70k/75k, holdout fixed85/fixed80, and the `top1_or_skip_v1` baseline.
+
+Readout:
+
+- Artifact status: ready.
+- Recommendation: `not_ready_for_paper_tracking`.
+- Source replay consistency: passed for all analyzed configs.
+- Open high-risk flags: 4.
+- Main blocker: selected 70k/75k fail yearly reset annualized floor in 2023 and 2026.
+- Secondary blocker: selected 70k/75k fail the post-hoc top-winner removal return gate.
+
+Interpretation:
+
+- The robustness artifact does not invalidate fixed85/fixed80 as mandatory benchmarks.
+- It does prevent promoting the risk-first selected 70k/75k variants directly into paper tracking.
+- Next useful check is benchmark-focused robustness/period review for fixed85/fixed80 and the diagnostic 90k row, not a new broad strategy family.

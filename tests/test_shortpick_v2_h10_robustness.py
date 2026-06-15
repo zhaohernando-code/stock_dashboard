@@ -16,6 +16,7 @@ from ashare_evidence.shortpick_v2_h10_robustness import (
 from ashare_evidence.shortpick_v2_strategy_search import (
     CONTROL_CANDIDATE_SOURCE_ID,
     H10_QUIET_CANDIDATE_SOURCE_IDS,
+    H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS,
     StrategySearchCandidateSource,
     build_shortpick_v2_strategy_search_artifact_from_series,
 )
@@ -62,6 +63,7 @@ def _selection_artifact(replay_artifact: dict[str, object], selected_config_id: 
         "source_replay_artifact": {"artifact_id": replay_artifact["artifact_id"]},
         "selection_policy": {},
         "gate_results": [],
+        "benchmark_configs": [],
         "selected_configs": [
             {
                 "config_id": selected_config_id,
@@ -183,6 +185,59 @@ def test_shortpick_v2_h10_robustness_replays_selected_config_and_validates_schem
     assert {
         flag["flag_id"] for flag in drifted_artifact["risk_flags"]
     } >= {"source_replay_consistency_failed"}
+
+
+def test_shortpick_v2_h10_robustness_accepts_quiet_champion_microgrid_sources() -> None:
+    days = [date(2026, 1, 1) + timedelta(days=index) for index in range(60)]
+    series_by_symbol = {
+        "600001.SH": _series("600001.SH", [10.0 + index * 0.12 for index in range(60)]),
+        "600002.SH": _series("600002.SH", [14.0 + index * 0.03 for index in range(60)]),
+    }
+    signal_days = days[5:25]
+    trade_days = days[5:45]
+    selections = {signal_day: ["600001.SH", "600002.SH"] for signal_day in signal_days}
+    control_source = StrategySearchCandidateSource(
+        source_id=CONTROL_CANDIDATE_SOURCE_ID,
+        source_ref="market_only_reconstruction:low_turnover_20d_uptrend_liquid_top120:v1",
+        selections=selections,
+    )
+    source_id = H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS[1]
+    champion_source = StrategySearchCandidateSource(
+        source_id=source_id,
+        source_ref=f"market_only_reconstruction:shortpick_v2_h10_quiet_champion_round:{source_id}",
+        selections=selections,
+    )
+    replay_artifact = build_shortpick_v2_strategy_search_artifact_from_series(
+        series_by_symbol,
+        signal_days=signal_days,
+        trade_days=trade_days,
+        candidate_sources=(control_source, champion_source),
+        start_date=days[0],
+        end_date=days[44],
+        initial_cash=200_000.0,
+        horizon_days=10,
+        account_profile="new_retail_cash_account",
+        candidate_batch="h10_quiet_champion",
+        generated_at=datetime(2026, 6, 15, 8, 0, tzinfo=UTC),
+    )
+    selected_config_id = f"{source_id}__fixed_notional_70k_top5_h10_v1"
+
+    artifact = build_shortpick_v2_h10_robustness_artifact_from_series(
+        series_by_symbol,
+        signal_days=signal_days,
+        trade_days=trade_days,
+        candidate_sources=(control_source, champion_source),
+        replay_artifact=replay_artifact,
+        selection_artifact=_selection_artifact(replay_artifact, selected_config_id),
+        start_date=days[0],
+        end_date=days[44],
+        initial_cash=200_000.0,
+        horizon_days=10,
+        generated_at=datetime(2026, 6, 15, 10, 0, tzinfo=UTC),
+    )
+
+    assert artifact["status"] == "ready"
+    assert any(row["source_id"] == source_id for row in artifact["parameter_stability"]["rows"])
 
 
 def test_shortpick_v2_h10_robustness_cli_parser_defaults_to_h10_quiet_artifacts() -> None:
