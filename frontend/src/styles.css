@@ -966,6 +966,27 @@ body[data-theme="dark"] {
   flex: 1 1 auto;
 }
 
+.shortpick-v2-return-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.shortpick-v2-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.shortpick-v2-filter-search {
+  width: min(100%, 280px);
+}
+
+.shortpick-v2-filter-select {
+  width: 160px;
+}
+
 @media (max-width: 720px) {
   .shortpick-paper-effect-head {
     align-items: stretch;
@@ -993,6 +1014,15 @@ body[data-theme="dark"] {
   .shortpick-paper-effect-metric-select {
     width: min(100%, 160px);
     min-width: min(100%, 160px);
+  }
+
+  .shortpick-v2-return-chart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .shortpick-v2-filter-search,
+  .shortpick-v2-filter-select {
+    width: 100%;
   }
 }
 

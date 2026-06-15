@@ -16,6 +16,8 @@ from ashare_evidence.shortpick_v2_h10_paper_governance import (
     ENTRY_POLICY as H10_PAPER_GOVERNANCE_ENTRY_POLICY,
 )
 from ashare_evidence.shortpick_v2_h10_paper_governance import (
+    H10_QUIET_CAPITAL_SHADOW_CONFIG_ID,
+    H10_QUIET_CHAMPION_CONFIG_ID,
     H10_QUIET_DIAGNOSTIC_90K_CONFIG_ID,
     H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS,
     SHORTPICK_V2_H10_PAPER_GOVERNANCE_ARTIFACT_FAMILY,
@@ -98,6 +100,7 @@ def build_shortpick_v2_historical_replay_read_model(
     sample_limit: int = 20,
     replay_artifact_path: str | Path | None = None,
     rule_selection_artifact_path: str | Path | None = None,
+    paper_governance_artifact_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Build the read-only v2 historical replay projection from precomputed artifacts."""
     bounded_sample_limit = _bounded_sample_limit(sample_limit)
@@ -111,17 +114,38 @@ def build_shortpick_v2_historical_replay_read_model(
         env_var=SHORTPICK_V2_RULE_SELECTION_ARTIFACT_ENV,
         candidates=SHORTPICK_V2_RULE_SELECTION_ARTIFACT_CANDIDATES,
     )
-    replay_artifact = _read_json_artifact(replay_path, label="shortpick v2 replay")
-    selection_artifact = _read_json_artifact(selection_path, label="shortpick v2 rule selection")
+    governance_path = _resolve_artifact_path(
+        explicit_path=paper_governance_artifact_path,
+        env_var=SHORTPICK_V2_H10_PAPER_GOVERNANCE_ARTIFACT_ENV,
+        candidates=SHORTPICK_V2_H10_PAPER_GOVERNANCE_ARTIFACT_CANDIDATES,
+    )
+    paper_governance_artifact = _read_optional_paper_governance_artifact(governance_path)
+    try:
+        replay_artifact = _read_json_artifact(replay_path, label="shortpick v2 replay")
+        selection_artifact = _read_json_artifact(selection_path, label="shortpick v2 rule selection")
+    except LookupError:
+        if paper_governance_artifact is None:
+            raise
+        return _h10_only_historical_replay_read_model(
+            paper_governance_artifact=paper_governance_artifact,
+            governance_path=governance_path,
+            replay_path=replay_path,
+            selection_path=selection_path,
+            decision_sample_limit=bounded_sample_limit,
+        )
     _validate_replay_artifact(replay_artifact)
     _validate_rule_selection_artifact(selection_artifact)
     _validate_replay_selection_alignment(replay_artifact, selection_artifact)
 
     result_by_config = _replay_results_by_config(replay_artifact)
-    selected_configs = _config_readouts(
-        selection_artifact.get("selected_configs"),
-        result_by_config=result_by_config,
-        decision_sample_limit=bounded_sample_limit,
+    selected_configs = (
+        _paper_governance_config_readouts(paper_governance_artifact)
+        if paper_governance_artifact is not None
+        else _config_readouts(
+            selection_artifact.get("selected_configs"),
+            result_by_config=result_by_config,
+            decision_sample_limit=bounded_sample_limit,
+        )
     )
     baseline_configs = _config_readouts(
         selection_artifact.get("baseline_configs"),
@@ -138,39 +162,78 @@ def build_shortpick_v2_historical_replay_read_model(
         result_by_config=result_by_config,
         decision_sample_limit=bounded_sample_limit,
     )
+    if paper_governance_artifact is not None:
+        baseline_configs = _legacy_strategy_search_readouts(baseline_configs, legacy_role="legacy_baseline_control")
+        holdout_configs = _legacy_strategy_search_readouts(holdout_configs, legacy_role="legacy_holdout")
+        rejected_configs = _legacy_strategy_search_readouts(rejected_configs, legacy_role="legacy_rejected")
+    diagnostic_configs = _paper_governance_diagnostic_readouts(paper_governance_artifact)
     data_scope = replay_artifact.get("data_scope") if isinstance(replay_artifact.get("data_scope"), dict) else {}
+    h10_strategy_inventory = _h10_strategy_inventory(paper_governance_artifact, governance_path)
+    status = "ready" if paper_governance_artifact is not None else str(selection_artifact.get("status") or "blocked")
     return {
         "generated_at": _now_iso(),
-        "status": str(selection_artifact.get("status") or "blocked"),
+        "status": status,
         "claim_ceiling": SHORTPICK_V2_CLAIM_CEILING,
         "evidence_basis": SHORTPICK_V2_SELECTION_EVIDENCE_BASIS,
-        "ui_language": "试验田v2历史回放仅展示预计算账户路径研究观察。",
-        "data_disclaimer": "历史回放读取固定来源文件，不构成投资建议，不代表生产交易能力。",
+        "ui_language": (
+            "试验田v2历史回放展示预计算账户路径研究观察；H10 quiet champion 为当前固定对标线。"
+            if paper_governance_artifact is not None
+            else "试验田v2历史回放仅展示预计算账户路径研究观察。"
+        ),
+        "data_disclaimer": (
+            "历史回放读取固定来源文件；H10 历史收益只用于研究对标，不计为真实前向纸面收益。"
+            if paper_governance_artifact is not None
+            else "历史回放读取固定来源文件，不构成投资建议，不代表生产交易能力。"
+        ),
         "source_artifacts": {
             "replay": _artifact_ref(replay_artifact, replay_path),
             "rule_selection": _artifact_ref(selection_artifact, selection_path),
+            "h10_paper_governance": (
+                _artifact_ref(paper_governance_artifact, governance_path)
+                if paper_governance_artifact is not None
+                else {
+                    "path": str(governance_path),
+                    "status": "missing",
+                    "artifact_family": SHORTPICK_V2_H10_PAPER_GOVERNANCE_ARTIFACT_FAMILY,
+                }
+            ),
         },
         "data_scope": data_scope,
         "selection_policy": selection_artifact.get("selection_policy") or {},
         "summary": {
             "selected_config_count": len(selected_configs),
             "baseline_config_count": len(baseline_configs),
-            "holdout_config_count": len(holdout_configs),
+            "holdout_config_count": len(holdout_configs) + len(diagnostic_configs),
             "rejected_config_count": len(rejected_configs),
             "signal_day_count": data_scope.get("signal_day_count"),
             "trade_day_count": data_scope.get("trade_day_count"),
             "coverage_status": data_scope.get("coverage_status"),
             "decision_sample_limit": bounded_sample_limit,
+            "h10_strategy_inventory": h10_strategy_inventory,
+            "legacy_strategy_search_context": (
+                {
+                    "status": "reference_only",
+                    "source": "older_strategy_search_artifacts",
+                    "note": "旧 strategy-search 结果只作为历史弱结果参照，不属于 H10 quiet champion 同窗候选。",
+                }
+                if paper_governance_artifact is not None
+                else None
+            ),
         },
         "selected_configs": selected_configs,
         "baseline_configs": baseline_configs,
-        "holdout_configs": holdout_configs,
+        "holdout_configs": [*holdout_configs, *diagnostic_configs],
         "rejected_configs": rejected_configs,
         "leakage_audit": {
             "status": "passed",
             "replay": replay_artifact.get("leakage_audit") or {},
             "rule_selection": selection_artifact.get("leakage_audit") or {},
-            "read_model_policy": "read_only_precomputed_artifacts_no_dynamic_replay",
+            "h10_governance": (paper_governance_artifact or {}).get("leakage_audit") or {},
+            "read_model_policy": (
+                "read_only_precomputed_artifacts_with_h10_governance_overlay_no_dynamic_replay"
+                if paper_governance_artifact is not None
+                else "read_only_precomputed_artifacts_no_dynamic_replay"
+            ),
         },
         "research_labeling": _research_labeling(
             evidence_basis=SHORTPICK_V2_SELECTION_EVIDENCE_BASIS,
@@ -180,6 +243,7 @@ def build_shortpick_v2_historical_replay_read_model(
             "shortpick_v2.phase6.backend_read_model.historical_replay",
             str(replay_artifact.get("artifact_id") or ""),
             str(selection_artifact.get("artifact_id") or ""),
+            str((paper_governance_artifact or {}).get("artifact_id") or ""),
         ],
     }
 
@@ -238,6 +302,84 @@ def build_shortpick_v2_paper_tracking_read_model(
         include_records=include_records,
         session=session,
     )
+
+
+def _h10_only_historical_replay_read_model(
+    *,
+    paper_governance_artifact: dict[str, Any],
+    governance_path: Path,
+    replay_path: Path,
+    selection_path: Path,
+    decision_sample_limit: int,
+) -> dict[str, Any]:
+    selected_configs = _paper_governance_config_readouts(paper_governance_artifact)
+    diagnostic_configs = _paper_governance_diagnostic_readouts(paper_governance_artifact)
+    analysis_scope = (
+        paper_governance_artifact.get("analysis_scope")
+        if isinstance(paper_governance_artifact.get("analysis_scope"), dict)
+        else {}
+    )
+    data_scope = {
+        "signal_date_from": analysis_scope.get("signal_date_from"),
+        "signal_date_to": analysis_scope.get("signal_date_to"),
+        "signal_day_count": None,
+        "trade_day_count": None,
+        "coverage_status": "h10_governance_summary_only",
+    }
+    return {
+        "generated_at": _now_iso(),
+        "status": "ready",
+        "claim_ceiling": SHORTPICK_V2_CLAIM_CEILING,
+        "evidence_basis": "h10_governance_summary_only",
+        "ui_language": "试验田v2历史回放展示 H10 quiet champion 固定对标统计。",
+        "data_disclaimer": "H10 历史收益只用于研究对标，不计为真实前向纸面收益。",
+        "source_artifacts": {
+            "replay": {
+                "path": str(replay_path),
+                "status": "missing",
+                "artifact_family": SHORTPICK_V2_REPLAY_ARTIFACT_FAMILY,
+            },
+            "rule_selection": {
+                "path": str(selection_path),
+                "status": "missing",
+                "artifact_family": SHORTPICK_V2_RULE_SELECTION_ARTIFACT_FAMILY,
+            },
+            "h10_paper_governance": _artifact_ref(paper_governance_artifact, governance_path),
+        },
+        "data_scope": data_scope,
+        "selection_policy": {
+            "policy_version": SHORTPICK_V2_RULE_SELECTION_POLICY_VERSION,
+            "source": "h10_paper_governance_summary_only",
+        },
+        "summary": {
+            "selected_config_count": len(selected_configs),
+            "baseline_config_count": 0,
+            "holdout_config_count": len(diagnostic_configs),
+            "rejected_config_count": 0,
+            "signal_day_count": data_scope.get("signal_day_count"),
+            "trade_day_count": data_scope.get("trade_day_count"),
+            "coverage_status": data_scope.get("coverage_status"),
+            "decision_sample_limit": decision_sample_limit,
+            "h10_strategy_inventory": _h10_strategy_inventory(paper_governance_artifact, governance_path),
+        },
+        "selected_configs": selected_configs,
+        "baseline_configs": [],
+        "holdout_configs": diagnostic_configs,
+        "rejected_configs": [],
+        "leakage_audit": {
+            "status": "passed",
+            "h10_governance": paper_governance_artifact.get("leakage_audit") or {},
+            "read_model_policy": "h10_governance_summary_only_no_dynamic_replay",
+        },
+        "research_labeling": _research_labeling(
+            evidence_basis="h10_governance_summary_only",
+            ui_language="试验田v2历史回放展示 H10 quiet champion 固定对标统计。",
+        ),
+        "event_refs": [
+            "shortpick_v2.phase6.backend_read_model.historical_replay.h10_summary_only",
+            str(paper_governance_artifact.get("artifact_id") or ""),
+        ],
+    }
 
 
 def _contract_ready_paper_tracking_read_model(
@@ -522,6 +664,9 @@ def _paper_tracking_display_projection(
                 {"key": "selected_rank_text", "label": "入选位置"},
                 {"key": "quantity_text", "label": "数量"},
                 {"key": "cash_after_text", "label": "剩余现金"},
+                {"key": "exit_state_text", "label": "退出状态"},
+                {"key": "exit_date_text", "label": "退出日"},
+                {"key": "return_text", "label": "收益"},
                 {"key": "note", "label": "说明"},
             ],
             "rows": table_rows,
@@ -710,15 +855,16 @@ def _build_paper_display_replay_rows_from_session(
             active_config_ids=tuple(config.config_id for config in rule_configs),
         )
         return rows, coverage
+    display_trade_days = _trade_days(
+        series_by_symbol,
+        start_date=start_date,
+        end_date=latest_bar_day + timedelta(days=80),
+        min_symbol_count=SHORTPICK_V2_PAPER_DISPLAY_MIN_SIGNAL_SYMBOL_COUNT,
+    )
     replay_artifact = build_shortpick_v2_replay_artifact_from_series(
         series_by_symbol,
         signal_days=available_signal_days,
-        trade_days=_trade_days(
-            series_by_symbol,
-            start_date=start_date,
-            end_date=latest_bar_day + timedelta(days=80),
-            min_symbol_count=SHORTPICK_V2_PAPER_DISPLAY_MIN_SIGNAL_SYMBOL_COUNT,
-        ),
+        trade_days=display_trade_days,
         selections=display_source.selections,
         start_date=start_date,
         end_date=latest_bar_day,
@@ -743,6 +889,8 @@ def _build_paper_display_replay_rows_from_session(
             symbol: str(getattr(series, "name", "") or symbol)
             for symbol, series in series_by_symbol.items()
         },
+        series_by_symbol=series_by_symbol,
+        trade_days=display_trade_days,
     )
     _finalize_paper_display_coverage(
         coverage,
@@ -758,6 +906,8 @@ def _paper_display_rows_from_replay_artifact(
     active_config_ids: tuple[str, ...],
     available_signal_dates: list[str],
     symbol_names: dict[str, str],
+    series_by_symbol: dict[str, Any],
+    trade_days: list[date],
 ) -> list[dict[str, Any]]:
     result_by_config = _replay_results_by_config(replay_artifact)
     rows: list[dict[str, Any]] = []
@@ -771,7 +921,15 @@ def _paper_display_rows_from_replay_artifact(
             if not signal_date or signal_date not in available_signal_dates:
                 continue
             seen.add((signal_date, config_id))
-            rows.append(_paper_display_row_from_replay_decision(decision, config_id, symbol_names=symbol_names))
+            rows.append(
+                _paper_display_row_from_replay_decision(
+                    decision,
+                    config_id,
+                    symbol_names=symbol_names,
+                    series_by_symbol=series_by_symbol,
+                    trade_days=trade_days,
+                )
+            )
     for signal_date in available_signal_dates:
         for config_id in active_config_ids:
             if (signal_date, config_id) in seen:
@@ -818,6 +976,8 @@ def _paper_display_row_from_replay_decision(
     config_id: str,
     *,
     symbol_names: dict[str, str],
+    series_by_symbol: dict[str, Any],
+    trade_days: list[date],
 ) -> dict[str, Any]:
     action = str(decision.get("action") or "skip")
     symbol = str(decision.get("symbol") or "")
@@ -825,6 +985,11 @@ def _paper_display_row_from_replay_decision(
     cash_before = _optional_float(decision.get("cash_before"))
     cash_after = _optional_float(decision.get("cash_after"))
     signal_date = str(decision.get("signal_date") or "")
+    exit_projection = _paper_display_exit_projection(
+        decision,
+        series_by_symbol=series_by_symbol,
+        trade_days=trade_days,
+    )
     return {
         "row_id": f"replay:{signal_date}:{config_id}",
         "signal_date": signal_date,
@@ -844,8 +1009,9 @@ def _paper_display_row_from_replay_decision(
         "cash_before_text": _format_cny(cash_before),
         "cash_after": cash_after,
         "cash_after_text": _format_cny(cash_after),
+        **exit_projection,
         "source_state": "observed",
-        "note": "回放补齐行：只用于观察 2026-05-08 以来策略会如何动作，不计入真实前向纸面收益。",
+        "note": "回放：不计入真实前向收益。",
     }
 
 
@@ -875,6 +1041,16 @@ def _paper_display_gap_row(
         "cash_before_text": "暂无",
         "cash_after": None,
         "cash_after_text": "暂无",
+        "entry_date": None,
+        "entry_date_text": "未入场",
+        "exit_date": None,
+        "exit_date_text": "未入场",
+        "exit_state": "not_entered",
+        "exit_state_text": "未入场",
+        "exit_reason_text": "未入场",
+        "holding_days_text": "无",
+        "return": None,
+        "return_text": "暂无",
         "source_state": "source_gap",
         "note": note,
     }
@@ -887,6 +1063,9 @@ def _paper_display_row_from_ledger(record: dict[str, Any]) -> dict[str, Any]:
     cash_before = _optional_float(record.get("cash_before"))
     cash_after = _optional_float(record.get("cash_after"))
     signal_date = str(record.get("signal_date") or "")
+    stock_return = _optional_float(record.get("stock_return"))
+    exit_trade_date = str(record.get("exit_trade_date") or record.get("exit_date") or "")
+    exit_reason = str(record.get("exit_reason") or "")
     return {
         "row_id": str(record.get("record_id") or f"ledger:{signal_date}:{record.get('config_id') or ''}"),
         "signal_date": signal_date,
@@ -906,8 +1085,18 @@ def _paper_display_row_from_ledger(record: dict[str, Any]) -> dict[str, Any]:
         "cash_before_text": _format_cny(cash_before),
         "cash_after": cash_after,
         "cash_after_text": _format_cny(cash_after),
+        "entry_date": record.get("entry_trade_date"),
+        "entry_date_text": str(record.get("entry_trade_date") or "未入场"),
+        "exit_date": exit_trade_date or None,
+        "exit_date_text": exit_trade_date or "等待退出",
+        "exit_state": "completed" if exit_trade_date else "pending",
+        "exit_state_text": "已退出" if exit_trade_date else "等待退出",
+        "exit_reason_text": _paper_exit_reason_label(exit_reason),
+        "holding_days_text": "按 ledger 记录",
+        "return": stock_return,
+        "return_text": _format_percent(stock_return),
         "source_state": str(record.get("source_state") or "observed"),
-        "note": "真实前向纸面记录：来自 v2 paper ledger。",
+        "note": "真实前向：来自 v2 ledger。",
     }
 
 
@@ -996,11 +1185,10 @@ def _paper_display_active_config_ids(selected_configs: list[dict[str, Any]]) -> 
 
 
 def _paper_config_target_notional(config_id: str) -> float | None:
-    if config_id == H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS[0]:
-        return 85_000.0
-    if config_id == H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS[1]:
-        return 80_000.0
-    return None
+    return {
+        H10_QUIET_CHAMPION_CONFIG_ID: 85_000.0,
+        H10_QUIET_CAPITAL_SHADOW_CONFIG_ID: 80_000.0,
+    }.get(config_id)
 
 
 def _paper_config_label(config_id: str) -> str:
@@ -1039,6 +1227,127 @@ def _paper_reason_label(reason: str) -> str:
     }.get(reason, "按既定规则完成判断。")
 
 
+def _paper_exit_reason_label(reason: str) -> str:
+    return {
+        "mechanical_horizon": "机械10日退出",
+        "mechanical_10d": "机械10日退出",
+        "take_profit": "止盈退出",
+        "stop_loss": "止损退出",
+        "trailing_stop": "移动止损退出",
+        "": "等待退出",
+    }.get(reason, "按既定规则退出")
+
+
+def _paper_display_exit_projection(
+    decision: dict[str, Any],
+    *,
+    series_by_symbol: dict[str, Any],
+    trade_days: list[date],
+) -> dict[str, Any]:
+    action = str(decision.get("action") or "")
+    symbol = str(decision.get("symbol") or "")
+    signal_date = str(decision.get("signal_date") or "")
+    if action not in {"buy_primary", "buy_fallback"}:
+        return {
+            "entry_date": None,
+            "entry_date_text": "未入场",
+            "exit_date": None,
+            "exit_date_text": "未入场",
+            "exit_state": "not_entered",
+            "exit_state_text": "未入场",
+            "exit_reason_text": "未入场",
+            "holding_days_text": "无",
+            "return": None,
+            "return_text": "暂无",
+        }
+    try:
+        signal_day = date.fromisoformat(signal_date)
+    except ValueError:
+        return _paper_display_pending_exit_projection("信号日缺失")
+    if signal_day not in trade_days:
+        return _paper_display_pending_exit_projection("等待入场日")
+    entry_index = trade_days.index(signal_day) + 1
+    if entry_index >= len(trade_days):
+        return _paper_display_pending_exit_projection("等待入场日")
+    entry_day = trade_days[entry_index]
+    exit_index = entry_index + 10
+    if exit_index >= len(trade_days):
+        return {
+            "entry_date": entry_day.isoformat(),
+            "entry_date_text": entry_day.isoformat(),
+            "exit_date": None,
+            "exit_date_text": "等待10日窗口",
+            "exit_state": "pending",
+            "exit_state_text": "等待10日窗口",
+            "exit_reason_text": "机械10日未到期",
+            "holding_days_text": "未满10个交易日",
+            "return": None,
+            "return_text": "暂无",
+        }
+    exit_day = trade_days[exit_index]
+    series = series_by_symbol.get(symbol)
+    entry_close = _series_close_on_day(series, entry_day)
+    exit_close = _series_close_on_day(series, exit_day)
+    stock_return = (
+        round(float(exit_close) / float(entry_close) - 1.0, 6)
+        if entry_close not in {None, 0} and exit_close is not None
+        else None
+    )
+    if stock_return is None:
+        return {
+            "entry_date": entry_day.isoformat(),
+            "entry_date_text": entry_day.isoformat(),
+            "exit_date": exit_day.isoformat(),
+            "exit_date_text": exit_day.isoformat(),
+            "exit_state": "source_gap",
+            "exit_state_text": "退出数据缺口",
+            "exit_reason_text": "缺少入场或退出价",
+            "holding_days_text": "10个交易日",
+            "return": None,
+            "return_text": "暂无",
+        }
+    return {
+        "entry_date": entry_day.isoformat(),
+        "entry_date_text": entry_day.isoformat(),
+        "exit_date": exit_day.isoformat(),
+        "exit_date_text": exit_day.isoformat(),
+        "exit_state": "completed",
+        "exit_state_text": "已按10日退出",
+        "exit_reason_text": "机械10日退出",
+        "holding_days_text": "10个交易日",
+        "return": stock_return,
+        "return_text": _format_percent(stock_return),
+    }
+
+
+def _paper_display_pending_exit_projection(reason_text: str) -> dict[str, Any]:
+    return {
+        "entry_date": None,
+        "entry_date_text": reason_text,
+        "exit_date": None,
+        "exit_date_text": "等待10日窗口",
+        "exit_state": "pending",
+        "exit_state_text": "等待10日窗口",
+        "exit_reason_text": reason_text,
+        "holding_days_text": "未满10个交易日",
+        "return": None,
+        "return_text": "暂无",
+    }
+
+
+def _series_close_on_day(series: Any, target_day: date) -> float | None:
+    if series is None:
+        return None
+    index = getattr(series, "by_day", {}).get(target_day)
+    bars = getattr(series, "bars", None)
+    if index is None or not bars:
+        return None
+    try:
+        return float(bars[index].close)
+    except (IndexError, TypeError, ValueError):
+        return None
+
+
 def _latest_display_trade(display_rows: list[dict[str, Any]]) -> dict[str, Any]:
     buys = [row for row in display_rows if row.get("action") in {"buy_primary", "buy_fallback"}]
     row = buys[0] if buys else (display_rows[0] if display_rows else None)
@@ -1061,6 +1370,8 @@ def _latest_display_trade(display_rows: list[dict[str, Any]]) -> dict[str, Any]:
             {"label": "标的", "value": row.get("stock_text")},
             {"label": "数量", "value": row.get("quantity_text")},
             {"label": "剩余现金", "value": row.get("cash_after_text")},
+            {"label": "退出", "value": row.get("exit_state_text")},
+            {"label": "收益", "value": row.get("return_text")},
         ],
         "note": row.get("note"),
     }
@@ -1084,6 +1395,12 @@ def _paper_display_visible_rows(rows: list[dict[str, Any]]) -> list[dict[str, An
                 "quantity_text": row.get("quantity_text"),
                 "cash_before_text": row.get("cash_before_text"),
                 "cash_after_text": row.get("cash_after_text"),
+                "entry_date_text": row.get("entry_date_text"),
+                "exit_date_text": row.get("exit_date_text"),
+                "exit_state_text": row.get("exit_state_text"),
+                "exit_reason_text": row.get("exit_reason_text"),
+                "holding_days_text": row.get("holding_days_text"),
+                "return_text": row.get("return_text"),
                 "note": row.get("note"),
             }
         )
@@ -1190,6 +1507,12 @@ def _format_cny(value: float | None) -> str:
     if value is None:
         return "暂无"
     return f"{value:,.0f} 元"
+
+
+def _format_percent(value: float | None) -> str:
+    if value is None:
+        return "暂无"
+    return f"{value * 100:+.1f}%"
 
 
 def _optional_int(value: object) -> int | None:
@@ -1519,6 +1842,20 @@ def _paper_config_readouts(selection_rows: object) -> list[dict[str, Any]]:
     ]
 
 
+def _legacy_strategy_search_readouts(rows: list[dict[str, Any]], *, legacy_role: str) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        selection_summary = dict(item.get("selection_summary") or {})
+        selection_summary["legacy_context"] = "older_strategy_search_reference_only"
+        item["role"] = legacy_role
+        item["gate_status"] = "legacy_reference"
+        item["reason"] = "旧 strategy-search 结果只作为历史弱结果参照，不属于 H10 quiet champion 同窗候选。"
+        item["selection_summary"] = selection_summary
+        output.append(item)
+    return output
+
+
 def _paper_governance_config_readouts(artifact: dict[str, Any] | None) -> list[dict[str, Any]]:
     if artifact is None:
         return []
@@ -1537,6 +1874,76 @@ def _paper_governance_config_readouts(artifact: dict[str, Any] | None) -> list[d
         }
         for index, row in enumerate(rows, start=1)
     ]
+
+
+def _paper_governance_diagnostic_readouts(artifact: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if artifact is None:
+        return []
+    rows = [row for row in artifact.get("diagnostic_configs") or [] if isinstance(row, dict)]
+    return [
+        {
+            "config_id": str(row.get("config_id") or ""),
+            "role": str(row.get("role") or "diagnostic"),
+            "selection_rank": index,
+            "gate_status": "diagnostic_only",
+            "reason": str(row.get("blocked_reason") or "diagnostic_only"),
+            "summary": row.get("summary") or {},
+            "selection_summary": {
+                "diagnostic_only": row.get("diagnostic_only") is True,
+                "paper_tracking_eligible": row.get("paper_tracking_eligible") is True,
+                "target_notional": row.get("target_notional"),
+                "blocked_reason": row.get("blocked_reason"),
+            },
+            "reason_counts": {},
+            "decision_samples": [],
+        }
+        for index, row in enumerate(rows, start=1)
+    ]
+
+
+def _h10_strategy_inventory(artifact: dict[str, Any] | None, path: Path) -> dict[str, Any]:
+    if artifact is None:
+        return {
+            "status": "missing",
+            "source_path": str(path),
+            "qualified_config_ids": [],
+            "diagnostic_config_ids": [],
+            "benchmark_config_id": None,
+            "capital_shadow_config_id": None,
+        }
+    analysis_scope = artifact.get("analysis_scope") if isinstance(artifact.get("analysis_scope"), dict) else {}
+    governance_policy = artifact.get("governance_policy") if isinstance(artifact.get("governance_policy"), dict) else {}
+    source_validation = artifact.get("source_validation") if isinstance(artifact.get("source_validation"), dict) else {}
+    qualification_floor = (
+        governance_policy.get("qualification_floor")
+        if isinstance(governance_policy.get("qualification_floor"), dict)
+        else {}
+    )
+    candidate_rows = [row for row in artifact.get("candidate_configs") or [] if isinstance(row, dict)]
+    diagnostic_rows = [row for row in artifact.get("diagnostic_configs") or [] if isinstance(row, dict)]
+    return {
+        "status": "ready",
+        "source_path": str(path),
+        "source_artifact_id": artifact.get("artifact_id"),
+        "horizon_days": analysis_scope.get("horizon_days"),
+        "initial_cash": analysis_scope.get("initial_cash"),
+        "signal_date_from": analysis_scope.get("signal_date_from"),
+        "signal_date_to": analysis_scope.get("signal_date_to"),
+        "paper_tracking_start_date": analysis_scope.get("paper_tracking_start_date"),
+        "benchmark_config_id": analysis_scope.get("primary_config_id"),
+        "capital_shadow_config_id": analysis_scope.get("capital_shadow_config_id"),
+        "qualified_config_ids": [str(row.get("config_id") or "") for row in candidate_rows],
+        "diagnostic_config_ids": [str(row.get("config_id") or "") for row in diagnostic_rows],
+        "rank2_support_label": (
+            source_validation.get("rank_ablation", {}).get("rank2_support_label")
+            if isinstance(source_validation.get("rank_ablation"), dict)
+            else None
+        ),
+        "min_annualized_return": qualification_floor.get("min_annualized_return"),
+        "must_beat_market": qualification_floor.get("must_beat_market"),
+        "claim_policy": governance_policy.get("claim_policy"),
+        "fixed90_policy": governance_policy.get("fixed90_policy"),
+    }
 
 
 def _paper_governance_projection(artifact: dict[str, Any] | None, path: Path) -> dict[str, Any]:

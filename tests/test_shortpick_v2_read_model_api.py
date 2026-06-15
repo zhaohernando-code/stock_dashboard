@@ -38,6 +38,7 @@ from ashare_evidence.shortpick_v2_read_model import (
     build_shortpick_v2_historical_replay_read_model,
     build_shortpick_v2_paper_tracking_read_model,
 )
+from ashare_evidence.shortpick_v2_read_model import _paper_display_row_from_replay_decision
 from ashare_evidence.shortpick_v2_rule_selection import build_shortpick_v2_rule_selection_artifact
 
 
@@ -492,15 +493,27 @@ def _source_ref(artifact_family: str) -> dict[str, object]:
 
 
 def _h10_candidate_config(config_id: str, role: str, *, annualized_return: float) -> dict[str, object]:
+    if config_id == H10_QUIET_CAPITAL_SHADOW_CONFIG_ID:
+        total_return = 2.572453
+        market_excess = 2.154009
+        trade_count = 192
+        turnover = 73.018706
+        skipped_ratio = 0.733703
+    else:
+        total_return = 2.712294
+        market_excess = 2.29385
+        trade_count = 190
+        turnover = 76.672058
+        skipped_ratio = 0.736477
     summary = {
-        "total_return": 2.7,
+        "total_return": total_return,
         "annualized_return": annualized_return,
         "market_reference_total_return": 0.418,
-        "market_excess_total_return": 2.282,
+        "market_excess_total_return": market_excess,
         "max_drawdown": -0.119,
-        "trade_count": 190,
-        "turnover": 76.67,
-        "skipped_ratio": 0.7365,
+        "trade_count": trade_count,
+        "turnover": turnover,
+        "skipped_ratio": skipped_ratio,
     }
     return {
         "config_id": config_id,
@@ -658,6 +671,67 @@ def test_shortpick_v2_historical_replay_read_model_uses_selected_precomputed_art
     assert summary_only_payload["summary"]["decision_sample_limit"] == 0
 
 
+def test_shortpick_v2_historical_replay_read_model_restores_h10_governance_inventory(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _write_v2_artifacts(tmp_path, monkeypatch)
+    governance_path = _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
+
+    payload = build_shortpick_v2_historical_replay_read_model(sample_limit=0)
+
+    assert payload["status"] == "ready"
+    assert [item["config_id"] for item in payload["selected_configs"]] == list(H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS)
+    fixed85 = payload["selected_configs"][0]
+    fixed80 = payload["selected_configs"][1]
+    assert fixed85["summary"]["total_return"] == 2.712294
+    assert fixed85["summary"]["annualized_return"] == 0.5396
+    assert fixed85["summary"]["max_drawdown"] == -0.119
+    assert fixed85["summary"]["market_excess_total_return"] == 2.29385
+    assert fixed85["summary"]["trade_count"] == 190
+    assert fixed80["summary"]["total_return"] == 2.572453
+    assert fixed80["summary"]["annualized_return"] == 0.5203
+    assert fixed80["summary"]["trade_count"] == 192
+    assert payload["summary"]["selected_config_count"] == 2
+    assert payload["summary"]["h10_strategy_inventory"]["benchmark_config_id"] == H10_QUIET_CHAMPION_CONFIG_ID
+    assert payload["summary"]["h10_strategy_inventory"]["capital_shadow_config_id"] == H10_QUIET_CAPITAL_SHADOW_CONFIG_ID
+    assert payload["summary"]["h10_strategy_inventory"]["rank2_support_label"] == "supported"
+    assert payload["source_artifacts"]["h10_paper_governance"]["path"] == str(governance_path)
+    assert payload["holdout_configs"][0]["config_id"] == H10_QUIET_DIAGNOSTIC_90K_CONFIG_ID
+    assert payload["holdout_configs"][0]["gate_status"] == "diagnostic_only"
+    assert payload["baseline_configs"][0]["role"] == "legacy_baseline_control"
+    assert payload["baseline_configs"][0]["gate_status"] == "legacy_reference"
+    assert "旧 strategy-search" in payload["baseline_configs"][0]["reason"]
+    assert payload["rejected_configs"][0]["role"] == "legacy_rejected"
+    assert payload["summary"]["legacy_strategy_search_context"]["status"] == "reference_only"
+    assert "不计为真实前向纸面收益" in payload["data_disclaimer"]
+    assert payload["leakage_audit"]["read_model_policy"] == (
+        "read_only_precomputed_artifacts_with_h10_governance_overlay_no_dynamic_replay"
+    )
+
+
+def test_shortpick_v2_historical_replay_read_model_can_use_h10_only_when_old_artifacts_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv(SHORTPICK_V2_REPLAY_ARTIFACT_ENV, str(tmp_path / "missing-replay.json"))
+    monkeypatch.setenv(SHORTPICK_V2_RULE_SELECTION_ARTIFACT_ENV, str(tmp_path / "missing-selection.json"))
+    _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
+
+    payload = build_shortpick_v2_historical_replay_read_model(sample_limit=0)
+
+    assert payload["status"] == "ready"
+    assert payload["evidence_basis"] == "h10_governance_summary_only"
+    assert payload["source_artifacts"]["replay"]["status"] == "missing"
+    assert payload["source_artifacts"]["rule_selection"]["status"] == "missing"
+    assert [item["config_id"] for item in payload["selected_configs"]] == list(H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS)
+    assert payload["baseline_configs"] == []
+    assert payload["rejected_configs"] == []
+    assert payload["holdout_configs"][0]["config_id"] == H10_QUIET_DIAGNOSTIC_90K_CONFIG_ID
+    assert payload["summary"]["h10_strategy_inventory"]["status"] == "ready"
+    assert payload["leakage_audit"]["read_model_policy"] == "h10_governance_summary_only_no_dynamic_replay"
+
+
 def test_shortpick_v2_paper_tracking_returns_contract_ready_empty_projection(
     tmp_path: Path,
     monkeypatch,
@@ -728,6 +802,9 @@ def test_shortpick_v2_paper_tracking_display_replays_since_start_with_session(
         "策略",
         "动作",
     ]
+    assert {"退出状态", "退出日", "收益"} <= {column["label"] for column in display["table"]["columns"]}
+    column_keys = [column["key"] for column in display["table"]["columns"]]
+    assert column_keys.index("exit_state_text") < column_keys.index("exit_date_text") < column_keys.index("return_text")
     coverage = display["coverage"]
     assert coverage["coverage_start"] == "2026-05-08"
     assert coverage["coverage_end"] == "2026-06-15"
@@ -739,6 +816,45 @@ def test_shortpick_v2_paper_tracking_display_replays_since_start_with_session(
     assert payload["summary"]["replay_record_count"] == coverage["replay_row_count"]
     assert display["table"]["rows"]
     assert {row["tracking_tag"] for row in display["table"]["rows"]} == {"回放"}
+    assert {"exit_state_text", "exit_date_text", "return_text"} <= set(display["table"]["rows"][0])
+
+
+def test_shortpick_v2_paper_display_buy_row_projects_exit_and_return() -> None:
+    class _Bar:
+        def __init__(self, day: date, close: float) -> None:
+            self.day = day
+            self.close = close
+
+    class _Series:
+        def __init__(self, bars: list[_Bar]) -> None:
+            self.bars = bars
+            self.by_day = {bar.day: index for index, bar in enumerate(bars)}
+
+    trade_days = _business_days(date(2026, 5, 8), date(2026, 5, 29))
+    bars = [_Bar(day, 10.0 + index) for index, day in enumerate(trade_days)]
+    row = _paper_display_row_from_replay_decision(
+        {
+            "signal_date": "2026-05-08",
+            "action": "buy_primary",
+            "reason": "bought_primary",
+            "selected_rank": 2,
+            "symbol": "600001.SH",
+            "cash_before": 200000.0,
+            "cash_after": 150000.0,
+            "quantity": 1000,
+        },
+        H10_QUIET_CHAMPION_CONFIG_ID,
+        symbol_names={"600001.SH": "测试股票"},
+        series_by_symbol={"600001.SH": _Series(bars)},
+        trade_days=trade_days,
+    )
+
+    assert row["entry_date_text"] == "2026-05-11"
+    assert row["exit_date_text"] == "2026-05-25"
+    assert row["exit_state_text"] == "已按10日退出"
+    assert row["exit_reason_text"] == "机械10日退出"
+    assert row["return"] == 0.909091
+    assert row["return_text"] == "+90.9%"
 
 
 def test_shortpick_v2_paper_tracking_display_avoids_full_daily_series_loader(
@@ -847,6 +963,8 @@ def test_shortpick_v2_paper_tracking_display_uses_readable_chinese_text(
             "动作": row["action_text"],
             "原因": row["reason_text"],
             "标的": row["stock_text"],
+            "退出": row["exit_state_text"],
+            "收益": row["return_text"],
             "说明": row["note"],
         }
         for row in display["table"]["rows"]

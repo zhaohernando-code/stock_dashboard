@@ -3,7 +3,9 @@ import {
   Button,
   Card,
   Empty,
+  Input,
   Progress,
+  Select,
   Skeleton,
   Space,
   Table,
@@ -13,7 +15,8 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { ReloadOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
-import { useEffect, useRef, useState } from "react";
+import { init } from "echarts";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type {
   ShortpickV2ConfigReadout,
@@ -49,6 +52,13 @@ function stringField(source: Record<string, unknown> | undefined, key: string): 
 }
 
 function configRoleLabel(role?: string | null): string {
+  if (role === "phase6_forward_observation_candidate") return "前向观察候选";
+  if (role === "primary_future_observation_candidate") return "冻结主策略";
+  if (role === "capital_shadow_future_observation_candidate") return "资金影子对照";
+  if (role === "diagnostic_boundary") return "诊断边界";
+  if (role === "legacy_baseline_control") return "旧基线参照";
+  if (role === "legacy_holdout") return "旧留出参照";
+  if (role === "legacy_rejected") return "旧弱结果参照";
   if (role === "phase5_contract_candidate") return "候选配置";
   if (role === "baseline_control") return "基线";
   if (role === "holdout") return "留出观察";
@@ -57,6 +67,11 @@ function configRoleLabel(role?: string | null): string {
 }
 
 function configRoleColor(role?: string | null): string {
+  if (role === "phase6_forward_observation_candidate") return "green";
+  if (role === "primary_future_observation_candidate") return "green";
+  if (role === "capital_shadow_future_observation_candidate") return "blue";
+  if (role === "diagnostic_boundary") return "gold";
+  if (role?.startsWith("legacy_")) return "default";
   if (role === "phase5_contract_candidate") return "green";
   if (role === "baseline_control") return "blue";
   if (role === "holdout") return "gold";
@@ -68,7 +83,7 @@ function statusColor(value?: string | null): string {
   if (value === "ready" || value === "active" || value === "passed") return "green";
   if (value === "contract_ready" || value === "baseline_control") return "blue";
   if (value === "failed" || value === "blocked") return "red";
-  if (value === "holdout") return "gold";
+  if (value === "holdout" || value === "diagnostic_only") return "gold";
   return "default";
 }
 
@@ -92,6 +107,10 @@ function readableStatusLabel(value?: string | null): string {
   if (value === "true_forward_tracking") return "真实前向跟踪";
   if (value === "historical_account_replay") return "历史账户回放";
   if (value === "historical_account_replay_selection") return "历史账户回放筛选";
+  if (value === "h10_governance_summary_only") return "H10 治理结论";
+  if (value === "diagnostic_only") return "仅作诊断";
+  if (value === "legacy_reference") return "旧结果参照";
+  if (value === "forward_observation_ready_with_open_risks") return "可前向观察，仍有开放风险";
   return value ? "未命名状态" : "暂无状态";
 }
 
@@ -106,10 +125,23 @@ function reasonLabel(value?: string | null): string {
   if (value === "limit_up_unfillable") return "入场日涨停不可成交。";
   if (value === "no_ranked_candidates") return "当天没有满足条件的候选。";
   if (value === "no_executable_candidate") return "当天候选都不满足买入约束。";
+  if (value === "h10_forward_observation_candidate_executable") return "H10 候选满足资金和整手约束，可进入纸面观察。";
+  if (value === "旧 strategy-search 结果只作为历史弱结果参照，不属于 H10 quiet champion 同窗候选。") {
+    return "旧策略搜索结果只作为历史弱结果参照，不属于当前 H10 冠军策略候选。";
+  }
   return value ? "按既定规则完成判断。" : "暂无说明。";
 }
 
 function configReadableLabel(configId?: string | null): string {
+  if (configId === "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1") {
+    return "8.5 万目标买入方案";
+  }
+  if (configId === "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1") {
+    return "8 万目标买入方案";
+  }
+  if (configId === "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1") {
+    return "9 万目标买入诊断方案";
+  }
   if (configId === "quiet_r2_poolhot10_mtw__fixed85_top5_v1") return "8.5 万目标买入方案";
   if (configId === "quiet_r2_poolhot10_mtw__fixed80_top5_v1") return "8 万目标买入方案";
   if (configId === "top1_or_skip_v1") return "首位候选对照策略";
@@ -146,6 +178,41 @@ function tagColorByTone(tone?: string | null): string {
 function chartPercent(value: number, maxValue: number): number {
   if (!Number.isFinite(value) || !Number.isFinite(maxValue) || maxValue <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((value / maxValue) * 100)));
+}
+
+function parsePercentText(value: unknown): number | null {
+  if (typeof value === "number") return value;
+  if (typeof value !== "string") return null;
+  const normalized = value.replace("%", "").replace("+", "").trim();
+  if (!normalized || normalized === "-") return null;
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed / 100;
+}
+
+function paperRowSearchText(row: ShortpickV2PaperDisplayTableRow): string {
+  return [
+    row.signal_date_text,
+    row.tracking_tag,
+    row.strategy_text,
+    row.action_text,
+    row.reason_text,
+    row.stock_text,
+    row.selected_rank_text,
+    row.quantity_text,
+    row.cash_before_text,
+    row.cash_after_text,
+    row.exit_state_text,
+    row.exit_date_text,
+    row.return_text,
+    row.note,
+  ].map((value) => displayValue(value, "")).join(" ");
+}
+
+function uniquePaperOptions(rows: ShortpickV2PaperDisplayTableRow[], key: string): { label: string; value: string }[] {
+  return Array.from(
+    new Set(rows.map((row) => displayValue(row[key], "")).filter(Boolean)),
+  ).map((value) => ({ label: value, value }));
 }
 
 function ConfigSummaryTable({
@@ -232,6 +299,24 @@ function ShortpickV2PaperTab({
   const charts = display?.charts ?? [];
   const table = display?.table;
   const tableRows = table?.rows ?? [];
+  const [tableSearch, setTableSearch] = useState("");
+  const [strategyFilter, setStrategyFilter] = useState("");
+  const [actionFilter, setActionFilter] = useState("");
+  const [exitFilter, setExitFilter] = useState("");
+  const strategyRows = tracking?.selected_configs ?? [];
+  const strategyOptions = useMemo(() => uniquePaperOptions(tableRows, "strategy_text"), [tableRows]);
+  const actionOptions = useMemo(() => uniquePaperOptions(tableRows, "action_text"), [tableRows]);
+  const exitOptions = useMemo(() => uniquePaperOptions(tableRows, "exit_state_text"), [tableRows]);
+  const filteredTableRows = useMemo(() => {
+    const keyword = tableSearch.trim().toLowerCase();
+    return tableRows.filter((row) => {
+      if (strategyFilter && displayValue(row.strategy_text, "") !== strategyFilter) return false;
+      if (actionFilter && displayValue(row.action_text, "") !== actionFilter) return false;
+      if (exitFilter && displayValue(row.exit_state_text, "") !== exitFilter) return false;
+      if (!keyword) return true;
+      return paperRowSearchText(row).toLowerCase().includes(keyword);
+    });
+  }, [actionFilter, exitFilter, strategyFilter, tableRows, tableSearch]);
   const tableColumns = paperDisplayTableColumns(table?.columns ?? []);
   const baseSummaryCards = display?.summary_cards ?? [
     { label: "真实前向记录", value: numberField(tracking?.summary, "true_forward_record_count") ?? 0 },
@@ -322,6 +407,18 @@ function ShortpickV2PaperTab({
         )}
       </Card>
 
+      <Card className="panel-card" title="策略观察组">
+        {loading && !tracking ? (
+          <Skeleton active paragraph={{ rows: 4 }} />
+        ) : strategyRows.length ? (
+          <ConfigSummaryTable rows={strategyRows} loading={loading} />
+        ) : (
+          <Empty description="暂无可展示的策略观察组。" />
+        )}
+      </Card>
+
+      <PaperReturnCharts rows={filteredTableRows} />
+
       <div className="shortpick-v2-chart-grid">
         {charts.length ? charts.map((chart) => <PaperDisplayChartCard key={chart.title || chart.kind} chart={chart} />) : (
           <Card className="panel-card" title="图表">
@@ -332,17 +429,222 @@ function ShortpickV2PaperTab({
 
       <Card className="panel-card" title={table?.title || "模拟交易明细"}>
         {tableRows.length ? (
-          <Table
-            rowKey={(_item, index) => `paper-display-row-${index ?? 0}`}
-            size="small"
-            columns={tableColumns}
-            dataSource={tableRows}
-            pagination={{ pageSize: 20 }}
-          />
+          <Space direction="vertical" size="middle" className="full-width">
+            <div className="shortpick-v2-filter-bar">
+              <Input.Search
+                className="shortpick-v2-filter-search"
+                allowClear
+                placeholder="搜索日期、标的、动作、原因"
+                value={tableSearch}
+                onChange={(event) => setTableSearch(event.target.value)}
+              />
+              <Select
+                allowClear
+                className="shortpick-v2-filter-select"
+                options={strategyOptions}
+                placeholder="策略"
+                value={strategyFilter || undefined}
+                onChange={(value) => setStrategyFilter(value ?? "")}
+              />
+              <Select
+                allowClear
+                className="shortpick-v2-filter-select"
+                options={actionOptions}
+                placeholder="动作"
+                value={actionFilter || undefined}
+                onChange={(value) => setActionFilter(value ?? "")}
+              />
+              <Select
+                allowClear
+                className="shortpick-v2-filter-select"
+                options={exitOptions}
+                placeholder="退出状态"
+                value={exitFilter || undefined}
+                onChange={(value) => setExitFilter(value ?? "")}
+              />
+              <Button
+                onClick={() => {
+                  setTableSearch("");
+                  setStrategyFilter("");
+                  setActionFilter("");
+                  setExitFilter("");
+                }}
+              >
+                重置
+              </Button>
+              <Text type="secondary">显示 {filteredTableRows.length} / {tableRows.length} 条</Text>
+            </div>
+            <Table
+              rowKey={(_item, index) => `paper-display-row-${index ?? 0}`}
+              size="small"
+              columns={tableColumns}
+              dataSource={filteredTableRows}
+              pagination={{ pageSize: 20 }}
+            />
+          </Space>
         ) : (
           <Empty description={table?.empty_text || "暂无可展示的纸面追踪记录。"} />
         )}
       </Card>
+    </div>
+  );
+}
+
+function PaperReturnCharts({ rows }: { rows: ShortpickV2PaperDisplayTableRow[] }) {
+  const cumulativeChartRef = useRef<HTMLDivElement | null>(null);
+  const strategyChartRef = useRef<HTMLDivElement | null>(null);
+  const completedRows = useMemo(() => rows
+    .map((row) => ({
+      signalDate: displayValue(row.signal_date_text || row.signal_date, ""),
+      strategy: displayValue(row.strategy_text, "未命名策略"),
+      returnValue: parsePercentText(row.return_text ?? row.return),
+    }))
+    .filter((row): row is { signalDate: string; strategy: string; returnValue: number } => (
+      Boolean(row.signalDate) && Boolean(row.strategy) && row.returnValue !== null
+    ))
+    .sort((left, right) => left.signalDate.localeCompare(right.signalDate)), [rows]);
+
+  const cumulativePoints = useMemo(() => {
+    let cumulative = 1;
+    return completedRows.map((row) => {
+      cumulative *= 1 + row.returnValue;
+      return {
+        signalDate: row.signalDate,
+        strategy: row.strategy,
+        value: cumulative - 1,
+      };
+    });
+  }, [completedRows]);
+
+  const strategyReturns = useMemo(() => {
+    const grouped = new Map<string, { total: number; count: number }>();
+    completedRows.forEach((row) => {
+      const current = grouped.get(row.strategy) ?? { total: 0, count: 0 };
+      grouped.set(row.strategy, { total: current.total + row.returnValue, count: current.count + 1 });
+    });
+    return Array.from(grouped.entries())
+      .map(([strategy, value]) => ({
+        strategy,
+        averageReturn: value.count ? value.total / value.count : 0,
+        count: value.count,
+      }))
+      .sort((left, right) => right.averageReturn - left.averageReturn);
+  }, [completedRows]);
+
+  useEffect(() => {
+    const container = cumulativeChartRef.current;
+    if (!container || !cumulativePoints.length) return undefined;
+    const chart = init(container, undefined, { renderer: "canvas" });
+    chart.setOption({
+      grid: { top: 28, right: 16, bottom: 38, left: 56 },
+      tooltip: {
+        trigger: "axis",
+        valueFormatter: (value: number) => formatPercent(value),
+      },
+      xAxis: {
+        type: "category",
+        boundaryGap: false,
+        data: cumulativePoints.map((point) => point.signalDate),
+        axisLabel: { hideOverlap: true },
+      },
+      yAxis: {
+        type: "value",
+        axisLabel: { formatter: (value: number) => formatPercent(value) },
+      },
+      series: [{
+        name: "累计纸面收益",
+        type: "line",
+        smooth: true,
+        showSymbol: false,
+        data: cumulativePoints.map((point) => point.value),
+        lineStyle: { width: 2 },
+        areaStyle: { opacity: 0.08 },
+      }],
+    });
+    const handleResize = () => chart.resize();
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      chart.dispose();
+    };
+  }, [cumulativePoints]);
+
+  useEffect(() => {
+    const container = strategyChartRef.current;
+    if (!container || !strategyReturns.length) return undefined;
+    const chart = init(container, undefined, { renderer: "canvas" });
+    chart.setOption({
+      grid: { top: 28, right: 18, bottom: 38, left: 120 },
+      tooltip: {
+        trigger: "axis",
+        axisPointer: { type: "shadow" },
+        valueFormatter: (value: number) => formatPercent(value),
+      },
+      xAxis: {
+        type: "value",
+        axisLabel: { formatter: (value: number) => formatPercent(value) },
+      },
+      yAxis: {
+        type: "category",
+        inverse: true,
+        data: strategyReturns.map((item) => item.strategy),
+        axisLabel: { width: 104, overflow: "truncate" },
+      },
+      series: [{
+        name: "平均退出收益",
+        type: "bar",
+        data: strategyReturns.map((item) => item.averageReturn),
+        itemStyle: { borderRadius: [0, 4, 4, 0] },
+      }],
+    });
+    const handleResize = () => chart.resize();
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      chart.dispose();
+    };
+  }, [strategyReturns]);
+
+  if (!completedRows.length) {
+    return (
+      <Card className="panel-card" title="纸面收益走势">
+        <Empty description="当前筛选下还没有已完成退出收益样本。" />
+      </Card>
+    );
+  }
+
+  return (
+    <div className="shortpick-paper-effect-panel">
+      <div className="shortpick-paper-effect-head">
+        <Space direction="vertical" size={2}>
+          <Text strong>纸面收益走势</Text>
+          <Text type="secondary">只统计已经按 10 日窗口退出的回放与前向记录。</Text>
+        </Space>
+        <Space wrap className="shortpick-paper-effect-summary-tags">
+          <Tag color="blue">已退出 {formatNumber(completedRows.length)}</Tag>
+          <Tag color="green">最新累计 {formatPercent(cumulativePoints[cumulativePoints.length - 1]?.value ?? 0)}</Tag>
+        </Space>
+      </div>
+      <div className="shortpick-v2-return-chart-grid">
+        <div className="shortpick-paper-effect-chart-block">
+          <div className="shortpick-paper-effect-chart-head">
+            <Space direction="vertical" size={0} className="shortpick-paper-effect-chart-title">
+              <Text strong>累计纸面收益</Text>
+              <Text type="secondary">按退出样本时间顺序滚动展示。</Text>
+            </Space>
+          </div>
+          <div ref={cumulativeChartRef} className="shortpick-paper-effect-chart" />
+        </div>
+        <div className="shortpick-paper-effect-chart-block">
+          <div className="shortpick-paper-effect-chart-head">
+            <Space direction="vertical" size={0} className="shortpick-paper-effect-chart-title">
+              <Text strong>策略退出效果排名</Text>
+              <Text type="secondary">按单笔平均退出收益排序。</Text>
+            </Space>
+          </div>
+          <div ref={strategyChartRef} className="shortpick-paper-effect-chart" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -383,6 +685,9 @@ function paperDisplayTableColumns(
     { key: "selected_rank_text", label: "入选位置" },
     { key: "quantity_text", label: "数量" },
     { key: "cash_after_text", label: "剩余现金" },
+    { key: "exit_state_text", label: "退出状态" },
+    { key: "exit_date_text", label: "退出日" },
+    { key: "return_text", label: "收益" },
     { key: "note", label: "说明" },
   ];
   return (sourceColumns.length ? sourceColumns : fallbackColumns).map((column) => ({

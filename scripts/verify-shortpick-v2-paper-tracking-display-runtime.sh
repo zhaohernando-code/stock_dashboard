@@ -271,10 +271,8 @@ holdout_configs = require_list(payload.get("holdout_configs"), "historical repla
 rejected_configs = require_list(payload.get("rejected_configs"), "historical replay rejected_configs")
 if payload.get("claim_ceiling") != "research_observation":
     fail(f"historical replay claim_ceiling changed: {payload.get('claim_ceiling')!r}")
-if payload.get("evidence_basis") != "historical_account_replay_selection":
+if payload.get("evidence_basis") not in {"historical_account_replay_selection", "h10_governance_summary_only"}:
     fail(f"historical replay evidence_basis changed: {payload.get('evidence_basis')!r}")
-if not baseline_configs:
-    fail("historical replay baseline_configs must not be empty")
 if int(summary.get("decision_sample_limit", -1)) != 0:
     fail(f"historical replay decision_sample_limit must be 0, got {summary.get('decision_sample_limit')!r}")
 if int(summary.get("selected_config_count") or 0) != len(selected_configs):
@@ -285,8 +283,30 @@ if int(summary.get("holdout_config_count") or 0) != len(holdout_configs):
     fail("historical replay holdout_config_count must match holdout_configs length")
 if int(summary.get("rejected_config_count") or 0) != len(rejected_configs):
     fail("historical replay rejected_config_count must match rejected_configs length")
-if not (selected_configs or baseline_configs or holdout_configs or rejected_configs):
-    fail("historical replay must include at least one statistical config row")
+expected_h10 = [
+    "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+    "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1",
+]
+selected_by_id = {
+    str(row.get("config_id")): row
+    for row in selected_configs
+    if isinstance(row, dict) and row.get("config_id")
+}
+if list(selected_by_id) != expected_h10:
+    fail(f"historical replay selected configs regressed: expected={expected_h10}, actual={list(selected_by_id)}")
+champion_summary = selected_by_id[expected_h10[0]].get("summary")
+shadow_summary = selected_by_id[expected_h10[1]].get("summary")
+if not isinstance(champion_summary, dict) or not (2.70 <= float(champion_summary.get("total_return", -99)) <= 2.72):
+    fail(f"fixed85 champion total_return regressed: {champion_summary!r}")
+if not isinstance(shadow_summary, dict) or not (2.55 <= float(shadow_summary.get("total_return", -99)) <= 2.59):
+    fail(f"fixed80 control total_return regressed: {shadow_summary!r}")
+fixed90 = "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1"
+diagnostic = [
+    row for row in holdout_configs
+    if isinstance(row, dict) and row.get("config_id") == fixed90
+]
+if not diagnostic or diagnostic[0].get("gate_status") != "diagnostic_only":
+    fail("fixed90 diagnostic-only holdout row is missing or promoted")
 for bucket_name, bucket in (
     ("selected_configs", selected_configs),
     ("baseline_configs", baseline_configs),
@@ -298,6 +318,8 @@ for bucket_name, bucket in (
             fail(f"historical replay {bucket_name} contains a non-object row")
         if row.get("decision_samples"):
             fail(f"historical replay {bucket_name} leaked decision_samples despite sample_limit=0")
+        if bucket_name in {"baseline_configs", "rejected_configs"} and row.get("gate_status") != "legacy_reference":
+            fail(f"historical replay {bucket_name} row must be legacy_reference, got {row.get('gate_status')!r}")
 print("served historical replay API verification passed")
 PY
 
@@ -316,6 +338,10 @@ wait_for_visible_terms \
   "served paper tab" \
   "$PAGE_TEXT_FILE" \
   "最新模拟交易" \
+  "策略观察组" \
+  "纸面收益走势" \
+  "累计纸面收益" \
+  "策略退出效果排名" \
   "覆盖情况" \
   "动作分布" \
   "模拟交易明细" \
@@ -332,7 +358,8 @@ wait_for_visible_terms \
   "$REPLAY_PAGE_TEXT_FILE" \
   "历史回放核心读数" \
   "配置与基线" \
-  "历史账户回放筛选"
+  "8.5 万目标买入方案" \
+  "8 万目标买入方案"
 
 ASHARE_SHORTPICK_V2_PAGE_TEXT_FILE="$PAGE_TEXT_FILE" \
 ASHARE_SHORTPICK_V2_REPLAY_PAGE_TEXT_FILE="$REPLAY_PAGE_TEXT_FILE" \
@@ -395,6 +422,10 @@ check_visible_text(
         "纸面追踪",
         "最新模拟交易",
         "策略说明",
+        "策略观察组",
+        "纸面收益走势",
+        "累计纸面收益",
+        "策略退出效果排名",
         "覆盖情况",
         "动作分布",
         "模拟交易明细",
@@ -417,11 +448,11 @@ check_visible_text(
         "信号日",
         "交易日",
         "配置与基线",
+        "8.5 万目标买入方案",
+        "8 万目标买入方案",
         "留出与未采用配置统计",
         "覆盖状态",
-        "基线对照",
         "研究观察",
-        "历史账户回放筛选",
         "已记录来源",
     ],
 )
