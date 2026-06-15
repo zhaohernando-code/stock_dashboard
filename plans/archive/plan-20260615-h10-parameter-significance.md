@@ -2,7 +2,7 @@
 schema_version: 1
 plan_id: "plan-20260615-h10-parameter-significance"
 title: "H10 Parameter Significance"
-status: "executing"
+status: "archived"
 created_at: "2026-06-15"
 source_request: "Continue from the current strong H10 quiet strategy and use a reviewed plan/run loop to validate whether important parameters, except the already-narrowed H10 horizon, have statistical or logical support."
 target_repo: "/Users/hernando_zhao/codex/worker-workspaces/20260614-shortpick-v2-robust-strategy-search-42e/20260615-h10-param-significance-adbc6f"
@@ -20,7 +20,7 @@ Key parameters: weekday gate, rank choice, pool-hot threshold, fixed notional / 
 Evidence approach: same-window ablation plus period-block stability and bootstrap/permutation-style confidence readouts; sparse samples are downgraded to inconclusive.
 Dependencies: runtime SQLite DB, existing h10 quiet strategy-search/replay machinery, and current fixed85/fixed80 benchmark lines.
 Major risks: false precision from non-iid market samples, overfitting by parameter grid, winner concentration, and confusing statistical support with causal proof.
-Approval state: user requested plan-then-run execution on 2026-06-15; MiMo round 2 passed with no blocking/major findings; plan is approved for execution.
+Plan state: all work items completed on 2026-06-15; plan archived after W-004 durable interpretation documentation.
 
 ## Goal
 
@@ -85,7 +85,7 @@ The next useful step is therefore not a broad new search, but a controlled ablat
 | W-001 | done | 1 | - | Add the H10 parameter-significance artifact builder, CLI, schemas if needed, and focused tests. | Parameter-significance artifact code and tests covering fixed H10 scope, ablation families, support labels, sparse-sample downgrade, and no-promotion semantics | test_pass | cmd:python3 -m pytest tests/test_shortpick_v2_h10_parameter_significance.py tests/test_shortpick_v2_strategy_search.py -q | Exit 0; 42 passed in 0.72s; MiMo code review found no blocking/major issues. |
 | W-002 | done | 2 | W-001 | Run the real-data H10 parameter-significance artifact against the runtime DB. | Runtime parameter-significance JSON artifact under `output/` | command_exit_0 | cmd:PYTHONPATH=src python3 -m ashare_evidence.cli shortpick-v2-h10-parameter-significance --database-url sqlite:////Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/ashare_dashboard.db --horizon-days 10 --initial-cash 200000 --output output/shortpick-v2-h10-parameter-significance-artifact.json | Exit 0; wrote `output/shortpick-v2-h10-parameter-significance-artifact.json`; 7 parameter rows: 4 supported, 3 inconclusive; horizon_days=10. |
 | W-003 | done | 3 | W-002 | Validate the generated parameter-significance artifact with machine-checkable structure and content gates. | Artifact validation command/result covering support labels, sample counts, period blocks, fixed H10, and no-promotion semantics | command_exit_0 | cmd:PYTHONPATH=src python3 -m ashare_evidence.cli shortpick-v2-h10-parameter-significance-validate --artifact output/shortpick-v2-h10-parameter-significance-artifact.json | Exit 0; validation status passed; 63 checks, 0 failed; horizon_days=10; parameter_row_count=7. |
-| W-004 | pending | 4 | W-003 | Record the interpretation and governance outcome for each tested parameter. | Durable docs/run notes describing supported, inconclusive, and rejected parameters without paper-tracking promotion | file_contains | path:docs/archive/SHORTPICK_LAB_V2_H10_PARAMETER_SIGNIFICANCE_RUN_2026-06-15.md \| pattern:supported parameters; inconclusive parameters; rejected parameters |  |
+| W-004 | done | 4 | W-003 | Record the interpretation and governance outcome for each tested parameter. | Durable docs/run notes describing supported, inconclusive, and rejected parameters without paper-tracking promotion | file_contains | path:docs/archive/SHORTPICK_LAB_V2_H10_PARAMETER_SIGNIFICANCE_RUN_2026-06-15.md \| pattern:supported parameters; inconclusive parameters; rejected parameters | File contains required pattern; MiMo doc review and re-review found no blocking/major/minor issues after minor clarifications. |
 
 ## Acceptance Criteria & Validation Gates
 
@@ -140,6 +140,8 @@ The next useful step is therefore not a broad new search, but a controlled ablat
 | 2026-06-15T13:13:00+08:00 | Codex | W-002 status changed from in_progress to done after the real-data artifact command exited 0 and wrote the parameter-significance JSON artifact. |
 | 2026-06-15T13:15:00+08:00 | Codex | W-003 status changed from pending to in_progress for artifact validation. |
 | 2026-06-15T13:17:00+08:00 | Codex | W-003 status changed from in_progress to done after the parameter-significance validation command passed 63 checks with 0 failures. |
+| 2026-06-15T13:18:00+08:00 | Codex | W-004 status changed from pending to in_progress for durable interpretation documentation. |
+| 2026-06-15T13:25:00+08:00 | Codex | W-004 status changed from in_progress to done after durable doc creation, file_contains gate, and MiMo doc re-review; plan status changed to archived for relocation to plans/archive. |
 
 ## External Review Log
 
