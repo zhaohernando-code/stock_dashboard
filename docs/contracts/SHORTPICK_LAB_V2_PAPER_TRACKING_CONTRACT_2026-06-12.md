@@ -1,10 +1,11 @@
 # Short Pick Lab V2 Paper Tracking Contract
 
-Status: Contract draft ready for producer implementation; current selection blocked by v2 qualification gates
+Status: Contract draft ready for producer implementation; H10 fixed85/fixed80 are future-observation candidates with no true-forward paper rows yet
 Owner: stock_dashboard
 Created: 2026-06-12
 Source plan: `docs/contracts/SHORTPICK_LAB_V2_PLAN_2026-06-12.md`
 Source selection artifact: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/shortpick-v2-rule-selection-artifact-20260612.json`
+H10 paper governance artifact: `output/shortpick-v2-h10-paper-governance-artifact.json`
 Schema: `docs/contracts/registry/schemas/shortpick_v2_paper_tracking_ledger.schema.json`
 
 ## Purpose
@@ -13,7 +14,7 @@ This contract defines the forward `试验田v2` paper-tracking ledger semantics.
 
 The v2 paper ledger answers an account-path question: after a fixed selected v2 rule sees a new signal, what would the constrained cash account buy, skip, hold, and close? It must not reuse or mutate the existing Short Pick Lab v1 paper-tracking ledger. It must not mix v1 candidate forward-return rows with v2 account-level cash, position, and NAV claims.
 
-This is a contract only. It does not write paper-tracking rows, backfill historical replay as true forward tracking, expose backend APIs, add frontend tabs, refresh market data, call models, or start services.
+This is a contract only. It does not write paper-tracking rows, backfill historical replay as true forward tracking, implement backend APIs, add frontend tabs, refresh market data, call models, or start services.
 
 ## Source Artifacts
 
@@ -21,21 +22,26 @@ This is a contract only. It does not write paper-tracking rows, backfill histori
 | --- | --- |
 | Replay artifact | `shortpick_v2_replay_artifact` from Phase 3 |
 | Rule selection artifact | `shortpick_v2_rule_selection_artifact` from Phase 4 |
+| H10 paper governance artifact | `shortpick_v2_h10_paper_governance_artifact` carrying fixed85/fixed80 future-observation eligibility |
 | Selection policy | `shortpick_v2_rule_selection_v2` |
 | Claim ceiling | `research_observation` until true forward tracking has enough evidence |
 
-Only configurations selected by the current governed rule-selection artifact are eligible for v2 forward ledger rows. Under `shortpick_v2_rule_selection_v2`, there are currently no non-baseline paper-tracking candidates because the existing replay results do not clear the market-outperformance and 30% annualized gates.
+Only configurations selected by the current governed rule-selection artifact or an explicitly validated H10 paper-governance overlay are eligible for v2 forward ledger rows. Under the H10 overlay, historical replay remains governance evidence only; it does not count as paper-tracking performance.
+
+H10 paper governance; future true-forward only; fixed90 diagnostic only.
 
 | Ledger role | Config ID | Write policy |
 | --- | --- | --- |
-| Phase 5 contract candidate | None | No non-baseline config is eligible until a later governed selection artifact passes policy v2. |
+| Future observation candidate | `quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1` | Eligible for future true-forward paper rows only after new source rows exist; no historical backfill. |
+| Future observation candidate | `quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1` | Eligible as capital-shadow future observation under the same no-backfill policy. |
+| Diagnostic only | `quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1` | Not eligible for active paper rows without separate turnover and boundary governance. |
 | Baseline/control | `top1_or_skip_v1` | May be tracked as a labeled baseline/control, not as a promoted candidate. |
 | Rejected under policy v2 | `conservative_cash_reserve_60k_top5_v1` | Historical Phase 4 v1 candidate only; not eligible for current v2 paper rows. |
 | Rejected under policy v2 | `fixed_notional_40k_top5_v1` | Historical Phase 4 v1 candidate only; not eligible for current v2 paper rows. |
 | Rejected under policy v2 | `top3_fallback_v1` | Not eligible for current v2 paper rows. |
 | Rejected under policy v2 | `position_cap_utilization_top5_v1` | Not eligible for current v2 paper rows. |
 
-Rejected or historical-candidate configs must not be written as active v2 paper-tracking candidates unless a later governed selection artifact changes the config scope.
+Rejected, diagnostic-only, or historical-candidate configs must not be written as active v2 paper-tracking candidates unless a later governed selection artifact changes the config scope.
 
 ## Qualification Gates
 
@@ -47,6 +53,7 @@ The current selection policy fails closed unless each promoted non-baseline conf
 | Market excess | Strategy total return is strictly above the declared market reference return. |
 | Annualized return | At least 30%. |
 | Existing replay gates | Signal count, trade count, skip ratio, drawdown, invested ratio, turnover, reason-count, and leakage audit gates remain required. |
+| H10 governance overlay | fixed85/fixed80 eligibility must come from the validated paper-governance artifact and must preserve open robustness risks. |
 
 ## Tracking Window
 
@@ -87,6 +94,8 @@ Each v2 paper row represents one selected config's decision for one signal date.
 
 Rows must be deterministic and reconstructable from fixed source artifacts, account state, and market observations available under the declared policy.
 
+H10 fixed85/fixed80 governance readiness is metadata only and does not write paper-tracking rows. The read API may expose this readiness while `record_count = 0`; consumers must not interpret that state as historical paper performance.
+
 ## Required Row Fields
 
 Every row must carry at least:
@@ -108,7 +117,7 @@ V2 paper tracking remains paper research. The ledger and future UI must not clai
 | --- | --- |
 | Evidence basis | `true_forward_tracking` |
 | Claim ceiling | `research_observation` |
-| Selected role label | `phase5_contract_candidate` |
+| Selected role label | `phase5_contract_candidate` or `phase6_forward_observation_candidate` |
 | UI language | Paper/research account-path evidence only |
 
 ## Future Consumer Boundary
@@ -130,7 +139,8 @@ The future writer or projection must fail closed when:
 - a row uses any action outside `buy_primary`, `buy_fallback`, or `skip`;
 - a row attempts delayed or discretionary later-day entry;
 - selected configs do not match the governed Phase 4 selection artifact;
-- the current selection artifact has no non-baseline configs passing market-outperformance and 30% annualized gates;
+- the current selection artifact or validated H10 paper-governance overlay has no non-baseline configs passing market-outperformance and 30% annualized gates;
+- `quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1` is promoted from diagnostic-only to an active paper config;
 - `2026-05-08` alignment is silently shifted;
 - v1 paper-tracking rows are written or mutated as v2 rows;
 - claim labels imply production proof or investment advice.

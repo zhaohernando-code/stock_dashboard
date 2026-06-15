@@ -101,6 +101,11 @@ from ashare_evidence.shortpick_v2_h10_execution_decomposition import (
     build_shortpick_v2_h10_execution_decomposition_artifact,
     write_shortpick_v2_h10_execution_decomposition_artifact,
 )
+from ashare_evidence.shortpick_v2_h10_paper_governance import (
+    build_shortpick_v2_h10_paper_governance_artifact_from_paths,
+    validate_shortpick_v2_h10_paper_governance_artifact,
+    write_shortpick_v2_h10_paper_governance_artifact,
+)
 from ashare_evidence.shortpick_v2_h10_parameter_significance import (
     build_shortpick_v2_h10_parameter_significance_artifact,
     validate_shortpick_v2_h10_parameter_significance_artifact,
@@ -253,6 +258,8 @@ def _should_initialize_database(database_url: str | None) -> bool:
 NO_DB_COMMANDS = {
     "shortpick-governance-credible-control-plan",
     "shortpick-v2-h10-artifact-validate",
+    "shortpick-v2-h10-paper-governance",
+    "shortpick-v2-h10-paper-governance-validate",
     "shortpick-v2-h10-parameter-significance-validate",
     "shortpick-v2-h10-rank-ablation-validate",
 }
@@ -1081,6 +1088,50 @@ def build_parser() -> argparse.ArgumentParser:
         default="docs/contracts/registry/schemas",
     )
 
+    shortpick_v2_h10_paper_governance = subparsers.add_parser(
+        "shortpick-v2-h10-paper-governance",
+        help="Build the h10 quiet paper-governance artifact from validated source artifacts.",
+    )
+    shortpick_v2_h10_paper_governance.add_argument(
+        "--rank-ablation-artifact",
+        required=True,
+    )
+    shortpick_v2_h10_paper_governance.add_argument(
+        "--parameter-significance-artifact",
+        required=True,
+    )
+    shortpick_v2_h10_paper_governance.add_argument(
+        "--robustness-artifact",
+        required=True,
+    )
+    shortpick_v2_h10_paper_governance.add_argument(
+        "--execution-artifact",
+        required=True,
+    )
+    shortpick_v2_h10_paper_governance.add_argument(
+        "--output",
+        default="output/shortpick-v2-h10-paper-governance-artifact.json",
+    )
+    shortpick_v2_h10_paper_governance.add_argument(
+        "--published-artifact",
+        default=None,
+        help="Optional committed docs/archive copy used by runtime publish.",
+    )
+    shortpick_v2_h10_paper_governance.add_argument(
+        "--schema-root",
+        default="docs/contracts/registry/schemas",
+    )
+
+    shortpick_v2_h10_paper_governance_validate = subparsers.add_parser(
+        "shortpick-v2-h10-paper-governance-validate",
+        help="Validate h10 quiet paper-governance artifact structure and governance semantics.",
+    )
+    shortpick_v2_h10_paper_governance_validate.add_argument("--artifact", required=True)
+    shortpick_v2_h10_paper_governance_validate.add_argument(
+        "--schema-root",
+        default="docs/contracts/registry/schemas",
+    )
+
     shortpick_governance_historical_backtest = subparsers.add_parser(
         "shortpick-governance-historical-backtest",
         help="Run Short Pick governance historical-backtest request plans into gated evidence artifacts.",
@@ -1846,6 +1897,47 @@ def main(argv: list[str] | None = None) -> int:
         payload = validate_shortpick_v2_h10_artifacts(
             robustness_artifact_path=args.robustness_artifact,
             execution_artifact_path=args.execution_artifact,
+            schema_root=args.schema_root,
+        )
+        _print_json(payload)
+        return 0 if payload.get("status") == "passed" else 1
+
+    if args.command == "shortpick-v2-h10-paper-governance":
+        payload = build_shortpick_v2_h10_paper_governance_artifact_from_paths(
+            rank_ablation_artifact_path=args.rank_ablation_artifact,
+            parameter_significance_artifact_path=args.parameter_significance_artifact,
+            robustness_artifact_path=args.robustness_artifact,
+            execution_artifact_path=args.execution_artifact,
+        )
+        path = write_shortpick_v2_h10_paper_governance_artifact(payload, output_path=args.output)
+        published_path = None
+        if args.published_artifact:
+            published_path = write_shortpick_v2_h10_paper_governance_artifact(
+                payload,
+                output_path=args.published_artifact,
+            )
+        validation = validate_shortpick_v2_h10_paper_governance_artifact(
+            artifact_path=path,
+            schema_root=args.schema_root,
+        )
+        _print_json(
+            {
+                "status": "ok" if validation.get("status") == "passed" else "failed",
+                "artifact_family": payload.get("artifact_family"),
+                "artifact_id": payload.get("artifact_id"),
+                "output_path": str(path),
+                "published_artifact_path": str(published_path) if published_path else None,
+                "recommendation_status": (payload.get("recommendation") or {}).get("status"),
+                "paper_tracking_status": (payload.get("recommendation") or {}).get("paper_tracking_status"),
+                "validation_status": validation.get("status"),
+                "failed_check_count": validation.get("failed_check_count"),
+            }
+        )
+        return 0 if validation.get("status") == "passed" else 1
+
+    if args.command == "shortpick-v2-h10-paper-governance-validate":
+        payload = validate_shortpick_v2_h10_paper_governance_artifact(
+            artifact_path=args.artifact,
             schema_root=args.schema_root,
         )
         _print_json(payload)

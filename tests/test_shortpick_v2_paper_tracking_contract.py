@@ -6,6 +6,12 @@ from pathlib import Path
 
 import jsonschema
 
+from ashare_evidence.shortpick_v2_h10_paper_governance import (
+    H10_QUIET_CAPITAL_SHADOW_CONFIG_ID,
+    H10_QUIET_CHAMPION_CONFIG_ID,
+    H10_QUIET_DIAGNOSTIC_90K_CONFIG_ID,
+)
+
 SCHEMA_PATH = Path("docs/contracts/registry/schemas/shortpick_v2_paper_tracking_ledger.schema.json")
 CONTRACT_PATH = Path("docs/contracts/SHORTPICK_LAB_V2_PAPER_TRACKING_CONTRACT_2026-06-12.md")
 
@@ -62,6 +68,7 @@ def _base_ledger() -> dict[str, object]:
             "forbidden_signal_actions": ["delay_buy", "later_buy", "retry_buy", "discretionary_buy"],
             "entry_policy": "declared_entry_date_only_fallback_or_skip_no_delayed_entry",
             "source_gap_policy": "record_source_gap_or_not_observed",
+            "ledger_policy": "future_true_forward_only_no_historical_backfill",
         },
         "records": [],
         "summary": {
@@ -142,6 +149,15 @@ def _skip_row() -> dict[str, object]:
     }
 
 
+def _h10_buy_row(config_id: str) -> dict[str, object]:
+    row = _buy_row()
+    row["record_id"] = f"2026-05-08:{config_id}:buy"
+    row["config_id"] = config_id
+    row["config_role"] = "phase6_forward_observation_candidate"
+    row["reason"] = "h10_forward_observation_candidate_executable"
+    return row
+
+
 def test_shortpick_v2_paper_tracking_schema_accepts_empty_contract_ledger() -> None:
     jsonschema.Draft202012Validator(_schema()).validate(_base_ledger())
 
@@ -159,6 +175,51 @@ def test_shortpick_v2_paper_tracking_schema_accepts_buy_and_skip_rows() -> None:
     }
 
     jsonschema.Draft202012Validator(_schema()).validate(ledger)
+
+
+def test_shortpick_v2_paper_tracking_schema_accepts_h10_fixed85_fixed80_candidates() -> None:
+    ledger = _base_ledger()
+    # Schema coverage only: these rows model future true-forward ledger rows, not historical backfill.
+    ledger["source_selection_artifact"]["selected_config_ids"] = [
+        H10_QUIET_CHAMPION_CONFIG_ID,
+        H10_QUIET_CAPITAL_SHADOW_CONFIG_ID,
+    ]
+    ledger["account_contract"]["selected_config_ids"] = [
+        H10_QUIET_CHAMPION_CONFIG_ID,
+        H10_QUIET_CAPITAL_SHADOW_CONFIG_ID,
+    ]
+    ledger["row_contract"]["ledger_policy"] = "future_true_forward_only_no_historical_backfill"
+    ledger["records"] = [
+        _h10_buy_row(H10_QUIET_CHAMPION_CONFIG_ID),
+        _h10_buy_row(H10_QUIET_CAPITAL_SHADOW_CONFIG_ID),
+    ]
+    ledger["summary"] = {
+        "record_count": 2,
+        "buy_count": 2,
+        "skip_count": 0,
+        "source_gap_count": 0,
+        "open_position_count": 2,
+        "closed_position_count": 0,
+    }
+
+    jsonschema.Draft202012Validator(_schema()).validate(ledger)
+
+
+def test_shortpick_v2_paper_tracking_schema_rejects_h10_fixed90_active_row() -> None:
+    ledger = _base_ledger()
+    ledger["records"] = [_h10_buy_row(H10_QUIET_DIAGNOSTIC_90K_CONFIG_ID)]
+    ledger["summary"] = {
+        "record_count": 1,
+        "buy_count": 1,
+        "skip_count": 0,
+        "source_gap_count": 0,
+        "open_position_count": 1,
+        "closed_position_count": 0,
+    }
+
+    errors = list(jsonschema.Draft202012Validator(_schema()).iter_errors(ledger))
+    assert errors
+    assert any(H10_QUIET_DIAGNOSTIC_90K_CONFIG_ID in str(error.message) for error in errors)
 
 
 def test_shortpick_v2_paper_tracking_schema_rejects_delayed_entry_action() -> None:
@@ -198,6 +259,10 @@ def test_shortpick_v2_paper_tracking_contract_contains_required_boundaries() -> 
     assert "conservative_cash_reserve_60k_top5_v1" in body
     assert "fixed_notional_40k_top5_v1" in body
     assert "top1_or_skip_v1" in body
+    assert H10_QUIET_CHAMPION_CONFIG_ID in body
+    assert H10_QUIET_CAPITAL_SHADOW_CONFIG_ID in body
+    assert H10_QUIET_DIAGNOSTIC_90K_CONFIG_ID in body
+    assert "H10 paper governance; future true-forward only; fixed90 diagnostic only." in body
     assert "No delayed-entry action is allowed." in body
     assert "does not write paper-tracking rows" in body
     assert "backend APIs" in body

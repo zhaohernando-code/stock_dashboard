@@ -126,7 +126,9 @@
               "top3_fallback_v1",
               "conservative_cash_reserve_60k_top5_v1",
               "position_cap_utilization_top5_v1",
-              "fixed_notional_40k_top5_v1"
+              "fixed_notional_40k_top5_v1",
+              "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+              "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1"
             ]
           },
           "uniqueItems": true
@@ -147,7 +149,9 @@
               "top3_fallback_v1",
               "conservative_cash_reserve_60k_top5_v1",
               "position_cap_utilization_top5_v1",
-              "fixed_notional_40k_top5_v1"
+              "fixed_notional_40k_top5_v1",
+              "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+              "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1"
             ]
           },
           "uniqueItems": true
@@ -160,7 +164,9 @@
               "top3_fallback_v1",
               "conservative_cash_reserve_60k_top5_v1",
               "position_cap_utilization_top5_v1",
-              "fixed_notional_40k_top5_v1"
+              "fixed_notional_40k_top5_v1",
+              "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+              "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1"
             ]
           },
           "uniqueItems": true
@@ -229,7 +235,9 @@
               "top3_fallback_v1",
               "conservative_cash_reserve_60k_top5_v1",
               "position_cap_utilization_top5_v1",
-              "fixed_notional_40k_top5_v1"
+              "fixed_notional_40k_top5_v1",
+              "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+              "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1"
             ]
           },
           "uniqueItems": true
@@ -241,6 +249,9 @@
             "enum": ["top1_or_skip_v1"]
           },
           "uniqueItems": true
+        },
+        "selection_policy": {
+          "const": "shortpick_v2_rule_selection_v2"
         }
       }
     },
@@ -251,7 +262,8 @@
         "allowed_signal_actions",
         "forbidden_signal_actions",
         "entry_policy",
-        "source_gap_policy"
+        "source_gap_policy",
+        "ledger_policy"
       ],
       "properties": {
         "allowed_signal_actions": {
@@ -277,6 +289,9 @@
         },
         "source_gap_policy": {
           "const": "record_source_gap_or_not_observed"
+        },
+        "ledger_policy": {
+          "const": "future_true_forward_only_no_historical_backfill"
         }
       }
     },
@@ -319,12 +334,14 @@
             "fixed_notional_40k_top5_v1",
             "top3_fallback_v1",
             "position_cap_utilization_top5_v1",
-            "top1_or_skip_v1"
+            "top1_or_skip_v1",
+            "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+            "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1"
           ]
         },
         "config_role": {
           "type": "string",
-          "enum": ["phase5_contract_candidate", "baseline_control"]
+          "enum": ["phase5_contract_candidate", "phase6_forward_observation_candidate", "baseline_control"]
         },
         "signal_date": {
           "type": "string",

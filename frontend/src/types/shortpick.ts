@@ -626,6 +626,7 @@ export interface ShortpickV2PaperTrackingResponse {
   row_contract: Record<string, unknown>;
   selected_configs: ShortpickV2ConfigReadout[];
   baseline_configs: ShortpickV2ConfigReadout[];
+  paper_governance: Record<string, unknown>;
   records: Record<string, unknown>[];
   summary: Record<string, unknown>;
   leakage_audit: Record<string, unknown>;

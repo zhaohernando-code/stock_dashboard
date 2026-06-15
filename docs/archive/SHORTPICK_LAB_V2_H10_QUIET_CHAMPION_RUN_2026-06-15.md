@@ -69,7 +69,11 @@ Interpretation:
 
 Acceptance marker: Benchmark-focused robustness; 90k diagnostic only; Prohibited directions
 
-W-003 and W-004 reran the robustness path with fixed85/fixed80 as first-class benchmark rows and validated the resulting runtime artifacts:
+H10 paper governance marker: H10 paper governance; future true-forward only; fixed90 diagnostic only
+
+This marker records the current disposition: fixed85/fixed80 are future true-forward observation candidates only, historical replay rows are not paper-tracking evidence, and fixed90 remains diagnostic-only.
+
+The benchmark-focused robustness path was run with fixed85/fixed80 as first-class benchmark rows and validated the resulting runtime artifacts:
 
 - Benchmark robustness artifact: `output/shortpick-v2-h10-quiet-benchmark-robustness-artifact.json`.
 - Execution decomposition artifact: `output/shortpick-v2-h10-quiet-execution-decomposition-artifact.json`.

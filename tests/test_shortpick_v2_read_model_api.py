@@ -4,11 +4,30 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from ashare_evidence.api import create_app
 from ashare_evidence.db import init_database
+from ashare_evidence.shortpick_v2_h10_paper_governance import (
+    ENTRY_POLICY,
+    FIXED90_POLICY,
+    FORWARD_OBSERVATION_DISPOSITION,
+    H10_QUIET_CAPITAL_SHADOW_CONFIG_ID,
+    H10_QUIET_CHAMPION_CONFIG_ID,
+    H10_QUIET_DIAGNOSTIC_90K_CONFIG_ID,
+    H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS,
+    LEDGER_POLICY,
+    MIN_ANNUALIZED_RETURN,
+    NO_DELAYED_BUY_POLICY,
+    PAPER_TRACKING_STATUS,
+    PRIOR_NO_PROMOTION_DECISION,
+    RECOMMENDATION_STATUS,
+    RISK_FLAG_DISPOSITION,
+    SHORTPICK_V2_H10_PAPER_GOVERNANCE_ARTIFACT_FAMILY,
+)
 from ashare_evidence.shortpick_v2_read_model import (
+    SHORTPICK_V2_H10_PAPER_GOVERNANCE_ARTIFACT_ENV,
     SHORTPICK_V2_PAPER_TRACKING_LEDGER_ARTIFACT_ENV,
     SHORTPICK_V2_REPLAY_ARTIFACT_ENV,
     SHORTPICK_V2_RULE_SELECTION_ARTIFACT_ENV,
@@ -243,7 +262,280 @@ def _write_v2_artifacts(
     monkeypatch.setenv(SHORTPICK_V2_REPLAY_ARTIFACT_ENV, str(replay_path))
     monkeypatch.setenv(SHORTPICK_V2_RULE_SELECTION_ARTIFACT_ENV, str(selection_path))
     monkeypatch.setenv(SHORTPICK_V2_PAPER_TRACKING_LEDGER_ARTIFACT_ENV, str(missing_ledger_path))
+    monkeypatch.setenv(
+        SHORTPICK_V2_H10_PAPER_GOVERNANCE_ARTIFACT_ENV,
+        str(tmp_path / "missing-h10-paper-governance.json"),
+    )
     return replay_path, selection_path, missing_ledger_path
+
+
+def _write_h10_paper_governance_artifact(tmp_path: Path, monkeypatch) -> Path:
+    governance_path = tmp_path / "shortpick-v2-h10-paper-governance.json"
+    governance_path.write_text(
+        json.dumps(_h10_paper_governance_artifact(), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv(SHORTPICK_V2_H10_PAPER_GOVERNANCE_ARTIFACT_ENV, str(governance_path))
+    return governance_path
+
+
+def _h10_paper_governance_artifact() -> dict[str, object]:
+    return {
+        "artifact_family": SHORTPICK_V2_H10_PAPER_GOVERNANCE_ARTIFACT_FAMILY,
+        "schema_version": "v1",
+        "artifact_id": "shortpick_v2_h10_paper_governance:test",
+        "generated_at": "2026-06-15T00:00:00+00:00",
+        "status": "ready",
+        "claim_ceiling": "research_observation",
+        "evidence_basis": "historical_governance_evidence_future_true_forward_observation_only",
+        "source_plan_ref": "plans/active/plan-20260615-h10-paper-governance.md",
+        "source_artifacts": {
+            "rank_ablation": _source_ref("shortpick_v2_h10_rank_ablation_artifact"),
+            "parameter_significance": _source_ref("shortpick_v2_h10_parameter_significance_artifact"),
+            "robustness": _source_ref("shortpick_v2_h10_robustness_artifact"),
+            "execution_decomposition": _source_ref("shortpick_v2_h10_execution_decomposition_artifact"),
+        },
+        "analysis_scope": {
+            "horizon_days": 10,
+            "initial_cash": 200_000.0,
+            "signal_date_from": "2023-04-13",
+            "signal_date_to": "2026-05-08",
+            "paper_tracking_start_date": "2026-05-08",
+            "primary_config_id": H10_QUIET_CHAMPION_CONFIG_ID,
+            "capital_shadow_config_id": H10_QUIET_CAPITAL_SHADOW_CONFIG_ID,
+            "diagnostic_config_ids": [H10_QUIET_DIAGNOSTIC_90K_CONFIG_ID],
+        },
+        "governance_policy": {
+            "ledger_policy": LEDGER_POLICY,
+            "entry_policy": ENTRY_POLICY,
+            "no_delayed_buy_policy": NO_DELAYED_BUY_POLICY,
+            "fixed90_policy": FIXED90_POLICY,
+            "qualification_floor": {
+                "min_annualized_return": MIN_ANNUALIZED_RETURN,
+                "must_beat_market": True,
+            },
+            "claim_policy": "historical_replay_is_not_true_forward_paper_performance",
+        },
+        "source_validation": {
+            "overall_status": "passed",
+            "rank_ablation": {"status": "passed", "rank2_support_label": "supported"},
+            "parameter_significance": {"status": "passed", "failed_check_count": 0},
+            "robustness": {
+                "status": "passed",
+                "recommendation_status": "not_ready_for_paper_tracking",
+                "risk_flag_count": 1,
+                "high_risk_flag_count": 1,
+            },
+            "execution_decomposition": {"status": "passed", "missing_config_ids": []},
+        },
+        "source_disposition": {
+            "prior_decision": PRIOR_NO_PROMOTION_DECISION,
+            "robustness_recommendation_status": "not_ready_for_paper_tracking",
+            "risk_flag_count": 1,
+            "high_risk_flag_count": 1,
+            "risk_flag_disposition": RISK_FLAG_DISPOSITION,
+            "governance_disposition": FORWARD_OBSERVATION_DISPOSITION,
+        },
+        "candidate_configs": [
+            _h10_candidate_config(
+                H10_QUIET_CHAMPION_CONFIG_ID,
+                "primary_future_observation_candidate",
+                annualized_return=0.5396,
+            ),
+            _h10_candidate_config(
+                H10_QUIET_CAPITAL_SHADOW_CONFIG_ID,
+                "capital_shadow_future_observation_candidate",
+                annualized_return=0.5203,
+            ),
+        ],
+        "diagnostic_configs": [
+            {
+                "config_id": H10_QUIET_DIAGNOSTIC_90K_CONFIG_ID,
+                "role": "diagnostic_boundary",
+                "diagnostic_only": True,
+                "paper_tracking_eligible": False,
+                "blocked_reason": FIXED90_POLICY,
+                "target_notional": 90_000.0,
+            }
+        ],
+        "ledger_contract_overlay": {
+            "selected_config_ids": list(H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS),
+            "diagnostic_rejected_config_ids": [H10_QUIET_DIAGNOSTIC_90K_CONFIG_ID],
+            "allowed_signal_actions": ["buy_primary", "buy_fallback", "skip"],
+            "forbidden_signal_actions": ["delay_buy", "later_buy", "retry_buy", "discretionary_buy"],
+            "entry_policy": ENTRY_POLICY,
+            "ledger_policy": LEDGER_POLICY,
+            "paper_tracking_start_date": "2026-05-08",
+            "record_backfill_allowed": False,
+            "current_true_forward_record_count": 0,
+            "row_evidence_basis": "future_true_forward_paper_tracking_only",
+        },
+        "recommendation": {
+            "status": RECOMMENDATION_STATUS,
+            "paper_tracking_status": PAPER_TRACKING_STATUS,
+            "notes": ["Future observation only; no true-forward rows yet."],
+        },
+        "leakage_audit": {
+            "status": "passed",
+            "no_historical_paper_row_backfill": True,
+            "no_delayed_buy_action": True,
+            "no_fixed90_promotion": True,
+            "no_database_write_or_refresh": True,
+            "no_investment_or_production_claim": True,
+        },
+        "event_refs": ["shortpick_v2.h10_paper_governance.test"],
+    }
+
+
+def _source_ref(artifact_family: str) -> dict[str, object]:
+    return {
+        "artifact_id": f"{artifact_family}:test",
+        "artifact_family": artifact_family,
+        "schema_version": "v1",
+        "status": "ready",
+        "claim_ceiling": "research_observation",
+        "evidence_basis": "historical_test_fixture",
+        "path": f"{artifact_family}.json",
+    }
+
+
+def _h10_candidate_config(config_id: str, role: str, *, annualized_return: float) -> dict[str, object]:
+    summary = {
+        "total_return": 2.7,
+        "annualized_return": annualized_return,
+        "market_reference_total_return": 0.418,
+        "market_excess_total_return": 2.282,
+        "max_drawdown": -0.119,
+        "trade_count": 190,
+        "turnover": 76.67,
+        "skipped_ratio": 0.7365,
+    }
+    return {
+        "config_id": config_id,
+        "role": role,
+        "source_role": "benchmark_control",
+        "eligibility_status": "future_true_forward_observation_candidate_only",
+        "paper_tracking_performance_claim": False,
+        "current_true_forward_record_count": 0,
+        "summary": summary,
+        "qualification_checks": {
+            "passed": True,
+            "min_annualized_return": MIN_ANNUALIZED_RETURN,
+            "annualized_return": annualized_return,
+            "annualized_return_meets_floor": True,
+            "market_excess_total_return": summary["market_excess_total_return"],
+            "beats_market": True,
+        },
+    }
+
+
+def _source_selection_artifact_ref(
+    selection_path: Path,
+    *,
+    selected_config_ids: list[str] | None = None,
+) -> dict[str, object]:
+    selection = json.loads(selection_path.read_text(encoding="utf-8"))
+    return {
+        "artifact_id": selection["artifact_id"],
+        "artifact_family": "shortpick_v2_rule_selection_artifact",
+        "schema_version": "v1",
+        "path": str(selection_path),
+        "selected_config_ids": selected_config_ids
+        if selected_config_ids is not None
+        else [str(row["config_id"]) for row in selection.get("selected_configs", [])],
+        "baseline_config_ids": [str(row["config_id"]) for row in selection.get("baseline_configs", [])],
+        "holdout_config_ids": [str(row["config_id"]) for row in selection.get("holdout_configs", [])],
+        "rejected_config_ids": [str(row["config_id"]) for row in selection.get("rejected_configs", [])],
+        "claim_ceiling": "research_observation",
+    }
+
+
+def _valid_v2_paper_ledger(selection_path: Path) -> dict[str, object]:
+    return {
+        "artifact_family": "shortpick_v2_paper_tracking_ledger",
+        "schema_version": "v1",
+        "ledger_id": "shortpick_v2_paper_tracking_ledger:test",
+        "generated_at": "2026-06-12T10:00:00+00:00",
+        "status": "active",
+        "claim_ceiling": "research_observation",
+        "evidence_basis": "true_forward_tracking",
+        "source_contract_ref": "docs/contracts/SHORTPICK_LAB_V2_PAPER_TRACKING_CONTRACT_2026-06-12.md",
+        "source_selection_artifact": _source_selection_artifact_ref(selection_path),
+        "tracking_window": {
+            "start_date": "2026-05-08",
+            "start_policy": "v1_aligned_forward_window",
+            "source_gap_policy": "record_source_gap_or_not_observed_without_shifting_start_date",
+            "backfill_policy": "historical_replay_rows_must_not_be_backfilled_as_true_forward_tracking",
+        },
+        "account_contract": {
+            "initial_cash": 200000,
+            "currency": "CNY",
+            "board_lot_size": 100,
+            "account_profile": "new_retail_cash_account",
+            "selected_config_ids": [
+                "conservative_cash_reserve_60k_top5_v1",
+                "fixed_notional_40k_top5_v1",
+            ],
+            "baseline_config_ids": ["top1_or_skip_v1"],
+            "selection_policy": "shortpick_v2_rule_selection_v2",
+        },
+        "row_contract": {
+            "allowed_signal_actions": ["buy_primary", "buy_fallback", "skip"],
+            "forbidden_signal_actions": ["delay_buy", "later_buy", "retry_buy", "discretionary_buy"],
+            "entry_policy": "declared_entry_date_only_fallback_or_skip_no_delayed_entry",
+            "source_gap_policy": "record_source_gap_or_not_observed",
+            "ledger_policy": "future_true_forward_only_no_historical_backfill",
+        },
+        "records": [_valid_v2_paper_record()],
+        "summary": {
+            "record_count": 1,
+            "buy_count": 1,
+            "skip_count": 0,
+            "source_gap_count": 0,
+            "open_position_count": 1,
+            "closed_position_count": 0,
+        },
+        "leakage_audit": {
+            "status": "passed",
+            "source_selection_artifact_required": True,
+            "used_only_signal_day_or_earlier_data": True,
+            "notes": ["Fixture ledger follows the public v2 paper-tracking JSON schema."],
+        },
+        "research_labeling": {
+            "claim_ceiling": "research_observation",
+            "evidence_basis": "true_forward_tracking",
+            "prohibited_claims": ["production_ready", "investment_advice", "automated_trading"],
+            "notes": ["V2 paper tracking is paper research only."],
+        },
+        "event_refs": ["shortpick_v2.phase6.test_ledger"],
+    }
+
+
+def _valid_v2_paper_record() -> dict[str, object]:
+    return {
+        "record_id": "shortpick_v2:test:2026-05-08:conservative",
+        "config_id": "conservative_cash_reserve_60k_top5_v1",
+        "config_role": "phase5_contract_candidate",
+        "signal_date": "2026-05-08",
+        "decision_date": "2026-05-08",
+        "decision_action": "buy_primary",
+        "reason": "bought_primary",
+        "selected_rank": 1,
+        "symbol": "601988.SH",
+        "source_state": "observed",
+        "entry_trade_date": "2026-05-11",
+        "entry_price_source": "next_close",
+        "quantity": 9600,
+        "board_lot_size": 100,
+        "cash_before": 200000,
+        "cash_after": 160080.32,
+        "position_state": "open",
+        "evidence_basis": "true_forward_tracking",
+        "validation_status": "open",
+        "exit_trade_date": None,
+        "exit_reason": None,
+        "notes": [],
+    }
 
 
 def test_shortpick_v2_historical_replay_read_model_uses_selected_precomputed_artifacts(
@@ -291,77 +583,34 @@ def test_shortpick_v2_paper_tracking_returns_contract_ready_empty_projection(
     assert "delay_buy" in payload["row_contract"]["forbidden_signal_actions"]
 
 
+def test_shortpick_v2_paper_tracking_projects_h10_governance_without_backfilled_records(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _write_v2_artifacts(tmp_path, monkeypatch)
+    governance_path = _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
+
+    payload = build_shortpick_v2_paper_tracking_read_model(include_records=True)
+
+    assert payload["status"] == "contract_ready"
+    assert payload["current_status"] == RECOMMENDATION_STATUS
+    assert payload["records"] == []
+    assert [row["config_id"] for row in payload["selected_configs"]] == list(H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS)
+    assert payload["summary"]["record_count"] == 0
+    assert payload["summary"]["paper_tracking_status"] == PAPER_TRACKING_STATUS
+    assert payload["paper_governance"]["selected_config_ids"] == list(H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS)
+    assert payload["paper_governance"]["diagnostic_rejected_config_ids"] == [H10_QUIET_DIAGNOSTIC_90K_CONFIG_ID]
+    assert payload["paper_governance"]["current_true_forward_record_count"] == 0
+    assert payload["source_artifacts"]["paper_governance"]["path"] == str(governance_path)
+    assert "历史回放不计为纸面追踪收益" in payload["data_disclaimer"]
+
+
 def test_shortpick_v2_paper_tracking_reads_existing_v2_ledger_artifact(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _, _, ledger_path = _write_v2_artifacts(tmp_path, monkeypatch, replay=_qualified_replay_artifact())
-    ledger = {
-        "artifact_family": "shortpick_v2_paper_tracking_ledger",
-        "schema_version": "v1",
-        "ledger_id": "shortpick_v2_paper_tracking_ledger:test",
-        "generated_at": "2026-06-12T10:00:00+00:00",
-        "status": "active",
-        "claim_ceiling": "research_observation",
-        "evidence_basis": "true_forward_tracking",
-        "source_contract_ref": "docs/contracts/SHORTPICK_LAB_V2_PAPER_TRACKING_CONTRACT_2026-06-12.md",
-        "tracking_window": {
-            "start_date": "2026-05-08",
-            "start_policy": "v1_aligned_forward_window",
-            "source_gap_policy": "record_source_gap_or_not_observed_without_shifting_start_date",
-            "backfill_policy": "historical_replay_rows_must_not_be_backfilled_as_true_forward_tracking",
-        },
-        "account_contract": {
-            "initial_cash": 200000,
-            "currency": "CNY",
-            "board_lot_size": 100,
-            "selected_config_ids": [
-                "conservative_cash_reserve_60k_top5_v1",
-                "fixed_notional_40k_top5_v1",
-            ],
-            "baseline_config_ids": ["top1_or_skip_v1"],
-        },
-        "row_contract": {
-            "allowed_signal_actions": ["buy_primary", "buy_fallback", "skip"],
-            "forbidden_signal_actions": ["delay_buy", "later_buy", "retry_buy", "discretionary_buy"],
-            "entry_policy": "no_delayed_entry_choose_declared_day_fallback_or_skip",
-        },
-        "records": [
-            {
-                "record_id": "shortpick_v2:test:2026-05-08:conservative",
-                "config_id": "conservative_cash_reserve_60k_top5_v1",
-                "config_role": "phase5_contract_candidate",
-                "signal_date": "2026-05-08",
-                "decision_date": "2026-05-08",
-                "decision_action": "buy_primary",
-                "reason": "bought_primary",
-                "selected_rank": 1,
-                "symbol": "601988.SH",
-                "source_state": "observed",
-                "entry_trade_date": "2026-05-11",
-                "entry_price_source": "next_close",
-                "quantity": 9600,
-                "board_lot_size": 100,
-                "cash_before": 200000,
-                "cash_after": 160080.32,
-                "position_state": "open",
-                "evidence_basis": "true_forward_tracking",
-                "validation_status": "tracking",
-                "exit_trade_date": None,
-                "exit_reason": None,
-                "notes": [],
-            }
-        ],
-        "summary": {"record_count": 1, "buy_count": 1, "skip_count": 0, "source_gap_count": 0},
-        "leakage_audit": {"status": "passed"},
-        "research_labeling": {
-            "claim_ceiling": "research_observation",
-            "evidence_basis": "true_forward_tracking",
-            "ui_language": "试验田v2纸面追踪仅展示账户路径纸面研究证据。",
-            "data_disclaimer": "纸面研究观察，不构成投资建议。",
-        },
-        "event_refs": ["shortpick_v2.phase6.test_ledger"],
-    }
+    _, selection_path, ledger_path = _write_v2_artifacts(tmp_path, monkeypatch, replay=_qualified_replay_artifact())
+    ledger = _valid_v2_paper_ledger(selection_path)
     ledger_path.write_text(json.dumps(ledger, ensure_ascii=False), encoding="utf-8")
 
     payload = build_shortpick_v2_paper_tracking_read_model(include_records=True)
@@ -372,6 +621,34 @@ def test_shortpick_v2_paper_tracking_reads_existing_v2_ledger_artifact(
     assert payload["summary"]["record_count"] == 1
     assert payload["records"][0]["decision_action"] == "buy_primary"
     assert payload["records"][0]["evidence_basis"] == "true_forward_tracking"
+
+
+def test_shortpick_v2_paper_tracking_rejects_h10_fixed90_active_ledger_config(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, selection_path, ledger_path = _write_v2_artifacts(tmp_path, monkeypatch, replay=_qualified_replay_artifact())
+    _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
+    ledger = _valid_v2_paper_ledger(selection_path)
+    ledger["account_contract"]["selected_config_ids"] = [H10_QUIET_DIAGNOSTIC_90K_CONFIG_ID]
+    ledger["records"][0]["config_id"] = H10_QUIET_DIAGNOSTIC_90K_CONFIG_ID
+    ledger_path.write_text(json.dumps(ledger, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="fixed90"):
+        build_shortpick_v2_paper_tracking_read_model(include_records=True)
+
+
+def test_shortpick_v2_paper_tracking_rejects_delayed_entry_action_in_read_model(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, selection_path, ledger_path = _write_v2_artifacts(tmp_path, monkeypatch, replay=_qualified_replay_artifact())
+    ledger = _valid_v2_paper_ledger(selection_path)
+    ledger["records"][0]["decision_action"] = "delay_buy"
+    ledger_path.write_text(json.dumps(ledger, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="delay_buy"):
+        build_shortpick_v2_paper_tracking_read_model(include_records=True)
 
 
 def test_shortpick_v2_read_api_routes_return_v2_payloads(tmp_path: Path, monkeypatch) -> None:
@@ -390,6 +667,28 @@ def test_shortpick_v2_read_api_routes_return_v2_payloads(tmp_path: Path, monkeyp
     assert paper_response.status_code == 200
     assert paper_response.json()["status"] == "blocked"
     assert paper_response.json()["summary"]["record_count"] == 0
+
+
+def test_shortpick_v2_read_api_preserves_h10_paper_governance_projection(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _write_v2_artifacts(tmp_path, monkeypatch)
+    _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
+    database_path = tmp_path / "api.db"
+    database_url = f"sqlite:///{database_path}"
+    init_database(database_url)
+
+    client = TestClient(create_app(database_url, enable_background_ops_tick=False))
+    response = client.get("/shortpick-lab-v2/paper-tracking/summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "contract_ready"
+    assert body["summary"]["record_count"] == 0
+    assert body["records"] == []
+    assert body["paper_governance"]["selected_config_ids"] == list(H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS)
+    assert body["paper_governance"]["paper_tracking_status"] == PAPER_TRACKING_STATUS
 
 
 def test_shortpick_v2_read_api_fails_closed_when_required_artifact_is_missing(
