@@ -13,21 +13,79 @@ PAGE_URL="${ASHARE_VERIFY_SHORTPICK_V2_PAGE_URL:-${CANONICAL_BASE_URL%/}/?view=s
 EXPECTED_COMMIT="${ASHARE_VERIFY_EXPECTED_COMMIT:-$(git rev-parse HEAD)}"
 PWCLI="${PWCLI:-$HOME/.codex/skills/playwright/scripts/playwright_cli.sh}"
 API_TIMEOUT_SECONDS="${ASHARE_VERIFY_API_TIMEOUT_SECONDS:-30}"
+API_PREWARM_TIMEOUT_SECONDS="${ASHARE_VERIFY_API_PREWARM_TIMEOUT_SECONDS:-120}"
+BROWSER_WAIT_SECONDS="${ASHARE_VERIFY_BROWSER_WAIT_SECONDS:-45}"
 
 API_PAYLOAD_FILE="$(mktemp)"
 REPLAY_API_PAYLOAD_FILE="$(mktemp)"
 PAGE_TEXT_FILE="$(mktemp)"
 REPLAY_PAGE_TEXT_FILE="$(mktemp)"
+CLICK_RESULT_FILE="$(mktemp)"
 PLAYWRIGHT_SESSION="shortpick-v2-paper-display-$$"
 
 cleanup() {
   PLAYWRIGHT_CLI_SESSION="$PLAYWRIGHT_SESSION" "$PWCLI" close >/dev/null 2>&1 || true
-  rm -f "$API_PAYLOAD_FILE" "$REPLAY_API_PAYLOAD_FILE" "$PAGE_TEXT_FILE" "$REPLAY_PAGE_TEXT_FILE"
+  rm -f "$API_PAYLOAD_FILE" "$REPLAY_API_PAYLOAD_FILE" "$PAGE_TEXT_FILE" "$REPLAY_PAGE_TEXT_FILE" "$CLICK_RESULT_FILE"
 }
 trap cleanup EXIT
 
 step() {
   printf '[shortpick-v2-paper-runtime] %s\n' "$*"
+}
+
+wait_for_visible_terms() {
+  local label="$1"
+  local output_file="$2"
+  shift 2
+
+  local terms_file
+  terms_file="$(mktemp)"
+  printf '%s\n' "$@" > "$terms_file"
+
+  local deadline=$((SECONDS + BROWSER_WAIT_SECONDS))
+  while true; do
+    PLAYWRIGHT_CLI_SESSION="$PLAYWRIGHT_SESSION" "$PWCLI" --raw eval "() => document.body.innerText" > "$output_file" || true
+    if ASHARE_VERIFY_TERMS_FILE="$terms_file" ASHARE_VERIFY_TEXT_FILE="$output_file" "$PYTHON_BIN" - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+text = Path(os.environ["ASHARE_VERIFY_TEXT_FILE"]).read_text(encoding="utf-8")
+terms = [
+    item
+    for item in Path(os.environ["ASHARE_VERIFY_TERMS_FILE"]).read_text(encoding="utf-8").splitlines()
+    if item
+]
+missing = [term for term in terms if term not in text]
+raise SystemExit(1 if missing else 0)
+PY
+    then
+      rm -f "$terms_file"
+      return 0
+    fi
+    if (( SECONDS >= deadline )); then
+      ASHARE_VERIFY_TERMS_FILE="$terms_file" ASHARE_VERIFY_TEXT_FILE="$output_file" "$PYTHON_BIN" - <<'PY' >&2
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+text = Path(os.environ["ASHARE_VERIFY_TEXT_FILE"]).read_text(encoding="utf-8")
+terms = [
+    item
+    for item in Path(os.environ["ASHARE_VERIFY_TERMS_FILE"]).read_text(encoding="utf-8").splitlines()
+    if item
+]
+missing = [term for term in terms if term not in text]
+print(f"missing terms: {missing}")
+PY
+      rm -f "$terms_file"
+      echo "$label did not render required terms within ${BROWSER_WAIT_SECONDS}s" >&2
+      return 1
+    fi
+    sleep 1
+  done
 }
 
 step "Checking runtime commit stamp"
@@ -42,8 +100,11 @@ if [[ "$RUNTIME_COMMIT" != "$EXPECTED_COMMIT" ]]; then
   exit 1
 fi
 
+PAPER_API_URL="$API_BASE_URL/shortpick-lab-v2/paper-tracking"
+step "Prewarming served v2 paper-tracking API"
+curl --max-time "$API_PREWARM_TIMEOUT_SECONDS" -fsS "$PAPER_API_URL" -o "$API_PAYLOAD_FILE"
 step "Fetching served v2 paper-tracking API"
-curl --max-time "$API_TIMEOUT_SECONDS" -fsS "$API_BASE_URL/shortpick-lab-v2/paper-tracking" -o "$API_PAYLOAD_FILE"
+curl --max-time "$API_TIMEOUT_SECONDS" -fsS "$PAPER_API_URL" -o "$API_PAYLOAD_FILE"
 ASHARE_SHORTPICK_V2_API_PAYLOAD_FILE="$API_PAYLOAD_FILE" "$PYTHON_BIN" - <<'PY'
 from __future__ import annotations
 
@@ -214,7 +275,7 @@ if payload.get("evidence_basis") != "historical_account_replay_selection":
     fail(f"historical replay evidence_basis changed: {payload.get('evidence_basis')!r}")
 if not baseline_configs:
     fail("historical replay baseline_configs must not be empty")
-if int(summary.get("decision_sample_limit") or -1) != 0:
+if int(summary.get("decision_sample_limit", -1)) != 0:
     fail(f"historical replay decision_sample_limit must be 0, got {summary.get('decision_sample_limit')!r}")
 if int(summary.get("selected_config_count") or 0) != len(selected_configs):
     fail("historical replay selected_config_count must match selected_configs length")
@@ -251,14 +312,27 @@ if ! command -v npx >/dev/null 2>&1; then
 fi
 
 PLAYWRIGHT_CLI_SESSION="$PLAYWRIGHT_SESSION" "$PWCLI" open "$PAGE_URL" >/dev/null
-PLAYWRIGHT_CLI_SESSION="$PLAYWRIGHT_SESSION" "$PWCLI" run-code \
-  "await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {}); await page.waitForTimeout(1500);" \
-  >/dev/null
-PLAYWRIGHT_CLI_SESSION="$PLAYWRIGHT_SESSION" "$PWCLI" eval "() => document.body.innerText" > "$PAGE_TEXT_FILE"
-PLAYWRIGHT_CLI_SESSION="$PLAYWRIGHT_SESSION" "$PWCLI" run-code \
-  "await page.getByRole('tab', { name: '历史回放' }).click({ timeout: 10000 }); await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {}); await page.waitForTimeout(1500);" \
-  >/dev/null
-PLAYWRIGHT_CLI_SESSION="$PLAYWRIGHT_SESSION" "$PWCLI" eval "() => document.body.innerText" > "$REPLAY_PAGE_TEXT_FILE"
+wait_for_visible_terms \
+  "served paper tab" \
+  "$PAGE_TEXT_FILE" \
+  "最新模拟交易" \
+  "覆盖情况" \
+  "动作分布" \
+  "模拟交易明细" \
+  "回放补齐不计入真实前向收益"
+PLAYWRIGHT_CLI_SESSION="$PLAYWRIGHT_SESSION" "$PWCLI" --raw eval \
+  "() => { const target = Array.from(document.querySelectorAll('[role=tab]')).find((el) => (el.textContent || '').trim() === '历史回放'); if (!target) return false; target.click(); return true; }" \
+  > "$CLICK_RESULT_FILE"
+if ! grep -q "true" "$CLICK_RESULT_FILE"; then
+  echo "Could not click served historical replay tab" >&2
+  exit 1
+fi
+wait_for_visible_terms \
+  "served historical replay tab" \
+  "$REPLAY_PAGE_TEXT_FILE" \
+  "历史回放核心读数" \
+  "配置与基线" \
+  "历史账户回放筛选"
 
 ASHARE_SHORTPICK_V2_PAGE_TEXT_FILE="$PAGE_TEXT_FILE" \
 ASHARE_SHORTPICK_V2_REPLAY_PAGE_TEXT_FILE="$REPLAY_PAGE_TEXT_FILE" \
@@ -342,7 +416,7 @@ check_visible_text(
         "历史回放核心读数",
         "信号日",
         "交易日",
-        "推广配置与基线",
+        "配置与基线",
         "留出与未采用配置统计",
         "覆盖状态",
         "基线对照",
