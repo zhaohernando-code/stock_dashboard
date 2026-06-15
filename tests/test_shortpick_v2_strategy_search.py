@@ -36,6 +36,7 @@ from ashare_evidence.shortpick_v2_strategy_search import (
     build_shortpick_v2_strategy_search_artifact_from_series,
     _h10_ma_accel_candidate_allows,
     _h10_ma_accel_score,
+    _h10_quiet_source_symbols,
     _rule_configs_for_source,
 )
 
@@ -727,6 +728,45 @@ def test_h10_quiet_champion_strategy_search_candidate_sources_include_expected_b
         "low_turnover_20d_uptrend_liquid_top120",
         *H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS,
     ]
+
+
+def test_h10_quiet_champion_rank_ablation_sources_select_same_gate_positions() -> None:
+    base_symbols = ["600001.SH", "600002.SH", "600003.SH", "600004.SH", "600005.SH"]
+    regime_features = {"pool_ret1_mean": 0.11}
+    signal_day = date(2025, 1, 6)
+
+    assert _h10_quiet_source_symbols(
+        "quiet_breakout_rank1_poolhot10_mtw",
+        signal_day=signal_day,
+        base_symbols=base_symbols,
+        context_by_symbol={},
+        regime_features=regime_features,
+        rank_limit=6,
+    ) == ["600001.SH"]
+    assert _h10_quiet_source_symbols(
+        "quiet_breakout_rank2_poolhot10_mtw",
+        signal_day=signal_day,
+        base_symbols=base_symbols,
+        context_by_symbol={},
+        regime_features=regime_features,
+        rank_limit=6,
+    ) == ["600002.SH"]
+    assert _h10_quiet_source_symbols(
+        "quiet_breakout_rank3_poolhot10_mtw",
+        signal_day=signal_day,
+        base_symbols=base_symbols,
+        context_by_symbol={},
+        regime_features=regime_features,
+        rank_limit=6,
+    ) == ["600003.SH"]
+    assert _h10_quiet_source_symbols(
+        "quiet_breakout_rank1_poolhot10_mtw",
+        signal_day=date(2025, 1, 9),
+        base_symbols=base_symbols,
+        context_by_symbol={},
+        regime_features=regime_features,
+        rank_limit=6,
+    ) == []
 
 
 def test_h10_robust_strategy_search_candidate_sources_include_expected_batch_ids() -> None:

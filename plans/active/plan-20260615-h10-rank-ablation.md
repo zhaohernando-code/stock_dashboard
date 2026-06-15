@@ -2,7 +2,7 @@
 schema_version: 1
 plan_id: "plan-20260615-h10-rank-ablation"
 title: "H10 Rank Ablation"
-status: "approved"
+status: "executing"
 created_at: "2026-06-15"
 source_request: "Continue the reviewed plan/run validation by directly testing whether the current H10 quiet benchmark's rank2 choice has same-gate empirical support."
 target_repo: "/Users/hernando_zhao/codex/worker-workspaces/stock_dashboard/20260615-h10-rank-ablation-140929"
@@ -77,7 +77,7 @@ This plan should close that specific gap without reopening strategy discovery. I
 
 | ID | Status | Order | Depends On | Task | Deliverable | Acceptance Type | Acceptance Spec | Evidence |
 |----|--------|-------|------------|------|-------------|-----------------|-----------------|----------|
-| W-001 | pending | 1 | - | Add same-gate rank ablation support for the H10 quiet benchmark family. | Rank source variants, rank-ablation artifact builder, CLI validation, and focused tests covering rank1, rank2, and rank3 source generation plus same-gate comparison semantics | test_pass | cmd:python3 -m pytest tests/test_shortpick_v2_h10_rank_ablation.py tests/test_shortpick_v2_strategy_search.py -q | pending |
+| W-001 | done | 1 | - | Add same-gate rank ablation support for the H10 quiet benchmark family. | Rank source variants, rank-ablation artifact builder, CLI validation, and focused tests covering rank1, rank2, and rank3 source generation plus same-gate comparison semantics | test_pass | cmd:python3 -m pytest tests/test_shortpick_v2_h10_rank_ablation.py tests/test_shortpick_v2_strategy_search.py -q | Exit 0; 45 passed in 0.65s; MiMo code review found no blocking or major issues, and minor threshold/diagnostic-rank coverage feedback was accepted. |
 | W-002 | pending | 2 | W-001 | Run the real-data H10 rank-ablation artifact against the runtime DB. | Runtime rank-ablation JSON artifact under `output/` | command_exit_0 | cmd:PYTHONPATH=src python3 -m ashare_evidence.cli shortpick-v2-h10-rank-ablation --database-url sqlite:////Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/ashare_dashboard.db --horizon-days 10 --initial-cash 200000 --output output/shortpick-v2-h10-rank-ablation-artifact.json | pending |
 | W-003 | pending | 3 | W-002 | Validate the generated rank-ablation artifact with machine-checkable structure and content gates. | Artifact validation command/result covering fixed H10, rank1/2/3 presence, support labels, period coverage, and no-promotion semantics | command_exit_0 | cmd:PYTHONPATH=src python3 -m ashare_evidence.cli shortpick-v2-h10-rank-ablation-validate --artifact output/shortpick-v2-h10-rank-ablation-artifact.json; validator must exit non-zero if fixed H10, rank1/2/3 presence, support label, coverage threshold, or no-promotion checks fail | pending |
 | W-004 | pending | 4 | W-003 | Record the rank-ablation interpretation and governance outcome. | Durable docs/run notes describing rank2 support status and any challenged-rank follow-up without promotion | file_contains | path:docs/archive/SHORTPICK_LAB_V2_H10_RANK_ABLATION_RUN_2026-06-15.md \| pattern:Rank2 status; no paper-tracking promotion; rank1/rank2/rank3 | pending |
@@ -131,6 +131,8 @@ This plan should close that specific gap without reopening strategy discovery. I
 | 2026-06-15T14:32:00+08:00 | Codex | Accepted MiMo round 1 feedback by adding concrete sample/period coverage thresholds, explicit rank1/rank2/rank3 test coverage, fixed80/fixed90 informational-only semantics, and non-zero validator content gates. |
 | 2026-06-15T14:43:00+08:00 | Codex | Accepted MiMo round 2 minor clarifications by defining period blocks as calendar-year blocks and requiring artifact-visible numeric rank decision thresholds. |
 | 2026-06-15T14:45:00+08:00 | Codex | Set plan status to approved after MiMo round 2 reported no blocking or major findings and the user requested continuing the established flow. |
+| 2026-06-15T14:50:00+08:00 | Codex | Started W-001 execution; plan status changed to executing and W-001 to in_progress. |
+| 2026-06-15T15:20:00+08:00 | Codex | Completed W-001 after adding rank source variants, rank-ablation artifact/CLI/validator/tests, accepting MiMo minor test feedback, and passing the W-001 focused pytest gate. |
 
 ## External Review Log
 

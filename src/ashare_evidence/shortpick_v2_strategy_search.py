@@ -113,7 +113,11 @@ H10_QUIET_CANDIDATE_SOURCE_IDS = (
     "quiet_breakout_rank2to6_poolhot10_mtw_ret5_0_10",
 )
 H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS = (
+    "quiet_breakout_rank1_poolhot10_mtw",
     "quiet_breakout_rank2_poolhot10_mtw",
+    "quiet_breakout_rank3_poolhot10_mtw",
+    "quiet_breakout_rank4_poolhot10_mtw",
+    "quiet_breakout_rank5_poolhot10_mtw",
     "quiet_breakout_rank2_poolhot09_mtw",
     "quiet_breakout_rank2_poolhot11_mtw",
     "quiet_breakout_rank2_poolhot12_mtw",
@@ -1471,15 +1475,10 @@ def _h10_quiet_source_symbols(
     elif source_id == "quiet_breakout_rank2to6_poolhot10_not_thu" and signal_day.weekday() == 3:
         return []
 
-    if source_id in {
-        "quiet_breakout_rank2_poolhot10_mtw",
-        "quiet_breakout_rank2_poolhot09_mtw",
-        "quiet_breakout_rank2_poolhot11_mtw",
-        "quiet_breakout_rank2_poolhot12_mtw",
-        "quiet_breakout_rank2_poolhot10_mt",
-        "quiet_breakout_rank2_poolhot10_tw",
-    }:
-        return base_symbols[1:2] if len(base_symbols) >= 2 else []
+    rank_position = _h10_quiet_single_rank_position(source_id)
+    if rank_position is not None:
+        start = rank_position - 1
+        return base_symbols[start:rank_position] if len(base_symbols) >= rank_position else []
     symbols = base_symbols[1 : 1 + rank_limit] if len(base_symbols) >= 2 else []
     if source_id == "quiet_breakout_rank2to6_poolhot10_mtw_ret5_0_10":
         return [
@@ -1510,7 +1509,11 @@ def _h10_quiet_allowed_weekdays(source_id: str) -> set[int] | None:
     if source_id.endswith("_tw"):
         return {1, 2}
     if source_id in {
+        "quiet_breakout_rank1_poolhot10_mtw",
         "quiet_breakout_rank2_poolhot10_mtw",
+        "quiet_breakout_rank3_poolhot10_mtw",
+        "quiet_breakout_rank4_poolhot10_mtw",
+        "quiet_breakout_rank5_poolhot10_mtw",
         "quiet_breakout_rank2_poolhot09_mtw",
         "quiet_breakout_rank2_poolhot11_mtw",
         "quiet_breakout_rank2_poolhot12_mtw",
@@ -1519,6 +1522,21 @@ def _h10_quiet_allowed_weekdays(source_id: str) -> set[int] | None:
     }:
         return {0, 1, 2}
     return None
+
+
+def _h10_quiet_single_rank_position(source_id: str) -> int | None:
+    prefix = "quiet_breakout_rank"
+    if not source_id.startswith(prefix):
+        return None
+    suffix = source_id.removeprefix(prefix)
+    rank_text, _, rest = suffix.partition("_")
+    if not rest.startswith("poolhot"):
+        return None
+    try:
+        rank = int(rank_text)
+    except ValueError:
+        return None
+    return rank if rank >= 1 else None
 
 
 def _build_h10_robust_batch_selections(
