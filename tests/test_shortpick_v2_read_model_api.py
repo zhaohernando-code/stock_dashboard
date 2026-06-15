@@ -1038,6 +1038,43 @@ def test_shortpick_v2_read_api_routes_return_v2_payloads(tmp_path: Path, monkeyp
     assert paper_response.json()["paper_display"]["coverage"]["source_status"] == "summary_rows_omitted"
 
 
+def test_shortpick_v2_paper_tracking_routes_skip_response_model_validation() -> None:
+    app = create_app(enable_background_ops_tick=False)
+    routes = {
+        getattr(route, "path", ""): route
+        for route in app.routes
+        if getattr(route, "path", "").startswith("/shortpick-lab-v2/")
+    }
+
+    assert getattr(routes["/shortpick-lab-v2/paper-tracking"], "response_model", None) is None
+    assert getattr(routes["/shortpick-lab-v2/paper-tracking/summary"], "response_model", None) is None
+    assert getattr(routes["/shortpick-lab-v2/historical-replay"], "response_model", None) is not None
+
+
+def test_shortpick_v2_read_api_full_paper_tracking_returns_display_rows(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _write_v2_artifacts(tmp_path, monkeypatch)
+    _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
+    database_path = tmp_path / "api-full-paper.db"
+    database_url = f"sqlite:///{database_path}"
+    init_database(database_url)
+    _seed_v2_paper_display_market_fixture(database_url)
+
+    client = TestClient(create_app(database_url, enable_background_ops_tick=False))
+    response = client.get("/shortpick-lab-v2/paper-tracking")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["records"] == []
+    rows = body["paper_display"]["table"]["rows"]
+    assert rows
+    assert {row["tracking_tag"] for row in rows} == {"回放"}
+    assert body["paper_display"]["coverage"]["coverage_start"] == "2026-05-08"
+    assert body["paper_display"]["coverage"]["row_or_gap_config_accounting_passed"] is True
+
+
 def test_shortpick_v2_read_api_preserves_h10_paper_governance_projection(
     tmp_path: Path,
     monkeypatch,

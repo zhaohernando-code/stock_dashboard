@@ -163,6 +163,7 @@ The current v2 paper-tracking page exposes contract/config/read-model fields and
 | 13 | 2026-06-15 | Accepted W-003 Codex implementation review findings: true-forward ledger records now reject dates before `2026-05-08`, verifier checks final table row dates, window-loader date filtering has direct test coverage, and historical replay keeps `sample_limit=1` API compatibility while the UI requests `sample_limit=0`. | Codex |
 | 14 | 2026-06-15 | Completed W-003 fix review pass with MiMo: bounded paper-display reads, statistics-only historical replay, row-level verifier checks, and API compatibility tests have no unresolved blocking/major/material findings. | Codex |
 | 15 | 2026-06-15 | Accepted W-003 runtime dry-run findings: verifier now follows statistics-only historical replay semantics, paper-display cold path requests only the single display H10 source, the read window is capped to 120 days before `2026-05-08` through latest market day, and cold runtime read-model timing is under the verifier timeout. | Codex |
+| 16 | 2026-06-15 | Accepted FastAPI cold-path finding: v2 paper-tracking routes now use `response_model=None`, the read model explicitly returns `records: []` on summary/empty projections, and full-route TestClient coverage prevents payload filtering regressions. | Codex |
 
 ## External Review Log
 
@@ -204,6 +205,8 @@ The current v2 paper-tracking page exposes contract/config/read-model fields and
 | 3 | MiMo | One shard claimed paper-tracking detail rows violate the statistics-only requirement. | blocking | rejected | The finding applied the `历史回放` requirement to `纸面追踪`; the user explicitly requires paper tracking to show detailed results from `2026-05-08` onward with `回放` tags. | SRC-003,SRC-004,SRC-012 |
 | 3 | MiMo | API cold-path replay construction remains heavier than a pure artifact read path. | major | accepted | The hot path is still dynamic because current artifacts stop at `2026-05-08`, but the implementation was reduced to a single display source and a 120-day read window; verifier now imposes a 30-second API timeout. | SRC-011,W-003,PF-002 |
 | 3 | MiMo | Final sharded synthesis returned PASS after reviewing the performance/verifier fixes. | note | accepted | Second shard confirmed the statistics-only historical replay verifier and tests; synthesis returned PASS with no unresolved blocker or major issue. | W-003,PF-006 |
+| 3 | Runtime cold-path test | Even after dynamic replay was reduced, the LaunchAgent-served paper API still took about 35.5 seconds cold, while the same read model took about 7-9 seconds in a direct process. | major | accepted | The paper-tracking routes now explicitly set `response_model=None`, avoiding FastAPI response-model validation on the deep display payload; a temporary FastAPI cold request against runtime DB/artifacts completed in about 6.7 seconds. | SRC-011,W-003,PF-002 |
+| 3 | MiMo | Full `/shortpick-lab-v2/paper-tracking` needed API-level coverage after disabling response model validation. | minor | accepted | Added a TestClient full-route test that asserts `records` remains present, paper display rows are returned, rows are tagged `回放`, and coverage starts at `2026-05-08`. | SRC-009,SRC-011,W-003 |
 
 ## User Review Notes
 

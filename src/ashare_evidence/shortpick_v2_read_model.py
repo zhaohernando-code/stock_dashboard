@@ -364,8 +364,7 @@ def _contract_ready_paper_tracking_read_model(
             str(selection_artifact.get("artifact_id") or ""),
         ],
     }
-    if include_records:
-        payload["records"] = []
+    payload["records"] = []
     return payload
 
 
@@ -444,8 +443,7 @@ def _paper_tracking_ledger_read_model(
         ),
         "event_refs": ledger_artifact.get("event_refs") or ["shortpick_v2.phase6.backend_read_model.paper_tracking"],
     }
-    if include_records:
-        payload["records"] = records
+    payload["records"] = records if include_records else []
     return payload
 
 

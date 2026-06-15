@@ -116,7 +116,6 @@ from ashare_evidence.schemas import (
     ShortpickRunValidateRequest,
     ShortpickRunView,
     ShortpickV2HistoricalReplayResponse,
-    ShortpickV2PaperTrackingResponse,
     ShortpickValidationQueueResponse,
     SimulationConfigRequest,
     SimulationControlActionResponse,
@@ -2299,7 +2298,7 @@ def create_app(
             return projection
         return build_shortpick_model_feedback(session)
 
-    @app.get("/shortpick-lab-v2/paper-tracking", response_model=ShortpickV2PaperTrackingResponse)
+    @app.get("/shortpick-lab-v2/paper-tracking", response_model=None)
     def shortpick_v2_paper_tracking(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
@@ -2311,7 +2310,7 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    @app.get("/shortpick-lab-v2/paper-tracking/summary", response_model=ShortpickV2PaperTrackingResponse)
+    @app.get("/shortpick-lab-v2/paper-tracking/summary", response_model=None)
     def shortpick_v2_paper_tracking_summary(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
