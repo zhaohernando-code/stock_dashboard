@@ -89,9 +89,9 @@ function statusColor(value?: string | null): string {
 
 function artifactShortRef(source?: Record<string, unknown>): string {
   const artifactId = stringField(source, "artifact_id");
-  if (artifactId) return artifactId.length > 24 ? `${artifactId.slice(0, 12)}…${artifactId.slice(-8)}` : artifactId;
+  if (artifactId) return "已记录来源";
   const path = stringField(source, "path");
-  return path.split("/").pop() || "--";
+  return path ? "已记录来源" : "暂无来源";
 }
 
 function readableStatusLabel(value?: string | null): string {
@@ -518,7 +518,7 @@ function ShortpickV2ReplayTab({
               <Tag>回放来源 {artifactShortRef(replay?.source_artifacts?.replay)}</Tag>
             </Space>
             <Paragraph type="secondary" className="panel-description">
-              {replay?.data_disclaimer || "历史回放读取固定 artifact，不构成投资建议。"}
+              {replay?.data_disclaimer || "历史回放读取固定来源文件，不构成投资建议。"}
             </Paragraph>
           </>
         )}
@@ -646,7 +646,7 @@ export function ShortpickLabV2View() {
           icon={<SafetyCertificateOutlined />}
           type="info"
           message="只读研究口径"
-          description="页面只读取 v2 backend read APIs；不触发回放生成、行情刷新、模型调用、纸面行写入或参数搜索。"
+          description="页面只读取 v2 后端只读接口；不触发回放生成、行情刷新、模型调用、纸面记录写入或参数搜索。"
         />
       </Card>
 

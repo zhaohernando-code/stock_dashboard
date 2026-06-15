@@ -144,7 +144,7 @@ def build_shortpick_v2_historical_replay_read_model(
         "claim_ceiling": SHORTPICK_V2_CLAIM_CEILING,
         "evidence_basis": SHORTPICK_V2_SELECTION_EVIDENCE_BASIS,
         "ui_language": "试验田v2历史回放仅展示预计算账户路径研究观察。",
-        "data_disclaimer": "历史回放读取固定 artifact，不构成投资建议，不代表生产交易能力。",
+        "data_disclaimer": "历史回放读取固定来源文件，不构成投资建议，不代表生产交易能力。",
         "source_artifacts": {
             "replay": _artifact_ref(replay_artifact, replay_path),
             "rule_selection": _artifact_ref(selection_artifact, selection_path),
