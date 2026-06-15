@@ -2,7 +2,7 @@
 schema_version: 1
 plan_id: "plan-20260615-h10-rank-ablation"
 title: "H10 Rank Ablation"
-status: "executing"
+status: "archived"
 created_at: "2026-06-15"
 source_request: "Continue the reviewed plan/run validation by directly testing whether the current H10 quiet benchmark's rank2 choice has same-gate empirical support."
 target_repo: "/Users/hernando_zhao/codex/worker-workspaces/stock_dashboard/20260615-h10-rank-ablation-140929"
@@ -42,6 +42,13 @@ This plan should close that specific gap without reopening strategy discovery. I
 | SRC-005 | Preserve the prior convention that delayed buy is not a valid action. | W-001,W-003,W-004 | covered | in-scope | The artifact remains fallback-or-skip only and includes no delayed-buy semantics. |
 | SRC-006 | Do not overclaim historical backtest evidence as paper-tracking readiness. | W-001,W-002,W-003,W-004 | covered | in-scope | Artifact claim ceiling remains `research_observation`; durable doc has a no-promotion statement. |
 
+## Production Path Fidelity
+
+| Path ID | User / Production Path | Validation Path | Responsibility Owner | Test Setup / Bypass | Fidelity Status | Evidence Required |
+|---------|------------------------|-----------------|----------------------|---------------------|-----------------|-------------------|
+| PATH-001 | Live stock dashboard route, API, runtime publish, and paper-tracking state | Not changed; this plan only adds research artifact generation, validation, and docs | Codex | - | not_applicable | Durable doc states no runtime publish, no paper-tracking promotion, no benchmark replacement, and no database write. |
+| PATH-002 | Runtime market data used by the stock dashboard | W-002 reads `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/ashare_dashboard.db` through the real CLI command | Codex | - | matches_product_path | W-002 command exited 0 against the runtime SQLite DB and W-003 validated the generated artifact. |
+
 ## Scope
 
 ### In Scope
@@ -80,7 +87,7 @@ This plan should close that specific gap without reopening strategy discovery. I
 | W-001 | done | 1 | - | Add same-gate rank ablation support for the H10 quiet benchmark family. | Rank source variants, rank-ablation artifact builder, CLI validation, and focused tests covering rank1, rank2, and rank3 source generation plus same-gate comparison semantics | test_pass | cmd:python3 -m pytest tests/test_shortpick_v2_h10_rank_ablation.py tests/test_shortpick_v2_strategy_search.py -q | Exit 0; 45 passed in 0.65s; MiMo code review found no blocking or major issues, and minor threshold/diagnostic-rank coverage feedback was accepted. |
 | W-002 | done | 2 | W-001 | Run the real-data H10 rank-ablation artifact against the runtime DB. | Runtime rank-ablation JSON artifact under `output/` | command_exit_0 | cmd:PYTHONPATH=src python3 -m ashare_evidence.cli shortpick-v2-h10-rank-ablation --database-url sqlite:////Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/ashare_dashboard.db --horizon-days 10 --initial-cash 200000 --output output/shortpick-v2-h10-rank-ablation-artifact.json | Exit 0; wrote `output/shortpick-v2-h10-rank-ablation-artifact.json`; artifact id `shortpick_v2_h10_rank_ablation:2023-05-16:2026-05-08:20260615`; rank2_status=supported; rank_row_count=5. |
 | W-003 | done | 3 | W-002 | Validate the generated rank-ablation artifact with machine-checkable structure and content gates. | Artifact validation command/result covering fixed H10, rank1/2/3 presence, support labels, period coverage, and no-promotion semantics | command_exit_0 | cmd:PYTHONPATH=src python3 -m ashare_evidence.cli shortpick-v2-h10-rank-ablation-validate --artifact output/shortpick-v2-h10-rank-ablation-artifact.json; validator must exit non-zero if fixed H10, rank1/2/3 presence, support label, coverage threshold, or no-promotion checks fail | Exit 0; validation status passed; 53 checks, 0 failed; horizon_days=10; rank2_status=supported; rank_row_count=5. |
-| W-004 | pending | 4 | W-003 | Record the rank-ablation interpretation and governance outcome. | Durable docs/run notes describing rank2 support status and any challenged-rank follow-up without promotion | file_contains | path:docs/archive/SHORTPICK_LAB_V2_H10_RANK_ABLATION_RUN_2026-06-15.md \| pattern:Rank2 status; no paper-tracking promotion; rank1/rank2/rank3 | pending |
+| W-004 | done | 4 | W-003 | Record the rank-ablation interpretation and governance outcome. | Durable docs/run notes describing rank2 support status and any challenged-rank follow-up without promotion | file_contains | path:docs/archive/SHORTPICK_LAB_V2_H10_RANK_ABLATION_RUN_2026-06-15.md \| pattern:Rank2 status; no paper-tracking promotion; rank1/rank2/rank3 | File contains required pattern; MiMo doc review found no blocking or major issues; durable doc records rank2 supported and no paper-tracking promotion. |
 
 ## Acceptance Criteria & Validation Gates
 
@@ -137,6 +144,8 @@ This plan should close that specific gap without reopening strategy discovery. I
 | 2026-06-15T15:38:00+08:00 | Codex | Completed W-002 after the real-data rank-ablation command exited 0 and wrote the local output artifact with rank2_status=supported. |
 | 2026-06-15T15:42:00+08:00 | Codex | Started W-003 artifact validation after W-002 completed. |
 | 2026-06-15T15:45:00+08:00 | Codex | Completed W-003 after the rank-ablation artifact validator passed 53 checks with 0 failures. |
+| 2026-06-15T15:48:00+08:00 | Codex | Started W-004 durable interpretation documentation after W-003 validation. |
+| 2026-06-15T16:02:00+08:00 | Codex | Completed W-004 after durable doc creation, file_contains gate, and MiMo doc review; plan status changed to archived for relocation to plans/archive. |
 
 ## External Review Log
 
