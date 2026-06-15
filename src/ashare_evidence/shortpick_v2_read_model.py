@@ -83,6 +83,7 @@ SHORTPICK_V2_H10_PAPER_GOVERNANCE_ARTIFACT_CANDIDATES = (
 SHORTPICK_V2_DECISION_SAMPLE_LIMIT_MAX = 40
 SHORTPICK_V2_PAPER_DISPLAY_REPLAY_ROW_LIMIT = 240
 SHORTPICK_V2_PAPER_DISPLAY_MIN_SIGNAL_SYMBOL_COUNT = 45
+SHORTPICK_V2_PAPER_DISPLAY_LOOKBACK_DAYS = 120
 SHORTPICK_V2_PAPER_DISPLAY_SOURCE_ID = "quiet_breakout_rank2_poolhot10_mtw"
 SHORTPICK_V2_PAPER_DISPLAY_SOURCE_LABEL = "安静突破 Rank2：热度池达标时取第 2 名，周一、周二、周三触发"
 SHORTPICK_V2_PAPER_DISPLAY_CACHE_TTL_SECONDS = float(
@@ -642,8 +643,8 @@ def _build_paper_display_replay_rows_from_session(
         return [], coverage
     raw_series_by_symbol = _load_daily_series_for_replay_window(
         session,
-        start_date=start_date - timedelta(days=260),
-        end_date=latest_market_day + timedelta(days=80),
+        start_date=start_date - timedelta(days=SHORTPICK_V2_PAPER_DISPLAY_LOOKBACK_DAYS),
+        end_date=latest_market_day,
     )
     series_by_symbol, account_eligibility = filter_account_eligible_series(
         raw_series_by_symbol,
@@ -686,6 +687,7 @@ def _build_paper_display_replay_rows_from_session(
         signal_days=available_signal_days,
         pool_limit=40,
         rank_limit=6,
+        source_ids=(SHORTPICK_V2_PAPER_DISPLAY_SOURCE_ID,),
     )
     display_source = next(
         (source for source in candidate_sources if source.source_id == SHORTPICK_V2_PAPER_DISPLAY_SOURCE_ID),

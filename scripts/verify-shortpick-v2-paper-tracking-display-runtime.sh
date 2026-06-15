@@ -12,6 +12,7 @@ CANONICAL_BASE_URL="${ASHARE_CANONICAL_BASE_URL:-https://hernando-zhao.cn/projec
 PAGE_URL="${ASHARE_VERIFY_SHORTPICK_V2_PAGE_URL:-${CANONICAL_BASE_URL%/}/?view=shortpick-v2&shortpickV2Tab=paper-tracking}"
 EXPECTED_COMMIT="${ASHARE_VERIFY_EXPECTED_COMMIT:-$(git rev-parse HEAD)}"
 PWCLI="${PWCLI:-$HOME/.codex/skills/playwright/scripts/playwright_cli.sh}"
+API_TIMEOUT_SECONDS="${ASHARE_VERIFY_API_TIMEOUT_SECONDS:-30}"
 
 API_PAYLOAD_FILE="$(mktemp)"
 REPLAY_API_PAYLOAD_FILE="$(mktemp)"
@@ -42,7 +43,7 @@ if [[ "$RUNTIME_COMMIT" != "$EXPECTED_COMMIT" ]]; then
 fi
 
 step "Fetching served v2 paper-tracking API"
-curl -fsS "$API_BASE_URL/shortpick-lab-v2/paper-tracking" -o "$API_PAYLOAD_FILE"
+curl --max-time "$API_TIMEOUT_SECONDS" -fsS "$API_BASE_URL/shortpick-lab-v2/paper-tracking" -o "$API_PAYLOAD_FILE"
 ASHARE_SHORTPICK_V2_API_PAYLOAD_FILE="$API_PAYLOAD_FILE" "$PYTHON_BIN" - <<'PY'
 from __future__ import annotations
 
@@ -175,7 +176,7 @@ print(
 PY
 
 step "Fetching served v2 historical-replay API"
-curl -fsS "$API_BASE_URL/shortpick-lab-v2/historical-replay?sample_limit=0" -o "$REPLAY_API_PAYLOAD_FILE"
+curl --max-time "$API_TIMEOUT_SECONDS" -fsS "$API_BASE_URL/shortpick-lab-v2/historical-replay?sample_limit=0" -o "$REPLAY_API_PAYLOAD_FILE"
 ASHARE_SHORTPICK_V2_REPLAY_API_PAYLOAD_FILE="$REPLAY_API_PAYLOAD_FILE" "$PYTHON_BIN" - <<'PY'
 from __future__ import annotations
 
@@ -205,16 +206,37 @@ payload = json.loads(Path(os.environ["ASHARE_SHORTPICK_V2_REPLAY_API_PAYLOAD_FIL
 summary = require_dict(payload.get("summary"), "historical replay summary")
 selected_configs = require_list(payload.get("selected_configs"), "historical replay selected_configs")
 baseline_configs = require_list(payload.get("baseline_configs"), "historical replay baseline_configs")
+holdout_configs = require_list(payload.get("holdout_configs"), "historical replay holdout_configs")
+rejected_configs = require_list(payload.get("rejected_configs"), "historical replay rejected_configs")
 if payload.get("claim_ceiling") != "research_observation":
     fail(f"historical replay claim_ceiling changed: {payload.get('claim_ceiling')!r}")
 if payload.get("evidence_basis") != "historical_account_replay_selection":
     fail(f"historical replay evidence_basis changed: {payload.get('evidence_basis')!r}")
-if int(summary.get("selected_config_count") or 0) <= 0:
-    fail("historical replay selected_config_count must be positive")
-if not selected_configs:
-    fail("historical replay selected_configs must not be empty")
 if not baseline_configs:
     fail("historical replay baseline_configs must not be empty")
+if int(summary.get("decision_sample_limit") or -1) != 0:
+    fail(f"historical replay decision_sample_limit must be 0, got {summary.get('decision_sample_limit')!r}")
+if int(summary.get("selected_config_count") or 0) != len(selected_configs):
+    fail("historical replay selected_config_count must match selected_configs length")
+if int(summary.get("baseline_config_count") or 0) != len(baseline_configs):
+    fail("historical replay baseline_config_count must match baseline_configs length")
+if int(summary.get("holdout_config_count") or 0) != len(holdout_configs):
+    fail("historical replay holdout_config_count must match holdout_configs length")
+if int(summary.get("rejected_config_count") or 0) != len(rejected_configs):
+    fail("historical replay rejected_config_count must match rejected_configs length")
+if not (selected_configs or baseline_configs or holdout_configs or rejected_configs):
+    fail("historical replay must include at least one statistical config row")
+for bucket_name, bucket in (
+    ("selected_configs", selected_configs),
+    ("baseline_configs", baseline_configs),
+    ("holdout_configs", holdout_configs),
+    ("rejected_configs", rejected_configs),
+):
+    for row in bucket:
+        if not isinstance(row, dict):
+            fail(f"historical replay {bucket_name} contains a non-object row")
+        if row.get("decision_samples"):
+            fail(f"historical replay {bucket_name} leaked decision_samples despite sample_limit=0")
 print("served historical replay API verification passed")
 PY
 
@@ -320,9 +342,10 @@ check_visible_text(
         "历史回放核心读数",
         "信号日",
         "交易日",
-        "入选配置",
+        "推广配置与基线",
+        "留出与未采用配置统计",
         "覆盖状态",
-        "回放来源",
+        "基线对照",
         "研究观察",
         "历史账户回放筛选",
         "已记录来源",

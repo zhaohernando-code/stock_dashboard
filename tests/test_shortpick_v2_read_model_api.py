@@ -30,6 +30,8 @@ from ashare_evidence.shortpick_v2_h10_paper_governance import (
 )
 from ashare_evidence.shortpick_v2_read_model import (
     SHORTPICK_V2_H10_PAPER_GOVERNANCE_ARTIFACT_ENV,
+    SHORTPICK_V2_PAPER_DISPLAY_LOOKBACK_DAYS,
+    SHORTPICK_V2_PAPER_DISPLAY_SOURCE_ID,
     SHORTPICK_V2_PAPER_TRACKING_LEDGER_ARTIFACT_ENV,
     SHORTPICK_V2_REPLAY_ARTIFACT_ENV,
     SHORTPICK_V2_RULE_SELECTION_ARTIFACT_ENV,
@@ -751,15 +753,43 @@ def test_shortpick_v2_paper_tracking_display_avoids_full_daily_series_loader(
     _seed_v2_paper_display_market_fixture(database_url)
 
     import ashare_evidence.shortpick_market_factor_study as market_factor_study
+    import ashare_evidence.shortpick_ranked_pool_replay_input as replay_input
+    import ashare_evidence.shortpick_v2_strategy_search as strategy_search
 
     def _fail_full_loader(*args, **kwargs):
         raise AssertionError("paper display must not load the full daily market table")
 
     monkeypatch.setattr(market_factor_study, "_load_daily_series", _fail_full_loader)
+    real_window_loader = replay_input._load_daily_series_for_replay_window
+    captured_window: dict[str, date] = {}
+
+    def _capture_window_loader(session, *, start_date: date, end_date: date):
+        captured_window["start_date"] = start_date
+        captured_window["end_date"] = end_date
+        return real_window_loader(session, start_date=start_date, end_date=end_date)
+
+    monkeypatch.setattr(replay_input, "_load_daily_series_for_replay_window", _capture_window_loader)
+    real_candidate_sources = strategy_search.build_h10_quiet_champion_strategy_search_candidate_sources
+    captured_source_ids: list[tuple[str, ...] | None] = []
+
+    def _capture_candidate_sources(*args, **kwargs):
+        captured_source_ids.append(kwargs.get("source_ids"))
+        return real_candidate_sources(*args, **kwargs)
+
+    monkeypatch.setattr(
+        strategy_search,
+        "build_h10_quiet_champion_strategy_search_candidate_sources",
+        _capture_candidate_sources,
+    )
 
     with session_scope(database_url) as session:
         payload = build_shortpick_v2_paper_tracking_read_model(include_records=True, session=session)
 
+    assert captured_window == {
+        "start_date": date(2026, 5, 8) - timedelta(days=SHORTPICK_V2_PAPER_DISPLAY_LOOKBACK_DAYS),
+        "end_date": date(2026, 6, 15),
+    }
+    assert captured_source_ids == [(SHORTPICK_V2_PAPER_DISPLAY_SOURCE_ID,)]
     coverage = payload["paper_display"]["coverage"]
     assert coverage["coverage_start"] == "2026-05-08"
     assert coverage["coverage_end"] == "2026-06-15"

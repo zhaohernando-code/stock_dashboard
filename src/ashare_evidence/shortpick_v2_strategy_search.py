@@ -885,7 +885,9 @@ def build_h10_quiet_champion_strategy_search_candidate_sources(
     signal_days: list[date],
     pool_limit: int,
     rank_limit: int,
+    source_ids: tuple[str, ...] | None = None,
 ) -> tuple[StrategySearchCandidateSource, ...]:
+    effective_source_ids = H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS if source_ids is None else source_ids
     effective_rank_limit = max(rank_limit, max(config.candidate_rank_limit for config in H10_QUIET_RULE_CONFIGS))
     quiet_base = _build_strategy_selections(
         series_by_symbol,
@@ -898,29 +900,36 @@ def build_h10_quiet_champion_strategy_search_candidate_sources(
     champion_selections = _build_h10_quiet_batch_selections(
         series_by_symbol,
         signal_days=signal_days,
-        source_ids=H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS,
+        source_ids=effective_source_ids,
         quiet_base_selections=quiet_base,
         regime_features=regime_features,
         rank_limit=effective_rank_limit,
     )
-    return (
-        StrategySearchCandidateSource(
-            source_id=CONTROL_CANDIDATE_SOURCE_ID,
-            source_ref=SHORTPICK_V2_REPLAY_CANDIDATE_SOURCE_REF,
-            selections=_build_low_turnover_uptrend_candidate_pool(
-                series_by_symbol,
-                signal_days=signal_days,
-                pool_limit=pool_limit,
-                rank_limit=effective_rank_limit,
+    control_sources = (
+        (
+            StrategySearchCandidateSource(
+                source_id=CONTROL_CANDIDATE_SOURCE_ID,
+                source_ref=SHORTPICK_V2_REPLAY_CANDIDATE_SOURCE_REF,
+                selections=_build_low_turnover_uptrend_candidate_pool(
+                    series_by_symbol,
+                    signal_days=signal_days,
+                    pool_limit=pool_limit,
+                    rank_limit=effective_rank_limit,
+                ),
             ),
-        ),
+        )
+        if source_ids is None
+        else ()
+    )
+    return (
+        *control_sources,
         *(
             StrategySearchCandidateSource(
                 source_id=source_id,
                 source_ref=f"market_only_reconstruction:shortpick_v2_h10_quiet_champion_round:{source_id}",
                 selections=champion_selections[source_id],
             )
-            for source_id in H10_QUIET_CHAMPION_CANDIDATE_SOURCE_IDS
+            for source_id in effective_source_ids
         ),
     )
 
