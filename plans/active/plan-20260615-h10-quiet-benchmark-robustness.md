@@ -2,7 +2,7 @@
 schema_version: 1
 plan_id: "plan-20260615-h10-quiet-benchmark-robustness"
 title: "H10 Quiet Benchmark Robustness"
-status: "executing"
+status: "done"
 created_at: "2026-06-15"
 source_request: "Use reviewed-plan-generator and plan-run-loop for the next Short Pick Lab V2 development: pause broad strategy search, prioritize fixed85/fixed80 benchmark-focused robustness, then funds execution decomposition and 90k boundary diagnostics."
 target_repo: "/Users/hernando_zhao/codex/worker-workspaces/stock_dashboard/20260614-shortpick-v2-robust-strategy-search-42e199"
@@ -82,7 +82,7 @@ The current robustness artifact primarily flagged 70k/75k because risk-first sel
 | W-002 | done | 2 | W-001 | Add funds/execution decomposition for fixed80/fixed85/90k quiet champion configs. | Execution decomposition artifact/report code, artifact validation support, and focused tests | test_pass | cmd:python3 -m pytest tests/test_shortpick_v2_h10_robustness.py tests/test_shortpick_v2_strategy_search.py -q | MiMo run-plan/code reviews passed; pytest `tests/test_shortpick_v2_h10_robustness.py tests/test_shortpick_v2_strategy_search.py -q` passed with 45 tests. |
 | W-003 | done | 3 | W-002 | Run real-data benchmark-focused robustness and execution decomposition against the runtime DB. | Runtime output artifacts under `output/` for benchmark robustness and execution decomposition | command_exit_0 | cmd:bash -lc 'PYTHONPATH=src python3 -m ashare_evidence.cli shortpick-v2-h10-robustness --database-url sqlite:////Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/ashare_dashboard.db --replay-artifact output/shortpick-v2-h10-quiet-champion-replay-artifact.json --selection-artifact output/shortpick-v2-h10-quiet-champion-selection-artifact.json --horizon-days 10 --initial-cash 200000 --output output/shortpick-v2-h10-quiet-benchmark-robustness-artifact.json && PYTHONPATH=src python3 -m ashare_evidence.cli shortpick-v2-h10-execution-decomposition --database-url sqlite:////Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/ashare_dashboard.db --replay-artifact output/shortpick-v2-h10-quiet-champion-replay-artifact.json --selection-artifact output/shortpick-v2-h10-quiet-champion-selection-artifact.json --horizon-days 10 --initial-cash 200000 --output output/shortpick-v2-h10-quiet-execution-decomposition-artifact.json' | Command exited 0; robustness artifact ready with 6 analyzed configs and not_ready_for_paper_tracking; decomposition artifact ready with fixed80/fixed85/90k and no missing configs; MiMo post-run review passed. |
 | W-004 | done | 4 | W-003 | Validate generated robustness and execution decomposition artifacts with machine-checkable structure/content gates. | Artifact validation command/result covering both runtime JSON outputs | command_exit_0 | cmd:PYTHONPATH=src python3 -m ashare_evidence.cli shortpick-v2-h10-artifact-validate --robustness-artifact output/shortpick-v2-h10-quiet-benchmark-robustness-artifact.json --execution-artifact output/shortpick-v2-h10-quiet-execution-decomposition-artifact.json | Command exited 0; validator reported `status=passed`, `check_count=25`, `failed_check_count=0`, robustness `claim_ceiling=research_observation`, `recommendation_status=not_ready_for_paper_tracking`, 5 risk flags / 4 high risk flags, and execution `missing_config_ids=[]`; MiMo reviews passed. |
-| W-005 | pending | 5 | W-004 | Record the decision outcome and freeze/prohibit directions after evidence review. | Durable docs/run notes updated with fixed85/fixed80 robustness decision, 90k diagnostic status, and prohibited directions | file_contains | path:docs/archive/SHORTPICK_LAB_V2_H10_QUIET_CHAMPION_RUN_2026-06-15.md \| pattern:Benchmark-focused robustness; 90k diagnostic only; Prohibited directions |  |
+| W-005 | done | 5 | W-004 | Record the decision outcome and freeze/prohibit directions after evidence review. | Durable docs/run notes updated with fixed85/fixed80 robustness decision, 90k diagnostic status, and prohibited directions | file_contains | path:docs/archive/SHORTPICK_LAB_V2_H10_QUIET_CHAMPION_RUN_2026-06-15.md \| pattern:Benchmark-focused robustness; 90k diagnostic only; Prohibited directions | Durable doc contains the acceptance marker line and explicit decision/prohibited-direction sections; `rg` file_contains gate and plan validation passed; MiMo document review passed with no blocking, major, or minor findings. |
 
 ## Acceptance Criteria & Validation Gates
 
@@ -134,6 +134,8 @@ The current robustness artifact primarily flagged 70k/75k because risk-first sel
 | 2026-06-15T13:10:00+08:00 | Codex | Completed W-003 runtime artifact generation and MiMo post-run evidence review. |
 | 2026-06-15T11:39:47+08:00 | Codex | Started W-004 artifact validation command implementation and runtime artifact validation. |
 | 2026-06-15T11:51:31+08:00 | Codex | Completed W-004 artifact validation CLI, focused tests, MiMo reviews, and runtime artifact validation command. |
+| 2026-06-15T11:54:08+08:00 | Codex | Started W-005 durable decision record update. |
+| 2026-06-15T11:57:36+08:00 | Codex | Completed W-005 durable decision record update, file_contains gate, MiMo review, and plan closeout. |
 
 ## External Review Log
 

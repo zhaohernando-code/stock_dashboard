@@ -64,3 +64,41 @@ Interpretation:
 - The robustness artifact does not invalidate fixed85/fixed80 as mandatory benchmarks.
 - It does prevent promoting the risk-first selected 70k/75k variants directly into paper tracking.
 - Next useful check is benchmark-focused robustness/period review for fixed85/fixed80 and the diagnostic 90k row, not a new broad strategy family.
+
+## Benchmark-Focused Robustness Decision
+
+Acceptance marker: Benchmark-focused robustness; 90k diagnostic only; Prohibited directions
+
+W-003 and W-004 reran the robustness path with fixed85/fixed80 as first-class benchmark rows and validated the resulting runtime artifacts:
+
+- Benchmark robustness artifact: `output/shortpick-v2-h10-quiet-benchmark-robustness-artifact.json`.
+- Execution decomposition artifact: `output/shortpick-v2-h10-quiet-execution-decomposition-artifact.json`.
+- Validation command: `shortpick-v2-h10-artifact-validate`.
+- Validation result: passed with 25 checks and 0 failures.
+- Robustness claim ceiling: `research_observation`.
+- Robustness recommendation: `not_ready_for_paper_tracking`.
+- Robustness risk evidence: 5 risk flags, including 4 high-severity flags.
+- Execution decomposition: fixed80/fixed85/90k all present, no missing config IDs.
+
+Decision:
+
+- fixed85 remains the primary benchmark row, and fixed80 remains the capital-shadow benchmark row.
+- The benchmark pair is not promoted to paper tracking by this plan. The current evidence is historical replay plus execution decomposition, not true-forward proof.
+- The benchmark pair remains the comparison line for future h10 quiet work. Any replacement must beat fixed85/fixed80 on the same data window before it is considered meaningful.
+- 90k remains diagnostic-only. It cannot bypass the current turnover gate and cannot be promoted without a separate governance decision.
+- The current next step is documentation and governance of the evidence, not another broad search round.
+
+## Prohibited Directions
+
+Do not reopen or promote these directions from this evidence package:
+
+- Delayed buy. The allowed execution choice remains buy via candidate/fallback or skip.
+- Broad `ma_accel` or `ma_accel_refine` family search.
+- Dynamic exit experiments.
+- Entry-quality rerank as a replacement family.
+- `rank2to6` widening.
+- `breadth65` gating.
+- `poolhot09`, `poolhot11`, or `poolhot12` promotion.
+- MT/TW weekday-only promotion.
+- 90k turnover-gate weakening without a separate governance plan.
+- Any true-forward, live, or paper-tracking claim based only on these retrospective artifacts.
