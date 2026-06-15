@@ -102,6 +102,8 @@ command_exit_0
 ## Actual Evidence
 
 - Pre-commit focused checks passed: `bash -n scripts/run-shortpick-v2-h10-paper-governance.sh && bash -n scripts/verify-shortpick-v2-h10-paper-governance-runtime.sh && PYTHONPATH=src python3 -m pytest -q tests/test_shortpick_v2_h10_paper_governance.py tests/test_shortpick_v2_paper_tracking_contract.py tests/test_shortpick_v2_read_model_api.py && python3 /Users/hernando_zhao/.codex/skills/reviewed-plan-generator/scripts/validate_plan.py plans/active/plan-20260615-h10-paper-governance.md` produced `28 passed in 1.30s` and `Plan is valid.`
+- First W-004 acceptance attempt from implementation commit `ca567fd` passed default pytest (`910 passed, 1 skipped, 173 deselected, 6 subtests passed in 27.99s`), policy audit (`status=pass`), frontend production build, and runtime sync, but failed waiting for backend health: `Timed out waiting for http://127.0.0.1:8000/health`.
+- Runtime failure root cause: foreground runtime backend start failed with `ModuleNotFoundError: No module named 'jsonschema'` from `shortpick_v2_read_model.py`. Fix: added `jsonschema>=4.0,<5.0` to `pyproject.toml` and installed it into the local backend venv used by the LaunchAgent.
 
 ## Risk And Rollback Notes
 
@@ -146,7 +148,8 @@ Passed. Codex subagent final diff review found no blocker, major, or minor issue
 ## Gate Results
 
 - Passed: pre-commit script syntax, focused pytest, and plan validator (`28 passed in 1.30s`; `Plan is valid.`)
-- Pending: W-004 acceptance command after implementation commit.
+- Failed then fixed: first `bash scripts/verify-shortpick-v2-h10-paper-governance-runtime.sh` attempt failed at backend health because runtime venv lacked `jsonschema`.
+- Pending: rerun W-004 acceptance command after dependency declaration/fix commit.
 
 ## Plan Update Summary
 
