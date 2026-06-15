@@ -104,6 +104,7 @@ command_exit_0
 - Pre-commit focused checks passed: `bash -n scripts/run-shortpick-v2-h10-paper-governance.sh && bash -n scripts/verify-shortpick-v2-h10-paper-governance-runtime.sh && PYTHONPATH=src python3 -m pytest -q tests/test_shortpick_v2_h10_paper_governance.py tests/test_shortpick_v2_paper_tracking_contract.py tests/test_shortpick_v2_read_model_api.py && python3 /Users/hernando_zhao/.codex/skills/reviewed-plan-generator/scripts/validate_plan.py plans/active/plan-20260615-h10-paper-governance.md` produced `28 passed in 1.30s` and `Plan is valid.`
 - First W-004 acceptance attempt from implementation commit `ca567fd` passed default pytest (`910 passed, 1 skipped, 173 deselected, 6 subtests passed in 27.99s`), policy audit (`status=pass`), frontend production build, and runtime sync, but failed waiting for backend health: `Timed out waiting for http://127.0.0.1:8000/health`.
 - Runtime failure root cause: foreground runtime backend start failed with `ModuleNotFoundError: No module named 'jsonschema'` from `shortpick_v2_read_model.py`. Fix: added `jsonschema>=4.0,<5.0` to `pyproject.toml` and installed it into the local backend venv used by the LaunchAgent.
+- Second W-004 acceptance attempt from clean committed tree `935c4e2` passed: default pytest `911 passed, 173 deselected, 6 subtests passed in 27.06s`; policy audit `status=pass`; frontend production build succeeded; runtime publish synced repo to `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard`; backend and frontend health passed; deploy verification reported `19 passed, 0 failed`; served `/shortpick-lab-v2/paper-tracking/summary` verification printed `served paper governance verification passed`; script ended with `[h10-paper-governance-runtime] Done`.
 
 ## Risk And Rollback Notes
 
@@ -149,16 +150,16 @@ Passed. Codex subagent final diff review found no blocker, major, or minor issue
 
 - Passed: pre-commit script syntax, focused pytest, and plan validator (`28 passed in 1.30s`; `Plan is valid.`)
 - Failed then fixed: first `bash scripts/verify-shortpick-v2-h10-paper-governance-runtime.sh` attempt failed at backend health because runtime venv lacked `jsonschema`.
-- Pending: rerun W-004 acceptance command after dependency declaration/fix commit.
+- Passed: `bash scripts/verify-shortpick-v2-h10-paper-governance-runtime.sh` after dependency declaration/fix commit (`911 passed`; policy audit pass; deploy verification `19 passed, 0 failed`; served governance verification passed).
 
 ## Plan Update Summary
 
-Pending.
+Updated W-004 to `done`, set the completed plan status to `archived`, recorded W-004 acceptance evidence and review dispositions, and prepared the plan for relocation from `plans/active/` to `plans/archive/`.
 
 ## Plan Archive Result
 
-Pending.
+Plan archive path: `plans/archive/plan-20260615-h10-paper-governance.md`. Active path will be removed after validator passes.
 
 ## Archive And Merge Result
 
-Pending.
+Ready for closeout commit, task branch push, main update, and origin/main push. Runtime publish and served API verification already passed; merge/push results will be recorded in final closeout response.
