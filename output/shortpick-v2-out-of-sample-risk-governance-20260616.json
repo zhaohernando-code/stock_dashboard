@@ -1,0 +1,134 @@
+{
+  "artifact_family": "shortpick_v2_out_of_sample_risk_governance",
+  "schema_version": "v1",
+  "artifact_id": "shortpick-v2-out-of-sample-risk-governance-20260616",
+  "generated_at": "2026-06-16T00:00:00+08:00",
+  "status": "ready",
+  "claim_ceiling": "research_observation",
+  "promotion_status": "research_only_no_paper_tracking_promotion",
+  "governance_scope": {
+    "primary_strategy_id": "h10_quiet_rank2_primary_poolhot10_mtw_drawdown_off__fixed_notional_85k_top5_h10_v1",
+    "primary_strategy_label_cn": "安静突破 Rank2 + 热度池 10% + 周一至周三 + H10 + 8.5 万目标买入",
+    "no_frozen_strategy_replacement": true,
+    "no_paper_tracking_backfill": true,
+    "no_recommendation": true
+  },
+  "historical_evidence": {
+    "source_artifact": "output/shortpick-v2-h10-weekday-drawdown-fixed85-validation-artifact.json",
+    "signal_date_from": "2023-05-16",
+    "signal_date_to": "2026-05-08",
+    "total_return": 2.712001,
+    "annualized_return": 0.538673,
+    "max_drawdown": -0.119033,
+    "trade_count": 192,
+    "skipped_ratio": 0.733703,
+    "market_reference_total_return": 0.418444
+  },
+  "paper_window_observation": {
+    "signal_date_from": "2026-05-08",
+    "latest_available_date": "2026-06-15",
+    "total_return_approx": -0.085,
+    "max_drawdown_approx": -0.175,
+    "market_reference_return_approx": -0.086,
+    "status": "out_of_sample_pressure_warning",
+    "window_caveat": "Historical max drawdown is a full-path three-year metric, while the paper drawdown is an approximately five-week observation. Treat this as a warning, not a strategy-failure verdict."
+  },
+  "external_reviews": {
+    "xiaomi_mimo": {
+      "blocker_count": 0,
+      "major_findings": [
+        "Quantify the historical-versus-paper drawdown deviation.",
+        "State that the historical artifact stops at 2026-05-08 and does not cover the paper pressure period.",
+        "Do not directly compare v1 dynamic-exit controls against v2 fixed-H10 as pure selection alpha."
+      ]
+    },
+    "deepseek": {
+      "blocker_count": 0,
+      "major_findings": [
+        "Freeze dynamic exit rules before treating the v1 control as auditable.",
+        "State the window mismatch between three-year historical drawdown and five-week paper drawdown."
+      ]
+    }
+  },
+  "v1_research_control": {
+    "status": "research_control_only",
+    "rule_version": "v1dd-price200-top1-fixed60k-cap35-max5-stop10-take15-v1",
+    "rule_signature": "sha256:996029a269e528f895179f694839a1cb09705de5c99ab3b4daa987e8cb4efaea",
+    "selection": {
+      "base": "v1 low-turnover uptrend",
+      "filter": "drawdown-reversal-filter-v1",
+      "price_filter": {
+        "basis": "signal_day_close",
+        "max_price": 200.0
+      },
+      "candidate_rank_limit": 1,
+      "fallback_enabled": false
+    },
+    "execution": {
+      "initial_cash": 200000.0,
+      "target_notional": 60000.0,
+      "max_position_pct": 0.35,
+      "max_position_count": 5,
+      "horizon_days": 10,
+      "stop_loss_pct": 0.1,
+      "take_profit_pct": 0.15,
+      "price_basis": "daily_close"
+    },
+    "latest_read_only_experiment": {
+      "total_return": 0.502315,
+      "annualized_return_estimate": 0.14641,
+      "market_excess_total_return": 0.083871,
+      "max_drawdown": -0.255,
+      "trade_count": 241,
+      "turnover": 48.565788,
+      "mean_invested_ratio": 0.496823
+    },
+    "threshold_assessment": {
+      "annualized_30pct_gate": "failed",
+      "paper_promotion_eligible": false
+    }
+  },
+  "risk_register": [
+    {
+      "risk_id": "RISK-001",
+      "title_cn": "历史最优行存在样本内选优偏差",
+      "status": "open",
+      "governance_action": "Display historical results as research evidence only and avoid treating them as reproducible guarantees."
+    },
+    {
+      "risk_id": "RISK-002",
+      "title_cn": "历史最大回撤可能低估样本外压力",
+      "status": "open",
+      "governance_action": "Add rolling-window drawdown comparison before any strategy replacement decision."
+    },
+    {
+      "risk_id": "RISK-003",
+      "title_cn": "纸面窗口样本过短",
+      "status": "open",
+      "governance_action": "Keep observing; do not retire the strategy from five weeks of data alone."
+    },
+    {
+      "risk_id": "RISK-004",
+      "title_cn": "v1 对照组动态退出可能过拟合",
+      "status": "governed",
+      "governance_action": "Freeze rule signature and keep the control research-only."
+    },
+    {
+      "risk_id": "RISK-005",
+      "title_cn": "v1 对照组和 v2 主线结构不同",
+      "status": "governed",
+      "governance_action": "Do not attribute performance differences purely to stock selection alpha."
+    }
+  ],
+  "next_governance_steps": [
+    "Build rolling 5-week and 10-week drawdown percentile diagnostics for the v2 primary strategy.",
+    "Generate a formal v1 research-control artifact with leakage audit and rule signature.",
+    "Add frontend/read-model risk labels only after the research artifacts are durable."
+  ],
+  "leakage_audit": {
+    "status": "passed",
+    "no_database_write_or_refresh": true,
+    "no_paper_tracking_backfill": true,
+    "no_strategy_replacement": true
+  }
+}

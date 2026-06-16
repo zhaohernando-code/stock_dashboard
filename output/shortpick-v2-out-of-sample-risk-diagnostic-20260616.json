@@ -1,0 +1,500 @@
+{
+  "artifact_family": "shortpick_v2_out_of_sample_risk_diagnostic",
+  "schema_version": "v1",
+  "artifact_id": "shortpick_v2_out_of_sample_risk_diagnostic:2023-04-13:2026-05-08:2026-06-16",
+  "generated_at": "2026-06-16T07:08:43.223857+00:00",
+  "status": "ready",
+  "claim_ceiling": "research_observation",
+  "evidence_basis": "historical_rolling_window_vs_current_paper_pressure",
+  "analysis_scope": {
+    "strategy_id": "h10_quiet_rank2_primary_poolhot10_mtw_drawdown_off__fixed_notional_85k_top5_h10_v1",
+    "strategy_label_cn": "安静突破 Rank2 + 热度池 10% + 周一至周三 + H10 + 8.5 万目标买入",
+    "selection_policy_cn": "仅在周一至周三触发；热度池 10%；Rank2 为首选；Rank3-Rank6 为同日候补；不加回撤反转过滤。",
+    "historical_start_date": "2023-04-13",
+    "historical_end_date": "2026-05-08",
+    "paper_start_date": "2026-05-08",
+    "paper_end_date": "2026-06-15",
+    "observed_paper_max_drawdown": -0.175,
+    "window_sizes_trade_days": [
+      25,
+      50
+    ],
+    "horizon_days": 10,
+    "initial_cash": 200000.0,
+    "target_notional": 85000.0,
+    "pool_hot_threshold": 0.1,
+    "entry_price_source": "next_close",
+    "account_profile": "new_retail_cash_account",
+    "promotion_status": "risk_warning_only_no_strategy_replacement"
+  },
+  "data_scope": {
+    "signal_date_from": "2023-05-16",
+    "signal_date_to": "2026-05-08",
+    "signal_day_count": 721,
+    "trade_day_count": 767,
+    "timeline_point_count": 767,
+    "stock_like_series_count": 3020,
+    "coverage_notes": [
+      "Read-only daily bars from the existing SQLite database; no refresh or model call performed.",
+      "Account eligibility filtered stock-like series from 3071 to 3020.",
+      "Account eligibility excluded board counts: {'st': 1, 'chnext': 32, 'star': 18}."
+    ]
+  },
+  "historical_replay_summary": {
+    "signal_count": 721,
+    "trade_count": 192,
+    "skip_count": 529,
+    "fallback_trade_count": 2,
+    "final_nav": 742400.1035,
+    "total_return": 2.712001,
+    "annualization_trade_day_count": 767,
+    "market_reference_total_return": 0.418444,
+    "market_excess_total_return": 2.293557,
+    "max_drawdown": -0.119033,
+    "mean_invested_ratio": 0.453028,
+    "max_position_count": 5,
+    "turnover": 76.672925,
+    "final_cash": 742400.1035,
+    "final_market_value": 0,
+    "open_position_count": 0,
+    "blocked_exit_count": 0,
+    "dynamic_exit_count": 0,
+    "exit_reason_counts": {
+      "mechanical_horizon": 192
+    },
+    "total_buy_value": 15334584.954,
+    "total_sell_value": 15876985.0575,
+    "skipped_ratio": 0.733703
+  },
+  "rolling_window_diagnostics": [
+    {
+      "window_size_trade_days": 25,
+      "historical_window_count": 743,
+      "observed_paper_max_drawdown": -0.175,
+      "equal_or_worse_historical_window_count": 0,
+      "equal_or_worse_historical_window_ratio": 0.0,
+      "rarity_label_cn": "历史极少见",
+      "drawdown_distribution": {
+        "min": -0.108753,
+        "p05": -0.097222,
+        "p10": -0.090783,
+        "p25": -0.061185,
+        "median": -0.038672,
+        "p75": -0.016515,
+        "max": 0.0
+      },
+      "worst_windows": [
+        {
+          "start_date": "2024-03-11",
+          "end_date": "2024-04-16",
+          "max_drawdown": -0.108753,
+          "window_return": 0.025936
+        },
+        {
+          "start_date": "2024-03-12",
+          "end_date": "2024-04-17",
+          "max_drawdown": -0.108753,
+          "window_return": 0.081333
+        },
+        {
+          "start_date": "2024-03-13",
+          "end_date": "2024-04-18",
+          "max_drawdown": -0.108753,
+          "window_return": 0.066954
+        },
+        {
+          "start_date": "2024-03-14",
+          "end_date": "2024-04-19",
+          "max_drawdown": -0.108753,
+          "window_return": 0.042191
+        },
+        {
+          "start_date": "2024-03-15",
+          "end_date": "2024-04-22",
+          "max_drawdown": -0.108753,
+          "window_return": -0.021385
+        }
+      ]
+    },
+    {
+      "window_size_trade_days": 50,
+      "historical_window_count": 718,
+      "observed_paper_max_drawdown": -0.175,
+      "equal_or_worse_historical_window_count": 0,
+      "equal_or_worse_historical_window_ratio": 0.0,
+      "rarity_label_cn": "历史极少见",
+      "drawdown_distribution": {
+        "min": -0.119033,
+        "p05": -0.108753,
+        "p10": -0.107505,
+        "p25": -0.090783,
+        "median": -0.061054,
+        "p75": -0.038672,
+        "max": 0.0
+      },
+      "worst_windows": [
+        {
+          "start_date": "2023-11-22",
+          "end_date": "2024-01-31",
+          "max_drawdown": -0.119033,
+          "window_return": 0.013703
+        },
+        {
+          "start_date": "2023-11-23",
+          "end_date": "2024-02-01",
+          "max_drawdown": -0.119033,
+          "window_return": 0.038536
+        },
+        {
+          "start_date": "2023-11-24",
+          "end_date": "2024-02-02",
+          "max_drawdown": -0.119033,
+          "window_return": 0.038855
+        },
+        {
+          "start_date": "2023-11-27",
+          "end_date": "2024-02-05",
+          "max_drawdown": -0.119033,
+          "window_return": 0.059663
+        },
+        {
+          "start_date": "2023-11-28",
+          "end_date": "2024-02-06",
+          "max_drawdown": -0.119033,
+          "window_return": 0.06411
+        }
+      ]
+    }
+  ],
+  "index_window_diagnostics": [
+    {
+      "symbol": "000300.SH",
+      "window_diagnostics": [
+        {
+          "window_size_trade_days": 25,
+          "historical_window_count": 743,
+          "observed_paper_max_drawdown": -0.175,
+          "equal_or_worse_historical_window_count": 0,
+          "equal_or_worse_historical_window_ratio": 0.0,
+          "rarity_label_cn": "历史极少见",
+          "drawdown_distribution": {
+            "min": -0.10993,
+            "p05": -0.087216,
+            "p10": -0.073693,
+            "p25": -0.061619,
+            "median": -0.041458,
+            "p75": -0.027129,
+            "max": -0.004337
+          },
+          "worst_windows": [
+            {
+              "start_date": "2024-09-04",
+              "end_date": "2024-10-17",
+              "max_drawdown": -0.10993,
+              "window_return": 0.164831
+            },
+            {
+              "start_date": "2024-09-05",
+              "end_date": "2024-10-18",
+              "max_drawdown": -0.10993,
+              "window_return": 0.204888
+            },
+            {
+              "start_date": "2024-09-06",
+              "end_date": "2024-10-21",
+              "max_drawdown": -0.10993,
+              "window_return": 0.21782
+            },
+            {
+              "start_date": "2024-09-09",
+              "end_date": "2024-10-22",
+              "max_drawdown": -0.10993,
+              "window_return": 0.239535
+            },
+            {
+              "start_date": "2024-09-10",
+              "end_date": "2024-10-23",
+              "max_drawdown": -0.10993,
+              "window_return": 0.243277
+            }
+          ]
+        },
+        {
+          "window_size_trade_days": 50,
+          "historical_window_count": 718,
+          "observed_paper_max_drawdown": -0.175,
+          "equal_or_worse_historical_window_count": 0,
+          "equal_or_worse_historical_window_ratio": 0.0,
+          "rarity_label_cn": "历史极少见",
+          "drawdown_distribution": {
+            "min": -0.129296,
+            "p05": -0.10993,
+            "p10": -0.104915,
+            "p25": -0.0908,
+            "median": -0.070653,
+            "p75": -0.041458,
+            "max": -0.019834
+          },
+          "worst_windows": [
+            {
+              "start_date": "2023-08-07",
+              "end_date": "2023-10-23",
+              "max_drawdown": -0.129296,
+              "window_return": -0.129296
+            },
+            {
+              "start_date": "2023-08-08",
+              "end_date": "2023-10-24",
+              "max_drawdown": -0.127016,
+              "window_return": -0.123778
+            },
+            {
+              "start_date": "2023-08-04",
+              "end_date": "2023-10-20",
+              "max_drawdown": -0.126845,
+              "window_return": -0.126845
+            },
+            {
+              "start_date": "2023-08-09",
+              "end_date": "2023-10-25",
+              "max_drawdown": -0.126134,
+              "window_return": -0.116723
+            },
+            {
+              "start_date": "2023-08-10",
+              "end_date": "2023-10-26",
+              "max_drawdown": -0.126134,
+              "window_return": -0.116098
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "symbol": "000852.SH",
+      "window_diagnostics": [
+        {
+          "window_size_trade_days": 25,
+          "historical_window_count": 743,
+          "observed_paper_max_drawdown": -0.175,
+          "equal_or_worse_historical_window_count": 22,
+          "equal_or_worse_historical_window_ratio": 0.02961,
+          "rarity_label_cn": "历史偏少见",
+          "drawdown_distribution": {
+            "min": -0.266737,
+            "p05": -0.153036,
+            "p10": -0.126609,
+            "p25": -0.091875,
+            "median": -0.061323,
+            "p75": -0.038929,
+            "max": -0.010086
+          },
+          "worst_windows": [
+            {
+              "start_date": "2024-01-02",
+              "end_date": "2024-02-05",
+              "max_drawdown": -0.266737,
+              "window_return": -0.266737
+            },
+            {
+              "start_date": "2024-01-03",
+              "end_date": "2024-02-06",
+              "max_drawdown": -0.262871,
+              "window_return": -0.211468
+            },
+            {
+              "start_date": "2024-01-04",
+              "end_date": "2024-02-07",
+              "max_drawdown": -0.257642,
+              "window_return": -0.170356
+            },
+            {
+              "start_date": "2024-01-05",
+              "end_date": "2024-02-08",
+              "max_drawdown": -0.24362,
+              "window_return": -0.120283
+            },
+            {
+              "start_date": "2024-01-08",
+              "end_date": "2024-02-19",
+              "max_drawdown": -0.234899,
+              "window_return": -0.092718
+            }
+          ]
+        },
+        {
+          "window_size_trade_days": 50,
+          "historical_window_count": 718,
+          "observed_paper_max_drawdown": -0.175,
+          "equal_or_worse_historical_window_count": 54,
+          "equal_or_worse_historical_window_ratio": 0.075209,
+          "rarity_label_cn": "历史低频",
+          "drawdown_distribution": {
+            "min": -0.301179,
+            "p05": -0.228207,
+            "p10": -0.168708,
+            "p25": -0.134535,
+            "median": -0.101943,
+            "p75": -0.068267,
+            "max": -0.018886
+          },
+          "worst_windows": [
+            {
+              "start_date": "2023-11-27",
+              "end_date": "2024-02-05",
+              "max_drawdown": -0.301179,
+              "window_return": -0.297527
+            },
+            {
+              "start_date": "2023-11-28",
+              "end_date": "2024-02-06",
+              "max_drawdown": -0.301179,
+              "window_return": -0.252447
+            },
+            {
+              "start_date": "2023-11-29",
+              "end_date": "2024-02-07",
+              "max_drawdown": -0.299668,
+              "window_return": -0.215188
+            },
+            {
+              "start_date": "2023-11-30",
+              "end_date": "2024-02-08",
+              "max_drawdown": -0.299668,
+              "window_return": -0.17884
+            },
+            {
+              "start_date": "2023-12-01",
+              "end_date": "2024-02-19",
+              "max_drawdown": -0.299668,
+              "window_return": -0.17952
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "symbol": "000905.SH",
+      "window_diagnostics": [
+        {
+          "window_size_trade_days": 25,
+          "historical_window_count": 743,
+          "observed_paper_max_drawdown": -0.175,
+          "equal_or_worse_historical_window_count": 1,
+          "equal_or_worse_historical_window_ratio": 0.001346,
+          "rarity_label_cn": "历史极少见",
+          "drawdown_distribution": {
+            "min": -0.175469,
+            "p05": -0.126812,
+            "p10": -0.118577,
+            "p25": -0.082534,
+            "median": -0.057922,
+            "p75": -0.034034,
+            "max": -0.00703
+          },
+          "worst_windows": [
+            {
+              "start_date": "2024-01-02",
+              "end_date": "2024-02-05",
+              "max_drawdown": -0.175469,
+              "window_return": -0.175469
+            },
+            {
+              "start_date": "2024-01-03",
+              "end_date": "2024-02-06",
+              "max_drawdown": -0.174239,
+              "window_return": -0.110248
+            },
+            {
+              "start_date": "2024-01-04",
+              "end_date": "2024-02-07",
+              "max_drawdown": -0.167134,
+              "window_return": -0.045889
+            },
+            {
+              "start_date": "2023-12-29",
+              "end_date": "2024-02-02",
+              "max_drawdown": -0.159508,
+              "window_return": -0.159508
+            },
+            {
+              "start_date": "2024-01-05",
+              "end_date": "2024-02-08",
+              "max_drawdown": -0.155552,
+              "window_return": -0.024923
+            }
+          ]
+        },
+        {
+          "window_size_trade_days": 50,
+          "historical_window_count": 718,
+          "observed_paper_max_drawdown": -0.175,
+          "equal_or_worse_historical_window_count": 27,
+          "equal_or_worse_historical_window_ratio": 0.037604,
+          "rarity_label_cn": "历史偏少见",
+          "drawdown_distribution": {
+            "min": -0.202313,
+            "p05": -0.155346,
+            "p10": -0.140638,
+            "p25": -0.120754,
+            "median": -0.092533,
+            "p75": -0.067245,
+            "max": -0.022487
+          },
+          "worst_windows": [
+            {
+              "start_date": "2023-11-27",
+              "end_date": "2024-02-05",
+              "max_drawdown": -0.202313,
+              "window_return": -0.198732
+            },
+            {
+              "start_date": "2023-11-28",
+              "end_date": "2024-02-06",
+              "max_drawdown": -0.202313,
+              "window_return": -0.140498
+            },
+            {
+              "start_date": "2023-11-29",
+              "end_date": "2024-02-07",
+              "max_drawdown": -0.198784,
+              "window_return": -0.07991
+            },
+            {
+              "start_date": "2023-11-30",
+              "end_date": "2024-02-08",
+              "max_drawdown": -0.198784,
+              "window_return": -0.071202
+            },
+            {
+              "start_date": "2023-12-01",
+              "end_date": "2024-02-19",
+              "max_drawdown": -0.198784,
+              "window_return": -0.076392
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "interpretation": {
+    "status": "sample_out_pressure_extreme",
+    "observed_paper_max_drawdown": -0.175,
+    "minimum_equal_or_worse_historical_window_ratio": 0.0,
+    "message_cn": "当前纸面回撤已经落在历史滚动窗口的极少见区域。它不能单独证明策略失效，但足以要求继续做逐笔归因、市场窗口归因和纸面风险标签。"
+  },
+  "leakage_audit": {
+    "status": "passed",
+    "used_only_existing_market_rows": true,
+    "paper_tracking_write_policy": "forbidden",
+    "notes": [
+      "Historical timeline is rebuilt from the governed v2 H10 replay engine.",
+      "Current paper drawdown is an observed input and is not used to choose strategy parameters.",
+      "The artifact compares rolling historical pressure windows; it does not promote or retire a strategy."
+    ]
+  },
+  "event_refs": [
+    "shortpick_v2.out_of_sample_risk_diagnostic.generated",
+    "shortpick_v2.paper_window.2026-05-08_2026-06-15"
+  ]
+}
