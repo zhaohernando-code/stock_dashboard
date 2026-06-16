@@ -120,6 +120,11 @@ from ashare_evidence.shortpick_v2_h10_robustness import (
     build_shortpick_v2_h10_robustness_artifact,
     write_shortpick_v2_h10_robustness_artifact,
 )
+from ashare_evidence.shortpick_v2_h10_weekday_drawdown_notional_matrix import (
+    build_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact,
+    validate_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact,
+    write_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact,
+)
 from ashare_evidence.shortpick_v2_replay import (
     build_shortpick_v2_replay_artifact,
     write_shortpick_v2_replay_artifact,
@@ -262,6 +267,7 @@ NO_DB_COMMANDS = {
     "shortpick-v2-h10-paper-governance-validate",
     "shortpick-v2-h10-parameter-significance-validate",
     "shortpick-v2-h10-rank-ablation-validate",
+    "shortpick-v2-h10-weekday-drawdown-notional-matrix-validate",
 }
 
 
@@ -1041,6 +1047,45 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate h10 quiet parameter significance artifact structure and governance labels.",
     )
     shortpick_v2_h10_parameter_significance_validate.add_argument("--artifact", required=True)
+
+    shortpick_v2_h10_weekday_drawdown_notional_matrix = subparsers.add_parser(
+        "shortpick-v2-h10-weekday-drawdown-notional-matrix",
+        help="Generate the H10 quiet weekday, drawdown-filter, and fixed-notional validation matrix.",
+    )
+    shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument("--database-url", default=None)
+    shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument("--start-date", default="2023-04-13")
+    shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument("--end-date", default="2026-05-08")
+    shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument("--initial-cash", type=float, default=200_000.0)
+    shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument(
+        "--entry-price-source",
+        choices=["next_close", "next_open", "same_close_proxy"],
+        default="next_close",
+    )
+    shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument("--horizon-days", type=int, default=10)
+    shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument("--pool-limit", type=int, default=40)
+    shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument("--rank-limit", type=int, default=6)
+    shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument("--cost-bps", type=float, default=20.0)
+    shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument("--stamp-tax-bps", type=float, default=5.0)
+    shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument("--min-signal-symbol-count", type=int, default=45)
+    shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument(
+        "--account-profile",
+        choices=["new_retail_cash_account", "unrestricted"],
+        default="new_retail_cash_account",
+    )
+    shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument(
+        "--output",
+        default="output/shortpick-v2-h10-weekday-drawdown-notional-matrix-artifact.json",
+    )
+    shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument(
+        "--summary-output",
+        default="docs/archive/SHORTPICK_LAB_V2_H10_WEEKDAY_DRAWDOWN_NOTIONAL_MATRIX.md",
+    )
+
+    shortpick_v2_h10_weekday_drawdown_notional_matrix_validate = subparsers.add_parser(
+        "shortpick-v2-h10-weekday-drawdown-notional-matrix-validate",
+        help="Validate the H10 quiet weekday, drawdown-filter, and notional matrix artifact.",
+    )
+    shortpick_v2_h10_weekday_drawdown_notional_matrix_validate.add_argument("--artifact", required=True)
 
     shortpick_v2_h10_rank_ablation = subparsers.add_parser(
         "shortpick-v2-h10-rank-ablation",
@@ -1854,6 +1899,46 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "shortpick-v2-h10-parameter-significance-validate":
         payload = validate_shortpick_v2_h10_parameter_significance_artifact(artifact_path=args.artifact)
+        _print_json(payload)
+        return 0 if payload.get("status") == "passed" else 1
+
+    if args.command == "shortpick-v2-h10-weekday-drawdown-notional-matrix":
+        with session_scope(args.database_url) as session:
+            payload = build_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact(
+                session,
+                start_date=date.fromisoformat(args.start_date),
+                end_date=date.fromisoformat(args.end_date),
+                initial_cash=args.initial_cash,
+                entry_price_source=args.entry_price_source,
+                horizon_days=args.horizon_days,
+                pool_limit=args.pool_limit,
+                rank_limit=args.rank_limit,
+                cost_bps=args.cost_bps,
+                stamp_tax_bps=args.stamp_tax_bps,
+                min_signal_symbol_count=args.min_signal_symbol_count,
+                account_profile=args.account_profile,
+            )
+        paths = write_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact(
+            payload,
+            output_path=args.output,
+            summary_path=args.summary_output,
+        )
+        _print_json(
+            {
+                "status": "ok",
+                "artifact_family": payload.get("artifact_family"),
+                "artifact_id": payload.get("artifact_id"),
+                "output_path": str(paths["artifact"]),
+                "summary_output_path": str(paths.get("summary")) if paths.get("summary") else None,
+                "row_count": len(payload.get("matrix_rows") or []),
+                "horizon_days": (payload.get("analysis_scope") or {}).get("horizon_days"),
+                "recommendation_status": (payload.get("recommendation") or {}).get("status"),
+            }
+        )
+        return 0
+
+    if args.command == "shortpick-v2-h10-weekday-drawdown-notional-matrix-validate":
+        payload = validate_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact(artifact_path=args.artifact)
         _print_json(payload)
         return 0 if payload.get("status") == "passed" else 1
 
