@@ -150,6 +150,11 @@ from ashare_evidence.shortpick_v2_out_of_sample_risk import (
     validate_shortpick_v2_out_of_sample_risk_artifact,
     write_shortpick_v2_out_of_sample_risk_artifact,
 )
+from ashare_evidence.shortpick_v2_ranking_backtest import (
+    build_shortpick_v2_ranking_backtest_artifact,
+    validate_shortpick_v2_ranking_backtest_artifact,
+    write_shortpick_v2_ranking_backtest_artifact,
+)
 from ashare_evidence.shortpick_v2_replay import (
     build_shortpick_v2_replay_artifact,
     write_shortpick_v2_replay_artifact,
@@ -308,6 +313,7 @@ NO_DB_COMMANDS = {
     "shortpick-v2-oos-position-rank-diagnostics-validate",
     "shortpick-v2-theme-position-diagnostics-validate",
     "shortpick-v2-out-of-sample-risk-validate",
+    "shortpick-v2-ranking-backtest-validate",
     "shortpick-v2-risk-switch-experiment-validate",
     "shortpick-paper-divergence-attribution-validate",
 }
@@ -1414,6 +1420,52 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate the v2 OOS position and Rank2/Top5 diagnostics artifact.",
     )
     shortpick_v2_oos_position_rank_diagnostics_validate.add_argument("--artifact", required=True)
+
+    shortpick_v2_ranking_backtest = subparsers.add_parser(
+        "shortpick-v2-ranking-backtest",
+        help="Generate formal v2 ranking replacement backtests under the fixed H10/MTW execution frame.",
+    )
+    shortpick_v2_ranking_backtest.add_argument("--database-url", default=None)
+    shortpick_v2_ranking_backtest.add_argument("--historical-start-date", default="2023-04-13")
+    shortpick_v2_ranking_backtest.add_argument("--train-end-date", default="2025-04-30")
+    shortpick_v2_ranking_backtest.add_argument("--holdout-start-date", default="2025-05-01")
+    shortpick_v2_ranking_backtest.add_argument("--historical-end-date", default="2026-05-08")
+    shortpick_v2_ranking_backtest.add_argument("--paper-start-date", default="2026-05-08")
+    shortpick_v2_ranking_backtest.add_argument("--paper-end-date", default="2026-06-16")
+    shortpick_v2_ranking_backtest.add_argument("--initial-cash", type=float, default=200_000.0)
+    shortpick_v2_ranking_backtest.add_argument("--target-notional", type=float, default=85_000.0)
+    shortpick_v2_ranking_backtest.add_argument(
+        "--entry-price-source",
+        choices=["next_close", "next_open", "same_close_proxy"],
+        default="next_close",
+    )
+    shortpick_v2_ranking_backtest.add_argument("--horizon-days", type=int, default=10)
+    shortpick_v2_ranking_backtest.add_argument("--pool-limit", type=int, default=40)
+    shortpick_v2_ranking_backtest.add_argument("--rank-limit", type=int, default=6)
+    shortpick_v2_ranking_backtest.add_argument("--cost-bps", type=float, default=20.0)
+    shortpick_v2_ranking_backtest.add_argument("--stamp-tax-bps", type=float, default=5.0)
+    shortpick_v2_ranking_backtest.add_argument("--min-signal-symbol-count", type=int, default=45)
+    shortpick_v2_ranking_backtest.add_argument("--min-acceptable-annualized-return", type=float, default=0.30)
+    shortpick_v2_ranking_backtest.add_argument("--max-acceptable-drawdown", type=float, default=-0.25)
+    shortpick_v2_ranking_backtest.add_argument(
+        "--account-profile",
+        choices=["new_retail_cash_account", "unrestricted"],
+        default="new_retail_cash_account",
+    )
+    shortpick_v2_ranking_backtest.add_argument(
+        "--output",
+        default="output/shortpick-v2-ranking-backtest-20260616.json",
+    )
+    shortpick_v2_ranking_backtest.add_argument(
+        "--summary-output",
+        default="docs/archive/SHORTPICK_V2_RANKING_BACKTEST_2026-06-16.md",
+    )
+
+    shortpick_v2_ranking_backtest_validate = subparsers.add_parser(
+        "shortpick-v2-ranking-backtest-validate",
+        help="Validate the v2 ranking replacement backtest artifact.",
+    )
+    shortpick_v2_ranking_backtest_validate.add_argument("--artifact", required=True)
 
     shortpick_paper_divergence_attribution = subparsers.add_parser(
         "shortpick-paper-divergence-attribution",
@@ -2564,6 +2616,53 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "shortpick-v2-oos-position-rank-diagnostics-validate":
         payload = validate_shortpick_v2_oos_position_rank_diagnostics_artifact(artifact_path=args.artifact)
+        _print_json(payload)
+        return 0 if payload.get("status") == "passed" else 1
+
+    if args.command == "shortpick-v2-ranking-backtest":
+        with session_scope(args.database_url) as session:
+            payload = build_shortpick_v2_ranking_backtest_artifact(
+                session,
+                historical_start_date=date.fromisoformat(args.historical_start_date),
+                train_end_date=date.fromisoformat(args.train_end_date),
+                holdout_start_date=date.fromisoformat(args.holdout_start_date),
+                historical_end_date=date.fromisoformat(args.historical_end_date),
+                paper_start_date=date.fromisoformat(args.paper_start_date),
+                paper_end_date=date.fromisoformat(args.paper_end_date),
+                initial_cash=args.initial_cash,
+                target_notional=args.target_notional,
+                entry_price_source=args.entry_price_source,
+                horizon_days=args.horizon_days,
+                pool_limit=args.pool_limit,
+                rank_limit=args.rank_limit,
+                cost_bps=args.cost_bps,
+                stamp_tax_bps=args.stamp_tax_bps,
+                min_signal_symbol_count=args.min_signal_symbol_count,
+                account_profile=args.account_profile,
+                min_acceptable_annualized_return=args.min_acceptable_annualized_return,
+                max_acceptable_drawdown=args.max_acceptable_drawdown,
+            )
+        paths = write_shortpick_v2_ranking_backtest_artifact(
+            payload,
+            output_path=args.output,
+            summary_path=args.summary_output,
+        )
+        comparison = payload.get("comparison") if isinstance(payload.get("comparison"), dict) else {}
+        _print_json(
+            {
+                "status": "ok",
+                "artifact_family": payload.get("artifact_family"),
+                "artifact_id": payload.get("artifact_id"),
+                "output_path": str(paths["artifact"]),
+                "summary_output_path": str(paths.get("summary")) if paths.get("summary") else None,
+                "candidate_variant_ids": comparison.get("candidate_variant_ids"),
+                "interpretation_status": (payload.get("interpretation") or {}).get("status"),
+            }
+        )
+        return 0
+
+    if args.command == "shortpick-v2-ranking-backtest-validate":
+        payload = validate_shortpick_v2_ranking_backtest_artifact(artifact_path=args.artifact)
         _print_json(payload)
         return 0 if payload.get("status") == "passed" else 1
 
