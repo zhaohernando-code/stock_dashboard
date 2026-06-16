@@ -118,9 +118,9 @@ styles = Path("frontend/src/styles.css").read_text(encoding="utf-8")
 
 required_component_terms = [
     "策略观察组",
-    "纸面收益走势",
-    "累计纸面收益",
-    "策略退出效果排名",
+    "账户净值走势",
+    "账户累计收益",
+    "账户最大回撤对比",
     "搜索日期、标的、动作、原因",
     "退出状态",
     "前向观察候选",

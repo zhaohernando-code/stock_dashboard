@@ -670,6 +670,27 @@ export interface ShortpickV2PaperDisplayTable {
   empty_text?: string;
 }
 
+export interface ShortpickV2PaperDisplayAccountPoint {
+  date: string;
+  nav: number;
+  account_return: number;
+  drawdown: number;
+  cash?: number;
+  position_value?: number;
+  open_position_count?: number;
+}
+
+export interface ShortpickV2PaperDisplayAccountCurve {
+  strategy: string;
+  initial_cash?: number;
+  latest_nav?: number;
+  latest_return?: number;
+  max_drawdown?: number;
+  point_count?: number;
+  completed_trade_count?: number;
+  points?: ShortpickV2PaperDisplayAccountPoint[];
+}
+
 export interface ShortpickV2PaperDisplay {
   title?: string;
   status_label?: string;
@@ -678,6 +699,7 @@ export interface ShortpickV2PaperDisplay {
   strategy_explanation?: ShortpickV2PaperDisplayStrategyExplanation;
   charts?: ShortpickV2PaperDisplayChart[];
   table?: ShortpickV2PaperDisplayTable;
+  account_curves?: ShortpickV2PaperDisplayAccountCurve[];
   coverage?: Record<string, unknown>;
   summary_cards?: ShortpickV2PaperDisplayTextItem[];
 }

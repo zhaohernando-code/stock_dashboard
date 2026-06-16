@@ -139,6 +139,46 @@ def parse_iso_day(value: str, label: str) -> date:
         fail(f"{label} must be an ISO date, got {value!r}: {exc}")
 
 
+def parse_percent_text(value: object) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not isinstance(value, str):
+        return None
+    normalized = value.replace("%", "").replace("+", "").strip()
+    if not normalized or normalized in {"-", "暂无"}:
+        return None
+    try:
+        return float(normalized) / 100.0
+    except ValueError:
+        return None
+
+
+def wrong_full_trade_compounded_drawdown(rows: list[dict[str, object]], strategy: str) -> float | None:
+    completed = sorted(
+        [
+            row
+            for row in rows
+            if str(row.get("strategy_text") or "") == strategy
+            and str(row.get("exit_state_text") or "") in {"已按10日退出", "已退出"}
+            and parse_percent_text(row.get("return_text")) is not None
+        ],
+        key=lambda row: str(row.get("signal_date") or row.get("signal_date_text") or ""),
+    )
+    if not completed:
+        return None
+    cumulative = 1.0
+    peak = 1.0
+    max_drawdown = 0.0
+    for row in completed:
+        return_value = parse_percent_text(row.get("return_text"))
+        if return_value is None:
+            continue
+        cumulative *= 1.0 + return_value
+        peak = max(peak, cumulative)
+        max_drawdown = min(max_drawdown, cumulative / peak - 1.0)
+    return max_drawdown
+
+
 payload = json.loads(Path(os.environ["ASHARE_SHORTPICK_V2_API_PAYLOAD_FILE"]).read_text(encoding="utf-8"))
 display = require_dict(payload.get("paper_display"), "paper_display")
 coverage = require_dict(display.get("coverage"), "paper_display.coverage")
@@ -148,6 +188,7 @@ latest_trade = require_dict(display.get("latest_trade"), "paper_display.latest_t
 strategy_explanation = require_dict(display.get("strategy_explanation"), "paper_display.strategy_explanation")
 charts = require_list(display.get("charts"), "paper_display.charts")
 rows = require_list(table.get("rows"), "paper_display.table.rows")
+account_curves = require_list(display.get("account_curves"), "paper_display.account_curves")
 
 if display.get("title") != "试验田v2纸面追踪":
     fail(f"unexpected display title: {display.get('title')!r}")
@@ -222,6 +263,40 @@ for row in rows:
     if row.get("tracking_tag") == "真实前向" and row.get("note") and "回放" in str(row.get("note")):
         fail("true-forward row note must not describe the row as replay")
 
+if not account_curves:
+    fail("paper_display.account_curves is empty; paper chart would have to recompute from table rows")
+for curve in account_curves:
+    if not isinstance(curve, dict):
+        fail("paper_display.account_curves contains a non-object curve")
+    strategy = str(curve.get("strategy") or "")
+    if not strategy:
+        fail("paper_display.account_curves contains a curve without Chinese strategy label")
+    if "config_id" in curve:
+        fail("paper_display.account_curves must not expose config_id")
+    points = require_list(curve.get("points"), f"paper_display.account_curves[{strategy}].points")
+    if not points:
+        fail(f"paper_display.account_curves[{strategy}] has no points")
+    max_drawdown = curve.get("max_drawdown")
+    latest_return = curve.get("latest_return")
+    if not isinstance(max_drawdown, (int, float)):
+        fail(f"paper_display.account_curves[{strategy}].max_drawdown must be numeric")
+    if not isinstance(latest_return, (int, float)):
+        fail(f"paper_display.account_curves[{strategy}].latest_return must be numeric")
+    old_drawdown = wrong_full_trade_compounded_drawdown(rows, strategy)
+    if old_drawdown is not None and old_drawdown <= -0.20 and abs(float(max_drawdown) - old_drawdown) < 0.01:
+        fail(
+            f"paper_display.account_curves[{strategy}].max_drawdown={max_drawdown:.4f} "
+            f"still matches old full-trade compounding drawdown {old_drawdown:.4f}"
+        )
+    for point in points:
+        if not isinstance(point, dict):
+            fail(f"paper_display.account_curves[{strategy}].points contains a non-object point")
+        for required_point_key in ("date", "nav", "account_return", "drawdown"):
+            if required_point_key not in point:
+                fail(f"paper_display.account_curves[{strategy}].points missing {required_point_key}")
+        if "config_id" in point:
+            fail("paper_display.account_curves points must not expose config_id")
+
 rendered_display = json.dumps(display, ensure_ascii=False)
 for forbidden in ("delay_buy", "retry_buy", "later_entry", "v2 Paper Ledger Rows"):
     if forbidden in rendered_display:
@@ -232,7 +307,8 @@ for forbidden_key in ("config_id", "decision_action", "source_state"):
 
 print(
     "served API display verification passed: "
-    f"available={len(available)}, replay={replay_count}, gaps={gap_count}, true_forward={true_forward_count}"
+    f"available={len(available)}, replay={replay_count}, gaps={gap_count}, "
+    f"true_forward={true_forward_count}, account_curves={len(account_curves)}"
 )
 PY
 
@@ -339,9 +415,9 @@ wait_for_visible_terms \
   "$PAGE_TEXT_FILE" \
   "最新模拟交易" \
   "策略观察组" \
-  "纸面收益走势" \
-  "累计纸面收益" \
-  "策略退出效果排名" \
+  "账户净值走势" \
+  "账户累计收益" \
+  "账户最大回撤对比" \
   "覆盖情况" \
   "动作分布" \
   "模拟交易明细" \
@@ -423,9 +499,9 @@ check_visible_text(
         "最新模拟交易",
         "策略说明",
         "策略观察组",
-        "纸面收益走势",
-        "累计纸面收益",
-        "策略退出效果排名",
+        "账户净值走势",
+        "账户累计收益",
+        "账户最大回撤对比",
         "覆盖情况",
         "动作分布",
         "模拟交易明细",

@@ -92,7 +92,10 @@ SHORTPICK_V2_PAPER_DISPLAY_CACHE_TTL_SECONDS = float(
     os.getenv("ASHARE_SHORTPICK_V2_PAPER_DISPLAY_CACHE_TTL_SECONDS", "300")
 )
 _paper_display_replay_cache_lock = threading.Lock()
-_paper_display_replay_cache: dict[tuple[Any, ...], tuple[float, list[dict[str, Any]], dict[str, Any]]] = {}
+_paper_display_replay_cache: dict[
+    tuple[Any, ...],
+    tuple[float, list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]],
+] = {}
 
 
 def build_shortpick_v2_historical_replay_read_model(
@@ -601,16 +604,28 @@ def _paper_tracking_display_projection(
 ) -> dict[str, Any]:
     true_forward_rows = [_paper_display_row_from_ledger(record) for record in records] if include_display_rows else []
     if include_display_rows:
-        replay_rows, coverage = _paper_display_replay_rows_from_session(
+        replay_rows, coverage, account_curves = _paper_display_replay_rows_from_session(
             session=session,
             active_config_ids=_paper_display_active_config_ids(selected_configs),
         )
     else:
         replay_rows = []
+        account_curves = []
         coverage = _empty_paper_display_coverage()
         coverage["source_status"] = "summary_rows_omitted"
         coverage["source_status_label"] = "摘要接口不返回明细行，也不执行回放重算"
     coverage["true_forward_record_count"] = len(records)
+    coverage["account_curve_scope"] = "回放账户曲线"
+    if true_forward_rows:
+        true_forward_account_curves = _paper_display_account_curves_from_session(
+            session=session,
+            rows=[*replay_rows, *true_forward_rows],
+        )
+        if true_forward_account_curves:
+            account_curves = true_forward_account_curves
+            coverage["account_curve_scope"] = "回放与真实前向合并账户曲线"
+        else:
+            coverage["account_curve_scope"] = "回放账户曲线，真实前向暂缺行情估值"
     internal_display_rows = _sorted_display_rows([*true_forward_rows, *replay_rows])[
         :SHORTPICK_V2_PAPER_DISPLAY_REPLAY_ROW_LIMIT
     ]
@@ -672,6 +687,7 @@ def _paper_tracking_display_projection(
             "rows": table_rows,
             "empty_text": "暂无可展示的纸面追踪记录。",
         },
+        "account_curves": account_curves,
         "coverage": coverage,
         "summary_cards": [
             {"label": "真实前向记录", "value": str(int(summary.get("record_count") or 0))},
@@ -686,24 +702,24 @@ def _paper_display_replay_rows_from_session(
     *,
     session: Any | None,
     active_config_ids: tuple[str, ...],
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
     if session is None:
         coverage = _empty_paper_display_coverage()
         coverage["source_status"] = "no_market_data_session"
         coverage["source_status_label"] = "未连接本地行情库，无法生成回放补齐行"
-        return [], coverage
+        return [], coverage, []
     cache_key = _paper_display_replay_cache_key(session, active_config_ids)
     if isinstance(cache_key, tuple):
         now = time.monotonic()
         with _paper_display_replay_cache_lock:
             cached = _paper_display_replay_cache.get(cache_key)
             if cached is not None and now - cached[0] <= SHORTPICK_V2_PAPER_DISPLAY_CACHE_TTL_SECONDS:
-                return copy.deepcopy(cached[1]), copy.deepcopy(cached[2])
+                return copy.deepcopy(cached[1]), copy.deepcopy(cached[2]), copy.deepcopy(cached[3])
     else:
-        return [], cache_key
+        return [], cache_key, []
 
     try:
-        rows, coverage = _build_paper_display_replay_rows_from_session(
+        rows, coverage, account_curves = _build_paper_display_replay_rows_from_session(
             session=session,
             active_config_ids=active_config_ids,
         )
@@ -711,7 +727,7 @@ def _paper_display_replay_rows_from_session(
         coverage = _empty_paper_display_coverage()
         coverage["source_status"] = "replay_generation_error"
         coverage["source_status_label"] = "回放展示生成失败；真实前向记录不受影响，请稍后重试或检查本地行情库"
-        return [], coverage
+        return [], coverage, []
 
     now = time.monotonic()
     with _paper_display_replay_cache_lock:
@@ -722,8 +738,13 @@ def _paper_display_replay_rows_from_session(
         ]
         for existing_key in expired_cache_keys:
             _paper_display_replay_cache.pop(existing_key, None)
-        _paper_display_replay_cache[cache_key] = (now, copy.deepcopy(rows), copy.deepcopy(coverage))
-    return rows, coverage
+        _paper_display_replay_cache[cache_key] = (
+            now,
+            copy.deepcopy(rows),
+            copy.deepcopy(coverage),
+            copy.deepcopy(account_curves),
+        )
+    return rows, coverage, account_curves
 
 
 def _paper_display_replay_cache_key(
@@ -756,14 +777,14 @@ def _build_paper_display_replay_rows_from_session(
     *,
     session: Any,
     active_config_ids: tuple[str, ...],
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
     coverage = _empty_paper_display_coverage()
     coverage["true_forward_record_count"] = 0
     rule_configs = _paper_display_rule_configs(active_config_ids)
     if not rule_configs:
         coverage["source_status"] = "no_active_h10_config"
         coverage["source_status_label"] = "当前没有可进入纸面观察的 H10 候选策略"
-        return [], coverage
+        return [], coverage, []
 
     from ashare_evidence.market_rules import ACCOUNT_PROFILE_NEW_RETAIL_CASH, filter_account_eligible_series
     from ashare_evidence.shortpick_market_factor_study import ENTRY_PRICE_SOURCE_NEXT_CLOSE, INDEX_SYMBOLS
@@ -783,7 +804,7 @@ def _build_paper_display_replay_rows_from_session(
         coverage["source_status_label"] = "本地行情库没有覆盖 2026-05-08 之后的数据"
         coverage["coverage_end"] = latest_market_day.isoformat() if latest_market_day is not None else None
         coverage["latest_source_signal_date"] = coverage["coverage_end"]
-        return [], coverage
+        return [], coverage, []
     raw_series_by_symbol = _load_daily_series_for_replay_window(
         session,
         start_date=start_date - timedelta(days=SHORTPICK_V2_PAPER_DISPLAY_LOOKBACK_DAYS),
@@ -800,7 +821,7 @@ def _build_paper_display_replay_rows_from_session(
         coverage["source_status_label"] = "本地行情库没有覆盖 2026-05-08 之后的数据"
         coverage["coverage_end"] = latest_bar_day.isoformat() if latest_bar_day is not None else None
         coverage["latest_source_signal_date"] = coverage["coverage_end"]
-        return [], coverage
+        return [], coverage, []
     latest_bar_day = min(latest_bar_day, latest_market_day)
 
     available_signal_days = _trade_days(
@@ -823,7 +844,7 @@ def _build_paper_display_replay_rows_from_session(
     )
     coverage["account_profile_label"] = str(account_eligibility.get("account_profile_label") or "新开户普通现金账户")
     if not available_signal_days:
-        return [], coverage
+        return [], coverage, []
 
     candidate_sources = build_h10_quiet_champion_strategy_search_candidate_sources(
         series_by_symbol,
@@ -854,7 +875,7 @@ def _build_paper_display_replay_rows_from_session(
             rows,
             active_config_ids=tuple(config.config_id for config in rule_configs),
         )
-        return rows, coverage
+        return rows, coverage, []
     display_trade_days = _trade_days(
         series_by_symbol,
         start_date=start_date,
@@ -897,7 +918,14 @@ def _build_paper_display_replay_rows_from_session(
         rows,
         active_config_ids=tuple(config.config_id for config in rule_configs),
     )
-    return rows, coverage
+    account_curves = _paper_display_account_curves_from_rows(
+        rows,
+        series_by_symbol=series_by_symbol,
+        trade_days=display_trade_days,
+        initial_cash=SHORTPICK_V2_DEFAULT_INITIAL_CASH,
+    )
+    coverage["account_curve_count"] = len(account_curves)
+    return rows, coverage, account_curves
 
 
 def _paper_display_rows_from_replay_artifact(
@@ -998,6 +1026,7 @@ def _paper_display_row_from_replay_decision(
         "tracking_tag_tone": "warning",
         "config_id": config_id,
         "strategy_text": _paper_config_label(config_id),
+        "symbol": symbol,
         "action": action,
         "action_text": _paper_action_label(action),
         "reason_text": _paper_reason_label(str(decision.get("reason") or "")),
@@ -1074,6 +1103,7 @@ def _paper_display_row_from_ledger(record: dict[str, Any]) -> dict[str, Any]:
         "tracking_tag_tone": "success",
         "config_id": str(record.get("config_id") or ""),
         "strategy_text": _paper_config_label(str(record.get("config_id") or "")),
+        "symbol": symbol,
         "action": action,
         "action_text": _paper_action_label(action),
         "reason_text": _paper_reason_label(str(record.get("reason") or "")),
@@ -1345,6 +1375,204 @@ def _series_close_on_day(series: Any, target_day: date) -> float | None:
     try:
         return float(bars[index].close)
     except (IndexError, TypeError, ValueError):
+        return None
+
+
+def _paper_display_account_curves_from_rows(
+    rows: list[dict[str, Any]],
+    *,
+    series_by_symbol: dict[str, Any],
+    trade_days: list[date],
+    initial_cash: float,
+) -> list[dict[str, Any]]:
+    latest_observed_day = _latest_series_day(series_by_symbol)
+    if latest_observed_day is None:
+        return []
+    observed_trade_days = [day for day in trade_days if day <= latest_observed_day]
+    if not observed_trade_days:
+        return []
+
+    grouped_rows: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        if row.get("action") not in {"buy_primary", "buy_fallback"}:
+            continue
+        if _optional_int(row.get("quantity")) is None or _optional_int(row.get("quantity")) <= 0:
+            continue
+        config_id = str(row.get("config_id") or "")
+        if not config_id:
+            continue
+        grouped_rows.setdefault(config_id, []).append(row)
+
+    curves: list[dict[str, Any]] = []
+    for config_id, config_rows in grouped_rows.items():
+        entries: list[dict[str, Any]] = []
+        for row in sorted(config_rows, key=lambda item: str(item.get("entry_date") or item.get("signal_date") or "")):
+            entry_day = _parse_iso_date_or_none(row.get("entry_date"))
+            if entry_day is None or entry_day > latest_observed_day:
+                continue
+            symbol = str(row.get("symbol") or "")
+            quantity = _optional_int(row.get("quantity"))
+            if not symbol or quantity is None or quantity <= 0:
+                continue
+            entry_close = _series_close_on_day(series_by_symbol.get(symbol), entry_day)
+            cash_before = _optional_float(row.get("cash_before"))
+            cash_after = _optional_float(row.get("cash_after"))
+            entry_cost = (
+                max(float(cash_before) - float(cash_after), 0.0)
+                if cash_before is not None and cash_after is not None
+                else 0.0
+            )
+            if entry_cost <= 0 and entry_close is not None:
+                entry_cost = float(quantity) * float(entry_close)
+            if entry_cost <= 0:
+                continue
+            entries.append(
+                {
+                    "entry_day": entry_day,
+                    "exit_day": _parse_iso_date_or_none(row.get("exit_date")),
+                    "symbol": symbol,
+                    "quantity": quantity,
+                    "entry_cost": entry_cost,
+                    "stock_return": _optional_float(row.get("return")),
+                    "last_close": entry_close,
+                }
+            )
+        if not entries:
+            continue
+
+        entry_days = {entry["entry_day"] for entry in entries}
+        entries_by_day: dict[date, list[dict[str, Any]]] = {}
+        for entry in entries:
+            entries_by_day.setdefault(entry["entry_day"], []).append(entry)
+        first_entry_day = min(entry_days)
+        account_days = [day for day in observed_trade_days if day >= first_entry_day]
+
+        cash = float(initial_cash)
+        peak_nav = float(initial_cash)
+        open_positions: list[dict[str, Any]] = []
+        points: list[dict[str, Any]] = []
+        completed_trade_count = 0
+        for day in account_days:
+            for entry in entries_by_day.get(day, []):
+                cash -= float(entry["entry_cost"])
+                open_positions.append(dict(entry))
+
+            position_value = 0.0
+            for position in open_positions:
+                close = _series_close_on_day(series_by_symbol.get(str(position["symbol"])), day)
+                if close is None:
+                    close = position.get("last_close") or (
+                        float(position["entry_cost"]) / float(position["quantity"])
+                    )
+                else:
+                    position["last_close"] = close
+                position_value += float(position["quantity"]) * float(close)
+
+            nav = cash + position_value
+            peak_nav = max(peak_nav, nav)
+            drawdown = nav / peak_nav - 1.0 if peak_nav else 0.0
+            points.append(
+                {
+                    "date": day.isoformat(),
+                    "nav": round(nav, 2),
+                    "account_return": round(nav / float(initial_cash) - 1.0, 6) if initial_cash else 0.0,
+                    "drawdown": round(drawdown, 6),
+                    "cash": round(cash, 2),
+                    "position_value": round(position_value, 2),
+                    "open_position_count": len(open_positions),
+                }
+            )
+
+            remaining_positions: list[dict[str, Any]] = []
+            for position in open_positions:
+                exit_day = position.get("exit_day")
+                if exit_day is not None and exit_day <= day:
+                    stock_return = position.get("stock_return")
+                    if stock_return is None:
+                        close = _series_close_on_day(series_by_symbol.get(str(position["symbol"])), day)
+                        stock_return = (
+                            float(close) * float(position["quantity"]) / float(position["entry_cost"]) - 1.0
+                            if close is not None and position["entry_cost"]
+                            else 0.0
+                        )
+                    cash += float(position["entry_cost"]) * (1.0 + float(stock_return))
+                    completed_trade_count += 1
+                else:
+                    remaining_positions.append(position)
+            open_positions = remaining_positions
+
+        if not points:
+            continue
+        latest_point = points[-1]
+        curves.append(
+            {
+                "strategy": _paper_config_label(config_id),
+                "initial_cash": round(float(initial_cash), 2),
+                "latest_nav": latest_point["nav"],
+                "latest_return": latest_point["account_return"],
+                "max_drawdown": min(point["drawdown"] for point in points),
+                "point_count": len(points),
+                "completed_trade_count": completed_trade_count,
+                "points": points,
+            }
+        )
+    return sorted(curves, key=lambda curve: str(curve.get("strategy") or ""))
+
+
+def _paper_display_account_curves_from_session(
+    *,
+    session: Any | None,
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if session is None or not rows:
+        return []
+    try:
+        from ashare_evidence.market_rules import ACCOUNT_PROFILE_NEW_RETAIL_CASH, filter_account_eligible_series
+        from ashare_evidence.shortpick_market_factor_study import INDEX_SYMBOLS
+        from ashare_evidence.shortpick_portfolio_backtest import _trade_days
+        from ashare_evidence.shortpick_ranked_pool_replay_input import _load_daily_series_for_replay_window
+
+        start_date = date.fromisoformat(SHORTPICK_V2_TRACKING_START_DATE)
+        latest_market_day = _latest_daily_market_bar_day(session)
+        if latest_market_day is None or latest_market_day < start_date:
+            return []
+        raw_series_by_symbol = _load_daily_series_for_replay_window(
+            session,
+            start_date=start_date - timedelta(days=SHORTPICK_V2_PAPER_DISPLAY_LOOKBACK_DAYS),
+            end_date=latest_market_day,
+        )
+        series_by_symbol, _account_eligibility = filter_account_eligible_series(
+            raw_series_by_symbol,
+            account_profile=ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+            include_index_symbols=INDEX_SYMBOLS,
+        )
+        latest_bar_day = _latest_series_day(series_by_symbol)
+        if latest_bar_day is None or latest_bar_day < start_date:
+            return []
+        trade_days = _trade_days(
+            series_by_symbol,
+            start_date=start_date,
+            end_date=min(latest_bar_day, latest_market_day),
+            min_symbol_count=SHORTPICK_V2_PAPER_DISPLAY_MIN_SIGNAL_SYMBOL_COUNT,
+        )
+        return _paper_display_account_curves_from_rows(
+            rows,
+            series_by_symbol=series_by_symbol,
+            trade_days=trade_days,
+            initial_cash=SHORTPICK_V2_DEFAULT_INITIAL_CASH,
+        )
+    except Exception:
+        return []
+
+
+def _parse_iso_date_or_none(value: Any) -> date | None:
+    if isinstance(value, date):
+        return value
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
         return None
 
 

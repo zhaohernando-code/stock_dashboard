@@ -38,7 +38,10 @@ from ashare_evidence.shortpick_v2_read_model import (
     build_shortpick_v2_historical_replay_read_model,
     build_shortpick_v2_paper_tracking_read_model,
 )
-from ashare_evidence.shortpick_v2_read_model import _paper_display_row_from_replay_decision
+from ashare_evidence.shortpick_v2_read_model import (
+    _paper_display_account_curves_from_rows,
+    _paper_display_row_from_replay_decision,
+)
 from ashare_evidence.shortpick_v2_rule_selection import build_shortpick_v2_rule_selection_artifact
 
 
@@ -817,6 +820,16 @@ def test_shortpick_v2_paper_tracking_display_replays_since_start_with_session(
     assert display["table"]["rows"]
     assert {row["tracking_tag"] for row in display["table"]["rows"]} == {"回放"}
     assert {"exit_state_text", "exit_date_text", "return_text"} <= set(display["table"]["rows"][0])
+    account_curves = display["account_curves"]
+    assert isinstance(account_curves, list)
+    assert coverage["account_curve_count"] == len(account_curves)
+    for curve in account_curves:
+        assert curve["strategy"] in {"8.5 万目标买入方案", "8 万目标买入方案"}
+        assert curve["points"]
+        assert curve["latest_nav"] == curve["points"][-1]["nav"]
+        assert -1.0 < curve["max_drawdown"] <= 0.0
+        assert "config_id" not in curve
+        assert all("config_id" not in point for point in curve["points"])
 
 
 def test_shortpick_v2_paper_display_buy_row_projects_exit_and_return() -> None:
@@ -855,6 +868,109 @@ def test_shortpick_v2_paper_display_buy_row_projects_exit_and_return() -> None:
     assert row["exit_reason_text"] == "机械10日退出"
     assert row["return"] == 0.909091
     assert row["return_text"] == "+90.9%"
+
+
+def test_shortpick_v2_paper_account_curve_uses_account_nav_not_full_trade_compounding() -> None:
+    class _Bar:
+        def __init__(self, day: date, close: float) -> None:
+            self.day = day
+            self.close = close
+
+    class _Series:
+        def __init__(self, bars: list[_Bar]) -> None:
+            self.bars = bars
+            self.by_day = {bar.day: index for index, bar in enumerate(bars)}
+
+    trade_days = _business_days(date(2026, 5, 11), date(2026, 5, 22))
+    series = _Series([_Bar(day, 10.0 if index == 0 else 8.0) for index, day in enumerate(trade_days)])
+    rows = [
+        {
+            "config_id": H10_QUIET_CHAMPION_CONFIG_ID,
+            "strategy_text": "8.5 万目标买入方案",
+            "action": "buy_primary",
+            "symbol": "600001.SH",
+            "quantity": 5000,
+            "cash_before": 200000.0,
+            "cash_after": 150000.0,
+            "entry_date": "2026-05-11",
+            "exit_date": "2026-05-13",
+            "return": -0.2,
+        },
+        {
+            "config_id": H10_QUIET_CHAMPION_CONFIG_ID,
+            "strategy_text": "8.5 万目标买入方案",
+            "action": "buy_primary",
+            "symbol": "600001.SH",
+            "quantity": 5000,
+            "cash_before": 150000.0,
+            "cash_after": 100000.0,
+            "entry_date": "2026-05-12",
+            "exit_date": "2026-05-14",
+            "return": -0.2,
+        },
+    ]
+
+    curves = _paper_display_account_curves_from_rows(
+        rows,
+        series_by_symbol={"600001.SH": series},
+        trade_days=trade_days,
+        initial_cash=200000.0,
+    )
+
+    assert len(curves) == 1
+    wrong_full_trade_compounding = (1 - 0.2) * (1 - 0.2) - 1
+    assert wrong_full_trade_compounding == pytest.approx(-0.36)
+    assert curves[0]["max_drawdown"] == pytest.approx(-0.1)
+    assert curves[0]["max_drawdown"] > wrong_full_trade_compounding
+    assert curves[0]["latest_return"] == pytest.approx(-0.1)
+
+
+def test_shortpick_v2_paper_account_curve_marks_open_position_drawdown() -> None:
+    class _Bar:
+        def __init__(self, day: date, close: float) -> None:
+            self.day = day
+            self.close = close
+
+    class _Series:
+        def __init__(self, bars: list[_Bar]) -> None:
+            self.bars = bars
+            self.by_day = {bar.day: index for index, bar in enumerate(bars)}
+
+    trade_days = _business_days(date(2026, 5, 11), date(2026, 5, 15))
+    series = _Series([
+        _Bar(trade_days[0], 10.0),
+        _Bar(trade_days[1], 4.0),
+        _Bar(trade_days[2], 5.0),
+        _Bar(trade_days[3], 6.0),
+        _Bar(trade_days[4], 7.0),
+    ])
+
+    curves = _paper_display_account_curves_from_rows(
+        [
+            {
+                "config_id": H10_QUIET_CHAMPION_CONFIG_ID,
+                "strategy_text": "8.5 万目标买入方案",
+                "action": "buy_primary",
+                "symbol": "600001.SH",
+                "quantity": 10000,
+                "cash_before": 200000.0,
+                "cash_after": 100000.0,
+                "entry_date": "2026-05-11",
+                "exit_date": None,
+                "return": None,
+            },
+        ],
+        series_by_symbol={"600001.SH": series},
+        trade_days=trade_days,
+        initial_cash=200000.0,
+    )
+
+    assert len(curves) == 1
+    assert curves[0]["points"][1]["position_value"] == pytest.approx(40000.0)
+    assert curves[0]["points"][1]["nav"] == pytest.approx(140000.0)
+    assert curves[0]["max_drawdown"] == pytest.approx(-0.3)
+    assert curves[0]["latest_return"] == pytest.approx(-0.15)
+    assert curves[0]["completed_trade_count"] == 0
 
 
 def test_shortpick_v2_paper_tracking_display_avoids_full_daily_series_loader(

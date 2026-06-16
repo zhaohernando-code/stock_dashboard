@@ -21,6 +21,7 @@ import { api } from "../api";
 import type {
   ShortpickV2ConfigReadout,
   ShortpickV2HistoricalReplayResponse,
+  ShortpickV2PaperDisplayAccountCurve,
   ShortpickV2PaperDisplayChart,
   ShortpickV2PaperDisplayTableColumn,
   ShortpickV2PaperDisplayTableRow,
@@ -180,16 +181,6 @@ function chartPercent(value: number, maxValue: number): number {
   return Math.max(0, Math.min(100, Math.round((value / maxValue) * 100)));
 }
 
-function parsePercentText(value: unknown): number | null {
-  if (typeof value === "number") return value;
-  if (typeof value !== "string") return null;
-  const normalized = value.replace("%", "").replace("+", "").trim();
-  if (!normalized || normalized === "-") return null;
-  const parsed = Number(normalized);
-  if (!Number.isFinite(parsed)) return null;
-  return parsed / 100;
-}
-
 function paperRowSearchText(row: ShortpickV2PaperDisplayTableRow): string {
   return [
     row.signal_date_text,
@@ -297,6 +288,7 @@ function ShortpickV2PaperTab({
   const latestTrade = display?.latest_trade;
   const strategyExplanation = display?.strategy_explanation;
   const charts = display?.charts ?? [];
+  const accountCurves = display?.account_curves ?? [];
   const table = display?.table;
   const tableRows = table?.rows ?? [];
   const [tableSearch, setTableSearch] = useState("");
@@ -417,7 +409,7 @@ function ShortpickV2PaperTab({
         )}
       </Card>
 
-      <PaperReturnCharts rows={filteredTableRows} />
+      <PaperReturnCharts accountCurves={accountCurves} strategyFilter={strategyFilter} />
 
       <div className="shortpick-v2-chart-grid">
         {charts.length ? charts.map((chart) => <PaperDisplayChartCard key={chart.title || chart.kind} chart={chart} />) : (
@@ -490,53 +482,43 @@ function ShortpickV2PaperTab({
   );
 }
 
-function PaperReturnCharts({ rows }: { rows: ShortpickV2PaperDisplayTableRow[] }) {
+function PaperReturnCharts({
+  accountCurves,
+  strategyFilter,
+}: {
+  accountCurves: ShortpickV2PaperDisplayAccountCurve[];
+  strategyFilter: string;
+}) {
   const cumulativeChartRef = useRef<HTMLDivElement | null>(null);
   const strategyChartRef = useRef<HTMLDivElement | null>(null);
-  const completedRows = useMemo(() => rows
-    .map((row) => ({
-      signalDate: displayValue(row.signal_date_text || row.signal_date, ""),
-      strategy: displayValue(row.strategy_text, "未命名策略"),
-      returnValue: parsePercentText(row.return_text ?? row.return),
+  const visibleCurves = useMemo(() => accountCurves
+    .filter((curve) => !strategyFilter || curve.strategy === strategyFilter)
+    .filter((curve) => (curve.points ?? []).length > 0), [accountCurves, strategyFilter]);
+  const chartDates = useMemo(() => Array.from(new Set(
+    visibleCurves.flatMap((curve) => (curve.points ?? []).map((point) => point.date)),
+  )).sort((left, right) => left.localeCompare(right)), [visibleCurves]);
+  const drawdownRows = useMemo(() => visibleCurves
+    .map((curve) => ({
+      strategy: curve.strategy,
+      maxDrawdown: typeof curve.max_drawdown === "number" ? curve.max_drawdown : 0,
+      latestReturn: typeof curve.latest_return === "number" ? curve.latest_return : 0,
+      completedTradeCount: typeof curve.completed_trade_count === "number" ? curve.completed_trade_count : 0,
     }))
-    .filter((row): row is { signalDate: string; strategy: string; returnValue: number } => (
-      Boolean(row.signalDate) && Boolean(row.strategy) && row.returnValue !== null
-    ))
-    .sort((left, right) => left.signalDate.localeCompare(right.signalDate)), [rows]);
-
-  const cumulativePoints = useMemo(() => {
-    let cumulative = 1;
-    return completedRows.map((row) => {
-      cumulative *= 1 + row.returnValue;
-      return {
-        signalDate: row.signalDate,
-        strategy: row.strategy,
-        value: cumulative - 1,
-      };
-    });
-  }, [completedRows]);
-
-  const strategyReturns = useMemo(() => {
-    const grouped = new Map<string, { total: number; count: number }>();
-    completedRows.forEach((row) => {
-      const current = grouped.get(row.strategy) ?? { total: 0, count: 0 };
-      grouped.set(row.strategy, { total: current.total + row.returnValue, count: current.count + 1 });
-    });
-    return Array.from(grouped.entries())
-      .map(([strategy, value]) => ({
-        strategy,
-        averageReturn: value.count ? value.total / value.count : 0,
-        count: value.count,
-      }))
-      .sort((left, right) => right.averageReturn - left.averageReturn);
-  }, [completedRows]);
+    .sort((left, right) => right.maxDrawdown - left.maxDrawdown), [visibleCurves]);
+  const latestReturn = visibleCurves.length
+    ? Math.max(...visibleCurves.map((curve) => typeof curve.latest_return === "number" ? curve.latest_return : 0))
+    : 0;
+  const latestDrawdown = visibleCurves.length
+    ? Math.min(...visibleCurves.map((curve) => typeof curve.max_drawdown === "number" ? curve.max_drawdown : 0))
+    : 0;
 
   useEffect(() => {
     const container = cumulativeChartRef.current;
-    if (!container || !cumulativePoints.length) return undefined;
+    if (!container || !visibleCurves.length || !chartDates.length) return undefined;
     const chart = init(container, undefined, { renderer: "canvas" });
     chart.setOption({
       grid: { top: 28, right: 16, bottom: 38, left: 56 },
+      legend: { top: 0, right: 8, type: "scroll" },
       tooltip: {
         trigger: "axis",
         valueFormatter: (value: number) => formatPercent(value),
@@ -544,22 +526,25 @@ function PaperReturnCharts({ rows }: { rows: ShortpickV2PaperDisplayTableRow[] }
       xAxis: {
         type: "category",
         boundaryGap: false,
-        data: cumulativePoints.map((point) => point.signalDate),
+        data: chartDates,
         axisLabel: { hideOverlap: true },
       },
       yAxis: {
         type: "value",
         axisLabel: { formatter: (value: number) => formatPercent(value) },
       },
-      series: [{
-        name: "累计纸面收益",
-        type: "line",
-        smooth: true,
-        showSymbol: false,
-        data: cumulativePoints.map((point) => point.value),
-        lineStyle: { width: 2 },
-        areaStyle: { opacity: 0.08 },
-      }],
+      series: visibleCurves.map((curve) => {
+        const pointByDate = new Map((curve.points ?? []).map((point) => [point.date, point.account_return]));
+        return {
+          name: curve.strategy,
+          type: "line",
+          smooth: true,
+          showSymbol: false,
+          data: chartDates.map((day) => pointByDate.get(day) ?? null),
+          lineStyle: { width: 2 },
+          areaStyle: { opacity: visibleCurves.length === 1 ? 0.08 : 0 },
+        };
+      }),
     });
     const handleResize = () => chart.resize();
     window.addEventListener("resize", handleResize);
@@ -567,11 +552,11 @@ function PaperReturnCharts({ rows }: { rows: ShortpickV2PaperDisplayTableRow[] }
       window.removeEventListener("resize", handleResize);
       chart.dispose();
     };
-  }, [cumulativePoints]);
+  }, [chartDates, visibleCurves]);
 
   useEffect(() => {
     const container = strategyChartRef.current;
-    if (!container || !strategyReturns.length) return undefined;
+    if (!container || !drawdownRows.length) return undefined;
     const chart = init(container, undefined, { renderer: "canvas" });
     chart.setOption({
       grid: { top: 28, right: 18, bottom: 38, left: 120 },
@@ -587,13 +572,13 @@ function PaperReturnCharts({ rows }: { rows: ShortpickV2PaperDisplayTableRow[] }
       yAxis: {
         type: "category",
         inverse: true,
-        data: strategyReturns.map((item) => item.strategy),
+        data: drawdownRows.map((item) => item.strategy),
         axisLabel: { width: 104, overflow: "truncate" },
       },
       series: [{
-        name: "平均退出收益",
+        name: "账户最大回撤",
         type: "bar",
-        data: strategyReturns.map((item) => item.averageReturn),
+        data: drawdownRows.map((item) => item.maxDrawdown),
         itemStyle: { borderRadius: [0, 4, 4, 0] },
       }],
     });
@@ -603,12 +588,12 @@ function PaperReturnCharts({ rows }: { rows: ShortpickV2PaperDisplayTableRow[] }
       window.removeEventListener("resize", handleResize);
       chart.dispose();
     };
-  }, [strategyReturns]);
+  }, [drawdownRows]);
 
-  if (!completedRows.length) {
+  if (!visibleCurves.length) {
     return (
-      <Card className="panel-card" title="纸面收益走势">
-        <Empty description="当前筛选下还没有已完成退出收益样本。" />
+      <Card className="panel-card" title="账户净值走势">
+        <Empty description="当前筛选下还没有账户净值曲线。" />
       </Card>
     );
   }
@@ -617,20 +602,21 @@ function PaperReturnCharts({ rows }: { rows: ShortpickV2PaperDisplayTableRow[] }
     <div className="shortpick-paper-effect-panel">
       <div className="shortpick-paper-effect-head">
         <Space direction="vertical" size={2}>
-          <Text strong>纸面收益走势</Text>
-          <Text type="secondary">只统计已经按 10 日窗口退出的回放与前向记录。</Text>
+          <Text strong>账户净值走势</Text>
+          <Text type="secondary">按 20 万纸面账户、实际买入成本和持仓市值计算。</Text>
         </Space>
         <Space wrap className="shortpick-paper-effect-summary-tags">
-          <Tag color="blue">已退出 {formatNumber(completedRows.length)}</Tag>
-          <Tag color="green">最新累计 {formatPercent(cumulativePoints[cumulativePoints.length - 1]?.value ?? 0)}</Tag>
+          <Tag color="blue">策略 {formatNumber(visibleCurves.length)}</Tag>
+          <Tag color="green">最好最新收益 {formatPercent(latestReturn)}</Tag>
+          <Tag color="red">最大回撤 {formatPercent(latestDrawdown)}</Tag>
         </Space>
       </div>
       <div className="shortpick-v2-return-chart-grid">
         <div className="shortpick-paper-effect-chart-block">
           <div className="shortpick-paper-effect-chart-head">
             <Space direction="vertical" size={0} className="shortpick-paper-effect-chart-title">
-              <Text strong>累计纸面收益</Text>
-              <Text type="secondary">按退出样本时间顺序滚动展示。</Text>
+              <Text strong>账户累计收益</Text>
+              <Text type="secondary">按交易日滚动展示，不按单笔收益复利。</Text>
             </Space>
           </div>
           <div ref={cumulativeChartRef} className="shortpick-paper-effect-chart" />
@@ -638,8 +624,8 @@ function PaperReturnCharts({ rows }: { rows: ShortpickV2PaperDisplayTableRow[] }
         <div className="shortpick-paper-effect-chart-block">
           <div className="shortpick-paper-effect-chart-head">
             <Space direction="vertical" size={0} className="shortpick-paper-effect-chart-title">
-              <Text strong>策略退出效果排名</Text>
-              <Text type="secondary">按单笔平均退出收益排序。</Text>
+              <Text strong>账户最大回撤对比</Text>
+              <Text type="secondary">按账户净值相对高点的最大跌幅统计。</Text>
             </Space>
           </div>
           <div ref={strategyChartRef} className="shortpick-paper-effect-chart" />
