@@ -270,7 +270,7 @@ export function getShortpickV2PaperTracking() {
     data: await request<ShortpickV2PaperTrackingResponse>(
       "/shortpick-lab-v2/paper-tracking",
       undefined,
-      operationsDashboardRequestBehavior,
+      longRunningRequestBehavior,
     ),
     source: buildSourceInfo(),
   }))();

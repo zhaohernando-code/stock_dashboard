@@ -29,6 +29,11 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("/shortpick-lab-v2/historical-replay", api_source)
         self.assertIn("getShortpickV2PaperTracking", api_index_source)
         self.assertIn("getShortpickV2HistoricalReplay", api_index_source)
+        v2_paper_api_source = api_source.split("export function getShortpickV2PaperTracking()", 1)[1].split(
+            "export function getShortpickV2HistoricalReplay", 1
+        )[0]
+        self.assertIn("longRunningRequestBehavior", v2_paper_api_source)
+        self.assertNotIn("operationsDashboardRequestBehavior", v2_paper_api_source)
 
         self.assertIn('type ShortpickV2Tab = "paper-tracking" | "historical-replay";', component_source)
         self.assertIn('label: "纸面追踪"', component_source)
