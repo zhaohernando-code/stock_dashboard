@@ -11,6 +11,7 @@ from ashare_evidence.shortpick_v2_h10_weekday_drawdown_notional_matrix import (
     WEEKDAY_MODE_SPECS,
     _build_rank2_primary_top5_selections,
     build_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact_from_series,
+    render_shortpick_v2_h10_weekday_drawdown_notional_matrix_markdown,
     validate_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact,
     validate_shortpick_v2_h10_weekday_drawdown_notional_matrix_payload,
     write_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact,
@@ -104,6 +105,93 @@ def test_h10_weekday_drawdown_notional_matrix_keeps_degenerate_drawdown_rows(mon
     assert validate_shortpick_v2_h10_weekday_drawdown_notional_matrix_payload(artifact)["status"] == "passed"
 
 
+def test_h10_weekday_drawdown_notional_matrix_supports_fixed85_weekday_validation(monkeypatch) -> None:
+    days = [date(2026, 1, 5) + timedelta(days=index) for index in range(28)]
+    signal_days = [day for day in days[:10] if day.weekday() < 5]
+    symbols = [f"60003{index}.SH" for index in range(1, 7)]
+    series_by_symbol = {symbol: _series(symbol, days, start_price=11.0 + index) for index, symbol in enumerate(symbols)}
+
+    monkeypatch.setattr(
+        "ashare_evidence.shortpick_v2_h10_weekday_drawdown_notional_matrix._build_strategy_selections",
+        lambda *args, **kwargs: {signal_day: symbols for signal_day in signal_days},
+    )
+    monkeypatch.setattr(
+        "ashare_evidence.shortpick_v2_h10_weekday_drawdown_notional_matrix._regime_features_by_day",
+        lambda *args, **kwargs: {signal_day: {"pool_ret1_mean": 0.12} for signal_day in signal_days},
+    )
+
+    artifact = build_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact_from_series(
+        series_by_symbol,
+        signal_days=signal_days,
+        trade_days=days,
+        start_date=days[0],
+        end_date=days[-5],
+        generated_at=datetime(2026, 6, 16, 12, 45, tzinfo=UTC),
+        initial_cash=200_000.0,
+        weekday_modes=("mtw", "tue_wed_thu", "mon_wed_fri", "wed_thu_fri", "mon_to_thu", "all_weekdays"),
+        notional_values=(85_000.0,),
+    )
+
+    rows = artifact["matrix_rows"]
+    assert len(rows) == 12
+    assert artifact["analysis_scope"]["expected_row_count"] == 12
+    assert artifact["analysis_scope"]["weekday_mode_labels_cn"] == [
+        "周一至周三",
+        "周二至周四",
+        "周一、周三、周五",
+        "周三至周五",
+        "周一至周四",
+        "周一至周五",
+    ]
+    assert {row["weekday_mode"] for row in rows} == {
+        "mtw",
+        "tue_wed_thu",
+        "mon_wed_fri",
+        "wed_thu_fri",
+        "mon_to_thu",
+        "all_weekdays",
+    }
+    assert {row["target_notional"] for row in rows} == {85_000.0}
+    assert {row["drawdown_mode"] for row in rows} == {"off", "v1_on"}
+    summary = render_shortpick_v2_h10_weekday_drawdown_notional_matrix_markdown(artifact)
+    assert "- 单笔金额：8.5万。" in summary
+    assert "1万、2万" not in summary
+    assert validate_shortpick_v2_h10_weekday_drawdown_notional_matrix_payload(artifact)["status"] == "passed"
+
+
+def test_h10_weekday_drawdown_notional_matrix_supports_fixed85_with_default_weekdays(monkeypatch) -> None:
+    days = [date(2026, 1, 5) + timedelta(days=index) for index in range(28)]
+    signal_days = [day for day in days[:10] if day.weekday() < 5]
+    symbols = [f"60004{index}.SH" for index in range(1, 7)]
+    series_by_symbol = {symbol: _series(symbol, days, start_price=12.0 + index) for index, symbol in enumerate(symbols)}
+
+    monkeypatch.setattr(
+        "ashare_evidence.shortpick_v2_h10_weekday_drawdown_notional_matrix._build_strategy_selections",
+        lambda *args, **kwargs: {signal_day: symbols for signal_day in signal_days},
+    )
+    monkeypatch.setattr(
+        "ashare_evidence.shortpick_v2_h10_weekday_drawdown_notional_matrix._regime_features_by_day",
+        lambda *args, **kwargs: {signal_day: {"pool_ret1_mean": 0.12} for signal_day in signal_days},
+    )
+
+    artifact = build_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact_from_series(
+        series_by_symbol,
+        signal_days=signal_days,
+        trade_days=days,
+        start_date=days[0],
+        end_date=days[-5],
+        generated_at=datetime(2026, 6, 16, 13, 10, tzinfo=UTC),
+        initial_cash=200_000.0,
+        notional_values=(85_000.0,),
+    )
+
+    assert len(artifact["matrix_rows"]) == 4
+    assert artifact["analysis_scope"]["weekday_modes"] == ["mtw", "all_weekdays"]
+    assert artifact["analysis_scope"]["notional_values"] == [85_000.0]
+    assert {row["drawdown_mode"] for row in artifact["matrix_rows"]} == {"off", "v1_on"}
+    assert validate_shortpick_v2_h10_weekday_drawdown_notional_matrix_payload(artifact)["status"] == "passed"
+
+
 def test_h10_weekday_drawdown_notional_selection_respects_weekday_and_pool_hot() -> None:
     wednesday = date(2026, 1, 7)
     thursday = date(2026, 1, 8)
@@ -172,11 +260,17 @@ def test_h10_weekday_drawdown_notional_matrix_write_validate_and_cli_parser(tmp_
             "shortpick-v2-h10-weekday-drawdown-notional-matrix",
             "--horizon-days",
             "10",
+            "--weekday-mode",
+            "mon_to_thu",
+            "--target-notional",
+            "85000",
             "--output",
             str(tmp_path / "generated.json"),
         ]
     )
     assert args.horizon_days == 10
+    assert args.weekday_modes == ["mon_to_thu"]
+    assert args.target_notionals == [85_000.0]
     assert args.output == str(tmp_path / "generated.json")
 
     validation = validate_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact(

@@ -1068,6 +1068,27 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument("--stamp-tax-bps", type=float, default=5.0)
     shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument("--min-signal-symbol-count", type=int, default=45)
     shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument(
+        "--weekday-mode",
+        action="append",
+        choices=[
+            "mtw",
+            "tue_wed_thu",
+            "mon_wed_fri",
+            "wed_thu_fri",
+            "mon_to_thu",
+            "all_weekdays",
+        ],
+        dest="weekday_modes",
+        help="Weekday mode to include; repeat for multiple modes. Defaults to the historical MTW/all-weekdays matrix.",
+    )
+    shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument(
+        "--target-notional",
+        action="append",
+        type=float,
+        dest="target_notionals",
+        help="Fixed buy notional to include; repeat for multiple sizes. Defaults to the historical 10k-85k matrix.",
+    )
+    shortpick_v2_h10_weekday_drawdown_notional_matrix.add_argument(
         "--account-profile",
         choices=["new_retail_cash_account", "unrestricted"],
         default="new_retail_cash_account",
@@ -1917,6 +1938,8 @@ def main(argv: list[str] | None = None) -> int:
                 stamp_tax_bps=args.stamp_tax_bps,
                 min_signal_symbol_count=args.min_signal_symbol_count,
                 account_profile=args.account_profile,
+                weekday_modes=tuple(args.weekday_modes) if args.weekday_modes else None,
+                notional_values=tuple(args.target_notionals) if args.target_notionals else None,
             )
         paths = write_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact(
             payload,

@@ -57,6 +57,10 @@ class _WeekdayMode:
 
 WEEKDAY_MODE_SPECS = {
     "mtw": _WeekdayMode("mtw", "周一至周三", frozenset({0, 1, 2})),
+    "tue_wed_thu": _WeekdayMode("tue_wed_thu", "周二至周四", frozenset({1, 2, 3})),
+    "mon_wed_fri": _WeekdayMode("mon_wed_fri", "周一、周三、周五", frozenset({0, 2, 4})),
+    "wed_thu_fri": _WeekdayMode("wed_thu_fri", "周三至周五", frozenset({2, 3, 4})),
+    "mon_to_thu": _WeekdayMode("mon_to_thu", "周一至周四", frozenset({0, 1, 2, 3})),
     "all_weekdays": _WeekdayMode("all_weekdays", "周一至周五", None),
 }
 
@@ -75,6 +79,8 @@ def build_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact(
     stamp_tax_bps: float = DEFAULT_STAMP_TAX_BPS,
     min_signal_symbol_count: int = 45,
     account_profile: str = ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+    weekday_modes: tuple[str, ...] | None = None,
+    notional_values: tuple[float, ...] | None = None,
     generated_at: datetime | None = None,
 ) -> dict[str, Any]:
     if horizon_days != DEFAULT_HORIZON_DAYS:
@@ -118,6 +124,8 @@ def build_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact(
         account_profile=str(account_eligibility["account_profile"]),
         stock_like_series_count=len([symbol for symbol in series_by_symbol if symbol not in INDEX_SYMBOLS]),
         coverage_notes=_coverage_notes(raw_series_by_symbol, series_by_symbol, account_eligibility),
+        weekday_modes=weekday_modes,
+        notional_values=notional_values,
         generated_at=generated_at,
     )
     return artifact
@@ -140,6 +148,8 @@ def build_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact_from_series
     account_profile: str = ACCOUNT_PROFILE_NEW_RETAIL_CASH,
     stock_like_series_count: int | None = None,
     coverage_notes: list[str] | None = None,
+    weekday_modes: tuple[str, ...] | None = None,
+    notional_values: tuple[float, ...] | None = None,
     generated_at: datetime | None = None,
 ) -> dict[str, Any]:
     if horizon_days != DEFAULT_HORIZON_DAYS:
@@ -149,6 +159,8 @@ def build_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact_from_series
     generated_at = generated_at or datetime.now(UTC)
     signal_days = sorted(signal_days)
     trade_days = sorted(trade_days)
+    weekday_modes = _validated_weekday_modes(weekday_modes or WEEKDAY_MODES)
+    notional_values = _validated_notional_values(notional_values or DEFAULT_NOTIONAL_VALUES)
     stock_like_series_count = (
         stock_like_series_count
         if stock_like_series_count is not None
@@ -167,7 +179,7 @@ def build_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact_from_series
     rows: list[dict[str, Any]] = []
     child_artifact_refs: list[dict[str, Any]] = []
 
-    for weekday_mode in WEEKDAY_MODES:
+    for weekday_mode in weekday_modes:
         weekday_spec = WEEKDAY_MODE_SPECS[weekday_mode]
         raw_selections = _build_rank2_primary_top5_selections(
             signal_days,
@@ -188,7 +200,7 @@ def build_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact_from_series
                     drawdown_mode=drawdown_mode,
                     target_notional=target_notional,
                 )
-                for target_notional in DEFAULT_NOTIONAL_VALUES
+                for target_notional in notional_values
             )
             notional_by_config_id = {
                 config.config_id: float(config.target_notional or 0.0)
@@ -262,10 +274,11 @@ def build_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact_from_series
             "entry_price_source": entry_price_source,
             "initial_cash": initial_cash,
             "pool_hot_threshold": DEFAULT_POOL_HOT_THRESHOLD,
-            "weekday_modes": list(WEEKDAY_MODES),
+            "weekday_modes": list(weekday_modes),
+            "weekday_mode_labels_cn": [WEEKDAY_MODE_SPECS[mode].label_cn for mode in weekday_modes],
             "drawdown_modes": list(DRAWDOWN_MODES),
-            "notional_values": list(DEFAULT_NOTIONAL_VALUES),
-            "expected_row_count": len(WEEKDAY_MODES) * len(DRAWDOWN_MODES) * len(DEFAULT_NOTIONAL_VALUES),
+            "notional_values": list(notional_values),
+            "expected_row_count": len(weekday_modes) * len(DRAWDOWN_MODES) * len(notional_values),
             "actual_row_count": len(rows),
             "source_feature_cutoff_policy": "signal_day_or_prior_daily_bar_features_only",
             "promotion_status": "research_only_no_paper_tracking_promotion",
@@ -337,7 +350,11 @@ def validate_shortpick_v2_h10_weekday_drawdown_notional_matrix_payload(payload: 
 
     rows = [row for row in payload.get("matrix_rows") or [] if isinstance(row, dict)]
     scope = payload.get("analysis_scope") if isinstance(payload.get("analysis_scope"), dict) else {}
-    expected_row_count = len(WEEKDAY_MODES) * len(DRAWDOWN_MODES) * len(DEFAULT_NOTIONAL_VALUES)
+    scope_weekday_modes = tuple(str(value) for value in scope.get("weekday_modes") or WEEKDAY_MODES)
+    scope_notional_values = tuple(float(value) for value in scope.get("notional_values") or DEFAULT_NOTIONAL_VALUES)
+    expected_row_count = int(scope.get("expected_row_count") or 0) or (
+        len(scope_weekday_modes) * len(DRAWDOWN_MODES) * len(scope_notional_values)
+    )
     check("artifact_family", payload.get("artifact_family") == ARTIFACT_FAMILY, str(payload.get("artifact_family")))
     check("schema_version", payload.get("schema_version") == SCHEMA_VERSION, str(payload.get("schema_version")))
     check("claim_ceiling", payload.get("claim_ceiling") == "research_observation", str(payload.get("claim_ceiling")))
@@ -345,7 +362,7 @@ def validate_shortpick_v2_h10_weekday_drawdown_notional_matrix_payload(payload: 
     check("row_count", len(rows) == expected_row_count, f"{len(rows)} of {expected_row_count}")
     check(
         "weekday_modes",
-        sorted({str(row.get("weekday_mode")) for row in rows}) == sorted(WEEKDAY_MODES),
+        sorted({str(row.get("weekday_mode")) for row in rows}) == sorted(scope_weekday_modes),
         str(sorted({str(row.get("weekday_mode")) for row in rows})),
     )
     check(
@@ -355,7 +372,7 @@ def validate_shortpick_v2_h10_weekday_drawdown_notional_matrix_payload(payload: 
     )
     check(
         "notional_values",
-        sorted({float(row.get("target_notional") or 0.0) for row in rows}) == list(DEFAULT_NOTIONAL_VALUES),
+        sorted({float(row.get("target_notional") or 0.0) for row in rows}) == sorted(scope_notional_values),
         str(sorted({float(row.get("target_notional") or 0.0) for row in rows})),
     )
     check(
@@ -394,6 +411,9 @@ def validate_shortpick_v2_h10_weekday_drawdown_notional_matrix_payload(payload: 
 
 
 def render_shortpick_v2_h10_weekday_drawdown_notional_matrix_markdown(payload: dict[str, Any]) -> str:
+    scope = payload.get("analysis_scope") if isinstance(payload.get("analysis_scope"), dict) else {}
+    weekday_labels = [str(value) for value in scope.get("weekday_mode_labels_cn") or []]
+    notional_values = [float(value) for value in scope.get("notional_values") or []]
     rows = sorted(
         [row for row in payload.get("matrix_rows") or [] if isinstance(row, dict)],
         key=lambda item: (
@@ -410,9 +430,9 @@ def render_shortpick_v2_h10_weekday_drawdown_notional_matrix_markdown(payload: d
         "",
         "- 选股：安静突破，热度池 10%，Rank2 为首选，Rank3-Rank6 为同日候补。",
         "- 持有：H10，使用既有 v2 回放引擎。",
-        "- 交易日：对比周一至周三与周一至周五。",
+        "- 交易日：对比 " + "、".join(weekday_labels) + "。",
         "- 回撤反转：对比关闭与 v1 过滤开启。",
-        "- 单笔金额：1万、2万、3万、4万、5万、6万、7万、8万、8.5万。",
+        "- 单笔金额：" + "、".join(_notional_label(value) for value in notional_values) + "。",
         "",
         "## 结果排序",
         "",
@@ -601,6 +621,28 @@ def _matrix_row(
 def _notional_key(target_notional: float) -> str:
     value = float(target_notional) / 1000.0
     return f"{value:g}k"
+
+
+def _notional_label(target_notional: float) -> str:
+    return f"{float(target_notional) / 10000.0:g}万"
+
+
+def _validated_weekday_modes(values: tuple[str, ...]) -> tuple[str, ...]:
+    if not values:
+        raise ValueError("weekday_modes must not be empty")
+    invalid = [value for value in values if value not in WEEKDAY_MODE_SPECS]
+    if invalid:
+        raise ValueError(f"unknown weekday_modes: {invalid}")
+    return tuple(dict.fromkeys(values))
+
+
+def _validated_notional_values(values: tuple[float, ...]) -> tuple[float, ...]:
+    if not values:
+        raise ValueError("notional_values must not be empty")
+    cleaned = tuple(float(value) for value in values)
+    if any(value <= 0.0 for value in cleaned):
+        raise ValueError("notional_values must be positive")
+    return tuple(dict.fromkeys(cleaned))
 
 
 def _annualized(total_return: float, trade_day_count: int) -> float | None:
