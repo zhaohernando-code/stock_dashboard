@@ -1562,6 +1562,24 @@ def _paper_display_account_curves_from_rows(
         points: list[dict[str, Any]] = []
         completed_trade_count = 0
         for day in account_days:
+            remaining_positions: list[dict[str, Any]] = []
+            for position in open_positions:
+                exit_day = position.get("exit_day")
+                if exit_day is not None and exit_day <= day:
+                    stock_return = position.get("stock_return")
+                    if stock_return is None:
+                        close = _series_close_on_day(series_by_symbol.get(str(position["symbol"])), day)
+                        stock_return = (
+                            float(close) * float(position["quantity"]) / float(position["entry_cost"]) - 1.0
+                            if close is not None and position["entry_cost"]
+                            else 0.0
+                        )
+                    cash += float(position["entry_cost"]) * (1.0 + float(stock_return))
+                    completed_trade_count += 1
+                else:
+                    remaining_positions.append(position)
+            open_positions = remaining_positions
+
             for entry in entries_by_day.get(day, []):
                 cash -= float(entry["entry_cost"])
                 open_positions.append(dict(entry))
@@ -1591,24 +1609,6 @@ def _paper_display_account_curves_from_rows(
                     "open_position_count": len(open_positions),
                 }
             )
-
-            remaining_positions: list[dict[str, Any]] = []
-            for position in open_positions:
-                exit_day = position.get("exit_day")
-                if exit_day is not None and exit_day <= day:
-                    stock_return = position.get("stock_return")
-                    if stock_return is None:
-                        close = _series_close_on_day(series_by_symbol.get(str(position["symbol"])), day)
-                        stock_return = (
-                            float(close) * float(position["quantity"]) / float(position["entry_cost"]) - 1.0
-                            if close is not None and position["entry_cost"]
-                            else 0.0
-                        )
-                    cash += float(position["entry_cost"]) * (1.0 + float(stock_return))
-                    completed_trade_count += 1
-                else:
-                    remaining_positions.append(position)
-            open_positions = remaining_positions
 
         if not points:
             continue

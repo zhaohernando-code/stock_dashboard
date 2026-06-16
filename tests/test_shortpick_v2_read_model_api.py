@@ -38,12 +38,10 @@ from ashare_evidence.shortpick_v2_read_model import (
     SHORTPICK_V2_PAPER_TRACKING_LEDGER_ARTIFACT_ENV,
     SHORTPICK_V2_REPLAY_ARTIFACT_ENV,
     SHORTPICK_V2_RULE_SELECTION_ARTIFACT_ENV,
-    build_shortpick_v2_historical_replay_read_model,
-    build_shortpick_v2_paper_tracking_read_model,
-)
-from ashare_evidence.shortpick_v2_read_model import (
     _paper_display_account_curves_from_rows,
     _paper_display_row_from_replay_decision,
+    build_shortpick_v2_historical_replay_read_model,
+    build_shortpick_v2_paper_tracking_read_model,
 )
 from ashare_evidence.shortpick_v2_rule_selection import build_shortpick_v2_rule_selection_artifact
 
@@ -1089,6 +1087,60 @@ def test_shortpick_v2_paper_account_curve_marks_open_position_drawdown() -> None
     assert curves[0]["max_drawdown"] == pytest.approx(-0.3)
     assert curves[0]["latest_return"] == pytest.approx(-0.15)
     assert curves[0]["completed_trade_count"] == 0
+
+
+def test_shortpick_v2_paper_account_curve_releases_exit_cash_before_same_day_entry() -> None:
+    class _Bar:
+        def __init__(self, day: date, close: float) -> None:
+            self.day = day
+            self.close = close
+
+    class _Series:
+        def __init__(self, bars: list[_Bar]) -> None:
+            self.bars = bars
+            self.by_day = {bar.day: index for index, bar in enumerate(bars)}
+
+    trade_days = _business_days(date(2026, 5, 11), date(2026, 5, 18))
+    series_a = _Series([_Bar(day, 10.0) for day in trade_days])
+    series_b = _Series([_Bar(day, 20.0) for day in trade_days])
+    rows = [
+        {
+            "config_id": H10_QUIET_CHAMPION_CONFIG_ID,
+            "strategy_text": "8.5 万目标买入方案",
+            "action": "buy_primary",
+            "symbol": "600001.SH",
+            "quantity": 8500,
+            "cash_before": 200000.0,
+            "cash_after": 115000.0,
+            "entry_date": trade_days[0].isoformat(),
+            "exit_date": trade_days[2].isoformat(),
+            "return": 0.0,
+        },
+        {
+            "config_id": H10_QUIET_CHAMPION_CONFIG_ID,
+            "strategy_text": "8.5 万目标买入方案",
+            "action": "buy_primary",
+            "symbol": "600002.SH",
+            "quantity": 4000,
+            "cash_before": 200000.0,
+            "cash_after": 120000.0,
+            "entry_date": trade_days[2].isoformat(),
+            "exit_date": trade_days[4].isoformat(),
+            "return": 0.0,
+        },
+    ]
+
+    curves = _paper_display_account_curves_from_rows(
+        rows,
+        series_by_symbol={"600001.SH": series_a, "600002.SH": series_b},
+        trade_days=trade_days,
+        initial_cash=200000.0,
+    )
+
+    same_day_point = next(point for point in curves[0]["points"] if point["date"] == trade_days[2].isoformat())
+    assert same_day_point["cash"] == pytest.approx(120000.0)
+    assert same_day_point["cash"] >= 0
+    assert same_day_point["open_position_count"] == 1
 
 
 def test_shortpick_v2_paper_tracking_display_avoids_full_daily_series_loader(

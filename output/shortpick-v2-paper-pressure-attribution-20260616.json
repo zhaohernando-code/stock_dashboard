@@ -1,0 +1,241 @@
+{
+  "artifact_family": "shortpick_v2_paper_pressure_attribution",
+  "schema_version": "v1",
+  "artifact_id": "shortpick-v2-paper-pressure-attribution-20260616",
+  "generated_at": "2026-06-16T07:25:11.256153+00:00",
+  "claim_ceiling": "research_observation",
+  "tracking_window": {
+    "start_date": "2026-05-08",
+    "end_date": "2026-06-15",
+    "signal_day_count": 27
+  },
+  "strategy": {
+    "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+    "label_cn": "安静突破 Rank2 + 热度池 10% + 周一至周三 + H10 + 8.5 万目标买入"
+  },
+  "correct_replay_summary": {
+    "signal_count": 27,
+    "trade_count": 6,
+    "skip_count": 21,
+    "fallback_trade_count": 0,
+    "final_nav": 181389.809,
+    "total_return": -0.093051,
+    "annualization_trade_day_count": 27,
+    "market_reference_total_return": -0.095829,
+    "market_excess_total_return": 0.002778,
+    "max_drawdown": -0.178748,
+    "mean_invested_ratio": 0.732741,
+    "max_position_count": 3,
+    "turnover": 1.942167,
+    "final_cash": 181389.809,
+    "final_market_value": 0,
+    "open_position_count": 0,
+    "blocked_exit_count": 0,
+    "dynamic_exit_count": 0,
+    "exit_reason_counts": {
+      "mechanical_horizon": 6
+    },
+    "total_buy_value": 388433.316,
+    "total_sell_value": 369823.125,
+    "skipped_ratio": 0.777778
+  },
+  "market_reference": {
+    "mode": "eligible_universe_equal_weight_close_to_close",
+    "date_from": "2026-05-08",
+    "date_to": "2026-06-15",
+    "sample_count": 2991,
+    "total_return": -0.095829
+  },
+  "index_returns": [
+    {
+      "symbol": "000300.SH",
+      "start_date": "2026-05-08",
+      "end_date": "2026-06-15",
+      "return": 0.004064
+    },
+    {
+      "symbol": "000852.SH",
+      "start_date": "2026-05-08",
+      "end_date": "2026-06-15",
+      "return": -0.025159
+    },
+    {
+      "symbol": "000905.SH",
+      "start_date": "2026-05-08",
+      "end_date": "2026-06-15",
+      "return": -0.033059
+    }
+  ],
+  "trade_contributions": [
+    {
+      "signal_date": "2026-05-11",
+      "entry_date": "2026-05-12",
+      "exit_date": "2026-05-26",
+      "symbol": "605069.SH",
+      "name": "正和生态",
+      "quantity": 4500,
+      "buy_cash_spent": 69573.87,
+      "sell_proceeds": 61406.1,
+      "pnl": -8167.77,
+      "pnl_pct_initial_cash": -0.040839,
+      "stock_return_close_to_close": -0.113415,
+      "entry_close": 15.43,
+      "exit_close": 13.68
+    },
+    {
+      "signal_date": "2026-05-25",
+      "entry_date": "2026-05-26",
+      "exit_date": "2026-06-09",
+      "symbol": "000716.SZ",
+      "name": "黑芝麻",
+      "quantity": 10900,
+      "buy_cash_spent": 61052.862,
+      "sell_proceeds": 53167.748,
+      "pnl": -7885.114,
+      "pnl_pct_initial_cash": -0.039426,
+      "stock_return_close_to_close": -0.125224,
+      "entry_close": 5.59,
+      "exit_close": 4.89
+    },
+    {
+      "signal_date": "2026-05-27",
+      "entry_date": "2026-05-28",
+      "exit_date": "2026-06-11",
+      "symbol": "000733.SZ",
+      "name": "振华科技",
+      "quantity": 1100,
+      "buy_cash_spent": 58835.436,
+      "sell_proceeds": 54588.188,
+      "pnl": -4247.249,
+      "pnl_pct_initial_cash": -0.021236,
+      "stock_return_close_to_close": -0.068003,
+      "entry_close": 53.38,
+      "exit_close": 49.75
+    },
+    {
+      "signal_date": "2026-05-13",
+      "entry_date": "2026-05-14",
+      "exit_date": "2026-05-28",
+      "symbol": "601882.SH",
+      "name": "海天精工",
+      "quantity": 2600,
+      "buy_cash_spent": 60310.38,
+      "sell_proceeds": 58250.01,
+      "pnl": -2060.37,
+      "pnl_pct_initial_cash": -0.010302,
+      "stock_return_close_to_close": -0.029806,
+      "entry_close": 23.15,
+      "exit_close": 22.46
+    },
+    {
+      "signal_date": "2026-05-26",
+      "entry_date": "2026-05-27",
+      "exit_date": "2026-06-10",
+      "symbol": "002048.SZ",
+      "name": "宁波华翔",
+      "quantity": 2400,
+      "buy_cash_spent": 68560.848,
+      "sell_proceeds": 68324.76,
+      "pnl": -236.088,
+      "pnl_pct_initial_cash": -0.00118,
+      "stock_return_close_to_close": 0.001052,
+      "entry_close": 28.51,
+      "exit_close": 28.54
+    },
+    {
+      "signal_date": "2026-05-12",
+      "entry_date": "2026-05-13",
+      "exit_date": "2026-05-27",
+      "symbol": "000811.SZ",
+      "name": "冰轮环境",
+      "quantity": 2200,
+      "buy_cash_spent": 70099.92,
+      "sell_proceeds": 74086.32,
+      "pnl": 3986.4,
+      "pnl_pct_initial_cash": 0.019932,
+      "stock_return_close_to_close": 0.061635,
+      "entry_close": 31.8,
+      "exit_close": 33.76
+    }
+  ],
+  "loss_decomposition": {
+    "total_trade_pnl": -18610.191,
+    "negative_trade_count": 5,
+    "positive_trade_count": 1,
+    "largest_loss_trade": {
+      "signal_date": "2026-05-11",
+      "entry_date": "2026-05-12",
+      "exit_date": "2026-05-26",
+      "symbol": "605069.SH",
+      "name": "正和生态",
+      "quantity": 4500,
+      "buy_cash_spent": 69573.87,
+      "sell_proceeds": 61406.1,
+      "pnl": -8167.77,
+      "pnl_pct_initial_cash": -0.040839,
+      "stock_return_close_to_close": -0.113415,
+      "entry_close": 15.43,
+      "exit_close": 13.68
+    },
+    "second_largest_loss_trade": {
+      "signal_date": "2026-05-25",
+      "entry_date": "2026-05-26",
+      "exit_date": "2026-06-09",
+      "symbol": "000716.SZ",
+      "name": "黑芝麻",
+      "quantity": 10900,
+      "buy_cash_spent": 61052.862,
+      "sell_proceeds": 53167.748,
+      "pnl": -7885.114,
+      "pnl_pct_initial_cash": -0.039426,
+      "stock_return_close_to_close": -0.125224,
+      "entry_close": 5.59,
+      "exit_close": 4.89
+    },
+    "top_two_loss_pct_initial_cash": -0.080264
+  },
+  "drawdown_path": {
+    "peak": {
+      "date": "2026-05-19",
+      "nav": 219446.83000000002,
+      "cash": 15.830000000016298,
+      "market_value": 219431.0,
+      "open_position_count": 3
+    },
+    "trough": {
+      "date": "2026-06-08",
+      "nav": 180221.11400000003,
+      "cash": 5309.114000000038,
+      "market_value": 174912.0,
+      "open_position_count": 3
+    },
+    "peak_to_trough_drawdown": -0.178748,
+    "peak_to_trough_nav_change": -39225.716
+  },
+  "display_cache_accounting_check": {
+    "cache_generated_at": "2026-06-16T06:14:33.920381+00:00",
+    "cached_latest_return": -0.084709,
+    "cached_max_drawdown": -0.174765,
+    "negative_cash_point_count": 3,
+    "first_negative_cash_point": {
+      "account_return": -0.03648,
+      "cash": -61037.03,
+      "date": "2026-05-26",
+      "drawdown": -0.121865,
+      "nav": 192703.97,
+      "open_position_count": 4,
+      "position_value": 253741.0
+    }
+  },
+  "attribution_conclusions_cn": [
+    "当前窗口的主要解释是市场/候选池窗口极端逆风：正确 replay 口径下策略收益 -9.31%，市场参考 -9.58%，策略相对市场没有明显跑输。",
+    "账户回撤被 3 仓接近满仓放大。5 月中旬先冲到 +9.72%，随后两组 H10 持仓连续回落，峰值到低点回撤约 -17.87%。",
+    "亏损集中在少数交易：正和生态、黑芝麻、振华科技三笔贡献主要亏损；其中正和生态和黑芝麻两笔合计约 -8.28% 初始资金。",
+    "runtime 展示缓存存在同日先买后卖的曲线口径问题，会出现负现金点；但用正确 replay 顺序重算后，极端回撤仍存在，不能把问题完全归因于展示 bug。"
+  ],
+  "leakage_audit": {
+    "status": "passed",
+    "data_policy": "read_only_runtime_sqlite_and_existing_display_cache",
+    "paper_tracking_write_policy": "forbidden"
+  }
+}
