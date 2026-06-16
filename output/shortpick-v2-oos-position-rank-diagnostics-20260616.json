@@ -1,0 +1,1601 @@
+{
+  "analysis_scope": {
+    "baseline_buy_cn": "固定单笔约 8.5 万，Rank2 首选，Rank3-Rank6 同日候补。",
+    "baseline_config_id": "diagnostic_v2_quiet_rank2_poolhot10_mtw_fixed85_top5_h10",
+    "current_month_end_date": "2026-06-16",
+    "current_month_start_date": "2026-06-01",
+    "entry_price_source": "next_close",
+    "historical_end_date": "2026-05-08",
+    "historical_start_date": "2023-04-13",
+    "holdout_start_date": "2025-05-01",
+    "horizon_days": 10,
+    "initial_cash": 200000.0,
+    "paper_end_date": "2026-06-16",
+    "paper_start_date": "2026-05-08",
+    "promotion_status": "research_only_no_strategy_promotion",
+    "question_cn": "上一跳显示 6 月强势股大多在可观察域内但进不了 v2 Top5；本跳验证位置形态是否样本外稳定，并定位 Rank2/Top5 排序链路卡点。",
+    "train_end_date": "2025-04-30"
+  },
+  "artifact_family": "shortpick_v2_oos_position_rank_diagnostics",
+  "artifact_id": "shortpick_v2_oos_position_rank_diagnostics:2026-06-01:2026-06-16:2026-06-16",
+  "claim_ceiling": "research_observation",
+  "current_month_winners": {
+    "end_anchor_date": "2026-06-16",
+    "start_anchor_date": "2026-05-29",
+    "status": "ready",
+    "top_avg_amount_20d_median": 926874428.9475,
+    "top_avg_turnover_20d_median": 0.063621,
+    "top_chase_high_shape_rate": 0.12,
+    "top_industries": [
+      {
+        "avg_month_return": 0.545038,
+        "count": 9,
+        "industry": "化工原料",
+        "sample_names": [
+          "宿迁联盛",
+          "红星发展",
+          "和远气体",
+          "昊华科技",
+          "圣泉集团"
+        ]
+      },
+      {
+        "avg_month_return": 0.573558,
+        "count": 5,
+        "industry": "元器件",
+        "sample_names": [
+          "金安国纪",
+          "旭光电子",
+          "华正新材",
+          "沃格光电",
+          "火炬电子"
+        ]
+      },
+      {
+        "avg_month_return": 0.390341,
+        "count": 5,
+        "industry": "半导体",
+        "sample_names": [
+          "康强电子",
+          "太极实业",
+          "华亚智能",
+          "有研新材",
+          "江化微"
+        ]
+      },
+      {
+        "avg_month_return": 0.412369,
+        "count": 5,
+        "industry": "小金属",
+        "sample_names": [
+          "厦门钨业",
+          "翔鹭钨业",
+          "福达合金",
+          "三祥新材",
+          "中钨高新"
+        ]
+      },
+      {
+        "avg_month_return": 0.470921,
+        "count": 4,
+        "industry": "塑料",
+        "sample_names": [
+          "中化国际",
+          "王子新材",
+          "时代新材",
+          "双星新材"
+        ]
+      },
+      {
+        "avg_month_return": 0.410013,
+        "count": 2,
+        "industry": "通信设备",
+        "sample_names": [
+          "烽火通信",
+          "亨通光电"
+        ]
+      },
+      {
+        "avg_month_return": 0.737853,
+        "count": 1,
+        "industry": "染料涂料",
+        "sample_names": [
+          "百合花"
+        ]
+      },
+      {
+        "avg_month_return": 0.60787,
+        "count": 1,
+        "industry": "摩托车",
+        "sample_names": [
+          "宗申动力"
+        ]
+      },
+      {
+        "avg_month_return": 0.563319,
+        "count": 1,
+        "industry": "区域地产",
+        "sample_names": [
+          "阳光股份"
+        ]
+      },
+      {
+        "avg_month_return": 0.524442,
+        "count": 1,
+        "industry": "服饰",
+        "sample_names": [
+          "天创时尚"
+        ]
+      },
+      {
+        "avg_month_return": 0.523923,
+        "count": 1,
+        "industry": "农业综合",
+        "sample_names": [
+          "京基智农"
+        ]
+      },
+      {
+        "avg_month_return": 0.478896,
+        "count": 1,
+        "industry": "食品",
+        "sample_names": [
+          "金字火腿"
+        ]
+      },
+      {
+        "avg_month_return": 0.472792,
+        "count": 1,
+        "industry": "铜",
+        "sample_names": [
+          "江南新材"
+        ]
+      },
+      {
+        "avg_month_return": 0.435736,
+        "count": 1,
+        "industry": "其他建材",
+        "sample_names": [
+          "法狮龙"
+        ]
+      },
+      {
+        "avg_month_return": 0.42256,
+        "count": 1,
+        "industry": "IT设备",
+        "sample_names": [
+          "鸿合科技"
+        ]
+      }
+    ],
+    "top_pre5_return_median": 0.01724,
+    "top_vs_20d_high_median": -0.081705,
+    "top_winner_count": 50,
+    "universe_avg_return": -0.022468,
+    "universe_count": 3006,
+    "universe_over20_rate": 0.041583,
+    "universe_positive_rate": 0.284098
+  },
+  "data_scope": {
+    "account_profile": "new_retail_cash_account",
+    "coverage_notes": [
+      "Read-only daily bars from the existing SQLite database; no refresh or model call performed.",
+      "Account eligibility filtered stock-like series from 3075 to 3024.",
+      "Account eligibility excluded board counts: {'chnext': 32, 'star': 18, 'st': 1}."
+    ],
+    "historical_signal_day_count": 721,
+    "historical_trade_count": 192,
+    "paper_closed_trade_count": 7,
+    "paper_signal_day_count": 22,
+    "stock_like_series_count": 3024
+  },
+  "event_refs": [
+    "shortpick_v2.oos_position_rank_diagnostics.generated",
+    "shortpick_v2.oos_position_rank_diagnostics.month.2026-06-01_2026-06-16"
+  ],
+  "generated_at": "2026-06-16T15:46:43.000012+00:00",
+  "interpretation": {
+    "message_cn": "没有非兜底形态同时满足 holdout 样本量和正收益要求；回撤蓄势 holdout 中位收益为 5.1%，但只有 6 笔。位置形态只能作为软排序特征继续验证。；Rank 入口更像主要矛盾：强势股能进入宽排名，但最终 Top5 覆盖不足",
+    "recommended_next_steps_cn": [
+      "下一轮做正式历史回测：保持 H10 和 20 万资金约束，比较原 Top5、行业热度+回撤蓄势排序、行业热度+成交额排序、低追高排序。",
+      "位置形态只作为候选排序特征参与，不先做硬过滤，避免因为小样本误杀可盈利交易。",
+      "如果排序版在历史、holdout、paper 都改善，再进入参数网格；否则回到 v1 冻结策略资金约束版做更强对照。"
+    ],
+    "status": "continue_research_no_strategy_promotion"
+  },
+  "leakage_audit": {
+    "notes": [
+      "Position bucket labels use only signal-day-or-earlier features; trade returns are outcomes.",
+      "Current-month winner labels are post-hoc opportunity labels and are not used to promote a rule.",
+      "Diagnostic scoring uses only signal-day context, but it is reported as coverage diagnostics, not a backtest.",
+      "No rule is promoted by this artifact."
+    ],
+    "status": "passed"
+  },
+  "paper_baseline": {
+    "annualization_trade_day_count": 28,
+    "annualized_return": -0.592136,
+    "blocked_exit_count": 0,
+    "dynamic_exit_count": 0,
+    "exit_reason_counts": {
+      "mechanical_horizon": 7
+    },
+    "fallback_trade_count": 0,
+    "final_cash": 181031.357,
+    "final_market_value": 0,
+    "final_nav": 181031.357,
+    "market_excess_total_return": 0.01539,
+    "market_reference_total_return": -0.110233,
+    "max_drawdown": -0.180727,
+    "max_position_count": 4,
+    "mean_invested_ratio": 0.71638,
+    "open_position_count": 0,
+    "signal_count": 22,
+    "skip_count": 15,
+    "skipped_ratio": 0.681818,
+    "total_buy_value": 393619.668,
+    "total_return": -0.094843,
+    "total_sell_value": 374651.025,
+    "trade_count": 7,
+    "turnover": 1.968098
+  },
+  "position_oos_diagnostics": {
+    "bucket_rows": [
+      {
+        "bucket_id": "chase_high",
+        "definition_cn": "信号日前 5 日涨幅 >= 8%，且距离 20 日高点不低于 -0.5%。",
+        "historical_all": {
+          "avg_net_return": 0.037281,
+          "count": 46,
+          "median_net_return": -0.014554,
+          "median_pnl_pct_initial_cash": -0.003432,
+          "top_industries": [
+            [
+              "化工原料",
+              3
+            ],
+            [
+              "全国地产",
+              3
+            ],
+            [
+              "文教休闲",
+              3
+            ],
+            [
+              "汽车配件",
+              2
+            ],
+            [
+              "纺织",
+              2
+            ]
+          ],
+          "win_rate": 0.456522
+        },
+        "holdout": {
+          "avg_net_return": 0.046296,
+          "count": 16,
+          "median_net_return": -0.039288,
+          "median_pnl_pct_initial_cash": -0.016674,
+          "top_industries": [
+            [
+              "电气设备",
+              2
+            ],
+            [
+              "汽车配件",
+              1
+            ],
+            [
+              "元器件",
+              1
+            ],
+            [
+              "服饰",
+              1
+            ],
+            [
+              "文教休闲",
+              1
+            ]
+          ],
+          "win_rate": 0.3125
+        },
+        "label_cn": "高位追强",
+        "paper": {
+          "avg_net_return": -0.063227,
+          "count": 3,
+          "median_net_return": -0.117397,
+          "median_pnl_pct_initial_cash": -0.039426,
+          "top_industries": [
+            [
+              "环境保护",
+              1
+            ],
+            [
+              "工程机械",
+              1
+            ],
+            [
+              "食品",
+              1
+            ]
+          ],
+          "win_rate": 0.333333
+        },
+        "train": {
+          "avg_net_return": 0.032473,
+          "count": 30,
+          "median_net_return": 0.008781,
+          "median_pnl_pct_initial_cash": 0.002758,
+          "top_industries": [
+            [
+              "化工原料",
+              3
+            ],
+            [
+              "全国地产",
+              3
+            ],
+            [
+              "纺织",
+              2
+            ],
+            [
+              "文教休闲",
+              2
+            ],
+            [
+              "汽车配件",
+              1
+            ]
+          ],
+          "win_rate": 0.533333
+        },
+        "verdict_cn": "holdout 为负"
+      },
+      {
+        "bucket_id": "pullback_setup",
+        "definition_cn": "信号日前 5 日涨幅在 -10% 到 +5%，且距离 20 日高点 -15% 到 -3%。",
+        "historical_all": {
+          "avg_net_return": 0.123098,
+          "count": 16,
+          "median_net_return": 0.055979,
+          "median_pnl_pct_initial_cash": 0.023211,
+          "top_industries": [
+            [
+              "纺织",
+              2
+            ],
+            [
+              "环境保护",
+              2
+            ],
+            [
+              "铅锌",
+              1
+            ],
+            [
+              "建筑工程",
+              1
+            ],
+            [
+              "运输设备",
+              1
+            ]
+          ],
+          "win_rate": 0.8125
+        },
+        "holdout": {
+          "avg_net_return": 0.186727,
+          "count": 6,
+          "median_net_return": 0.051261,
+          "median_pnl_pct_initial_cash": 0.021542,
+          "top_industries": [
+            [
+              "园区开发",
+              1
+            ],
+            [
+              "环境保护",
+              1
+            ],
+            [
+              "汽车配件",
+              1
+            ],
+            [
+              "纺织",
+              1
+            ],
+            [
+              "农药化肥",
+              1
+            ]
+          ],
+          "win_rate": 1.0
+        },
+        "label_cn": "回撤蓄势",
+        "paper": {
+          "avg_net_return": -0.069114,
+          "count": 1,
+          "median_net_return": -0.069114,
+          "median_pnl_pct_initial_cash": -0.001792,
+          "top_industries": [
+            [
+              "新型电力",
+              1
+            ]
+          ],
+          "win_rate": 0.0
+        },
+        "train": {
+          "avg_net_return": 0.084921,
+          "count": 10,
+          "median_net_return": 0.072645,
+          "median_pnl_pct_initial_cash": 0.030259,
+          "top_industries": [
+            [
+              "纺织",
+              1
+            ],
+            [
+              "铅锌",
+              1
+            ],
+            [
+              "建筑工程",
+              1
+            ],
+            [
+              "运输设备",
+              1
+            ],
+            [
+              "环境保护",
+              1
+            ]
+          ],
+          "win_rate": 0.7
+        },
+        "verdict_cn": "holdout 样本不足"
+      },
+      {
+        "bucket_id": "low_pre5_pullback",
+        "definition_cn": "信号日前 5 日涨幅 <= 5%，且距离 20 日高点低于 -15%。",
+        "historical_all": {
+          "avg_net_return": null,
+          "count": 0,
+          "median_net_return": null,
+          "median_pnl_pct_initial_cash": null,
+          "top_industries": [],
+          "win_rate": null
+        },
+        "holdout": {
+          "avg_net_return": null,
+          "count": 0,
+          "median_net_return": null,
+          "median_pnl_pct_initial_cash": null,
+          "top_industries": [],
+          "win_rate": null
+        },
+        "label_cn": "低涨幅回撤",
+        "paper": {
+          "avg_net_return": null,
+          "count": 0,
+          "median_net_return": null,
+          "median_pnl_pct_initial_cash": null,
+          "top_industries": [],
+          "win_rate": null
+        },
+        "train": {
+          "avg_net_return": null,
+          "count": 0,
+          "median_net_return": null,
+          "median_pnl_pct_initial_cash": null,
+          "top_industries": [],
+          "win_rate": null
+        },
+        "verdict_cn": "holdout 样本不足"
+      },
+      {
+        "bucket_id": "other",
+        "definition_cn": "不属于上述固定形态。",
+        "historical_all": {
+          "avg_net_return": 0.019796,
+          "count": 130,
+          "median_net_return": 0.00586,
+          "median_pnl_pct_initial_cash": 0.001951,
+          "top_industries": [
+            [
+              "汽车配件",
+              11
+            ],
+            [
+              "化工原料",
+              9
+            ],
+            [
+              "供气供热",
+              6
+            ],
+            [
+              "机械基件",
+              6
+            ],
+            [
+              "专用机械",
+              5
+            ]
+          ],
+          "win_rate": 0.546154
+        },
+        "holdout": {
+          "avg_net_return": 0.010542,
+          "count": 75,
+          "median_net_return": 0.00179,
+          "median_pnl_pct_initial_cash": 0.000756,
+          "top_industries": [
+            [
+              "化工原料",
+              7
+            ],
+            [
+              "汽车配件",
+              5
+            ],
+            [
+              "家用电器",
+              4
+            ],
+            [
+              "供气供热",
+              4
+            ],
+            [
+              "专用机械",
+              4
+            ]
+          ],
+          "win_rate": 0.52
+        },
+        "label_cn": "其它形态",
+        "paper": {
+          "avg_net_return": -0.036598,
+          "count": 3,
+          "median_net_return": -0.034163,
+          "median_pnl_pct_initial_cash": -0.010302,
+          "top_industries": [
+            [
+              "机床制造",
+              1
+            ],
+            [
+              "汽车配件",
+              1
+            ],
+            [
+              "元器件",
+              1
+            ]
+          ],
+          "win_rate": 0.0
+        },
+        "train": {
+          "avg_net_return": 0.032416,
+          "count": 55,
+          "median_net_return": 0.01413,
+          "median_pnl_pct_initial_cash": 0.005538,
+          "top_industries": [
+            [
+              "汽车配件",
+              6
+            ],
+            [
+              "食品",
+              4
+            ],
+            [
+              "机械基件",
+              3
+            ],
+            [
+              "新型电力",
+              3
+            ],
+            [
+              "电气设备",
+              3
+            ]
+          ],
+          "win_rate": 0.581818
+        },
+        "verdict_cn": "历史样本外为正，但 paper 已转弱"
+      }
+    ],
+    "historical_trade_count": 192,
+    "holdout_trade_count": 97,
+    "paper_trade_count": 7,
+    "paper_trade_samples": [
+      {
+        "entry_date": "2026-05-12",
+        "exit_date": "2026-05-26",
+        "industry": "环境保护",
+        "name": "正和生态",
+        "net_return": -0.117397,
+        "position_shape": "chase_high",
+        "pre5_return": 0.097443,
+        "price_vs_20d_high": 0.0,
+        "signal_date": "2026-05-11",
+        "symbol": "605069.SH"
+      },
+      {
+        "entry_date": "2026-05-13",
+        "exit_date": "2026-05-27",
+        "industry": "工程机械",
+        "name": "冰轮环境",
+        "net_return": 0.056867,
+        "position_shape": "chase_high",
+        "pre5_return": 0.158717,
+        "price_vs_20d_high": 0.0,
+        "signal_date": "2026-05-12",
+        "symbol": "000811.SZ"
+      },
+      {
+        "entry_date": "2026-05-14",
+        "exit_date": "2026-05-28",
+        "industry": "机床制造",
+        "name": "海天精工",
+        "net_return": -0.034163,
+        "position_shape": "other",
+        "pre5_return": 0.117078,
+        "price_vs_20d_high": -0.029424,
+        "signal_date": "2026-05-13",
+        "symbol": "601882.SH"
+      },
+      {
+        "entry_date": "2026-05-26",
+        "exit_date": "2026-06-09",
+        "industry": "食品",
+        "name": "黑芝麻",
+        "net_return": -0.129152,
+        "position_shape": "chase_high",
+        "pre5_return": 0.16129,
+        "price_vs_20d_high": 0.0,
+        "signal_date": "2026-05-25",
+        "symbol": "000716.SZ"
+      },
+      {
+        "entry_date": "2026-05-27",
+        "exit_date": "2026-06-10",
+        "industry": "汽车配件",
+        "name": "宁波华翔",
+        "net_return": -0.003443,
+        "position_shape": "other",
+        "pre5_return": 0.044051,
+        "price_vs_20d_high": -0.009868,
+        "signal_date": "2026-05-26",
+        "symbol": "002048.SZ"
+      },
+      {
+        "entry_date": "2026-05-28",
+        "exit_date": "2026-06-11",
+        "industry": "元器件",
+        "name": "振华科技",
+        "net_return": -0.072189,
+        "position_shape": "other",
+        "pre5_return": 0.073576,
+        "price_vs_20d_high": -0.03341,
+        "signal_date": "2026-05-27",
+        "symbol": "000733.SZ"
+      },
+      {
+        "entry_date": "2026-06-02",
+        "exit_date": "2026-06-16",
+        "industry": "新型电力",
+        "name": "林洋能源",
+        "net_return": -0.069114,
+        "position_shape": "pullback_setup",
+        "pre5_return": 0.015385,
+        "price_vs_20d_high": -0.035088,
+        "signal_date": "2026-06-01",
+        "symbol": "601222.SH"
+      }
+    ],
+    "recommendation": {
+      "message_cn": "没有非兜底形态同时满足 holdout 样本量和正收益要求；回撤蓄势 holdout 中位收益为 5.1%，但只有 6 笔。位置形态只能作为软排序特征继续验证。",
+      "status": "no_promotable_hard_bucket"
+    },
+    "train_trade_count": 95
+  },
+  "rank_entry_diagnostics": {
+    "bought_top_winner_count": 0,
+    "bought_top_winner_rate": 0.0,
+    "broad_rank_limit": 80,
+    "current_month_start_date": "2026-06-01",
+    "diagnostic_score_rows": [
+      {
+        "label_cn": "行业热度 + 回撤蓄势",
+        "meaning_cn": "主题行业强、位置不过度追高的股票前置。",
+        "pre_launch_top5_hit_count": 5,
+        "pre_launch_top5_hit_rate": 0.1,
+        "score_id": "industry_heat_pullback",
+        "top10_hit_count": 9,
+        "top10_hit_rate": 0.18,
+        "top5_hit_count": 5,
+        "top5_hit_rate": 0.1
+      },
+      {
+        "label_cn": "行业热度 + 成交额",
+        "meaning_cn": "主题行业强且流动性高的股票前置。",
+        "pre_launch_top5_hit_count": 1,
+        "pre_launch_top5_hit_rate": 0.02,
+        "score_id": "industry_heat_amount",
+        "top10_hit_count": 3,
+        "top10_hit_rate": 0.06,
+        "top5_hit_count": 2,
+        "top5_hit_rate": 0.04
+      },
+      {
+        "label_cn": "回撤优先 + 低追高",
+        "meaning_cn": "先排除高位追强，优先回撤蓄势。",
+        "pre_launch_top5_hit_count": 2,
+        "pre_launch_top5_hit_rate": 0.04,
+        "score_id": "pullback_low_chase",
+        "top10_hit_count": 7,
+        "top10_hit_rate": 0.14,
+        "top5_hit_count": 2,
+        "top5_hit_rate": 0.04
+      }
+    ],
+    "eligible_universe_hit_count": 49,
+    "eligible_universe_hit_rate": 0.98,
+    "final_top5_hit_count": 1,
+    "final_top5_hit_rate": 0.02,
+    "missed_top10_examples": [
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "化工原料",
+        "month_return": 0.924101,
+        "name": "宿迁联盛",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "603065.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "元器件",
+        "month_return": 0.896655,
+        "name": "金安国纪",
+        "position_shape": "chase_high",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": 2,
+        "quiet_broad_day_count": 1,
+        "quiet_median_rank": 2,
+        "symbol": "002636.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "化工原料",
+        "month_return": 0.761059,
+        "name": "红星发展",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "600367.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "染料涂料",
+        "month_return": 0.737853,
+        "name": "百合花",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "603823.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "化工原料",
+        "month_return": 0.704748,
+        "name": "和远气体",
+        "position_shape": "low_pre5_pullback",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "002971.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "塑料",
+        "month_return": 0.684015,
+        "name": "中化国际",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": 9,
+        "quiet_broad_day_count": 1,
+        "quiet_median_rank": 9,
+        "symbol": "600500.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "摩托车",
+        "month_return": 0.60787,
+        "name": "宗申动力",
+        "position_shape": "low_pre5_pullback",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": 77,
+        "quiet_broad_day_count": 1,
+        "quiet_median_rank": 77,
+        "symbol": "001696.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 0,
+        "final_top5_day_count": 0,
+        "industry": "区域地产",
+        "month_return": 0.563319,
+        "name": "阳光股份",
+        "position_shape": "chase_high",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "000608.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "元器件",
+        "month_return": 0.559879,
+        "name": "华正新材",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": 1,
+        "quiet_broad_day_count": 1,
+        "quiet_median_rank": 1,
+        "symbol": "603186.SH"
+      }
+    ],
+    "paper_signal_day_count": 22,
+    "quiet_broad_hit_count": 14,
+    "quiet_broad_hit_rate": 0.28,
+    "recommendation": {
+      "best_diagnostic_score_id": "industry_heat_pullback",
+      "message_cn": "强势股能进入更宽的 quiet 排名但很少进入最终 Top5，下一轮应优先验证排序/截断，而不是先改资金执行。",
+      "status": "rank_truncation_suspect",
+      "truncation_ratio_threshold": 0.5
+    },
+    "top_winner_count": 50,
+    "winner_rows": [
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "化工原料",
+        "month_return": 0.924101,
+        "name": "宿迁联盛",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "603065.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "元器件",
+        "month_return": 0.896655,
+        "name": "金安国纪",
+        "position_shape": "chase_high",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": 2,
+        "quiet_broad_day_count": 1,
+        "quiet_median_rank": 2,
+        "symbol": "002636.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "化工原料",
+        "month_return": 0.761059,
+        "name": "红星发展",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "600367.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "染料涂料",
+        "month_return": 0.737853,
+        "name": "百合花",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "603823.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "化工原料",
+        "month_return": 0.704748,
+        "name": "和远气体",
+        "position_shape": "low_pre5_pullback",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "002971.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "塑料",
+        "month_return": 0.684015,
+        "name": "中化国际",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": 9,
+        "quiet_broad_day_count": 1,
+        "quiet_median_rank": 9,
+        "symbol": "600500.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "摩托车",
+        "month_return": 0.60787,
+        "name": "宗申动力",
+        "position_shape": "low_pre5_pullback",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": 77,
+        "quiet_broad_day_count": 1,
+        "quiet_median_rank": 77,
+        "symbol": "001696.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 0,
+        "final_top5_day_count": 0,
+        "industry": "区域地产",
+        "month_return": 0.563319,
+        "name": "阳光股份",
+        "position_shape": "chase_high",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "000608.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 1,
+        "industry": "元器件",
+        "month_return": 0.562556,
+        "name": "旭光电子",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 1,
+        "quiet_best_rank": 4,
+        "quiet_broad_day_count": 2,
+        "quiet_median_rank": 7.0,
+        "symbol": "600353.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "元器件",
+        "month_return": 0.559879,
+        "name": "华正新材",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": 1,
+        "quiet_broad_day_count": 1,
+        "quiet_median_rank": 1,
+        "symbol": "603186.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "服饰",
+        "month_return": 0.524442,
+        "name": "天创时尚",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "603608.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "农业综合",
+        "month_return": 0.523923,
+        "name": "京基智农",
+        "position_shape": "low_pre5_pullback",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "000048.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "化工原料",
+        "month_return": 0.498708,
+        "name": "昊华科技",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "600378.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "食品",
+        "month_return": 0.478896,
+        "name": "金字火腿",
+        "position_shape": "low_pre5_pullback",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": 23,
+        "quiet_broad_day_count": 1,
+        "quiet_median_rank": 23,
+        "symbol": "002515.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "铜",
+        "month_return": 0.472792,
+        "name": "江南新材",
+        "position_shape": "chase_high",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "603124.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "元器件",
+        "month_return": 0.451095,
+        "name": "沃格光电",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "603773.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "塑料",
+        "month_return": 0.448649,
+        "name": "王子新材",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "002735.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "半导体",
+        "month_return": 0.446087,
+        "name": "康强电子",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "002119.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "化工原料",
+        "month_return": 0.44557,
+        "name": "圣泉集团",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": 46,
+        "quiet_broad_day_count": 1,
+        "quiet_median_rank": 46,
+        "symbol": "605589.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "小金属",
+        "month_return": 0.442156,
+        "name": "厦门钨业",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "600549.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "其他建材",
+        "month_return": 0.435736,
+        "name": "法狮龙",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": 64,
+        "quiet_broad_day_count": 1,
+        "quiet_median_rank": 64,
+        "symbol": "605318.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "化工原料",
+        "month_return": 0.4348,
+        "name": "东材科技",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "601208.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "小金属",
+        "month_return": 0.432324,
+        "name": "翔鹭钨业",
+        "position_shape": "low_pre5_pullback",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "002842.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "通信设备",
+        "month_return": 0.426094,
+        "name": "烽火通信",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "600498.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "IT设备",
+        "month_return": 0.42256,
+        "name": "鸿合科技",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": 20,
+        "quiet_broad_day_count": 1,
+        "quiet_median_rank": 20,
+        "symbol": "002955.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "小金属",
+        "month_return": 0.417524,
+        "name": "福达合金",
+        "position_shape": "low_pre5_pullback",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "603045.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "化工原料",
+        "month_return": 0.414294,
+        "name": "巨化股份",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "600160.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "电气设备",
+        "month_return": 0.410788,
+        "name": "远东股份",
+        "position_shape": "chase_high",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": 1,
+        "quiet_broad_day_count": 1,
+        "quiet_median_rank": 1,
+        "symbol": "600869.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "小金属",
+        "month_return": 0.409546,
+        "name": "三祥新材",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "603663.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "半导体",
+        "month_return": 0.398911,
+        "name": "太极实业",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "600667.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "元器件",
+        "month_return": 0.397605,
+        "name": "火炬电子",
+        "position_shape": "chase_high",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "603678.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "装修装饰",
+        "month_return": 0.395966,
+        "name": "亚翔集成",
+        "position_shape": "low_pre5_pullback",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "603929.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "通信设备",
+        "month_return": 0.393932,
+        "name": "亨通光电",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "600487.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "建筑工程",
+        "month_return": 0.3898,
+        "name": "深桑达A",
+        "position_shape": "low_pre5_pullback",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": 74,
+        "quiet_broad_day_count": 1,
+        "quiet_median_rank": 74,
+        "symbol": "000032.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "专用机械",
+        "month_return": 0.388443,
+        "name": "合锻智能",
+        "position_shape": "chase_high",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "603011.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "纺织机械",
+        "month_return": 0.383239,
+        "name": "泰坦股份",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "003036.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "软饮料",
+        "month_return": 0.382161,
+        "name": "安德利",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "605198.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "塑料",
+        "month_return": 0.381517,
+        "name": "时代新材",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": 20,
+        "quiet_broad_day_count": 2,
+        "quiet_median_rank": 24.0,
+        "symbol": "600458.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "半导体",
+        "month_return": 0.378808,
+        "name": "华亚智能",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "003043.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "化工原料",
+        "month_return": 0.378378,
+        "name": "新金路",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "000510.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "半导体",
+        "month_return": 0.372281,
+        "name": "有研新材",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "600206.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "塑料",
+        "month_return": 0.369501,
+        "name": "双星新材",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "002585.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "供气供热",
+        "month_return": 0.369327,
+        "name": "亨通股份",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": 44,
+        "quiet_broad_day_count": 1,
+        "quiet_median_rank": 44,
+        "symbol": "600226.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "机械基件",
+        "month_return": 0.368982,
+        "name": "锋龙股份",
+        "position_shape": "low_pre5_pullback",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "002931.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "小金属",
+        "month_return": 0.360294,
+        "name": "中钨高新",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "000657.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "运输设备",
+        "month_return": 0.358555,
+        "name": "科安达",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "002972.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "半导体",
+        "month_return": 0.35562,
+        "name": "江化微",
+        "position_shape": "other",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "603078.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 17,
+        "final_top5_day_count": 0,
+        "industry": "家用电器",
+        "month_return": 0.352785,
+        "name": "金海高科",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "603311.SH"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "火力发电",
+        "month_return": 0.347587,
+        "name": "豫能控股",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": null,
+        "quiet_broad_day_count": 0,
+        "quiet_median_rank": null,
+        "symbol": "001896.SZ"
+      },
+      {
+        "bought_by_v2": false,
+        "eligible_signal_day_count": 22,
+        "final_top5_day_count": 0,
+        "industry": "化工原料",
+        "month_return": 0.343687,
+        "name": "湘潭电化",
+        "position_shape": "pullback_setup",
+        "pre_launch_final_top5_day_count": 0,
+        "quiet_best_rank": 21,
+        "quiet_broad_day_count": 1,
+        "quiet_median_rank": 21,
+        "symbol": "002125.SZ"
+      }
+    ],
+    "winner_symbol_count": 50
+  },
+  "schema_version": "v1",
+  "source_ref": "market_only_reconstruction:shortpick_v2_oos_position_rank_diagnostics:v1",
+  "status": "ready"
+}
