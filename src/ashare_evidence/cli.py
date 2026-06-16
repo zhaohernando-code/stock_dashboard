@@ -70,6 +70,11 @@ from ashare_evidence.shortpick_lab import (
     validate_shortpick_run,
 )
 from ashare_evidence.shortpick_market_factor_study import build_shortpick_market_factor_study
+from ashare_evidence.shortpick_paper_divergence_attribution import (
+    build_shortpick_paper_divergence_attribution_artifact,
+    validate_shortpick_paper_divergence_attribution_artifact,
+    write_shortpick_paper_divergence_attribution_artifact,
+)
 from ashare_evidence.shortpick_portfolio_backtest import (
     build_shortpick_portfolio_backtest,
     write_shortpick_portfolio_backtest,
@@ -268,6 +273,7 @@ NO_DB_COMMANDS = {
     "shortpick-v2-h10-parameter-significance-validate",
     "shortpick-v2-h10-rank-ablation-validate",
     "shortpick-v2-h10-weekday-drawdown-notional-matrix-validate",
+    "shortpick-paper-divergence-attribution-validate",
 }
 
 
@@ -1107,6 +1113,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate the H10 quiet weekday, drawdown-filter, and notional matrix artifact.",
     )
     shortpick_v2_h10_weekday_drawdown_notional_matrix_validate.add_argument("--artifact", required=True)
+
+    shortpick_paper_divergence_attribution = subparsers.add_parser(
+        "shortpick-paper-divergence-attribution",
+        help="Generate research-only attribution for v1/v2 paper-window divergence.",
+    )
+    shortpick_paper_divergence_attribution.add_argument("--database-url", default=None)
+    shortpick_paper_divergence_attribution.add_argument("--start-date", default="2026-05-08")
+    shortpick_paper_divergence_attribution.add_argument("--initial-cash", type=float, default=200_000.0)
+    shortpick_paper_divergence_attribution.add_argument(
+        "--output",
+        default="output/shortpick-paper-divergence-attribution-20260616.json",
+    )
+    shortpick_paper_divergence_attribution.add_argument(
+        "--summary-output",
+        default="docs/archive/SHORTPICK_PAPER_DIVERGENCE_ATTRIBUTION_2026-06-16.md",
+    )
+    shortpick_paper_divergence_attribution.add_argument("--rule-selection-artifact", default=None)
+    shortpick_paper_divergence_attribution.add_argument("--ledger-artifact", default=None)
+    shortpick_paper_divergence_attribution.add_argument("--paper-governance-artifact", default=None)
+
+    shortpick_paper_divergence_attribution_validate = subparsers.add_parser(
+        "shortpick-paper-divergence-attribution-validate",
+        help="Validate the v1/v2 paper-window divergence attribution artifact.",
+    )
+    shortpick_paper_divergence_attribution_validate.add_argument("--artifact", required=True)
 
     shortpick_v2_h10_rank_ablation = subparsers.add_parser(
         "shortpick-v2-h10-rank-ablation",
@@ -1962,6 +1993,40 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "shortpick-v2-h10-weekday-drawdown-notional-matrix-validate":
         payload = validate_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact(artifact_path=args.artifact)
+        _print_json(payload)
+        return 0 if payload.get("status") == "passed" else 1
+
+    if args.command == "shortpick-paper-divergence-attribution":
+        with session_scope(args.database_url) as session:
+            payload = build_shortpick_paper_divergence_attribution_artifact(
+                session,
+                start_date=date.fromisoformat(args.start_date),
+                initial_cash=args.initial_cash,
+                rule_selection_artifact_path=args.rule_selection_artifact,
+                ledger_artifact_path=args.ledger_artifact,
+                paper_governance_artifact_path=args.paper_governance_artifact,
+            )
+        paths = write_shortpick_paper_divergence_attribution_artifact(
+            payload,
+            output_path=args.output,
+            summary_path=args.summary_output,
+        )
+        _print_json(
+            {
+                "status": "ok",
+                "artifact_family": payload.get("artifact_family"),
+                "artifact_id": payload.get("artifact_id"),
+                "validation_status": payload.get("validation_status"),
+                "output_path": str(paths["artifact"]),
+                "summary_output_path": str(paths.get("summary")) if paths.get("summary") else None,
+                "strategy_count": len(payload.get("strategies") or []),
+                "latest_available_date": (payload.get("tracking_window") or {}).get("latest_available_date"),
+            }
+        )
+        return 0
+
+    if args.command == "shortpick-paper-divergence-attribution-validate":
+        payload = validate_shortpick_paper_divergence_attribution_artifact(artifact_path=args.artifact)
         _print_json(payload)
         return 0 if payload.get("status") == "passed" else 1
 

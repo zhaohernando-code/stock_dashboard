@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hernando-zhao.local/schemas/shortpick_paper_divergence_attribution.schema.json",
+  "title": "Shortpick paper divergence attribution artifact",
+  "type": "object",
+  "required": [
+    "artifact_family",
+    "schema_version",
+    "claim_ceiling",
+    "artifact_id",
+    "generated_at",
+    "tracking_window",
+    "account_constraints",
+    "source_notes",
+    "strategies",
+    "attribution",
+    "conclusions_cn",
+    "event_refs"
+  ],
+  "properties": {
+    "artifact_family": {
+      "const": "shortpick_paper_divergence_attribution"
+    },
+    "schema_version": {
+      "const": "v1"
+    },
+    "claim_ceiling": {
+      "const": "research_observation"
+    },
+    "artifact_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tracking_window": {
+      "type": "object",
+      "required": ["start_date", "latest_available_date", "horizon_days"],
+      "properties": {
+        "start_date": {"type": "string"},
+        "latest_available_date": {"type": "string"},
+        "horizon_days": {"const": 10}
+      },
+      "additionalProperties": true
+    },
+    "account_constraints": {
+      "type": "object",
+      "required": ["initial_cash", "board_lot_size", "delayed_buy_allowed"],
+      "properties": {
+        "initial_cash": {"type": "number"},
+        "board_lot_size": {"const": 100},
+        "delayed_buy_allowed": {"const": false}
+      },
+      "additionalProperties": true
+    },
+    "source_notes": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "strategies": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["strategy_id", "label_cn", "source_kind", "status", "summary"],
+        "properties": {
+          "strategy_id": {"type": "string"},
+          "label_cn": {"type": "string"},
+          "source_kind": {"type": "string"},
+          "status": {"type": "string"},
+          "summary": {"type": "object"},
+          "reason_counts": {"type": "object"},
+          "notes_cn": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "attribution": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["dimension", "status", "evidence_cn"],
+        "properties": {
+          "dimension": {"type": "string"},
+          "status": {"enum": ["supports", "does_not_support", "uncertain"]},
+          "evidence_cn": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "conclusions_cn": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "validation_status": {
+      "type": "string"
+    },
+    "event_refs": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "additionalProperties": true
+}
