@@ -1036,9 +1036,9 @@ def test_shortpick_v2_paper_account_curve_uses_account_nav_not_full_trade_compou
     assert len(curves) == 1
     wrong_full_trade_compounding = (1 - 0.2) * (1 - 0.2) - 1
     assert wrong_full_trade_compounding == pytest.approx(-0.36)
-    assert curves[0]["max_drawdown"] == pytest.approx(-0.1)
+    assert curves[0]["max_drawdown"] == pytest.approx(-0.101)
     assert curves[0]["max_drawdown"] > wrong_full_trade_compounding
-    assert curves[0]["latest_return"] == pytest.approx(-0.1)
+    assert curves[0]["latest_return"] == pytest.approx(-0.101)
 
 
 def test_shortpick_v2_paper_account_curve_marks_open_position_drawdown() -> None:
@@ -1138,7 +1138,7 @@ def test_shortpick_v2_paper_account_curve_releases_exit_cash_before_same_day_ent
     )
 
     same_day_point = next(point for point in curves[0]["points"] if point["date"] == trade_days[2].isoformat())
-    assert same_day_point["cash"] == pytest.approx(120000.0)
+    assert same_day_point["cash"] == pytest.approx(119787.5)
     assert same_day_point["cash"] >= 0
     assert same_day_point["open_position_count"] == 1
 

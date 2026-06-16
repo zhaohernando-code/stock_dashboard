@@ -1500,6 +1500,9 @@ def _paper_display_account_curves_from_rows(
     observed_trade_days = [day for day in trade_days if day <= latest_observed_day]
     if not observed_trade_days:
         return []
+    from ashare_evidence.shortpick_v2_replay import DEFAULT_COST_BPS, DEFAULT_STAMP_TAX_BPS
+
+    sell_cost_rate = float(DEFAULT_COST_BPS + DEFAULT_STAMP_TAX_BPS) / 10000.0
 
     grouped_rows: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
@@ -1566,15 +1569,12 @@ def _paper_display_account_curves_from_rows(
             for position in open_positions:
                 exit_day = position.get("exit_day")
                 if exit_day is not None and exit_day <= day:
-                    stock_return = position.get("stock_return")
-                    if stock_return is None:
-                        close = _series_close_on_day(series_by_symbol.get(str(position["symbol"])), day)
-                        stock_return = (
-                            float(close) * float(position["quantity"]) / float(position["entry_cost"]) - 1.0
-                            if close is not None and position["entry_cost"]
-                            else 0.0
-                        )
-                    cash += float(position["entry_cost"]) * (1.0 + float(stock_return))
+                    close = _series_close_on_day(series_by_symbol.get(str(position["symbol"])), day)
+                    if close is not None:
+                        cash += float(position["quantity"]) * float(close) * (1.0 - sell_cost_rate)
+                    else:
+                        stock_return = position.get("stock_return")
+                        cash += float(position["entry_cost"]) * (1.0 + float(stock_return or 0.0))
                     completed_trade_count += 1
                 else:
                     remaining_positions.append(position)
