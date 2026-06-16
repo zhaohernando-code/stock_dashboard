@@ -1,0 +1,914 @@
+{
+  "analysis_scope": {
+    "baseline_buy_cn": "固定单笔约 8.5 万，Rank2 首选，Rank3-Rank6 同日候补。",
+    "baseline_config_id": "diagnostic_v2_quiet_rank2_poolhot10_mtw_fixed85_top5_h10",
+    "entry_price_source": "next_close",
+    "historical_end_date": "2026-05-08",
+    "historical_start_date": "2023-04-13",
+    "holdout_start_date": "2025-05-01",
+    "horizon_days": 10,
+    "initial_cash": 200000.0,
+    "paper_end_date": "2026-06-15",
+    "paper_start_date": "2026-05-08",
+    "promotion_status": "research_only_no_strategy_promotion",
+    "question_cn": "历史大亏画像里的涨幅贴高特征，能否形成可样本外验证的候选过滤器？",
+    "train_end_date": "2025-04-30"
+  },
+  "artifact_family": "shortpick_v2_oos_loss_filter",
+  "artifact_id": "shortpick_v2_oos_loss_filter:2023-04-13:2026-05-08:paper_to_2026-06-15:2026-06-16",
+  "claim_ceiling": "research_observation",
+  "data_scope": {
+    "account_profile": "new_retail_cash_account",
+    "coverage_notes": [
+      "Read-only daily bars from the existing SQLite database; no refresh or model call performed.",
+      "Account eligibility filtered stock-like series from 3075 to 3024.",
+      "Account eligibility excluded board counts: {'chnext': 32, 'star': 18, 'st': 1}."
+    ],
+    "stock_like_series_count": 3024
+  },
+  "event_refs": [
+    "shortpick_v2.oos_loss_filter.generated",
+    "shortpick_v2.oos_loss_filter.historical.2023-04-13_2026-05-08",
+    "shortpick_v2.oos_loss_filter.paper.2026-05-08_2026-06-15"
+  ],
+  "evidence_basis": "train_holdout_paper_account_replay",
+  "filter_variants": [
+    {
+      "description_cn": "安静突破 Rank2 + 热度池 10% + 周一至周三 + 固定 8.5 万 + H10。",
+      "fallback_after_filter": true,
+      "label_cn": "基线：不加大亏前兆过滤",
+      "market_5d_return_min": null,
+      "price_vs_20d_high_min": null,
+      "stock_pre5d_return_min": null,
+      "variant_id": "baseline_no_filter"
+    },
+    {
+      "description_cn": "候选信号日前 5 日涨幅 >= 8%，且收盘距离 20 日高点不低于 -0.5% 时跳过该候选，允许同日候补。",
+      "fallback_after_filter": true,
+      "label_cn": "涨幅贴高过滤",
+      "market_5d_return_min": null,
+      "price_vs_20d_high_min": -0.005,
+      "stock_pre5d_return_min": 0.08,
+      "variant_id": "runup_high_guard_v1"
+    },
+    {
+      "description_cn": "候选信号日前 5 日涨幅 >= 10% 时跳过该候选，允许同日候补。",
+      "fallback_after_filter": true,
+      "label_cn": "高涨幅过滤",
+      "market_5d_return_min": null,
+      "price_vs_20d_high_min": null,
+      "stock_pre5d_return_min": 0.1,
+      "variant_id": "runup_only_guard_v1"
+    },
+    {
+      "description_cn": "候选信号日收盘距离 20 日高点不低于 -0.2% 时跳过该候选，允许同日候补。",
+      "fallback_after_filter": true,
+      "label_cn": "贴 20 日高点过滤",
+      "market_5d_return_min": null,
+      "price_vs_20d_high_min": -0.002,
+      "stock_pre5d_return_min": null,
+      "variant_id": "near_high_only_guard_v1"
+    },
+    {
+      "description_cn": "沪深300信号日前 5 日收益 >= 1%，且候选前 5 日涨幅 >= 8% 时跳过该候选，允许同日候补。",
+      "fallback_after_filter": true,
+      "label_cn": "市场走强叠加个股涨幅过滤",
+      "market_5d_return_min": 0.01,
+      "price_vs_20d_high_min": null,
+      "stock_pre5d_return_min": 0.08,
+      "variant_id": "market_runup_guard_v1"
+    }
+  ],
+  "generated_at": "2026-06-16T12:08:42.156105+00:00",
+  "leakage_audit": {
+    "notes": [
+      "Candidate filters use only signal-day-or-prior close, return, and index features.",
+      "Train/holdout split is predeclared; current paper window is reported as smoke evidence only.",
+      "Filtered candidates are skipped within the ranked pool, and same-day fallback remains allowed."
+    ],
+    "status": "passed",
+    "used_only_signal_day_or_earlier_data": true
+  },
+  "recommendation": {
+    "candidate_variant_ids": [],
+    "message_cn": "本轮大亏前兆过滤器没有形成可晋级候选；不要把当前纸面窗口反向调参为新规则。相对最接近的是“高涨幅过滤”，但未同时满足 holdout 收益保留与回撤改善。",
+    "status": "no_promotable_filter"
+  },
+  "schema_version": "v1",
+  "source_ref": "market_only_reconstruction:shortpick_v2_oos_loss_filter:v1",
+  "status": "ready",
+  "variant_rows": [
+    {
+      "description_cn": "安静突破 Rank2 + 热度池 10% + 周一至周三 + 固定 8.5 万 + H10。",
+      "filter_contract": {
+        "description_cn": "安静突破 Rank2 + 热度池 10% + 周一至周三 + 固定 8.5 万 + H10。",
+        "fallback_after_filter": true,
+        "label_cn": "基线：不加大亏前兆过滤",
+        "market_5d_return_min": null,
+        "price_vs_20d_high_min": null,
+        "stock_pre5d_return_min": null,
+        "variant_id": "baseline_no_filter"
+      },
+      "historical_all": {
+        "annualization_trade_day_count": 768,
+        "annualized_return": 0.53781,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 192
+        },
+        "fallback_trade_count": 2,
+        "final_cash": 742400.1035,
+        "final_market_value": 0,
+        "final_nav": 742400.1035,
+        "market_excess_total_return": 2.293557,
+        "market_reference_total_return": 0.418444,
+        "max_drawdown": -0.119033,
+        "max_position_count": 5,
+        "mean_invested_ratio": 0.452438,
+        "open_position_count": 0,
+        "signal_count": 721,
+        "skip_count": 529,
+        "skipped_ratio": 0.733703,
+        "total_buy_value": 15334584.954,
+        "total_return": 2.712001,
+        "total_sell_value": 15876985.0575,
+        "trade_count": 192,
+        "turnover": 76.672925
+      },
+      "holdout": {
+        "annualization_trade_day_count": 272,
+        "annualized_return": 1.018885,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 93
+        },
+        "fallback_trade_count": 1,
+        "final_cash": 426930.263,
+        "final_market_value": 0,
+        "final_nav": 426930.263,
+        "market_excess_total_return": 0.736088,
+        "market_reference_total_return": 0.398563,
+        "max_drawdown": -0.139837,
+        "max_position_count": 5,
+        "mean_invested_ratio": 0.753343,
+        "open_position_count": 0,
+        "signal_count": 245,
+        "skip_count": 152,
+        "skipped_ratio": 0.620408,
+        "total_buy_value": 6940268.832,
+        "total_return": 1.134651,
+        "total_sell_value": 7167199.095,
+        "trade_count": 93,
+        "turnover": 34.701344
+      },
+      "label_cn": "基线：不加大亏前兆过滤",
+      "outcome_label_cn": "基线对照",
+      "outcome_reasons_cn": [
+        "不参与晋级判断"
+      ],
+      "outcome_status": "baseline",
+      "paper": {
+        "annualization_trade_day_count": 28,
+        "annualized_return": -0.592136,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 7
+        },
+        "fallback_trade_count": 0,
+        "final_cash": 181031.357,
+        "final_market_value": 0,
+        "final_nav": 181031.357,
+        "market_excess_total_return": 0.01539,
+        "market_reference_total_return": -0.110233,
+        "max_drawdown": -0.180727,
+        "max_position_count": 4,
+        "mean_invested_ratio": 0.71638,
+        "open_position_count": 0,
+        "signal_count": 22,
+        "skip_count": 15,
+        "skipped_ratio": 0.681818,
+        "total_buy_value": 393619.668,
+        "total_return": -0.094843,
+        "total_sell_value": 374651.025,
+        "trade_count": 7,
+        "turnover": 1.968098
+      },
+      "rejection_summary": {
+        "historical_all": {
+          "affected_signal_count": 0,
+          "reason_counts": {},
+          "rejected_candidate_count": 0
+        },
+        "holdout": {
+          "affected_signal_count": 0,
+          "reason_counts": {},
+          "rejected_candidate_count": 0
+        },
+        "paper": {
+          "affected_signal_count": 0,
+          "reason_counts": {},
+          "rejected_candidate_count": 0
+        },
+        "train": {
+          "affected_signal_count": 0,
+          "reason_counts": {},
+          "rejected_candidate_count": 0
+        }
+      },
+      "train": {
+        "annualization_trade_day_count": 520,
+        "annualized_return": 0.586948,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 95
+        },
+        "fallback_trade_count": 2,
+        "final_cash": 518667.7205,
+        "final_market_value": 0,
+        "final_nav": 518667.7205,
+        "market_excess_total_return": 1.601206,
+        "market_reference_total_return": -0.007867,
+        "max_drawdown": -0.119033,
+        "max_position_count": 5,
+        "mean_invested_ratio": 0.422842,
+        "open_position_count": 0,
+        "signal_count": 476,
+        "skip_count": 381,
+        "skipped_ratio": 0.80042,
+        "total_buy_value": 7144526.532,
+        "total_return": 1.593339,
+        "total_sell_value": 7463194.2525,
+        "trade_count": 95,
+        "turnover": 35.722633
+      },
+      "variant_id": "baseline_no_filter"
+    },
+    {
+      "description_cn": "候选信号日前 5 日涨幅 >= 8%，且收盘距离 20 日高点不低于 -0.5% 时跳过该候选，允许同日候补。",
+      "filter_contract": {
+        "description_cn": "候选信号日前 5 日涨幅 >= 8%，且收盘距离 20 日高点不低于 -0.5% 时跳过该候选，允许同日候补。",
+        "fallback_after_filter": true,
+        "label_cn": "涨幅贴高过滤",
+        "market_5d_return_min": null,
+        "price_vs_20d_high_min": -0.005,
+        "stock_pre5d_return_min": 0.08,
+        "variant_id": "runup_high_guard_v1"
+      },
+      "historical_all": {
+        "annualization_trade_day_count": 768,
+        "annualized_return": 0.434401,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 188
+        },
+        "fallback_trade_count": 2,
+        "final_cash": 600485.5985,
+        "final_market_value": 0,
+        "final_nav": 600485.5985,
+        "market_excess_total_return": 1.583984,
+        "market_reference_total_return": 0.418444,
+        "max_drawdown": -0.196362,
+        "max_position_count": 5,
+        "mean_invested_ratio": 0.514306,
+        "open_position_count": 0,
+        "signal_count": 721,
+        "skip_count": 533,
+        "skipped_ratio": 0.739251,
+        "total_buy_value": 14979471.144,
+        "total_return": 2.002428,
+        "total_sell_value": 15379956.7425,
+        "trade_count": 188,
+        "turnover": 74.897356
+      },
+      "holdout": {
+        "annualization_trade_day_count": 272,
+        "annualized_return": 0.776971,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 96
+        },
+        "fallback_trade_count": 6,
+        "final_cash": 371985.5855,
+        "final_market_value": 0,
+        "final_nav": 371985.5855,
+        "market_excess_total_return": 0.461365,
+        "market_reference_total_return": 0.398563,
+        "max_drawdown": -0.132204,
+        "max_position_count": 5,
+        "mean_invested_ratio": 0.765956,
+        "open_position_count": 0,
+        "signal_count": 245,
+        "skip_count": 149,
+        "skipped_ratio": 0.608163,
+        "total_buy_value": 6144755.982,
+        "total_return": 0.859928,
+        "total_sell_value": 6316741.5675,
+        "trade_count": 96,
+        "turnover": 30.72378
+      },
+      "label_cn": "涨幅贴高过滤",
+      "outcome_label_cn": "不晋级",
+      "outcome_reasons_cn": [
+        "holdout 年化未保留基线 90%",
+        "paper 收益较基线恶化超过 3pp"
+      ],
+      "outcome_status": "rejected",
+      "paper": {
+        "annualization_trade_day_count": 28,
+        "annualized_return": -0.721045,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 6
+        },
+        "fallback_trade_count": 0,
+        "final_cash": 173549.1815,
+        "final_market_value": 0,
+        "final_nav": 173549.1815,
+        "market_excess_total_return": -0.022021,
+        "market_reference_total_return": -0.110233,
+        "max_drawdown": -0.13371,
+        "max_position_count": 4,
+        "mean_invested_ratio": 0.602504,
+        "open_position_count": 0,
+        "signal_count": 22,
+        "skip_count": 16,
+        "skipped_ratio": 0.727273,
+        "total_buy_value": 327636.966,
+        "total_return": -0.132254,
+        "total_sell_value": 301186.1475,
+        "trade_count": 6,
+        "turnover": 1.638185
+      },
+      "rejection_summary": {
+        "historical_all": {
+          "affected_signal_count": 123,
+          "reason_counts": {
+            "stock_pre5d_return+price_vs_20d_high": 204
+          },
+          "rejected_candidate_count": 204
+        },
+        "holdout": {
+          "affected_signal_count": 63,
+          "reason_counts": {
+            "stock_pre5d_return+price_vs_20d_high": 98
+          },
+          "rejected_candidate_count": 98
+        },
+        "paper": {
+          "affected_signal_count": 6,
+          "reason_counts": {
+            "stock_pre5d_return+price_vs_20d_high": 12
+          },
+          "rejected_candidate_count": 12
+        },
+        "train": {
+          "affected_signal_count": 60,
+          "reason_counts": {
+            "stock_pre5d_return+price_vs_20d_high": 106
+          },
+          "rejected_candidate_count": 106
+        }
+      },
+      "train": {
+        "annualization_trade_day_count": 520,
+        "annualized_return": 0.404836,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 92
+        },
+        "fallback_trade_count": 2,
+        "final_cash": 403324.4195,
+        "final_market_value": 0,
+        "final_nav": 403324.4195,
+        "market_excess_total_return": 1.024489,
+        "market_reference_total_return": -0.007867,
+        "max_drawdown": -0.196362,
+        "max_position_count": 5,
+        "mean_invested_ratio": 0.453129,
+        "open_position_count": 0,
+        "signal_count": 476,
+        "skip_count": 384,
+        "skipped_ratio": 0.806723,
+        "total_buy_value": 6927165.678,
+        "total_return": 1.016622,
+        "total_sell_value": 7130490.0975,
+        "trade_count": 92,
+        "turnover": 34.635828
+      },
+      "variant_id": "runup_high_guard_v1"
+    },
+    {
+      "description_cn": "候选信号日前 5 日涨幅 >= 10% 时跳过该候选，允许同日候补。",
+      "filter_contract": {
+        "description_cn": "候选信号日前 5 日涨幅 >= 10% 时跳过该候选，允许同日候补。",
+        "fallback_after_filter": true,
+        "label_cn": "高涨幅过滤",
+        "market_5d_return_min": null,
+        "price_vs_20d_high_min": null,
+        "stock_pre5d_return_min": 0.1,
+        "variant_id": "runup_only_guard_v1"
+      },
+      "historical_all": {
+        "annualization_trade_day_count": 768,
+        "annualized_return": 0.546159,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 188
+        },
+        "fallback_trade_count": 2,
+        "final_cash": 754753.04,
+        "final_market_value": 0,
+        "final_nav": 754753.04,
+        "market_excess_total_return": 2.355321,
+        "market_reference_total_return": 0.418444,
+        "max_drawdown": -0.139911,
+        "max_position_count": 5,
+        "mean_invested_ratio": 0.466445,
+        "open_position_count": 0,
+        "signal_count": 721,
+        "skip_count": 533,
+        "skipped_ratio": 0.739251,
+        "total_buy_value": 14846188.11,
+        "total_return": 2.773765,
+        "total_sell_value": 15400941.15,
+        "trade_count": 188,
+        "turnover": 74.230941
+      },
+      "holdout": {
+        "annualization_trade_day_count": 272,
+        "annualized_return": 1.236277,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 95
+        },
+        "fallback_trade_count": 0,
+        "final_cash": 476755.37,
+        "final_market_value": 0,
+        "final_nav": 476755.37,
+        "market_excess_total_return": 0.985214,
+        "market_reference_total_return": 0.398563,
+        "max_drawdown": -0.15418,
+        "max_position_count": 5,
+        "mean_invested_ratio": 0.74379,
+        "open_position_count": 0,
+        "signal_count": 245,
+        "skip_count": 150,
+        "skipped_ratio": 0.612245,
+        "total_buy_value": 7078869.48,
+        "total_return": 1.383777,
+        "total_sell_value": 7355624.85,
+        "trade_count": 95,
+        "turnover": 35.394347
+      },
+      "label_cn": "高涨幅过滤",
+      "outcome_label_cn": "不晋级",
+      "outcome_reasons_cn": [
+        "holdout 回撤未改善",
+        "paper 收益较基线恶化超过 3pp"
+      ],
+      "outcome_status": "rejected",
+      "paper": {
+        "annualization_trade_day_count": 28,
+        "annualized_return": -0.752175,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 7
+        },
+        "fallback_trade_count": 0,
+        "final_cash": 171282.3845,
+        "final_market_value": 0,
+        "final_nav": 171282.3845,
+        "market_excess_total_return": -0.033355,
+        "market_reference_total_return": -0.110233,
+        "max_drawdown": -0.180031,
+        "max_position_count": 4,
+        "mean_invested_ratio": 0.714524,
+        "open_position_count": 0,
+        "signal_count": 22,
+        "skip_count": 15,
+        "skipped_ratio": 0.681818,
+        "total_buy_value": 381715.908,
+        "total_return": -0.143588,
+        "total_sell_value": 352998.2925,
+        "trade_count": 7,
+        "turnover": 1.90858
+      },
+      "rejection_summary": {
+        "historical_all": {
+          "affected_signal_count": 114,
+          "reason_counts": {
+            "stock_pre5d_return": 206
+          },
+          "rejected_candidate_count": 206
+        },
+        "holdout": {
+          "affected_signal_count": 56,
+          "reason_counts": {
+            "stock_pre5d_return": 84
+          },
+          "rejected_candidate_count": 84
+        },
+        "paper": {
+          "affected_signal_count": 8,
+          "reason_counts": {
+            "stock_pre5d_return": 15
+          },
+          "rejected_candidate_count": 15
+        },
+        "train": {
+          "affected_signal_count": 58,
+          "reason_counts": {
+            "stock_pre5d_return": 122
+          },
+          "rejected_candidate_count": 122
+        }
+      },
+      "train": {
+        "annualization_trade_day_count": 520,
+        "annualized_return": 0.508656,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 91
+        },
+        "fallback_trade_count": 2,
+        "final_cash": 467249.9315,
+        "final_market_value": 0,
+        "final_nav": 467249.9315,
+        "market_excess_total_return": 1.344117,
+        "market_reference_total_return": -0.007867,
+        "max_drawdown": -0.139911,
+        "max_position_count": 5,
+        "mean_invested_ratio": 0.428919,
+        "open_position_count": 0,
+        "signal_count": 476,
+        "skip_count": 385,
+        "skipped_ratio": 0.808824,
+        "total_buy_value": 6655141.716,
+        "total_return": 1.33625,
+        "total_sell_value": 6922391.6475,
+        "trade_count": 91,
+        "turnover": 33.275709
+      },
+      "variant_id": "runup_only_guard_v1"
+    },
+    {
+      "description_cn": "候选信号日收盘距离 20 日高点不低于 -0.2% 时跳过该候选，允许同日候补。",
+      "filter_contract": {
+        "description_cn": "候选信号日收盘距离 20 日高点不低于 -0.2% 时跳过该候选，允许同日候补。",
+        "fallback_after_filter": true,
+        "label_cn": "贴 20 日高点过滤",
+        "market_5d_return_min": null,
+        "price_vs_20d_high_min": -0.002,
+        "stock_pre5d_return_min": null,
+        "variant_id": "near_high_only_guard_v1"
+      },
+      "historical_all": {
+        "annualization_trade_day_count": 768,
+        "annualized_return": 0.443061,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 192
+        },
+        "fallback_trade_count": 0,
+        "final_cash": 611602.643,
+        "final_market_value": 0,
+        "final_nav": 611602.643,
+        "market_excess_total_return": 1.639569,
+        "market_reference_total_return": 0.418444,
+        "max_drawdown": -0.233151,
+        "max_position_count": 5,
+        "mean_invested_ratio": 0.521378,
+        "open_position_count": 0,
+        "signal_count": 721,
+        "skip_count": 529,
+        "skipped_ratio": 0.733703,
+        "total_buy_value": 14800026.972,
+        "total_return": 2.058013,
+        "total_sell_value": 15211629.615,
+        "trade_count": 192,
+        "turnover": 74.000135
+      },
+      "holdout": {
+        "annualization_trade_day_count": 272,
+        "annualized_return": 0.73998,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 91
+        },
+        "fallback_trade_count": 1,
+        "final_cash": 363634.3715,
+        "final_market_value": 0,
+        "final_nav": 363634.3715,
+        "market_excess_total_return": 0.419609,
+        "market_reference_total_return": 0.398563,
+        "max_drawdown": -0.117865,
+        "max_position_count": 5,
+        "mean_invested_ratio": 0.769228,
+        "open_position_count": 0,
+        "signal_count": 245,
+        "skip_count": 154,
+        "skipped_ratio": 0.628571,
+        "total_buy_value": 5909573.556,
+        "total_return": 0.818172,
+        "total_sell_value": 6073207.9275,
+        "trade_count": 91,
+        "turnover": 29.547868
+      },
+      "label_cn": "贴 20 日高点过滤",
+      "outcome_label_cn": "不晋级",
+      "outcome_reasons_cn": [
+        "holdout 年化未保留基线 90%",
+        "paper 收益较基线恶化超过 3pp"
+      ],
+      "outcome_status": "rejected",
+      "paper": {
+        "annualization_trade_day_count": 28,
+        "annualized_return": -0.721045,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 6
+        },
+        "fallback_trade_count": 0,
+        "final_cash": 173549.1815,
+        "final_market_value": 0,
+        "final_nav": 173549.1815,
+        "market_excess_total_return": -0.022021,
+        "market_reference_total_return": -0.110233,
+        "max_drawdown": -0.13371,
+        "max_position_count": 4,
+        "mean_invested_ratio": 0.602504,
+        "open_position_count": 0,
+        "signal_count": 22,
+        "skip_count": 16,
+        "skipped_ratio": 0.727273,
+        "total_buy_value": 327636.966,
+        "total_return": -0.132254,
+        "total_sell_value": 301186.1475,
+        "trade_count": 6,
+        "turnover": 1.638185
+      },
+      "rejection_summary": {
+        "historical_all": {
+          "affected_signal_count": 194,
+          "reason_counts": {
+            "price_vs_20d_high": 458
+          },
+          "rejected_candidate_count": 458
+        },
+        "holdout": {
+          "affected_signal_count": 102,
+          "reason_counts": {
+            "price_vs_20d_high": 248
+          },
+          "rejected_candidate_count": 248
+        },
+        "paper": {
+          "affected_signal_count": 8,
+          "reason_counts": {
+            "price_vs_20d_high": 21
+          },
+          "rejected_candidate_count": 21
+        },
+        "train": {
+          "affected_signal_count": 92,
+          "reason_counts": {
+            "price_vs_20d_high": 210
+          },
+          "rejected_candidate_count": 210
+        }
+      },
+      "train": {
+        "annualization_trade_day_count": 520,
+        "annualized_return": 0.358288,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 95
+        },
+        "fallback_trade_count": 0,
+        "final_cash": 376233.7055,
+        "final_market_value": 0,
+        "final_nav": 376233.7055,
+        "market_excess_total_return": 0.889036,
+        "market_reference_total_return": -0.007867,
+        "max_drawdown": -0.233151,
+        "max_position_count": 5,
+        "mean_invested_ratio": 0.45746,
+        "open_position_count": 0,
+        "signal_count": 476,
+        "skip_count": 381,
+        "skipped_ratio": 0.80042,
+        "total_buy_value": 6800920.692,
+        "total_return": 0.881169,
+        "total_sell_value": 6977154.3975,
+        "trade_count": 95,
+        "turnover": 34.004603
+      },
+      "variant_id": "near_high_only_guard_v1"
+    },
+    {
+      "description_cn": "沪深300信号日前 5 日收益 >= 1%，且候选前 5 日涨幅 >= 8% 时跳过该候选，允许同日候补。",
+      "filter_contract": {
+        "description_cn": "沪深300信号日前 5 日收益 >= 1%，且候选前 5 日涨幅 >= 8% 时跳过该候选，允许同日候补。",
+        "fallback_after_filter": true,
+        "label_cn": "市场走强叠加个股涨幅过滤",
+        "market_5d_return_min": 0.01,
+        "price_vs_20d_high_min": null,
+        "stock_pre5d_return_min": 0.08,
+        "variant_id": "market_runup_guard_v1"
+      },
+      "historical_all": {
+        "annualization_trade_day_count": 768,
+        "annualized_return": 0.33952,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 181
+        },
+        "fallback_trade_count": 2,
+        "final_cash": 487441.499,
+        "final_market_value": 0,
+        "final_nav": 487441.499,
+        "market_excess_total_return": 1.018763,
+        "market_reference_total_return": 0.418444,
+        "max_drawdown": -0.257847,
+        "max_position_count": 5,
+        "mean_invested_ratio": 0.535651,
+        "open_position_count": 0,
+        "signal_count": 721,
+        "skip_count": 540,
+        "skipped_ratio": 0.74896,
+        "total_buy_value": 13953193.686,
+        "total_return": 1.437207,
+        "total_sell_value": 14240635.185,
+        "trade_count": 181,
+        "turnover": 69.765968
+      },
+      "holdout": {
+        "annualization_trade_day_count": 272,
+        "annualized_return": 0.642017,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 91
+        },
+        "fallback_trade_count": 4,
+        "final_cash": 341586.758,
+        "final_market_value": 0,
+        "final_nav": 341586.758,
+        "market_excess_total_return": 0.309371,
+        "market_reference_total_return": 0.398563,
+        "max_drawdown": -0.152654,
+        "max_position_count": 5,
+        "mean_invested_ratio": 0.775358,
+        "open_position_count": 0,
+        "signal_count": 245,
+        "skip_count": 154,
+        "skipped_ratio": 0.628571,
+        "total_buy_value": 6028373.682,
+        "total_return": 0.707934,
+        "total_sell_value": 6169960.44,
+        "trade_count": 91,
+        "turnover": 30.141868
+      },
+      "label_cn": "市场走强叠加个股涨幅过滤",
+      "outcome_label_cn": "不晋级",
+      "outcome_reasons_cn": [
+        "holdout 年化未保留基线 90%",
+        "holdout 回撤未改善",
+        "paper 收益较基线恶化超过 3pp"
+      ],
+      "outcome_status": "rejected",
+      "paper": {
+        "annualization_trade_day_count": 28,
+        "annualized_return": -0.782151,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 7
+        },
+        "fallback_trade_count": 1,
+        "final_cash": 168846.4685,
+        "final_market_value": 0,
+        "final_nav": 168846.4685,
+        "market_excess_total_return": -0.045535,
+        "market_reference_total_return": -0.110233,
+        "max_drawdown": -0.155777,
+        "max_position_count": 5,
+        "mean_invested_ratio": 0.602307,
+        "open_position_count": 0,
+        "signal_count": 22,
+        "skip_count": 15,
+        "skipped_ratio": 0.681818,
+        "total_buy_value": 324194.094,
+        "total_return": -0.155768,
+        "total_sell_value": 293040.5625,
+        "trade_count": 7,
+        "turnover": 1.62097
+      },
+      "rejection_summary": {
+        "historical_all": {
+          "affected_signal_count": 78,
+          "reason_counts": {
+            "stock_pre5d_return+market_5d_return": 189
+          },
+          "rejected_candidate_count": 189
+        },
+        "holdout": {
+          "affected_signal_count": 31,
+          "reason_counts": {
+            "stock_pre5d_return+market_5d_return": 62
+          },
+          "rejected_candidate_count": 62
+        },
+        "paper": {
+          "affected_signal_count": 5,
+          "reason_counts": {
+            "stock_pre5d_return+market_5d_return": 13
+          },
+          "rejected_candidate_count": 13
+        },
+        "train": {
+          "affected_signal_count": 47,
+          "reason_counts": {
+            "stock_pre5d_return+market_5d_return": 127
+          },
+          "rejected_candidate_count": 127
+        }
+      },
+      "train": {
+        "annualization_trade_day_count": 520,
+        "annualized_return": 0.291887,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 86
+        },
+        "fallback_trade_count": 1,
+        "final_cash": 339266.549,
+        "final_market_value": 0,
+        "final_nav": 339266.549,
+        "market_excess_total_return": 0.7042,
+        "market_reference_total_return": -0.007867,
+        "max_drawdown": -0.257847,
+        "max_position_count": 5,
+        "mean_invested_ratio": 0.442135,
+        "open_position_count": 0,
+        "signal_count": 476,
+        "skip_count": 390,
+        "skipped_ratio": 0.819328,
+        "total_buy_value": 6188520.336,
+        "total_return": 0.696333,
+        "total_sell_value": 6327786.885,
+        "trade_count": 86,
+        "turnover": 30.942602
+      },
+      "variant_id": "market_runup_guard_v1"
+    }
+  ],
+  "window_data_scope": {
+    "historical_all": {
+      "market_reference_total_return": 0.418444,
+      "signal_date_from": "2023-05-16",
+      "signal_date_to": "2026-05-08",
+      "signal_day_count": 721,
+      "trade_day_count": 768
+    },
+    "holdout": {
+      "market_reference_total_return": 0.398563,
+      "signal_date_from": "2025-05-06",
+      "signal_date_to": "2026-05-08",
+      "signal_day_count": 245,
+      "trade_day_count": 272
+    },
+    "paper": {
+      "market_reference_total_return": -0.110233,
+      "signal_date_from": "2026-05-08",
+      "signal_date_to": "2026-06-08",
+      "signal_day_count": 22,
+      "trade_day_count": 28
+    },
+    "train": {
+      "market_reference_total_return": -0.007867,
+      "signal_date_from": "2023-05-16",
+      "signal_date_to": "2025-04-30",
+      "signal_day_count": 476,
+      "trade_day_count": 520
+    }
+  }
+}

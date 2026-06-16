@@ -135,6 +135,11 @@ from ashare_evidence.shortpick_v2_next_diagnostics import (
     validate_shortpick_v2_next_diagnostics_artifact,
     write_shortpick_v2_next_diagnostics_artifact,
 )
+from ashare_evidence.shortpick_v2_oos_loss_filter import (
+    build_shortpick_v2_oos_loss_filter_artifact,
+    validate_shortpick_v2_oos_loss_filter_artifact,
+    write_shortpick_v2_oos_loss_filter_artifact,
+)
 from ashare_evidence.shortpick_v2_out_of_sample_risk import (
     build_shortpick_v2_out_of_sample_risk_artifact,
     validate_shortpick_v2_out_of_sample_risk_artifact,
@@ -289,6 +294,7 @@ NO_DB_COMMANDS = {
     "shortpick-v2-h10-rank-ablation-validate",
     "shortpick-v2-h10-weekday-drawdown-notional-matrix-validate",
     "shortpick-v2-next-diagnostics-validate",
+    "shortpick-v2-oos-loss-filter-validate",
     "shortpick-v2-out-of-sample-risk-validate",
     "shortpick-v2-risk-switch-experiment-validate",
     "shortpick-paper-divergence-attribution-validate",
@@ -1262,6 +1268,49 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate the next diagnostics artifact.",
     )
     shortpick_v2_next_diagnostics_validate.add_argument("--artifact", required=True)
+
+    shortpick_v2_oos_loss_filter = subparsers.add_parser(
+        "shortpick-v2-oos-loss-filter",
+        help="Generate the train/holdout OOS loss-precursor filter artifact for v2 H10 baseline.",
+    )
+    shortpick_v2_oos_loss_filter.add_argument("--database-url", default=None)
+    shortpick_v2_oos_loss_filter.add_argument("--historical-start-date", default="2023-04-13")
+    shortpick_v2_oos_loss_filter.add_argument("--train-end-date", default="2025-04-30")
+    shortpick_v2_oos_loss_filter.add_argument("--holdout-start-date", default="2025-05-01")
+    shortpick_v2_oos_loss_filter.add_argument("--historical-end-date", default="2026-05-08")
+    shortpick_v2_oos_loss_filter.add_argument("--paper-start-date", default="2026-05-08")
+    shortpick_v2_oos_loss_filter.add_argument("--paper-end-date", default="2026-06-15")
+    shortpick_v2_oos_loss_filter.add_argument("--initial-cash", type=float, default=200_000.0)
+    shortpick_v2_oos_loss_filter.add_argument(
+        "--entry-price-source",
+        choices=["next_close", "next_open", "same_close_proxy"],
+        default="next_close",
+    )
+    shortpick_v2_oos_loss_filter.add_argument("--horizon-days", type=int, default=10)
+    shortpick_v2_oos_loss_filter.add_argument("--pool-limit", type=int, default=40)
+    shortpick_v2_oos_loss_filter.add_argument("--rank-limit", type=int, default=6)
+    shortpick_v2_oos_loss_filter.add_argument("--cost-bps", type=float, default=20.0)
+    shortpick_v2_oos_loss_filter.add_argument("--stamp-tax-bps", type=float, default=5.0)
+    shortpick_v2_oos_loss_filter.add_argument("--min-signal-symbol-count", type=int, default=45)
+    shortpick_v2_oos_loss_filter.add_argument(
+        "--account-profile",
+        choices=["new_retail_cash_account", "unrestricted"],
+        default="new_retail_cash_account",
+    )
+    shortpick_v2_oos_loss_filter.add_argument(
+        "--output",
+        default="output/shortpick-v2-oos-loss-filter-20260616.json",
+    )
+    shortpick_v2_oos_loss_filter.add_argument(
+        "--summary-output",
+        default="docs/archive/SHORTPICK_V2_OOS_LOSS_FILTER_2026-06-16.md",
+    )
+
+    shortpick_v2_oos_loss_filter_validate = subparsers.add_parser(
+        "shortpick-v2-oos-loss-filter-validate",
+        help="Validate the OOS loss-filter artifact.",
+    )
+    shortpick_v2_oos_loss_filter_validate.add_argument("--artifact", required=True)
 
     shortpick_paper_divergence_attribution = subparsers.add_parser(
         "shortpick-paper-divergence-attribution",
@@ -2269,6 +2318,50 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "shortpick-v2-next-diagnostics-validate":
         payload = validate_shortpick_v2_next_diagnostics_artifact(artifact_path=args.artifact)
+        _print_json(payload)
+        return 0 if payload.get("status") == "passed" else 1
+
+    if args.command == "shortpick-v2-oos-loss-filter":
+        with session_scope(args.database_url) as session:
+            payload = build_shortpick_v2_oos_loss_filter_artifact(
+                session,
+                historical_start_date=date.fromisoformat(args.historical_start_date),
+                train_end_date=date.fromisoformat(args.train_end_date),
+                holdout_start_date=date.fromisoformat(args.holdout_start_date),
+                historical_end_date=date.fromisoformat(args.historical_end_date),
+                paper_start_date=date.fromisoformat(args.paper_start_date),
+                paper_end_date=date.fromisoformat(args.paper_end_date),
+                initial_cash=args.initial_cash,
+                entry_price_source=args.entry_price_source,
+                horizon_days=args.horizon_days,
+                pool_limit=args.pool_limit,
+                rank_limit=args.rank_limit,
+                cost_bps=args.cost_bps,
+                stamp_tax_bps=args.stamp_tax_bps,
+                min_signal_symbol_count=args.min_signal_symbol_count,
+                account_profile=args.account_profile,
+            )
+        paths = write_shortpick_v2_oos_loss_filter_artifact(
+            payload,
+            output_path=args.output,
+            summary_path=args.summary_output,
+        )
+        _print_json(
+            {
+                "status": "ok",
+                "artifact_family": payload.get("artifact_family"),
+                "artifact_id": payload.get("artifact_id"),
+                "output_path": str(paths["artifact"]),
+                "summary_output_path": str(paths.get("summary")) if paths.get("summary") else None,
+                "variant_count": len(payload.get("variant_rows") or []),
+                "recommendation_status": (payload.get("recommendation") or {}).get("status"),
+                "candidate_variant_ids": (payload.get("recommendation") or {}).get("candidate_variant_ids"),
+            }
+        )
+        return 0
+
+    if args.command == "shortpick-v2-oos-loss-filter-validate":
+        payload = validate_shortpick_v2_oos_loss_filter_artifact(artifact_path=args.artifact)
         _print_json(payload)
         return 0 if payload.get("status") == "passed" else 1
 
