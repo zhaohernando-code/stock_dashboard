@@ -12,6 +12,8 @@ from ashare_evidence.shortpick_market_factor_study import _Bar, _Series
 from ashare_evidence.shortpick_v2_replay import (
     DEFAULT_INITIAL_CASH,
     ShortpickV2RuleConfig,
+    _market_reference_summary,
+    _simulate_rule_config,
     build_shortpick_v2_replay_artifact_from_series,
 )
 
@@ -154,6 +156,59 @@ def test_shortpick_v2_topn_fallback_buys_candidate_without_delayed_entry() -> No
         "buy_fallback",
         "skip",
     }
+
+
+def test_shortpick_v2_replay_can_emit_nav_timeline_for_research_diagnostics_only() -> None:
+    days = [date(2026, 1, 1) + timedelta(days=index) for index in range(6)]
+    series_by_symbol = {"600001.SH": _series("600001.SH", [10, 10, 11, 12, 11, 13])}
+    rule = ShortpickV2RuleConfig(
+        config_id="test_timeline_diagnostic",
+        family="fixed_notional_lot_rounding",
+        candidate_rank_limit=1,
+        fallback_enabled=False,
+        target_mode="fixed_notional",
+        target_notional=10_000.0,
+        allowed_actions=("buy_primary", "skip"),
+    )
+
+    default_result = _simulate_rule_config(
+        series_by_symbol,
+        signal_days=[days[1]],
+        trade_days=days[1:],
+        selections={days[1]: ["600001.SH"]},
+        config=rule,
+        initial_cash=20_000.0,
+        entry_price_source="next_close",
+        horizon_days=3,
+        cost_bps=20.0,
+        stamp_tax_bps=5.0,
+        market_reference_total_return=_market_reference_summary(series_by_symbol, signal_days=[days[1]])[
+            "total_return"
+        ],
+        decision_sample_limit=0,
+    )
+    diagnostic_result = _simulate_rule_config(
+        series_by_symbol,
+        signal_days=[days[1]],
+        trade_days=days[1:],
+        selections={days[1]: ["600001.SH"]},
+        config=rule,
+        initial_cash=20_000.0,
+        entry_price_source="next_close",
+        horizon_days=3,
+        cost_bps=20.0,
+        stamp_tax_bps=5.0,
+        market_reference_total_return=_market_reference_summary(series_by_symbol, signal_days=[days[1]])[
+            "total_return"
+        ],
+        decision_sample_limit=0,
+        include_nav_timeline=True,
+    )
+
+    assert "diagnostic_details" not in default_result
+    timeline = diagnostic_result["diagnostic_details"]["nav_timeline"]  # type: ignore[index]
+    assert len(timeline) == len(days[1:])
+    assert set(timeline[0]) == {"date", "nav", "cash", "market_value", "open_position_count"}
 
 
 def test_shortpick_v2_close_stop_loss_exits_before_horizon_and_validates_schema() -> None:

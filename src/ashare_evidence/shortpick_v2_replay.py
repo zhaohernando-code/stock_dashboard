@@ -473,6 +473,7 @@ def _simulate_rule_config(
     stamp_tax_bps: float,
     market_reference_total_return: float | None,
     decision_sample_limit: int,
+    include_nav_timeline: bool = False,
 ) -> dict[str, Any]:
     entries_by_day, pre_entry_decisions, pre_entry_counts = _prepare_signal_entries(
         series_by_symbol,
@@ -593,7 +594,7 @@ def _simulate_rule_config(
         if market_reference_total_return is None
         else round(total_return - market_reference_total_return, 6)
     )
-    return {
+    result = {
         "config_id": config.config_id,
         "status": result_status,
         "summary": {
@@ -630,6 +631,12 @@ def _simulate_rule_config(
             "decisions": "phase3-envelope-summary-only:decision_samples_bounded",
         },
     }
+    if include_nav_timeline:
+        result["diagnostic_details"] = {
+            "nav_timeline": timeline,
+            "detail_policy": "research_diagnostics_only_not_emitted_by_default",
+        }
+    return result
 
 
 def _prepare_signal_entries(
