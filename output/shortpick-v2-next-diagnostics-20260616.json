@@ -1,0 +1,890 @@
+{
+  "analysis_scope": {
+    "entry_price_source": "next_close",
+    "historical_end_date": "2026-05-08",
+    "historical_start_date": "2023-04-13",
+    "horizon_days": 10,
+    "initial_cash": 200000.0,
+    "paper_end_date": "2026-06-15",
+    "paper_start_date": "2026-05-08",
+    "promotion_status": "research_only_no_strategy_promotion",
+    "question_cn": "历史回测很强但当前纸面窗口很弱，究竟是偶然窗口、暴露结构，还是 v2 选股相对 v1 失效？"
+  },
+  "artifact_family": "shortpick_v2_next_diagnostics",
+  "artifact_id": "shortpick_v2_next_diagnostics:2023-04-13:2026-05-08:paper_to_2026-06-15:2026-06-16",
+  "baseline_v2": {
+    "config_id": "diagnostic_v2_quiet_rank2_poolhot10_mtw_fixed85_top5_h10",
+    "description_cn": "安静突破热度池 10%，周一至周三，Rank2 首选，Rank3-Rank6 同日候补，单笔约 8.5 万，最多 5 仓，H10 卖出。",
+    "historical": {
+      "annualization_trade_day_count": 767,
+      "annualized_return": 0.538673,
+      "blocked_exit_count": 0,
+      "dynamic_exit_count": 0,
+      "exit_reason_counts": {
+        "mechanical_horizon": 192
+      },
+      "fallback_trade_count": 2,
+      "final_cash": 742400.1035,
+      "final_market_value": 0,
+      "final_nav": 742400.1035,
+      "market_excess_total_return": 2.293557,
+      "market_reference_total_return": 0.418444,
+      "max_drawdown": -0.119033,
+      "max_position_count": 5,
+      "mean_invested_ratio": 0.453028,
+      "open_position_count": 0,
+      "signal_count": 721,
+      "skip_count": 529,
+      "skipped_ratio": 0.733703,
+      "total_buy_value": 15334584.954,
+      "total_return": 2.712001,
+      "total_sell_value": 15876985.0575,
+      "trade_count": 192,
+      "turnover": 76.672925
+    },
+    "paper_window": {
+      "annualization_trade_day_count": 27,
+      "annualized_return": -0.59811,
+      "blocked_exit_count": 0,
+      "dynamic_exit_count": 0,
+      "exit_reason_counts": {
+        "mechanical_horizon": 6
+      },
+      "fallback_trade_count": 0,
+      "final_cash": 181389.809,
+      "final_market_value": 0,
+      "final_nav": 181389.809,
+      "market_excess_total_return": -0.007346,
+      "market_reference_total_return": -0.085705,
+      "max_drawdown": -0.178748,
+      "max_position_count": 3,
+      "mean_invested_ratio": 0.732741,
+      "open_position_count": 0,
+      "signal_count": 21,
+      "skip_count": 15,
+      "skipped_ratio": 0.714286,
+      "total_buy_value": 388433.316,
+      "total_return": -0.093051,
+      "total_sell_value": 369823.125,
+      "trade_count": 6,
+      "turnover": 1.942167
+    }
+  },
+  "claim_ceiling": "research_observation",
+  "data_scope": {
+    "account_profile": "new_retail_cash_account",
+    "coverage_notes": [
+      "Read-only daily bars from the existing SQLite database; no refresh or model call performed.",
+      "Account eligibility filtered stock-like series from 3071 to 3020.",
+      "Account eligibility excluded board counts: {'chnext': 32, 'star': 18, 'st': 1}."
+    ],
+    "historical_signal_day_count": 721,
+    "historical_trade_day_count": 767,
+    "paper_signal_day_count": 21,
+    "paper_trade_day_count": 27,
+    "stock_like_series_count": 3020
+  },
+  "diagnostics": {
+    "similar_market_windows": {
+      "candidate_window_count": 716,
+      "current_window_end_date": "2026-06-15",
+      "current_window_index_return": -0.011385,
+      "current_window_start_date": "2026-05-12",
+      "index_symbol": "000300.SH",
+      "interpretation_cn": "当前沪深300窗口收益为 -1.1%；历史上 2pp 内相似窗口 225 个，最相似窗口后续收益中位数 -2.6%。",
+      "matched_future_positive_ratio": 0.2,
+      "matched_future_return_median": -0.025629,
+      "matched_window_count": 5,
+      "matched_window_within_2pp_count": 225,
+      "matched_windows": [
+        {
+          "distance_abs": 0.00015,
+          "end_date": "2026-02-24",
+          "future_end_date": "2026-03-31",
+          "future_index_return": -0.054698,
+          "index_return": -0.011235,
+          "start_date": "2026-01-13"
+        },
+        {
+          "distance_abs": 0.000185,
+          "end_date": "2025-03-27",
+          "future_end_date": "2025-05-07",
+          "future_index_return": -0.025629,
+          "index_return": -0.01157,
+          "start_date": "2025-02-21"
+        },
+        {
+          "distance_abs": 0.000222,
+          "end_date": "2023-09-25",
+          "future_end_date": "2023-11-07",
+          "future_index_return": -0.025533,
+          "index_return": -0.011607,
+          "start_date": "2023-08-22"
+        },
+        {
+          "distance_abs": 0.000378,
+          "end_date": "2026-02-02",
+          "future_end_date": "2026-03-17",
+          "future_index_return": 0.00683,
+          "index_return": -0.011007,
+          "start_date": "2025-12-26"
+        },
+        {
+          "distance_abs": 0.000421,
+          "end_date": "2026-02-10",
+          "future_end_date": "2026-03-25",
+          "future_index_return": -0.039547,
+          "index_return": -0.010964,
+          "start_date": "2026-01-07"
+        }
+      ],
+      "status": "ready",
+      "window_size": 25
+    },
+    "trade_profile": {
+      "big_group_trade_count": 15,
+      "feature_delta_win_minus_loss": {
+        "industry_hhi_median": -1e-05,
+        "market_5d_return_median": -0.014663,
+        "net_return_median": 0.400541,
+        "pnl_pct_initial_cash_median": 0.157823,
+        "price_vs_20d_high_median": -0.014965,
+        "signal_density_5d_median": 0.0,
+        "stock_pre5d_return_median": -0.036564,
+        "stock_pre5d_volatility_median": 0.014399,
+        "turnover_rate_median": 0.021018
+      },
+      "historical_trade_count": 192,
+      "initial_cash": 200000.0,
+      "largest_loss_samples": [
+        {
+          "entry_date": "2026-03-11",
+          "exit_date": "2026-03-25",
+          "features": {
+            "industry": "电气设备",
+            "industry_hhi": 0.019675,
+            "market_5d_return": 0.004051,
+            "net_return": -0.174737,
+            "pnl_pct_initial_cash": -0.073694,
+            "price_vs_20d_high": 0.0,
+            "selected_rank": 1,
+            "signal_density_5d": 7,
+            "stock_pre5d_return": 0.094241,
+            "stock_pre5d_volatility": 0.017283,
+            "symbol": "601700.SH",
+            "turnover_rate": 0.037844
+          },
+          "industry": "电气设备",
+          "name": "风范股份",
+          "net_return": -0.174737,
+          "pnl_pct_initial_cash": -0.073694,
+          "selected_rank": 1,
+          "signal_date": "2026-03-10",
+          "symbol": "601700.SH"
+        },
+        {
+          "entry_date": "2026-03-04",
+          "exit_date": "2026-03-18",
+          "features": {
+            "industry": "林业",
+            "industry_hhi": 0.019679,
+            "market_5d_return": -0.010971,
+            "net_return": -0.173758,
+            "pnl_pct_initial_cash": -0.072881,
+            "price_vs_20d_high": -0.000824,
+            "selected_rank": 1,
+            "signal_density_5d": 6,
+            "stock_pre5d_return": 0.10979,
+            "stock_pre5d_volatility": 0.029116,
+            "symbol": "000592.SZ",
+            "turnover_rate": 0.272977
+          },
+          "industry": "林业",
+          "name": "平潭发展",
+          "net_return": -0.173758,
+          "pnl_pct_initial_cash": -0.072881,
+          "selected_rank": 1,
+          "signal_date": "2026-03-03",
+          "symbol": "000592.SZ"
+        },
+        {
+          "entry_date": "2025-08-21",
+          "exit_date": "2025-09-04",
+          "features": {
+            "industry": "供气供热",
+            "industry_hhi": 0.019522,
+            "market_5d_return": 0.022702,
+            "net_return": -0.165819,
+            "pnl_pct_initial_cash": -0.0702,
+            "price_vs_20d_high": -0.015686,
+            "selected_rank": 1,
+            "signal_density_5d": 8,
+            "stock_pre5d_return": 0.200957,
+            "stock_pre5d_volatility": 0.049312,
+            "symbol": "002259.SZ",
+            "turnover_rate": 0.05937
+          },
+          "industry": "供气供热",
+          "name": "升达林业",
+          "net_return": -0.165819,
+          "pnl_pct_initial_cash": -0.0702,
+          "selected_rank": 1,
+          "signal_date": "2025-08-20",
+          "symbol": "002259.SZ"
+        },
+        {
+          "entry_date": "2025-03-27",
+          "exit_date": "2025-04-11",
+          "features": {
+            "industry": "普钢",
+            "industry_hhi": 0.019455,
+            "market_5d_return": -0.022645,
+            "net_return": -0.151447,
+            "pnl_pct_initial_cash": -0.064054,
+            "price_vs_20d_high": -0.025057,
+            "selected_rank": 1,
+            "signal_density_5d": 8,
+            "stock_pre5d_return": 0.009434,
+            "stock_pre5d_volatility": 0.015166,
+            "symbol": "002110.SZ",
+            "turnover_rate": 0.007884
+          },
+          "industry": "普钢",
+          "name": "三钢闽光",
+          "net_return": -0.151447,
+          "pnl_pct_initial_cash": -0.064054,
+          "selected_rank": 1,
+          "signal_date": "2025-03-26",
+          "symbol": "002110.SZ"
+        },
+        {
+          "entry_date": "2025-02-27",
+          "exit_date": "2025-03-13",
+          "features": {
+            "industry": "电气设备",
+            "industry_hhi": 0.019443,
+            "market_5d_return": 0.00502,
+            "net_return": -0.162221,
+            "pnl_pct_initial_cash": -0.062693,
+            "price_vs_20d_high": -0.048931,
+            "selected_rank": 1,
+            "signal_density_5d": 8,
+            "stock_pre5d_return": 0.108542,
+            "stock_pre5d_volatility": 0.062996,
+            "symbol": "603728.SH",
+            "turnover_rate": 0.056269
+          },
+          "industry": "电气设备",
+          "name": "鸣志电器",
+          "net_return": -0.162221,
+          "pnl_pct_initial_cash": -0.062693,
+          "selected_rank": 1,
+          "signal_date": "2025-02-26",
+          "symbol": "603728.SH"
+        },
+        {
+          "entry_date": "2024-04-02",
+          "exit_date": "2024-04-18",
+          "features": {
+            "industry": "化工原料",
+            "industry_hhi": 0.019329,
+            "market_5d_return": 0.019821,
+            "net_return": -0.155046,
+            "pnl_pct_initial_cash": -0.060403,
+            "price_vs_20d_high": 0.0,
+            "selected_rank": 1,
+            "signal_density_5d": 7,
+            "stock_pre5d_return": 0.106757,
+            "stock_pre5d_volatility": 0.06514,
+            "symbol": "603192.SH",
+            "turnover_rate": 0.052972
+          },
+          "industry": "化工原料",
+          "name": "汇得科技",
+          "net_return": -0.155046,
+          "pnl_pct_initial_cash": -0.060403,
+          "selected_rank": 1,
+          "signal_date": "2024-04-01",
+          "symbol": "603192.SH"
+        },
+        {
+          "entry_date": "2025-09-16",
+          "exit_date": "2025-09-30",
+          "features": {
+            "industry": "区域地产",
+            "industry_hhi": 0.019561,
+            "market_5d_return": 0.014657,
+            "net_return": -0.112913,
+            "pnl_pct_initial_cash": -0.047822,
+            "price_vs_20d_high": 0.0,
+            "selected_rank": 1,
+            "signal_density_5d": 7,
+            "stock_pre5d_return": 0.076087,
+            "stock_pre5d_volatility": 0.00904,
+            "symbol": "600533.SH",
+            "turnover_rate": 0.038393
+          },
+          "industry": "区域地产",
+          "name": "栖霞建设",
+          "net_return": -0.112913,
+          "pnl_pct_initial_cash": -0.047822,
+          "selected_rank": 1,
+          "signal_date": "2025-09-15",
+          "symbol": "600533.SH"
+        },
+        {
+          "entry_date": "2024-04-08",
+          "exit_date": "2024-04-22",
+          "features": {
+            "industry": "钢加工",
+            "industry_hhi": 0.019329,
+            "market_5d_return": 0.018561,
+            "net_return": -0.110443,
+            "pnl_pct_initial_cash": -0.045917,
+            "price_vs_20d_high": 0.0,
+            "selected_rank": 1,
+            "signal_density_5d": 8,
+            "stock_pre5d_return": 0.09324,
+            "stock_pre5d_volatility": 0.017129,
+            "symbol": "002743.SZ",
+            "turnover_rate": 0.0164
+          },
+          "industry": "钢加工",
+          "name": "富煌钢构",
+          "net_return": -0.110443,
+          "pnl_pct_initial_cash": -0.045917,
+          "selected_rank": 1,
+          "signal_date": "2024-04-03",
+          "symbol": "002743.SZ"
+        },
+        {
+          "entry_date": "2026-04-23",
+          "exit_date": "2026-05-12",
+          "features": {
+            "industry": "汽车配件",
+            "industry_hhi": 0.019711,
+            "market_5d_return": 0.024413,
+            "net_return": -0.106655,
+            "pnl_pct_initial_cash": -0.045226,
+            "price_vs_20d_high": 0.0,
+            "selected_rank": 1,
+            "signal_density_5d": 8,
+            "stock_pre5d_return": 0.036675,
+            "stock_pre5d_volatility": 0.006847,
+            "symbol": "002662.SZ",
+            "turnover_rate": 0.015149
+          },
+          "industry": "汽车配件",
+          "name": "峰璟股份",
+          "net_return": -0.106655,
+          "pnl_pct_initial_cash": -0.045226,
+          "selected_rank": 1,
+          "signal_date": "2026-04-22",
+          "symbol": "002662.SZ"
+        },
+        {
+          "entry_date": "2025-11-11",
+          "exit_date": "2025-11-25",
+          "features": {
+            "industry": "化工原料",
+            "industry_hhi": 0.01963,
+            "market_5d_return": 0.00895,
+            "net_return": -0.106872,
+            "pnl_pct_initial_cash": -0.04455,
+            "price_vs_20d_high": 0.0,
+            "selected_rank": 1,
+            "signal_density_5d": 7,
+            "stock_pre5d_return": 0.042021,
+            "stock_pre5d_volatility": 0.026902,
+            "symbol": "603681.SH",
+            "turnover_rate": 0.032097
+          },
+          "industry": "化工原料",
+          "name": "永冠新材",
+          "net_return": -0.106872,
+          "pnl_pct_initial_cash": -0.04455,
+          "selected_rank": 1,
+          "signal_date": "2025-11-10",
+          "symbol": "603681.SH"
+        }
+      ],
+      "largest_win_samples": [
+        {
+          "entry_date": "2025-09-30",
+          "exit_date": "2025-10-22",
+          "features": {
+            "industry": "煤炭开采",
+            "industry_hhi": 0.019517,
+            "market_5d_return": 0.021546,
+            "net_return": 1.155301,
+            "pnl_pct_initial_cash": 0.48879,
+            "price_vs_20d_high": 0.0,
+            "selected_rank": 1,
+            "signal_density_5d": 7,
+            "stock_pre5d_return": 0.09434,
+            "stock_pre5d_volatility": 0.046084,
+            "symbol": "600403.SH",
+            "turnover_rate": 0.040209
+          },
+          "industry": "煤炭开采",
+          "name": "大有能源",
+          "net_return": 1.155301,
+          "pnl_pct_initial_cash": 0.48879,
+          "selected_rank": 1,
+          "signal_date": "2025-09-29",
+          "symbol": "600403.SH"
+        },
+        {
+          "entry_date": "2024-10-15",
+          "exit_date": "2024-10-29",
+          "features": {
+            "industry": "机床制造",
+            "industry_hhi": 0.019526,
+            "market_5d_return": -0.014065,
+            "net_return": 0.896937,
+            "pnl_pct_initial_cash": 0.380298,
+            "price_vs_20d_high": -0.1,
+            "selected_rank": 1,
+            "signal_density_5d": 5,
+            "stock_pre5d_return": 0.089474,
+            "stock_pre5d_volatility": 0.07879,
+            "symbol": "002685.SZ",
+            "turnover_rate": 0.092677
+          },
+          "industry": "机床制造",
+          "name": "华东重机",
+          "net_return": 0.896937,
+          "pnl_pct_initial_cash": 0.380298,
+          "selected_rank": 1,
+          "signal_date": "2024-10-14",
+          "symbol": "002685.SZ"
+        },
+        {
+          "entry_date": "2025-08-06",
+          "exit_date": "2025-08-20",
+          "features": {
+            "industry": "园区开发",
+            "industry_hhi": 0.019595,
+            "market_5d_return": -0.011699,
+            "net_return": 0.668363,
+            "pnl_pct_initial_cash": 0.282955,
+            "price_vs_20d_high": -0.031008,
+            "selected_rank": 1,
+            "signal_density_5d": 7,
+            "stock_pre5d_return": 0.048218,
+            "stock_pre5d_volatility": 0.02736,
+            "symbol": "600658.SH",
+            "turnover_rate": 0.027238
+          },
+          "industry": "园区开发",
+          "name": "电子城",
+          "net_return": 0.668363,
+          "pnl_pct_initial_cash": 0.282955,
+          "selected_rank": 1,
+          "signal_date": "2025-08-05",
+          "symbol": "600658.SH"
+        },
+        {
+          "entry_date": "2024-11-19",
+          "exit_date": "2024-12-03",
+          "features": {
+            "industry": "化工原料",
+            "industry_hhi": 0.019467,
+            "market_5d_return": -0.043753,
+            "net_return": 0.413664,
+            "pnl_pct_initial_cash": 0.175135,
+            "price_vs_20d_high": 0.0,
+            "selected_rank": 1,
+            "signal_density_5d": 7,
+            "stock_pre5d_return": 0.080692,
+            "stock_pre5d_volatility": 0.048468,
+            "symbol": "002741.SZ",
+            "turnover_rate": 0.145625
+          },
+          "industry": "化工原料",
+          "name": "光华科技",
+          "net_return": 0.413664,
+          "pnl_pct_initial_cash": 0.175135,
+          "selected_rank": 1,
+          "signal_date": "2024-11-18",
+          "symbol": "002741.SZ"
+        },
+        {
+          "entry_date": "2026-02-05",
+          "exit_date": "2026-02-27",
+          "features": {
+            "industry": "软件服务",
+            "industry_hhi": 0.019714,
+            "market_5d_return": -0.004092,
+            "net_return": 0.316127,
+            "pnl_pct_initial_cash": 0.131744,
+            "price_vs_20d_high": -0.104423,
+            "selected_rank": 1,
+            "signal_density_5d": 8,
+            "stock_pre5d_return": 0.036984,
+            "stock_pre5d_volatility": 0.062985,
+            "symbol": "600410.SH",
+            "turnover_rate": 0.266505
+          },
+          "industry": "软件服务",
+          "name": "华胜天成",
+          "net_return": 0.316127,
+          "pnl_pct_initial_cash": 0.131744,
+          "selected_rank": 1,
+          "signal_date": "2026-02-04",
+          "symbol": "600410.SH"
+        },
+        {
+          "entry_date": "2024-10-17",
+          "exit_date": "2024-10-31",
+          "features": {
+            "industry": "环境保护",
+            "industry_hhi": 0.019512,
+            "market_5d_return": -0.031445,
+            "net_return": 0.302695,
+            "pnl_pct_initial_cash": 0.128448,
+            "price_vs_20d_high": -0.047368,
+            "selected_rank": 1,
+            "signal_density_5d": 7,
+            "stock_pre5d_return": 0.016854,
+            "stock_pre5d_volatility": 0.027966,
+            "symbol": "002210.SZ",
+            "turnover_rate": 0.011674
+          },
+          "industry": "环境保护",
+          "name": "飞马国际",
+          "net_return": 0.302695,
+          "pnl_pct_initial_cash": 0.128448,
+          "selected_rank": 1,
+          "signal_date": "2024-10-16",
+          "symbol": "002210.SZ"
+        },
+        {
+          "entry_date": "2024-10-24",
+          "exit_date": "2024-11-07",
+          "features": {
+            "industry": "食品",
+            "industry_hhi": 0.019498,
+            "market_5d_return": 0.036961,
+            "net_return": 0.290098,
+            "pnl_pct_initial_cash": 0.123062,
+            "price_vs_20d_high": -0.010204,
+            "selected_rank": 1,
+            "signal_density_5d": 8,
+            "stock_pre5d_return": 0.048649,
+            "stock_pre5d_volatility": 0.027255,
+            "symbol": "002495.SZ",
+            "turnover_rate": 0.05306
+          },
+          "industry": "食品",
+          "name": "佳隆股份",
+          "net_return": 0.290098,
+          "pnl_pct_initial_cash": 0.123062,
+          "selected_rank": 1,
+          "signal_date": "2024-10-23",
+          "symbol": "002495.SZ"
+        },
+        {
+          "entry_date": "2024-03-27",
+          "exit_date": "2024-04-12",
+          "features": {
+            "industry": "铅锌",
+            "industry_hhi": 0.019334,
+            "market_5d_return": -0.009471,
+            "net_return": 0.294073,
+            "pnl_pct_initial_cash": 0.111906,
+            "price_vs_20d_high": -0.03431,
+            "selected_rank": 1,
+            "signal_density_5d": 7,
+            "stock_pre5d_return": 0.004352,
+            "stock_pre5d_volatility": 0.026553,
+            "symbol": "000688.SZ",
+            "turnover_rate": 0.004855
+          },
+          "industry": "铅锌",
+          "name": "国城矿业",
+          "net_return": 0.294073,
+          "pnl_pct_initial_cash": 0.111906,
+          "selected_rank": 1,
+          "signal_date": "2024-03-26",
+          "symbol": "000688.SZ"
+        },
+        {
+          "entry_date": "2024-09-25",
+          "exit_date": "2024-10-16",
+          "features": {
+            "industry": "互联网",
+            "industry_hhi": 0.019475,
+            "market_5d_return": 0.060984,
+            "net_return": 0.244753,
+            "pnl_pct_initial_cash": 0.103242,
+            "price_vs_20d_high": 0.0,
+            "selected_rank": 1,
+            "signal_density_5d": 5,
+            "stock_pre5d_return": 0.142086,
+            "stock_pre5d_volatility": 0.041301,
+            "symbol": "000676.SZ",
+            "turnover_rate": 0.086579
+          },
+          "industry": "互联网",
+          "name": "智度股份",
+          "net_return": 0.244753,
+          "pnl_pct_initial_cash": 0.103242,
+          "selected_rank": 1,
+          "signal_date": "2024-09-24",
+          "symbol": "000676.SZ"
+        },
+        {
+          "entry_date": "2024-04-30",
+          "exit_date": "2024-05-17",
+          "features": {
+            "industry": "新型电力",
+            "industry_hhi": 0.019385,
+            "market_5d_return": 0.026341,
+            "net_return": 0.214858,
+            "pnl_pct_initial_cash": 0.090502,
+            "price_vs_20d_high": -0.014965,
+            "selected_rank": 1,
+            "signal_density_5d": 7,
+            "stock_pre5d_return": 0.089581,
+            "stock_pre5d_volatility": 0.047068,
+            "symbol": "603693.SH",
+            "turnover_rate": 0.012093
+          },
+          "industry": "新型电力",
+          "name": "江苏新能",
+          "net_return": 0.214858,
+          "pnl_pct_initial_cash": 0.090502,
+          "selected_rank": 1,
+          "signal_date": "2024-04-29",
+          "symbol": "603693.SH"
+        }
+      ],
+      "loss_group": {
+        "count": 15,
+        "industry_hhi_mean": 0.019525,
+        "industry_hhi_median": 0.019522,
+        "market_5d_return_mean": 0.008416,
+        "market_5d_return_median": 0.013774,
+        "net_return_mean": -0.123149,
+        "net_return_median": -0.110443,
+        "pnl_pct_initial_cash_mean": -0.051189,
+        "pnl_pct_initial_cash_median": -0.045917,
+        "price_vs_20d_high_mean": -0.006374,
+        "price_vs_20d_high_median": 0.0,
+        "rank_counts": {
+          "1": 15
+        },
+        "signal_density_5d_mean": 7.4,
+        "signal_density_5d_median": 7.0,
+        "stock_pre5d_return_mean": 0.083267,
+        "stock_pre5d_return_median": 0.085213,
+        "stock_pre5d_volatility_mean": 0.029188,
+        "stock_pre5d_volatility_median": 0.026902,
+        "top_industries": [
+          [
+            "电气设备",
+            2
+          ],
+          [
+            "化工原料",
+            2
+          ],
+          [
+            "汽车配件",
+            2
+          ],
+          [
+            "林业",
+            1
+          ],
+          [
+            "供气供热",
+            1
+          ]
+        ],
+        "turnover_rate_mean": 0.042402,
+        "turnover_rate_median": 0.019191
+      },
+      "loss_group_summary_cn": "样本 15 笔，单笔对初始资金影响中位数 -4.6%，信号日前沪深300 5 日收益中位数 1.4%，个股前 5 日收益中位数 8.5%，距离 20 日高点中位数 0.0%，主要行业：电气设备(2)、化工原料(2)、汽车配件(2)、林业(1)、供气供热(1)。",
+      "paper_trade_count": 6,
+      "paper_window_group": {
+        "count": 6,
+        "industry_hhi_mean": 0.019723,
+        "industry_hhi_median": 0.019723,
+        "market_5d_return_mean": 0.022198,
+        "market_5d_return_median": 0.022215,
+        "net_return_mean": -0.049913,
+        "net_return_median": -0.053176,
+        "pnl_pct_initial_cash_mean": -0.015509,
+        "pnl_pct_initial_cash_median": -0.015769,
+        "price_vs_20d_high_mean": -0.012117,
+        "price_vs_20d_high_median": -0.004934,
+        "rank_counts": {
+          "1": 6
+        },
+        "signal_density_5d_mean": 5.166667,
+        "signal_density_5d_median": 5.5,
+        "stock_pre5d_return_mean": 0.108693,
+        "stock_pre5d_return_median": 0.107261,
+        "stock_pre5d_volatility_mean": 0.043751,
+        "stock_pre5d_volatility_median": 0.044463,
+        "top_industries": [
+          [
+            "环境保护",
+            1
+          ],
+          [
+            "工程机械",
+            1
+          ],
+          [
+            "机床制造",
+            1
+          ],
+          [
+            "食品",
+            1
+          ],
+          [
+            "汽车配件",
+            1
+          ]
+        ],
+        "turnover_rate_mean": 0.050504,
+        "turnover_rate_median": 0.05393
+      },
+      "paper_window_summary_cn": "样本 6 笔，单笔对初始资金影响中位数 -1.6%，信号日前沪深300 5 日收益中位数 2.2%，个股前 5 日收益中位数 10.7%，距离 20 日高点中位数 -0.5%，主要行业：环境保护(1)、工程机械(1)、机床制造(1)、食品(1)、汽车配件(1)。",
+      "sample_warning_cn": "逐笔画像只描述历史大赚/大亏分布；当前纸面窗口样本很少，不能单独用来生成规则。",
+      "win_group": {
+        "count": 15,
+        "industry_hhi_mean": 0.019528,
+        "industry_hhi_median": 0.019512,
+        "market_5d_return_mean": 0.002209,
+        "market_5d_return_median": -0.000889,
+        "net_return_mean": 0.387211,
+        "net_return_median": 0.290098,
+        "pnl_pct_initial_cash_mean": 0.162823,
+        "pnl_pct_initial_cash_median": 0.111906,
+        "price_vs_20d_high_mean": -0.027229,
+        "price_vs_20d_high_median": -0.014965,
+        "rank_counts": {
+          "1": 15
+        },
+        "signal_density_5d_mean": 7.0,
+        "signal_density_5d_median": 7.0,
+        "stock_pre5d_return_mean": 0.086483,
+        "stock_pre5d_return_median": 0.048649,
+        "stock_pre5d_volatility_mean": 0.041846,
+        "stock_pre5d_volatility_median": 0.041301,
+        "top_industries": [
+          [
+            "专用机械",
+            2
+          ],
+          [
+            "陶瓷",
+            1
+          ],
+          [
+            "普钢",
+            1
+          ],
+          [
+            "广告包装",
+            1
+          ],
+          [
+            "新型电力",
+            1
+          ]
+        ],
+        "turnover_rate_mean": 0.088131,
+        "turnover_rate_median": 0.040209
+      },
+      "win_group_summary_cn": "样本 15 笔，单笔对初始资金影响中位数 11.2%，信号日前沪深300 5 日收益中位数 -0.1%，个股前 5 日收益中位数 4.9%，距离 20 日高点中位数 -1.5%，主要行业：专用机械(2)、陶瓷(1)、普钢(1)、广告包装(1)、新型电力(1)。"
+    },
+    "v1_constrained_control": {
+      "config_id": "diagnostic_v1_low_turnover_uptrend_200k_top1_or_skip_h10",
+      "control_role_cn": "用来判断 v2 复杂选股是否真的优于 v1 冻结逻辑在资金约束下的表现。",
+      "description_cn": "v1 冻结思路强对照：全市场10日上涨占比不低于45%，选择低换手上升趋势首位；20万账户、100股手数、买不起就跳过、H10卖出。",
+      "reason_counts": {
+        "action:buy_primary": 79,
+        "action:skip": 642,
+        "candidate_reject:insufficient_cash": 319,
+        "candidate_reject:limit_up_unfillable": 1,
+        "exit:mechanical_horizon": 79,
+        "reason:bought_primary": 79,
+        "reason:insufficient_cash": 319,
+        "reason:limit_up_unfillable": 1,
+        "reason:no_ranked_candidates": 322
+      },
+      "status": "ready",
+      "summary": {
+        "annualization_trade_day_count": 767,
+        "annualized_return": -0.140816,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 79
+        },
+        "fallback_trade_count": 0,
+        "final_cash": 126011.7665,
+        "final_market_value": 0,
+        "final_nav": 126011.7665,
+        "market_excess_total_return": -0.788385,
+        "market_reference_total_return": 0.418444,
+        "max_drawdown": -0.651385,
+        "max_position_count": 3,
+        "mean_invested_ratio": 0.685193,
+        "open_position_count": 0,
+        "signal_count": 721,
+        "skip_count": 642,
+        "skipped_ratio": 0.89043,
+        "total_buy_value": 7592978.646,
+        "total_return": -0.369941,
+        "total_sell_value": 7518990.4125,
+        "trade_count": 79,
+        "turnover": 37.964893
+      }
+    }
+  },
+  "event_refs": [
+    "shortpick_v2.next_diagnostics.generated",
+    "shortpick_v2.next_diagnostics.historical.2023-04-13_2026-05-08",
+    "shortpick_v2.next_diagnostics.paper.2026-05-08_2026-06-15"
+  ],
+  "evidence_basis": "historical_account_replay_and_current_window_diagnostics",
+  "external_review": {
+    "deepseek": {
+      "status": "passed",
+      "summary_cn": "认可逐笔画像、相似窗口、v1 资金约束强对照三方向互补；要求冻结特征和样本门槛。"
+    },
+    "xiaomi_mimo": {
+      "status": "passed",
+      "summary_cn": "认可当前问题更像暴露结构与窗口压力；要求不要用 6 笔纸面交易直接推断规则。"
+    }
+  },
+  "generated_at": "2026-06-16T09:12:04.168145+00:00",
+  "interpretation": {
+    "message_cn": "当前纸面窗口回撤已经明显超出用户可接受体感，需要继续归因而不是只等待；v1 资金约束强对照未明显替代 v2，v2 历史优势仍保留；相似指数窗口后续中位数为负，当前环境可能不是单纯偶然噪声",
+    "recommended_next_steps_cn": [
+      "先不要把当前纸面窗口反向调参为新规则。",
+      "若逐笔画像特征在时间切分中仍能区分大亏，再进入 OOS 过滤器验证。",
+      "若 v1 强对照长期接近 v2，应把 v1 冻结逻辑纳入 v2 候选池，而不是只优化安静突破族。"
+    ],
+    "status": "continue_diagnostics_no_strategy_promotion"
+  },
+  "leakage_audit": {
+    "notes": [
+      "逐笔画像使用信号日或之前的行情特征；收益和卖出价只用于结果归因。",
+      "相似窗口只用沪深300历史收益做检索，不用未来收益参与匹配。",
+      "v1 强对照使用既有低换手上升趋势候选，不写入纸面追踪。"
+    ],
+    "status": "passed",
+    "used_only_signal_day_or_earlier_data_for_entry_features": true
+  },
+  "schema_version": "v1",
+  "source_ref": "market_only_reconstruction:shortpick_v2_next_diagnostics:v1",
+  "status": "ready"
+}
