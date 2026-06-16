@@ -88,6 +88,8 @@ SHORTPICK_V2_PAPER_DISPLAY_MIN_SIGNAL_SYMBOL_COUNT = 45
 SHORTPICK_V2_PAPER_DISPLAY_LOOKBACK_DAYS = 120
 SHORTPICK_V2_PAPER_DISPLAY_SOURCE_ID = "quiet_breakout_rank2_poolhot10_mtw"
 SHORTPICK_V2_PAPER_DISPLAY_SOURCE_LABEL = "安静突破 Rank2：热度池达标时取第 2 名，周一、周二、周三触发"
+SHORTPICK_V2_PAPER_DISPLAY_CACHE_VERSION = "shortpick_v2_paper_display_cache_v1"
+SHORTPICK_V2_PAPER_DISPLAY_CACHE_ENV = "ASHARE_SHORTPICK_V2_PAPER_DISPLAY_CACHE"
 SHORTPICK_V2_PAPER_DISPLAY_CACHE_TTL_SECONDS = float(
     os.getenv("ASHARE_SHORTPICK_V2_PAPER_DISPLAY_CACHE_TTL_SECONDS", "300")
 )
@@ -718,6 +720,19 @@ def _paper_display_replay_rows_from_session(
     else:
         return [], cache_key, []
 
+    persistent_cache = _read_paper_display_replay_persistent_cache(cache_key)
+    if persistent_cache is not None:
+        rows, coverage, account_curves = persistent_cache
+        now = time.monotonic()
+        with _paper_display_replay_cache_lock:
+            _paper_display_replay_cache[cache_key] = (
+                now,
+                copy.deepcopy(rows),
+                copy.deepcopy(coverage),
+                copy.deepcopy(account_curves),
+            )
+        return copy.deepcopy(rows), copy.deepcopy(coverage), copy.deepcopy(account_curves)
+
     try:
         rows, coverage, account_curves = _build_paper_display_replay_rows_from_session(
             session=session,
@@ -744,7 +759,101 @@ def _paper_display_replay_rows_from_session(
             copy.deepcopy(coverage),
             copy.deepcopy(account_curves),
         )
+    _write_paper_display_replay_persistent_cache(
+        cache_key,
+        rows=rows,
+        coverage=coverage,
+        account_curves=account_curves,
+    )
     return rows, coverage, account_curves
+
+
+def _paper_display_replay_persistent_cache_path(cache_key: tuple[Any, ...]) -> Path | None:
+    configured = os.getenv(SHORTPICK_V2_PAPER_DISPLAY_CACHE_ENV)
+    if configured:
+        return Path(configured)
+    database_identity = str(cache_key[0] if cache_key else "")
+    if database_identity.startswith("sqlite:///") and database_identity != "sqlite:///:memory:":
+        return Path(database_identity.removeprefix("sqlite:///")).resolve().parent / "shortpick-v2-paper-display-cache.json"
+    return None
+
+
+def _paper_display_replay_persistent_cache_identity(cache_key: tuple[Any, ...]) -> dict[str, Any]:
+    return {
+        "cache_version": SHORTPICK_V2_PAPER_DISPLAY_CACHE_VERSION,
+        "input_key": _json_safe_cache_value(cache_key),
+        "tracking_start_date": SHORTPICK_V2_TRACKING_START_DATE,
+        "lookback_days": SHORTPICK_V2_PAPER_DISPLAY_LOOKBACK_DAYS,
+        "min_signal_symbol_count": SHORTPICK_V2_PAPER_DISPLAY_MIN_SIGNAL_SYMBOL_COUNT,
+        "source_id": SHORTPICK_V2_PAPER_DISPLAY_SOURCE_ID,
+        "row_limit": SHORTPICK_V2_PAPER_DISPLAY_REPLAY_ROW_LIMIT,
+    }
+
+
+def _json_safe_cache_value(value: Any) -> Any:
+    if isinstance(value, tuple):
+        return [_json_safe_cache_value(item) for item in value]
+    if isinstance(value, list):
+        return [_json_safe_cache_value(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _json_safe_cache_value(item) for key, item in value.items()}
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
+def _read_paper_display_replay_persistent_cache(
+    cache_key: tuple[Any, ...],
+) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]] | None:
+    path = _paper_display_replay_persistent_cache_path(cache_key)
+    if path is None:
+        return None
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("identity") != _paper_display_replay_persistent_cache_identity(cache_key):
+        return None
+    rows = payload.get("rows")
+    coverage = payload.get("coverage")
+    account_curves = payload.get("account_curves")
+    if not isinstance(rows, list) or not isinstance(coverage, dict) or not isinstance(account_curves, list):
+        return None
+    if not all(isinstance(row, dict) for row in rows):
+        return None
+    if not all(isinstance(curve, dict) for curve in account_curves):
+        return None
+    return copy.deepcopy(rows), copy.deepcopy(coverage), copy.deepcopy(account_curves)
+
+
+def _write_paper_display_replay_persistent_cache(
+    cache_key: tuple[Any, ...],
+    *,
+    rows: list[dict[str, Any]],
+    coverage: dict[str, Any],
+    account_curves: list[dict[str, Any]],
+) -> None:
+    path = _paper_display_replay_persistent_cache_path(cache_key)
+    if path is None:
+        return
+    payload = {
+        "identity": _paper_display_replay_persistent_cache_identity(cache_key),
+        "generated_at": _now_iso(),
+        "rows": rows,
+        "coverage": coverage,
+        "account_curves": account_curves,
+    }
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_name(f".{path.name}.tmp")
+        tmp_path.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        tmp_path.replace(path)
+    except OSError:
+        return
 
 
 def _paper_display_replay_cache_key(

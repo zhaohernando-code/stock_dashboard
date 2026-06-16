@@ -498,6 +498,13 @@ else
   echo "[publish] Data refresh completed"
 fi
 
+echo "[publish] Prewarming shortpick v2 paper cache"
+if bash "$RUNTIME_ROOT/scripts/prewarm-shortpick-v2-paper-cache.sh" 2>&1 | sed 's/^/[publish:shortpick-v2-prewarm] /'; then
+  echo "[publish] Shortpick v2 paper cache prewarm completed"
+else
+  echo "[publish] Shortpick v2 paper cache prewarm failed; continuing deploy verification" >&2
+fi
+
 echo "[publish] Runtime frontend matches repo build"
 echo "[publish] Backend healthy at $BACKEND_URL"
 echo "[publish] Frontend healthy at $FRONTEND_URL"

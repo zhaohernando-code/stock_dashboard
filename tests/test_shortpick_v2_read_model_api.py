@@ -6,7 +6,9 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+import ashare_evidence.shortpick_v2_read_model as shortpick_v2_read_model
 from ashare_evidence.api import create_app
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.lineage import compute_lineage_hash
@@ -30,6 +32,7 @@ from ashare_evidence.shortpick_v2_h10_paper_governance import (
 )
 from ashare_evidence.shortpick_v2_read_model import (
     SHORTPICK_V2_H10_PAPER_GOVERNANCE_ARTIFACT_ENV,
+    SHORTPICK_V2_PAPER_DISPLAY_CACHE_VERSION,
     SHORTPICK_V2_PAPER_DISPLAY_LOOKBACK_DAYS,
     SHORTPICK_V2_PAPER_DISPLAY_SOURCE_ID,
     SHORTPICK_V2_PAPER_TRACKING_LEDGER_ARTIFACT_ENV,
@@ -830,6 +833,121 @@ def test_shortpick_v2_paper_tracking_display_replays_since_start_with_session(
         assert -1.0 < curve["max_drawdown"] <= 0.0
         assert "config_id" not in curve
         assert all("config_id" not in point for point in curve["points"])
+
+
+def test_shortpick_v2_paper_display_uses_persistent_cache_after_cold_build(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _write_v2_artifacts(tmp_path, monkeypatch)
+    _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
+    database_path = tmp_path / "paper-display-persistent-cache.db"
+    database_url = f"sqlite:///{database_path}"
+    init_database(database_url)
+    _seed_v2_paper_display_market_fixture(database_url)
+
+    with session_scope(database_url) as session:
+        first_payload = build_shortpick_v2_paper_tracking_read_model(include_records=True, session=session)
+
+    cache_path = tmp_path / "shortpick-v2-paper-display-cache.json"
+    assert cache_path.exists()
+    cache_payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert cache_payload["identity"]["cache_version"] == SHORTPICK_V2_PAPER_DISPLAY_CACHE_VERSION
+    assert cache_payload["coverage"]["coverage_end"] == "2026-06-15"
+    assert len(cache_payload["rows"]) == first_payload["paper_display"]["coverage"]["replay_row_count"]
+
+    with shortpick_v2_read_model._paper_display_replay_cache_lock:
+        shortpick_v2_read_model._paper_display_replay_cache.clear()
+
+    import ashare_evidence.shortpick_ranked_pool_replay_input as replay_input
+
+    def _fail_market_window_loader(*args, **kwargs):
+        raise AssertionError("persistent cache hit must not rebuild the market replay window")
+
+    monkeypatch.setattr(replay_input, "_load_daily_series_for_replay_window", _fail_market_window_loader)
+
+    with session_scope(database_url) as session:
+        second_payload = build_shortpick_v2_paper_tracking_read_model(include_records=True, session=session)
+
+    assert second_payload["paper_display"]["coverage"] == first_payload["paper_display"]["coverage"]
+    assert second_payload["paper_display"]["table"]["rows"] == first_payload["paper_display"]["table"]["rows"]
+    assert second_payload["paper_display"]["account_curves"] == first_payload["paper_display"]["account_curves"]
+
+
+def test_shortpick_v2_paper_display_persistent_cache_misses_when_market_data_changes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _write_v2_artifacts(tmp_path, monkeypatch)
+    _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
+    database_path = tmp_path / "paper-display-persistent-cache-miss.db"
+    database_url = f"sqlite:///{database_path}"
+    init_database(database_url)
+    _seed_v2_paper_display_market_fixture(database_url)
+
+    with session_scope(database_url) as session:
+        build_shortpick_v2_paper_tracking_read_model(include_records=True, session=session)
+
+    with shortpick_v2_read_model._paper_display_replay_cache_lock:
+        shortpick_v2_read_model._paper_display_replay_cache.clear()
+
+    with session_scope(database_url) as session:
+        latest_bar = session.execute(
+            select(MarketBar).where(MarketBar.timeframe == "1d").order_by(MarketBar.observed_at.desc()).limit(1)
+        ).scalar_one()
+        latest_bar.observed_at = latest_bar.observed_at + timedelta(minutes=1)
+
+    import ashare_evidence.shortpick_ranked_pool_replay_input as replay_input
+
+    real_window_loader = replay_input._load_daily_series_for_replay_window
+    calls = {"count": 0}
+
+    def _counting_window_loader(session, *, start_date: date, end_date: date):
+        calls["count"] += 1
+        return real_window_loader(session, start_date=start_date, end_date=end_date)
+
+    monkeypatch.setattr(replay_input, "_load_daily_series_for_replay_window", _counting_window_loader)
+
+    with session_scope(database_url) as session:
+        payload = build_shortpick_v2_paper_tracking_read_model(include_records=True, session=session)
+
+    assert calls["count"] == 1
+    assert payload["paper_display"]["coverage"]["source_status"] == "ready"
+
+
+def test_shortpick_v2_paper_display_ignores_corrupt_persistent_cache(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _write_v2_artifacts(tmp_path, monkeypatch)
+    _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
+    database_path = tmp_path / "paper-display-corrupt-cache.db"
+    database_url = f"sqlite:///{database_path}"
+    init_database(database_url)
+    _seed_v2_paper_display_market_fixture(database_url)
+    (tmp_path / "shortpick-v2-paper-display-cache.json").write_text("{not-json", encoding="utf-8")
+
+    with shortpick_v2_read_model._paper_display_replay_cache_lock:
+        shortpick_v2_read_model._paper_display_replay_cache.clear()
+
+    import ashare_evidence.shortpick_ranked_pool_replay_input as replay_input
+
+    real_window_loader = replay_input._load_daily_series_for_replay_window
+    calls = {"count": 0}
+
+    def _counting_window_loader(session, *, start_date: date, end_date: date):
+        calls["count"] += 1
+        return real_window_loader(session, start_date=start_date, end_date=end_date)
+
+    monkeypatch.setattr(replay_input, "_load_daily_series_for_replay_window", _counting_window_loader)
+
+    with session_scope(database_url) as session:
+        payload = build_shortpick_v2_paper_tracking_read_model(include_records=True, session=session)
+
+    assert calls["count"] == 1
+    assert payload["paper_display"]["coverage"]["source_status"] == "ready"
+    repaired_cache = json.loads((tmp_path / "shortpick-v2-paper-display-cache.json").read_text(encoding="utf-8"))
+    assert repaired_cache["identity"]["cache_version"] == SHORTPICK_V2_PAPER_DISPLAY_CACHE_VERSION
 
 
 def test_shortpick_v2_paper_display_buy_row_projects_exit_and_return() -> None:

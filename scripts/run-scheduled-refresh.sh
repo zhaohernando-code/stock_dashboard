@@ -40,6 +40,7 @@ DAILY_REFRESH_TIMEOUT_SECONDS="${ASHARE_DAILY_REFRESH_TIMEOUT_SECONDS:-7200}"
 SHORTPICK_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_TIMEOUT_SECONDS:-7200}"
 SHORTPICK_INTRADAY_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_INTRADAY_TIMEOUT_SECONDS:-600}"
 SHORTPICK_VALIDATION_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_VALIDATION_TIMEOUT_SECONDS:-600}"
+SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS:-180}"
 SHORTPICK_VALIDATE_RECENT_DAYS="${ASHARE_SHORTPICK_VALIDATE_RECENT_DAYS:-30}"
 SHORTPICK_VALIDATE_RECENT_LIMIT="${ASHARE_SHORTPICK_VALIDATE_RECENT_LIMIT:-20}"
 SHORTPICK_VALIDATE_RECENT_BEFORE_RUN="${ASHARE_SHORTPICK_VALIDATE_RECENT_BEFORE_RUN:-0}"
@@ -106,6 +107,10 @@ run_frontend_projection_refresh() {
     --projection all
 }
 
+prewarm_shortpick_v2_paper_cache() {
+  bash "$REPO_ROOT/scripts/prewarm-shortpick-v2-paper-cache.sh"
+}
+
 wait_for_database_writable() {
   local deadline=$((SECONDS + DATABASE_LOCK_WAIT_SECONDS))
   while (( SECONDS < deadline )); do
@@ -168,6 +173,9 @@ PY
   fi
   if ! run_frontend_projection_refresh; then
     echo "Frontend projection refresh failed; keeping previous projection rows." >&2
+  fi
+  if ! run_with_timeout "$SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS" prewarm_shortpick_v2_paper_cache; then
+    echo "Shortpick v2 paper cache prewarm failed; the next page load may rebuild the cache." >&2
   fi
 }
 
@@ -458,6 +466,9 @@ run_daily_refresh_slot() {
   run_with_timeout "$DAILY_REFRESH_TIMEOUT_SECONDS" run_phase5_daily_refresh --analysis-only
   local exit_code=$?
   if [[ "$exit_code" == "0" ]]; then
+    if ! run_with_timeout "$SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS" prewarm_shortpick_v2_paper_cache; then
+      echo "Shortpick v2 paper cache prewarm failed after daily refresh; the next page load may rebuild the cache." >&2
+    fi
     mark_slot_completed "$target_date" "$slot_name"
     release_run_lock
     trap - EXIT

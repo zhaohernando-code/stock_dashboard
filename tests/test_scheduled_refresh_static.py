@@ -75,6 +75,14 @@ def test_shortpick_lab_is_part_of_postmarket_daily_cycle() -> None:
     assert "run_shortpick_daily_cycle" in script
     assert "run_frontend_projection_refresh" in script
     assert "keeping previous projection rows" in script
+    assert 'SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS:-180}"' in script
+    assert "prewarm_shortpick_v2_paper_cache" in script
+    assert 'bash "$REPO_ROOT/scripts/prewarm-shortpick-v2-paper-cache.sh"' in script
+    assert 'run_with_timeout "$SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS" prewarm_shortpick_v2_paper_cache' in script
+    assert "Shortpick v2 paper cache prewarm failed; the next page load may rebuild the cache." in script
+    assert script.index("run_frontend_projection_refresh") < script.index(
+        "Shortpick v2 paper cache prewarm failed; the next page load may rebuild the cache."
+    )
     assert "run_shortpick_lab_slot \"$TODAY_STR\"" in script
     assert "run_with_timeout \"$SHORTPICK_TIMEOUT_SECONDS\" run_shortpick_daily_cycle \"$target_date\"\n  local exit_code=$?" in script
 
@@ -109,6 +117,18 @@ def test_publish_reloads_scheduled_refresh_calendar_slots() -> None:
     assert '{"Hour": 16, "Minute": 20}' in script
     assert 'launchctl bootout "gui/$(id -u)" "$SCHEDULED_PLIST"' in script
     assert 'launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"' in script
+
+
+def test_daily_refresh_prewarms_shortpick_v2_paper_cache_after_market_data_refresh() -> None:
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert "Shortpick v2 paper cache prewarm failed after daily refresh" in script
+    assert script.index('run_with_timeout "$DAILY_REFRESH_TIMEOUT_SECONDS" run_phase5_daily_refresh --analysis-only') < (
+        script.index("Shortpick v2 paper cache prewarm failed after daily refresh")
+    )
+    assert script.index("Shortpick v2 paper cache prewarm failed after daily refresh") < script.index(
+        'mark_slot_completed "$target_date" "$slot_name"'
+    )
 
 
 def test_deepseek_shortpick_round_has_in_process_soft_timeout() -> None:
