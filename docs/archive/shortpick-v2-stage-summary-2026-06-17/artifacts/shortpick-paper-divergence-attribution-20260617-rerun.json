@@ -1,0 +1,190 @@
+{
+  "artifact_family": "shortpick_paper_divergence_attribution",
+  "schema_version": "v1",
+  "claim_ceiling": "research_observation",
+  "artifact_id": "shortpick-paper-divergence-attribution-20260616163037",
+  "generated_at": "2026-06-16T16:30:37.193650+00:00",
+  "tracking_window": {
+    "start_date": "2026-05-08",
+    "latest_available_date": "2026-06-16",
+    "horizon_days": 10
+  },
+  "account_constraints": {
+    "initial_cash": 200000.0,
+    "board_lot_size": 100,
+    "delayed_buy_allowed": false,
+    "v1_control_rule": "top1_or_skip",
+    "v2_control_rule": "fixed_notional_rank2_primary_top5_fallback_or_skip"
+  },
+  "source_notes": {
+    "v1": "v1 paper records are candidate-level forward observations; the account control is derived in this artifact only.",
+    "v2": "v2 account curves come from the existing v2 paper read model and are kept separate from v1 controls.",
+    "sample_size": "The current paper window is short; attribution labels are research evidence, not strategy promotion decisions."
+  },
+  "strategies": [
+    {
+      "strategy_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "label_cn": "8.5 万目标买入方案",
+      "source_kind": "v2_paper_account_curve",
+      "status": "ready",
+      "summary": {
+        "initial_cash": 200000.0,
+        "final_nav": 181031.36,
+        "total_return": -0.094843,
+        "annualized_return": null,
+        "max_drawdown": -0.180727,
+        "trade_count": 7,
+        "completed_trade_count": 7,
+        "skip_count": 21,
+        "fallback_trade_count": 0,
+        "cash_or_lot_rejection_count": null,
+        "cash_or_lot_rejection_count_basis": "not_exposed_by_v2_paper_read_model",
+        "mean_invested_ratio": null,
+        "turnover": null,
+        "point_count": 26
+      },
+      "reason_counts": {
+        "action:buy_primary": 7,
+        "action:buy_fallback": 0,
+        "action:skip": 21,
+        "source_gap": 0
+      },
+      "notes_cn": [
+        "来自 v2 纸面追踪 read model 的账户曲线。"
+      ]
+    },
+    {
+      "strategy_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1",
+      "label_cn": "8 万目标买入方案",
+      "source_kind": "v2_paper_account_curve",
+      "status": "ready",
+      "summary": {
+        "initial_cash": 200000.0,
+        "final_nav": 181031.36,
+        "total_return": -0.094843,
+        "annualized_return": null,
+        "max_drawdown": -0.180727,
+        "trade_count": 7,
+        "completed_trade_count": 7,
+        "skip_count": 21,
+        "fallback_trade_count": 0,
+        "cash_or_lot_rejection_count": null,
+        "cash_or_lot_rejection_count_basis": "not_exposed_by_v2_paper_read_model",
+        "mean_invested_ratio": null,
+        "turnover": null,
+        "point_count": 26
+      },
+      "reason_counts": {
+        "action:buy_primary": 7,
+        "action:buy_fallback": 0,
+        "action:skip": 21,
+        "source_gap": 0
+      },
+      "notes_cn": [
+        "来自 v2 纸面追踪 read model 的账户曲线。"
+      ]
+    },
+    {
+      "strategy_id": "v1_raw_candidate_forward_h10",
+      "label_cn": "v1 原始候选 forward 观察",
+      "source_kind": "v1_candidate_forward_return_not_account_nav",
+      "status": "ready",
+      "summary": {
+        "observation_count": 28,
+        "completed_observation_count": 17,
+        "pending_observation_count": 11,
+        "mean_stock_return": 0.083195,
+        "win_rate": 0.470588,
+        "best_stock_return": 0.563313,
+        "worst_stock_return": -0.161059
+      },
+      "reason_counts": {},
+      "notes_cn": [
+        "这是候选级 forward return 统计，不是账户 NAV。",
+        "它只用于说明 v1 候选源在同窗期的 raw 表现。"
+      ]
+    },
+    {
+      "strategy_id": "v1_derived_200k_top1_or_skip_h10",
+      "label_cn": "v1 派生对照：20万账户，只买首位候选，买不起就跳过",
+      "source_kind": "derived_v1_200k_account_control",
+      "status": "ready",
+      "summary": {
+        "signal_count": 28,
+        "trade_count": 5,
+        "completed_trade_count": 3,
+        "skip_count": 23,
+        "fallback_trade_count": 0,
+        "cash_or_lot_rejection_count": 22,
+        "final_nav": 204086.0,
+        "total_return": 0.02043,
+        "annualized_return": null,
+        "max_drawdown": -0.051316,
+        "mean_invested_ratio": null,
+        "turnover": 2.943925,
+        "final_cash": 11701.0,
+        "open_position_count": 2,
+        "unresolved_position_count": 2,
+        "open_position_valuation_basis": "cost_until_exit_return_is_available",
+        "total_buy_value": 588785.0,
+        "total_sell_value": 400486.0,
+        "tail_sensitivity": {
+          "trade_pnl_count": 3,
+          "best_trade_pnl": 7570.0,
+          "worst_trade_pnl": -10630.0,
+          "drop_best_trade_total_return": -0.01742,
+          "drop_worst_trade_total_return": 0.07358
+        }
+      },
+      "reason_counts": {
+        "action:buy_primary": 5,
+        "action:skip": 23,
+        "exit:mechanical_h10": 3,
+        "reason:board_lot_minimum": 22,
+        "reason:missing_entry_price": 1,
+        "reason:selected": 5
+      },
+      "notes_cn": [
+        "该账户路径由 v1 候选记录派生，只用于研究对照。",
+        "没有写入或替换现有 v1/v2 纸面追踪 ledger。"
+      ]
+    }
+  ],
+  "attribution": [
+    {
+      "dimension": "short_window_noise",
+      "status": "uncertain",
+      "evidence_cn": "当前窗口成交笔数偏少，不能单独否定三年历史回测。"
+    },
+    {
+      "dimension": "v1_factor_current_window",
+      "status": "supports",
+      "evidence_cn": "v1 派生 20 万账户 当前收益 2.0%；v2 fixed85 当前收益 -9.5%。"
+    },
+    {
+      "dimension": "execution_capital_constraint",
+      "status": "uncertain",
+      "evidence_cn": "v2 fixed85 当前窗口候补买入 0 次；若这些交易为负，需要继续拆分 fallback 贡献。"
+    },
+    {
+      "dimension": "concentration_tail_risk",
+      "status": "supports",
+      "evidence_cn": "v1 派生账户最差单笔 P/L 约 -10630.00 元；短窗结果可能被少数交易主导。"
+    },
+    {
+      "dimension": "regime_shift",
+      "status": "uncertain",
+      "evidence_cn": "本产物优先做同窗账户归因；市场 regime 需要结合指数与候选池覆盖率进一步确认。"
+    }
+  ],
+  "conclusions_cn": [
+    "当前更像是一个需要拆分的纸面窗口分歧，而不是可以直接推翻三年历史基准的证据。",
+    "支持项应作为下一轮策略治理输入，但不能单独触发策略晋级或淘汰。"
+  ],
+  "event_refs": [
+    "shortpick.paper_divergence_attribution.generated",
+    "shortpick.v2.paper_tracking_current_window",
+    "shortpick.v1.derived_account_control_research_only"
+  ],
+  "validation_status": "passed"
+}

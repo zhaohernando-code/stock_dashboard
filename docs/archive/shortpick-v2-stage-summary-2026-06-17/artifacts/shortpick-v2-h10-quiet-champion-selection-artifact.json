@@ -1,0 +1,4623 @@
+{
+  "artifact_family": "shortpick_v2_rule_selection_artifact",
+  "schema_version": "v1",
+  "artifact_id": "shortpick_v2_rule_selection_artifact:shortpick_v2_replay_artifact:strategy_search_h10_quiet_champion:2023-04-13:2026-05-08:200000:2026-06-15:2026-06-15",
+  "generated_at": "2026-06-15T02:01:57.286599+00:00",
+  "status": "ready",
+  "claim_ceiling": "research_observation",
+  "evidence_basis": "historical_account_replay_selection",
+  "source_plan_ref": "docs/contracts/SHORTPICK_LAB_V2_PLAN_2026-06-12.md#phase-4-candidate-rule-selection",
+  "source_replay_artifact": {
+    "artifact_id": "shortpick_v2_replay_artifact:strategy_search_h10_quiet_champion:2023-04-13:2026-05-08:200000:2026-06-15",
+    "artifact_family": "shortpick_v2_replay_artifact",
+    "schema_version": "v1",
+    "path": "output/shortpick-v2-h10-quiet-champion-replay-artifact.json",
+    "status": "ready",
+    "claim_ceiling": "research_observation",
+    "evidence_basis": "historical_account_replay",
+    "signal_day_count": 721,
+    "trade_day_count": 766
+  },
+  "selection_policy": {
+    "policy_version": "shortpick_v2_rule_selection_v2",
+    "max_selected": 2,
+    "required_config_ids": [
+      "top1_or_skip_v1",
+      "top3_fallback_v1",
+      "fixed_notional_40k_top5_v1",
+      "position_cap_utilization_top5_v1",
+      "conservative_cash_reserve_60k_top5_v1",
+      "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1"
+    ],
+    "baseline_config_ids": [
+      "top1_or_skip_v1"
+    ],
+    "benchmark_config_ids": [
+      "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1"
+    ],
+    "gate_thresholds": {
+      "threshold_profile": "h10_quiet_champion",
+      "signal_count_min": 300,
+      "trade_count_min": 180,
+      "skip_ratio_max": 1.0,
+      "total_return_min_exclusive": 0.0,
+      "annualized_return_min": 0.3,
+      "market_reference_required": true,
+      "market_excess_total_return_min_exclusive": 0.0,
+      "max_drawdown_min": -0.18,
+      "mean_invested_ratio_min": 0.0,
+      "turnover_max": 80.0,
+      "reason_counts_required": true,
+      "source_replay_leakage_status_required": "passed"
+    },
+    "ranking_order": [
+      "max_drawdown_desc",
+      "annualized_return_desc",
+      "market_excess_total_return_desc",
+      "total_return_desc",
+      "skip_ratio_asc",
+      "turnover_asc",
+      "trade_count_desc"
+    ]
+  },
+  "gate_results": [
+    {
+      "config_id": "conservative_cash_reserve_60k_top5_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": true,
+          "actual": 209,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.710125,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 0.264061,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": false,
+          "actual": 0.080139,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": false,
+          "actual": -0.154383,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": false,
+          "actual": -0.334271,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.443472,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 32.378643,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 209,
+        "skip_count": 512,
+        "skip_ratio": 0.710125,
+        "fallback_trade_count": 91,
+        "total_return": 0.264061,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.080139,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.154383,
+        "max_drawdown": -0.334271,
+        "mean_invested_ratio": 0.443472,
+        "turnover": 32.378643
+      },
+      "reason": "Failed deterministic selection gates: annualized_return, market_excess_total_return, max_drawdown"
+    },
+    {
+      "config_id": "fixed_notional_40k_top5_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": true,
+          "actual": 240,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.667129,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 0.256745,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": false,
+          "actual": 0.078079,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": false,
+          "actual": -0.161699,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": false,
+          "actual": -0.259999,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.489518,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 36.947327,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 240,
+        "skip_count": 481,
+        "skip_ratio": 0.667129,
+        "fallback_trade_count": 66,
+        "total_return": 0.256745,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.078079,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.161699,
+        "max_drawdown": -0.259999,
+        "mean_invested_ratio": 0.489518,
+        "turnover": 36.947327
+      },
+      "reason": "Failed deterministic selection gates: annualized_return, market_excess_total_return, max_drawdown"
+    },
+    {
+      "config_id": "position_cap_utilization_top5_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": true,
+          "actual": 216,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.700416,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 0.262832,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": false,
+          "actual": 0.079794,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": false,
+          "actual": -0.155612,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": false,
+          "actual": -0.441008,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.629064,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 41.232405,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 216,
+        "skip_count": 505,
+        "skip_ratio": 0.700416,
+        "fallback_trade_count": 108,
+        "total_return": 0.262832,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.079794,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.155612,
+        "max_drawdown": -0.441008,
+        "mean_invested_ratio": 0.629064,
+        "turnover": 41.232405
+      },
+      "reason": "Failed deterministic selection gates: annualized_return, market_excess_total_return, max_drawdown"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot09_mtw__fixed_notional_70k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": true,
+          "actual": 249,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.654646,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 1.438079,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.3407,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 1.019635,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": false,
+          "actual": -0.268389,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.668818,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 79.722241,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 249,
+        "skip_count": 472,
+        "skip_ratio": 0.654646,
+        "fallback_trade_count": 0,
+        "total_return": 1.438079,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.3407,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.019635,
+        "max_drawdown": -0.268389,
+        "mean_invested_ratio": 0.668818,
+        "turnover": 79.722241
+      },
+      "reason": "Failed deterministic selection gates: max_drawdown"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot09_mtw__fixed_notional_75k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": true,
+          "actual": 245,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.660194,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 1.495545,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.351015,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 1.077101,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": false,
+          "actual": -0.272173,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.686155,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": false,
+          "actual": 83.121707,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 245,
+        "skip_count": 476,
+        "skip_ratio": 0.660194,
+        "fallback_trade_count": 0,
+        "total_return": 1.495545,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.351015,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.077101,
+        "max_drawdown": -0.272173,
+        "mean_invested_ratio": 0.686155,
+        "turnover": 83.121707
+      },
+      "reason": "Failed deterministic selection gates: max_drawdown, turnover"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot09_mtw__fixed_notional_80k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": true,
+          "actual": 244,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.661581,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 1.549666,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.360585,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 1.131222,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": false,
+          "actual": -0.272173,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.697241,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": false,
+          "actual": 85.729948,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 244,
+        "skip_count": 477,
+        "skip_ratio": 0.661581,
+        "fallback_trade_count": 0,
+        "total_return": 1.549666,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.360585,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.131222,
+        "max_drawdown": -0.272173,
+        "mean_invested_ratio": 0.697241,
+        "turnover": 85.729948
+      },
+      "reason": "Failed deterministic selection gates: max_drawdown, turnover"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot09_mtw__fixed_notional_85k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": true,
+          "actual": 244,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.661581,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 1.584757,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.366717,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 1.166313,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": false,
+          "actual": -0.272173,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.708218,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": false,
+          "actual": 88.121346,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 244,
+        "skip_count": 477,
+        "skip_ratio": 0.661581,
+        "fallback_trade_count": 0,
+        "total_return": 1.584757,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.366717,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.166313,
+        "max_drawdown": -0.272173,
+        "mean_invested_ratio": 0.708218,
+        "turnover": 88.121346
+      },
+      "reason": "Failed deterministic selection gates: max_drawdown, turnover"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot09_mtw__fixed_notional_90k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": true,
+          "actual": 243,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.662968,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 1.623265,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.373382,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 1.204821,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": false,
+          "actual": -0.278485,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.717861,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": false,
+          "actual": 90.288021,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 243,
+        "skip_count": 478,
+        "skip_ratio": 0.662968,
+        "fallback_trade_count": 0,
+        "total_return": 1.623265,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.373382,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.204821,
+        "max_drawdown": -0.278485,
+        "mean_invested_ratio": 0.717861,
+        "turnover": 90.288021
+      },
+      "reason": "Failed deterministic selection gates: max_drawdown, turnover"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mt__fixed_notional_70k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 142,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.803051,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 1.664432,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.380436,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 1.245988,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": -0.132126,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.382601,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 48.432532,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 142,
+        "skip_count": 579,
+        "skip_ratio": 0.803051,
+        "fallback_trade_count": 0,
+        "total_return": 1.664432,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.380436,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.245988,
+        "max_drawdown": -0.132126,
+        "mean_invested_ratio": 0.382601,
+        "turnover": 48.432532
+      },
+      "reason": "Failed deterministic selection gates: trade_count"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mt__fixed_notional_75k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 141,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.804438,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 1.785175,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.40071,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 1.366731,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": -0.132506,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.391956,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 51.26752,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 141,
+        "skip_count": 580,
+        "skip_ratio": 0.804438,
+        "fallback_trade_count": 0,
+        "total_return": 1.785175,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.40071,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.366731,
+        "max_drawdown": -0.132506,
+        "mean_invested_ratio": 0.391956,
+        "turnover": 51.26752
+      },
+      "reason": "Failed deterministic selection gates: trade_count"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mt__fixed_notional_80k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 140,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.805825,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 1.889906,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.417824,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 1.471462,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": -0.138729,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.40188,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 53.943251,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 140,
+        "skip_count": 581,
+        "skip_ratio": 0.805825,
+        "fallback_trade_count": 0,
+        "total_return": 1.889906,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.417824,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.471462,
+        "max_drawdown": -0.138729,
+        "mean_invested_ratio": 0.40188,
+        "turnover": 53.943251
+      },
+      "reason": "Failed deterministic selection gates: trade_count"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mt__fixed_notional_85k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 141,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.804438,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 2.003913,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.435987,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 1.585469,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": -0.14458,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.409601,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 56.523531,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 141,
+        "skip_count": 580,
+        "skip_ratio": 0.804438,
+        "fallback_trade_count": 0,
+        "total_return": 2.003913,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.435987,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.585469,
+        "max_drawdown": -0.14458,
+        "mean_invested_ratio": 0.409601,
+        "turnover": 56.523531
+      },
+      "reason": "Failed deterministic selection gates: trade_count"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mt__fixed_notional_90k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 141,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.804438,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 2.085852,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.448757,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 1.667408,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": -0.152685,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.418966,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 58.974714,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 141,
+        "skip_count": 580,
+        "skip_ratio": 0.804438,
+        "fallback_trade_count": 0,
+        "total_return": 2.085852,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.448757,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.667408,
+        "max_drawdown": -0.152685,
+        "mean_invested_ratio": 0.418966,
+        "turnover": 58.974714
+      },
+      "reason": "Failed deterministic selection gates: trade_count"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_70k_top5_h10_v1",
+      "gate_status": "passed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": true,
+          "actual": 192,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.733703,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 2.230284,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.470723,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 1.81184,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": -0.114351,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.426601,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 65.007425,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 192,
+        "skip_count": 529,
+        "skip_ratio": 0.733703,
+        "fallback_trade_count": 0,
+        "total_return": 2.230284,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.470723,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.81184,
+        "max_drawdown": -0.114351,
+        "mean_invested_ratio": 0.426601,
+        "turnover": 65.007425
+      },
+      "reason": "Passed deterministic selection gates."
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_75k_top5_h10_v1",
+      "gate_status": "passed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": true,
+          "actual": 193,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.732316,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 2.418711,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.498411,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 2.000267,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": -0.118308,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.435712,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 69.194322,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 193,
+        "skip_count": 528,
+        "skip_ratio": 0.732316,
+        "fallback_trade_count": 0,
+        "total_return": 2.418711,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.498411,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 2.000267,
+        "max_drawdown": -0.118308,
+        "mean_invested_ratio": 0.435712,
+        "turnover": 69.194322
+      },
+      "reason": "Passed deterministic selection gates."
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1",
+      "gate_status": "passed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": true,
+          "actual": 192,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.733703,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 2.572453,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.520253,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 2.154009,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": -0.119033,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.444733,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 73.018706,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 192,
+        "skip_count": 529,
+        "skip_ratio": 0.733703,
+        "fallback_trade_count": 0,
+        "total_return": 2.572453,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.520253,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 2.154009,
+        "max_drawdown": -0.119033,
+        "mean_invested_ratio": 0.444733,
+        "turnover": 73.018706
+      },
+      "reason": "Passed deterministic selection gates."
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "gate_status": "passed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": true,
+          "actual": 190,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.736477,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 2.712294,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.539579,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 2.29385,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": -0.119033,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.453574,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 76.672058,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 190,
+        "skip_count": 531,
+        "skip_ratio": 0.736477,
+        "fallback_trade_count": 0,
+        "total_return": 2.712294,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.539579,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 2.29385,
+        "max_drawdown": -0.119033,
+        "mean_invested_ratio": 0.453574,
+        "turnover": 76.672058
+      },
+      "reason": "Passed deterministic selection gates."
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": true,
+          "actual": 189,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.737864,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 2.843451,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.557265,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 2.425007,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": -0.119033,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.462212,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": false,
+          "actual": 80.285556,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 189,
+        "skip_count": 532,
+        "skip_ratio": 0.737864,
+        "fallback_trade_count": 0,
+        "total_return": 2.843451,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.557265,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 2.425007,
+        "max_drawdown": -0.119033,
+        "mean_invested_ratio": 0.462212,
+        "turnover": 80.285556
+      },
+      "reason": "Failed deterministic selection gates: turnover"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_tw__fixed_notional_70k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 147,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.796117,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 1.332503,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.321316,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 0.914059,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": -0.113699,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.395218,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 50.248406,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 147,
+        "skip_count": 574,
+        "skip_ratio": 0.796117,
+        "fallback_trade_count": 0,
+        "total_return": 1.332503,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.321316,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 0.914059,
+        "max_drawdown": -0.113699,
+        "mean_invested_ratio": 0.395218,
+        "turnover": 50.248406
+      },
+      "reason": "Failed deterministic selection gates: trade_count"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_tw__fixed_notional_75k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 147,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.796117,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 1.441377,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.341296,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 1.022933,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": -0.115375,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.409104,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 53.576384,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 147,
+        "skip_count": 574,
+        "skip_ratio": 0.796117,
+        "fallback_trade_count": 0,
+        "total_return": 1.441377,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.341296,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.022933,
+        "max_drawdown": -0.115375,
+        "mean_invested_ratio": 0.409104,
+        "turnover": 53.576384
+      },
+      "reason": "Failed deterministic selection gates: trade_count"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_tw__fixed_notional_80k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 145,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.79889,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 1.534257,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.357874,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 1.115813,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": -0.121507,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.422352,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 56.567685,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 145,
+        "skip_count": 576,
+        "skip_ratio": 0.79889,
+        "fallback_trade_count": 0,
+        "total_return": 1.534257,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.357874,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.115813,
+        "max_drawdown": -0.121507,
+        "mean_invested_ratio": 0.422352,
+        "turnover": 56.567685
+      },
+      "reason": "Failed deterministic selection gates: trade_count"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_tw__fixed_notional_85k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 145,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.79889,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 1.619764,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.372779,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 1.20132,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": -0.124062,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.43335,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 59.362548,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 145,
+        "skip_count": 576,
+        "skip_ratio": 0.79889,
+        "fallback_trade_count": 0,
+        "total_return": 1.619764,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.372779,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.20132,
+        "max_drawdown": -0.124062,
+        "mean_invested_ratio": 0.43335,
+        "turnover": 59.362548
+      },
+      "reason": "Failed deterministic selection gates: trade_count"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_tw__fixed_notional_90k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 144,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.800277,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 1.701285,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": true,
+          "actual": 0.386688,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": true,
+          "actual": 1.282841,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": -0.131071,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.442989,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 61.946661,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 144,
+        "skip_count": 577,
+        "skip_ratio": 0.800277,
+        "fallback_trade_count": 0,
+        "total_return": 1.701285,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.386688,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.282841,
+        "max_drawdown": -0.131071,
+        "mean_invested_ratio": 0.442989,
+        "turnover": 61.946661
+      },
+      "reason": "Failed deterministic selection gates: trade_count"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot11_mtw__fixed_notional_70k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 0,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": false,
+          "actual": -0.418444,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      },
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot11_mtw__fixed_notional_75k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 0,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": false,
+          "actual": -0.418444,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      },
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot11_mtw__fixed_notional_80k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 0,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": false,
+          "actual": -0.418444,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      },
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot11_mtw__fixed_notional_85k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 0,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": false,
+          "actual": -0.418444,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      },
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot11_mtw__fixed_notional_90k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 0,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": false,
+          "actual": -0.418444,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      },
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot12_mtw__fixed_notional_70k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 0,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": false,
+          "actual": -0.418444,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      },
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot12_mtw__fixed_notional_75k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 0,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": false,
+          "actual": -0.418444,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      },
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot12_mtw__fixed_notional_80k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 0,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": false,
+          "actual": -0.418444,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      },
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot12_mtw__fixed_notional_85k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 0,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": false,
+          "actual": -0.418444,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      },
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return"
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot12_mtw__fixed_notional_90k_top5_h10_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 0,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": false,
+          "actual": 0.0,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": false,
+          "actual": -0.418444,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 0.0,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      },
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return"
+    },
+    {
+      "config_id": "top1_or_skip_v1",
+      "gate_status": "baseline_control",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": false,
+          "actual": 152,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.789182,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": true,
+          "actual": 0.246999,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": false,
+          "actual": 0.075321,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": false,
+          "actual": -0.171445,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": false,
+          "actual": -0.316451,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.475963,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 37.042828,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 152,
+        "skip_count": 569,
+        "skip_ratio": 0.789182,
+        "fallback_trade_count": 0,
+        "total_return": 0.246999,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.075321,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.171445,
+        "max_drawdown": -0.316451,
+        "mean_invested_ratio": 0.475963,
+        "turnover": 37.042828
+      },
+      "reason": "Retained as baseline/control regardless of promotion gate outcome."
+    },
+    {
+      "config_id": "top3_fallback_v1",
+      "gate_status": "failed",
+      "checks": [
+        {
+          "check_id": "result_status_ready",
+          "passed": true,
+          "actual": "ready",
+          "threshold": "ready",
+          "direction": "eq"
+        },
+        {
+          "check_id": "signal_count",
+          "passed": true,
+          "actual": 721,
+          "threshold": 300,
+          "direction": "gte"
+        },
+        {
+          "check_id": "trade_count",
+          "passed": true,
+          "actual": 209,
+          "threshold": 180,
+          "direction": "gte"
+        },
+        {
+          "check_id": "skip_ratio",
+          "passed": true,
+          "actual": 0.710125,
+          "threshold": 1.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "total_return",
+          "passed": false,
+          "actual": -0.043245,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "annualized_return",
+          "passed": false,
+          "actual": -0.014438,
+          "threshold": 0.3,
+          "direction": "gte"
+        },
+        {
+          "check_id": "market_reference_total_return",
+          "passed": true,
+          "actual": 0.418444,
+          "threshold": true,
+          "direction": "present"
+        },
+        {
+          "check_id": "market_excess_total_return",
+          "passed": false,
+          "actual": -0.461689,
+          "threshold": 0.0,
+          "direction": "gt"
+        },
+        {
+          "check_id": "max_drawdown",
+          "passed": false,
+          "actual": -0.505369,
+          "threshold": -0.18,
+          "direction": "gte"
+        },
+        {
+          "check_id": "mean_invested_ratio",
+          "passed": true,
+          "actual": 0.619518,
+          "threshold": 0.0,
+          "direction": "gte"
+        },
+        {
+          "check_id": "turnover",
+          "passed": true,
+          "actual": 35.848193,
+          "threshold": 80.0,
+          "direction": "lte"
+        },
+        {
+          "check_id": "reason_counts",
+          "passed": true,
+          "actual": true,
+          "threshold": true,
+          "direction": "present"
+        }
+      ],
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 209,
+        "skip_count": 512,
+        "skip_ratio": 0.710125,
+        "fallback_trade_count": 101,
+        "total_return": -0.043245,
+        "annualization_trade_day_count": 766,
+        "annualized_return": -0.014438,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.461689,
+        "max_drawdown": -0.505369,
+        "mean_invested_ratio": 0.619518,
+        "turnover": 35.848193
+      },
+      "reason": "Failed deterministic selection gates: total_return, annualized_return, market_excess_total_return, max_drawdown"
+    }
+  ],
+  "benchmark_configs": [
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "role": "benchmark_control",
+      "selection_rank": null,
+      "gate_status": "passed",
+      "reason": "Retained as a mandatory h10 quiet benchmark; later candidates must be compared against this same-window replay row before any replacement decision.",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 190,
+        "skip_count": 531,
+        "skip_ratio": 0.736477,
+        "fallback_trade_count": 0,
+        "total_return": 2.712294,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.539579,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 2.29385,
+        "max_drawdown": -0.119033,
+        "mean_invested_ratio": 0.453574,
+        "turnover": 76.672058
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1",
+      "role": "benchmark_control",
+      "selection_rank": null,
+      "gate_status": "passed",
+      "reason": "Retained as a mandatory h10 quiet benchmark; later candidates must be compared against this same-window replay row before any replacement decision.",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 192,
+        "skip_count": 529,
+        "skip_ratio": 0.733703,
+        "fallback_trade_count": 0,
+        "total_return": 2.572453,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.520253,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 2.154009,
+        "max_drawdown": -0.119033,
+        "mean_invested_ratio": 0.444733,
+        "turnover": 73.018706
+      }
+    }
+  ],
+  "selected_configs": [
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_70k_top5_h10_v1",
+      "role": "phase5_contract_candidate",
+      "selection_rank": 1,
+      "gate_status": "passed",
+      "reason": "Selected by risk-first ranking among gate-passing configs; best drawdown profile in the bounded set.",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 192,
+        "skip_count": 529,
+        "skip_ratio": 0.733703,
+        "fallback_trade_count": 0,
+        "total_return": 2.230284,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.470723,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.81184,
+        "max_drawdown": -0.114351,
+        "mean_invested_ratio": 0.426601,
+        "turnover": 65.007425
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_75k_top5_h10_v1",
+      "role": "phase5_contract_candidate",
+      "selection_rank": 2,
+      "gate_status": "passed",
+      "reason": "Selected by risk-first ranking among gate-passing configs after higher-ranked candidates; config_id=quiet_breakout_rank2_poolhot10_mtw__fixed_notional_75k_top5_h10_v1.",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 193,
+        "skip_count": 528,
+        "skip_ratio": 0.732316,
+        "fallback_trade_count": 0,
+        "total_return": 2.418711,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.498411,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 2.000267,
+        "max_drawdown": -0.118308,
+        "mean_invested_ratio": 0.435712,
+        "turnover": 69.194322
+      }
+    }
+  ],
+  "baseline_configs": [
+    {
+      "config_id": "top1_or_skip_v1",
+      "role": "baseline_control",
+      "selection_rank": null,
+      "gate_status": "baseline_control",
+      "reason": "Retained as the strict Top1-or-skip control; not promoted because Phase 4 keeps a bounded candidate set.",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 152,
+        "skip_count": 569,
+        "skip_ratio": 0.789182,
+        "fallback_trade_count": 0,
+        "total_return": 0.246999,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.075321,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.171445,
+        "max_drawdown": -0.316451,
+        "mean_invested_ratio": 0.475963,
+        "turnover": 37.042828
+      }
+    }
+  ],
+  "holdout_configs": [
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "role": "holdout",
+      "selection_rank": null,
+      "gate_status": "passed",
+      "reason": "Passed deterministic gates but held out because Phase 4 allows at most two candidates.",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 190,
+        "skip_count": 531,
+        "skip_ratio": 0.736477,
+        "fallback_trade_count": 0,
+        "total_return": 2.712294,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.539579,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 2.29385,
+        "max_drawdown": -0.119033,
+        "mean_invested_ratio": 0.453574,
+        "turnover": 76.672058
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1",
+      "role": "holdout",
+      "selection_rank": null,
+      "gate_status": "passed",
+      "reason": "Passed deterministic gates but held out because Phase 4 allows at most two candidates.",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 192,
+        "skip_count": 529,
+        "skip_ratio": 0.733703,
+        "fallback_trade_count": 0,
+        "total_return": 2.572453,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.520253,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 2.154009,
+        "max_drawdown": -0.119033,
+        "mean_invested_ratio": 0.444733,
+        "turnover": 73.018706
+      }
+    }
+  ],
+  "rejected_configs": [
+    {
+      "config_id": "conservative_cash_reserve_60k_top5_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: annualized_return, market_excess_total_return, max_drawdown",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 209,
+        "skip_count": 512,
+        "skip_ratio": 0.710125,
+        "fallback_trade_count": 91,
+        "total_return": 0.264061,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.080139,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.154383,
+        "max_drawdown": -0.334271,
+        "mean_invested_ratio": 0.443472,
+        "turnover": 32.378643
+      }
+    },
+    {
+      "config_id": "fixed_notional_40k_top5_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: annualized_return, market_excess_total_return, max_drawdown",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 240,
+        "skip_count": 481,
+        "skip_ratio": 0.667129,
+        "fallback_trade_count": 66,
+        "total_return": 0.256745,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.078079,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.161699,
+        "max_drawdown": -0.259999,
+        "mean_invested_ratio": 0.489518,
+        "turnover": 36.947327
+      }
+    },
+    {
+      "config_id": "position_cap_utilization_top5_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: annualized_return, market_excess_total_return, max_drawdown",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 216,
+        "skip_count": 505,
+        "skip_ratio": 0.700416,
+        "fallback_trade_count": 108,
+        "total_return": 0.262832,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.079794,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.155612,
+        "max_drawdown": -0.441008,
+        "mean_invested_ratio": 0.629064,
+        "turnover": 41.232405
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot09_mtw__fixed_notional_70k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: max_drawdown",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 249,
+        "skip_count": 472,
+        "skip_ratio": 0.654646,
+        "fallback_trade_count": 0,
+        "total_return": 1.438079,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.3407,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.019635,
+        "max_drawdown": -0.268389,
+        "mean_invested_ratio": 0.668818,
+        "turnover": 79.722241
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot09_mtw__fixed_notional_75k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: max_drawdown, turnover",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 245,
+        "skip_count": 476,
+        "skip_ratio": 0.660194,
+        "fallback_trade_count": 0,
+        "total_return": 1.495545,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.351015,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.077101,
+        "max_drawdown": -0.272173,
+        "mean_invested_ratio": 0.686155,
+        "turnover": 83.121707
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot09_mtw__fixed_notional_80k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: max_drawdown, turnover",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 244,
+        "skip_count": 477,
+        "skip_ratio": 0.661581,
+        "fallback_trade_count": 0,
+        "total_return": 1.549666,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.360585,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.131222,
+        "max_drawdown": -0.272173,
+        "mean_invested_ratio": 0.697241,
+        "turnover": 85.729948
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot09_mtw__fixed_notional_85k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: max_drawdown, turnover",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 244,
+        "skip_count": 477,
+        "skip_ratio": 0.661581,
+        "fallback_trade_count": 0,
+        "total_return": 1.584757,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.366717,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.166313,
+        "max_drawdown": -0.272173,
+        "mean_invested_ratio": 0.708218,
+        "turnover": 88.121346
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot09_mtw__fixed_notional_90k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: max_drawdown, turnover",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 243,
+        "skip_count": 478,
+        "skip_ratio": 0.662968,
+        "fallback_trade_count": 0,
+        "total_return": 1.623265,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.373382,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.204821,
+        "max_drawdown": -0.278485,
+        "mean_invested_ratio": 0.717861,
+        "turnover": 90.288021
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mt__fixed_notional_70k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 142,
+        "skip_count": 579,
+        "skip_ratio": 0.803051,
+        "fallback_trade_count": 0,
+        "total_return": 1.664432,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.380436,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.245988,
+        "max_drawdown": -0.132126,
+        "mean_invested_ratio": 0.382601,
+        "turnover": 48.432532
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mt__fixed_notional_75k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 141,
+        "skip_count": 580,
+        "skip_ratio": 0.804438,
+        "fallback_trade_count": 0,
+        "total_return": 1.785175,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.40071,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.366731,
+        "max_drawdown": -0.132506,
+        "mean_invested_ratio": 0.391956,
+        "turnover": 51.26752
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mt__fixed_notional_80k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 140,
+        "skip_count": 581,
+        "skip_ratio": 0.805825,
+        "fallback_trade_count": 0,
+        "total_return": 1.889906,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.417824,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.471462,
+        "max_drawdown": -0.138729,
+        "mean_invested_ratio": 0.40188,
+        "turnover": 53.943251
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mt__fixed_notional_85k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 141,
+        "skip_count": 580,
+        "skip_ratio": 0.804438,
+        "fallback_trade_count": 0,
+        "total_return": 2.003913,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.435987,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.585469,
+        "max_drawdown": -0.14458,
+        "mean_invested_ratio": 0.409601,
+        "turnover": 56.523531
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mt__fixed_notional_90k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 141,
+        "skip_count": 580,
+        "skip_ratio": 0.804438,
+        "fallback_trade_count": 0,
+        "total_return": 2.085852,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.448757,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.667408,
+        "max_drawdown": -0.152685,
+        "mean_invested_ratio": 0.418966,
+        "turnover": 58.974714
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: turnover",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 189,
+        "skip_count": 532,
+        "skip_ratio": 0.737864,
+        "fallback_trade_count": 0,
+        "total_return": 2.843451,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.557265,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 2.425007,
+        "max_drawdown": -0.119033,
+        "mean_invested_ratio": 0.462212,
+        "turnover": 80.285556
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_tw__fixed_notional_70k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 147,
+        "skip_count": 574,
+        "skip_ratio": 0.796117,
+        "fallback_trade_count": 0,
+        "total_return": 1.332503,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.321316,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 0.914059,
+        "max_drawdown": -0.113699,
+        "mean_invested_ratio": 0.395218,
+        "turnover": 50.248406
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_tw__fixed_notional_75k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 147,
+        "skip_count": 574,
+        "skip_ratio": 0.796117,
+        "fallback_trade_count": 0,
+        "total_return": 1.441377,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.341296,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.022933,
+        "max_drawdown": -0.115375,
+        "mean_invested_ratio": 0.409104,
+        "turnover": 53.576384
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_tw__fixed_notional_80k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 145,
+        "skip_count": 576,
+        "skip_ratio": 0.79889,
+        "fallback_trade_count": 0,
+        "total_return": 1.534257,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.357874,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.115813,
+        "max_drawdown": -0.121507,
+        "mean_invested_ratio": 0.422352,
+        "turnover": 56.567685
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_tw__fixed_notional_85k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 145,
+        "skip_count": 576,
+        "skip_ratio": 0.79889,
+        "fallback_trade_count": 0,
+        "total_return": 1.619764,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.372779,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.20132,
+        "max_drawdown": -0.124062,
+        "mean_invested_ratio": 0.43335,
+        "turnover": 59.362548
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_tw__fixed_notional_90k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 144,
+        "skip_count": 577,
+        "skip_ratio": 0.800277,
+        "fallback_trade_count": 0,
+        "total_return": 1.701285,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.386688,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 1.282841,
+        "max_drawdown": -0.131071,
+        "mean_invested_ratio": 0.442989,
+        "turnover": 61.946661
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot11_mtw__fixed_notional_70k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot11_mtw__fixed_notional_75k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot11_mtw__fixed_notional_80k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot11_mtw__fixed_notional_85k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot11_mtw__fixed_notional_90k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot12_mtw__fixed_notional_70k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot12_mtw__fixed_notional_75k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot12_mtw__fixed_notional_80k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot12_mtw__fixed_notional_85k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot12_mtw__fixed_notional_90k_top5_h10_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: trade_count, total_return, annualized_return, market_excess_total_return",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 0,
+        "skip_count": 721,
+        "skip_ratio": 1.0,
+        "fallback_trade_count": 0,
+        "total_return": 0.0,
+        "annualization_trade_day_count": 766,
+        "annualized_return": 0.0,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.418444,
+        "max_drawdown": 0.0,
+        "mean_invested_ratio": 0.0,
+        "turnover": 0.0
+      }
+    },
+    {
+      "config_id": "top3_fallback_v1",
+      "role": "rejected",
+      "selection_rank": null,
+      "gate_status": "failed",
+      "reason": "Failed deterministic selection gates: total_return, annualized_return, market_excess_total_return, max_drawdown",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 209,
+        "skip_count": 512,
+        "skip_ratio": 0.710125,
+        "fallback_trade_count": 101,
+        "total_return": -0.043245,
+        "annualization_trade_day_count": 766,
+        "annualized_return": -0.014438,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.461689,
+        "max_drawdown": -0.505369,
+        "mean_invested_ratio": 0.619518,
+        "turnover": 35.848193
+      }
+    }
+  ],
+  "leakage_audit": {
+    "status": "passed",
+    "source_replay_leakage_status": "passed",
+    "used_only_replay_artifact": true,
+    "notes": [
+      "Selection reads only the Phase 3 replay artifact.",
+      "Source replay leakage_audit.status is passed and required before any candidate can be selected."
+    ]
+  },
+  "research_labeling": {
+    "claim_ceiling": "research_observation",
+    "selected_role_label": "phase5_contract_candidate",
+    "notes": [
+      "Selected configurations are candidates for Phase 5 contract design only.",
+      "When present, benchmark_config_ids are the mandatory comparison baseline for later Short Pick Lab v2 strategy-search rounds; broad search results cannot replace them without strict same-window replay evidence.",
+      "This artifact does not start paper tracking, create a ledger, expose an API, or claim production readiness."
+    ]
+  },
+  "event_refs": [
+    "shortpick_v2.phase4.rule_selection.generated",
+    "shortpick_v2.rule_selection.source.shortpick_v2_replay_artifact:strategy_search_h10_quiet_champion:2023-04-13:2026-05-08:200000:2026-06-15"
+  ]
+}

@@ -1,0 +1,232 @@
+{
+  "artifact_family": "shortpick_v2_h10_execution_decomposition_artifact",
+  "schema_version": "v1",
+  "artifact_id": "shortpick_v2_h10_execution_decomposition:shortpick_v2_h10_robustness:2023-04-13:2026-05-08:200000:2026-06-15:2026-06-15",
+  "generated_at": "2026-06-15T09:41:50.113019+00:00",
+  "status": "ready",
+  "claim_ceiling": "research_observation",
+  "evidence_basis": "historical_account_replay_execution_decomposition",
+  "source_robustness_artifact": {
+    "artifact_id": "shortpick_v2_h10_robustness:2023-04-13:2026-05-08:200000:2026-06-15",
+    "artifact_family": "shortpick_v2_h10_robustness_artifact",
+    "schema_version": "v1",
+    "status": "ready",
+    "claim_ceiling": "research_observation",
+    "evidence_basis": "historical_account_replay_robustness"
+  },
+  "analysis_scope": {
+    "config_ids": [
+      "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1",
+      "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1"
+    ],
+    "decomposed_config_count": 3,
+    "missing_config_ids": [],
+    "initial_cash": 200000.0,
+    "horizon_days": 10,
+    "entry_price_source": "next_close"
+  },
+  "decomposition_policy": {
+    "target_configs": "fixed80_capital_shadow_fixed85_champion_and_90k_diagnostic",
+    "cash_policy": "Cash deployment uses robustness summary totals and mean invested ratio.",
+    "board_lot_policy": "Board-lot pressure uses reason counts and replay rule metadata when available.",
+    "winner_policy": "Winner concentration uses post-hoc trade contribution stress, not a resimulated path.",
+    "promotion_policy": "90k remains diagnostic-only and cannot be promoted by this artifact."
+  },
+  "config_decompositions": [
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1",
+      "role": "benchmark_control",
+      "diagnostic_only": false,
+      "target_notional": 80000.0,
+      "board_lot": {
+        "board_lot_size": 100,
+        "target_notional": 80000.0,
+        "target_notional_pct_of_initial_cash": 0.4,
+        "board_lot_block_count": 0,
+        "insufficient_cash_count": 14
+      },
+      "cash_deployment": {
+        "initial_cash": 200000.0,
+        "final_cash": 714490.511,
+        "final_market_value": 0.0,
+        "final_cash_ratio": 3.572453,
+        "mean_invested_ratio": 0.444153,
+        "cash_drag_proxy": 0.555847,
+        "total_buy_value": 14603741.184,
+        "total_buy_value_to_initial_cash": 73.018706
+      },
+      "turnover_skip": {
+        "turnover": 73.018706,
+        "trade_count": 192,
+        "skip_count": 529,
+        "skipped_ratio": 0.733703,
+        "fallback_trade_count": 0,
+        "buy_primary_count": 192,
+        "buy_fallback_count": null,
+        "skip_reason_counts": {
+          "bought_primary": 192,
+          "insufficient_cash": 7,
+          "no_ranked_candidates": 503,
+          "position_count_cap": 19
+        }
+      },
+      "winner_concentration": {
+        "largest_symbol_abs_pnl_share": 0.078103,
+        "largest_industry_abs_pnl_share": 0.079914,
+        "top_winner_symbol": "600403.SH",
+        "top_winner_net_pnl": 92118.138,
+        "remove_top_1_total_return_proxy": 2.111862,
+        "remove_top_1_annualized_return_proxy": 0.452055,
+        "remove_top_1_market_excess_total_return_proxy": 1.693418
+      },
+      "funding_effect_vs_fixed85": {
+        "total_return_delta": -0.139841,
+        "annualized_return_delta": -0.01929,
+        "turnover_delta": -3.653352,
+        "trade_count_delta": 2,
+        "skip_count_delta": -2,
+        "mean_invested_ratio_delta": -0.008829,
+        "final_cash_delta": -27968.226
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "role": "benchmark_control",
+      "diagnostic_only": false,
+      "target_notional": 85000.0,
+      "board_lot": {
+        "board_lot_size": 100,
+        "target_notional": 85000.0,
+        "target_notional_pct_of_initial_cash": 0.425,
+        "board_lot_block_count": 0,
+        "insufficient_cash_count": 18
+      },
+      "cash_deployment": {
+        "initial_cash": 200000.0,
+        "final_cash": 742458.737,
+        "final_market_value": 0.0,
+        "final_cash_ratio": 3.712294,
+        "mean_invested_ratio": 0.452982,
+        "cash_drag_proxy": 0.547018,
+        "total_buy_value": 15334411.608,
+        "total_buy_value_to_initial_cash": 76.672058
+      },
+      "turnover_skip": {
+        "turnover": 76.672058,
+        "trade_count": 190,
+        "skip_count": 531,
+        "skipped_ratio": 0.736477,
+        "fallback_trade_count": 0,
+        "buy_primary_count": 190,
+        "buy_fallback_count": null,
+        "skip_reason_counts": {
+          "bought_primary": 190,
+          "insufficient_cash": 9,
+          "no_ranked_candidates": 503,
+          "position_count_cap": 19
+        }
+      },
+      "winner_concentration": {
+        "largest_symbol_abs_pnl_share": 0.078767,
+        "largest_industry_abs_pnl_share": 0.080217,
+        "top_winner_symbol": "600403.SH",
+        "top_winner_net_pnl": 97758.024,
+        "remove_top_1_total_return_proxy": 2.223504,
+        "remove_top_1_annualized_return_proxy": 0.468969,
+        "remove_top_1_market_excess_total_return_proxy": 1.80506
+      },
+      "funding_effect_vs_fixed85": {
+        "total_return_delta": 0.0,
+        "annualized_return_delta": 0.0,
+        "turnover_delta": 0.0,
+        "trade_count_delta": 0,
+        "skip_count_delta": 0,
+        "mean_invested_ratio_delta": 0.0,
+        "final_cash_delta": 0.0
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1",
+      "role": "diagnostic_boundary",
+      "diagnostic_only": true,
+      "target_notional": 90000.0,
+      "board_lot": {
+        "board_lot_size": 100,
+        "target_notional": 90000.0,
+        "target_notional_pct_of_initial_cash": 0.45,
+        "board_lot_block_count": 0,
+        "insufficient_cash_count": 20
+      },
+      "cash_deployment": {
+        "initial_cash": 200000.0,
+        "final_cash": 768690.203,
+        "final_market_value": 0.0,
+        "final_cash_ratio": 3.843451,
+        "mean_invested_ratio": 0.46161,
+        "cash_drag_proxy": 0.53839,
+        "total_buy_value": 16057111.122,
+        "total_buy_value_to_initial_cash": 80.285556
+      },
+      "turnover_skip": {
+        "turnover": 80.285556,
+        "trade_count": 189,
+        "skip_count": 532,
+        "skipped_ratio": 0.737864,
+        "fallback_trade_count": 0,
+        "buy_primary_count": 189,
+        "buy_fallback_count": null,
+        "skip_reason_counts": {
+          "bought_primary": 189,
+          "insufficient_cash": 10,
+          "no_ranked_candidates": 503,
+          "position_count_cap": 19
+        }
+      },
+      "winner_concentration": {
+        "largest_symbol_abs_pnl_share": 0.079667,
+        "largest_industry_abs_pnl_share": 0.080981,
+        "top_winner_symbol": "600403.SH",
+        "top_winner_net_pnl": 103867.9005,
+        "remove_top_1_total_return_proxy": 2.324112,
+        "remove_top_1_annualized_return_proxy": 0.483877,
+        "remove_top_1_market_excess_total_return_proxy": 1.905668
+      },
+      "funding_effect_vs_fixed85": {
+        "total_return_delta": 0.131157,
+        "annualized_return_delta": 0.017653,
+        "turnover_delta": 3.613498,
+        "trade_count_delta": -1,
+        "skip_count_delta": 1,
+        "mean_invested_ratio_delta": 0.008628,
+        "final_cash_delta": 26231.466
+      }
+    }
+  ],
+  "pairwise_funding_effects": [
+    {
+      "comparison_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1_vs_fixed85",
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1",
+      "baseline_config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "target_notional_delta": -5000.0,
+      "total_return_delta": -0.139841,
+      "annualized_return_delta": -0.01929,
+      "turnover_delta": -3.653352,
+      "skip_count_delta": -2
+    },
+    {
+      "comparison_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1_vs_fixed85",
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1",
+      "baseline_config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "target_notional_delta": 5000.0,
+      "total_return_delta": 0.131157,
+      "annualized_return_delta": 0.017653,
+      "turnover_delta": 3.613498,
+      "skip_count_delta": 1
+    }
+  ],
+  "event_refs": [
+    "shortpick_v2.h10_quiet.execution_decomposition.generated",
+    "shortpick_v2.execution_decomposition.source.shortpick_v2_h10_robustness:2023-04-13:2026-05-08:200000:2026-06-15"
+  ]
+}

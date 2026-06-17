@@ -1,0 +1,6492 @@
+{
+  "artifact_family": "shortpick_v2_replay_artifact",
+  "schema_version": "v1",
+  "artifact_id": "shortpick_v2_replay_artifact:strategy_search_h10_exit:2023-04-13:2026-05-08:200000:2026-06-14",
+  "generated_at": "2026-06-14T16:17:48.430615+00:00",
+  "status": "ready",
+  "claim_ceiling": "research_observation",
+  "evidence_basis": "historical_account_replay",
+  "source_plan_ref": "docs/contracts/SHORTPICK_LAB_V2_PLAN_2026-06-12.md#phase-3-replay-artifact-generation",
+  "data_scope": {
+    "signal_date_from": "2023-05-16",
+    "signal_date_to": "2026-05-08",
+    "signal_day_count": 721,
+    "trade_day_count": 766,
+    "stock_like_series_count": 3018,
+    "account_profile": "new_retail_cash_account",
+    "coverage_status": "complete",
+    "coverage_notes": [
+      "Read-only daily bars from the existing SQLite database; no refresh or model call performed.",
+      "Account eligibility filtered stock-like series from 3067 to 3018.",
+      "Account eligibility excluded board counts: {'st': 1, 'chnext': 31, 'star': 17}.",
+      "Strategy-search batch evaluated candidate sources: market_only_reconstruction:low_turnover_20d_uptrend_liquid_top120:v1, market_only_reconstruction:shortpick_v2_h10_exit_round:ma_accel_volume_confirm_exit_seed_h10_v1."
+    ],
+    "market_reference_mode": "eligible_universe_equal_weight_close_to_close",
+    "market_reference_date_from": "2023-05-16",
+    "market_reference_date_to": "2026-05-08",
+    "market_reference_sample_count": 2895,
+    "market_reference_total_return": 0.418444
+  },
+  "input_contracts": {
+    "candidate_source": {
+      "source_family": "shortpick_v2_candidate_projection",
+      "source_ref": "market_only_reconstruction:shortpick_v2_strategy_search_batch:v1:h10_exit",
+      "ranked_pool_required": true,
+      "source_feature_cutoff_policy": "Strategy-search candidate pools are reconstructed from signal-day-or-earlier daily-bar features; entry and exit bars are used only by the execution replay.",
+      "allowed_evidence_basis": [
+        "historical_backtest",
+        "market_only_reconstruction"
+      ]
+    },
+    "market_data": {
+      "source_ref": "existing_sqlite_daily_market_bars",
+      "status": "ready",
+      "read_policy": "read_only_existing_rows_no_refresh"
+    },
+    "account": {
+      "initial_cash": 200000.0,
+      "currency": "CNY",
+      "board_lot_size": 100,
+      "account_profile": "new_retail_cash_account",
+      "max_position_count": 5,
+      "max_position_pct": 0.35
+    },
+    "cost_model": {
+      "cost_bps": 20.0,
+      "stamp_tax_bps": 5.0,
+      "description": "Cost bps are applied on both buy and sell notional; stamp tax bps apply on sell notional."
+    },
+    "entry_model": {
+      "entry_price_source": "next_close",
+      "entry_trade_day_policy": "For each signal, buy on the declared entry bar from the fixed entry source; if not executable, use a predeclared fallback candidate or skip. No delayed entry action exists."
+    },
+    "exit_model": {
+      "holding_days": 10,
+      "exit_tracks": [
+        "mechanical_horizon_exit",
+        "limit_down_blocked_exit",
+        "close_stop_loss_exit",
+        "close_take_profit_exit",
+        "close_trailing_stop_exit"
+      ],
+      "unfillable_exit_policy": "If a mechanical or dynamic close-based exit is a one-price limit-down bar, keep the position open and retry exit evaluation on later trade days."
+    }
+  },
+  "rule_matrix": [
+    {
+      "config_id": "top1_or_skip_v1",
+      "family": "top1_or_skip",
+      "status": "candidate",
+      "allowed_actions": [
+        "buy_primary",
+        "skip"
+      ],
+      "candidate_rank_limit": 1,
+      "fallback_policy": {
+        "enabled": false,
+        "max_rank": 1
+      },
+      "lot_policy": {
+        "board_lot_size": 100,
+        "rounding": "floor_to_board_lot"
+      },
+      "cash_policy": {
+        "target_mode": "position_cap"
+      },
+      "position_policy": {
+        "max_position_count": 5,
+        "max_position_pct": 0.35,
+        "same_symbol_exposure_cap": true
+      },
+      "exit_policy": {
+        "mechanical_horizon_exit": true,
+        "dynamic_exit_triggers": [],
+        "stop_loss_pct": null,
+        "take_profit_pct": null,
+        "trailing_stop_pct": null,
+        "trailing_activation_pct": null,
+        "price_basis": "daily_close"
+      }
+    },
+    {
+      "config_id": "top3_fallback_v1",
+      "family": "topn_fallback",
+      "status": "candidate",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "candidate_rank_limit": 3,
+      "fallback_policy": {
+        "enabled": true,
+        "max_rank": 3
+      },
+      "lot_policy": {
+        "board_lot_size": 100,
+        "rounding": "floor_to_board_lot"
+      },
+      "cash_policy": {
+        "target_mode": "position_cap"
+      },
+      "position_policy": {
+        "max_position_count": 5,
+        "max_position_pct": 0.35,
+        "same_symbol_exposure_cap": true
+      },
+      "exit_policy": {
+        "mechanical_horizon_exit": true,
+        "dynamic_exit_triggers": [],
+        "stop_loss_pct": null,
+        "take_profit_pct": null,
+        "trailing_stop_pct": null,
+        "trailing_activation_pct": null,
+        "price_basis": "daily_close"
+      }
+    },
+    {
+      "config_id": "fixed_notional_40k_top5_v1",
+      "family": "fixed_notional_lot_rounding",
+      "status": "candidate",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "candidate_rank_limit": 5,
+      "fallback_policy": {
+        "enabled": true,
+        "max_rank": 5
+      },
+      "lot_policy": {
+        "board_lot_size": 100,
+        "rounding": "floor_to_board_lot"
+      },
+      "cash_policy": {
+        "target_mode": "fixed_notional",
+        "target_notional": 40000.0
+      },
+      "position_policy": {
+        "max_position_count": 5,
+        "max_position_pct": 0.35,
+        "same_symbol_exposure_cap": true
+      },
+      "exit_policy": {
+        "mechanical_horizon_exit": true,
+        "dynamic_exit_triggers": [],
+        "stop_loss_pct": null,
+        "take_profit_pct": null,
+        "trailing_stop_pct": null,
+        "trailing_activation_pct": null,
+        "price_basis": "daily_close"
+      }
+    },
+    {
+      "config_id": "position_cap_utilization_top5_v1",
+      "family": "position_cap_utilization",
+      "status": "candidate",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "candidate_rank_limit": 5,
+      "fallback_policy": {
+        "enabled": true,
+        "max_rank": 5
+      },
+      "lot_policy": {
+        "board_lot_size": 100,
+        "rounding": "floor_to_board_lot"
+      },
+      "cash_policy": {
+        "target_mode": "position_cap"
+      },
+      "position_policy": {
+        "max_position_count": 5,
+        "max_position_pct": 0.35,
+        "same_symbol_exposure_cap": true
+      },
+      "exit_policy": {
+        "mechanical_horizon_exit": true,
+        "dynamic_exit_triggers": [],
+        "stop_loss_pct": null,
+        "take_profit_pct": null,
+        "trailing_stop_pct": null,
+        "trailing_activation_pct": null,
+        "price_basis": "daily_close"
+      }
+    },
+    {
+      "config_id": "conservative_cash_reserve_60k_top5_v1",
+      "family": "conservative_cash_reserve",
+      "status": "candidate",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "candidate_rank_limit": 5,
+      "fallback_policy": {
+        "enabled": true,
+        "max_rank": 5
+      },
+      "lot_policy": {
+        "board_lot_size": 100,
+        "rounding": "floor_to_board_lot"
+      },
+      "cash_policy": {
+        "target_mode": "reserve_constrained",
+        "cash_reserve": 60000.0
+      },
+      "position_policy": {
+        "max_position_count": 5,
+        "max_position_pct": 0.3,
+        "same_symbol_exposure_cap": true
+      },
+      "exit_policy": {
+        "mechanical_horizon_exit": true,
+        "dynamic_exit_triggers": [],
+        "stop_loss_pct": null,
+        "take_profit_pct": null,
+        "trailing_stop_pct": null,
+        "trailing_activation_pct": null,
+        "price_basis": "daily_close"
+      }
+    },
+    {
+      "config_id": "ma_accel_volume_confirm_exit_seed_h10_v1__fixed_notional_40k_top5_h10_exit_baseline_v1",
+      "family": "fixed_notional_lot_rounding",
+      "status": "candidate",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "candidate_rank_limit": 5,
+      "fallback_policy": {
+        "enabled": true,
+        "max_rank": 5
+      },
+      "lot_policy": {
+        "board_lot_size": 100,
+        "rounding": "floor_to_board_lot"
+      },
+      "cash_policy": {
+        "target_mode": "fixed_notional",
+        "target_notional": 40000.0
+      },
+      "position_policy": {
+        "max_position_count": 5,
+        "max_position_pct": 0.35,
+        "same_symbol_exposure_cap": true
+      },
+      "exit_policy": {
+        "mechanical_horizon_exit": true,
+        "dynamic_exit_triggers": [],
+        "stop_loss_pct": null,
+        "take_profit_pct": null,
+        "trailing_stop_pct": null,
+        "trailing_activation_pct": null,
+        "price_basis": "daily_close"
+      }
+    },
+    {
+      "config_id": "ma_accel_volume_confirm_exit_seed_h10_v1__fixed_notional_45k_top5_h10_exit_baseline_v1",
+      "family": "fixed_notional_lot_rounding",
+      "status": "candidate",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "candidate_rank_limit": 5,
+      "fallback_policy": {
+        "enabled": true,
+        "max_rank": 5
+      },
+      "lot_policy": {
+        "board_lot_size": 100,
+        "rounding": "floor_to_board_lot"
+      },
+      "cash_policy": {
+        "target_mode": "fixed_notional",
+        "target_notional": 45000.0
+      },
+      "position_policy": {
+        "max_position_count": 5,
+        "max_position_pct": 0.35,
+        "same_symbol_exposure_cap": true
+      },
+      "exit_policy": {
+        "mechanical_horizon_exit": true,
+        "dynamic_exit_triggers": [],
+        "stop_loss_pct": null,
+        "take_profit_pct": null,
+        "trailing_stop_pct": null,
+        "trailing_activation_pct": null,
+        "price_basis": "daily_close"
+      }
+    },
+    {
+      "config_id": "ma_accel_volume_confirm_exit_seed_h10_v1__fixed_notional_40k_top5_stop8_h10_exit_v1",
+      "family": "fixed_notional_lot_rounding",
+      "status": "candidate",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "candidate_rank_limit": 5,
+      "fallback_policy": {
+        "enabled": true,
+        "max_rank": 5
+      },
+      "lot_policy": {
+        "board_lot_size": 100,
+        "rounding": "floor_to_board_lot"
+      },
+      "cash_policy": {
+        "target_mode": "fixed_notional",
+        "target_notional": 40000.0
+      },
+      "position_policy": {
+        "max_position_count": 5,
+        "max_position_pct": 0.35,
+        "same_symbol_exposure_cap": true
+      },
+      "exit_policy": {
+        "mechanical_horizon_exit": true,
+        "dynamic_exit_triggers": [
+          "stop_loss"
+        ],
+        "stop_loss_pct": 0.08,
+        "take_profit_pct": null,
+        "trailing_stop_pct": null,
+        "trailing_activation_pct": null,
+        "price_basis": "daily_close"
+      }
+    },
+    {
+      "config_id": "ma_accel_volume_confirm_exit_seed_h10_v1__fixed_notional_45k_top5_stop8_h10_exit_v1",
+      "family": "fixed_notional_lot_rounding",
+      "status": "candidate",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "candidate_rank_limit": 5,
+      "fallback_policy": {
+        "enabled": true,
+        "max_rank": 5
+      },
+      "lot_policy": {
+        "board_lot_size": 100,
+        "rounding": "floor_to_board_lot"
+      },
+      "cash_policy": {
+        "target_mode": "fixed_notional",
+        "target_notional": 45000.0
+      },
+      "position_policy": {
+        "max_position_count": 5,
+        "max_position_pct": 0.35,
+        "same_symbol_exposure_cap": true
+      },
+      "exit_policy": {
+        "mechanical_horizon_exit": true,
+        "dynamic_exit_triggers": [
+          "stop_loss"
+        ],
+        "stop_loss_pct": 0.08,
+        "take_profit_pct": null,
+        "trailing_stop_pct": null,
+        "trailing_activation_pct": null,
+        "price_basis": "daily_close"
+      }
+    },
+    {
+      "config_id": "ma_accel_volume_confirm_exit_seed_h10_v1__fixed_notional_40k_top5_stop8_take12_h10_exit_v1",
+      "family": "fixed_notional_lot_rounding",
+      "status": "candidate",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "candidate_rank_limit": 5,
+      "fallback_policy": {
+        "enabled": true,
+        "max_rank": 5
+      },
+      "lot_policy": {
+        "board_lot_size": 100,
+        "rounding": "floor_to_board_lot"
+      },
+      "cash_policy": {
+        "target_mode": "fixed_notional",
+        "target_notional": 40000.0
+      },
+      "position_policy": {
+        "max_position_count": 5,
+        "max_position_pct": 0.35,
+        "same_symbol_exposure_cap": true
+      },
+      "exit_policy": {
+        "mechanical_horizon_exit": true,
+        "dynamic_exit_triggers": [
+          "stop_loss",
+          "take_profit"
+        ],
+        "stop_loss_pct": 0.08,
+        "take_profit_pct": 0.12,
+        "trailing_stop_pct": null,
+        "trailing_activation_pct": null,
+        "price_basis": "daily_close"
+      }
+    },
+    {
+      "config_id": "ma_accel_volume_confirm_exit_seed_h10_v1__fixed_notional_45k_top5_stop8_take12_h10_exit_v1",
+      "family": "fixed_notional_lot_rounding",
+      "status": "candidate",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "candidate_rank_limit": 5,
+      "fallback_policy": {
+        "enabled": true,
+        "max_rank": 5
+      },
+      "lot_policy": {
+        "board_lot_size": 100,
+        "rounding": "floor_to_board_lot"
+      },
+      "cash_policy": {
+        "target_mode": "fixed_notional",
+        "target_notional": 45000.0
+      },
+      "position_policy": {
+        "max_position_count": 5,
+        "max_position_pct": 0.35,
+        "same_symbol_exposure_cap": true
+      },
+      "exit_policy": {
+        "mechanical_horizon_exit": true,
+        "dynamic_exit_triggers": [
+          "stop_loss",
+          "take_profit"
+        ],
+        "stop_loss_pct": 0.08,
+        "take_profit_pct": 0.12,
+        "trailing_stop_pct": null,
+        "trailing_activation_pct": null,
+        "price_basis": "daily_close"
+      }
+    },
+    {
+      "config_id": "ma_accel_volume_confirm_exit_seed_h10_v1__fixed_notional_40k_top5_stop8_trail6_after10_h10_exit_v1",
+      "family": "fixed_notional_lot_rounding",
+      "status": "candidate",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "candidate_rank_limit": 5,
+      "fallback_policy": {
+        "enabled": true,
+        "max_rank": 5
+      },
+      "lot_policy": {
+        "board_lot_size": 100,
+        "rounding": "floor_to_board_lot"
+      },
+      "cash_policy": {
+        "target_mode": "fixed_notional",
+        "target_notional": 40000.0
+      },
+      "position_policy": {
+        "max_position_count": 5,
+        "max_position_pct": 0.35,
+        "same_symbol_exposure_cap": true
+      },
+      "exit_policy": {
+        "mechanical_horizon_exit": true,
+        "dynamic_exit_triggers": [
+          "stop_loss",
+          "trailing_stop"
+        ],
+        "stop_loss_pct": 0.08,
+        "take_profit_pct": null,
+        "trailing_stop_pct": 0.06,
+        "trailing_activation_pct": 0.1,
+        "price_basis": "daily_close"
+      }
+    },
+    {
+      "config_id": "ma_accel_volume_confirm_exit_seed_h10_v1__fixed_notional_45k_top5_stop8_trail6_after10_h10_exit_v1",
+      "family": "fixed_notional_lot_rounding",
+      "status": "candidate",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "candidate_rank_limit": 5,
+      "fallback_policy": {
+        "enabled": true,
+        "max_rank": 5
+      },
+      "lot_policy": {
+        "board_lot_size": 100,
+        "rounding": "floor_to_board_lot"
+      },
+      "cash_policy": {
+        "target_mode": "fixed_notional",
+        "target_notional": 45000.0
+      },
+      "position_policy": {
+        "max_position_count": 5,
+        "max_position_pct": 0.35,
+        "same_symbol_exposure_cap": true
+      },
+      "exit_policy": {
+        "mechanical_horizon_exit": true,
+        "dynamic_exit_triggers": [
+          "stop_loss",
+          "trailing_stop"
+        ],
+        "stop_loss_pct": 0.08,
+        "take_profit_pct": null,
+        "trailing_stop_pct": 0.06,
+        "trailing_activation_pct": 0.1,
+        "price_basis": "daily_close"
+      }
+    }
+  ],
+  "results": [
+    {
+      "config_id": "top1_or_skip_v1",
+      "status": "ready",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 152,
+        "skip_count": 569,
+        "fallback_trade_count": 0,
+        "final_nav": 249399.8015,
+        "total_return": 0.246999,
+        "annualization_trade_day_count": 766,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.171445,
+        "max_drawdown": -0.316451,
+        "mean_invested_ratio": 0.475963,
+        "max_position_count": 5,
+        "turnover": 37.042828,
+        "final_cash": 249399.8015,
+        "final_market_value": 0,
+        "open_position_count": 0,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 152
+        },
+        "total_buy_value": 7408565.556,
+        "total_sell_value": 7457965.3575,
+        "skipped_ratio": 0.789182
+      },
+      "reason_counts": {
+        "action:buy_primary": 152,
+        "action:skip": 569,
+        "candidate_reject:board_lot_minimum": 55,
+        "candidate_reject:insufficient_cash": 77,
+        "candidate_reject:position_count_cap": 25,
+        "candidate_reject:position_value_cap": 90,
+        "exit:mechanical_horizon": 152,
+        "reason:board_lot_minimum": 55,
+        "reason:bought_primary": 152,
+        "reason:insufficient_cash": 77,
+        "reason:no_ranked_candidates": 322,
+        "reason:position_count_cap": 25,
+        "reason:position_value_cap": 90
+      },
+      "decision_samples": [
+        {
+          "signal_date": "2023-05-16",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601988.SH",
+          "cash_before": 200000.0,
+          "cash_after": 130140.56,
+          "quantity": 16800
+        },
+        {
+          "signal_date": "2023-05-17",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 130140.56,
+          "cash_after": 130140.56,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-18",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-19",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601288.SH",
+          "cash_before": 130140.56,
+          "cash_after": 60328.214,
+          "quantity": 19300
+        },
+        {
+          "signal_date": "2023-05-22",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601988.SH",
+          "cash_before": 60328.214,
+          "cash_after": 59923.406,
+          "quantity": 100
+        },
+        {
+          "signal_date": "2023-05-23",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601988.SH",
+          "cash_before": 59923.406,
+          "cash_after": 58754.072,
+          "quantity": 300
+        },
+        {
+          "signal_date": "2023-05-24",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-25",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-26",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601318.SH",
+          "cash_before": 58754.072,
+          "cash_after": 990.776,
+          "quantity": 1200
+        },
+        {
+          "signal_date": "2023-05-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-31",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-01",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-02",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-08",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-09",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-12",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601138.SH",
+          "cash_before": 195825.4685,
+          "cash_after": 127426.9445,
+          "quantity": 3100
+        },
+        {
+          "signal_date": "2023-06-13",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 127426.9445,
+          "cash_after": 127426.9445,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-14",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 127426.9445,
+          "cash_after": 127426.9445,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-15",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 127426.9445,
+          "cash_after": 127426.9445,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-16",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 127426.9445,
+          "cash_after": 127426.9445,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-20",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 127426.9445,
+          "cash_after": 127426.9445,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-21",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-27",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-28",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-30",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601138.SH",
+          "cash_before": 201022.4945,
+          "cash_after": 132650.0225,
+          "quantity": 2800
+        },
+        {
+          "signal_date": "2023-07-03",
+          "action": "skip",
+          "reason": "board_lot_minimum",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 132650.0225,
+          "cash_after": 132650.0225,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-04",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601138.SH",
+          "cash_before": 132650.0225,
+          "cash_after": 130259.2505,
+          "quantity": 100
+        },
+        {
+          "signal_date": "2023-07-05",
+          "action": "skip",
+          "reason": "board_lot_minimum",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 130259.2505,
+          "cash_after": 130259.2505,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-06",
+          "action": "skip",
+          "reason": "board_lot_minimum",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 130259.2505,
+          "cash_after": 130259.2505,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-07",
+          "action": "skip",
+          "reason": "board_lot_minimum",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 130259.2505,
+          "cash_after": 130259.2505,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-10",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 130259.2505,
+          "cash_after": 130259.2505,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-11",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601138.SH",
+          "cash_before": 130259.2505,
+          "cash_after": 128001.7445,
+          "quantity": 100
+        },
+        {
+          "signal_date": "2023-07-12",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "002475.SZ",
+          "cash_before": 128001.7445,
+          "cash_after": 59024.0645,
+          "quantity": 2000
+        }
+      ],
+      "detail_refs": {
+        "nav_timeline": "phase3-envelope-summary-only:nav_timeline_not_emitted",
+        "trades": "phase3-envelope-summary-only:trade_table_not_emitted",
+        "decisions": "phase3-envelope-summary-only:decision_samples_bounded"
+      }
+    },
+    {
+      "config_id": "top3_fallback_v1",
+      "status": "ready",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 209,
+        "skip_count": 512,
+        "fallback_trade_count": 101,
+        "final_nav": 191351.0015,
+        "total_return": -0.043245,
+        "annualization_trade_day_count": 766,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.461689,
+        "max_drawdown": -0.505369,
+        "mean_invested_ratio": 0.619518,
+        "max_position_count": 5,
+        "turnover": 35.848193,
+        "final_cash": 191351.0015,
+        "final_market_value": 0,
+        "open_position_count": 0,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 209
+        },
+        "total_buy_value": 7169638.656,
+        "total_sell_value": 7160989.6575,
+        "skipped_ratio": 0.710125
+      },
+      "reason_counts": {
+        "action:buy_fallback": 101,
+        "action:buy_primary": 108,
+        "action:skip": 512,
+        "candidate_reject:board_lot_minimum": 55,
+        "candidate_reject:insufficient_cash": 357,
+        "candidate_reject:position_count_cap": 210,
+        "candidate_reject:position_value_cap": 75,
+        "exit:mechanical_horizon": 209,
+        "reason:board_lot_minimum": 1,
+        "reason:bought_fallback": 101,
+        "reason:bought_primary": 108,
+        "reason:insufficient_cash": 88,
+        "reason:no_ranked_candidates": 322,
+        "reason:position_count_cap": 70,
+        "reason:position_value_cap": 31
+      },
+      "decision_samples": [
+        {
+          "signal_date": "2023-05-16",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601988.SH",
+          "cash_before": 200000.0,
+          "cash_after": 130140.56,
+          "quantity": 16800
+        },
+        {
+          "signal_date": "2023-05-17",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "601318.SH",
+          "cash_before": 130140.56,
+          "cash_after": 62639.828,
+          "quantity": 1300
+        },
+        {
+          "signal_date": "2023-05-18",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-19",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601288.SH",
+          "cash_before": 62639.828,
+          "cash_after": 61.922,
+          "quantity": 17300
+        },
+        {
+          "signal_date": "2023-05-22",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 61.922,
+          "cash_after": 61.922,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-23",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 61.922,
+          "cash_after": 61.922,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-24",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-25",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-26",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 61.922,
+          "cash_after": 61.922,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-31",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-01",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-02",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-08",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-09",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-12",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601138.SH",
+          "cash_before": 188382.9395,
+          "cash_after": 124397.2235,
+          "quantity": 2900
+        },
+        {
+          "signal_date": "2023-06-13",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "002602.SZ",
+          "cash_before": 124397.2235,
+          "cash_after": 58000.6955,
+          "quantity": 8800
+        },
+        {
+          "signal_date": "2023-06-14",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "000858.SZ",
+          "cash_before": 58000.6955,
+          "cash_after": 3291.4955,
+          "quantity": 300
+        },
+        {
+          "signal_date": "2023-06-15",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 3291.4955,
+          "cash_after": 3291.4955,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-16",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 3291.4955,
+          "cash_after": 3291.4955,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-20",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 3291.4955,
+          "cash_after": 3291.4955,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-21",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-27",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-28",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-30",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601138.SH",
+          "cash_before": 188846.4455,
+          "cash_after": 122915.8475,
+          "quantity": 2700
+        },
+        {
+          "signal_date": "2023-07-03",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "000333.SZ",
+          "cash_before": 122915.8475,
+          "cash_after": 57996.2675,
+          "quantity": 1100
+        },
+        {
+          "signal_date": "2023-07-04",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "000063.SZ",
+          "cash_before": 57996.2675,
+          "cash_after": 1150.8035,
+          "quantity": 1300
+        },
+        {
+          "signal_date": "2023-07-05",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 1150.8035,
+          "cash_after": 1150.8035,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-06",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 1150.8035,
+          "cash_after": 1150.8035,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-07",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "601600.SH",
+          "cash_before": 1150.8035,
+          "cash_after": 563.6315,
+          "quantity": 100
+        },
+        {
+          "signal_date": "2023-07-10",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 563.6315,
+          "cash_after": 563.6315,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-11",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 563.6315,
+          "cash_after": 563.6315,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-12",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 563.6315,
+          "cash_after": 563.6315,
+          "quantity": 0
+        }
+      ],
+      "detail_refs": {
+        "nav_timeline": "phase3-envelope-summary-only:nav_timeline_not_emitted",
+        "trades": "phase3-envelope-summary-only:trade_table_not_emitted",
+        "decisions": "phase3-envelope-summary-only:decision_samples_bounded"
+      }
+    },
+    {
+      "config_id": "fixed_notional_40k_top5_v1",
+      "status": "ready",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 240,
+        "skip_count": 481,
+        "fallback_trade_count": 66,
+        "final_nav": 251348.9105,
+        "total_return": 0.256745,
+        "annualization_trade_day_count": 766,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.161699,
+        "max_drawdown": -0.259999,
+        "mean_invested_ratio": 0.489518,
+        "max_position_count": 5,
+        "turnover": 36.947327,
+        "final_cash": 251348.9105,
+        "final_market_value": 0,
+        "open_position_count": 0,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 240
+        },
+        "total_buy_value": 7389465.432,
+        "total_sell_value": 7440814.3425,
+        "skipped_ratio": 0.667129
+      },
+      "reason_counts": {
+        "action:buy_fallback": 66,
+        "action:buy_primary": 174,
+        "action:skip": 481,
+        "candidate_reject:board_lot_minimum": 28,
+        "candidate_reject:insufficient_cash": 17,
+        "candidate_reject:position_count_cap": 795,
+        "candidate_reject:position_value_cap": 29,
+        "exit:mechanical_horizon": 240,
+        "reason:bought_fallback": 66,
+        "reason:bought_primary": 174,
+        "reason:no_ranked_candidates": 322,
+        "reason:position_count_cap": 159
+      },
+      "decision_samples": [
+        {
+          "signal_date": "2023-05-16",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601988.SH",
+          "cash_before": 200000.0,
+          "cash_after": 160080.32,
+          "quantity": 9600
+        },
+        {
+          "signal_date": "2023-05-17",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601988.SH",
+          "cash_before": 160080.32,
+          "cash_after": 130551.38,
+          "quantity": 7000
+        },
+        {
+          "signal_date": "2023-05-18",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-19",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601288.SH",
+          "cash_before": 130551.38,
+          "cash_after": 90761.96,
+          "quantity": 11000
+        },
+        {
+          "signal_date": "2023-05-22",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601988.SH",
+          "cash_before": 90761.96,
+          "cash_after": 89142.728,
+          "quantity": 400
+        },
+        {
+          "signal_date": "2023-05-23",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601988.SH",
+          "cash_before": 89142.728,
+          "cash_after": 87973.394,
+          "quantity": 300
+        },
+        {
+          "signal_date": "2023-05-24",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-25",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-26",
+          "action": "skip",
+          "reason": "position_count_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 87973.394,
+          "cash_after": 87973.394,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-31",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-01",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-02",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-08",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-09",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-12",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601138.SH",
+          "cash_before": 194484.449,
+          "cash_after": 154769.177,
+          "quantity": 1800
+        },
+        {
+          "signal_date": "2023-06-13",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601138.SH",
+          "cash_before": 154769.177,
+          "cash_after": 127366.481,
+          "quantity": 1200
+        },
+        {
+          "signal_date": "2023-06-14",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "000858.SZ",
+          "cash_before": 127366.481,
+          "cash_after": 90893.681,
+          "quantity": 200
+        },
+        {
+          "signal_date": "2023-06-15",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "000858.SZ",
+          "cash_before": 90893.681,
+          "cash_after": 72448.865,
+          "quantity": 100
+        },
+        {
+          "signal_date": "2023-06-16",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 3,
+          "symbol": "000858.SZ",
+          "cash_before": 72448.865,
+          "cash_after": 54659.357,
+          "quantity": 100
+        },
+        {
+          "signal_date": "2023-06-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-20",
+          "action": "skip",
+          "reason": "position_count_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 54659.357,
+          "cash_after": 54659.357,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-21",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-27",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-28",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-30",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601138.SH",
+          "cash_before": 160944.977,
+          "cash_after": 121874.993,
+          "quantity": 1600
+        },
+        {
+          "signal_date": "2023-07-03",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601138.SH",
+          "cash_before": 138654.938,
+          "cash_after": 111562.862,
+          "quantity": 1100
+        },
+        {
+          "signal_date": "2023-07-04",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601138.SH",
+          "cash_before": 128059.517,
+          "cash_after": 125668.745,
+          "quantity": 100
+        },
+        {
+          "signal_date": "2023-07-05",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "002475.SZ",
+          "cash_before": 125668.745,
+          "cash_after": 85688.945,
+          "quantity": 1200
+        },
+        {
+          "signal_date": "2023-07-06",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "002475.SZ",
+          "cash_before": 85688.945,
+          "cash_after": 58987.649,
+          "quantity": 800
+        },
+        {
+          "signal_date": "2023-07-07",
+          "action": "skip",
+          "reason": "position_count_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 58987.649,
+          "cash_after": 58987.649,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-10",
+          "action": "skip",
+          "reason": "position_count_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 58987.649,
+          "cash_after": 58987.649,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-11",
+          "action": "skip",
+          "reason": "position_count_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 58987.649,
+          "cash_after": 58987.649,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-12",
+          "action": "skip",
+          "reason": "position_count_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 58987.649,
+          "cash_after": 58987.649,
+          "quantity": 0
+        }
+      ],
+      "detail_refs": {
+        "nav_timeline": "phase3-envelope-summary-only:nav_timeline_not_emitted",
+        "trades": "phase3-envelope-summary-only:trade_table_not_emitted",
+        "decisions": "phase3-envelope-summary-only:decision_samples_bounded"
+      }
+    },
+    {
+      "config_id": "position_cap_utilization_top5_v1",
+      "status": "ready",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 216,
+        "skip_count": 505,
+        "fallback_trade_count": 108,
+        "final_nav": 252566.3405,
+        "total_return": 0.262832,
+        "annualization_trade_day_count": 766,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.155612,
+        "max_drawdown": -0.441008,
+        "mean_invested_ratio": 0.629064,
+        "max_position_count": 5,
+        "turnover": 41.232405,
+        "final_cash": 252566.3405,
+        "final_market_value": 0,
+        "open_position_count": 0,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 216
+        },
+        "total_buy_value": 8246481.042,
+        "total_sell_value": 8299047.3825,
+        "skipped_ratio": 0.700416
+      },
+      "reason_counts": {
+        "action:buy_fallback": 108,
+        "action:buy_primary": 108,
+        "action:skip": 505,
+        "candidate_reject:board_lot_minimum": 46,
+        "candidate_reject:insufficient_cash": 484,
+        "candidate_reject:limit_up_unfillable": 1,
+        "candidate_reject:position_count_cap": 475,
+        "candidate_reject:position_value_cap": 63,
+        "exit:mechanical_horizon": 216,
+        "reason:bought_fallback": 108,
+        "reason:bought_primary": 108,
+        "reason:insufficient_cash": 74,
+        "reason:no_ranked_candidates": 322,
+        "reason:position_count_cap": 95,
+        "reason:position_value_cap": 14
+      },
+      "decision_samples": [
+        {
+          "signal_date": "2023-05-16",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601988.SH",
+          "cash_before": 200000.0,
+          "cash_after": 130140.56,
+          "quantity": 16800
+        },
+        {
+          "signal_date": "2023-05-17",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "601318.SH",
+          "cash_before": 130140.56,
+          "cash_after": 62639.828,
+          "quantity": 1300
+        },
+        {
+          "signal_date": "2023-05-18",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-19",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601288.SH",
+          "cash_before": 62639.828,
+          "cash_after": 61.922,
+          "quantity": 17300
+        },
+        {
+          "signal_date": "2023-05-22",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 61.922,
+          "cash_after": 61.922,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-23",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 61.922,
+          "cash_after": 61.922,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-24",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-25",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-26",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 61.922,
+          "cash_after": 61.922,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-31",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-01",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-02",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-08",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-09",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-12",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601138.SH",
+          "cash_before": 188382.9395,
+          "cash_after": 124397.2235,
+          "quantity": 2900
+        },
+        {
+          "signal_date": "2023-06-13",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "002602.SZ",
+          "cash_before": 124397.2235,
+          "cash_after": 58000.6955,
+          "quantity": 8800
+        },
+        {
+          "signal_date": "2023-06-14",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "000858.SZ",
+          "cash_before": 58000.6955,
+          "cash_after": 3291.4955,
+          "quantity": 300
+        },
+        {
+          "signal_date": "2023-06-15",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 3291.4955,
+          "cash_after": 3291.4955,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-16",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 4,
+          "symbol": "601899.SH",
+          "cash_before": 3291.4955,
+          "cash_after": 924.7715,
+          "quantity": 200
+        },
+        {
+          "signal_date": "2023-06-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-20",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 924.7715,
+          "cash_after": 924.7715,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-21",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-27",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-28",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-30",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601138.SH",
+          "cash_before": 186479.7215,
+          "cash_after": 120549.1235,
+          "quantity": 2700
+        },
+        {
+          "signal_date": "2023-07-03",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "000333.SZ",
+          "cash_before": 120549.1235,
+          "cash_after": 55629.5435,
+          "quantity": 1100
+        },
+        {
+          "signal_date": "2023-07-04",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "000063.SZ",
+          "cash_before": 57983.6435,
+          "cash_after": 1138.1795,
+          "quantity": 1300
+        },
+        {
+          "signal_date": "2023-07-05",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 1138.1795,
+          "cash_after": 1138.1795,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-06",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 1138.1795,
+          "cash_after": 1138.1795,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-07",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "601600.SH",
+          "cash_before": 1138.1795,
+          "cash_after": 551.0075,
+          "quantity": 100
+        },
+        {
+          "signal_date": "2023-07-10",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 551.0075,
+          "cash_after": 551.0075,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-11",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 551.0075,
+          "cash_after": 551.0075,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-12",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 551.0075,
+          "cash_after": 551.0075,
+          "quantity": 0
+        }
+      ],
+      "detail_refs": {
+        "nav_timeline": "phase3-envelope-summary-only:nav_timeline_not_emitted",
+        "trades": "phase3-envelope-summary-only:trade_table_not_emitted",
+        "decisions": "phase3-envelope-summary-only:decision_samples_bounded"
+      }
+    },
+    {
+      "config_id": "conservative_cash_reserve_60k_top5_v1",
+      "status": "ready",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 209,
+        "skip_count": 512,
+        "fallback_trade_count": 91,
+        "final_nav": 252812.1365,
+        "total_return": 0.264061,
+        "annualization_trade_day_count": 766,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.154383,
+        "max_drawdown": -0.334271,
+        "mean_invested_ratio": 0.443472,
+        "max_position_count": 5,
+        "turnover": 32.378643,
+        "final_cash": 252812.1365,
+        "final_market_value": 0,
+        "open_position_count": 0,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 209
+        },
+        "total_buy_value": 6475728.606,
+        "total_sell_value": 6528540.7425,
+        "skipped_ratio": 0.710125
+      },
+      "reason_counts": {
+        "action:buy_fallback": 91,
+        "action:buy_primary": 118,
+        "action:skip": 512,
+        "candidate_reject:board_lot_minimum": 33,
+        "candidate_reject:insufficient_cash": 625,
+        "candidate_reject:limit_up_unfillable": 1,
+        "candidate_reject:position_count_cap": 350,
+        "candidate_reject:position_value_cap": 79,
+        "exit:mechanical_horizon": 209,
+        "reason:board_lot_minimum": 2,
+        "reason:bought_fallback": 91,
+        "reason:bought_primary": 118,
+        "reason:insufficient_cash": 95,
+        "reason:no_ranked_candidates": 322,
+        "reason:position_count_cap": 70,
+        "reason:position_value_cap": 23
+      },
+      "decision_samples": [
+        {
+          "signal_date": "2023-05-16",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601988.SH",
+          "cash_before": 200000.0,
+          "cash_after": 140120.48,
+          "quantity": 14400
+        },
+        {
+          "signal_date": "2023-05-17",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "601318.SH",
+          "cash_before": 140120.48,
+          "cash_after": 83004.476,
+          "quantity": 1100
+        },
+        {
+          "signal_date": "2023-05-18",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-19",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601288.SH",
+          "cash_before": 83004.476,
+          "cash_after": 60215.99,
+          "quantity": 6300
+        },
+        {
+          "signal_date": "2023-05-22",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 60215.99,
+          "cash_after": 60215.99,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-23",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 60215.99,
+          "cash_after": 60215.99,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-24",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-25",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-26",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 60215.99,
+          "cash_after": 60215.99,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-31",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-01",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-02",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-08",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-09",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-12",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601138.SH",
+          "cash_before": 190672.0325,
+          "cash_after": 135511.9325,
+          "quantity": 2500
+        },
+        {
+          "signal_date": "2023-06-13",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "002602.SZ",
+          "cash_before": 135511.9325,
+          "cash_after": 78169.4765,
+          "quantity": 7600
+        },
+        {
+          "signal_date": "2023-06-14",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 4,
+          "symbol": "603000.SH",
+          "cash_before": 78169.4765,
+          "cash_after": 60960.1265,
+          "quantity": 500
+        },
+        {
+          "signal_date": "2023-06-15",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 60960.1265,
+          "cash_after": 60960.1265,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-16",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 60960.1265,
+          "cash_after": 60960.1265,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-20",
+          "action": "skip",
+          "reason": "position_value_cap",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 60960.1265,
+          "cash_after": 60960.1265,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-21",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-27",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-28",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-30",
+          "action": "buy_primary",
+          "reason": "bought_primary",
+          "selected_rank": 1,
+          "symbol": "601138.SH",
+          "cash_before": 191965.7915,
+          "cash_after": 135802.6895,
+          "quantity": 2300
+        },
+        {
+          "signal_date": "2023-07-03",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "000333.SZ",
+          "cash_before": 135802.6895,
+          "cash_after": 82686.6695,
+          "quantity": 900
+        },
+        {
+          "signal_date": "2023-07-04",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "000063.SZ",
+          "cash_before": 82686.6695,
+          "cash_after": 60823.0295,
+          "quantity": 500
+        },
+        {
+          "signal_date": "2023-07-05",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 60823.0295,
+          "cash_after": 60823.0295,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-06",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 60823.0295,
+          "cash_after": 60823.0295,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-07",
+          "action": "buy_fallback",
+          "reason": "bought_fallback",
+          "selected_rank": 2,
+          "symbol": "601600.SH",
+          "cash_before": 60823.0295,
+          "cash_after": 60235.8575,
+          "quantity": 100
+        },
+        {
+          "signal_date": "2023-07-10",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 60235.8575,
+          "cash_after": 60235.8575,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-11",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 60235.8575,
+          "cash_after": 60235.8575,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-12",
+          "action": "skip",
+          "reason": "insufficient_cash",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 60235.8575,
+          "cash_after": 60235.8575,
+          "quantity": 0
+        }
+      ],
+      "detail_refs": {
+        "nav_timeline": "phase3-envelope-summary-only:nav_timeline_not_emitted",
+        "trades": "phase3-envelope-summary-only:trade_table_not_emitted",
+        "decisions": "phase3-envelope-summary-only:decision_samples_bounded"
+      }
+    },
+    {
+      "config_id": "ma_accel_volume_confirm_exit_seed_h10_v1__fixed_notional_40k_top5_h10_exit_baseline_v1",
+      "status": "ready",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 176,
+        "skip_count": 545,
+        "fallback_trade_count": 0,
+        "final_nav": 387157.226,
+        "total_return": 0.935786,
+        "annualization_trade_day_count": 766,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 0.517342,
+        "max_drawdown": -0.221433,
+        "mean_invested_ratio": 0.335126,
+        "max_position_count": 5,
+        "turnover": 34.116883,
+        "final_cash": 387157.226,
+        "final_market_value": 0,
+        "open_position_count": 0,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 176
+        },
+        "total_buy_value": 6823376.514,
+        "total_sell_value": 7010533.74,
+        "skipped_ratio": 0.755895
+      },
+      "reason_counts": {
+        "action:buy_primary": 176,
+        "action:skip": 545,
+        "candidate_reject:limit_up_unfillable": 1,
+        "candidate_reject:position_count_cap": 315,
+        "exit:mechanical_horizon": 176,
+        "reason:bought_primary": 176,
+        "reason:limit_up_unfillable": 1,
+        "reason:no_ranked_candidates": 448,
+        "reason:position_count_cap": 96
+      },
+      "decision_samples": [
+        {
+          "signal_date": "2023-05-16",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-17",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-18",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-22",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-23",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-24",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-25",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-31",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-01",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-02",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-08",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-09",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-12",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-13",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-14",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-15",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-16",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-20",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-21",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-27",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-28",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-03",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-04",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-10",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-11",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-12",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        }
+      ],
+      "detail_refs": {
+        "nav_timeline": "phase3-envelope-summary-only:nav_timeline_not_emitted",
+        "trades": "phase3-envelope-summary-only:trade_table_not_emitted",
+        "decisions": "phase3-envelope-summary-only:decision_samples_bounded"
+      }
+    },
+    {
+      "config_id": "ma_accel_volume_confirm_exit_seed_h10_v1__fixed_notional_45k_top5_h10_exit_baseline_v1",
+      "status": "ready",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 176,
+        "skip_count": 545,
+        "fallback_trade_count": 0,
+        "final_nav": 387614.66,
+        "total_return": 0.938073,
+        "annualization_trade_day_count": 766,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 0.519629,
+        "max_drawdown": -0.242273,
+        "mean_invested_ratio": 0.374429,
+        "max_position_count": 5,
+        "turnover": 37.825475,
+        "final_cash": 387614.66,
+        "final_market_value": 0,
+        "open_position_count": 0,
+        "blocked_exit_count": 0,
+        "dynamic_exit_count": 0,
+        "exit_reason_counts": {
+          "mechanical_horizon": 176
+        },
+        "total_buy_value": 7565094.99,
+        "total_sell_value": 7752709.65,
+        "skipped_ratio": 0.755895
+      },
+      "reason_counts": {
+        "action:buy_primary": 176,
+        "action:skip": 545,
+        "candidate_reject:limit_up_unfillable": 1,
+        "candidate_reject:position_count_cap": 315,
+        "exit:mechanical_horizon": 176,
+        "reason:bought_primary": 176,
+        "reason:limit_up_unfillable": 1,
+        "reason:no_ranked_candidates": 448,
+        "reason:position_count_cap": 96
+      },
+      "decision_samples": [
+        {
+          "signal_date": "2023-05-16",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-17",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-18",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-22",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-23",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-24",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-25",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-31",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-01",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-02",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-08",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-09",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-12",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-13",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-14",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-15",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-16",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-20",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-21",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-27",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-28",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-03",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-04",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-10",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-11",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-12",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        }
+      ],
+      "detail_refs": {
+        "nav_timeline": "phase3-envelope-summary-only:nav_timeline_not_emitted",
+        "trades": "phase3-envelope-summary-only:trade_table_not_emitted",
+        "decisions": "phase3-envelope-summary-only:decision_samples_bounded"
+      }
+    },
+    {
+      "config_id": "ma_accel_volume_confirm_exit_seed_h10_v1__fixed_notional_40k_top5_stop8_h10_exit_v1",
+      "status": "ready",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 191,
+        "skip_count": 530,
+        "fallback_trade_count": 1,
+        "final_nav": 333683.0195,
+        "total_return": 0.668415,
+        "annualization_trade_day_count": 766,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 0.249971,
+        "max_drawdown": -0.286519,
+        "mean_invested_ratio": 0.347676,
+        "max_position_count": 5,
+        "turnover": 36.83354,
+        "final_cash": 333683.0195,
+        "final_market_value": 0,
+        "open_position_count": 0,
+        "blocked_exit_count": 1,
+        "dynamic_exit_count": 54,
+        "exit_reason_counts": {
+          "mechanical_horizon": 137,
+          "stop_loss": 54
+        },
+        "total_buy_value": 7366708.008,
+        "total_sell_value": 7500391.0275,
+        "skipped_ratio": 0.73509
+      },
+      "reason_counts": {
+        "action:buy_fallback": 1,
+        "action:buy_primary": 190,
+        "action:skip": 530,
+        "blocked_exit:limit_down": 1,
+        "candidate_reject:board_lot_minimum": 1,
+        "candidate_reject:limit_up_unfillable": 1,
+        "candidate_reject:position_count_cap": 264,
+        "exit:mechanical_horizon": 137,
+        "exit:stop_loss": 54,
+        "reason:bought_fallback": 1,
+        "reason:bought_primary": 190,
+        "reason:limit_up_unfillable": 1,
+        "reason:no_ranked_candidates": 448,
+        "reason:position_count_cap": 81
+      },
+      "decision_samples": [
+        {
+          "signal_date": "2023-05-16",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-17",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-18",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-22",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-23",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-24",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-25",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-31",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-01",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-02",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-08",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-09",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-12",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-13",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-14",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-15",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-16",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-20",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-21",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-27",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-28",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-03",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-04",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-10",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-11",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-12",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        }
+      ],
+      "detail_refs": {
+        "nav_timeline": "phase3-envelope-summary-only:nav_timeline_not_emitted",
+        "trades": "phase3-envelope-summary-only:trade_table_not_emitted",
+        "decisions": "phase3-envelope-summary-only:decision_samples_bounded"
+      }
+    },
+    {
+      "config_id": "ma_accel_volume_confirm_exit_seed_h10_v1__fixed_notional_45k_top5_stop8_h10_exit_v1",
+      "status": "ready",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 191,
+        "skip_count": 530,
+        "fallback_trade_count": 1,
+        "final_nav": 327658.541,
+        "total_return": 0.638293,
+        "annualization_trade_day_count": 766,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 0.219849,
+        "max_drawdown": -0.313545,
+        "mean_invested_ratio": 0.386341,
+        "max_position_count": 5,
+        "turnover": 40.212474,
+        "final_cash": 327658.541,
+        "final_market_value": 0,
+        "open_position_count": 0,
+        "blocked_exit_count": 1,
+        "dynamic_exit_count": 54,
+        "exit_reason_counts": {
+          "mechanical_horizon": 137,
+          "stop_loss": 54
+        },
+        "total_buy_value": 8042494.884,
+        "total_sell_value": 8170153.425,
+        "skipped_ratio": 0.73509
+      },
+      "reason_counts": {
+        "action:buy_fallback": 1,
+        "action:buy_primary": 190,
+        "action:skip": 530,
+        "blocked_exit:limit_down": 1,
+        "candidate_reject:board_lot_minimum": 1,
+        "candidate_reject:limit_up_unfillable": 1,
+        "candidate_reject:position_count_cap": 264,
+        "exit:mechanical_horizon": 137,
+        "exit:stop_loss": 54,
+        "reason:bought_fallback": 1,
+        "reason:bought_primary": 190,
+        "reason:limit_up_unfillable": 1,
+        "reason:no_ranked_candidates": 448,
+        "reason:position_count_cap": 81
+      },
+      "decision_samples": [
+        {
+          "signal_date": "2023-05-16",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-17",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-18",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-22",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-23",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-24",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-25",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-31",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-01",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-02",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-08",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-09",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-12",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-13",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-14",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-15",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-16",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-20",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-21",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-27",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-28",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-03",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-04",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-10",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-11",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-12",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        }
+      ],
+      "detail_refs": {
+        "nav_timeline": "phase3-envelope-summary-only:nav_timeline_not_emitted",
+        "trades": "phase3-envelope-summary-only:trade_table_not_emitted",
+        "decisions": "phase3-envelope-summary-only:decision_samples_bounded"
+      }
+    },
+    {
+      "config_id": "ma_accel_volume_confirm_exit_seed_h10_v1__fixed_notional_40k_top5_stop8_take12_h10_exit_v1",
+      "status": "ready",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 205,
+        "skip_count": 516,
+        "fallback_trade_count": 2,
+        "final_nav": 214560.3305,
+        "total_return": 0.072802,
+        "annualization_trade_day_count": 766,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.345642,
+        "max_drawdown": -0.352488,
+        "mean_invested_ratio": 0.401004,
+        "max_position_count": 5,
+        "turnover": 35.956474,
+        "final_cash": 214560.3305,
+        "final_market_value": 0,
+        "open_position_count": 0,
+        "blocked_exit_count": 1,
+        "dynamic_exit_count": 102,
+        "exit_reason_counts": {
+          "mechanical_horizon": 103,
+          "stop_loss": 59,
+          "take_profit": 43
+        },
+        "total_buy_value": 7191294.882,
+        "total_sell_value": 7205855.2125,
+        "skipped_ratio": 0.715673
+      },
+      "reason_counts": {
+        "action:buy_fallback": 2,
+        "action:buy_primary": 203,
+        "action:skip": 516,
+        "blocked_exit:limit_down": 1,
+        "candidate_reject:board_lot_minimum": 1,
+        "candidate_reject:insufficient_cash": 7,
+        "candidate_reject:limit_up_unfillable": 1,
+        "candidate_reject:position_count_cap": 210,
+        "exit:mechanical_horizon": 103,
+        "exit:stop_loss": 59,
+        "exit:take_profit": 43,
+        "reason:bought_fallback": 2,
+        "reason:bought_primary": 203,
+        "reason:insufficient_cash": 3,
+        "reason:limit_up_unfillable": 1,
+        "reason:no_ranked_candidates": 448,
+        "reason:position_count_cap": 64
+      },
+      "decision_samples": [
+        {
+          "signal_date": "2023-05-16",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-17",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-18",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-22",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-23",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-24",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-25",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-31",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-01",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-02",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-08",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-09",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-12",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-13",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-14",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-15",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-16",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-20",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-21",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-27",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-28",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-03",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-04",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-10",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-11",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-12",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        }
+      ],
+      "detail_refs": {
+        "nav_timeline": "phase3-envelope-summary-only:nav_timeline_not_emitted",
+        "trades": "phase3-envelope-summary-only:trade_table_not_emitted",
+        "decisions": "phase3-envelope-summary-only:decision_samples_bounded"
+      }
+    },
+    {
+      "config_id": "ma_accel_volume_confirm_exit_seed_h10_v1__fixed_notional_45k_top5_stop8_take12_h10_exit_v1",
+      "status": "ready",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 203,
+        "skip_count": 518,
+        "fallback_trade_count": 3,
+        "final_nav": 190431.6695,
+        "total_return": -0.047842,
+        "annualization_trade_day_count": 766,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": -0.466286,
+        "max_drawdown": -0.415054,
+        "mean_invested_ratio": 0.426879,
+        "max_position_count": 5,
+        "turnover": 35.305841,
+        "final_cash": 190431.6695,
+        "final_market_value": 0,
+        "open_position_count": 0,
+        "blocked_exit_count": 1,
+        "dynamic_exit_count": 103,
+        "exit_reason_counts": {
+          "mechanical_horizon": 100,
+          "stop_loss": 61,
+          "take_profit": 42
+        },
+        "total_buy_value": 7061168.148,
+        "total_sell_value": 7051599.8175,
+        "skipped_ratio": 0.718447
+      },
+      "reason_counts": {
+        "action:buy_fallback": 3,
+        "action:buy_primary": 200,
+        "action:skip": 518,
+        "blocked_exit:limit_down": 1,
+        "candidate_reject:board_lot_minimum": 1,
+        "candidate_reject:insufficient_cash": 29,
+        "candidate_reject:limit_up_unfillable": 1,
+        "candidate_reject:position_count_cap": 192,
+        "exit:mechanical_horizon": 100,
+        "exit:stop_loss": 61,
+        "exit:take_profit": 42,
+        "reason:bought_fallback": 3,
+        "reason:bought_primary": 200,
+        "reason:insufficient_cash": 10,
+        "reason:limit_up_unfillable": 1,
+        "reason:no_ranked_candidates": 448,
+        "reason:position_count_cap": 59
+      },
+      "decision_samples": [
+        {
+          "signal_date": "2023-05-16",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-17",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-18",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-22",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-23",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-24",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-25",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-31",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-01",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-02",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-08",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-09",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-12",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-13",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-14",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-15",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-16",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-20",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-21",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-27",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-28",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-03",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-04",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-10",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-11",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-12",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        }
+      ],
+      "detail_refs": {
+        "nav_timeline": "phase3-envelope-summary-only:nav_timeline_not_emitted",
+        "trades": "phase3-envelope-summary-only:trade_table_not_emitted",
+        "decisions": "phase3-envelope-summary-only:decision_samples_bounded"
+      }
+    },
+    {
+      "config_id": "ma_accel_volume_confirm_exit_seed_h10_v1__fixed_notional_40k_top5_stop8_trail6_after10_h10_exit_v1",
+      "status": "ready",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 196,
+        "skip_count": 525,
+        "fallback_trade_count": 0,
+        "final_nav": 295690.6685,
+        "total_return": 0.478453,
+        "annualization_trade_day_count": 766,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 0.060009,
+        "max_drawdown": -0.32211,
+        "mean_invested_ratio": 0.365471,
+        "max_position_count": 5,
+        "turnover": 37.365016,
+        "final_cash": 295690.6685,
+        "final_market_value": 0,
+        "open_position_count": 0,
+        "blocked_exit_count": 1,
+        "dynamic_exit_count": 77,
+        "exit_reason_counts": {
+          "mechanical_horizon": 119,
+          "stop_loss": 54,
+          "trailing_stop": 23
+        },
+        "total_buy_value": 7473003.174,
+        "total_sell_value": 7568693.8425,
+        "skipped_ratio": 0.728155
+      },
+      "reason_counts": {
+        "action:buy_primary": 196,
+        "action:skip": 525,
+        "blocked_exit:limit_down": 1,
+        "candidate_reject:limit_up_unfillable": 1,
+        "candidate_reject:position_count_cap": 253,
+        "exit:mechanical_horizon": 119,
+        "exit:stop_loss": 54,
+        "exit:trailing_stop": 23,
+        "reason:bought_primary": 196,
+        "reason:limit_up_unfillable": 1,
+        "reason:no_ranked_candidates": 448,
+        "reason:position_count_cap": 76
+      },
+      "decision_samples": [
+        {
+          "signal_date": "2023-05-16",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-17",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-18",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-22",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-23",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-24",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-25",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-31",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-01",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-02",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-08",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-09",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-12",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-13",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-14",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-15",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-16",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-20",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-21",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-27",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-28",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-03",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-04",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-10",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-11",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-12",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        }
+      ],
+      "detail_refs": {
+        "nav_timeline": "phase3-envelope-summary-only:nav_timeline_not_emitted",
+        "trades": "phase3-envelope-summary-only:trade_table_not_emitted",
+        "decisions": "phase3-envelope-summary-only:decision_samples_bounded"
+      }
+    },
+    {
+      "config_id": "ma_accel_volume_confirm_exit_seed_h10_v1__fixed_notional_45k_top5_stop8_trail6_after10_h10_exit_v1",
+      "status": "ready",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 195,
+        "skip_count": 526,
+        "fallback_trade_count": 0,
+        "final_nav": 284632.4585,
+        "total_return": 0.423162,
+        "annualization_trade_day_count": 766,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 0.004718,
+        "max_drawdown": -0.353294,
+        "mean_invested_ratio": 0.401915,
+        "max_position_count": 5,
+        "turnover": 39.688203,
+        "final_cash": 284632.4585,
+        "final_market_value": 0,
+        "open_position_count": 0,
+        "blocked_exit_count": 1,
+        "dynamic_exit_count": 76,
+        "exit_reason_counts": {
+          "mechanical_horizon": 119,
+          "stop_loss": 54,
+          "trailing_stop": 22
+        },
+        "total_buy_value": 7937640.594,
+        "total_sell_value": 8022273.0525,
+        "skipped_ratio": 0.729542
+      },
+      "reason_counts": {
+        "action:buy_primary": 195,
+        "action:skip": 526,
+        "blocked_exit:limit_down": 1,
+        "candidate_reject:insufficient_cash": 14,
+        "candidate_reject:limit_up_unfillable": 1,
+        "candidate_reject:position_count_cap": 240,
+        "exit:mechanical_horizon": 119,
+        "exit:stop_loss": 54,
+        "exit:trailing_stop": 22,
+        "reason:bought_primary": 195,
+        "reason:insufficient_cash": 6,
+        "reason:limit_up_unfillable": 1,
+        "reason:no_ranked_candidates": 448,
+        "reason:position_count_cap": 71
+      },
+      "decision_samples": [
+        {
+          "signal_date": "2023-05-16",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-17",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-18",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-22",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-23",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-24",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-25",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-05-31",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-01",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-02",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-08",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-09",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-12",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-13",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-14",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-15",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-16",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-19",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-20",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-21",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-26",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-27",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-28",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-29",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-06-30",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-03",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-04",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-05",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-06",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-07",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-10",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-11",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        },
+        {
+          "signal_date": "2023-07-12",
+          "action": "skip",
+          "reason": "no_ranked_candidates",
+          "selected_rank": null,
+          "symbol": null,
+          "cash_before": 200000.0,
+          "cash_after": 200000.0,
+          "quantity": 0
+        }
+      ],
+      "detail_refs": {
+        "nav_timeline": "phase3-envelope-summary-only:nav_timeline_not_emitted",
+        "trades": "phase3-envelope-summary-only:trade_table_not_emitted",
+        "decisions": "phase3-envelope-summary-only:decision_samples_bounded"
+      }
+    }
+  ],
+  "promotion_gate": {
+    "status": "not_evaluated",
+    "claim_ceiling": "research_observation",
+    "criteria": [
+      "Historical replay artifact exists and validates against the v1 schema.",
+      "A later phase must select a bounded governed subset before paper tracking.",
+      "Forward v2 paper tracking is required before any paper_tracking_candidate claim."
+    ],
+    "blocking_reasons": [
+      "phase4_candidate_rule_selection_not_run"
+    ]
+  },
+  "leakage_audit": {
+    "status": "passed",
+    "source_feature_cutoff_policy": "Buy, fallback, and skip decisions use only fixed ranked pools and account state available at the signal's declared entry point; future bars are used only for mechanical marking and exits.",
+    "used_only_signal_day_or_earlier_data": true,
+    "notes": [
+      "Candidate pools are reconstructed from signal-day-or-earlier market features.",
+      "No delayed-entry, discretionary reselection, model call, refresh, or database write is performed."
+    ]
+  },
+  "event_refs": [
+    "shortpick_v2.phase3.replay_artifact.generated",
+    "shortpick_v2.replay_window.2023-04-13_2026-05-08",
+    "shortpick_v2.strategy_search.generated.h10_exit"
+  ]
+}

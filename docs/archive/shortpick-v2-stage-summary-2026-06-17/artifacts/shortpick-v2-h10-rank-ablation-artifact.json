@@ -1,0 +1,426 @@
+{
+  "artifact_family": "shortpick_v2_h10_rank_ablation_artifact",
+  "schema_version": "v1",
+  "artifact_id": "shortpick_v2_h10_rank_ablation:2023-05-16:2026-05-08:20260615",
+  "generated_at": "2026-06-15T09:39:38.031270+00:00",
+  "status": "ready",
+  "claim_ceiling": "research_observation",
+  "evidence_basis": "historical_same_gate_rank_ablation",
+  "source_plan_ref": "plans/active/plan-20260615-h10-rank-ablation.md",
+  "source_replay_artifact": {
+    "artifact_id": "shortpick_v2_replay_artifact:strategy_search_h10_quiet_champion:2023-04-13:2026-05-08:200000:2026-06-15",
+    "artifact_family": "shortpick_v2_replay_artifact",
+    "schema_version": "v1",
+    "status": "ready",
+    "claim_ceiling": "research_observation"
+  },
+  "analysis_scope": {
+    "candidate_batch": "h10_quiet_champion",
+    "baseline_source_id": "quiet_breakout_rank2_poolhot10_mtw",
+    "mandatory_ranks": [
+      1,
+      2,
+      3
+    ],
+    "diagnostic_ranks": [
+      4,
+      5
+    ],
+    "primary_notional": 85000,
+    "informational_notionals": [
+      80000,
+      90000
+    ],
+    "signal_date_from": "2023-05-16",
+    "signal_date_to": "2026-05-08",
+    "signal_day_count": 721,
+    "horizon_days": 10,
+    "initial_cash": 200000.0,
+    "period_block_count": 4,
+    "period_block_definition": "calendar years covered by the replay signal_date_from/signal_date_to range"
+  },
+  "analysis_policy": {
+    "horizon_policy": "H10 is fixed by prior evidence and is not retested here.",
+    "rank_decision_thresholds": {
+      "min_sample_count": 50,
+      "min_period_block_count": 3,
+      "total_return_delta_threshold": 0.03,
+      "max_drawdown_deterioration": 0.03
+    },
+    "support_label_policy": "Primary fixed85 rank rows with sample_count < 50 or period_block_count < 3 are inconclusive. Rank2 support requires at least a 0.03 total-return edge versus rank1/rank3 and no material drawdown deterioration. A comparator challenges rank2 when it has at least a 0.03 total-return edge and no material drawdown deterioration.",
+    "execution_context_policy": "Fixed80 and fixed90 rows are informational execution-pressure context only; they cannot override the primary fixed85 rank2 support decision.",
+    "promotion_policy": "This artifact cannot start paper tracking or replace the benchmark."
+  },
+  "rank2_decision": {
+    "support_label": "supported",
+    "reason_codes": [
+      "rank2_return_edge_without_material_drawdown_deterioration"
+    ],
+    "challenger_ranks": [],
+    "thresholds": {
+      "min_sample_count": 50,
+      "min_period_block_count": 3,
+      "total_return_delta_threshold": 0.03,
+      "max_drawdown_deterioration": 0.03
+    },
+    "promotion_status": "not_eligible"
+  },
+  "rank_rows": [
+    {
+      "rank": 1,
+      "source_id": "quiet_breakout_rank1_poolhot10_mtw",
+      "config_id": "quiet_breakout_rank1_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "notional": 85000,
+      "comparison_role": "mandatory_comparator",
+      "result_status": "present",
+      "support_label": "inconclusive",
+      "sample_count": 175,
+      "period_block_count": 4,
+      "evidence_basis": "statistical",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 175,
+        "skip_count": 546,
+        "fallback_trade_count": 0,
+        "total_return": 0.607437,
+        "market_excess_total_return": 0.188993,
+        "max_drawdown": -0.254832,
+        "turnover": 51.046594,
+        "skipped_ratio": 0.757282
+      },
+      "comparison_to_rank2": {
+        "total_return_delta": -2.104857,
+        "annualized_return_delta": null,
+        "max_drawdown_delta": -0.135799,
+        "trade_count_delta": -15
+      },
+      "promotion_status": "not_eligible"
+    },
+    {
+      "rank": 2,
+      "source_id": "quiet_breakout_rank2_poolhot10_mtw",
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "notional": 85000,
+      "comparison_role": "baseline_rank2",
+      "result_status": "present",
+      "support_label": "supported",
+      "sample_count": 190,
+      "period_block_count": 4,
+      "evidence_basis": "statistical",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 190,
+        "skip_count": 531,
+        "fallback_trade_count": 0,
+        "total_return": 2.712294,
+        "market_excess_total_return": 2.29385,
+        "max_drawdown": -0.119033,
+        "turnover": 76.672058,
+        "skipped_ratio": 0.736477
+      },
+      "comparison_to_rank2": {
+        "total_return_delta": 0.0,
+        "annualized_return_delta": null,
+        "max_drawdown_delta": 0.0,
+        "trade_count_delta": 0
+      },
+      "promotion_status": "not_eligible"
+    },
+    {
+      "rank": 3,
+      "source_id": "quiet_breakout_rank3_poolhot10_mtw",
+      "config_id": "quiet_breakout_rank3_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "notional": 85000,
+      "comparison_role": "mandatory_comparator",
+      "result_status": "present",
+      "support_label": "inconclusive",
+      "sample_count": 177,
+      "period_block_count": 4,
+      "evidence_basis": "statistical",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 177,
+        "skip_count": 544,
+        "fallback_trade_count": 0,
+        "total_return": 0.507956,
+        "market_excess_total_return": 0.089512,
+        "max_drawdown": -0.280524,
+        "turnover": 59.018221,
+        "skipped_ratio": 0.754508
+      },
+      "comparison_to_rank2": {
+        "total_return_delta": -2.204338,
+        "annualized_return_delta": null,
+        "max_drawdown_delta": -0.161491,
+        "trade_count_delta": -13
+      },
+      "promotion_status": "not_eligible"
+    },
+    {
+      "rank": 4,
+      "source_id": "quiet_breakout_rank4_poolhot10_mtw",
+      "config_id": "quiet_breakout_rank4_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "notional": 85000,
+      "comparison_role": "diagnostic_comparator",
+      "result_status": "present",
+      "support_label": "inconclusive",
+      "sample_count": 174,
+      "period_block_count": 4,
+      "evidence_basis": "statistical",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 174,
+        "skip_count": 547,
+        "fallback_trade_count": 0,
+        "total_return": 0.694669,
+        "market_excess_total_return": 0.276225,
+        "max_drawdown": -0.298545,
+        "turnover": 58.639199,
+        "skipped_ratio": 0.758669
+      },
+      "comparison_to_rank2": {
+        "total_return_delta": -2.017625,
+        "annualized_return_delta": null,
+        "max_drawdown_delta": -0.179512,
+        "trade_count_delta": -16
+      },
+      "promotion_status": "not_eligible"
+    },
+    {
+      "rank": 5,
+      "source_id": "quiet_breakout_rank5_poolhot10_mtw",
+      "config_id": "quiet_breakout_rank5_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "notional": 85000,
+      "comparison_role": "diagnostic_comparator",
+      "result_status": "present",
+      "support_label": "inconclusive",
+      "sample_count": 177,
+      "period_block_count": 4,
+      "evidence_basis": "statistical",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 177,
+        "skip_count": 544,
+        "fallback_trade_count": 0,
+        "total_return": 0.533923,
+        "market_excess_total_return": 0.115479,
+        "max_drawdown": -0.190238,
+        "turnover": 61.291103,
+        "skipped_ratio": 0.754508
+      },
+      "comparison_to_rank2": {
+        "total_return_delta": -2.178371,
+        "annualized_return_delta": null,
+        "max_drawdown_delta": -0.071205,
+        "trade_count_delta": -13
+      },
+      "promotion_status": "not_eligible"
+    }
+  ],
+  "execution_context_rows": [
+    {
+      "rank": 1,
+      "source_id": "quiet_breakout_rank1_poolhot10_mtw",
+      "config_id": "quiet_breakout_rank1_poolhot10_mtw__fixed_notional_80k_top5_h10_v1",
+      "notional": 80000,
+      "comparison_role": "mandatory_comparator",
+      "result_status": "present",
+      "support_label": "inconclusive",
+      "sample_count": 176,
+      "period_block_count": 4,
+      "evidence_basis": "statistical",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 176,
+        "skip_count": 545,
+        "fallback_trade_count": 0,
+        "total_return": 0.608915,
+        "market_excess_total_return": 0.190471,
+        "max_drawdown": -0.258995,
+        "turnover": 50.787327,
+        "skipped_ratio": 0.755895
+      },
+      "comparison_to_rank2": {
+        "total_return_delta": -1.963538,
+        "annualized_return_delta": null,
+        "max_drawdown_delta": -0.139962,
+        "trade_count_delta": -16
+      },
+      "promotion_status": "not_eligible",
+      "informational_only": true
+    },
+    {
+      "rank": 2,
+      "source_id": "quiet_breakout_rank2_poolhot10_mtw",
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1",
+      "notional": 80000,
+      "comparison_role": "baseline_rank2",
+      "result_status": "present",
+      "support_label": "inconclusive",
+      "sample_count": 192,
+      "period_block_count": 4,
+      "evidence_basis": "statistical",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 192,
+        "skip_count": 529,
+        "fallback_trade_count": 0,
+        "total_return": 2.572453,
+        "market_excess_total_return": 2.154009,
+        "max_drawdown": -0.119033,
+        "turnover": 73.018706,
+        "skipped_ratio": 0.733703
+      },
+      "comparison_to_rank2": {
+        "total_return_delta": 0.0,
+        "annualized_return_delta": null,
+        "max_drawdown_delta": 0.0,
+        "trade_count_delta": 0
+      },
+      "promotion_status": "not_eligible",
+      "informational_only": true
+    },
+    {
+      "rank": 3,
+      "source_id": "quiet_breakout_rank3_poolhot10_mtw",
+      "config_id": "quiet_breakout_rank3_poolhot10_mtw__fixed_notional_80k_top5_h10_v1",
+      "notional": 80000,
+      "comparison_role": "mandatory_comparator",
+      "result_status": "present",
+      "support_label": "inconclusive",
+      "sample_count": 183,
+      "period_block_count": 4,
+      "evidence_basis": "statistical",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 183,
+        "skip_count": 538,
+        "fallback_trade_count": 0,
+        "total_return": 0.478116,
+        "market_excess_total_return": 0.059672,
+        "max_drawdown": -0.274552,
+        "turnover": 57.824238,
+        "skipped_ratio": 0.746186
+      },
+      "comparison_to_rank2": {
+        "total_return_delta": -2.094337,
+        "annualized_return_delta": null,
+        "max_drawdown_delta": -0.155519,
+        "trade_count_delta": -9
+      },
+      "promotion_status": "not_eligible",
+      "informational_only": true
+    },
+    {
+      "rank": 1,
+      "source_id": "quiet_breakout_rank1_poolhot10_mtw",
+      "config_id": "quiet_breakout_rank1_poolhot10_mtw__fixed_notional_90k_top5_h10_v1",
+      "notional": 90000,
+      "comparison_role": "mandatory_comparator",
+      "result_status": "present",
+      "support_label": "inconclusive",
+      "sample_count": 172,
+      "period_block_count": 4,
+      "evidence_basis": "statistical",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 172,
+        "skip_count": 549,
+        "fallback_trade_count": 0,
+        "total_return": 0.600622,
+        "market_excess_total_return": 0.182178,
+        "max_drawdown": -0.256557,
+        "turnover": 51.165807,
+        "skipped_ratio": 0.761442
+      },
+      "comparison_to_rank2": {
+        "total_return_delta": -2.242829,
+        "annualized_return_delta": null,
+        "max_drawdown_delta": -0.137524,
+        "trade_count_delta": -17
+      },
+      "promotion_status": "not_eligible",
+      "informational_only": true
+    },
+    {
+      "rank": 2,
+      "source_id": "quiet_breakout_rank2_poolhot10_mtw",
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1",
+      "notional": 90000,
+      "comparison_role": "baseline_rank2",
+      "result_status": "present",
+      "support_label": "inconclusive",
+      "sample_count": 189,
+      "period_block_count": 4,
+      "evidence_basis": "statistical",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 189,
+        "skip_count": 532,
+        "fallback_trade_count": 0,
+        "total_return": 2.843451,
+        "market_excess_total_return": 2.425007,
+        "max_drawdown": -0.119033,
+        "turnover": 80.285556,
+        "skipped_ratio": 0.737864
+      },
+      "comparison_to_rank2": {
+        "total_return_delta": 0.0,
+        "annualized_return_delta": null,
+        "max_drawdown_delta": 0.0,
+        "trade_count_delta": 0
+      },
+      "promotion_status": "not_eligible",
+      "informational_only": true
+    },
+    {
+      "rank": 3,
+      "source_id": "quiet_breakout_rank3_poolhot10_mtw",
+      "config_id": "quiet_breakout_rank3_poolhot10_mtw__fixed_notional_90k_top5_h10_v1",
+      "notional": 90000,
+      "comparison_role": "mandatory_comparator",
+      "result_status": "present",
+      "support_label": "inconclusive",
+      "sample_count": 173,
+      "period_block_count": 4,
+      "evidence_basis": "statistical",
+      "summary": {
+        "signal_count": 721,
+        "trade_count": 173,
+        "skip_count": 548,
+        "fallback_trade_count": 0,
+        "total_return": 0.503292,
+        "market_excess_total_return": 0.084848,
+        "max_drawdown": -0.283695,
+        "turnover": 59.572412,
+        "skipped_ratio": 0.760055
+      },
+      "comparison_to_rank2": {
+        "total_return_delta": -2.340159,
+        "annualized_return_delta": null,
+        "max_drawdown_delta": -0.164662,
+        "trade_count_delta": -16
+      },
+      "promotion_status": "not_eligible",
+      "informational_only": true
+    }
+  ],
+  "recommendation": {
+    "status": "research_only_no_paper_tracking_promotion",
+    "rank2_status": "supported",
+    "notes": [
+      "Treat the rank result as same-window historical evidence, not causal proof.",
+      "A challenged outcome requires a separate benchmark-governance plan before any replacement."
+    ]
+  },
+  "leakage_audit": {
+    "status": "passed",
+    "used_only_replay_artifact_and_signal_day_candidate_sources": true,
+    "no_delayed_buy_action": true,
+    "no_database_write_or_refresh": true
+  },
+  "event_refs": [
+    "shortpick_v2.h10_rank_ablation.generated",
+    "shortpick_v2.h10_rank_ablation.source_replay.shortpick_v2_replay_artifact:strategy_search_h10_quiet_champion:2023-04-13:2026-05-08:200000:2026-06-15"
+  ]
+}
