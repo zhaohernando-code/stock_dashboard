@@ -1,0 +1,380 @@
+{
+  "artifact_family": "shortpick_v2_h10_parameter_significance_artifact",
+  "schema_version": "v1",
+  "artifact_id": "shortpick_v2_h10_parameter_significance:2023-05-16:2026-05-08:20260615",
+  "generated_at": "2026-06-15T09:37:43.465993+00:00",
+  "status": "ready",
+  "claim_ceiling": "research_observation",
+  "evidence_basis": "historical_parameter_ablation_and_governance_validation",
+  "source_plan_ref": "plans/active/plan-20260615-h10-parameter-significance.md",
+  "source_replay_artifact": {
+    "artifact_id": "shortpick_v2_replay_artifact:strategy_search_h10_quiet_champion:2023-04-13:2026-05-08:200000:2026-06-15",
+    "artifact_family": "shortpick_v2_replay_artifact",
+    "schema_version": "v1",
+    "status": "ready",
+    "claim_ceiling": "research_observation"
+  },
+  "analysis_scope": {
+    "candidate_batch": "h10_quiet_champion",
+    "baseline_source_id": "quiet_breakout_rank2_poolhot10_mtw",
+    "benchmark_config_ids": [
+      "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1"
+    ],
+    "diagnostic_config_ids": [
+      "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1"
+    ],
+    "signal_date_from": "2023-05-16",
+    "signal_date_to": "2026-05-08",
+    "signal_day_count": 721,
+    "horizon_days": 10,
+    "initial_cash": 200000.0,
+    "period_block_count": 4,
+    "benchmark_trade_count": 190,
+    "parameter_family_count": 6
+  },
+  "analysis_policy": {
+    "horizon_policy": "H10 is fixed by prior v1 evidence and is not retested here.",
+    "support_label_policy": "Rows with period_block_count < 3 are automatically inconclusive. Supported/rejected rows must carry non-empty machine-readable evidence, not only narrative notes.",
+    "promotion_policy": "This artifact is a research/governance artifact only. It cannot start paper tracking, promote 90k, or replace the current benchmark without a follow-up governed plan."
+  },
+  "parameter_families": [
+    {
+      "family_id": "weekday_gate",
+      "row_count": 1
+    },
+    {
+      "family_id": "rank_choice",
+      "row_count": 1
+    },
+    {
+      "family_id": "pool_hot_threshold",
+      "row_count": 1
+    },
+    {
+      "family_id": "fixed_notional",
+      "row_count": 2
+    },
+    {
+      "family_id": "fallback_skip",
+      "row_count": 1
+    },
+    {
+      "family_id": "concentration_stability",
+      "row_count": 1
+    }
+  ],
+  "parameter_rows": [
+    {
+      "parameter_family": "weekday_gate",
+      "parameter_id": "weekday_gate_mtw_vs_mt_tw",
+      "label": "MTW weekday gate versus MT/TW controls",
+      "support_label": "supported",
+      "sample_count": 190,
+      "period_block_count": 4,
+      "evidence_basis": "statistical",
+      "comparison_evidence": {
+        "baseline_config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+        "baseline_summary": {
+          "signal_count": 721,
+          "trade_count": 190,
+          "skip_count": 531,
+          "fallback_trade_count": 0,
+          "total_return": 2.712294,
+          "market_excess_total_return": 2.29385,
+          "max_drawdown": -0.119033,
+          "turnover": 76.672058,
+          "skipped_ratio": 0.736477
+        },
+        "comparators": [
+          {
+            "config_id": "quiet_breakout_rank2_poolhot10_mt__fixed_notional_85k_top5_h10_v1",
+            "summary": {
+              "signal_count": 721,
+              "trade_count": 141,
+              "skip_count": 580,
+              "fallback_trade_count": 0,
+              "total_return": 2.003913,
+              "market_excess_total_return": 1.585469,
+              "max_drawdown": -0.14458,
+              "turnover": 56.523531,
+              "skipped_ratio": 0.804438
+            },
+            "total_return_delta_vs_baseline": 0.708381,
+            "max_drawdown_delta_vs_baseline": 0.025547
+          },
+          {
+            "config_id": "quiet_breakout_rank2_poolhot10_tw__fixed_notional_85k_top5_h10_v1",
+            "summary": {
+              "signal_count": 721,
+              "trade_count": 145,
+              "skip_count": 576,
+              "fallback_trade_count": 0,
+              "total_return": 1.619764,
+              "market_excess_total_return": 1.20132,
+              "max_drawdown": -0.124062,
+              "turnover": 59.362548,
+              "skipped_ratio": 0.79889
+            },
+            "total_return_delta_vs_baseline": 1.09253,
+            "max_drawdown_delta_vs_baseline": 0.005029
+          }
+        ]
+      },
+      "notes": [
+        "This is a same-window historical ablation over existing MT/TW controls.",
+        "It is not causal proof that Monday through Wednesday is inherently superior."
+      ]
+    },
+    {
+      "parameter_family": "rank_choice",
+      "parameter_id": "rank_choice_rank2_direct_ablation_missing",
+      "label": "rank2 selection against direct rank1/rank3 ablations",
+      "support_label": "inconclusive",
+      "sample_count": 190,
+      "period_block_count": 4,
+      "evidence_basis": "logical",
+      "comparison_evidence": {
+        "baseline_selection_rank": 2,
+        "available_direct_rank_ablation_config_ids": [],
+        "missing_direct_rank_ablation_config_ids": [
+          "rank1_same_gate",
+          "rank3_same_gate"
+        ]
+      },
+      "notes": [
+        "Current source names and implementation select the second quiet-breakout rank.",
+        "Direct rank1/rank3 same-gate ablations are not present in the existing replay batch, so no support claim is made."
+      ]
+    },
+    {
+      "parameter_family": "pool_hot_threshold",
+      "parameter_id": "pool_hot_threshold_10_vs_09_11_12",
+      "label": "pool_ret1_mean >= 0.10 versus nearby 0.09/0.11/0.12 thresholds",
+      "support_label": "supported",
+      "sample_count": 190,
+      "period_block_count": 4,
+      "evidence_basis": "statistical",
+      "comparison_evidence": {
+        "baseline_config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+        "baseline_summary": {
+          "signal_count": 721,
+          "trade_count": 190,
+          "skip_count": 531,
+          "fallback_trade_count": 0,
+          "total_return": 2.712294,
+          "market_excess_total_return": 2.29385,
+          "max_drawdown": -0.119033,
+          "turnover": 76.672058,
+          "skipped_ratio": 0.736477
+        },
+        "comparators": [
+          {
+            "config_id": "quiet_breakout_rank2_poolhot09_mtw__fixed_notional_85k_top5_h10_v1",
+            "summary": {
+              "signal_count": 721,
+              "trade_count": 244,
+              "skip_count": 477,
+              "fallback_trade_count": 0,
+              "total_return": 1.584757,
+              "market_excess_total_return": 1.166313,
+              "max_drawdown": -0.272173,
+              "turnover": 88.121346,
+              "skipped_ratio": 0.661581
+            },
+            "total_return_delta_vs_baseline": 1.127537,
+            "max_drawdown_delta_vs_baseline": 0.15314
+          },
+          {
+            "config_id": "quiet_breakout_rank2_poolhot11_mtw__fixed_notional_85k_top5_h10_v1",
+            "summary": {
+              "signal_count": 721,
+              "trade_count": 0,
+              "skip_count": 721,
+              "fallback_trade_count": 0,
+              "total_return": 0.0,
+              "market_excess_total_return": -0.418444,
+              "max_drawdown": 0.0,
+              "turnover": 0.0,
+              "skipped_ratio": 1.0
+            },
+            "total_return_delta_vs_baseline": 2.712294,
+            "max_drawdown_delta_vs_baseline": -0.119033
+          },
+          {
+            "config_id": "quiet_breakout_rank2_poolhot12_mtw__fixed_notional_85k_top5_h10_v1",
+            "summary": {
+              "signal_count": 721,
+              "trade_count": 0,
+              "skip_count": 721,
+              "fallback_trade_count": 0,
+              "total_return": 0.0,
+              "market_excess_total_return": -0.418444,
+              "max_drawdown": 0.0,
+              "turnover": 0.0,
+              "skipped_ratio": 1.0
+            },
+            "total_return_delta_vs_baseline": 2.712294,
+            "max_drawdown_delta_vs_baseline": -0.119033
+          }
+        ]
+      },
+      "notes": [
+        "Threshold support requires baseline outperformance against nearby local thresholds.",
+        "A better neighbor should trigger a follow-up plan rather than silent promotion."
+      ]
+    },
+    {
+      "parameter_family": "fixed_notional",
+      "parameter_id": "fixed_notional_85k_vs_80k",
+      "label": "85k primary fixed notional versus 80k capital-shadow baseline",
+      "support_label": "supported",
+      "sample_count": 190,
+      "period_block_count": 4,
+      "evidence_basis": "mixed",
+      "comparison_evidence": {
+        "baseline_config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+        "baseline_summary": {
+          "signal_count": 721,
+          "trade_count": 190,
+          "skip_count": 531,
+          "fallback_trade_count": 0,
+          "total_return": 2.712294,
+          "market_excess_total_return": 2.29385,
+          "max_drawdown": -0.119033,
+          "turnover": 76.672058,
+          "skipped_ratio": 0.736477
+        },
+        "comparators": [
+          {
+            "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1",
+            "summary": {
+              "signal_count": 721,
+              "trade_count": 192,
+              "skip_count": 529,
+              "fallback_trade_count": 0,
+              "total_return": 2.572453,
+              "market_excess_total_return": 2.154009,
+              "max_drawdown": -0.119033,
+              "turnover": 73.018706,
+              "skipped_ratio": 0.733703
+            },
+            "total_return_delta_vs_baseline": 0.139841,
+            "max_drawdown_delta_vs_baseline": 0.0
+          }
+        ]
+      },
+      "notes": [
+        "85k is tested as the current benchmark notional, while 80k remains the capital-shadow baseline.",
+        "The row does not authorize raising the notional boundary."
+      ]
+    },
+    {
+      "parameter_family": "fixed_notional",
+      "parameter_id": "fixed_notional_90k_diagnostic_boundary",
+      "label": "90k fixed-notional execution pressure boundary",
+      "support_label": "inconclusive",
+      "sample_count": 189,
+      "period_block_count": 4,
+      "evidence_basis": "diagnostic",
+      "diagnostic_only": true,
+      "promotion_status": "not_eligible",
+      "comparison_evidence": {
+        "diagnostic_config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1",
+        "diagnostic_summary": {
+          "signal_count": 721,
+          "trade_count": 189,
+          "skip_count": 532,
+          "fallback_trade_count": 0,
+          "total_return": 2.843451,
+          "market_excess_total_return": 2.425007,
+          "max_drawdown": -0.119033,
+          "turnover": 80.285556,
+          "skipped_ratio": 0.737864
+        },
+        "boundary_reason": "90k previously exceeded the turnover governance boundary and is diagnostic only."
+      },
+      "notes": [
+        "90k can appear in sensitivity readouts but cannot become a promoted parameter in this plan."
+      ]
+    },
+    {
+      "parameter_family": "fallback_skip",
+      "parameter_id": "action_choice_fallback_or_skip_no_delay",
+      "label": "fallback-or-skip action model with no delayed buy",
+      "support_label": "supported",
+      "sample_count": 721,
+      "period_block_count": 4,
+      "evidence_basis": "logical",
+      "comparison_evidence": {
+        "allowed_actions": [
+          "buy_primary",
+          "buy_fallback",
+          "skip"
+        ],
+        "fallback_enabled": true,
+        "fallback_max_rank": 5,
+        "trade_count": 190,
+        "fallback_trade_count": 0,
+        "skip_count": 531,
+        "skipped_ratio": 0.736477
+      },
+      "notes": [
+        "The action set remains explainable: buy the current candidate, use a predeclared fallback, or skip.",
+        "Delayed buy is intentionally absent because it has no stable interpretation in this strategy context."
+      ]
+    },
+    {
+      "parameter_family": "concentration_stability",
+      "parameter_id": "winner_concentration_and_period_stability_detail_missing",
+      "label": "winner concentration and weak-period stability evidence",
+      "support_label": "inconclusive",
+      "sample_count": 190,
+      "period_block_count": 4,
+      "evidence_basis": "mixed",
+      "comparison_evidence": {
+        "baseline_summary": {
+          "signal_count": 721,
+          "trade_count": 190,
+          "skip_count": 531,
+          "fallback_trade_count": 0,
+          "total_return": 2.712294,
+          "market_excess_total_return": 2.29385,
+          "max_drawdown": -0.119033,
+          "turnover": 76.672058,
+          "skipped_ratio": 0.736477
+        },
+        "missing_detail_refs": [
+          "trade_contribution_table",
+          "period_reset_replay"
+        ]
+      },
+      "notes": [
+        "Replay summaries expose drawdown and turnover, but not enough trade-contribution detail for support.",
+        "Robustness/decomposition artifacts should remain the source for winner-concentration judgement."
+      ]
+    }
+  ],
+  "recommendation": {
+    "status": "research_only_no_paper_tracking_promotion",
+    "notes": [
+      "Treat supported labels as historical evidence, not causal proof.",
+      "Treat inconclusive labels as follow-up validation targets, not hidden approvals.",
+      "90k remains diagnostic-only even when its headline return is higher."
+    ]
+  },
+  "leakage_audit": {
+    "status": "passed",
+    "used_only_replay_artifact_and_signal_day_candidate_sources": true,
+    "no_delayed_buy_action": true,
+    "no_database_write_or_refresh": true,
+    "notes": [
+      "The builder consumes a strategy-search replay artifact or read-only database bars.",
+      "Parameter labels summarize existing same-window replay evidence; no future paper-tracking data is used."
+    ]
+  },
+  "event_refs": [
+    "shortpick_v2.h10_parameter_significance.generated",
+    "shortpick_v2.parameter_significance.source_replay.shortpick_v2_replay_artifact:strategy_search_h10_quiet_champion:2023-04-13:2026-05-08:200000:2026-06-15"
+  ]
+}

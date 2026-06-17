@@ -1,0 +1,627 @@
+{
+  "artifact_family": "shortpick_v2_h10_weekday_drawdown_notional_matrix",
+  "schema_version": "v1",
+  "artifact_id": "shortpick_v2_h10_weekday_drawdown_notional_matrix:2023-04-13:2026-05-08:200000:2026-06-16",
+  "generated_at": "2026-06-16T04:33:26.395833+00:00",
+  "status": "ready",
+  "claim_ceiling": "research_observation",
+  "evidence_basis": "historical_account_replay",
+  "source_ref": "market_only_reconstruction:shortpick_v2_h10_weekday_drawdown_notional_matrix:v1",
+  "analysis_scope": {
+    "strategy_family": "安静突破 Rank2 首选 + 热度池 10% + H10",
+    "selection_policy": "Rank2 is the primary candidate; Rank3-Rank6 are same-day fallback candidates. Drawdown-on rows first apply the v1 drawdown reversal filter to that candidate pool.",
+    "horizon_days": 10,
+    "entry_price_source": "next_close",
+    "initial_cash": 200000.0,
+    "pool_hot_threshold": 0.1,
+    "weekday_modes": [
+      "mtw",
+      "tue_wed_thu",
+      "mon_wed_fri",
+      "wed_thu_fri",
+      "mon_to_thu",
+      "all_weekdays"
+    ],
+    "weekday_mode_labels_cn": [
+      "周一至周三",
+      "周二至周四",
+      "周一、周三、周五",
+      "周三至周五",
+      "周一至周四",
+      "周一至周五"
+    ],
+    "drawdown_modes": [
+      "off",
+      "v1_on"
+    ],
+    "notional_values": [
+      85000.0
+    ],
+    "expected_row_count": 12,
+    "actual_row_count": 12,
+    "source_feature_cutoff_policy": "signal_day_or_prior_daily_bar_features_only",
+    "promotion_status": "research_only_no_paper_tracking_promotion"
+  },
+  "data_scope": {
+    "signal_date_from": "2023-05-16",
+    "signal_date_to": "2026-05-08",
+    "signal_day_count": 721,
+    "trade_day_count": 767,
+    "stock_like_series_count": 3020,
+    "account_profile": "new_retail_cash_account",
+    "coverage_notes": [
+      "Read-only daily bars from the existing SQLite database; no refresh or model call performed.",
+      "Account eligibility filtered stock-like series from 3071 to 3020.",
+      "Account eligibility excluded board counts: {'st': 1, 'chnext': 32, 'star': 18}."
+    ]
+  },
+  "drawdown_reversal_rule": {
+    "control_group_id": "control_drawdown_reversal_filter:v1",
+    "rule_version": "drawdown-reversal-filter-v1",
+    "filter_basis": "signal_date_or_prior_technical_features",
+    "drawdown_lookback_days": 10,
+    "max_recent_drawdown_return": -0.08,
+    "short_window_return_threshold": -0.03,
+    "price_vs_ma20_threshold": 0.0,
+    "high_level_reversal_return_threshold": -0.05,
+    "trigger_policy": "block_if_any_threshold_triggered",
+    "rule_defined_at": null,
+    "leakage_policy": "ignore_features_after_signal_date",
+    "rule_signature": "sha256:8fba1da96ee391b717fd7e033dc2ed04fb94e3eb90d3dffa8e83ef8cbae0894b"
+  },
+  "matrix_rows": [
+    {
+      "config_id": "h10_quiet_rank2_primary_poolhot10_all_weekdays_drawdown_off__fixed_notional_85k_top5_h10_v1",
+      "status": "ready",
+      "weekday_mode": "all_weekdays",
+      "weekday_label_cn": "周一至周五",
+      "drawdown_mode": "off",
+      "drawdown_label_cn": "不加回撤反转过滤",
+      "target_notional": 85000.0,
+      "strategy_description_cn": "周一至周五，不加回撤反转过滤，单笔约 8.5 万",
+      "selection_description_cn": "安静突破热度池 10%，Rank2 为首选，Rank3-Rank6 为同日候补；不做回撤反转过滤。",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "signal_count": 721,
+      "trade_count": 233,
+      "skip_count": 488,
+      "fallback_trade_count": 10,
+      "total_return": 1.299599,
+      "annualized_return": 0.314685,
+      "market_reference_total_return": 0.418444,
+      "market_excess_total_return": 0.881155,
+      "max_drawdown": -0.382193,
+      "mean_invested_ratio": 0.643936,
+      "max_position_count": 5,
+      "turnover": 80.865448,
+      "skipped_ratio": 0.676838,
+      "degenerate": false,
+      "degenerate_label_cn": "",
+      "drawdown_filter_summary": {
+        "mode": "off",
+        "input_candidate_count": 1785,
+        "blocked_count": 0,
+        "allowed_count": 1785,
+        "missing_feature_count": 0
+      }
+    },
+    {
+      "config_id": "h10_quiet_rank2_primary_poolhot10_all_weekdays_drawdown_v1_on__fixed_notional_85k_top5_h10_v1",
+      "status": "ready",
+      "weekday_mode": "all_weekdays",
+      "weekday_label_cn": "周一至周五",
+      "drawdown_mode": "v1_on",
+      "drawdown_label_cn": "开启 v1 回撤反转过滤",
+      "target_notional": 85000.0,
+      "strategy_description_cn": "周一至周五，开启 v1 回撤反转过滤，单笔约 8.5 万",
+      "selection_description_cn": "安静突破热度池 10%，Rank2 为首选，Rank3-Rank6 为同日候补；候选先通过 v1 回撤反转过滤。",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "signal_count": 721,
+      "trade_count": 222,
+      "skip_count": 499,
+      "fallback_trade_count": 6,
+      "total_return": 1.813423,
+      "annualized_return": 0.404745,
+      "market_reference_total_return": 0.418444,
+      "market_excess_total_return": 1.394979,
+      "max_drawdown": -0.223326,
+      "mean_invested_ratio": 0.599183,
+      "max_position_count": 5,
+      "turnover": 81.251614,
+      "skipped_ratio": 0.692094,
+      "degenerate": false,
+      "degenerate_label_cn": "",
+      "drawdown_filter_summary": {
+        "mode": "v1_on",
+        "input_candidate_count": 1785,
+        "blocked_count": 715,
+        "allowed_count": 1070,
+        "missing_feature_count": 0,
+        "rule_signature": "sha256:8fba1da96ee391b717fd7e033dc2ed04fb94e3eb90d3dffa8e83ef8cbae0894b"
+      }
+    },
+    {
+      "config_id": "h10_quiet_rank2_primary_poolhot10_mon_to_thu_drawdown_off__fixed_notional_85k_top5_h10_v1",
+      "status": "ready",
+      "weekday_mode": "mon_to_thu",
+      "weekday_label_cn": "周一至周四",
+      "drawdown_mode": "off",
+      "drawdown_label_cn": "不加回撤反转过滤",
+      "target_notional": 85000.0,
+      "strategy_description_cn": "周一至周四，不加回撤反转过滤，单笔约 8.5 万",
+      "selection_description_cn": "安静突破热度池 10%，Rank2 为首选，Rank3-Rank6 为同日候补；不做回撤反转过滤。",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "signal_count": 721,
+      "trade_count": 212,
+      "skip_count": 509,
+      "fallback_trade_count": 5,
+      "total_return": 1.780082,
+      "annualized_return": 0.399253,
+      "market_reference_total_return": 0.418444,
+      "market_excess_total_return": 1.361638,
+      "max_drawdown": -0.326666,
+      "mean_invested_ratio": 0.579468,
+      "max_position_count": 5,
+      "turnover": 78.110855,
+      "skipped_ratio": 0.705964,
+      "degenerate": false,
+      "degenerate_label_cn": "",
+      "drawdown_filter_summary": {
+        "mode": "off",
+        "input_candidate_count": 1410,
+        "blocked_count": 0,
+        "allowed_count": 1410,
+        "missing_feature_count": 0
+      }
+    },
+    {
+      "config_id": "h10_quiet_rank2_primary_poolhot10_mon_to_thu_drawdown_v1_on__fixed_notional_85k_top5_h10_v1",
+      "status": "ready",
+      "weekday_mode": "mon_to_thu",
+      "weekday_label_cn": "周一至周四",
+      "drawdown_mode": "v1_on",
+      "drawdown_label_cn": "开启 v1 回撤反转过滤",
+      "target_notional": 85000.0,
+      "strategy_description_cn": "周一至周四，开启 v1 回撤反转过滤，单笔约 8.5 万",
+      "selection_description_cn": "安静突破热度池 10%，Rank2 为首选，Rank3-Rank6 为同日候补；候选先通过 v1 回撤反转过滤。",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "signal_count": 721,
+      "trade_count": 199,
+      "skip_count": 522,
+      "fallback_trade_count": 0,
+      "total_return": 2.06459,
+      "annualized_return": 0.444771,
+      "market_reference_total_return": 0.418444,
+      "market_excess_total_return": 1.646146,
+      "max_drawdown": -0.198344,
+      "mean_invested_ratio": 0.546376,
+      "max_position_count": 5,
+      "turnover": 73.135319,
+      "skipped_ratio": 0.723994,
+      "degenerate": false,
+      "degenerate_label_cn": "",
+      "drawdown_filter_summary": {
+        "mode": "v1_on",
+        "input_candidate_count": 1410,
+        "blocked_count": 562,
+        "allowed_count": 848,
+        "missing_feature_count": 0,
+        "rule_signature": "sha256:8fba1da96ee391b717fd7e033dc2ed04fb94e3eb90d3dffa8e83ef8cbae0894b"
+      }
+    },
+    {
+      "config_id": "h10_quiet_rank2_primary_poolhot10_mon_wed_fri_drawdown_off__fixed_notional_85k_top5_h10_v1",
+      "status": "ready",
+      "weekday_mode": "mon_wed_fri",
+      "weekday_label_cn": "周一、周三、周五",
+      "drawdown_mode": "off",
+      "drawdown_label_cn": "不加回撤反转过滤",
+      "target_notional": 85000.0,
+      "strategy_description_cn": "周一、周三、周五，不加回撤反转过滤，单笔约 8.5 万",
+      "selection_description_cn": "安静突破热度池 10%，Rank2 为首选，Rank3-Rank6 为同日候补；不做回撤反转过滤。",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "signal_count": 721,
+      "trade_count": 188,
+      "skip_count": 533,
+      "fallback_trade_count": 2,
+      "total_return": 0.906658,
+      "annualized_return": 0.236188,
+      "market_reference_total_return": 0.418444,
+      "market_excess_total_return": 0.488214,
+      "max_drawdown": -0.265768,
+      "mean_invested_ratio": 0.567801,
+      "max_position_count": 5,
+      "turnover": 66.062015,
+      "skipped_ratio": 0.739251,
+      "degenerate": false,
+      "degenerate_label_cn": "",
+      "drawdown_filter_summary": {
+        "mode": "off",
+        "input_candidate_count": 1080,
+        "blocked_count": 0,
+        "allowed_count": 1080,
+        "missing_feature_count": 0
+      }
+    },
+    {
+      "config_id": "h10_quiet_rank2_primary_poolhot10_mon_wed_fri_drawdown_v1_on__fixed_notional_85k_top5_h10_v1",
+      "status": "ready",
+      "weekday_mode": "mon_wed_fri",
+      "weekday_label_cn": "周一、周三、周五",
+      "drawdown_mode": "v1_on",
+      "drawdown_label_cn": "开启 v1 回撤反转过滤",
+      "target_notional": 85000.0,
+      "strategy_description_cn": "周一、周三、周五，开启 v1 回撤反转过滤，单笔约 8.5 万",
+      "selection_description_cn": "安静突破热度池 10%，Rank2 为首选，Rank3-Rank6 为同日候补；候选先通过 v1 回撤反转过滤。",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "signal_count": 721,
+      "trade_count": 177,
+      "skip_count": 544,
+      "fallback_trade_count": 3,
+      "total_return": 1.360012,
+      "annualized_return": 0.325934,
+      "market_reference_total_return": 0.418444,
+      "market_excess_total_return": 0.941568,
+      "max_drawdown": -0.17095,
+      "mean_invested_ratio": 0.534546,
+      "max_position_count": 5,
+      "turnover": 66.014385,
+      "skipped_ratio": 0.754508,
+      "degenerate": false,
+      "degenerate_label_cn": "",
+      "drawdown_filter_summary": {
+        "mode": "v1_on",
+        "input_candidate_count": 1080,
+        "blocked_count": 435,
+        "allowed_count": 645,
+        "missing_feature_count": 0,
+        "rule_signature": "sha256:8fba1da96ee391b717fd7e033dc2ed04fb94e3eb90d3dffa8e83ef8cbae0894b"
+      }
+    },
+    {
+      "config_id": "h10_quiet_rank2_primary_poolhot10_mtw_drawdown_off__fixed_notional_85k_top5_h10_v1",
+      "status": "ready",
+      "weekday_mode": "mtw",
+      "weekday_label_cn": "周一至周三",
+      "drawdown_mode": "off",
+      "drawdown_label_cn": "不加回撤反转过滤",
+      "target_notional": 85000.0,
+      "strategy_description_cn": "周一至周三，不加回撤反转过滤，单笔约 8.5 万",
+      "selection_description_cn": "安静突破热度池 10%，Rank2 为首选，Rank3-Rank6 为同日候补；不做回撤反转过滤。",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "signal_count": 721,
+      "trade_count": 192,
+      "skip_count": 529,
+      "fallback_trade_count": 2,
+      "total_return": 2.712001,
+      "annualized_return": 0.538673,
+      "market_reference_total_return": 0.418444,
+      "market_excess_total_return": 2.293557,
+      "max_drawdown": -0.119033,
+      "mean_invested_ratio": 0.453028,
+      "max_position_count": 5,
+      "turnover": 76.672925,
+      "skipped_ratio": 0.733703,
+      "degenerate": false,
+      "degenerate_label_cn": "",
+      "drawdown_filter_summary": {
+        "mode": "off",
+        "input_candidate_count": 1090,
+        "blocked_count": 0,
+        "allowed_count": 1090,
+        "missing_feature_count": 0
+      }
+    },
+    {
+      "config_id": "h10_quiet_rank2_primary_poolhot10_mtw_drawdown_v1_on__fixed_notional_85k_top5_h10_v1",
+      "status": "ready",
+      "weekday_mode": "mtw",
+      "weekday_label_cn": "周一至周三",
+      "drawdown_mode": "v1_on",
+      "drawdown_label_cn": "开启 v1 回撤反转过滤",
+      "target_notional": 85000.0,
+      "strategy_description_cn": "周一至周三，开启 v1 回撤反转过滤，单笔约 8.5 万",
+      "selection_description_cn": "安静突破热度池 10%，Rank2 为首选，Rank3-Rank6 为同日候补；候选先通过 v1 回撤反转过滤。",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "signal_count": 721,
+      "trade_count": 181,
+      "skip_count": 540,
+      "fallback_trade_count": 1,
+      "total_return": 2.5111,
+      "annualized_return": 0.5108,
+      "market_reference_total_return": 0.418444,
+      "market_excess_total_return": 2.092656,
+      "max_drawdown": -0.144118,
+      "mean_invested_ratio": 0.473754,
+      "max_position_count": 5,
+      "turnover": 70.456877,
+      "skipped_ratio": 0.74896,
+      "degenerate": false,
+      "degenerate_label_cn": "",
+      "drawdown_filter_summary": {
+        "mode": "v1_on",
+        "input_candidate_count": 1090,
+        "blocked_count": 434,
+        "allowed_count": 656,
+        "missing_feature_count": 0,
+        "rule_signature": "sha256:8fba1da96ee391b717fd7e033dc2ed04fb94e3eb90d3dffa8e83ef8cbae0894b"
+      }
+    },
+    {
+      "config_id": "h10_quiet_rank2_primary_poolhot10_tue_wed_thu_drawdown_off__fixed_notional_85k_top5_h10_v1",
+      "status": "ready",
+      "weekday_mode": "tue_wed_thu",
+      "weekday_label_cn": "周二至周四",
+      "drawdown_mode": "off",
+      "drawdown_label_cn": "不加回撤反转过滤",
+      "target_notional": 85000.0,
+      "strategy_description_cn": "周二至周四，不加回撤反转过滤，单笔约 8.5 万",
+      "selection_description_cn": "安静突破热度池 10%，Rank2 为首选，Rank3-Rank6 为同日候补；不做回撤反转过滤。",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "signal_count": 721,
+      "trade_count": 189,
+      "skip_count": 532,
+      "fallback_trade_count": 9,
+      "total_return": 0.950162,
+      "annualized_return": 0.245385,
+      "market_reference_total_return": 0.418444,
+      "market_excess_total_return": 0.531718,
+      "max_drawdown": -0.292312,
+      "mean_invested_ratio": 0.565542,
+      "max_position_count": 5,
+      "turnover": 63.759219,
+      "skipped_ratio": 0.737864,
+      "degenerate": false,
+      "degenerate_label_cn": "",
+      "drawdown_filter_summary": {
+        "mode": "off",
+        "input_candidate_count": 1065,
+        "blocked_count": 0,
+        "allowed_count": 1065,
+        "missing_feature_count": 0
+      }
+    },
+    {
+      "config_id": "h10_quiet_rank2_primary_poolhot10_tue_wed_thu_drawdown_v1_on__fixed_notional_85k_top5_h10_v1",
+      "status": "ready",
+      "weekday_mode": "tue_wed_thu",
+      "weekday_label_cn": "周二至周四",
+      "drawdown_mode": "v1_on",
+      "drawdown_label_cn": "开启 v1 回撤反转过滤",
+      "target_notional": 85000.0,
+      "strategy_description_cn": "周二至周四，开启 v1 回撤反转过滤，单笔约 8.5 万",
+      "selection_description_cn": "安静突破热度池 10%，Rank2 为首选，Rank3-Rank6 为同日候补；候选先通过 v1 回撤反转过滤。",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "signal_count": 721,
+      "trade_count": 174,
+      "skip_count": 547,
+      "fallback_trade_count": 2,
+      "total_return": 1.395066,
+      "annualized_return": 0.332373,
+      "market_reference_total_return": 0.418444,
+      "market_excess_total_return": 0.976622,
+      "max_drawdown": -0.177369,
+      "mean_invested_ratio": 0.511215,
+      "max_position_count": 5,
+      "turnover": 64.68898,
+      "skipped_ratio": 0.758669,
+      "degenerate": false,
+      "degenerate_label_cn": "",
+      "drawdown_filter_summary": {
+        "mode": "v1_on",
+        "input_candidate_count": 1065,
+        "blocked_count": 414,
+        "allowed_count": 651,
+        "missing_feature_count": 0,
+        "rule_signature": "sha256:8fba1da96ee391b717fd7e033dc2ed04fb94e3eb90d3dffa8e83ef8cbae0894b"
+      }
+    },
+    {
+      "config_id": "h10_quiet_rank2_primary_poolhot10_wed_thu_fri_drawdown_off__fixed_notional_85k_top5_h10_v1",
+      "status": "ready",
+      "weekday_mode": "wed_thu_fri",
+      "weekday_label_cn": "周三至周五",
+      "drawdown_mode": "off",
+      "drawdown_label_cn": "不加回撤反转过滤",
+      "target_notional": 85000.0,
+      "strategy_description_cn": "周三至周五，不加回撤反转过滤，单笔约 8.5 万",
+      "selection_description_cn": "安静突破热度池 10%，Rank2 为首选，Rank3-Rank6 为同日候补；不做回撤反转过滤。",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "signal_count": 721,
+      "trade_count": 179,
+      "skip_count": 542,
+      "fallback_trade_count": 13,
+      "total_return": 0.149133,
+      "annualized_return": 0.04673,
+      "market_reference_total_return": 0.418444,
+      "market_excess_total_return": -0.269311,
+      "max_drawdown": -0.289405,
+      "mean_invested_ratio": 0.594827,
+      "max_position_count": 5,
+      "turnover": 50.247585,
+      "skipped_ratio": 0.751734,
+      "degenerate": false,
+      "degenerate_label_cn": "",
+      "drawdown_filter_summary": {
+        "mode": "off",
+        "input_candidate_count": 1055,
+        "blocked_count": 0,
+        "allowed_count": 1055,
+        "missing_feature_count": 0
+      }
+    },
+    {
+      "config_id": "h10_quiet_rank2_primary_poolhot10_wed_thu_fri_drawdown_v1_on__fixed_notional_85k_top5_h10_v1",
+      "status": "ready",
+      "weekday_mode": "wed_thu_fri",
+      "weekday_label_cn": "周三至周五",
+      "drawdown_mode": "v1_on",
+      "drawdown_label_cn": "开启 v1 回撤反转过滤",
+      "target_notional": 85000.0,
+      "strategy_description_cn": "周三至周五，开启 v1 回撤反转过滤，单笔约 8.5 万",
+      "selection_description_cn": "安静突破热度池 10%，Rank2 为首选，Rank3-Rank6 为同日候补；候选先通过 v1 回撤反转过滤。",
+      "allowed_actions": [
+        "buy_primary",
+        "buy_fallback",
+        "skip"
+      ],
+      "signal_count": 721,
+      "trade_count": 177,
+      "skip_count": 544,
+      "fallback_trade_count": 9,
+      "total_return": 0.54148,
+      "annualized_return": 0.152783,
+      "market_reference_total_return": 0.418444,
+      "market_excess_total_return": 0.123036,
+      "max_drawdown": -0.286826,
+      "mean_invested_ratio": 0.553932,
+      "max_position_count": 5,
+      "turnover": 56.355436,
+      "skipped_ratio": 0.754508,
+      "degenerate": false,
+      "degenerate_label_cn": "",
+      "drawdown_filter_summary": {
+        "mode": "v1_on",
+        "input_candidate_count": 1055,
+        "blocked_count": 415,
+        "allowed_count": 640,
+        "missing_feature_count": 0,
+        "rule_signature": "sha256:8fba1da96ee391b717fd7e033dc2ed04fb94e3eb90d3dffa8e83ef8cbae0894b"
+      }
+    }
+  ],
+  "child_artifact_refs": [
+    {
+      "weekday_mode": "mtw",
+      "drawdown_mode": "off",
+      "artifact_id": "shortpick_v2_replay_artifact:2023-04-13:2026-05-08:200000:2026-06-16",
+      "status": "ready"
+    },
+    {
+      "weekday_mode": "mtw",
+      "drawdown_mode": "v1_on",
+      "artifact_id": "shortpick_v2_replay_artifact:2023-04-13:2026-05-08:200000:2026-06-16",
+      "status": "ready"
+    },
+    {
+      "weekday_mode": "tue_wed_thu",
+      "drawdown_mode": "off",
+      "artifact_id": "shortpick_v2_replay_artifact:2023-04-13:2026-05-08:200000:2026-06-16",
+      "status": "ready"
+    },
+    {
+      "weekday_mode": "tue_wed_thu",
+      "drawdown_mode": "v1_on",
+      "artifact_id": "shortpick_v2_replay_artifact:2023-04-13:2026-05-08:200000:2026-06-16",
+      "status": "ready"
+    },
+    {
+      "weekday_mode": "mon_wed_fri",
+      "drawdown_mode": "off",
+      "artifact_id": "shortpick_v2_replay_artifact:2023-04-13:2026-05-08:200000:2026-06-16",
+      "status": "ready"
+    },
+    {
+      "weekday_mode": "mon_wed_fri",
+      "drawdown_mode": "v1_on",
+      "artifact_id": "shortpick_v2_replay_artifact:2023-04-13:2026-05-08:200000:2026-06-16",
+      "status": "ready"
+    },
+    {
+      "weekday_mode": "wed_thu_fri",
+      "drawdown_mode": "off",
+      "artifact_id": "shortpick_v2_replay_artifact:2023-04-13:2026-05-08:200000:2026-06-16",
+      "status": "ready"
+    },
+    {
+      "weekday_mode": "wed_thu_fri",
+      "drawdown_mode": "v1_on",
+      "artifact_id": "shortpick_v2_replay_artifact:2023-04-13:2026-05-08:200000:2026-06-16",
+      "status": "ready"
+    },
+    {
+      "weekday_mode": "mon_to_thu",
+      "drawdown_mode": "off",
+      "artifact_id": "shortpick_v2_replay_artifact:2023-04-13:2026-05-08:200000:2026-06-16",
+      "status": "ready"
+    },
+    {
+      "weekday_mode": "mon_to_thu",
+      "drawdown_mode": "v1_on",
+      "artifact_id": "shortpick_v2_replay_artifact:2023-04-13:2026-05-08:200000:2026-06-16",
+      "status": "ready"
+    },
+    {
+      "weekday_mode": "all_weekdays",
+      "drawdown_mode": "off",
+      "artifact_id": "shortpick_v2_replay_artifact:2023-04-13:2026-05-08:200000:2026-06-16",
+      "status": "ready"
+    },
+    {
+      "weekday_mode": "all_weekdays",
+      "drawdown_mode": "v1_on",
+      "artifact_id": "shortpick_v2_replay_artifact:2023-04-13:2026-05-08:200000:2026-06-16",
+      "status": "ready"
+    }
+  ],
+  "leakage_audit": {
+    "status": "passed",
+    "used_only_signal_day_or_earlier_data": true,
+    "notes": [
+      "Quiet breakout candidate ranking uses signal-day-or-prior daily-bar features.",
+      "Drawdown reversal filter uses the existing v1 signal-date-or-prior feature policy.",
+      "Entry and exit future bars are used only by the account replay simulation."
+    ]
+  },
+  "recommendation": {
+    "status": "research_only_no_paper_tracking_promotion",
+    "message_cn": "本产物只用于参数验证，不把任何组合直接晋级为纸面追踪冻结策略。"
+  },
+  "event_refs": [
+    "shortpick_v2.h10_weekday_drawdown_notional_matrix.generated",
+    "shortpick_v2.h10_matrix_window.2023-04-13_2026-05-08"
+  ]
+}

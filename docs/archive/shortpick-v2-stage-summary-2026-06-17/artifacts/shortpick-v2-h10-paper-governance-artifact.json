@@ -1,0 +1,244 @@
+{
+  "artifact_family": "shortpick_v2_h10_paper_governance_artifact",
+  "schema_version": "v1",
+  "artifact_id": "shortpick_v2_h10_paper_governance_artifact:20260615T094407Z:shortpick_v2_h10_robustness_2023-04-13_2026-05-08_200000_2026-06-15",
+  "generated_at": "2026-06-15T09:44:07.174936+00:00",
+  "status": "ready",
+  "claim_ceiling": "research_observation",
+  "evidence_basis": "historical_governance_evidence_future_true_forward_observation_only",
+  "source_plan_ref": "plans/active/plan-20260615-h10-paper-governance.md",
+  "source_artifacts": {
+    "rank_ablation": {
+      "artifact_id": "shortpick_v2_h10_rank_ablation:2023-05-16:2026-05-08:20260615",
+      "artifact_family": "shortpick_v2_h10_rank_ablation_artifact",
+      "schema_version": "v1",
+      "status": "ready",
+      "claim_ceiling": "research_observation",
+      "evidence_basis": "historical_same_gate_rank_ablation",
+      "path": "output/shortpick-v2-h10-rank-ablation-artifact.json"
+    },
+    "parameter_significance": {
+      "artifact_id": "shortpick_v2_h10_parameter_significance:2023-05-16:2026-05-08:20260615",
+      "artifact_family": "shortpick_v2_h10_parameter_significance_artifact",
+      "schema_version": "v1",
+      "status": "ready",
+      "claim_ceiling": "research_observation",
+      "evidence_basis": "historical_parameter_ablation_and_governance_validation",
+      "path": "output/shortpick-v2-h10-parameter-significance-artifact.json"
+    },
+    "robustness": {
+      "artifact_id": "shortpick_v2_h10_robustness:2023-04-13:2026-05-08:200000:2026-06-15",
+      "artifact_family": "shortpick_v2_h10_robustness_artifact",
+      "schema_version": "v1",
+      "status": "ready",
+      "claim_ceiling": "research_observation",
+      "evidence_basis": "historical_account_replay_robustness",
+      "path": "output/shortpick-v2-h10-quiet-benchmark-robustness-artifact.json"
+    },
+    "execution_decomposition": {
+      "artifact_id": "shortpick_v2_h10_execution_decomposition:shortpick_v2_h10_robustness:2023-04-13:2026-05-08:200000:2026-06-15:2026-06-15",
+      "artifact_family": "shortpick_v2_h10_execution_decomposition_artifact",
+      "schema_version": "v1",
+      "status": "ready",
+      "claim_ceiling": "research_observation",
+      "evidence_basis": "historical_account_replay_execution_decomposition",
+      "path": "output/shortpick-v2-h10-quiet-execution-decomposition-artifact.json"
+    }
+  },
+  "analysis_scope": {
+    "horizon_days": 10,
+    "initial_cash": 200000.0,
+    "signal_date_from": "2023-05-16",
+    "signal_date_to": "2026-05-08",
+    "paper_tracking_start_date": "2026-05-08",
+    "primary_config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+    "capital_shadow_config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1",
+    "diagnostic_config_ids": [
+      "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1"
+    ]
+  },
+  "governance_policy": {
+    "ledger_policy": "future_true_forward_only_no_historical_backfill",
+    "entry_policy": "declared_entry_date_only_fallback_or_skip_no_delayed_entry",
+    "no_delayed_buy_policy": "candidate_or_fallback_on_declared_day_or_skip_no_delay",
+    "fixed90_policy": "diagnostic_only_blocked_without_separate_turnover_governance",
+    "qualification_floor": {
+      "min_annualized_return": 0.3,
+      "must_beat_market": true
+    },
+    "claim_policy": "historical_replay_is_not_true_forward_paper_performance"
+  },
+  "source_validation": {
+    "rank_ablation": {
+      "status": "passed",
+      "rank2_support_label": "supported",
+      "recommendation_status": "research_only_no_paper_tracking_promotion"
+    },
+    "parameter_significance": {
+      "status": "passed",
+      "failed_check_count": 0,
+      "recommendation_status": "research_only_no_paper_tracking_promotion"
+    },
+    "robustness": {
+      "status": "passed",
+      "recommendation_status": "not_ready_for_paper_tracking",
+      "risk_flag_count": 5,
+      "high_risk_flag_count": 4
+    },
+    "execution_decomposition": {
+      "status": "passed",
+      "missing_config_ids": []
+    },
+    "overall_status": "passed"
+  },
+  "source_disposition": {
+    "prior_decision_ref": {
+      "path": "docs/archive/SHORTPICK_LAB_V2_H10_QUIET_CHAMPION_RUN_2026-06-15.md",
+      "section": "Benchmark-Focused Robustness Decision"
+    },
+    "prior_decision": "not_promoted_to_paper_tracking_by_prior_plan",
+    "robustness_recommendation_status": "not_ready_for_paper_tracking",
+    "risk_flag_count": 5,
+    "high_risk_flag_count": 4,
+    "risk_flag_disposition": "open_risks_carried_to_forward_observation",
+    "governance_disposition": "future_true_forward_observation_candidate_only_no_historical_rows_no_performance_claim",
+    "open_risk_flags": [
+      {
+        "flag_id": "winner_removal_stress_fails_gate",
+        "severity": "medium",
+        "message": "Post-hoc removal of top winners breaks the return gate."
+      },
+      {
+        "flag_id": "yearly_period_below_annualized_floor",
+        "severity": "high",
+        "message": "A yearly reset period fails the 30% annualized floor."
+      },
+      {
+        "flag_id": "yearly_period_below_annualized_floor",
+        "severity": "high",
+        "message": "A yearly reset period fails the 30% annualized floor."
+      },
+      {
+        "flag_id": "yearly_period_below_annualized_floor",
+        "severity": "high",
+        "message": "A yearly reset period fails the 30% annualized floor."
+      },
+      {
+        "flag_id": "yearly_period_below_annualized_floor",
+        "severity": "high",
+        "message": "A yearly reset period fails the 30% annualized floor."
+      }
+    ]
+  },
+  "candidate_configs": [
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "role": "primary_future_observation_candidate",
+      "source_role": "benchmark_control",
+      "eligibility_status": "future_true_forward_observation_candidate_only",
+      "paper_tracking_performance_claim": false,
+      "current_true_forward_record_count": 0,
+      "summary": {
+        "total_return": 2.712294,
+        "annualized_return": 0.538713,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 2.29385,
+        "max_drawdown": -0.119033,
+        "trade_count": 190,
+        "turnover": 76.672058,
+        "skipped_ratio": 0.736477
+      },
+      "qualification_checks": {
+        "passed": true,
+        "min_annualized_return": 0.3,
+        "annualized_return": 0.538713,
+        "annualized_return_meets_floor": true,
+        "market_excess_total_return": 2.29385,
+        "beats_market": true
+      }
+    },
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1",
+      "role": "capital_shadow_future_observation_candidate",
+      "source_role": "benchmark_control",
+      "eligibility_status": "future_true_forward_observation_candidate_only",
+      "paper_tracking_performance_claim": false,
+      "current_true_forward_record_count": 0,
+      "summary": {
+        "total_return": 2.572453,
+        "annualized_return": 0.519423,
+        "market_reference_total_return": 0.418444,
+        "market_excess_total_return": 2.154009,
+        "max_drawdown": -0.119033,
+        "trade_count": 192,
+        "turnover": 73.018706,
+        "skipped_ratio": 0.733703
+      },
+      "qualification_checks": {
+        "passed": true,
+        "min_annualized_return": 0.3,
+        "annualized_return": 0.519423,
+        "annualized_return_meets_floor": true,
+        "market_excess_total_return": 2.154009,
+        "beats_market": true
+      }
+    }
+  ],
+  "diagnostic_configs": [
+    {
+      "config_id": "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1",
+      "role": "diagnostic_boundary",
+      "diagnostic_only": true,
+      "paper_tracking_eligible": false,
+      "blocked_reason": "diagnostic_only_blocked_without_separate_turnover_governance",
+      "target_notional": 90000.0
+    }
+  ],
+  "ledger_contract_overlay": {
+    "selected_config_ids": [
+      "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
+      "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1"
+    ],
+    "diagnostic_rejected_config_ids": [
+      "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1"
+    ],
+    "allowed_signal_actions": [
+      "buy_primary",
+      "buy_fallback",
+      "skip"
+    ],
+    "forbidden_signal_actions": [
+      "delay_buy",
+      "later_buy",
+      "retry_buy",
+      "discretionary_buy"
+    ],
+    "entry_policy": "declared_entry_date_only_fallback_or_skip_no_delayed_entry",
+    "ledger_policy": "future_true_forward_only_no_historical_backfill",
+    "paper_tracking_start_date": "2026-05-08",
+    "record_backfill_allowed": false,
+    "current_true_forward_record_count": 0,
+    "row_evidence_basis": "future_true_forward_paper_tracking_only"
+  },
+  "recommendation": {
+    "status": "forward_observation_ready_with_open_risks",
+    "paper_tracking_status": "not_started_no_true_forward_rows",
+    "notes": [
+      "This artifact records future observation eligibility only.",
+      "Historical replay return is not paper-tracking performance.",
+      "Open robustness risks must remain visible until true-forward rows exist."
+    ]
+  },
+  "leakage_audit": {
+    "status": "passed",
+    "no_historical_paper_row_backfill": true,
+    "no_delayed_buy_action": true,
+    "no_fixed90_promotion": true,
+    "no_database_write_or_refresh": true,
+    "no_investment_or_production_claim": true
+  },
+  "event_refs": [
+    "shortpick_v2.h10_paper_governance.generated",
+    "shortpick_v2.h10_paper_governance.source_robustness.shortpick_v2_h10_robustness:2023-04-13:2026-05-08:200000:2026-06-15"
+  ]
+}
