@@ -1,6 +1,7 @@
 import type { ShortpickPaperTrackingItem } from "../types";
 import { formatDate } from "../utils/format";
 import { statusLabel } from "./shortpickLabLabels";
+import { paperTrackingSpecialStrategyFilter } from "./shortpickPaperTrackingStrategyGroups";
 
 export type PaperTrackingGroupFilter =
   | ""
@@ -278,9 +279,7 @@ export function paperTrackingEntryRuleKey(item: ShortpickPaperTrackingItem): Pap
 }
 
 export function paperTrackingStrategyFilterKey(item: ShortpickPaperTrackingItem): PaperTrackingGroupFilter {
-  const label = item.control_label || item.selection_label?.replace(/^后验前向回放：/, "");
-  if (label === "同股冷却过滤" || label === "回撤/反转过滤" || label === "重复暴露限制") return label;
-  return "";
+  return paperTrackingSpecialStrategyFilter(item);
 }
 
 export function paperTrackingGroupFilterMatches(item: ShortpickPaperTrackingItem, filter: PaperTrackingGroupFilter): boolean {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,7 @@ def run_shortpick_combined_ledger_backfill_artifact(
     tracking rows; a later runtime integration can load the artifact explicitly.
     """
 
+    generated_at = generated_at or datetime.now(UTC).isoformat()
     normalized_true_forward_rows = _normalize_true_forward_rows(true_forward_rows or [], generated_at=generated_at)
     retrospective_rows: list[dict[str, Any]] = []
     blocked_sources: list[dict[str, Any]] = []

@@ -155,10 +155,6 @@ from ashare_evidence.shortpick_replay import (
     list_shortpick_replay_runs,
 )
 from ashare_evidence.shortpick_replay_readout import CURRENT_FROZEN_STRATEGY, build_shortpick_replay_decision_projection
-from ashare_evidence.shortpick_v2_read_model import (
-    build_shortpick_v2_historical_replay_read_model,
-    build_shortpick_v2_paper_tracking_read_model,
-)
 from ashare_evidence.shortpick_strategy_governance import (
     build_shortpick_redundant_control_archive_decisions,
     build_shortpick_strategy_archive_records,
@@ -168,6 +164,10 @@ from ashare_evidence.shortpick_strategy_governance import (
     partition_paper_tracking_rows_by_governance,
     project_shortpick_strategy_view_sections,
     shortpick_control_inventory_archive_items_from_artifacts,
+)
+from ashare_evidence.shortpick_v2_read_model import (
+    build_shortpick_v2_historical_replay_read_model,
+    build_shortpick_v2_paper_tracking_read_model,
 )
 from ashare_evidence.simulation import (
     end_simulation_session,
@@ -897,35 +897,35 @@ def _shortpick_combined_ledger_projection(
     include_rows: bool = True,
 ) -> dict[str, object]:
     if not isinstance(source, dict):
-        payload = {
-            "status": "not_configured",
-            "source": "shortpick_combined_ledger_backfill_artifact_store",
-            "artifact_count": 0,
-            "ignored_count": 0,
-            "combined_row_count": 0,
-            "true_forward_count": 0,
-            "retrospective_count": 0,
-        }
+        payload = dict(
+            status="not_configured", source="shortpick_combined_ledger_backfill_artifact_store",
+            artifact_count=0, ignored_count=0, combined_row_count=0, true_forward_count=0, retrospective_count=0,
+        )
         if include_rows:
             payload.update({"rows": [], "true_forward_rows": [], "retrospective_rows": []})
         return payload
 
     rows_by_id: dict[str, dict[str, object]] = {}
+    row_versions: dict[str, tuple[str, str]] = {}
     duplicate_row_count = 0
     for artifact in source.get("artifacts") or []:
         if not isinstance(artifact, dict):
             continue
         artifact_ref = str(artifact.get("artifact_id") or "")
+        artifact_generated_at = str(artifact.get("generated_at") or "")
         for row in artifact.get("combined_rows") or []:
             if not isinstance(row, dict):
                 continue
             row_id = str(row.get("combined_ledger_row_id") or "")
             if not row_id:
                 continue
+            row_version = (str(row.get("combined_ledger_materialized_at") or artifact_generated_at), artifact_ref)
             if row_id in rows_by_id:
                 duplicate_row_count += 1
-                continue
+                if row_version <= row_versions.get(row_id, ("", "")):
+                    continue
             rows_by_id[row_id] = {**row, "source_combined_ledger_artifact_id": artifact_ref}
+            row_versions[row_id] = row_version
 
     rows = list(rows_by_id.values())
     true_forward = filter_shortpick_combined_ledger_rows_by_evidence_basis(rows, evidence_basis="true_forward_tracking")
