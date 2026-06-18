@@ -617,6 +617,7 @@ def _paper_tracking_display_projection(
         coverage["source_status"] = "summary_rows_omitted"
         coverage["source_status_label"] = "摘要接口不返回明细行，也不执行回放重算"
     coverage["true_forward_record_count"] = len(records)
+    _merge_true_forward_tracking_coverage(coverage, records)
     coverage["account_curve_scope"] = "回放账户曲线"
     if true_forward_rows:
         if _paper_display_rows_have_buy_action(true_forward_rows):
@@ -700,7 +701,14 @@ def _paper_tracking_display_projection(
             {"label": "真实前向记录", "value": str(int(summary.get("record_count") or 0))},
             {"label": "回放展示行", "value": str(int(coverage.get("replay_row_count") or 0))},
             {"label": "覆盖起点", "value": str(coverage.get("coverage_start") or SHORTPICK_V2_TRACKING_START_DATE)},
-            {"label": "最新来源信号日", "value": str(coverage.get("latest_source_signal_date") or "暂无")},
+            {
+                "label": "最新纸面信号日",
+                "value": str(
+                    coverage.get("latest_tracking_signal_date")
+                    or coverage.get("latest_source_signal_date")
+                    or "暂无"
+                ),
+            },
         ],
     }
 
@@ -1321,6 +1329,42 @@ def _paper_display_rule_configs(active_config_ids: tuple[str, ...]) -> tuple[Any
 
 def _paper_display_rows_have_buy_action(rows: list[dict[str, Any]]) -> bool:
     return any(str(row.get("action") or "") in {"buy_primary", "buy_fallback"} for row in rows)
+
+
+def _merge_true_forward_tracking_coverage(coverage: dict[str, Any], records: list[dict[str, Any]]) -> None:
+    replay_latest = _iso_date_text_or_none(coverage.get("latest_source_signal_date"))
+    replay_coverage_end = _iso_date_text_or_none(coverage.get("coverage_end"))
+    if replay_latest is not None:
+        coverage["latest_replay_source_signal_date"] = replay_latest
+
+    true_forward_dates = sorted(
+        signal_date
+        for record in records
+        if (signal_date := _iso_date_text_or_none(record.get("signal_date"))) is not None
+    )
+    if not true_forward_dates:
+        coverage["latest_tracking_signal_date"] = replay_latest
+        return
+
+    latest_true_forward = true_forward_dates[-1]
+    coverage["latest_true_forward_signal_date"] = latest_true_forward
+    latest_tracking = max(date_text for date_text in (replay_latest, latest_true_forward) if date_text is not None)
+    coverage["latest_tracking_signal_date"] = latest_tracking
+    coverage["coverage_end"] = max(
+        date_text for date_text in (replay_coverage_end, latest_true_forward) if date_text is not None
+    )
+    coverage["latest_source_signal_date"] = latest_tracking
+
+
+def _iso_date_text_or_none(value: Any) -> str | None:
+    if isinstance(value, date):
+        return value.isoformat()
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return date.fromisoformat(value).isoformat()
+    except ValueError:
+        return None
 
 
 def _paper_display_active_config_ids(selected_configs: list[dict[str, Any]]) -> tuple[str, ...]:
