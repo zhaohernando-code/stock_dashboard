@@ -52,7 +52,7 @@ allowed_config_ids = {
 
 ledger_ref = (summary.get("source_artifacts") or {}).get("paper_ledger") or {}
 summary_counts = summary.get("summary") or {}
-coverage = summary.get("coverage") or {}
+coverage = summary.get("coverage") or (summary.get("paper_display") or {}).get("coverage") or {}
 records = full.get("records") or []
 
 if ledger_ref.get("artifact_family") != "shortpick_v2_paper_tracking_ledger":
@@ -61,8 +61,11 @@ if ledger_ref.get("status") == "missing":
     raise SystemExit(f"paper ledger source is missing: {ledger_ref}")
 if int(summary_counts.get("record_count") or 0) <= 0:
     raise SystemExit(f"expected nonzero record_count, got {summary_counts}")
-if int(coverage.get("true_forward_record_count") or 0) <= 0:
-    raise SystemExit(f"expected true-forward records, got {coverage}")
+true_forward_record_count = coverage.get("true_forward_record_count")
+if true_forward_record_count is None:
+    true_forward_record_count = summary_counts.get("true_forward_record_count")
+if int(true_forward_record_count or 0) <= 0:
+    raise SystemExit(f"expected true-forward records, got summary={summary_counts}, coverage={coverage}")
 if not records:
     raise SystemExit("full paper tracking payload returned no records")
 
