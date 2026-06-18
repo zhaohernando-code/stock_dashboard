@@ -130,6 +130,11 @@ from ashare_evidence.shortpick_v2_h10_weekday_drawdown_notional_matrix import (
     validate_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact,
     write_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact,
 )
+from ashare_evidence.shortpick_v2_industry_theme_experiment import (
+    build_shortpick_v2_industry_theme_experiment_artifact,
+    validate_shortpick_v2_industry_theme_experiment_artifact,
+    write_shortpick_v2_industry_theme_experiment_artifact,
+)
 from ashare_evidence.shortpick_v2_next_diagnostics import (
     build_shortpick_v2_next_diagnostics_artifact,
     validate_shortpick_v2_next_diagnostics_artifact,
@@ -309,6 +314,7 @@ NO_DB_COMMANDS = {
     "shortpick-v2-h10-parameter-significance-validate",
     "shortpick-v2-h10-rank-ablation-validate",
     "shortpick-v2-h10-weekday-drawdown-notional-matrix-validate",
+    "shortpick-v2-industry-theme-experiment-validate",
     "shortpick-v2-next-diagnostics-validate",
     "shortpick-v2-oos-loss-filter-validate",
     "shortpick-v2-oos-position-rank-diagnostics-validate",
@@ -1477,6 +1483,56 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate the v2 ranking replacement backtest artifact.",
     )
     shortpick_v2_ranking_backtest_validate.add_argument("--artifact", required=True)
+
+    shortpick_v2_industry_theme_experiment = subparsers.add_parser(
+        "shortpick-v2-industry-theme-experiment",
+        help="Generate research-only v2 industry/theme leadership experiments without candidate promotion.",
+    )
+    shortpick_v2_industry_theme_experiment.add_argument("--database-url", default=None)
+    shortpick_v2_industry_theme_experiment.add_argument("--historical-start-date", default="2023-04-13")
+    shortpick_v2_industry_theme_experiment.add_argument("--train-end-date", default="2025-04-30")
+    shortpick_v2_industry_theme_experiment.add_argument("--holdout-start-date", default="2025-05-01")
+    shortpick_v2_industry_theme_experiment.add_argument("--historical-end-date", default="2026-05-08")
+    shortpick_v2_industry_theme_experiment.add_argument("--paper-start-date", default="2026-05-08")
+    shortpick_v2_industry_theme_experiment.add_argument("--paper-end-date", default="2026-06-17")
+    shortpick_v2_industry_theme_experiment.add_argument("--current-month-start-date", default="2026-06-01")
+    shortpick_v2_industry_theme_experiment.add_argument("--initial-cash", type=float, default=200_000.0)
+    shortpick_v2_industry_theme_experiment.add_argument("--target-notional", type=float, default=85_000.0)
+    shortpick_v2_industry_theme_experiment.add_argument(
+        "--entry-price-source",
+        choices=["next_close", "next_open", "same_close_proxy"],
+        default="next_close",
+    )
+    shortpick_v2_industry_theme_experiment.add_argument("--horizon-days", type=int, default=10)
+    shortpick_v2_industry_theme_experiment.add_argument("--pool-limit", type=int, default=40)
+    shortpick_v2_industry_theme_experiment.add_argument("--rank-limit", type=int, default=6)
+    shortpick_v2_industry_theme_experiment.add_argument("--cost-bps", type=float, default=20.0)
+    shortpick_v2_industry_theme_experiment.add_argument("--stamp-tax-bps", type=float, default=5.0)
+    shortpick_v2_industry_theme_experiment.add_argument("--min-signal-symbol-count", type=int, default=45)
+    shortpick_v2_industry_theme_experiment.add_argument("--min-acceptable-annualized-return", type=float, default=0.30)
+    shortpick_v2_industry_theme_experiment.add_argument("--max-acceptable-drawdown", type=float, default=-0.25)
+    shortpick_v2_industry_theme_experiment.add_argument("--min-holdout-return-delta", type=float, default=0.10)
+    shortpick_v2_industry_theme_experiment.add_argument("--max-holdout-drawdown-worsening", type=float, default=-0.05)
+    shortpick_v2_industry_theme_experiment.add_argument("--top-winner-count", type=int, default=50)
+    shortpick_v2_industry_theme_experiment.add_argument(
+        "--account-profile",
+        choices=["new_retail_cash_account", "unrestricted"],
+        default="new_retail_cash_account",
+    )
+    shortpick_v2_industry_theme_experiment.add_argument(
+        "--output",
+        default="output/shortpick-v2-industry-theme-experiment-20260618.json",
+    )
+    shortpick_v2_industry_theme_experiment.add_argument(
+        "--summary-output",
+        default="docs/archive/SHORTPICK_V2_INDUSTRY_THEME_EXPERIMENT_2026-06-18.md",
+    )
+
+    shortpick_v2_industry_theme_experiment_validate = subparsers.add_parser(
+        "shortpick-v2-industry-theme-experiment-validate",
+        help="Validate the research-only v2 industry/theme leadership experiment artifact.",
+    )
+    shortpick_v2_industry_theme_experiment_validate.add_argument("--artifact", required=True)
 
     shortpick_paper_divergence_attribution = subparsers.add_parser(
         "shortpick-paper-divergence-attribution",
@@ -2695,6 +2751,57 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "shortpick-v2-ranking-backtest-validate":
         payload = validate_shortpick_v2_ranking_backtest_artifact(artifact_path=args.artifact)
+        _print_json(payload)
+        return 0 if payload.get("status") == "passed" else 1
+
+    if args.command == "shortpick-v2-industry-theme-experiment":
+        with session_scope(args.database_url) as session:
+            payload = build_shortpick_v2_industry_theme_experiment_artifact(
+                session,
+                historical_start_date=date.fromisoformat(args.historical_start_date),
+                train_end_date=date.fromisoformat(args.train_end_date),
+                holdout_start_date=date.fromisoformat(args.holdout_start_date),
+                historical_end_date=date.fromisoformat(args.historical_end_date),
+                paper_start_date=date.fromisoformat(args.paper_start_date),
+                paper_end_date=date.fromisoformat(args.paper_end_date),
+                current_month_start_date=date.fromisoformat(args.current_month_start_date),
+                initial_cash=args.initial_cash,
+                target_notional=args.target_notional,
+                entry_price_source=args.entry_price_source,
+                horizon_days=args.horizon_days,
+                pool_limit=args.pool_limit,
+                rank_limit=args.rank_limit,
+                cost_bps=args.cost_bps,
+                stamp_tax_bps=args.stamp_tax_bps,
+                min_signal_symbol_count=args.min_signal_symbol_count,
+                account_profile=args.account_profile,
+                min_acceptable_annualized_return=args.min_acceptable_annualized_return,
+                max_acceptable_drawdown=args.max_acceptable_drawdown,
+                min_holdout_return_delta=args.min_holdout_return_delta,
+                max_holdout_drawdown_worsening=args.max_holdout_drawdown_worsening,
+                top_winner_count=args.top_winner_count,
+            )
+        paths = write_shortpick_v2_industry_theme_experiment_artifact(
+            payload,
+            output_path=args.output,
+            summary_path=args.summary_output,
+        )
+        comparison = payload.get("comparison") if isinstance(payload.get("comparison"), dict) else {}
+        _print_json(
+            {
+                "status": "ok",
+                "artifact_family": payload.get("artifact_family"),
+                "artifact_id": payload.get("artifact_id"),
+                "output_path": str(paths["artifact"]),
+                "summary_output_path": str(paths.get("summary")) if paths.get("summary") else None,
+                "future_research_variant_ids": comparison.get("future_research_variant_ids"),
+                "interpretation_status": (payload.get("interpretation") or {}).get("status"),
+            }
+        )
+        return 0
+
+    if args.command == "shortpick-v2-industry-theme-experiment-validate":
+        payload = validate_shortpick_v2_industry_theme_experiment_artifact(artifact_path=args.artifact)
         _print_json(payload)
         return 0 if payload.get("status") == "passed" else 1
 
