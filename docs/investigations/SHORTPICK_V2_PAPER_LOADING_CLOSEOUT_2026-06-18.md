@@ -84,11 +84,26 @@ summary: status=active, records=4, rows=60, curves=2
 
 ## remediations
 
-| Type | Status | Remediation | Evidence Required |
+| Type | Status | Remediation | Evidence |
 |------|--------|-------------|-------------------|
-| known_defect | planned | skip-only true-forward ledger 复用回放账户曲线，不触发合并重算 | 单元测试；完整接口耗时复验；页面骨架屏解除 |
-| process_gap | planned | 运行时验证脚本加入完整纸面追踪 API 延迟门禁 | 脚本输出包含 full_api_seconds 且低于阈值 |
-| downstream_impact | planned | 检查 v2 页面与 API 路径，确认历史回放不受影响 | run 记录与验证输出 |
+| known_defect | fixed | skip-only true-forward ledger 复用回放账户曲线，不触发合并重算 | `35 passed in 9.20s`; runtime full API `0.657s`; 页面 `1.825s` 出现 v2 纸面追踪内容 |
+| process_gap | fixed | 运行时验证脚本加入完整纸面追踪 API 延迟门禁 | `bash scripts/verify-shortpick-v2-paper-ledger-runtime.sh` 输出 `full_api_seconds=0.543`, `full_api_max_seconds=10.0` |
+| downstream_impact | fixed | 检查 v2 页面与 API 路径，确认历史回放不受影响 | v2 纸面 API 返回 `records=4`, `rows=60`, `curves=2`; local served route renders v2 tab; public route returns auth 302 rather than 5173 proxy error |
+
+## closeoutEvidence
+
+- Targeted tests: `python3 -m pytest -q tests/test_shortpick_v2_paper_ledger.py tests/test_shortpick_v2_read_model_api.py` -> `35 passed in 9.20s`.
+- Full fast regression: `python3 -m pytest -q` -> `961 passed, 173 deselected, 6 subtests passed in 34.47s`.
+- Policy audit: `PYTHONPATH=src python3 -m ashare_evidence.cli policy-audit --fail-on-new-unclassified --fail-on-direct-config-read --fail-on-formula-side-effects --fail-on-missing-config-lineage` -> `status=pass`.
+- Publish: `ASHARE_PUBLISH_REFRESH_MODE=skip bash scripts/publish-local-runtime.sh` -> deploy verification `19 passed, 0 failed`.
+- Runtime API verifier: `full_api_seconds=0.543`, threshold `10.0s`, status `ok`.
+- Direct API timing: `/shortpick-lab-v2/paper-tracking` returned in `0.657190s`, `records=4`, `rows=60`, `curves=2`, `account_curve_scope=回放账户曲线，真实前向暂无买入`.
+- Browser verification: local runtime `/?view=shortpick-v2&shortpickTab=paper-tracking&shortpickV2Tab=paper-tracking` showed `纸面追踪运行中`, `显示 60 / 60 条`, and `2026-06-16` rows after `1.825s`.
+- Public served route check: `https://hernando-zhao.cn/projects/ashare-dashboard/?view=shortpick-v2&shortpickTab=paper-tracking&shortpickV2Tab=paper-tracking` returned auth `302`, confirming the route reaches the authenticated site layer rather than failing with `ECONNREFUSED 127.0.0.1:5173`.
+
+## downstreamNotes
+
+The first local browser run against `/projects/ashare-dashboard/...` failed to load static assets because the local static server does not strip the public prefix; the public reverse proxy path is authenticated and returned a normal auth redirect. The product-path validation therefore used the local root route with the same query parameters plus direct runtime API verification.
 
 ## confidence
 

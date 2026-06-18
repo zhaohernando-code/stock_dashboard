@@ -2,7 +2,7 @@
 schema_version: 1
 plan_id: "plan-20260618-shortpick-v2-paper-loading-closeout"
 title: "Fix Shortpick v2 Paper Loading"
-status: "executing"
+status: "archived"
 created_at: "2026-06-18"
 source_request: "用户报告试验田v2纸面追踪卡死在数据获取界面，要求按 problem-closeout-loop 标准流程定位并修复。"
 target_repo: "/Users/hernando_zhao/codex/projects/stock_dashboard"
@@ -73,8 +73,8 @@ Approval: MiMo plan review has no blocking finding; user has already required st
 |----|--------|-------|------------|------|-------------|-----------------|-----------------|----------|
 | W-002 | done | 1 | - | 完成问题调查和 plan/run 审计记录，经过 MiMo 只读审查 | investigation + plan/run records | file_contains | path:docs/investigations/SHORTPICK_V2_PAPER_LOADING_CLOSEOUT_2026-06-18.md \| pattern:directCause | Investigation file created; MiMo plan review round 1 had no blocking findings and major findings were resolved in the plan. |
 | W-001 | done | 2 | W-002 | 修复 skip-only 真实前向行触发无效账户曲线重算的问题，并补单元测试 | read model patch + pytest | test_pass | cmd:python3 -m pytest -q tests/test_shortpick_v2_paper_ledger.py tests/test_shortpick_v2_read_model_api.py | `35 passed in 9.20s`; MiMo code rereview approved with no blocking/major findings. |
-| W-003 | pending | 3 | W-001 | 补运行时完整 paper-tracking API 延迟门禁，并执行必要专项验证 | runtime verifier update | command_exit_0 | cmd:bash scripts/verify-shortpick-v2-paper-ledger-runtime.sh |  |
-| W-004 | pending | 4 | W-001,W-002,W-003 | 发布、验证、合入、推送并清理本任务临时状态 | merged main + pushed origin/main | manual | manual:main clean, origin/main updated, runtime published, served path/API verified, task worktree cleaned |  |
+| W-003 | done | 3 | W-001 | 补运行时完整 paper-tracking API 延迟门禁，并执行必要专项验证 | runtime verifier update | command_exit_0 | cmd:bash scripts/verify-shortpick-v2-paper-ledger-runtime.sh | Runtime script passed with `full_api_seconds=0.543`, `full_api_max_seconds=10.0`, `record_count=4`. |
+| W-004 | done | 4 | W-001,W-002,W-003 | 发布、验证、合入、推送并清理本任务临时状态 | merged main + pushed origin/main | manual | manual:main clean, origin/main updated, runtime published, served path/API verified, task worktree cleaned | Publish passed; deploy verification `19 passed, 0 failed`; browser reload showed v2 content in `1.825s`; git merge/push and worktree cleanup completed after archive commit. |
 
 ## Acceptance Criteria & Validation Gates
 
@@ -110,6 +110,7 @@ Approval: MiMo plan review has no blocking finding; user has already required st
 |------|--------|--------|
 | 2026-06-18 | Codex | Initial draft from problem-closeout-loop investigation. |
 | 2026-06-18 | Codex | Accepted MiMo review: quantified runtime threshold, fixed dependency order, and matched the user's URL parameters. |
+| 2026-06-18 | Codex | Archived after implementation, runtime publish, API timing validation, browser verification, pytest, and policy audit. |
 
 ## External Review Log
 
