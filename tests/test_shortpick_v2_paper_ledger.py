@@ -85,6 +85,9 @@ def test_shortpick_v2_paper_ledger_writer_emits_post_governance_records(
     assert read_model["paper_display"]["coverage"]["true_forward_record_count"] == written_payload["summary"][
         "record_count"
     ]
+    assert read_model["paper_display"]["coverage"]["latest_true_forward_signal_date"] == "2026-06-18"
+    assert read_model["paper_display"]["coverage"]["latest_tracking_signal_date"] == "2026-06-18"
+    assert read_model["paper_display"]["coverage"]["coverage_end"] == "2026-06-18"
 
 
 def test_shortpick_v2_paper_tracking_skip_only_ledger_does_not_reprice_account_curves(
@@ -133,6 +136,14 @@ def test_shortpick_v2_paper_tracking_skip_only_ledger_does_not_reprice_account_c
     coverage = read_model["paper_display"]["coverage"]
     assert coverage["true_forward_record_count"] == payload["summary"]["record_count"]
     assert coverage["account_curve_scope"] == "回放账户曲线，真实前向暂无买入"
+    assert coverage["latest_true_forward_signal_date"] == "2026-06-18"
+    assert coverage["latest_tracking_signal_date"] == "2026-06-18"
+    assert coverage["latest_source_signal_date"] == "2026-06-18"
+    assert coverage["coverage_end"] == "2026-06-18"
+    assert any(
+        card == {"label": "最新纸面信号日", "value": "2026-06-18"}
+        for card in read_model["paper_display"]["summary_cards"]
+    )
 
 
 def test_shortpick_v2_paper_tracking_buy_ledger_reprices_account_curves(
