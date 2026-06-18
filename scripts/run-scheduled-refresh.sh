@@ -40,6 +40,7 @@ DAILY_REFRESH_TIMEOUT_SECONDS="${ASHARE_DAILY_REFRESH_TIMEOUT_SECONDS:-7200}"
 SHORTPICK_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_TIMEOUT_SECONDS:-7200}"
 SHORTPICK_INTRADAY_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_INTRADAY_TIMEOUT_SECONDS:-600}"
 SHORTPICK_VALIDATION_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_VALIDATION_TIMEOUT_SECONDS:-600}"
+SHORTPICK_COMBINED_LEDGER_REFRESH_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_COMBINED_LEDGER_REFRESH_TIMEOUT_SECONDS:-900}"
 SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS:-180}"
 SHORTPICK_VALIDATE_RECENT_DAYS="${ASHARE_SHORTPICK_VALIDATE_RECENT_DAYS:-30}"
 SHORTPICK_VALIDATE_RECENT_LIMIT="${ASHARE_SHORTPICK_VALIDATE_RECENT_LIMIT:-20}"
@@ -111,6 +112,10 @@ prewarm_shortpick_v2_paper_cache() {
   bash "$REPO_ROOT/scripts/prewarm-shortpick-v2-paper-cache.sh"
 }
 
+refresh_shortpick_v1_control_combined_ledger() {
+  bash "$REPO_ROOT/scripts/refresh-shortpick-v1-control-combined-ledger.sh"
+}
+
 wait_for_database_writable() {
   local deadline=$((SECONDS + DATABASE_LOCK_WAIT_SECONDS))
   while (( SECONDS < deadline )); do
@@ -170,6 +175,9 @@ PY
     if ! run_with_timeout "$SHORTPICK_VALIDATION_TIMEOUT_SECONDS" run_shortpick_validation_refresh; then
       echo "Shortpick recent validation did not finish within ${SHORTPICK_VALIDATION_TIMEOUT_SECONDS}s; continuing with frontend projection refresh." >&2
     fi
+  fi
+  if ! run_with_timeout "$SHORTPICK_COMBINED_LEDGER_REFRESH_TIMEOUT_SECONDS" refresh_shortpick_v1_control_combined_ledger; then
+    echo "Shortpick v1 control combined-ledger refresh failed; keeping previous artifact rows." >&2
   fi
   if ! run_frontend_projection_refresh; then
     echo "Frontend projection refresh failed; keeping previous projection rows." >&2
