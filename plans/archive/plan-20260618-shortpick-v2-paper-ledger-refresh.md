@@ -2,7 +2,7 @@
 schema_version: 1
 plan_id: "plan-20260618-shortpick-v2-paper-ledger-refresh"
 title: "Shortpick v2 paper ledger refresh"
-status: "executing"
+status: "completed"
 created_at: "2026-06-18"
 source_request: "实现试验田v2在每日刷新时自动刷新真实前向纸面记录。"
 target_repo: "/Users/hernando_zhao/codex/projects/stock_dashboard"
@@ -16,7 +16,7 @@ review_rounds: 1
 
 Goal: make daily refresh produce and refresh v2 true-forward paper ledger rows, not only prewarm the read model.
 Scope: use existing v2 paper ledger JSON schema and H10 governed configs; no new strategy search or historical result mutation.
-Production path: `scripts/run-scheduled-refresh.sh` postmarket shortpick cycle writes ledger, then prewarms `/shortpick-lab-v2/paper-tracking`.
+Production path: `scripts/run-scheduled-refresh.sh` main postmarket daily refresh writes the v2 ledger once, then prewarms `/shortpick-lab-v2/paper-tracking`.
 Validation: focused unit/static tests, runtime verify script, publish to runtime, served API proves `record_count > 0`.
 Risk: accidental historical backfill or v1 ledger fallback; mitigate through schema, start-date, source-gap policy, and no delayed-buy tests.
 Approval: user requested standard-flow implementation and previously approved non-blocking execution; plan is approved for execution after MiMo review found no blocker.
@@ -43,7 +43,7 @@ Add the missing v2 paper ledger writer and scheduled-refresh integration so `试
 
 | Path ID | User / Production Path | Validation Path | Responsibility Owner | Test Setup / Bypass | Fidelity Status | Evidence Required |
 |---------|------------------------|-----------------|----------------------|---------------------|-----------------|-------------------|
-| PF-001 | LaunchAgent calls `scripts/run-scheduled-refresh.sh`; postmarket `shortpick_lab` cycle writes v2 paper ledger and prewarms v2 paper read model. | Static script test plus direct execution of the new v2 refresh script and runtime verify script after publish. | scheduled refresh script | none | matches_product_path | Runtime artifact exists; `scripts/verify-shortpick-v2-paper-ledger-runtime.sh` exits 0 and served summary reads the produced ledger. |
+| PF-001 | LaunchAgent calls `scripts/run-scheduled-refresh.sh`; main postmarket daily refresh writes v2 paper ledger once and prewarms v2 paper read model. | Static script test plus direct execution of the new v2 refresh script and runtime verify script after publish. | scheduled refresh script | none | matches_product_path | Runtime artifact exists; `scripts/verify-shortpick-v2-paper-ledger-runtime.sh` exits 0 and served summary reads the produced ledger. |
 | PF-002 | Browser/API users open `试验田v2` paper tracking; backend uses `build_shortpick_v2_paper_tracking_read_model` and ledger artifact. | Served API requests through `scripts/verify-shortpick-v2-paper-ledger-runtime.sh`. | FastAPI read model | none | matches_product_path | Served payload has true-forward `record_count > 0`, no missing ledger source, and Chinese readout remains available. |
 | PF-003 | Unit tests construct temporary DB/artifacts to prove writer behavior without touching runtime. | Focused pytest using temp dirs and fixture market series. | test harness | controlled temp DB and artifacts; production owner still covered by PF-001/PF-002 | controlled_simulation | Test passes and production path evidence also collected. |
 
@@ -76,10 +76,10 @@ Add the missing v2 paper ledger writer and scheduled-refresh integration so `试
 
 | ID | Status | Order | Depends On | Task | Deliverable | Acceptance Type | Acceptance Spec | Evidence |
 |----|--------|-------|------------|------|-------------|-----------------|-----------------|----------|
-| W-001 | completed | 1 | - | Implement v2 paper ledger writer, CLI/script entrypoint, and writer/read-model tests using the existing schema and governed H10 configs. Tests must assert records are on or after `2026-05-08`. | `src/ashare_evidence/shortpick_v2_paper_ledger.py`, CLI/script, tests | test_pass | cmd:python3 -m pytest -q tests/test_shortpick_v2_paper_ledger.py tests/test_shortpick_v2_read_model_api.py -k 'paper_tracking' | passed: 15 passed, 16 deselected |
+| W-001 | completed | 1 | - | Implement v2 paper ledger writer, CLI/script entrypoint, and writer/read-model tests using the existing schema and governed H10 configs. Tests must assert records are on or after `2026-05-08`. | `src/ashare_evidence/shortpick_v2_paper_ledger.py`, CLI/script, tests | test_pass | cmd:python3 -m pytest -q tests/test_shortpick_v2_paper_ledger.py tests/test_shortpick_v2_read_model_api.py -k 'paper_tracking' | passed: 15 passed, 18 deselected |
 | W-002 | completed | 2 | W-001 | Wire v2 paper ledger refresh into the postmarket scheduled refresh before v2 paper cache prewarm, with shell syntax/static coverage. | `scripts/run-scheduled-refresh.sh` integration and static tests | test_pass | cmd:bash -n scripts/run-scheduled-refresh.sh scripts/refresh-shortpick-v2-paper-ledger.sh scripts/verify-shortpick-v2-paper-ledger-runtime.sh && python3 -m pytest -q tests/test_scheduled_refresh_static.py tests/test_publish_script_static.py | passed: 25 passed |
-| W-003 | in_progress | 3 | W-002 | Verify runtime behavior through publish and served API using a scriptable production-path gate. | Published runtime and API evidence | command_exit_0 | cmd:scripts/verify-shortpick-v2-paper-ledger-runtime.sh | local writer smoke passed against runtime DB: record_count=4 |
-| W-004 | pending | 4 | W-003 | Close out standard flow with archived run record, plan archive, push, merge, origin/main sync, and cleanup. | Archived run + merged PR + clean local state | manual | manual:run record archived, PR merged, origin/main clean, temporary worktree removed |  |
+| W-003 | completed | 3 | W-002 | Verify runtime behavior through publish and served API using a scriptable production-path gate. | Published runtime and API evidence | command_exit_0 | cmd:scripts/verify-shortpick-v2-paper-ledger-runtime.sh | passed after publish: runtime writer record_count=4; served verify record_count=4 true_forward_record_count=4 |
+| W-004 | completed | 4 | W-003 | Close out standard flow with archived run record, plan archive, push, merge, origin/main sync, and cleanup. | Archived run + merged PR + clean local state | manual | manual:run record archived, PR merged, origin/main clean, temporary worktree removed | PR #7 merged; ef6cc0e pushed to origin/main; runtime publish verification passed |
 
 ## Acceptance Criteria & Validation Gates
 
@@ -120,6 +120,7 @@ Add the missing v2 paper ledger writer and scheduled-refresh integration so `试
 | 2026-06-18 | Codex | Drafted standard-flow plan for v2 paper ledger daily refresh. |
 | 2026-06-18 | Codex | Accepted MiMo plan review findings: script runtime verification, clarified W-001 sequencing, added start-date and shell syntax gates. |
 | 2026-06-18 | Codex | Started full-plan execution; W-001 moved from pending to in_progress. |
+| 2026-06-18 | Codex | Completed implementation, MiMo code review fixes, PR #7 merge, origin/main push, runtime publish, and served API verification. |
 
 ## External Review Log
 
@@ -129,6 +130,9 @@ Add the missing v2 paper ledger writer and scheduled-refresh integration so `试
 | 1 | MiMo | W-001 should make writer/test sequencing explicit for plan-run-loop execution. | major | accepted | W-001 now explicitly includes writer, CLI/script, tests, and start-date assertion before running pytest. | W-001 |
 | 1 | MiMo | W-002 lacks an intermediate shell/dry-run style gate. | minor | accepted | W-002 now includes `bash -n` for run and verification scripts plus static tests. | W-002, W-003 |
 | 1 | MiMo | Frontend check is broad for this backend/script change. | note | rejected | Retained because live-facing runtime publish includes frontend bundle health and project CI now has a cheap `check` script. | Validation Gates |
+| 2 | MiMo | Missing H10 paper governance artifact could fall back to tracking-start rows and falsely write true-forward records. | blocker | accepted | Writer now raises when H10 paper governance artifact is missing before any ledger can be built. | W-001 |
+| 2 | MiMo | v2 ledger refresh had duplicate scheduled-refresh call points. | major | accepted | Kept one main postmarket daily-refresh call and added a static count assertion. | W-002 |
+| 2 | MiMo | Runtime/test boundary checks used tracking start instead of post-governance true-forward boundary. | major | accepted | Runtime verify and tests now enforce 2026-06-16 minimum signal date and fixed85/fixed80 configs. | W-001, W-003 |
 
 ## User Review Notes
 
