@@ -686,6 +686,11 @@ def _paper_tracking_display_projection(
                 ],
             },
         ],
+        "strategy_observations": _paper_display_strategy_observations(
+            account_curves=account_curves,
+            display_rows=internal_display_rows,
+            include_display_rows=include_display_rows,
+        ),
         "table": {
             "title": "模拟交易明细",
             "columns": [
@@ -1257,11 +1262,11 @@ def _paper_display_row_from_ledger(record: dict[str, Any]) -> dict[str, Any]:
         "exit_state": "completed" if exit_trade_date else "pending",
         "exit_state_text": "已退出" if exit_trade_date else "等待退出",
         "exit_reason_text": _paper_exit_reason_label(exit_reason),
-        "holding_days_text": "按 ledger 记录",
+        "holding_days_text": "按纸面记录",
         "return": stock_return,
         "return_text": _format_percent(stock_return),
         "source_state": str(record.get("source_state") or "observed"),
-        "note": "真实前向：来自 v2 ledger。",
+        "note": "真实前向：来自 v2 纸面记录。",
     }
 
 
@@ -1739,6 +1744,103 @@ def _paper_display_account_curves_from_rows(
             }
         )
     return sorted(curves, key=lambda curve: str(curve.get("strategy") or ""))
+
+
+def _paper_display_strategy_observations(
+    *,
+    account_curves: list[dict[str, Any]],
+    display_rows: list[dict[str, Any]],
+    include_display_rows: bool,
+) -> dict[str, Any]:
+    columns = [
+        {"key": "strategy", "label": "策略"},
+        {"key": "latest_return_text", "label": "最新收益"},
+        {"key": "max_drawdown_text", "label": "最大回撤"},
+        {"key": "completed_trade_count_text", "label": "已退出交易"},
+        {"key": "buy_count_text", "label": "买入次数"},
+        {"key": "skip_count_text", "label": "未买入次数"},
+        {"key": "gap_count_text", "label": "缺口"},
+        {"key": "latest_signal_date_text", "label": "最新信号日"},
+        {"key": "note", "label": "说明"},
+    ]
+    if not include_display_rows:
+        return {
+            "title": "策略观察组",
+            "columns": columns,
+            "rows": [],
+            "empty_text": "摘要接口不返回纸面对照明细。",
+        }
+
+    stats_by_strategy: dict[str, dict[str, Any]] = {}
+    for row in display_rows:
+        strategy = str(row.get("strategy_text") or "未命名策略")
+        stats = stats_by_strategy.setdefault(
+            strategy,
+            {
+                "buy_count": 0,
+                "skip_count": 0,
+                "gap_count": 0,
+                "latest_signal_date": "",
+            },
+        )
+        action = str(row.get("action") or "")
+        if action in {"buy_primary", "buy_fallback"}:
+            stats["buy_count"] += 1
+        elif action == "skip":
+            stats["skip_count"] += 1
+        elif action == "source_gap":
+            stats["gap_count"] += 1
+        signal_date = str(row.get("signal_date") or "")
+        if signal_date > str(stats.get("latest_signal_date") or ""):
+            stats["latest_signal_date"] = signal_date
+
+    curve_by_strategy = {
+        str(curve.get("strategy") or "未命名策略"): curve
+        for curve in account_curves
+        if isinstance(curve, dict)
+    }
+    strategies = sorted(set(stats_by_strategy) | set(curve_by_strategy))
+    rows: list[dict[str, Any]] = []
+    for strategy in strategies:
+        stats = stats_by_strategy.get(strategy, {})
+        curve = curve_by_strategy.get(strategy, {})
+        latest_return = _optional_float(curve.get("latest_return"))
+        max_drawdown = _optional_float(curve.get("max_drawdown"))
+        completed_trade_count = _optional_int(curve.get("completed_trade_count"))
+        has_curve = bool(curve.get("points"))
+        rows.append(
+            {
+                "row_key": f"paper-strategy-observation-{len(rows) + 1}",
+                "strategy": strategy,
+                "latest_return": latest_return,
+                "latest_return_text": _format_percent(latest_return),
+                "max_drawdown": max_drawdown,
+                "max_drawdown_text": _format_percent(max_drawdown),
+                "completed_trade_count_text": str(int(completed_trade_count or 0)),
+                "buy_count_text": str(int(stats.get("buy_count") or 0)),
+                "skip_count_text": str(int(stats.get("skip_count") or 0)),
+                "gap_count_text": str(int(stats.get("gap_count") or 0)),
+                "latest_signal_date_text": str(stats.get("latest_signal_date") or "暂无"),
+                "note": (
+                    "按 20 万纸面账户、实际买入成本和持仓市值统计。"
+                    if has_curve
+                    else "暂无账户曲线；仅统计纸面对照动作覆盖。"
+                ),
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            row.get("latest_return") is None,
+            -float(row.get("latest_return") or 0.0),
+            str(row.get("strategy") or ""),
+        )
+    )
+    return {
+        "title": "策略观察组",
+        "columns": columns,
+        "rows": rows,
+        "empty_text": "暂无可展示的纸面对照观察组。",
+    }
 
 
 def _paper_display_account_curves_from_session(

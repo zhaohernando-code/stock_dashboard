@@ -640,6 +640,27 @@ export interface ShortpickV2PaperDisplayChart {
   data?: ShortpickV2PaperDisplayChartPoint[];
 }
 
+export interface ShortpickV2PaperDisplayStrategyObservationRow {
+  row_key?: string;
+  strategy?: string;
+  latest_return_text?: string;
+  max_drawdown_text?: string;
+  completed_trade_count_text?: string;
+  buy_count_text?: string;
+  skip_count_text?: string;
+  gap_count_text?: string;
+  latest_signal_date_text?: string;
+  note?: string;
+  [key: string]: unknown;
+}
+
+export interface ShortpickV2PaperDisplayStrategyObservations {
+  title?: string;
+  columns?: ShortpickV2PaperDisplayTableColumn[];
+  rows?: ShortpickV2PaperDisplayStrategyObservationRow[];
+  empty_text?: string;
+}
+
 export interface ShortpickV2PaperDisplayTableColumn {
   key: string;
   label: string;
@@ -698,6 +719,7 @@ export interface ShortpickV2PaperDisplay {
   latest_trade?: ShortpickV2PaperDisplayLatestTrade;
   strategy_explanation?: ShortpickV2PaperDisplayStrategyExplanation;
   charts?: ShortpickV2PaperDisplayChart[];
+  strategy_observations?: ShortpickV2PaperDisplayStrategyObservations;
   table?: ShortpickV2PaperDisplayTable;
   account_curves?: ShortpickV2PaperDisplayAccountCurve[];
   coverage?: Record<string, unknown>;

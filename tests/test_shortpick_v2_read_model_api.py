@@ -832,6 +832,23 @@ def test_shortpick_v2_paper_tracking_display_replays_since_start_with_session(
     account_curves = display["account_curves"]
     assert isinstance(account_curves, list)
     assert coverage["account_curve_count"] == len(account_curves)
+    observations = display["strategy_observations"]
+    assert observations["title"] == "策略观察组"
+    assert [column["label"] for column in observations["columns"]][:4] == [
+        "策略",
+        "最新收益",
+        "最大回撤",
+        "已退出交易",
+    ]
+    assert {
+        "8.5 万目标买入方案",
+        "8 万目标买入方案",
+        "8.5 万目标买入 H5 对照",
+        "8.5 万目标买入 H5 止损对照",
+    } <= {row["strategy"] for row in observations["rows"]}
+    assert {curve["strategy"] for curve in account_curves} <= {row["strategy"] for row in observations["rows"]}
+    assert all("config_id" not in row for row in observations["rows"])
+    assert all("纸面" in row["note"] or "账户曲线" in row["note"] for row in observations["rows"])
     for curve in account_curves:
         assert curve["points"]
         assert curve["latest_nav"] == curve["points"][-1]["nav"]
@@ -1342,6 +1359,7 @@ def test_shortpick_v2_paper_tracking_display_uses_readable_chinese_text(
         [
             display["latest_trade"],
             display["strategy_explanation"],
+            display["strategy_observations"],
             display["charts"],
             display["table"]["columns"],
             visible_table_rows,
@@ -1357,6 +1375,7 @@ def test_shortpick_v2_paper_tracking_display_uses_readable_chinese_text(
         "fixed_notional",
         "paper_tracking",
         "source_gap",
+        "ledger",
     ):
         assert forbidden not in visible_text
     assert "回放" in visible_text
@@ -1560,6 +1579,15 @@ def test_shortpick_v2_read_api_full_paper_tracking_returns_display_rows(
     assert {row["tracking_tag"] for row in rows} == {"回放"}
     assert body["paper_display"]["coverage"]["coverage_start"] == "2026-05-08"
     assert body["paper_display"]["coverage"]["row_or_gap_config_accounting_passed"] is True
+    observation_rows = body["paper_display"]["strategy_observations"]["rows"]
+    assert observation_rows
+    assert {row["strategy"] for row in observation_rows} == {
+        "8.5 万目标买入方案",
+        "8 万目标买入方案",
+        "8.5 万目标买入 H5 对照",
+        "8.5 万目标买入 H5 止损对照",
+    }
+    assert all("config_id" not in row for row in observation_rows)
 
 
 def test_shortpick_v2_read_api_preserves_h10_paper_governance_projection(
@@ -1582,6 +1610,8 @@ def test_shortpick_v2_read_api_preserves_h10_paper_governance_projection(
     assert body["records"] == []
     assert body["paper_display"]["table"]["rows"] == []
     assert body["paper_display"]["coverage"]["source_status"] == "summary_rows_omitted"
+    assert body["paper_display"]["strategy_observations"]["rows"] == []
+    assert body["paper_display"]["strategy_observations"]["empty_text"] == "摘要接口不返回纸面对照明细。"
     assert body["paper_governance"]["selected_config_ids"] == list(H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS)
     assert body["paper_governance"]["paper_tracking_status"] == PAPER_TRACKING_STATUS
 

@@ -23,6 +23,7 @@ import type {
   ShortpickV2HistoricalReplayResponse,
   ShortpickV2PaperDisplayAccountCurve,
   ShortpickV2PaperDisplayChart,
+  ShortpickV2PaperDisplayStrategyObservationRow,
   ShortpickV2PaperDisplayTableColumn,
   ShortpickV2PaperDisplayTableRow,
   ShortpickV2PaperDisplayTextItem,
@@ -289,13 +290,14 @@ function ShortpickV2PaperTab({
   const strategyExplanation = display?.strategy_explanation;
   const charts = display?.charts ?? [];
   const accountCurves = display?.account_curves ?? [];
+  const strategyObservations = display?.strategy_observations;
+  const strategyObservationRows = strategyObservations?.rows ?? [];
   const table = display?.table;
   const tableRows = table?.rows ?? [];
   const [tableSearch, setTableSearch] = useState("");
   const [strategyFilter, setStrategyFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
   const [exitFilter, setExitFilter] = useState("");
-  const strategyRows = tracking?.selected_configs ?? [];
   const strategyOptions = useMemo(() => uniquePaperOptions(tableRows, "strategy_text"), [tableRows]);
   const actionOptions = useMemo(() => uniquePaperOptions(tableRows, "action_text"), [tableRows]);
   const exitOptions = useMemo(() => uniquePaperOptions(tableRows, "exit_state_text"), [tableRows]);
@@ -399,13 +401,20 @@ function ShortpickV2PaperTab({
         )}
       </Card>
 
-      <Card className="panel-card" title="策略观察组">
+      <Card className="panel-card" title={strategyObservations?.title || "策略观察组"}>
         {loading && !tracking ? (
           <Skeleton active paragraph={{ rows: 4 }} />
-        ) : strategyRows.length ? (
-          <ConfigSummaryTable rows={strategyRows} loading={loading} />
+        ) : strategyObservationRows.length ? (
+          <Table
+            rowKey={(item, index) => String(item.row_key || `paper-strategy-observation-${index ?? 0}`)}
+            size="small"
+            loading={loading}
+            pagination={false}
+            columns={paperStrategyObservationColumns(strategyObservations?.columns ?? [])}
+            dataSource={strategyObservationRows}
+          />
         ) : (
-          <Empty description="暂无可展示的策略观察组。" />
+          <Empty description={strategyObservations?.empty_text || "暂无可展示的纸面对照观察组。"} />
         )}
       </Card>
 
@@ -633,6 +642,32 @@ function PaperReturnCharts({
       </div>
     </div>
   );
+}
+
+function paperStrategyObservationColumns(
+  sourceColumns: ShortpickV2PaperDisplayTableColumn[],
+): ColumnsType<ShortpickV2PaperDisplayStrategyObservationRow> {
+  const fallbackColumns: ShortpickV2PaperDisplayTableColumn[] = [
+    { key: "strategy", label: "策略" },
+    { key: "latest_return_text", label: "最新收益" },
+    { key: "max_drawdown_text", label: "最大回撤" },
+    { key: "completed_trade_count_text", label: "已退出交易" },
+    { key: "buy_count_text", label: "买入次数" },
+    { key: "skip_count_text", label: "未买入次数" },
+    { key: "gap_count_text", label: "缺口" },
+    { key: "latest_signal_date_text", label: "最新信号日" },
+    { key: "note", label: "说明" },
+  ];
+  return (sourceColumns.length ? sourceColumns : fallbackColumns).map((column) => ({
+    title: column.label,
+    key: column.key,
+    render: (_, item) => {
+      const value = displayValue(item[column.key]);
+      if (column.key === "strategy") return <Text strong>{value}</Text>;
+      if (column.key === "note") return <Text type="secondary">{value}</Text>;
+      return <Text>{value}</Text>;
+    },
+  }));
 }
 
 function PaperDisplayChartCard({ chart }: { chart: ShortpickV2PaperDisplayChart }) {
