@@ -7,7 +7,7 @@ created_at: "2026-06-18"
 source_request: "用户报告试验田v2纸面追踪卡死在数据获取界面，要求按 problem-closeout-loop 标准流程定位并修复。"
 target_repo: "/Users/hernando_zhao/codex/projects/stock_dashboard"
 owner: "user"
-review_rounds: 1
+review_rounds: 2
 ---
 
 # Plan: Fix Shortpick v2 Paper Loading
