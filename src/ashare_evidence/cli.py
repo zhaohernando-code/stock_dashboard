@@ -150,6 +150,7 @@ from ashare_evidence.shortpick_v2_out_of_sample_risk import (
     validate_shortpick_v2_out_of_sample_risk_artifact,
     write_shortpick_v2_out_of_sample_risk_artifact,
 )
+from ashare_evidence.shortpick_v2_paper_ledger import refresh_shortpick_v2_paper_ledger_artifact
 from ashare_evidence.shortpick_v2_ranking_backtest import (
     build_shortpick_v2_ranking_backtest_artifact,
     validate_shortpick_v2_ranking_backtest_artifact,
@@ -984,6 +985,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=SELECTION_THRESHOLD_PROFILE_STANDARD,
     )
     shortpick_v2_rule_selection.add_argument("--generated-at", default=None)
+
+    shortpick_v2_paper_ledger_refresh = subparsers.add_parser(
+        "shortpick-v2-paper-ledger-refresh",
+        help="Refresh the Short Pick Lab v2 true-forward paper tracking ledger artifact.",
+    )
+    shortpick_v2_paper_ledger_refresh.add_argument("--database-url", default=None)
+    shortpick_v2_paper_ledger_refresh.add_argument("--output", default="output/shortpick-v2-paper-tracking-ledger.json")
+    shortpick_v2_paper_ledger_refresh.add_argument("--rule-selection-artifact", default=None)
+    shortpick_v2_paper_ledger_refresh.add_argument("--paper-governance-artifact", default=None)
+    shortpick_v2_paper_ledger_refresh.add_argument("--target-date", default=None)
 
     shortpick_v2_h10_robustness = subparsers.add_parser(
         "shortpick-v2-h10-robustness",
@@ -2196,6 +2207,27 @@ def main(argv: list[str] | None = None) -> int:
                 "baseline_config_ids": [item["config_id"] for item in payload.get("baseline_configs") or []],
                 "holdout_count": len(payload.get("holdout_configs") or []),
                 "rejected_count": len(payload.get("rejected_configs") or []),
+            }
+        )
+        return 0
+
+    if args.command == "shortpick-v2-paper-ledger-refresh":
+        target_date = date.fromisoformat(args.target_date) if args.target_date else None
+        with session_scope(args.database_url) as session:
+            payload, path = refresh_shortpick_v2_paper_ledger_artifact(
+                session,
+                output_path=args.output,
+                rule_selection_artifact_path=args.rule_selection_artifact,
+                paper_governance_artifact_path=args.paper_governance_artifact,
+                target_date=target_date,
+            )
+        _print_json(
+            {
+                "status": "ok",
+                "artifact_family": payload.get("artifact_family"),
+                "ledger_id": payload.get("ledger_id"),
+                "output_path": str(path),
+                "summary": payload.get("summary"),
             }
         )
         return 0

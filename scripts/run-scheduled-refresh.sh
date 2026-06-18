@@ -41,6 +41,7 @@ SHORTPICK_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_TIMEOUT_SECONDS:-7200}"
 SHORTPICK_INTRADAY_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_INTRADAY_TIMEOUT_SECONDS:-600}"
 SHORTPICK_VALIDATION_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_VALIDATION_TIMEOUT_SECONDS:-600}"
 SHORTPICK_COMBINED_LEDGER_REFRESH_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_COMBINED_LEDGER_REFRESH_TIMEOUT_SECONDS:-900}"
+SHORTPICK_V2_PAPER_LEDGER_REFRESH_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_V2_PAPER_LEDGER_REFRESH_TIMEOUT_SECONDS:-900}"
 SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS:-180}"
 SHORTPICK_VALIDATE_RECENT_DAYS="${ASHARE_SHORTPICK_VALIDATE_RECENT_DAYS:-30}"
 SHORTPICK_VALIDATE_RECENT_LIMIT="${ASHARE_SHORTPICK_VALIDATE_RECENT_LIMIT:-20}"
@@ -110,6 +111,10 @@ run_frontend_projection_refresh() {
 
 prewarm_shortpick_v2_paper_cache() {
   bash "$REPO_ROOT/scripts/prewarm-shortpick-v2-paper-cache.sh"
+}
+
+refresh_shortpick_v2_paper_ledger() {
+  bash "$REPO_ROOT/scripts/refresh-shortpick-v2-paper-ledger.sh"
 }
 
 refresh_shortpick_v1_control_combined_ledger() {
@@ -474,6 +479,9 @@ run_daily_refresh_slot() {
   run_with_timeout "$DAILY_REFRESH_TIMEOUT_SECONDS" run_phase5_daily_refresh --analysis-only
   local exit_code=$?
   if [[ "$exit_code" == "0" ]]; then
+    if ! run_with_timeout "$SHORTPICK_V2_PAPER_LEDGER_REFRESH_TIMEOUT_SECONDS" refresh_shortpick_v2_paper_ledger; then
+      echo "Shortpick v2 paper ledger refresh failed after daily refresh; keeping previous artifact rows." >&2
+    fi
     if ! run_with_timeout "$SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS" prewarm_shortpick_v2_paper_cache; then
       echo "Shortpick v2 paper cache prewarm failed after daily refresh; the next page load may rebuild the cache." >&2
     fi

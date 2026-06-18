@@ -131,8 +131,29 @@ def test_publish_reloads_scheduled_refresh_calendar_slots() -> None:
 def test_daily_refresh_prewarms_shortpick_v2_paper_cache_after_market_data_refresh() -> None:
     script = SCRIPT_PATH.read_text(encoding="utf-8")
 
+    assert (
+        'SHORTPICK_V2_PAPER_LEDGER_REFRESH_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_V2_PAPER_LEDGER_REFRESH_TIMEOUT_SECONDS:-900}"'
+        in script
+    )
+    assert "refresh_shortpick_v2_paper_ledger" in script
+    assert 'bash "$REPO_ROOT/scripts/refresh-shortpick-v2-paper-ledger.sh"' in script
+    assert (
+        'run_with_timeout "$SHORTPICK_V2_PAPER_LEDGER_REFRESH_TIMEOUT_SECONDS" refresh_shortpick_v2_paper_ledger'
+        in script
+    )
+    assert (
+        script.count(
+            'run_with_timeout "$SHORTPICK_V2_PAPER_LEDGER_REFRESH_TIMEOUT_SECONDS" refresh_shortpick_v2_paper_ledger'
+        )
+        == 1
+    )
+    assert "Shortpick v2 paper ledger refresh failed after daily refresh" in script
     assert "Shortpick v2 paper cache prewarm failed after daily refresh" in script
+    assert "Shortpick v2 paper ledger refresh failed; keeping previous artifact rows." not in script
     assert script.index('run_with_timeout "$DAILY_REFRESH_TIMEOUT_SECONDS" run_phase5_daily_refresh --analysis-only') < (
+        script.index("Shortpick v2 paper ledger refresh failed after daily refresh")
+    )
+    assert script.index("Shortpick v2 paper ledger refresh failed after daily refresh") < (
         script.index("Shortpick v2 paper cache prewarm failed after daily refresh")
     )
     assert script.index("Shortpick v2 paper cache prewarm failed after daily refresh") < script.index(
