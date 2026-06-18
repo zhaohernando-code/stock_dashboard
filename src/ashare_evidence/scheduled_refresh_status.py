@@ -248,7 +248,10 @@ def _latest_known_target_date(now: datetime) -> str:
     postmarket = _postmarket_time()
     if now.strftime("%H:%M") >= postmarket and now.isoweekday() <= 5:
         return now.date().isoformat()
-    return (now.date() - timedelta(days=1)).isoformat()
+    candidate = now.date() - timedelta(days=1)
+    while candidate.isoweekday() > 5:
+        candidate -= timedelta(days=1)
+    return candidate.isoformat()
 
 
 def get_scheduled_refresh_status(now: datetime | None = None) -> dict[str, Any]:

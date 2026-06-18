@@ -588,6 +588,13 @@ from datetime import date
 
 cache_path = os.environ.get('TRADE_CALENDAR_CACHE', '')
 target = os.environ.get('_TRADE_DATE_CHECK', '')
+target_date = date.fromisoformat(target)
+
+# A-share markets never trade on Saturday or Sunday. Do this local guard before
+# AKShare so network/API failures cannot turn weekends into catch-up candidates.
+if target_date.weekday() >= 5:
+    json.dump({'date': target, 'is_trading_day': False}, open(cache_path, 'w'))
+    sys.exit(1)
 
 # Check daily cache
 if os.path.exists(cache_path):
@@ -603,11 +610,12 @@ try:
     import akshare as ak
     dates = ak.tool_trade_date_hist_sina()
     trade_dates = set(dates['trade_date'].tolist())
-    is_td = date.fromisoformat(target) in trade_dates
+    is_td = target_date in trade_dates
     json.dump({'date': target, 'is_trading_day': is_td}, open(cache_path, 'w'))
     sys.exit(0 if is_td else 1)
 except Exception as e:
-    # If API fails (network issue, etc.), assume trading day to be safe
+    # If API fails on a weekday (network issue, etc.), assume trading day to be
+    # safe; weekends are already rejected above.
     print(f'Warning: trade calendar check failed: {e}', file=sys.stderr)
     sys.exit(0)
 " 2>&1

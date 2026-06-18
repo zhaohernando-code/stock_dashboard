@@ -107,6 +107,15 @@ def test_previous_trading_day_catchup_never_runs_today_before_postmarket() -> No
     assert "Skipping previous trading day refresh; resolved ${previous_date} equals today before postmarket slot" in script
 
 
+def test_scheduled_refresh_never_treats_weekends_as_trading_days() -> None:
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert "target_date = date.fromisoformat(target)" in script
+    assert "if target_date.weekday() >= 5:" in script
+    assert "sys.exit(1)" in script
+    assert "weekends are already rejected above" in script
+
+
 def test_publish_reloads_scheduled_refresh_calendar_slots() -> None:
     script = (REPO_ROOT / "scripts" / "publish-local-runtime.sh").read_text(encoding="utf-8")
 

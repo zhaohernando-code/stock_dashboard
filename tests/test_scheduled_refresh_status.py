@@ -46,6 +46,23 @@ def test_scheduled_refresh_status_reports_shortpick_pending_when_main_done(tmp_p
     assert payload["components"][1]["label"] == "LLM对照批次"
 
 
+def test_scheduled_refresh_status_weekend_targets_previous_weekday(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("ASHARE_SCHEDULED_REFRESH_STATE_DIR", str(tmp_path))
+    (tmp_path / "daily-2026-06-12-postmarket.ok").write_text(
+        "target_date=2026-06-12\nslot=postmarket\ncompleted_at=2026-06-12T16:45:00+0800\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "daily-2026-06-12-shortpick_lab.ok").write_text(
+        "target_date=2026-06-12\nslot=shortpick_lab\ncompleted_at=2026-06-12T17:20:00+0800\n",
+        encoding="utf-8",
+    )
+
+    payload = get_scheduled_refresh_status(datetime(2026, 6, 14, 11, 30, tzinfo=ZoneInfo("Asia/Shanghai")))
+
+    assert payload["status"] == "success"
+    assert payload["target_date"] == "2026-06-12"
+
+
 def test_scheduled_refresh_status_prefers_running_lock(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("ASHARE_SCHEDULED_REFRESH_STATE_DIR", str(tmp_path))
     lock = tmp_path / "run.lock"
