@@ -141,7 +141,7 @@ Not required.
 
 ## Plan Update Summary
 
-Plan work items W-001 through W-005 marked done with evidence. Plan validator passed after the update.
+Plan work items W-001 through W-005 marked done with evidence. Plan validator passed after the update. The archived plan records status `archived`.
 
 ## Plan Archive Result
 
@@ -149,4 +149,11 @@ Plan will be moved from `plans/active/plan-20260618-shortpick-v2-industry-theme-
 
 ## Archive And Merge Result
 
-Run document archived. Git commit, push, merge to main, main push, and temporary lock/state cleanup remain pending.
+Completed.
+
+- Run document moved to `runs/archive/2026-06-18-shortpick-v2-industry-theme-experiment.md`.
+- Plan moved to `plans/archive/plan-20260618-shortpick-v2-industry-theme-experiment.md`.
+- Temporary lock/state files under `runs/active` were removed.
+- Task branch `codex/shortpick-v2-industry-theme-experiment` was pushed to origin.
+- `main` fast-forward merged the task commit and was pushed to `origin/main`; pre-push fast regression and policy audit passed.
+- This final closeout update records the completed merge state.
