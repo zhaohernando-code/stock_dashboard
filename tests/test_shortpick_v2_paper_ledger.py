@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import ashare_evidence.shortpick_v2_read_model as shortpick_v2_read_model
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.shortpick_v2_h10_paper_governance import H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS
 from ashare_evidence.shortpick_v2_paper_ledger import (
@@ -84,6 +85,140 @@ def test_shortpick_v2_paper_ledger_writer_emits_post_governance_records(
     assert read_model["paper_display"]["coverage"]["true_forward_record_count"] == written_payload["summary"][
         "record_count"
     ]
+
+
+def test_shortpick_v2_paper_tracking_skip_only_ledger_does_not_reprice_account_curves(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, selection_path, ledger_path = _write_v2_artifacts(tmp_path, monkeypatch)
+    governance_path = _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
+    database_path = tmp_path / "paper-ledger-skip-only.db"
+    database_url = f"sqlite:///{database_path}"
+    init_database(database_url)
+    _seed_v2_paper_display_market_fixture(database_url, end_date=date(2026, 6, 18))
+
+    with session_scope(database_url) as session:
+        payload, path = refresh_shortpick_v2_paper_ledger_artifact(
+            session,
+            output_path=ledger_path,
+            rule_selection_artifact_path=selection_path,
+            paper_governance_artifact_path=governance_path,
+            generated_at=datetime(2026, 6, 18, 9, 0, tzinfo=UTC),
+            target_date=date(2026, 6, 18),
+        )
+
+    assert path == ledger_path
+    assert payload["summary"]["buy_count"] == 0
+    assert payload["summary"]["skip_count"] == payload["summary"]["record_count"]
+
+    def fail_if_repriced(*_args: object, **_kwargs: object) -> list[dict[str, object]]:
+        raise AssertionError("skip-only true-forward ledger must not trigger account-curve repricing")
+
+    monkeypatch.setattr(
+        shortpick_v2_read_model,
+        "_paper_display_account_curves_from_session",
+        fail_if_repriced,
+    )
+
+    with session_scope(database_url) as session:
+        read_model = build_shortpick_v2_paper_tracking_read_model(
+            include_records=True,
+            session=session,
+            rule_selection_artifact_path=selection_path,
+            ledger_artifact_path=ledger_path,
+            paper_governance_artifact_path=governance_path,
+        )
+
+    coverage = read_model["paper_display"]["coverage"]
+    assert coverage["true_forward_record_count"] == payload["summary"]["record_count"]
+    assert coverage["account_curve_scope"] == "回放账户曲线，真实前向暂无买入"
+
+
+def test_shortpick_v2_paper_tracking_buy_ledger_reprices_account_curves(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, selection_path, ledger_path = _write_v2_artifacts(tmp_path, monkeypatch)
+    governance_path = _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
+    database_path = tmp_path / "paper-ledger-buy.db"
+    database_url = f"sqlite:///{database_path}"
+    init_database(database_url)
+    _seed_v2_paper_display_market_fixture(database_url, end_date=date(2026, 6, 18))
+
+    with session_scope(database_url) as session:
+        payload, path = refresh_shortpick_v2_paper_ledger_artifact(
+            session,
+            output_path=ledger_path,
+            rule_selection_artifact_path=selection_path,
+            paper_governance_artifact_path=governance_path,
+            generated_at=datetime(2026, 6, 18, 9, 0, tzinfo=UTC),
+            target_date=date(2026, 6, 18),
+        )
+
+    assert path == ledger_path
+    buy_record = payload["records"][0]
+    buy_record.update(
+        {
+            "decision_action": "buy_primary",
+            "reason": "首选标的满足资金和整手要求。",
+            "symbol": "600001.SH",
+            "selected_rank": 2,
+            "quantity": 100,
+            "cash_before": 200000.0,
+            "cash_after": 190000.0,
+            "entry_trade_date": "2026-06-17",
+            "entry_price_source": "next_open",
+            "position_state": "open",
+            "validation_status": "open",
+        }
+    )
+    payload["summary"]["buy_count"] = 1
+    payload["summary"]["skip_count"] = int(payload["summary"]["record_count"]) - 1
+    payload["summary"]["open_position_count"] = 1
+    ledger_path.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+
+    mocked_curves = [
+        {
+            "strategy": "mock merged curve",
+            "initial_cash": 200000.0,
+            "latest_nav": 201000.0,
+            "latest_return": 0.005,
+            "max_drawdown": 0.0,
+            "point_count": 1,
+            "completed_trade_count": 0,
+            "points": [{"date": "2026-06-18", "nav": 201000.0}],
+        }
+    ]
+    captured: dict[str, object] = {}
+
+    def fake_reprice(*, session: object | None, rows: list[dict[str, object]]) -> list[dict[str, object]]:
+        captured["session_present"] = session is not None
+        captured["rows"] = rows
+        return mocked_curves
+
+    monkeypatch.setattr(
+        shortpick_v2_read_model,
+        "_paper_display_account_curves_from_session",
+        fake_reprice,
+    )
+
+    with session_scope(database_url) as session:
+        read_model = build_shortpick_v2_paper_tracking_read_model(
+            include_records=True,
+            session=session,
+            rule_selection_artifact_path=selection_path,
+            ledger_artifact_path=ledger_path,
+            paper_governance_artifact_path=governance_path,
+        )
+
+    coverage = read_model["paper_display"]["coverage"]
+    assert captured["session_present"] is True
+    captured_rows = captured["rows"]
+    assert isinstance(captured_rows, list)
+    assert any(isinstance(row, dict) and row.get("action") == "buy_primary" for row in captured_rows)
+    assert coverage["account_curve_scope"] == "回放与真实前向合并账户曲线"
+    assert read_model["paper_display"]["account_curves"] == mocked_curves
 
 
 def test_shortpick_v2_paper_ledger_requires_h10_governance_artifact(
