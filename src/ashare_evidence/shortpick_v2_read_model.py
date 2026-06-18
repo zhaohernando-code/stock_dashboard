@@ -88,7 +88,17 @@ SHORTPICK_V2_PAPER_DISPLAY_MIN_SIGNAL_SYMBOL_COUNT = 45
 SHORTPICK_V2_PAPER_DISPLAY_LOOKBACK_DAYS = 120
 SHORTPICK_V2_PAPER_DISPLAY_SOURCE_ID = "quiet_breakout_rank2_poolhot10_mtw"
 SHORTPICK_V2_PAPER_DISPLAY_SOURCE_LABEL = "安静突破 Rank2：热度池达标时取第 2 名，周一、周二、周三触发"
-SHORTPICK_V2_PAPER_DISPLAY_CACHE_VERSION = "shortpick_v2_paper_display_cache_v1"
+SHORTPICK_V2_H5_OBSERVATION_CONFIG_ID = (
+    "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h5_observation_v1"
+)
+SHORTPICK_V2_H5_STOP8_OBSERVATION_CONFIG_ID = (
+    "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h5_stop8_observation_v1"
+)
+SHORTPICK_V2_HORIZON_OBSERVATION_CONFIG_IDS = (
+    SHORTPICK_V2_H5_OBSERVATION_CONFIG_ID,
+    SHORTPICK_V2_H5_STOP8_OBSERVATION_CONFIG_ID,
+)
+SHORTPICK_V2_PAPER_DISPLAY_CACHE_VERSION = "shortpick_v2_paper_display_cache_v2"
 SHORTPICK_V2_PAPER_DISPLAY_CACHE_ENV = "ASHARE_SHORTPICK_V2_PAPER_DISPLAY_CACHE"
 SHORTPICK_V2_PAPER_DISPLAY_CACHE_TTL_SECONDS = float(
     os.getenv("ASHARE_SHORTPICK_V2_PAPER_DISPLAY_CACHE_TTL_SECONDS", "300")
@@ -1004,37 +1014,39 @@ def _build_paper_display_replay_rows_from_session(
         end_date=latest_bar_day + timedelta(days=80),
         min_symbol_count=SHORTPICK_V2_PAPER_DISPLAY_MIN_SIGNAL_SYMBOL_COUNT,
     )
-    replay_artifact = build_shortpick_v2_replay_artifact_from_series(
-        series_by_symbol,
-        signal_days=available_signal_days,
-        trade_days=display_trade_days,
-        selections=display_source.selections,
-        start_date=start_date,
-        end_date=latest_bar_day,
-        initial_cash=SHORTPICK_V2_DEFAULT_INITIAL_CASH,
-        entry_price_source=ENTRY_PRICE_SOURCE_NEXT_CLOSE,
-        horizon_days=10,
-        pool_limit=40,
-        rank_limit=6,
-        cost_bps=DEFAULT_COST_BPS,
-        stamp_tax_bps=DEFAULT_STAMP_TAX_BPS,
-        account_profile=str(account_eligibility.get("account_profile") or ACCOUNT_PROFILE_NEW_RETAIL_CASH),
-        stock_like_series_count=len([symbol for symbol in series_by_symbol if symbol not in INDEX_SYMBOLS]),
-        coverage_notes=["纸面追踪显示投影只读生成，不刷新行情、不写入 ledger。"],
-        rule_configs=rule_configs,
-        decision_sample_limit=len(available_signal_days),
-    )
-    rows = _paper_display_rows_from_replay_artifact(
-        replay_artifact,
-        active_config_ids=tuple(config.config_id for config in rule_configs),
-        available_signal_dates=coverage["available_source_signal_dates"],
-        symbol_names={
-            symbol: str(getattr(series, "name", "") or symbol)
-            for symbol, series in series_by_symbol.items()
-        },
-        series_by_symbol=series_by_symbol,
-        trade_days=display_trade_days,
-    )
+    rows: list[dict[str, Any]] = []
+    symbol_names = {symbol: str(getattr(series, "name", "") or symbol) for symbol, series in series_by_symbol.items()}
+    for horizon_days, horizon_rule_configs in _paper_display_rule_configs_by_horizon(rule_configs).items():
+        replay_artifact = build_shortpick_v2_replay_artifact_from_series(
+            series_by_symbol,
+            signal_days=available_signal_days,
+            trade_days=display_trade_days,
+            selections=display_source.selections,
+            start_date=start_date,
+            end_date=latest_bar_day,
+            initial_cash=SHORTPICK_V2_DEFAULT_INITIAL_CASH,
+            entry_price_source=ENTRY_PRICE_SOURCE_NEXT_CLOSE,
+            horizon_days=horizon_days,
+            pool_limit=40,
+            rank_limit=6,
+            cost_bps=DEFAULT_COST_BPS,
+            stamp_tax_bps=DEFAULT_STAMP_TAX_BPS,
+            account_profile=str(account_eligibility.get("account_profile") or ACCOUNT_PROFILE_NEW_RETAIL_CASH),
+            stock_like_series_count=len([symbol for symbol in series_by_symbol if symbol not in INDEX_SYMBOLS]),
+            coverage_notes=["纸面追踪显示投影只读生成，不刷新行情、不写入 ledger。"],
+            rule_configs=horizon_rule_configs,
+            decision_sample_limit=len(available_signal_days),
+        )
+        rows.extend(
+            _paper_display_rows_from_replay_artifact(
+                replay_artifact,
+                active_config_ids=tuple(config.config_id for config in horizon_rule_configs),
+                available_signal_dates=coverage["available_source_signal_dates"],
+                symbol_names=symbol_names,
+                series_by_symbol=series_by_symbol,
+                trade_days=display_trade_days,
+            )
+        )
     _finalize_paper_display_coverage(
         coverage,
         rows,
@@ -1137,6 +1149,7 @@ def _paper_display_row_from_replay_decision(
     signal_date = str(decision.get("signal_date") or "")
     exit_projection = _paper_display_exit_projection(
         decision,
+        config_id=config_id,
         series_by_symbol=series_by_symbol,
         trade_days=trade_days,
     )
@@ -1286,6 +1299,13 @@ def _paper_display_strategy_explanation(
                 "value": selected_text,
             },
             {
+                "label": "退出周期观察",
+                "value": (
+                    "新增两条同选股、同 8.5 万买入约束的观察对照：机械 5 日退出；"
+                    "机械 5 日退出并在收盘跌破入场价 8% 时提前止损。它们只用于纸面对照，不替代 H10 冻结主线。"
+                ),
+            },
+            {
                 "label": "对照策略",
                 "value": "；".join(baseline_labels) if baseline_labels else "暂无对照策略。",
             },
@@ -1322,9 +1342,17 @@ def _paper_display_rule_configs(active_config_ids: tuple[str, ...]) -> tuple[Any
                 target_mode="fixed_notional",
                 target_notional=target_notional,
                 allowed_actions=("buy_primary", "buy_fallback", "skip"),
+                stop_loss_pct=_paper_config_stop_loss_pct(config_id),
             )
         )
     return tuple(configs)
+
+
+def _paper_display_rule_configs_by_horizon(rule_configs: tuple[Any, ...]) -> dict[int, tuple[Any, ...]]:
+    grouped: dict[int, list[Any]] = {}
+    for config in rule_configs:
+        grouped.setdefault(_paper_config_horizon_days(str(config.config_id)), []).append(config)
+    return {horizon_days: tuple(configs) for horizon_days, configs in sorted(grouped.items())}
 
 
 def _paper_display_rows_have_buy_action(rows: list[dict[str, Any]]) -> bool:
@@ -1369,24 +1397,43 @@ def _iso_date_text_or_none(value: Any) -> str | None:
 
 def _paper_display_active_config_ids(selected_configs: list[dict[str, Any]]) -> tuple[str, ...]:
     allowed = set(H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS)
-    return tuple(
+    active_ids = [
         config_id
         for config_id in (str(row.get("config_id") or "") for row in selected_configs)
         if config_id in allowed
-    )
+    ]
+    if H10_QUIET_CHAMPION_CONFIG_ID in active_ids:
+        active_ids.extend(SHORTPICK_V2_HORIZON_OBSERVATION_CONFIG_IDS)
+    return tuple(dict.fromkeys(active_ids))
 
 
 def _paper_config_target_notional(config_id: str) -> float | None:
     return {
         H10_QUIET_CHAMPION_CONFIG_ID: 85_000.0,
         H10_QUIET_CAPITAL_SHADOW_CONFIG_ID: 80_000.0,
+        SHORTPICK_V2_H5_OBSERVATION_CONFIG_ID: 85_000.0,
+        SHORTPICK_V2_H5_STOP8_OBSERVATION_CONFIG_ID: 85_000.0,
     }.get(config_id)
+
+
+def _paper_config_horizon_days(config_id: str) -> int:
+    if config_id in SHORTPICK_V2_HORIZON_OBSERVATION_CONFIG_IDS:
+        return 5
+    return 10
+
+
+def _paper_config_stop_loss_pct(config_id: str) -> float | None:
+    if config_id == SHORTPICK_V2_H5_STOP8_OBSERVATION_CONFIG_ID:
+        return 0.08
+    return None
 
 
 def _paper_config_label(config_id: str) -> str:
     labels = {
         H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS[0]: "8.5 万目标买入方案",
         H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS[1]: "8 万目标买入方案",
+        SHORTPICK_V2_H5_OBSERVATION_CONFIG_ID: "8.5 万目标买入 H5 对照",
+        SHORTPICK_V2_H5_STOP8_OBSERVATION_CONFIG_ID: "8.5 万目标买入 H5 止损对照",
         "top1_or_skip_v1": "首位候选对照策略",
         "conservative_cash_reserve_60k_top5_v1": "保留 6 万现金的旧候选策略",
         "fixed_notional_40k_top5_v1": "4 万目标买入旧候选策略",
@@ -1433,6 +1480,7 @@ def _paper_exit_reason_label(reason: str) -> str:
 def _paper_display_exit_projection(
     decision: dict[str, Any],
     *,
+    config_id: str,
     series_by_symbol: dict[str, Any],
     trade_days: list[date],
 ) -> dict[str, Any]:
@@ -1462,23 +1510,33 @@ def _paper_display_exit_projection(
     if entry_index >= len(trade_days):
         return _paper_display_pending_exit_projection("等待入场日")
     entry_day = trade_days[entry_index]
-    exit_index = entry_index + 10
+    horizon_days = _paper_config_horizon_days(config_id)
+    exit_index = entry_index + horizon_days
     if exit_index >= len(trade_days):
         return {
             "entry_date": entry_day.isoformat(),
             "entry_date_text": entry_day.isoformat(),
             "exit_date": None,
-            "exit_date_text": "等待10日窗口",
+            "exit_date_text": f"等待{horizon_days}日窗口",
             "exit_state": "pending",
-            "exit_state_text": "等待10日窗口",
-            "exit_reason_text": "机械10日未到期",
-            "holding_days_text": "未满10个交易日",
+            "exit_state_text": f"等待{horizon_days}日窗口",
+            "exit_reason_text": f"机械{horizon_days}日未到期",
+            "holding_days_text": f"未满{horizon_days}个交易日",
             "return": None,
             "return_text": "暂无",
         }
-    exit_day = trade_days[exit_index]
     series = series_by_symbol.get(symbol)
     entry_close = _series_close_on_day(series, entry_day)
+    stop_loss_pct = _paper_config_stop_loss_pct(config_id)
+    exit_reason = "mechanical_horizon"
+    exit_day = trade_days[exit_index]
+    if entry_close not in {None, 0} and stop_loss_pct is not None:
+        for candidate_exit_day in trade_days[entry_index + 1 : exit_index + 1]:
+            candidate_close = _series_close_on_day(series, candidate_exit_day)
+            if candidate_close is not None and float(candidate_close) / float(entry_close) - 1.0 <= -stop_loss_pct:
+                exit_day = candidate_exit_day
+                exit_reason = "stop_loss"
+                break
     exit_close = _series_close_on_day(series, exit_day)
     stock_return = (
         round(float(exit_close) / float(entry_close) - 1.0, 6)
@@ -1494,19 +1552,21 @@ def _paper_display_exit_projection(
             "exit_state": "source_gap",
             "exit_state_text": "退出数据缺口",
             "exit_reason_text": "缺少入场或退出价",
-            "holding_days_text": "10个交易日",
+            "holding_days_text": f"{horizon_days}个交易日",
             "return": None,
             "return_text": "暂无",
         }
+    exit_reason_text = "止损退出" if exit_reason == "stop_loss" else f"机械{horizon_days}日退出"
+    holding_days = max(trade_days.index(exit_day) - entry_index, 0) if exit_day in trade_days else horizon_days
     return {
         "entry_date": entry_day.isoformat(),
         "entry_date_text": entry_day.isoformat(),
         "exit_date": exit_day.isoformat(),
         "exit_date_text": exit_day.isoformat(),
         "exit_state": "completed",
-        "exit_state_text": "已按10日退出",
-        "exit_reason_text": "机械10日退出",
-        "holding_days_text": "10个交易日",
+        "exit_state_text": f"已按{horizon_days}日退出" if exit_reason != "stop_loss" else "已止损退出",
+        "exit_reason_text": exit_reason_text,
+        "holding_days_text": f"{holding_days}个交易日",
         "return": stock_return,
         "return_text": _format_percent(stock_return),
     }

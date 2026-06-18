@@ -31,6 +31,8 @@ from ashare_evidence.shortpick_v2_h10_paper_governance import (
     SHORTPICK_V2_H10_PAPER_GOVERNANCE_ARTIFACT_FAMILY,
 )
 from ashare_evidence.shortpick_v2_read_model import (
+    SHORTPICK_V2_H5_OBSERVATION_CONFIG_ID,
+    SHORTPICK_V2_H5_STOP8_OBSERVATION_CONFIG_ID,
     SHORTPICK_V2_H10_PAPER_GOVERNANCE_ARTIFACT_ENV,
     SHORTPICK_V2_PAPER_DISPLAY_CACHE_VERSION,
     SHORTPICK_V2_PAPER_DISPLAY_LOOKBACK_DAYS,
@@ -816,16 +818,21 @@ def test_shortpick_v2_paper_tracking_display_replays_since_start_with_session(
     assert "2026-05-08" in coverage["available_source_signal_dates"]
     assert coverage["row_or_gap_accounting_passed"] is True
     assert coverage["row_or_gap_config_accounting_passed"] is True
-    assert coverage["available_source_signal_config_count"] == len(coverage["available_source_signal_dates"]) * 2
+    assert coverage["available_source_signal_config_count"] == len(coverage["available_source_signal_dates"]) * 4
     assert payload["summary"]["replay_record_count"] == coverage["replay_row_count"]
     assert display["table"]["rows"]
     assert {row["tracking_tag"] for row in display["table"]["rows"]} == {"回放"}
     assert {"exit_state_text", "exit_date_text", "return_text"} <= set(display["table"]["rows"][0])
+    assert {
+        "8.5 万目标买入方案",
+        "8 万目标买入方案",
+        "8.5 万目标买入 H5 对照",
+        "8.5 万目标买入 H5 止损对照",
+    } <= {row["strategy_text"] for row in display["table"]["rows"]}
     account_curves = display["account_curves"]
     assert isinstance(account_curves, list)
     assert coverage["account_curve_count"] == len(account_curves)
     for curve in account_curves:
-        assert curve["strategy"] in {"8.5 万目标买入方案", "8 万目标买入方案"}
         assert curve["points"]
         assert curve["latest_nav"] == curve["points"][-1]["nav"]
         assert -1.0 < curve["max_drawdown"] <= 0.0
@@ -984,6 +991,82 @@ def test_shortpick_v2_paper_display_buy_row_projects_exit_and_return() -> None:
     assert row["exit_reason_text"] == "机械10日退出"
     assert row["return"] == 0.909091
     assert row["return_text"] == "+90.9%"
+
+
+def test_shortpick_v2_paper_display_h5_row_projects_5_day_exit() -> None:
+    class _Bar:
+        def __init__(self, day: date, close: float) -> None:
+            self.day = day
+            self.close = close
+
+    class _Series:
+        def __init__(self, bars: list[_Bar]) -> None:
+            self.bars = bars
+            self.by_day = {bar.day: index for index, bar in enumerate(bars)}
+
+    trade_days = _business_days(date(2026, 5, 8), date(2026, 5, 29))
+    bars = [_Bar(day, 10.0 + index) for index, day in enumerate(trade_days)]
+    row = _paper_display_row_from_replay_decision(
+        {
+            "signal_date": "2026-05-08",
+            "action": "buy_primary",
+            "reason": "bought_primary",
+            "selected_rank": 2,
+            "symbol": "600001.SH",
+            "cash_before": 200000.0,
+            "cash_after": 150000.0,
+            "quantity": 1000,
+        },
+        SHORTPICK_V2_H5_OBSERVATION_CONFIG_ID,
+        symbol_names={"600001.SH": "测试股票"},
+        series_by_symbol={"600001.SH": _Series(bars)},
+        trade_days=trade_days,
+    )
+
+    assert row["entry_date_text"] == "2026-05-11"
+    assert row["exit_date_text"] == "2026-05-18"
+    assert row["exit_state_text"] == "已按5日退出"
+    assert row["exit_reason_text"] == "机械5日退出"
+    assert row["holding_days_text"] == "5个交易日"
+
+
+def test_shortpick_v2_paper_display_h5_stop8_row_projects_early_stop_loss() -> None:
+    class _Bar:
+        def __init__(self, day: date, close: float) -> None:
+            self.day = day
+            self.close = close
+
+    class _Series:
+        def __init__(self, bars: list[_Bar]) -> None:
+            self.bars = bars
+            self.by_day = {bar.day: index for index, bar in enumerate(bars)}
+
+    trade_days = _business_days(date(2026, 5, 8), date(2026, 5, 29))
+    closes = [10.0, 10.0, 9.6, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7]
+    bars = [_Bar(day, closes[index] if index < len(closes) else 9.7) for index, day in enumerate(trade_days)]
+    row = _paper_display_row_from_replay_decision(
+        {
+            "signal_date": "2026-05-08",
+            "action": "buy_primary",
+            "reason": "bought_primary",
+            "selected_rank": 2,
+            "symbol": "600001.SH",
+            "cash_before": 200000.0,
+            "cash_after": 150000.0,
+            "quantity": 1000,
+        },
+        SHORTPICK_V2_H5_STOP8_OBSERVATION_CONFIG_ID,
+        symbol_names={"600001.SH": "测试股票"},
+        series_by_symbol={"600001.SH": _Series(bars)},
+        trade_days=trade_days,
+    )
+
+    assert row["entry_date_text"] == "2026-05-11"
+    assert row["exit_date_text"] == "2026-05-13"
+    assert row["exit_state_text"] == "已止损退出"
+    assert row["exit_reason_text"] == "止损退出"
+    assert row["holding_days_text"] == "2个交易日"
+    assert row["return"] == pytest.approx(-0.09)
 
 
 def test_shortpick_v2_paper_account_curve_uses_account_nav_not_full_trade_compounding() -> None:
@@ -1329,7 +1412,7 @@ def test_shortpick_v2_paper_tracking_display_not_limited_to_default_decision_sam
     assert coverage["coverage_end"] == "2026-08-31"
     assert coverage["row_or_gap_accounting_passed"] is True
     assert coverage["row_or_gap_config_accounting_passed"] is True
-    assert coverage["available_source_signal_config_count"] == len(coverage["available_source_signal_dates"]) * 2
+    assert coverage["available_source_signal_config_count"] == len(coverage["available_source_signal_dates"]) * 4
 
 
 def test_shortpick_v2_paper_tracking_display_replay_error_does_not_break_read_model(
