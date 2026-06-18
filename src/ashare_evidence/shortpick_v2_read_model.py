@@ -619,15 +619,20 @@ def _paper_tracking_display_projection(
     coverage["true_forward_record_count"] = len(records)
     coverage["account_curve_scope"] = "回放账户曲线"
     if true_forward_rows:
-        true_forward_account_curves = _paper_display_account_curves_from_session(
-            session=session,
-            rows=[*replay_rows, *true_forward_rows],
-        )
-        if true_forward_account_curves:
-            account_curves = true_forward_account_curves
-            coverage["account_curve_scope"] = "回放与真实前向合并账户曲线"
+        if _paper_display_rows_have_buy_action(true_forward_rows):
+            true_forward_account_curves = _paper_display_account_curves_from_session(
+                session=session,
+                rows=[*replay_rows, *true_forward_rows],
+            )
+            if true_forward_account_curves:
+                account_curves = true_forward_account_curves
+                coverage["account_curve_scope"] = "回放与真实前向合并账户曲线"
+            else:
+                coverage["account_curve_scope"] = "回放账户曲线，真实前向暂缺行情估值"
         else:
-            coverage["account_curve_scope"] = "回放账户曲线，真实前向暂缺行情估值"
+            # Skip/source-gap true-forward rows do not change cash, holdings, or NAV, so the
+            # replay account curve remains the correct display curve without a costly repricing pass.
+            coverage["account_curve_scope"] = "回放账户曲线，真实前向暂无买入"
     internal_display_rows = _sorted_display_rows([*true_forward_rows, *replay_rows])[
         :SHORTPICK_V2_PAPER_DISPLAY_REPLAY_ROW_LIMIT
     ]
@@ -1312,6 +1317,10 @@ def _paper_display_rule_configs(active_config_ids: tuple[str, ...]) -> tuple[Any
             )
         )
     return tuple(configs)
+
+
+def _paper_display_rows_have_buy_action(rows: list[dict[str, Any]]) -> bool:
+    return any(str(row.get("action") or "") in {"buy_primary", "buy_fallback"} for row in rows)
 
 
 def _paper_display_active_config_ids(selected_configs: list[dict[str, Any]]) -> tuple[str, ...]:

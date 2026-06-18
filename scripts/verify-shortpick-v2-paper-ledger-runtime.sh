@@ -22,6 +22,7 @@ fi
 
 API_BASE_URL="${ASHARE_API_BASE_URL:-http://127.0.0.1:8000}"
 API_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_V2_PAPER_LEDGER_API_TIMEOUT_SECONDS:-60}"
+FULL_API_MAX_SECONDS="${ASHARE_SHORTPICK_V2_PAPER_FULL_API_MAX_SECONDS:-10}"
 MIN_TRUE_FORWARD_SIGNAL_DATE="${ASHARE_SHORTPICK_V2_PAPER_LEDGER_MIN_SIGNAL_DATE:-2026-06-16}"
 WORK_DIR="$(mktemp -d)"
 
@@ -34,17 +35,27 @@ curl -fsSL --max-time "$API_TIMEOUT_SECONDS" "$API_BASE_URL/health" -o "$WORK_DI
 curl -fsSL --max-time "$API_TIMEOUT_SECONDS" \
   "$API_BASE_URL/shortpick-lab-v2/paper-tracking/summary" \
   -o "$WORK_DIR/summary.json"
-curl -fsSL --max-time "$API_TIMEOUT_SECONDS" \
+FULL_API_SECONDS="$(
+  curl -fsSL --max-time "$API_TIMEOUT_SECONDS" \
+  -w "%{time_total}" \
   "$API_BASE_URL/shortpick-lab-v2/paper-tracking" \
   -o "$WORK_DIR/paper-tracking.json"
+)"
 
-"$PYTHON_BIN" - "$WORK_DIR/summary.json" "$WORK_DIR/paper-tracking.json" "$MIN_TRUE_FORWARD_SIGNAL_DATE" <<'PY'
+"$PYTHON_BIN" - \
+  "$WORK_DIR/summary.json" \
+  "$WORK_DIR/paper-tracking.json" \
+  "$MIN_TRUE_FORWARD_SIGNAL_DATE" \
+  "$FULL_API_SECONDS" \
+  "$FULL_API_MAX_SECONDS" <<'PY'
 import json
 import sys
 
 summary = json.load(open(sys.argv[1], encoding="utf-8"))
 full = json.load(open(sys.argv[2], encoding="utf-8"))
 min_true_forward_signal_date = sys.argv[3]
+full_api_seconds = float(sys.argv[4])
+full_api_max_seconds = float(sys.argv[5])
 allowed_config_ids = {
     "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1",
     "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1",
@@ -68,6 +79,11 @@ if int(true_forward_record_count or 0) <= 0:
     raise SystemExit(f"expected true-forward records, got summary={summary_counts}, coverage={coverage}")
 if not records:
     raise SystemExit("full paper tracking payload returned no records")
+if full_api_seconds > full_api_max_seconds:
+    raise SystemExit(
+        f"full paper tracking API exceeded latency threshold: "
+        f"{full_api_seconds:.3f}s > {full_api_max_seconds:.3f}s"
+    )
 
 for record in records:
     config_id = record.get("config_id")
@@ -86,6 +102,8 @@ print(
             "status": "ok",
             "record_count": summary_counts.get("record_count"),
             "true_forward_record_count": coverage.get("true_forward_record_count"),
+            "full_api_seconds": round(full_api_seconds, 3),
+            "full_api_max_seconds": full_api_max_seconds,
             "ledger_path": ledger_ref.get("path"),
         },
         ensure_ascii=False,
