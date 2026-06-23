@@ -477,6 +477,7 @@ export interface ShortpickPaperTrackingItem {
   tracking_role?: string | null;
   selection_label?: string | null;
   source_rank?: number | null;
+  entry_price_source?: string | null;
   entry_rule?: string | null;
   exit_rule?: string | null;
   monitoring_tracks?: Record<string, unknown>[];

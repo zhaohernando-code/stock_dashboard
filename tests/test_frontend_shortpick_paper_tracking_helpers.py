@@ -284,19 +284,31 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
                       { key: "take_profit_stop_loss", label: "止盈止损", exit_trade_day: "2026-06-09", stock_return: 0.10 },
                     ],
                   },
-                  {
-                    candidate_id: 102,
-                    tracking_group: "frozen_strategy",
-                    signal_date: "2026-06-02",
+	                  {
+	                    candidate_id: 102,
+	                    tracking_group: "frozen_strategy",
+	                    signal_date: "2026-06-02",
                     name: "冻结B",
                     symbol: "600184.SH",
                     paper_tracking_exit_tracks: [
-                      { key: "mechanical_5d", label: "机械5日", exit_trade_day: "2026-06-09", stock_return: -0.03 },
-                    ],
-                  },
-                ];
-                const effectObservations = helpers.paperTrackingEffectObservations(effectRows);
-                const effectSummaries = helpers.paperTrackingEffectSummaries(effectRows);
+	                      { key: "mechanical_5d", label: "机械5日", exit_trade_day: "2026-06-09", stock_return: -0.03 },
+	                    ],
+	                  },
+	                  {
+	                    candidate_id: 103,
+	                    tracking_group: "market_factor_control",
+	                    selection_label: "14点同日买入版",
+	                    entry_price_source: "same_day_intraday_current",
+	                    signal_date: "2026-06-05",
+	                    name: "盘中C",
+	                    symbol: "600185.SH",
+	                    paper_tracking_exit_tracks: [
+	                      { key: "mechanical_10d", label: "机械10日", exit_trade_day: "2026-06-22", stock_return: 0.32 },
+	                    ],
+	                  },
+	                ];
+	                const effectObservations = helpers.paperTrackingEffectObservations(effectRows);
+	                const effectSummaries = helpers.paperTrackingEffectSummaries(effectRows);
                 console.log(JSON.stringify({
                   frozenGroups: frozen.map((item) => item.tracking_group),
                   frozenNames: frozen.map((item) => item.name),
@@ -321,11 +333,13 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
                   immatureReplayExitReturn: helpers.paperTrackingExitReturn(immatureReplayRow),
                   ordinaryCompletedExitText: helpers.paperTrackingExitText(ordinaryCompletedRow),
                   ordinaryCompletedExitReturn: helpers.paperTrackingExitReturn(ordinaryCompletedRow),
-                  effectObservationKeys: effectObservations.map((item) => item.exitTrackKey).sort(),
-                  effectObservationFilters: effectObservations.map((item) => item.groupFilter).sort(),
-                  effectSummaryLabels: effectSummaries.map((item) => `${item.strategyLabel}:${item.exitTrackLabel}:${item.count}`).sort(),
-                  effectExitStateFilter: helpers.paperTrackingEffectExitStateFilter("take_profit_stop_loss"),
-                }));
+	                  effectObservationKeys: effectObservations.map((item) => item.exitTrackKey).sort(),
+	                  effectObservationFilters: effectObservations.map((item) => item.groupFilter).sort(),
+	                  effectObservationSignalDates: effectObservations.map((item) => item.signalDate).sort(),
+	                  effectSummaryLabels: effectSummaries.map((item) => `${item.strategyLabel}:${item.exitTrackLabel}:${item.count}`).sort(),
+	                  intradayComparableEffect: helpers.isComparablePaperTrackingEffectRow(effectRows[2]),
+	                  effectExitStateFilter: helpers.paperTrackingEffectExitStateFilter("take_profit_stop_loss"),
+	                }));
                 """
             )
             result = subprocess.run(
@@ -380,5 +394,10 @@ class FrontendShortpickPaperTrackingHelperTests(unittest.TestCase):
             payload["effectObservationFilters"],
             ["frozen_strategy", "同股冷却过滤", "同股冷却过滤", "同股冷却过滤"],
         )
+        self.assertEqual(
+            payload["effectObservationSignalDates"],
+            ["2026-06-01", "2026-06-01", "2026-06-01", "2026-06-02"],
+        )
         self.assertIn("同股冷却过滤:止盈止损:1", payload["effectSummaryLabels"])
+        self.assertFalse(payload["intradayComparableEffect"])
         self.assertEqual(payload["effectExitStateFilter"], "take_profit_stop_loss_done")

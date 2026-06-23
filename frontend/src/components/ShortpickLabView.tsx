@@ -119,7 +119,6 @@ import {
   paperTrackingEntryRuleKey,
   paperTrackingEffectObservations,
   paperTrackingEffectSummaries,
-  paperTrackingEffectExitStateFilter,
   paperTrackingExitDay,
   paperTrackingExitReturn,
   paperTrackingExitText,
@@ -974,21 +973,12 @@ export function ShortpickLabView({ canTrigger }: { canTrigger: boolean }) {
 
 function PaperTrackingEffectCharts({
   rows,
-  onSelect,
-  activeGroupFilter,
-  activeExitStateFilter,
-  onClearSelection,
 }: {
   rows: ShortpickPaperTrackingItem[];
-  onSelect: (groupFilter: PaperTrackingGroupFilter, exitTrackKey: PaperTrackingEffectExitTrackKey) => void;
-  activeGroupFilter: PaperTrackingGroupFilter;
-  activeExitStateFilter: PaperTrackingExitStateFilter;
-  onClearSelection: () => void;
 }) {
   const lineRef = useRef<HTMLDivElement | null>(null);
   const rankingRef = useRef<HTMLDivElement | null>(null);
   const themeRevision = useDashboardThemeRevision();
-  const initializedDefaultStrategyRef = useRef(false);
   const [selectedLineStrategy, setSelectedLineStrategy] = useState<string>(PAPER_TRACKING_EFFECT_ALL_STRATEGIES);
   const [selectedRankingMetric, setSelectedRankingMetric] = useState<PaperTrackingRankingMetricKey>("meanReturn");
   const observations = useMemo(() => paperTrackingEffectObservations(rows), [rows]);
@@ -1010,23 +1000,11 @@ function PaperTrackingEffectCharts({
   );
   const selectedLineStrategyLabel = selectedLineStrategy === PAPER_TRACKING_EFFECT_ALL_STRATEGIES ? "全部策略" : selectedLineStrategy;
   const selectedRankingMetricLabel = PAPER_TRACKING_RANKING_METRIC_OPTIONS.find((item) => item.value === selectedRankingMetric)?.label ?? "均值";
-  const hasLinkedTableFilter = Boolean(activeGroupFilter || activeExitStateFilter);
 
   useEffect(() => {
-    if (!strategyLabels.length) {
-      if (!initializedDefaultStrategyRef.current) {
-        setSelectedLineStrategy(PAPER_TRACKING_EFFECT_ALL_STRATEGIES);
-      }
-      return;
-    }
-    if (!initializedDefaultStrategyRef.current) {
-      initializedDefaultStrategyRef.current = true;
-      setSelectedLineStrategy(strategyLabels.includes("冻结策略") ? "冻结策略" : PAPER_TRACKING_EFFECT_ALL_STRATEGIES);
-      return;
-    }
     setSelectedLineStrategy((current) => {
       if (current === PAPER_TRACKING_EFFECT_ALL_STRATEGIES || strategyLabels.includes(current)) return current;
-      return strategyLabels.includes("冻结策略") ? "冻结策略" : PAPER_TRACKING_EFFECT_ALL_STRATEGIES;
+      return PAPER_TRACKING_EFFECT_ALL_STRATEGIES;
     });
   }, [strategyLabels]);
 
@@ -1056,7 +1034,7 @@ function PaperTrackingEffectCharts({
             value: [date, Number(cumulative.toFixed(6))],
             dailyReturn: dailyMean,
             count: dayObservations.length,
-            groupFilter: selectedLineStrategy === PAPER_TRACKING_EFFECT_ALL_STRATEGIES ? "" : dayObservations[0]?.groupFilter ?? "",
+            groupFilter: dayObservations[0]?.groupFilter || "",
             exitTrackKey: track.key,
             exitTrackLabel: track.label,
           };
@@ -1114,17 +1092,13 @@ function PaperTrackingEffectCharts({
       },
       series,
     });
-    chart.on("click", (params: unknown) => {
-      const data = (params as { data?: { groupFilter?: PaperTrackingGroupFilter; exitTrackKey?: PaperTrackingEffectExitTrackKey } }).data;
-      if (data?.exitTrackKey) onSelect(data.groupFilter ?? "", data.exitTrackKey);
-    });
     const resizeObserver = new ResizeObserver(() => chart.resize());
     resizeObserver.observe(container);
     return () => {
       resizeObserver.disconnect();
       chart.dispose();
     };
-  }, [onSelect, selectedLineObservations, selectedLineStrategy, themeRevision]);
+  }, [selectedLineObservations, themeRevision]);
 
   useEffect(() => {
     if (!rankingRef.current || summaries.length === 0 || strategyLabels.length === 0) return;
@@ -1219,26 +1193,19 @@ function PaperTrackingEffectCharts({
       },
       series,
     });
-    chart.on("click", (params: unknown) => {
-      const data = (params as { data?: { groupFilter?: PaperTrackingGroupFilter; exitTrackKey?: PaperTrackingEffectExitTrackKey } }).data;
-      if (data?.exitTrackKey) onSelect(data.groupFilter ?? "", data.exitTrackKey);
-    });
     const resizeObserver = new ResizeObserver(() => chart.resize());
     resizeObserver.observe(container);
     return () => {
       resizeObserver.disconnect();
       chart.dispose();
     };
-  }, [onSelect, selectedRankingMetric, selectedRankingMetricLabel, strategyLabels, summaries, themeRevision]);
+  }, [selectedRankingMetric, selectedRankingMetricLabel, strategyLabels, summaries, themeRevision]);
 
   if (!observations.length) {
     return (
       <div className="shortpick-paper-effect-panel shortpick-paper-effect-empty">
         <Space direction="vertical" align="center">
           <Empty description="当前筛选下还没有已完成的 5日、10日或止盈止损退出样本。" />
-          {hasLinkedTableFilter ? (
-            <Button size="small" onClick={onClearSelection}>清除图表联动筛选</Button>
-          ) : null}
         </Space>
       </div>
     );
@@ -1251,9 +1218,6 @@ function PaperTrackingEffectCharts({
           <Text strong>策略纸面对照效果</Text>
         </Space>
         <Space wrap className="shortpick-paper-effect-summary-tags">
-          {hasLinkedTableFilter ? (
-            <Button size="small" onClick={onClearSelection}>清除图表联动筛选</Button>
-          ) : null}
           <Tag color="blue">样本 {selectedLineObservations.length}</Tag>
           <Tag color="cyan">策略 {strategyLabels.length}</Tag>
         </Space>
@@ -1332,26 +1296,7 @@ function PaperTrackingTab({
   const [ledgerEntryStateFilter, setLedgerEntryStateFilter] = useState<PaperTrackingEntryStateFilter>("entered");
   const [ledgerEntryRuleFilter, setLedgerEntryRuleFilter] = useState<PaperTrackingEntryRuleFilter>("");
   const [ledgerExitStateFilter, setLedgerExitStateFilter] = useState<PaperTrackingExitStateFilter>("");
-  const handlePaperEffectSelect = useCallback((groupFilter: PaperTrackingGroupFilter, exitTrackKey: PaperTrackingEffectExitTrackKey) => {
-    setLedgerSearch("");
-    if (groupFilter) setLedgerGroupFilter(groupFilter);
-    setLedgerEntryStateFilter("entered");
-    setLedgerExitStateFilter(paperTrackingEffectExitStateFilter(exitTrackKey));
-  }, []);
-  const handlePaperEffectClearSelection = useCallback(() => {
-    setLedgerGroupFilter("");
-    setLedgerExitStateFilter("");
-  }, []);
   const normalizedLedgerSearch = ledgerSearch.trim().toLowerCase();
-  // Charts remain comparative after table linkage, so they ignore record-group and exit-result filters.
-  const chartRows = primaryRows.filter((item) => {
-    const entered = hasPaperTrackingEntered(item);
-    if (ledgerEntryStateFilter === "entered" && !entered) return false;
-    if (ledgerEntryStateFilter === "pending" && entered) return false;
-    if (ledgerEntryRuleFilter && paperTrackingEntryRuleKey(item) !== ledgerEntryRuleFilter) return false;
-    if (normalizedLedgerSearch && !paperTrackingSearchText(item).includes(normalizedLedgerSearch)) return false;
-    return true;
-  });
   const displayRows = primaryRows.filter((item) => {
     const entered = hasPaperTrackingEntered(item);
     const hasMechanical5dExit = hasPaperTrackingMechanical5dExit(item);
@@ -1704,11 +1649,7 @@ function PaperTrackingTab({
         title="纸面跟踪记录（正式策略与对照组）"
       >
         <PaperTrackingEffectCharts
-          rows={chartRows}
-          onSelect={handlePaperEffectSelect}
-          activeGroupFilter={ledgerGroupFilter}
-          activeExitStateFilter={ledgerExitStateFilter}
-          onClearSelection={handlePaperEffectClearSelection}
+          rows={primaryRows}
         />
         <Space wrap className="shortpick-filter-bar shortpick-paper-ledger-filter-bar">
           <Input.Search

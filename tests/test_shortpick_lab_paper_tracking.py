@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ashare_evidence.api import _shortpick_combined_ledger_exit_tracks
+from ashare_evidence import api as api_module
+from ashare_evidence.api import _paper_tracking_validation_snapshot_from_rows, _shortpick_combined_ledger_exit_tracks
 from ashare_evidence.research_artifact_store import (
     SHORTPICK_FILTER_RESELECT_SELECTION_POLICY,
     artifact_root_from_database_url,
@@ -23,6 +24,81 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
         self.assertIn("include_items=False", api_source)
         self.assertIn("include_combined_ledger_rows=False", api_source)
         self.assertNotIn(".limit(1000)", api_source)
+        self.assertIn("_compact_shortpick_paper_tracking_item", api_source)
+
+    def test_paper_tracking_endpoint_omits_heavy_row_debug_fields(self) -> None:
+        self._seed_frozen_strategy_candidate()
+
+        client = TestClient(create_app(self.database_url, enable_background_ops_tick=False))
+        payload = client.get("/shortpick-lab/paper-tracking").json()
+
+        self.assertTrue(payload["items"])
+        item = payload["items"][0]
+        self.assertIn("paper_tracking_exit_tracks", item)
+        self.assertNotIn("selection_score_components", item)
+        self.assertNotIn("validation_by_horizon", item)
+        self.assertNotIn("monitoring_tracks", item)
+        self.assertNotIn("gate", item)
+        self.assertNotIn("regime", item)
+
+    def test_paper_tracking_endpoint_reuses_response_cache_after_first_build(self) -> None:
+        self._seed_frozen_strategy_candidate()
+
+        with patch.dict(
+            os.environ,
+            {"ASHARE_SHORTPICK_PAPER_TRACKING_RESPONSE_PREWARM": "0"},
+        ):
+            client = TestClient(create_app(self.database_url, enable_background_ops_tick=False))
+            first_payload = client.get("/shortpick-lab/paper-tracking").json()
+            first_summary = client.get("/shortpick-lab/paper-tracking/summary").json()
+
+            with patch.object(
+                api_module,
+                "_build_shortpick_paper_tracking_ledger",
+                side_effect=AssertionError("cached response should satisfy repeated paper-tracking requests"),
+            ):
+                cached_payload = client.get("/shortpick-lab/paper-tracking").json()
+                cached_summary = client.get("/shortpick-lab/paper-tracking/summary").json()
+
+        self.assertEqual(cached_payload["items"], first_payload["items"])
+        self.assertEqual(cached_summary["summary"], first_summary["summary"])
+
+    def test_paper_tracking_exit_tracks_only_use_completed_validation_snapshots(self) -> None:
+        completed_5d = ShortpickValidationSnapshot(
+            candidate_id=1,
+            horizon_days=5,
+            status="completed",
+            entry_at=datetime(2026, 6, 8, 7, 0, tzinfo=UTC),
+            exit_at=datetime(2026, 6, 15, 7, 0, tzinfo=UTC),
+            stock_return=0.08,
+            validation_payload={
+                "paper_tracking_exit_tracks": [
+                    {"key": "mechanical_5d", "exit_trade_day": "2026-06-15", "stock_return": 0.08},
+                ],
+            },
+        )
+        pending_10d = ShortpickValidationSnapshot(
+            candidate_id=1,
+            horizon_days=10,
+            status="pending_benchmark_data",
+            entry_at=datetime(2026, 6, 8, 7, 0, tzinfo=UTC),
+            exit_at=datetime(2026, 6, 22, 7, 0, tzinfo=UTC),
+            stock_return=0.2,
+            validation_payload={
+                "paper_tracking_exit_tracks": [
+                    {"key": "mechanical_5d", "exit_trade_day": "2026-06-15", "stock_return": 0.08},
+                    {"key": "mechanical_10d", "exit_trade_day": "2026-06-22", "stock_return": 0.2},
+                ],
+            },
+        )
+
+        snapshot = _paper_tracking_validation_snapshot_from_rows([completed_5d, pending_10d])
+
+        self.assertEqual(snapshot["validation_status"], "completed")
+        self.assertEqual(
+            [track["key"] for track in snapshot["paper_tracking_exit_tracks"]],
+            ["mechanical_5d"],
+        )
 
     def test_frozen_paper_contract_tracks_three_trading_day_exit_windows(self) -> None:
         contract = shortpick_frozen_paper_strategy_contract()
@@ -820,7 +896,9 @@ class ShortpickLabPaperTrackingTests(ShortpickLabTestCase):
         self.assertEqual(combined["true_forward_count"], 0)
         self.assertEqual(combined["retrospective_count"], 1)
         self.assertEqual(combined["source_policy"], "artifact_source_merged_into_paper_tracking_items_with_evidence_basis")
-        self.assertEqual(combined["retrospective_rows"][0]["evidence_basis"], "retrospective_forward_replay")
+        self.assertNotIn("rows", combined)
+        self.assertNotIn("true_forward_rows", combined)
+        self.assertNotIn("retrospective_rows", combined)
 
         summary_payload = client.get("/shortpick-lab/paper-tracking/summary").json()
         self.assertEqual(summary_payload["items"], [])

@@ -1,4 +1,5 @@
 import { request, buildSourceInfo, longRunningRequestBehavior, operationsDashboardRequestBehavior } from "./core";
+import type { RequestBehavior } from "./core";
 import type {
   ShortpickCandidateListResponse,
   ShortpickCandidateView,
@@ -15,6 +16,11 @@ import type {
   ShortpickReplaySourceResponse,
   ShortpickValidationQueueResponse,
 } from "../types";
+
+const paperTrackingRequestBehavior: RequestBehavior = {
+  timeoutMs: 180000,
+  attemptTimeoutMs: 180000,
+};
 
 export function getShortpickRuns(params?: {
   limit?: number;
@@ -248,7 +254,7 @@ export function getShortpickPaperTracking() {
     data: await request<ShortpickPaperTrackingResponse>(
       "/shortpick-lab/paper-tracking",
       undefined,
-      longRunningRequestBehavior,
+      paperTrackingRequestBehavior,
     ),
     source: buildSourceInfo(),
   }))();

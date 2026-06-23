@@ -319,6 +319,18 @@ function isRetrospectiveReplayPaperTrackingRow(item: ShortpickPaperTrackingItem)
   return item.retrospective === true || item.evidence_basis === "retrospective_forward_replay";
 }
 
+function paperTrackingEffectEntryPriceSource(item: ShortpickPaperTrackingItem): PaperTrackingEntryRuleFilter {
+  if (item.entry_price_source === "next_open" || item.entry_price_source === "same_day_intraday_current") {
+    return item.entry_price_source;
+  }
+  if (item.entry_price_source === "next_close") return "next_close";
+  return paperTrackingEntryRuleKey(item);
+}
+
+export function isComparablePaperTrackingEffectRow(item: ShortpickPaperTrackingItem): boolean {
+  return paperTrackingEffectEntryPriceSource(item) !== "same_day_intraday_current";
+}
+
 export function paperTrackingPrimaryExitTrack(item: ShortpickPaperTrackingItem): Record<string, unknown> | null {
   const tracks = paperTrackingExitTracks(item);
   return tracks.find((track) => track.key === "mechanical_5d") ?? tracks[0] ?? null;
@@ -364,7 +376,7 @@ function paperTrackingMedian(values: number[]): number {
 }
 
 export function paperTrackingEffectObservations(rows: ShortpickPaperTrackingItem[]): PaperTrackingEffectObservation[] {
-  return rows.flatMap((item) => {
+  return rows.filter(isComparablePaperTrackingEffectRow).flatMap((item) => {
     const groupFilter = (paperTrackingStrategyFilterKey(item) || item.tracking_group || "") as PaperTrackingGroupFilter;
     const strategyLabel = paperTrackingRecordGroupLabel(item);
     const signalDate = paperTrackingSignalDate(item);

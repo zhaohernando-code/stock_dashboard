@@ -940,7 +940,7 @@ body[data-theme="dark"] {
 
 .shortpick-paper-effect-chart-block {
   display: flex;
-  min-height: 320px;
+  height: 360px;
   flex-direction: column;
   gap: 4px;
   padding: 12px;
@@ -961,9 +961,10 @@ body[data-theme="dark"] {
 }
 
 .shortpick-paper-effect-chart {
+  height: 260px;
   min-height: 260px;
   width: 100%;
-  flex: 1 1 auto;
+  flex: 0 0 260px;
 }
 
 .shortpick-v2-return-chart-grid {

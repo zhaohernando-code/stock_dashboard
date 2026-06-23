@@ -208,6 +208,12 @@ OPERATIONS_RESPONSE_CACHE_STALE_GRACE_SECONDS = float(
 SHORTPICK_REPLAY_AGGREGATE_FEEDBACK_TTL_SECONDS = float(
     os.getenv("ASHARE_SHORTPICK_REPLAY_AGGREGATE_FEEDBACK_TTL_SECONDS", "15")
 )
+SHORTPICK_PAPER_TRACKING_RESPONSE_CACHE_TTL_SECONDS = float(
+    os.getenv("ASHARE_SHORTPICK_PAPER_TRACKING_RESPONSE_CACHE_TTL_SECONDS", "300")
+)
+SHORTPICK_PAPER_TRACKING_RESPONSE_CACHE_STALE_GRACE_SECONDS = float(
+    os.getenv("ASHARE_SHORTPICK_PAPER_TRACKING_RESPONSE_CACHE_STALE_GRACE_SECONDS", "900")
+)
 _shortpick_replay_aggregate_feedback_cache_lock = threading.Lock()
 _shortpick_replay_aggregate_feedback_cache: tuple[float, dict[str, object]] | None = None
 
@@ -1343,13 +1349,13 @@ def _paper_tracking_validation_snapshot_from_rows(validations: list[ShortpickVal
     selected = validations[-1]
     for validation in validations:
         payload = validation.validation_payload if isinstance(validation.validation_payload, dict) else {}
-        tracks = [item for item in payload.get("paper_tracking_exit_tracks") or [] if isinstance(item, dict)]
-        for track in tracks:
-            key = str(track.get("key") or "")
-            if key:
-                exit_tracks_by_key[key] = dict(track)
         if validation.status == "completed":
             selected = validation
+            tracks = [item for item in payload.get("paper_tracking_exit_tracks") or [] if isinstance(item, dict)]
+            for track in tracks:
+                key = str(track.get("key") or "")
+                if key:
+                    exit_tracks_by_key[key] = dict(track)
         by_horizon.append(
             {
                 "horizon_days": validation.horizon_days,
@@ -1500,6 +1506,7 @@ def _build_shortpick_paper_tracking_ledger(
             "tracking_role": tracking_role or ("frozen_paper_primary" if is_frozen_item else ""),
             "selection_label": str(item_contract.get("label") or "纸面对照"),
             "source_rank": int(overlay.get("source_rank") or llm_control.get("selection_rank") or 2),
+            "entry_price_source": entry_price_source,
             "entry_rule": (
                 "次一交易日开盘买入；开盘直接接近涨停时标记为不可假设成交"
                 if entry_price_source == "next_open"
@@ -1607,7 +1614,11 @@ def _build_shortpick_paper_tracking_ledger(
         include_rows=include_combined_ledger_rows,
     )
     retrospective_items = _shortpick_combined_ledger_display_items(combined_ledger) if include_items else []
-    display_items = [*items, *retrospective_items] if include_items else []
+    display_items = (
+        [_compact_shortpick_paper_tracking_item(item) for item in [*items, *retrospective_items]]
+        if include_items
+        else []
+    )
     retrospective_count = int(combined_ledger.get("retrospective_count") or len(retrospective_items))
 
     return {
@@ -1662,9 +1673,30 @@ def _build_shortpick_paper_tracking_ledger(
             "llm_control_scope_note": str(llm_contract.get("scope_note") or ""),
             "market_control_scope_note": str(market_control_contract.get("scope_note") or ""),
         },
-        "combined_ledger": combined_ledger,
+        "combined_ledger": _compact_shortpick_combined_ledger_projection(combined_ledger),
         "items": display_items,
     }
+
+
+def _compact_shortpick_paper_tracking_item(item: dict[str, object]) -> dict[str, object]:
+    compact = dict(item)
+    for key in (
+        "selection_score_components",
+        "validation_by_horizon",
+        "monitoring_tracks",
+        "gate",
+        "regime",
+    ):
+        compact.pop(key, None)
+    return compact
+
+
+def _compact_shortpick_combined_ledger_projection(combined_ledger: dict[str, object]) -> dict[str, object]:
+    compact = dict(combined_ledger)
+    compact.pop("rows", None)
+    compact.pop("true_forward_rows", None)
+    compact.pop("retrospective_rows", None)
+    return compact
 
 
 def create_app(
@@ -1681,6 +1713,9 @@ def create_app(
     operations_response_cache: dict[str, tuple[float, str]] = {}
     operations_response_refreshing: set[str] = set()
     operations_response_cache_lock = threading.Lock()
+    shortpick_paper_tracking_response_cache: dict[str, tuple[float, str]] = {}
+    shortpick_paper_tracking_response_refreshing: set[str] = set()
+    shortpick_paper_tracking_response_cache_lock = threading.Lock()
     with session_factory() as session:
         ensure_runtime_defaults(session)
         session.commit()
@@ -1742,6 +1777,134 @@ def create_app(
         with operations_response_cache_lock:
             operations_response_cache[cache_key] = (time.perf_counter(), content)
         return _operations_json_content_response(content)
+
+    def build_shortpick_paper_tracking_payload(*, include_items: bool, include_combined_ledger_rows: bool) -> object:
+        with session_factory() as cache_session:
+            return _build_shortpick_paper_tracking_ledger(
+                cache_session,
+                include_items=include_items,
+                include_combined_ledger_rows=include_combined_ledger_rows,
+            )
+
+    def shortpick_paper_tracking_cache_key(*, include_items: bool) -> str:
+        return "full" if include_items else "summary"
+
+    def refresh_shortpick_paper_tracking_response_cache_entry(
+        cache_key: str,
+        *,
+        include_items: bool,
+        include_combined_ledger_rows: bool,
+    ) -> None:
+        try:
+            payload = build_shortpick_paper_tracking_payload(
+                include_items=include_items,
+                include_combined_ledger_rows=include_combined_ledger_rows,
+            )
+            content = _operations_json_content(payload)
+            with shortpick_paper_tracking_response_cache_lock:
+                shortpick_paper_tracking_response_cache[cache_key] = (time.perf_counter(), content)
+        except Exception:
+            LOGGER.exception("shortpick paper tracking response cache refresh failed for %s", cache_key)
+        finally:
+            with shortpick_paper_tracking_response_cache_lock:
+                shortpick_paper_tracking_response_refreshing.discard(cache_key)
+
+    def start_shortpick_paper_tracking_response_cache_refresh(
+        cache_key: str,
+        *,
+        include_items: bool,
+        include_combined_ledger_rows: bool,
+    ) -> None:
+        threading.Thread(
+            target=refresh_shortpick_paper_tracking_response_cache_entry,
+            kwargs={
+                "cache_key": cache_key,
+                "include_items": include_items,
+                "include_combined_ledger_rows": include_combined_ledger_rows,
+            },
+            name=f"shortpick-paper-tracking-response-refresh-{cache_key}",
+            daemon=True,
+        ).start()
+
+    def get_shortpick_paper_tracking_response(
+        *,
+        include_items: bool,
+        include_combined_ledger_rows: bool,
+    ) -> Response:
+        cache_key = shortpick_paper_tracking_cache_key(include_items=include_items)
+        refresh_needed = False
+        with shortpick_paper_tracking_response_cache_lock:
+            cached = shortpick_paper_tracking_response_cache.get(cache_key)
+            if cached is not None:
+                cached_at, content = cached
+                cache_age = time.perf_counter() - cached_at
+                if cache_age <= SHORTPICK_PAPER_TRACKING_RESPONSE_CACHE_TTL_SECONDS:
+                    return _operations_json_content_response(content)
+                if cache_age <= (
+                    SHORTPICK_PAPER_TRACKING_RESPONSE_CACHE_TTL_SECONDS
+                    + SHORTPICK_PAPER_TRACKING_RESPONSE_CACHE_STALE_GRACE_SECONDS
+                ):
+                    if cache_key not in shortpick_paper_tracking_response_refreshing:
+                        shortpick_paper_tracking_response_refreshing.add(cache_key)
+                        refresh_needed = True
+                    content_response = _operations_json_content_response(content)
+                else:
+                    shortpick_paper_tracking_response_cache.pop(cache_key, None)
+                    shortpick_paper_tracking_response_refreshing.discard(cache_key)
+                    content_response = None
+            else:
+                content_response = None
+        if refresh_needed:
+            start_shortpick_paper_tracking_response_cache_refresh(
+                cache_key,
+                include_items=include_items,
+                include_combined_ledger_rows=include_combined_ledger_rows,
+            )
+        if content_response is not None:
+            return content_response
+        with shortpick_paper_tracking_response_cache_lock:
+            if cache_key in shortpick_paper_tracking_response_refreshing:
+                cached = shortpick_paper_tracking_response_cache.get(cache_key)
+                if cached is not None:
+                    return _operations_json_content_response(cached[1])
+            shortpick_paper_tracking_response_refreshing.add(cache_key)
+        refresh_shortpick_paper_tracking_response_cache_entry(
+            cache_key,
+            include_items=include_items,
+            include_combined_ledger_rows=include_combined_ledger_rows,
+        )
+        with shortpick_paper_tracking_response_cache_lock:
+            cached = shortpick_paper_tracking_response_cache.get(cache_key)
+        if cached is None:
+            payload = build_shortpick_paper_tracking_payload(
+                include_items=include_items,
+                include_combined_ledger_rows=include_combined_ledger_rows,
+            )
+            return _operations_json_response(payload)
+        return _operations_json_content_response(cached[1])
+
+    def prewarm_shortpick_paper_tracking_response_cache() -> None:
+        prewarm_enabled = os.getenv("ASHARE_SHORTPICK_PAPER_TRACKING_RESPONSE_PREWARM", "1").strip().lower()
+        if prewarm_enabled in {"0", "false", "no", "off"}:
+            return
+        for include_items, include_combined_ledger_rows in ((True, True), (False, False)):
+            cache_key = shortpick_paper_tracking_cache_key(include_items=include_items)
+            refresh_shortpick_paper_tracking_response_cache_entry(
+                cache_key,
+                include_items=include_items,
+                include_combined_ledger_rows=include_combined_ledger_rows,
+            )
+
+    def start_shortpick_paper_tracking_response_cache_prewarm() -> None:
+        prewarm_mode = os.getenv("ASHARE_SHORTPICK_PAPER_TRACKING_RESPONSE_PREWARM_MODE", "background").strip().lower()
+        if prewarm_mode == "sync":
+            prewarm_shortpick_paper_tracking_response_cache()
+            return
+        threading.Thread(
+            target=prewarm_shortpick_paper_tracking_response_cache,
+            name="shortpick-paper-tracking-response-cache-prewarm",
+            daemon=True,
+        ).start()
 
     def prewarm_operations_response_cache() -> None:
         if os.getenv("ASHARE_DISABLE_OPERATIONS_RESPONSE_PREWARM", "").strip().lower() in {"1", "true", "yes", "on"}:
@@ -1826,6 +1989,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         start_operations_response_cache_prewarm()
+        start_shortpick_paper_tracking_response_cache_prewarm()
         if not background_ops_enabled:
             yield
             return
@@ -2361,17 +2525,17 @@ def create_app(
     @app.get("/shortpick-lab/paper-tracking")
     def shortpick_paper_tracking(
         access: StockAccessContext = Depends(require_stock_access),
-        session: Session = Depends(get_session),
-    ) -> dict[str, object]:
-        return _build_shortpick_paper_tracking_ledger(session)
+    ) -> Response:
+        return get_shortpick_paper_tracking_response(
+            include_items=True,
+            include_combined_ledger_rows=True,
+        )
 
     @app.get("/shortpick-lab/paper-tracking/summary")
     def shortpick_paper_tracking_summary(
         access: StockAccessContext = Depends(require_stock_access),
-        session: Session = Depends(get_session),
-    ) -> dict[str, object]:
-        return _build_shortpick_paper_tracking_ledger(
-            session,
+    ) -> Response:
+        return get_shortpick_paper_tracking_response(
             include_items=False,
             include_combined_ledger_rows=False,
         )
