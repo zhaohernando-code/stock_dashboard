@@ -118,6 +118,9 @@ def test_publish_bootstraps_scheduled_refresh_when_launchagent_is_unloaded() -> 
 
     assert 'SCHEDULED_PLIST="$HOME/Library/LaunchAgents/${SCHEDULED_LABEL}.plist"' in script
     assert 'ensure_scheduled_refresh_calendar' in script
+    assert 'scheduled_refresh_loaded' in script
+    assert 'scheduled_refresh_plist_hash' in script
+    assert 'scheduled-refresh already loaded and plist unchanged; reload skipped' in script
     assert 'trap cleanup_on_exit EXIT' in script
     assert 'wait_for_scheduled_refresh_quiescent' in script
     assert 'SCHEDULED_REFRESH_QUIESCE_TIMEOUT_SECONDS="${ASHARE_PUBLISH_SCHEDULED_REFRESH_QUIESCE_TIMEOUT_SECONDS:-180}"' in script
@@ -125,6 +128,16 @@ def test_publish_bootstraps_scheduled_refresh_when_launchagent_is_unloaded() -> 
     assert 'resume_scheduled_refresh || true' in script
     assert 'launchctl bootout "gui/$(id -u)" "$SCHEDULED_PLIST"' in script
     assert 'launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"' in script
+    resume_body = script[script.index("resume_scheduled_refresh()") :]
+    assert resume_body.index('plist_hash_before="$(scheduled_refresh_plist_hash)"') < resume_body.index(
+        'ensure_scheduled_refresh_calendar'
+    )
+    assert resume_body.index('ensure_scheduled_refresh_calendar') < resume_body.index(
+        'plist_hash_after="$(scheduled_refresh_plist_hash)"'
+    )
+    assert resume_body.index('scheduled-refresh already loaded and plist unchanged; reload skipped') < resume_body.index(
+        'launchctl bootout "gui/$(id -u)" "$SCHEDULED_PLIST"'
+    )
     assert script.index('wait_for_scheduled_refresh_quiescent') < script.index('echo "[publish] Building repo frontend"')
     assert script.index('if [[ "$VERIFY_MODE" == "canonical" ]]') < script.index(
         'echo "[publish] Triggering post-deploy data refresh"'

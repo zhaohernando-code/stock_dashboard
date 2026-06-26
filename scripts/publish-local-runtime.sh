@@ -199,6 +199,25 @@ wait_for_scheduled_refresh_quiescent() {
   return 1
 }
 
+scheduled_refresh_loaded() {
+  launchctl print "gui/$(id -u)/$SCHEDULED_LABEL" >/dev/null 2>&1
+}
+
+scheduled_refresh_plist_hash() {
+  if [[ ! -f "$SCHEDULED_PLIST" ]]; then
+    printf 'missing\n'
+    return 0
+  fi
+  "$PYTHON_BIN" - "$SCHEDULED_PLIST" <<'PY'
+from pathlib import Path
+import hashlib
+import sys
+
+path = Path(sys.argv[1])
+print(hashlib.sha256(path.read_bytes()).hexdigest())
+PY
+}
+
 resume_scheduled_refresh() {
   if [[ "$SCHEDULED_REFRESH_PAUSED" != "1" ]]; then
     return 0
@@ -208,7 +227,20 @@ resume_scheduled_refresh() {
     echo "Scheduled refresh plist missing: $SCHEDULED_PLIST" >&2
     return 1
   fi
+  local was_loaded=0
+  local plist_hash_before
+  local plist_hash_after
+  if scheduled_refresh_loaded; then
+    was_loaded=1
+  fi
+  plist_hash_before="$(scheduled_refresh_plist_hash)"
   ensure_scheduled_refresh_calendar
+  plist_hash_after="$(scheduled_refresh_plist_hash)"
+  if [[ "$was_loaded" == "1" && "$plist_hash_before" == "$plist_hash_after" ]]; then
+    echo "[publish] scheduled-refresh already loaded and plist unchanged; reload skipped"
+    SCHEDULED_REFRESH_PAUSED=0
+    return 0
+  fi
   launchctl bootout "gui/$(id -u)" "$SCHEDULED_PLIST" 2>/dev/null || true
   launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"
   # Do NOT kickstart here. The agent is loaded with RunAtLoad=false; its
