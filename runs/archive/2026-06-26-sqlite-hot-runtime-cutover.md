@@ -120,4 +120,6 @@ Complete the physical SQLite split that the first foundation run intentionally d
 - The cold DBs are append/copy artifacts; they can be regenerated from the original source DB and hot DB as needed.
 
 ## Archive And Merge Result
-- Pending until branch push, merge to `main`, and `origin/main` push complete.
+- Task branch pushed to `origin/codex/sqlite-hot-runtime-cutover`.
+- `main` fast-forwarded from `04f16c8b533a23e692e37bddce9480c31b03cef8` to `324ca2f306335f02cfe04b6bd55b30e8f40629fd`.
+- `origin/main` push succeeded after pre-push fast regression and policy audit passed.
