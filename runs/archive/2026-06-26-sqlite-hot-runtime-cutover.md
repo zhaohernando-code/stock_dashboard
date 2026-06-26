@@ -96,7 +96,22 @@ Complete the physical SQLite split that the first foundation run intentionally d
 - Policy audit: pass; no direct config reads, formula side effects, missing config lineage, or new unclassified items.
 - Runtime cold verify-only: pass; `1d` source/target counts both `2,325,997`, range `2022-11-21 15:00:00.000000` to `2026-06-26 15:00:00.000000`; research archive source/target counts match for all archived shortpick tables.
 - MiMo code review: `NO_BLOCKING_CODE_REVIEW`; minor findings accepted and fixed before commit.
-- Runtime publish after branch commit: pending.
+- Runtime publish after branch commit: pass.
+  - Command: `ASHARE_PUBLISH_MAX_WAIT_SECONDS=600 ASHARE_PUBLISH_VERIFY_MODE=local ASHARE_PUBLISH_REFRESH_MODE=skip bash scripts/publish-local-runtime.sh`.
+  - Published source commit: `7d16300aede71b72d41a33e504136d91b94b7d0b`.
+  - Release parity manifest: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/local-20260626T133130Z-7d16300.json`.
+  - Backend health and frontend health passed.
+  - Post-deploy real data refresh was skipped as intended; shortpick v2 paper cache prewarm completed.
+
+## Post-Publish Served API Smoke
+- `/health`: 200, `0.012s`, database URL `sqlite:////Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/ashare_hot.db`.
+- `/dashboard/shell`: 200, `0.224s`.
+- `/dashboard/scheduled-refresh-status`: 200, `0.008s`.
+- `/dashboard/operations?sample_symbol=600519.SH`: 200 degraded cache miss, `0.011s`.
+- `/dashboard/operations/summary?sample_symbol=600519.SH`: 200, `0.025s`.
+- `/dashboard/operations/details?section=portfolios&sample_symbol=600519.SH`: 200 degraded cache miss, `0.011s`.
+- `/dashboard/operations/details?section=replay&sample_symbol=600519.SH`: 200 degraded cache miss, `0.010s`.
+- `/stocks/002028.SZ/dashboard`: 200, `0.934s`.
 
 ## Risk And Rollback Notes
 - Original runtime DB was not modified by hot slimming and remains the rollback DB.
@@ -105,4 +120,4 @@ Complete the physical SQLite split that the first foundation run intentionally d
 - The cold DBs are append/copy artifacts; they can be regenerated from the original source DB and hot DB as needed.
 
 ## Archive And Merge Result
-- Pending until tests, review, publish, branch push, merge to `main`, and `origin/main` push complete.
+- Pending until branch push, merge to `main`, and `origin/main` push complete.
