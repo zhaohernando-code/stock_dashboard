@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +13,13 @@ MARKET_HISTORY_TABLE = "market_bar_history"
 RESEARCH_ARCHIVE_TABLE = "research_archive_rows"
 DEFAULT_ARCHIVE_TIMEFRAMES = ("1d",)
 COPY_BATCH_SIZE = 10_000
+DEFAULT_HOT_RETAIN_DAYS = 450
+BENCHMARK_SYMBOL_ALIASES = {
+    "CSI300": "000300.SH",
+    "CSI500": "000905.SH",
+    "CSI1000": "000852.SH",
+}
+DEFAULT_HOT_BENCHMARK_SYMBOLS = tuple(BENCHMARK_SYMBOL_ALIASES.values())
 RESEARCH_ARCHIVE_SOURCE_TABLES = (
     "shortpick_experiment_runs",
     "shortpick_model_rounds",
@@ -43,6 +50,12 @@ def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA synchronous=NORMAL")
     return connection
+
+
+def _remove_sqlite_file_set(path: Path) -> None:
+    for candidate in (path, path.with_name(path.name + "-wal"), path.with_name(path.name + "-shm")):
+        if candidate.exists():
+            candidate.unlink()
 
 
 def _create_market_history_schema(connection: sqlite3.Connection) -> None:
@@ -278,6 +291,121 @@ def _research_archive_verification(*, source: sqlite3.Connection, target: sqlite
     return checks
 
 
+def _parse_sqlite_datetime(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace(" ", "T"))
+
+
+def _hot_symbol_set(connection: sqlite3.Connection, extra_symbols: Iterable[str] = ()) -> set[str]:
+    symbols = {symbol.upper() for symbol in DEFAULT_HOT_BENCHMARK_SYMBOLS}
+    for symbol in extra_symbols:
+        normalized = BENCHMARK_SYMBOL_ALIASES.get(symbol.upper(), symbol.upper())
+        if normalized:
+            symbols.add(normalized)
+    queries = [
+        "SELECT symbol FROM watchlist_entries WHERE status = 'active'",
+        "SELECT symbol FROM watchlist_follows WHERE status = 'active'",
+        "SELECT benchmark_symbol AS symbol FROM paper_portfolios WHERE benchmark_symbol IS NOT NULL AND benchmark_symbol != ''",
+        "SELECT benchmark_symbol AS symbol FROM simulation_sessions WHERE benchmark_symbol IS NOT NULL AND benchmark_symbol != ''",
+    ]
+    for query in queries:
+        if not _table_exists(connection, query.split(" FROM ", 1)[1].split()[0]):
+            continue
+        for row in connection.execute(query):
+            raw_symbol = str(row["symbol"] or "").upper()
+            normalized = BENCHMARK_SYMBOL_ALIASES.get(raw_symbol, raw_symbol)
+            if normalized:
+                symbols.add(normalized)
+    return symbols
+
+
+def create_slim_hot_database(
+    *,
+    source_database_url: str,
+    hot_database_url: str,
+    retain_recent_days: int = DEFAULT_HOT_RETAIN_DAYS,
+    extra_hot_symbols: Iterable[str] = (),
+    overwrite: bool = False,
+    vacuum: bool = True,
+) -> dict[str, Any]:
+    source_path = sqlite_path_from_url(source_database_url)
+    hot_path = sqlite_path_from_url(hot_database_url)
+    if hot_path.exists() and not overwrite:
+        raise FileExistsError(f"hot database already exists: {hot_path}")
+    if overwrite:
+        _remove_sqlite_file_set(hot_path)
+    hot_path.parent.mkdir(parents=True, exist_ok=True)
+    with _connect(source_path, readonly=True) as source, sqlite3.connect(hot_path) as target:
+        source.backup(target)
+    with _connect(hot_path) as hot:
+        hot_symbols = _hot_symbol_set(hot, extra_symbols=extra_hot_symbols)
+        before_rows = hot.execute("SELECT COUNT(*) AS row_count FROM market_bars").fetchone()["row_count"]
+        before_1d_rows = hot.execute(
+            "SELECT COUNT(*) AS row_count FROM market_bars WHERE timeframe = '1d'"
+        ).fetchone()["row_count"]
+        max_observed = hot.execute(
+            "SELECT MAX(observed_at) AS max_observed_at FROM market_bars WHERE timeframe = '1d'"
+        ).fetchone()["max_observed_at"]
+        cutoff = None
+        deleted_rows = 0
+        if max_observed is not None:
+            cutoff_dt = _parse_sqlite_datetime(str(max_observed)) - timedelta(days=retain_recent_days)
+            cutoff = cutoff_dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+            hot.execute("CREATE TEMP TABLE __ashare_hot_symbols (symbol TEXT PRIMARY KEY)")
+            hot.executemany(
+                "INSERT OR IGNORE INTO __ashare_hot_symbols(symbol) VALUES (?)",
+                [(symbol,) for symbol in sorted(hot_symbols)],
+            )
+            hot.execute(
+                """
+                CREATE TEMP TABLE __ashare_hot_stock_ids AS
+                SELECT id AS stock_id FROM stocks WHERE symbol IN (SELECT symbol FROM __ashare_hot_symbols)
+                """
+            )
+            cursor = hot.execute(
+                """
+                DELETE FROM market_bars
+                WHERE timeframe = '1d'
+                  AND observed_at < ?
+                  AND stock_id NOT IN (SELECT stock_id FROM __ashare_hot_stock_ids)
+                """,
+                (cutoff,),
+            )
+            deleted_rows = int(cursor.rowcount if cursor.rowcount is not None and cursor.rowcount >= 0 else 0)
+        hot.commit()
+        if vacuum:
+            hot.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            hot.execute("VACUUM")
+            hot.execute("PRAGMA optimize")
+        after_rows = hot.execute("SELECT COUNT(*) AS row_count FROM market_bars").fetchone()["row_count"]
+        after_1d_rows = hot.execute("SELECT COUNT(*) AS row_count FROM market_bars WHERE timeframe = '1d'").fetchone()[
+            "row_count"
+        ]
+        retained_hot_symbol_rows = hot.execute(
+            """
+            SELECT COUNT(*) AS row_count
+            FROM market_bars mb
+            JOIN stocks s ON s.id = mb.stock_id
+            WHERE mb.timeframe = '1d'
+              AND s.symbol IN (SELECT symbol FROM __ashare_hot_symbols)
+            """
+        ).fetchone()["row_count"]
+    return {
+        "status": "ok",
+        "created_at": datetime.now(UTC).isoformat(),
+        "source_database": str(source_path),
+        "hot_database": str(hot_path),
+        "retain_recent_days": retain_recent_days,
+        "cutoff_observed_at": cutoff,
+        "hot_symbols": sorted(hot_symbols),
+        "before_market_bar_rows": before_rows,
+        "after_market_bar_rows": after_rows,
+        "before_1d_rows": before_1d_rows,
+        "after_1d_rows": after_1d_rows,
+        "deleted_1d_rows": deleted_rows,
+        "retained_hot_symbol_1d_rows": retained_hot_symbol_rows,
+    }
+
+
 def migrate_sqlite_hot_cold_split(
     *,
     source_database_url: str,
@@ -285,6 +413,11 @@ def migrate_sqlite_hot_cold_split(
     research_archive_database_url: str | None = None,
     timeframes: Iterable[str] = DEFAULT_ARCHIVE_TIMEFRAMES,
     verify_only: bool = False,
+    hot_database_url: str | None = None,
+    create_hot: bool = False,
+    overwrite_hot: bool = False,
+    hot_retain_days: int = DEFAULT_HOT_RETAIN_DAYS,
+    extra_hot_symbols: Iterable[str] = (),
 ) -> dict[str, Any]:
     source_path = sqlite_path_from_url(source_database_url)
     market_history_path = sqlite_path_from_url(
@@ -314,6 +447,17 @@ def migrate_sqlite_hot_cold_split(
     passed = all(item["passed"] for item in market_checks.values()) and all(
         item["passed"] for item in research_checks.values()
     )
+    hot_result = None
+    if create_hot:
+        if not hot_database_url:
+            raise ValueError("hot_database_url is required when create_hot=True")
+        hot_result = create_slim_hot_database(
+            source_database_url=source_database_url,
+            hot_database_url=hot_database_url,
+            retain_recent_days=hot_retain_days,
+            extra_hot_symbols=extra_hot_symbols,
+            overwrite=overwrite_hot,
+        )
     return {
         "status": "ok" if passed else "failed",
         "passed": passed,
@@ -324,4 +468,5 @@ def migrate_sqlite_hot_cold_split(
         "research_copy": research_copy,
         "market_checks": market_checks,
         "research_checks": research_checks,
+        "hot_database": hot_result,
     }

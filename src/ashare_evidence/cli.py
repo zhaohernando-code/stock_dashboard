@@ -862,6 +862,7 @@ def build_parser() -> argparse.ArgumentParser:
     sqlite_hot_cold_split.add_argument("--source-database-url", required=True)
     sqlite_hot_cold_split.add_argument("--market-history-database-url", default=None)
     sqlite_hot_cold_split.add_argument("--research-archive-database-url", default=None)
+    sqlite_hot_cold_split.add_argument("--hot-database-url", default=None)
     sqlite_hot_cold_split.add_argument(
         "--timeframe",
         action="append",
@@ -872,6 +873,28 @@ def build_parser() -> argparse.ArgumentParser:
         "--verify-only",
         action="store_true",
         help="Validate existing split targets without copying rows.",
+    )
+    sqlite_hot_cold_split.add_argument(
+        "--create-hot",
+        action="store_true",
+        help="Create a slim hot database copy after cold migration/verification.",
+    )
+    sqlite_hot_cold_split.add_argument(
+        "--overwrite-hot",
+        action="store_true",
+        help="Replace an existing --hot-database-url file set.",
+    )
+    sqlite_hot_cold_split.add_argument(
+        "--hot-retain-days",
+        type=int,
+        default=450,
+        help="Keep this many latest calendar days of all 1d bars in the slim hot database.",
+    )
+    sqlite_hot_cold_split.add_argument(
+        "--hot-symbol",
+        action="append",
+        default=None,
+        help="Additional symbol whose full 1d history should remain in the slim hot database.",
     )
 
     shortpick_market_factor_study = subparsers.add_parser(
@@ -2160,9 +2183,18 @@ def main(argv: list[str] | None = None) -> int:
             research_archive_database_url=args.research_archive_database_url,
             timeframes=args.timeframe or ("1d",),
             verify_only=args.verify_only,
+            hot_database_url=args.hot_database_url,
+            create_hot=args.create_hot,
+            overwrite_hot=args.overwrite_hot,
+            hot_retain_days=args.hot_retain_days,
+            extra_hot_symbols=args.hot_symbol or (),
         )
         _print_json(payload)
-        return 0 if payload["passed"] else 1
+        passed = bool(payload["passed"])
+        if args.create_hot:
+            hot_result = payload.get("hot_database")
+            passed = passed and isinstance(hot_result, dict) and hot_result.get("status") == "ok"
+        return 0 if passed else 1
 
     if args.command == "shortpick-market-factor-study":
         with session_scope(args.database_url) as session:
