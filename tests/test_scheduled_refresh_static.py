@@ -5,10 +5,21 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "run-scheduled-refresh.sh"
+VERIFY_DEPLOY_PATH = REPO_ROOT / "scripts" / "verify-deploy.sh"
 
 
 def test_scheduled_refresh_script_has_valid_bash_syntax() -> None:
     subprocess.run(["bash", "-n", str(SCRIPT_PATH)], check=True)
+
+
+def test_deploy_verifier_allows_empty_watchlist_mode() -> None:
+    script = VERIFY_DEPLOY_PATH.read_text(encoding="utf-8")
+
+    assert "isinstance(d.get('items'), list)" in script
+    assert "d.get('items', [])" in script
+    assert "No dashboard candidates; factor saturation check skipped." in script
+    assert "No dashboard candidates; size factor check skipped." in script
+    assert "No dashboard candidates; reversal distribution check skipped." in script
 
 
 def test_postmarket_daily_refresh_is_single_1620_slot() -> None:
@@ -38,7 +49,10 @@ def test_daily_refresh_has_catchup_guards() -> None:
     assert "process_tree_pids" in script
     assert 'pgrep -P "$root_pid"' in script
     assert 'kill $descendant_pids' in script
-    assert "run_with_timeout \"$DAILY_REFRESH_TIMEOUT_SECONDS\" run_phase5_daily_refresh --analysis-only\n  local exit_code=$?" in script
+    assert "active_watchlist_count" in script
+    assert 'ASHARE_SKIP_PHASE5_DAILY_WHEN_WATCHLIST_EMPTY:-1' in script
+    assert "active watchlist is empty" in script
+    assert 'run_with_timeout "$DAILY_REFRESH_TIMEOUT_SECONDS" run_phase5_daily_refresh --analysis-only' in script
 
 
 def test_slot_retry_interval_is_at_least_daily_refresh_duration() -> None:
@@ -72,6 +86,7 @@ def test_shortpick_lab_is_part_of_postmarket_daily_cycle() -> None:
     assert "wait_for_database_writable" in script
     assert 'connection.execute(text("BEGIN IMMEDIATE"))' in script
     assert '--run-date "$target_date"' in script
+    assert '--llm-pool-size "${ASHARE_SHORTPICK_LLM_POOL_SIZE:-4}"' in script
     assert "run_shortpick_daily_cycle" in script
     assert "run_frontend_projection_refresh" in script
     assert "keeping previous projection rows" in script
@@ -165,7 +180,9 @@ def test_deepseek_shortpick_round_has_in_process_soft_timeout() -> None:
     source = (REPO_ROOT / "src" / "ashare_evidence" / "shortpick_lab.py").read_text(encoding="utf-8")
 
     assert "ASHARE_SHORTPICK_DEEPSEEK_ROUND_TIMEOUT_SECONDS" in source
+    assert "ASHARE_SHORTPICK_CLAUDE_DEEPSEEK_TIMEOUT_SECONDS" in source
+    assert "deepseek_claude_cli_native_web_v1" in source
     assert "SHORTPICK_DEEPSEEK_SEARCH_TIMEOUT_SECONDS = 180" in source
     assert "signal.setitimer(signal.ITIMER_REAL, timeout_seconds)" in source
     assert "deepseek_tool_search_lobechat_searxng_v1" in source
-    assert "with _shortpick_executor_round_timeout(executor):\n            raw_answer = executor.complete(prompt)" in source
+    assert "with _shortpick_executor_round_timeout(task.executor):\n            raw_answer = task.executor.complete(task.prompt)" in source

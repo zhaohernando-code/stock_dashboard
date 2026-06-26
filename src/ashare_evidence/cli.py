@@ -688,6 +688,7 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_run.add_argument("--database-url", default=None)
     shortpick_run.add_argument("--run-date", default=None)
     shortpick_run.add_argument("--rounds-per-model", type=int, default=5)
+    shortpick_run.add_argument("--llm-pool-size", type=int, default=None)
 
     shortpick_intraday = subparsers.add_parser(
         "shortpick-lab-intraday-same-day",
@@ -1999,6 +2000,7 @@ def main(argv: list[str] | None = None) -> int:
                 session,
                 run_date=target_date,
                 rounds_per_model=args.rounds_per_model,
+                llm_pool_size=args.llm_pool_size,
                 triggered_by="scheduled_cli",
                 trigger_source="scheduled_cli",
             )

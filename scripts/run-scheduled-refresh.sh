@@ -76,7 +76,8 @@ run_shortpick_lab() {
   "$PYTHON_BIN" -m ashare_evidence.cli shortpick-lab-run \
     --database-url "$ASHARE_DATABASE_URL" \
     --run-date "$target_date" \
-    --rounds-per-model "${ASHARE_SHORTPICK_ROUNDS_PER_MODEL:-5}"
+    --rounds-per-model "${ASHARE_SHORTPICK_ROUNDS_PER_MODEL:-5}" \
+    --llm-pool-size "${ASHARE_SHORTPICK_LLM_POOL_SIZE:-4}"
 }
 
 run_shortpick_intraday_same_day() {
@@ -105,6 +106,20 @@ run_frontend_projection_refresh() {
   "$PYTHON_BIN" -m ashare_evidence.cli frontend-projections-refresh \
     --database-url "$ASHARE_DATABASE_URL" \
     --projection all
+}
+
+active_watchlist_count() {
+  "$PYTHON_BIN" - "$ASHARE_DATABASE_URL" <<'PY'
+from sqlalchemy import create_engine, text
+import sys
+
+engine = create_engine(sys.argv[1])
+with engine.connect() as connection:
+    count = connection.execute(
+        text("select count(*) from watchlist_follows where status = 'active'")
+    ).scalar_one()
+print(int(count or 0))
+PY
 }
 
 prewarm_shortpick_v2_paper_cache() {
@@ -474,8 +489,15 @@ run_daily_refresh_slot() {
   write_run_context "$target_date" "$slot_name"
   trap release_run_lock EXIT
   echo "Running ${slot_name} daily refresh for ${target_date} at ${NOW_HHMM}."
-  run_with_timeout "$DAILY_REFRESH_TIMEOUT_SECONDS" run_phase5_daily_refresh --analysis-only
-  local exit_code=$?
+  local exit_code=0
+  local watchlist_count="1"
+  watchlist_count="$(active_watchlist_count 2>/dev/null || printf '1\n')"
+  if [[ "${ASHARE_SKIP_PHASE5_DAILY_WHEN_WATCHLIST_EMPTY:-1}" == "1" && "$watchlist_count" == "0" ]]; then
+    echo "Skipping ${slot_name} Phase 5 watchlist daily refresh for ${target_date}; active watchlist is empty." >&2
+  else
+    run_with_timeout "$DAILY_REFRESH_TIMEOUT_SECONDS" run_phase5_daily_refresh --analysis-only
+    exit_code=$?
+  fi
   if [[ "$exit_code" == "0" ]]; then
     if ! run_with_timeout "$SHORTPICK_V2_PAPER_LEDGER_REFRESH_TIMEOUT_SECONDS" refresh_shortpick_v2_paper_ledger; then
       echo "Shortpick v2 paper ledger refresh failed after daily refresh; keeping previous artifact rows." >&2

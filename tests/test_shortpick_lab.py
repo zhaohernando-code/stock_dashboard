@@ -1,6 +1,9 @@
 # ruff: noqa: F403,F405
 from __future__ import annotations
 
+import threading
+import time
+
 from ashare_evidence.research_artifact_store import (
     artifact_root_from_database_url,
     write_shortpick_control_inventory_archive_artifact_record,
@@ -571,6 +574,52 @@ class ShortpickLabTests(ShortpickLabTestCase):
         with session_scope(self.database_url) as session:
             self.assertEqual(session.scalar(select(WatchlistFollow).where(WatchlistFollow.symbol == "600519.SH")), None)
             self.assertEqual(session.scalar(select(Recommendation).limit(1)), None)
+
+    def test_run_executes_llm_rounds_through_parallel_pool(self) -> None:
+        lock = threading.Lock()
+        active_count = 0
+        max_active_count = 0
+
+        class SlowExecutor:
+            def __init__(self, provider_name: str, symbol: str) -> None:
+                self.provider_name = provider_name
+                self.model_name = f"{provider_name}-test"
+                self.executor_kind = "fake"
+                self.symbol = symbol
+
+            def complete(self, prompt: str) -> str:
+                nonlocal active_count, max_active_count
+                with lock:
+                    active_count += 1
+                    max_active_count = max(max_active_count, active_count)
+                try:
+                    time.sleep(0.1)
+                    return _answer(self.symbol, self.symbol, "并发池测试", f"https://{self.provider_name}.example/news")
+                finally:
+                    with lock:
+                        active_count -= 1
+
+        executors = [
+            SlowExecutor("openai", "600519.SH"),
+            SlowExecutor("deepseek", "601318.SH"),
+            SlowExecutor("qwen", "002594.SZ"),
+        ]
+
+        with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
+            with patch("ashare_evidence.shortpick_lab._sync_shortpick_candidate_market_data", return_value={"status": "skipped"}):
+                with session_scope(self.database_url) as session:
+                    payload = run_shortpick_experiment(
+                        session,
+                        run_date=date(2026, 5, 5),
+                        rounds_per_model=1,
+                        llm_pool_size=3,
+                        triggered_by="root",
+                        executors=executors,
+                    )
+
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["summary"]["completed_round_count"], 3)
+        self.assertGreater(max_active_count, 1)
 
     def test_validate_recent_shortpick_runs_refreshes_completed_runs(self) -> None:
         self._seed_daily_bars()

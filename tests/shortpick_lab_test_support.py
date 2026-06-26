@@ -374,24 +374,27 @@ class ShortpickLabTestCase(unittest.TestCase):
                 executor.complete("prompt")
 
     def _check_default_deepseek_executor_uses_lobechat_search_not_official_native_api(self) -> None:
-        with session_scope(self.database_url) as session:
-            session.add(
-                ModelApiKey(
-                    name="deepseek",
-                    provider_name="deepseek",
-                    model_name="deepseek-v4-pro",
-                    base_url="https://api.deepseek.com",
-                    api_key="secret",
-                    enabled=True,
-                    is_default=True,
-                    priority=1,
-                )
-            )
-            session.flush()
-            executors = default_shortpick_executors(session)
+        with tempfile.NamedTemporaryFile() as launcher:
+            os.chmod(launcher.name, 0o755)
+            with patch.dict(os.environ, {"DEEPSEEK_LAUNCHER": launcher.name}, clear=False):
+                with session_scope(self.database_url) as session:
+                    session.add(
+                        ModelApiKey(
+                            name="deepseek",
+                            provider_name="deepseek",
+                            model_name="deepseek-v4-pro",
+                            base_url="https://api.deepseek.com",
+                            api_key="secret",
+                            enabled=True,
+                            is_default=True,
+                            priority=1,
+                        )
+                    )
+                    session.flush()
+                    executors = default_shortpick_executors(session)
 
         deepseek_executor = next(item for item in executors if item.provider_name == "deepseek")
-        self.assertEqual(deepseek_executor.executor_kind, "deepseek_tool_search_lobechat_searxng_v1")
+        self.assertEqual(deepseek_executor.executor_kind, "deepseek_claude_cli_native_web_v1")
 
     def _check_intraday_same_day_control_skips_limit_up_entry_candidate(self) -> None:
         trading_days = [date(2026, 4, 22) + timedelta(days=index) for index in range(20)]
