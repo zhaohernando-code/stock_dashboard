@@ -51,5 +51,15 @@ Prevent future runtime or maintenance scripts from silently writing to the legac
 - `ashare_dashboard.db` remains in backup-retention patterns, migration/cutover test fixtures, publish quiescence compatibility checks for old running processes, and documentation that identifies the original DB as a retained archive/rollback source.
 
 ## Runtime/Release Notes
-- Runtime publish and post-publish API smoke are required before final closeout because startup scripts changed.
+- Runtime publish passed with command:
+  `ASHARE_PUBLISH_MAX_WAIT_SECONDS=600 ASHARE_PUBLISH_VERIFY_MODE=local ASHARE_PUBLISH_REFRESH_MODE=skip bash scripts/publish-local-runtime.sh`
+- Published source commit: `c2e8c5dac8a2be35ce148849c05844a0c7cd4bf3`.
+- Release parity manifest: `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/local-20260626T135934Z-c2e8c5d.json`.
+- Post-publish API smoke:
+  - `/health`: 200, `0.008s`, DB URL `sqlite:////Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/ashare_hot.db`.
+  - `/dashboard/shell`: 200, `0.417s`.
+  - `/dashboard/operations?sample_symbol=600519.SH`: 200, `0.118s`.
+  - `/dashboard/scheduled-refresh-status`: 200, `0.058s`.
+- Runtime script sync check confirmed `start-local-backend.sh` and `run-scheduled-refresh.sh` use `ashare_source_backend_env` and `data/ashare_hot.db` fallback.
+- Runtime `lsof` check showed the backend process opening `ashare_hot.db` only, not `ashare_dashboard.db`.
 - Rollback is the previous `main` commit plus runtime republish; runtime data files are not modified by this code change.
