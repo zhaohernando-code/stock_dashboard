@@ -9,6 +9,7 @@ FRONTEND_URL="${ASHARE_LOCAL_FRONTEND_URL:-http://127.0.0.1:5173/}"
 LOCAL_API_BASE_URL="${ASHARE_LOCAL_API_BASE_URL:-http://127.0.0.1:8000/}"
 CANONICAL_BASE_URL="${ASHARE_CANONICAL_BASE_URL:-https://hernando-zhao.cn/projects/ashare-dashboard/}"
 BACKEND_ENV_FILE="${ASHARE_LOCAL_BACKEND_ENV_FILE:-$HOME/.config/codex/ashare-dashboard.backend.env}"
+BACKEND_ENV_HELPER="$REPO_ROOT/scripts/ashare-backend-env.sh"
 FRONTEND_ENV_FILE="${ASHARE_LOCAL_FRONTEND_ENV_FILE:-$HOME/.config/codex/ashare-dashboard.frontend.env}"
 RSYNC_BIN="${RSYNC_BIN:-rsync}"
 MAX_WAIT_SECONDS="${ASHARE_PUBLISH_MAX_WAIT_SECONDS:-180}"
@@ -179,6 +180,8 @@ scheduled_refresh_lock_active() {
 
 scheduled_refresh_process_active() {
   pgrep -f "$RUNTIME_ROOT/scripts/run-scheduled-refresh.sh" >/dev/null 2>&1 && return 0
+  pgrep -f "ashare_evidence.cli phase5-daily-refresh .*${RUNTIME_ROOT}/data/ashare_hot.db" >/dev/null 2>&1 && return 0
+  pgrep -f "ashare_evidence.cli refresh-runtime-data .*${RUNTIME_ROOT}/data/ashare_hot.db" >/dev/null 2>&1 && return 0
   pgrep -f "ashare_evidence.cli phase5-daily-refresh .*${RUNTIME_ROOT}/data/ashare_dashboard.db" >/dev/null 2>&1 && return 0
   pgrep -f "ashare_evidence.cli refresh-runtime-data .*${RUNTIME_ROOT}/data/ashare_dashboard.db" >/dev/null 2>&1 && return 0
   return 1
@@ -457,11 +460,9 @@ else
 fi
 
 echo "[publish] Triggering post-deploy data refresh"
-if [[ -f "$BACKEND_ENV_FILE" ]]; then
-  set -a
-  source "$BACKEND_ENV_FILE"
-  set +a
-fi
+# shellcheck source=scripts/ashare-backend-env.sh
+source "$BACKEND_ENV_HELPER"
+ashare_source_backend_env "$BACKEND_ENV_FILE"
 export ASHARE_ARTIFACT_ROOT="${ASHARE_ARTIFACT_ROOT:-$RUNTIME_ROOT/data/artifacts}"
 if [[ "$REFRESH_MODE" == "skip" ]]; then
   echo "[publish] Data refresh skipped by ASHARE_PUBLISH_REFRESH_MODE=skip"

@@ -56,7 +56,7 @@ Start the backend:
 
 ```bash
 mkdir -p data
-export ASHARE_DATABASE_URL="sqlite:///$(pwd)/data/ashare_dashboard.db"
+export ASHARE_DATABASE_URL="sqlite:///$(pwd)/data/ashare_hot.db"
 PYTHONPATH=src uvicorn ashare_evidence.api:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -75,7 +75,7 @@ The local frontend defaults to Vite's development server. The backend exposes `/
 
 Common environment variables:
 
-- `ASHARE_DATABASE_URL`: SQLAlchemy database URL; defaults to a local SQLite database in startup scripts.
+- `ASHARE_DATABASE_URL`: SQLAlchemy database URL; defaults to the local hot SQLite database in startup scripts.
 - `ASHARE_ARTIFACT_ROOT`: output root for research and replay artifacts.
 - `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`: optional OpenAI-compatible model settings.
 - `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`: optional Anthropic-compatible model settings.

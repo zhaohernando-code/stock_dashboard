@@ -4,7 +4,7 @@ import argparse
 from datetime import UTC, date, datetime
 from typing import Any
 
-from ashare_evidence.db import init_database, session_scope
+from ashare_evidence.db import get_database_url, init_database, session_scope
 from ashare_evidence.models import ShortpickCandidate, ShortpickExperimentRun
 from ashare_evidence.shortpick_lab import (
     SHORTPICK_INFORMATION_MODE,
@@ -249,9 +249,9 @@ def backfill(database_url: str) -> dict[str, int]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--database-url", default="sqlite:///data/ashare_dashboard.db")
+    parser.add_argument("--database-url", default=None)
     args = parser.parse_args()
-    result = backfill(args.database_url)
+    result = backfill(get_database_url(args.database_url))
     print(result)
 
 

@@ -107,9 +107,16 @@ def main() -> int:
     require_text("src/ashare_evidence/artifact_store_core.py", 'project_root / "data" / "artifacts"')
 
     for script in ["scripts/run-scheduled-refresh.sh", "scripts/start-local-backend.sh"]:
+        require_text(script, "ashare_source_backend_env")
         require_text(script, 'source "$ARTIFACT_ROOT_HELPER"')
         require_text(script, 'ashare_resolve_local_artifact_root "$REPO_ROOT"')
+        require_text(script, "data/ashare_hot.db")
         forbid_text(script, 'ASHARE_ARTIFACT_ROOT:-$REPO_ROOT/data/artifacts')
+        legacy_db_name = "ashare_" + "dashboard.db"
+        forbid_text(
+            script,
+            'ASHARE_DATABASE_URL="${ASHARE_DATABASE_URL:-sqlite:///$REPO_ROOT/data/' + legacy_db_name + '}"',
+        )
 
     require_text("scripts/publish-local-runtime.sh", 'ASHARE_ARTIFACT_ROOT:-$RUNTIME_ROOT/data/artifacts')
 

@@ -35,7 +35,7 @@
 ## 运行态与发布
 
 - **runtime DB 是 live 真值源**：repo 本地库、样本库、output artifact 只能用于复现和研究；对用户解释当前页面时以 runtime DB/API 为准。
-- **runtime DB 备份要有保留上限**：live 数据手术前必须备份，但大 SQLite 备份不能无限留在 `data/`。备份文件应匹配 `ashare_dashboard.before-*.db` 或 `ashare_dashboard.db.bak-*`，保留最近少量原始副本，其余由 `scripts/prune-runtime-db-backups.sh` 压缩进 `~/Library/Logs/codex-archive/ashare-dashboard-db-backups` 并按天数淘汰；当前 `ashare_dashboard.db` 永远不进入清理范围。
+- **runtime DB 备份要有保留上限**：live 数据手术前必须备份，但大 SQLite 备份不能无限留在 `data/`。备份文件应匹配 `ashare_dashboard.before-*.db` 或 `ashare_dashboard.db.bak-*`，保留最近少量原始副本，其余由 `scripts/prune-runtime-db-backups.sh` 压缩进 `~/Library/Logs/codex-archive/ashare-dashboard-db-backups` 并按天数淘汰；当前 live 热库 `ashare_hot.db` 和原始归档源 `ashare_dashboard.db` 永远不进入清理范围。
 - **artifact 写入保护要识别项目级 `.git`**：开发仓里的 `data/artifacts` 仍属于源码污染风险，必须拒绝刷新脚本直接写入；同步后的 runtime 目录没有项目级 `.git`，其中的 `data/artifacts` 是 live 数据目录，不能被同一保护误判为 source checkout。
 - **scheduled run 成功写候选后必须幂等**：短投试验田这类先写候选、后跑维护/验证的调度任务，retry 不能只依赖外层 slot 文件。写入侧要按业务日期、信息模式和触发源复用已完成 run；展示侧仍要保留语义去重，避免历史重复写入继续污染纸面跟踪。
 - **runtime DB 数据手术必须先备份再做可审计最小删除**：清理 live 重复候选时，先复制完整 sqlite 库到 `data/backups`，再用可复查的候选范围删除验证快照和候选；不要为了消除看板重复而删除仍可能有独立研究含义的 LLM run 内容。

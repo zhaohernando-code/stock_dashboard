@@ -4,9 +4,18 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
+RUNTIME_ROOT="${ASHARE_RUNTIME_ROOT:-$HOME/codex/runtime/projects/ashare-dashboard}"
+
+ENV_FILE="${ASHARE_LOCAL_BACKEND_ENV_FILE:-$HOME/.config/codex/ashare-dashboard.backend.env}"
+BACKEND_ENV_HELPER="$REPO_ROOT/scripts/ashare-backend-env.sh"
+
+# shellcheck source=scripts/ashare-backend-env.sh
+source "$BACKEND_ENV_HELPER"
+ashare_source_backend_env "$ENV_FILE"
+RUNTIME_ROOT="${ASHARE_RUNTIME_ROOT:-$RUNTIME_ROOT}"
 
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-RUNTIME_DB_PATH="${ASHARE_RUNTIME_DB_PATH:-$HOME/codex/runtime/projects/ashare-dashboard/data/ashare_dashboard.db}"
+RUNTIME_DB_PATH="${ASHARE_RUNTIME_DB_PATH:-$RUNTIME_ROOT/data/ashare_hot.db}"
 DATABASE_URL="${ASHARE_DATABASE_URL:-sqlite:///$RUNTIME_DB_PATH}"
 OUTPUT_DIR="${ASHARE_H10_PAPER_GOVERNANCE_OUTPUT_DIR:-output}"
 DOC_MARKER="${ASHARE_H10_PAPER_GOVERNANCE_DOC_MARKER:-H10 paper governance; future true-forward only; fixed90 diagnostic only}"
@@ -25,10 +34,19 @@ step() {
   printf '[h10-paper-governance] %s\n' "$*"
 }
 
+if [[ "$DATABASE_URL" == sqlite:///* ]]; then
+  DB_PATH="${DATABASE_URL#sqlite:///}"
+  if [[ ! -f "$DB_PATH" ]]; then
+    echo "Runtime database not found: $DB_PATH" >&2
+    exit 1
+  fi
+fi
+
 mkdir -p "$OUTPUT_DIR" "$(dirname "$PUBLISHED_ARTIFACT")"
+export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 
 step "Generating h10 quiet champion replay artifact"
-PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-strategy-search \
+"$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-strategy-search \
   --database-url "$DATABASE_URL" \
   --candidate-batch h10_quiet_champion \
   --horizon-days 10 \
@@ -36,27 +54,27 @@ PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-strategy-search
   --output "$REPLAY_ARTIFACT"
 
 step "Generating h10 quiet champion selection artifact"
-PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-rule-selection \
+"$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-rule-selection \
   --replay-artifact "$REPLAY_ARTIFACT" \
   --threshold-profile h10_quiet_champion \
   --output "$SELECTION_ARTIFACT"
 
 step "Generating h10 parameter-significance artifact"
-PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-parameter-significance \
+"$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-parameter-significance \
   --database-url "$DATABASE_URL" \
   --horizon-days 10 \
   --initial-cash 200000 \
   --output "$PARAMETER_ARTIFACT"
 
 step "Generating h10 rank-ablation artifact"
-PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-rank-ablation \
+"$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-rank-ablation \
   --database-url "$DATABASE_URL" \
   --horizon-days 10 \
   --initial-cash 200000 \
   --output "$RANK_ARTIFACT"
 
 step "Generating h10 benchmark robustness artifact"
-PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-robustness \
+"$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-robustness \
   --database-url "$DATABASE_URL" \
   --replay-artifact "$REPLAY_ARTIFACT" \
   --selection-artifact "$SELECTION_ARTIFACT" \
@@ -65,7 +83,7 @@ PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-robustness 
   --output "$ROBUSTNESS_ARTIFACT"
 
 step "Generating h10 execution decomposition artifact"
-PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-execution-decomposition \
+"$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-execution-decomposition \
   --database-url "$DATABASE_URL" \
   --replay-artifact "$REPLAY_ARTIFACT" \
   --selection-artifact "$SELECTION_ARTIFACT" \
@@ -74,12 +92,12 @@ PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-execution-d
   --output "$EXECUTION_ARTIFACT"
 
 step "Validating h10 robustness/execution source artifacts"
-PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-artifact-validate \
+"$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-artifact-validate \
   --robustness-artifact "$ROBUSTNESS_ARTIFACT" \
   --execution-artifact "$EXECUTION_ARTIFACT"
 
 step "Building h10 paper-governance artifact"
-PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-paper-governance \
+"$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-paper-governance \
   --rank-ablation-artifact "$RANK_ARTIFACT" \
   --parameter-significance-artifact "$PARAMETER_ARTIFACT" \
   --robustness-artifact "$ROBUSTNESS_ARTIFACT" \
@@ -88,9 +106,9 @@ PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-paper-gover
   --published-artifact "$PUBLISHED_ARTIFACT"
 
 step "Validating h10 paper-governance artifacts"
-PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-paper-governance-validate \
+"$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-paper-governance-validate \
   --artifact "$PAPER_GOVERNANCE_ARTIFACT"
-PYTHONPATH=src "$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-paper-governance-validate \
+"$PYTHON_BIN" -m ashare_evidence.cli shortpick-v2-h10-paper-governance-validate \
   --artifact "$PUBLISHED_ARTIFACT"
 
 step "Verifying durable doc marker"

@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-DEFAULT_DB_PATH = Path("data/ashare_dashboard.db")
+DEFAULT_DB_PATH = Path("data/ashare_hot.db")
 DEFAULT_DB_URL = f"sqlite:///{DEFAULT_DB_PATH}"
 DEFAULT_MARKET_HISTORY_DB_NAME = "ashare_market_history.db"
 DEFAULT_RESEARCH_ARCHIVE_DB_NAME = "ashare_research_archive.db"

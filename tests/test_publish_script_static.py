@@ -62,7 +62,10 @@ def test_local_backend_forces_operations_response_prewarm_by_default() -> None:
     assert 'if [[ "$FORCE_OPERATIONS_PREWARM" != "0" ]]; then' in script
     assert "export ASHARE_DISABLE_OPERATIONS_RESPONSE_PREWARM=0" in script
     assert 'export ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE="${ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE:-sync}"' in script
-    assert script.index('source "$ENV_FILE"') < script.index("export ASHARE_DISABLE_OPERATIONS_RESPONSE_PREWARM=0")
+    assert "ashare_source_backend_env" in script
+    assert script.index('ashare_source_backend_env "$ENV_FILE"') < script.index(
+        "export ASHARE_DISABLE_OPERATIONS_RESPONSE_PREWARM=0"
+    )
     assert script.index("export ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE") < script.index(
         'exec "$VENV_PATH/bin/python" -m uvicorn'
     )
