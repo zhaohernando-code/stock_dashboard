@@ -139,6 +139,8 @@ def test_publish_reloads_scheduled_refresh_calendar_slots() -> None:
     assert '{"Hour": 14, "Minute": 0}' in script
     assert '{"Hour": 14, "Minute": 5}' in script
     assert '{"Hour": 16, "Minute": 20}' in script
+    assert 'payload.pop("StartInterval", None)' in script
+    assert 'os.getenv("ASHARE_SCHEDULED_REFRESH_KEEP_INTERVAL") == "1"' in script
     assert 'launchctl bootout "gui/$(id -u)" "$SCHEDULED_PLIST"' in script
     assert 'launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"' in script
 

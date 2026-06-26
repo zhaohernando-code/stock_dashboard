@@ -45,7 +45,7 @@
 - **canonical stale 多半是路由或隧道问题**：页面旧、接口新、资源健康时，优先检查 tunnel、远端端口和缓存态，再决定是否重新发布。
 - **发布重启服务不能用旧 `launchctl unload/load`**：触发场景——canonical 报 `connect ECONNREFUSED 127.0.0.1:5173`，但本地前端服务随后又恢复。原则——发布脚本重启 frontend/backend 应用 `bootout/bootstrap` 控制 GUI domain，并给 backend 慢启动留足健康等待窗口；旧 `unload/load` 容易和 KeepAlive 抢端口，制造 `EADDRINUSE` 和公网短暂空窗。排查顺序——先看 `5173/8000` 本地 health，再看 frontend LaunchAgent stderr 是否有 `EADDRINUSE`，最后查远端 `3102/4101` tunnel 端口是否真实监听。
 - **mounted app API fallback 不能越过挂载前缀**：canonical 路由挂在 `/projects/ashare-dashboard/` 时，前端请求只能优先走同前缀 `/projects/ashare-dashboard/api/...`。不要把超时或 HTML fallback 降级到站点根 `/api/...` 或无 `/api` 的 SPA 路径，否则会制造 404、误报面板失败，并掩盖真实 API 慢查询。
-- **LaunchAgent 要区分任务和服务**：定时任务用 `RunAtLoad` + `StartCalendarInterval` 或 `StartInterval`；服务进程用 `RunAtLoad` + `KeepAlive`。需要精确时钟触发时不能只靠 `StartInterval=300`；关键时点应配置显式 calendar trigger，并让任务用 slot state 保证多次唤醒不重复写入。
+- **LaunchAgent 要区分任务和服务**：定时任务用 `RunAtLoad` + `StartCalendarInterval`，服务进程用 `RunAtLoad` + `KeepAlive`。需要精确时钟触发时不能只靠 `StartInterval=300`；本项目 scheduled-refresh 默认不保留 5 分钟 interval，除非显式设置 `ASHARE_SCHEDULED_REFRESH_KEEP_INTERVAL=1` 并重新评估后台提示、DB 锁窗口和看板读接口影响。关键时点应配置显式 calendar trigger，并让任务用 slot state 保证多次唤醒不重复写入。
 - **SSH 隧道要自愈且能清旧占用**：重连失败先查远端旧 sshd 是否占端口；清理脚本改动后跑语法检查；隧道进程遇错应退避重试。
 - **SQLite 写锁要按工作流避让**：批量短投验证、历史回放、盘后刷新和页面验收不要无脑并发；遇到等待时先判断锁持有者，不要把慢写误判为 Python 崩溃。
 - **后台热路径要避让定时刷新锁**：API 后台 tick、定时刷新和维护补算都可能写同一个 runtime SQLite。服务型后台写入在执行前必须识别 scheduled refresh 的 `run.lock`，锁活跃时跳过本轮，而不是和盘后/午间刷新争写锁。

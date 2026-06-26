@@ -129,6 +129,7 @@ ensure_scheduled_refresh_calendar() {
   fi
   "$PYTHON_BIN" - "$SCHEDULED_PLIST" <<'PY'
 from pathlib import Path
+import os
 import plistlib
 import sys
 
@@ -159,10 +160,16 @@ payload["StartCalendarInterval"] = sorted(
     intervals,
     key=lambda item: (int(item.get("Hour", 0)), int(item.get("Minute", 0))),
 )
+if os.getenv("ASHARE_SCHEDULED_REFRESH_KEEP_INTERVAL") == "1":
+    payload["StartInterval"] = int(payload.get("StartInterval") or 300)
+else:
+    payload.pop("StartInterval", None)
 # RunAtLoad must stay false: launchctl bootstrap (below, and any reload during
 # governance work) would otherwise fire a full ~50min phase5-daily-refresh on
-# every publish/reload. The StartCalendarInterval/StartInterval ticks plus the
-# .ok slot guard already trigger exactly one refresh per trading day.
+# every publish/reload. Calendar ticks plus the .ok slot guard already trigger
+# exactly one refresh per trading day; the old 5-minute interval is opt-in only
+# because it wakes macOS background activity far more often than the dashboard
+# now needs.
 payload["RunAtLoad"] = False
 with path.open("wb") as handle:
     plistlib.dump(payload, handle)
@@ -244,10 +251,9 @@ resume_scheduled_refresh() {
   launchctl bootout "gui/$(id -u)" "$SCHEDULED_PLIST" 2>/dev/null || true
   launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"
   # Do NOT kickstart here. The agent is loaded with RunAtLoad=false; its
-  # StartCalendarInterval/StartInterval ticks plus the .ok slot guard fire
-  # exactly one phase5-daily-refresh per trading day. Force-starting on every
-  # publish would launch a ~50min full refresh that holds the DB lock and times
-  # out the dashboard (the original outage).
+  # calendar ticks plus the .ok slot guard fire exactly one scheduled refresh
+  # per trading day. Force-starting on every publish would launch a heavy
+  # refresh that holds the DB lock and times out the dashboard.
   SCHEDULED_REFRESH_PAUSED=0
 }
 

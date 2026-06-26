@@ -121,6 +121,8 @@ def test_publish_bootstraps_scheduled_refresh_when_launchagent_is_unloaded() -> 
     assert 'scheduled_refresh_loaded' in script
     assert 'scheduled_refresh_plist_hash' in script
     assert 'scheduled-refresh already loaded and plist unchanged; reload skipped' in script
+    assert 'ASHARE_SCHEDULED_REFRESH_KEEP_INTERVAL' in script
+    assert 'payload.pop("StartInterval", None)' in script
     assert 'trap cleanup_on_exit EXIT' in script
     assert 'wait_for_scheduled_refresh_quiescent' in script
     assert 'SCHEDULED_REFRESH_QUIESCE_TIMEOUT_SECONDS="${ASHARE_PUBLISH_SCHEDULED_REFRESH_QUIESCE_TIMEOUT_SECONDS:-180}"' in script

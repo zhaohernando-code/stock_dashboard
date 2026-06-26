@@ -455,7 +455,7 @@ mark_slot_failed() {
     printf 'started_at=%s\n' "$started_at"
     printf 'failed_at=%s\n' "$(TZ="$TIMEZONE" date '+%Y-%m-%dT%H:%M:%S%z')"
     printf 'exit_code=%s\n' "$exit_code"
-    printf 'reason=%s\n' "daily refresh 执行失败，将等待下一次 5 分钟轮询重试。"
+    printf 'reason=%s\n' "daily refresh 执行失败，将等待下一次调度触发重试。"
   } > "$(slot_state_file "$target_date" "$slot_name" | sed 's/\.ok$/.failed/')"
 }
 
