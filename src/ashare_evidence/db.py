@@ -13,9 +13,11 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 DEFAULT_DB_PATH = Path("data/ashare_dashboard.db")
 DEFAULT_DB_URL = f"sqlite:///{DEFAULT_DB_PATH}"
+DEFAULT_MARKET_HISTORY_DB_NAME = "ashare_market_history.db"
+DEFAULT_RESEARCH_ARCHIVE_DB_NAME = "ashare_research_archive.db"
 
-_ENGINE_CACHE: dict[str, Engine] = {}
-_SESSION_FACTORY_CACHE: dict[str, sessionmaker[Session]] = {}
+_ENGINE_CACHE: dict[tuple[str, bool], Engine] = {}
+_SESSION_FACTORY_CACHE: dict[tuple[str, bool], sessionmaker[Session]] = {}
 
 
 def utcnow() -> datetime:
@@ -36,6 +38,39 @@ def get_database_url(explicit: str | None = None) -> str:
     return explicit or os.getenv("ASHARE_DATABASE_URL") or DEFAULT_DB_URL
 
 
+def get_hot_database_url(explicit: str | None = None) -> str:
+    return explicit or os.getenv("ASHARE_HOT_DATABASE_URL") or get_database_url()
+
+
+def _sqlite_path_from_url(database_url: str) -> Path | None:
+    if not database_url.startswith("sqlite:///") or database_url == "sqlite:///:memory:":
+        return None
+    return Path(database_url.removeprefix("sqlite:///"))
+
+
+def _sidecar_sqlite_url(base_database_url: str, filename: str) -> str:
+    base_path = _sqlite_path_from_url(base_database_url)
+    if base_path is None:
+        return f"sqlite:///{Path('data') / filename}"
+    return f"sqlite:///{base_path.parent / filename}"
+
+
+def get_market_history_database_url(explicit: str | None = None, *, base_database_url: str | None = None) -> str:
+    return (
+        explicit
+        or os.getenv("ASHARE_MARKET_HISTORY_DATABASE_URL")
+        or _sidecar_sqlite_url(get_database_url(base_database_url), DEFAULT_MARKET_HISTORY_DB_NAME)
+    )
+
+
+def get_research_archive_database_url(explicit: str | None = None, *, base_database_url: str | None = None) -> str:
+    return (
+        explicit
+        or os.getenv("ASHARE_RESEARCH_ARCHIVE_DATABASE_URL")
+        or _sidecar_sqlite_url(get_database_url(base_database_url), DEFAULT_RESEARCH_ARCHIVE_DB_NAME)
+    )
+
+
 def _prepare_sqlite_parent(database_url: str) -> None:
     if database_url.startswith("sqlite:///") and database_url != "sqlite:///:memory:":
         db_path = Path(database_url.removeprefix("sqlite:///"))
@@ -46,11 +81,13 @@ class Base(DeclarativeBase):
     pass
 
 
-def get_engine(database_url: str | None = None) -> Engine:
+def get_engine(database_url: str | None = None, *, readonly: bool = False) -> Engine:
     resolved = get_database_url(database_url)
-    engine = _ENGINE_CACHE.get(resolved)
+    cache_key = (resolved, readonly)
+    engine = _ENGINE_CACHE.get(cache_key)
     if engine is None:
-        _prepare_sqlite_parent(resolved)
+        if not readonly:
+            _prepare_sqlite_parent(resolved)
         connect_args = {"check_same_thread": False, "timeout": 30} if resolved.startswith("sqlite") else {}
         engine = create_engine(resolved, future=True, connect_args=connect_args)
         if resolved.startswith("sqlite"):
@@ -66,14 +103,17 @@ def get_engine(database_url: str | None = None) -> Engine:
                 # checkpoints.
                 cursor = dbapi_connection.cursor()
                 try:
-                    cursor.execute("PRAGMA journal_mode=WAL")
-                    cursor.execute("PRAGMA synchronous=NORMAL")
                     cursor.execute("PRAGMA busy_timeout=30000")
-                    cursor.execute("PRAGMA wal_autocheckpoint=1000")
+                    if readonly:
+                        cursor.execute("PRAGMA query_only=ON")
+                    else:
+                        cursor.execute("PRAGMA journal_mode=WAL")
+                        cursor.execute("PRAGMA synchronous=NORMAL")
+                        cursor.execute("PRAGMA wal_autocheckpoint=1000")
                 finally:
                     cursor.close()
 
-        _ENGINE_CACHE[resolved] = engine
+        _ENGINE_CACHE[cache_key] = engine
     return engine
 
 
@@ -95,12 +135,18 @@ def preflight_database_writable(database_url: str | None = None) -> None:
         ) from exc
 
 
-def get_session_factory(database_url: str | None = None) -> sessionmaker[Session]:
+def get_session_factory(database_url: str | None = None, *, readonly: bool = False) -> sessionmaker[Session]:
     resolved = get_database_url(database_url)
-    factory = _SESSION_FACTORY_CACHE.get(resolved)
+    cache_key = (resolved, readonly)
+    factory = _SESSION_FACTORY_CACHE.get(cache_key)
     if factory is None:
-        factory = sessionmaker(bind=get_engine(resolved), autoflush=False, autocommit=False, expire_on_commit=False)
-        _SESSION_FACTORY_CACHE[resolved] = factory
+        factory = sessionmaker(
+            bind=get_engine(resolved, readonly=readonly),
+            autoflush=False,
+            autocommit=False,
+            expire_on_commit=False,
+        )
+        _SESSION_FACTORY_CACHE[cache_key] = factory
     return factory
 
 
@@ -330,11 +376,14 @@ def _run_schema_migrations(engine: Engine) -> None:
 
 
 @contextmanager
-def session_scope(database_url: str | None = None) -> Iterator[Session]:
-    session = get_session_factory(database_url)()
+def session_scope(database_url: str | None = None, *, readonly: bool = False) -> Iterator[Session]:
+    session = get_session_factory(database_url, readonly=readonly)()
     try:
         yield session
-        session.commit()
+        if readonly:
+            session.rollback()
+        else:
+            session.commit()
     except Exception:
         session.rollback()
         raise

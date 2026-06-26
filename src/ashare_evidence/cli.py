@@ -101,6 +101,7 @@ from ashare_evidence.shortpick_strategy_retirement_writer import (
     run_shortpick_strategy_retirement_artifact,
 )
 from ashare_evidence.shortpick_strategy_slices import build_shortpick_strategy_slice_evidence
+from ashare_evidence.sqlite_hot_cold_split import migrate_sqlite_hot_cold_split
 from ashare_evidence.shortpick_v2_h10_artifact_validation import validate_shortpick_v2_h10_artifacts
 from ashare_evidence.shortpick_v2_h10_execution_decomposition import (
     build_shortpick_v2_h10_execution_decomposition_artifact,
@@ -307,6 +308,7 @@ def _should_initialize_database(database_url: str | None) -> bool:
 
 # Commands in this set are pure file/plan commands and may omit --database-url.
 NO_DB_COMMANDS = {
+    "sqlite-hot-cold-split",
     "shortpick-governance-credible-control-plan",
     "shortpick-v2-h10-artifact-validate",
     "shortpick-v2-h10-paper-governance",
@@ -851,6 +853,25 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         default=None,
         help="Sample symbol to precompute for operations_summary. May be provided multiple times.",
+    )
+
+    sqlite_hot_cold_split = subparsers.add_parser(
+        "sqlite-hot-cold-split",
+        help="Materialize denormalized cold SQLite stores from the current monolithic dashboard database.",
+    )
+    sqlite_hot_cold_split.add_argument("--source-database-url", required=True)
+    sqlite_hot_cold_split.add_argument("--market-history-database-url", default=None)
+    sqlite_hot_cold_split.add_argument("--research-archive-database-url", default=None)
+    sqlite_hot_cold_split.add_argument(
+        "--timeframe",
+        action="append",
+        default=None,
+        help="Market bar timeframe to archive. Defaults to 1d. May be provided multiple times.",
+    )
+    sqlite_hot_cold_split.add_argument(
+        "--verify-only",
+        action="store_true",
+        help="Validate existing split targets without copying rows.",
     )
 
     shortpick_market_factor_study = subparsers.add_parser(
@@ -2131,6 +2152,17 @@ def main(argv: list[str] | None = None) -> int:
             )
         _print_json(payload)
         return 0
+
+    if args.command == "sqlite-hot-cold-split":
+        payload = migrate_sqlite_hot_cold_split(
+            source_database_url=args.source_database_url,
+            market_history_database_url=args.market_history_database_url,
+            research_archive_database_url=args.research_archive_database_url,
+            timeframes=args.timeframe or ("1d",),
+            verify_only=args.verify_only,
+        )
+        _print_json(payload)
+        return 0 if payload["passed"] else 1
 
     if args.command == "shortpick-market-factor-study":
         with session_scope(args.database_url) as session:
