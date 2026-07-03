@@ -11,6 +11,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from ashare_evidence.benchmark import CSI_BENCHMARKS, DEFAULT_BENCHMARK_ID, benchmark_close_maps
+from ashare_evidence.governance_promotion import (
+    build_governance_promotion_decision_artifact,
+    governance_promotion_summary,
+    write_governance_promotion_decision_artifact,
+)
 from ashare_evidence.models import MarketBar, NewsEntityLink, NewsItem, Recommendation, Stock
 from ashare_evidence.multiple_testing_diagnostics import (
     build_multiple_testing_diagnostics_artifact,
@@ -899,6 +904,12 @@ def build_factor_observations(
         "status": status,
         "generated_at": datetime.now(UTC).isoformat(),
         "validation_run_id": validation_run_id,
+        "source_db_snapshot_id": input_snapshot["source_db_snapshot_id"],
+        "source_data_time_range": _source_data_time_range(observation_rows),
+        "feature_version": "legacy_recommendation_payload_factor_breakdown:v1",
+        "label_version": "daily_close_forward_excess_return:v1",
+        "code_version": "unresolved_local_checkout",
+        "config_version": VALIDATION_PROTOCOL_VERSION,
         "research_input_snapshot": {
             "artifact_type": "research_input_snapshot",
             "schema_version": RESEARCH_INPUT_SNAPSHOT_SCHEMA_VERSION,
@@ -960,6 +971,7 @@ def build_factor_observations(
         "min_windows_for_weighting": MIN_WINDOWS_FOR_WEIGHTING,
         "gate_readout": gate_readout,
         "promotion_status": gate_readout["promotion_status"],
+        "claim_ceiling": gate_readout["claim_ceiling"],
         "factor_results": factor_results,
         "observation_rows": observation_rows,
         "note": (
@@ -980,17 +992,34 @@ def build_factor_observations(
         **dict(results.get("lineage") or {}),
         "oos_validation_id": oos_validation["artifact_id"],
     }
+    governance_decision = build_governance_promotion_decision_artifact(
+        validation_run_id=validation_run_id,
+        source_db_snapshot_id=input_snapshot["source_db_snapshot_id"],
+        source_data_time_range=_source_data_time_range(observation_rows),
+        candidate_kind="factor_ic_study",
+        candidate_artifact=results,
+        objective_universe=objective_universe,
+        walk_forward_protocol=walk_forward_protocol,
+        oos_validation=oos_validation,
+    )
+    results["governance_promotion"] = governance_promotion_summary(governance_decision)
+    results["lineage"] = {
+        **dict(results.get("lineage") or {}),
+        "governance_promotion_decision_id": governance_decision["artifact_id"],
+    }
     if include_raw_research_artifacts:
         results["objective_universe_artifact"] = objective_universe
         results["pit_feature_store_artifact"] = pit_feature_store
         results["walk_forward_protocol_artifact"] = walk_forward_protocol
         results["oos_validation_artifact"] = oos_validation
+        results["governance_promotion_artifact"] = governance_decision
     if persist:
         write_objective_universe_artifact(objective_universe, artifact_root=artifact_root)
         _write_research_input_snapshot(input_snapshot, artifact_root=artifact_root, artifact_id=input_snapshot_id)
         write_pit_feature_store_artifact(pit_feature_store, artifact_root=artifact_root)
         write_walk_forward_protocol_artifact(walk_forward_protocol, artifact_root=artifact_root)
         write_oos_validation_artifact(oos_validation, artifact_root=artifact_root)
+        write_governance_promotion_decision_artifact(governance_decision, artifact_root=artifact_root)
         _write_artifact(results, artifact_root=artifact_root, artifact_id=artifact_id)
     return results
 
@@ -1089,6 +1118,7 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
         sweep_results.append({"label": label, "weights": weights, "horizon_metrics": horizon_metrics})
     status = "insufficient_sample" if observations.get("status") == "insufficient_sample" else "diagnostic_only_blocked"
     artifact_id = _artifact_id("weight-sweep-study", validation_run_id)
+    source_data_time_range = (observations.get("lineage") or {}).get("source_data_time_range", {})
     results: dict[str, Any] = {
         "artifact_type": "weight_sweep_study",
         "schema_version": WEIGHT_SWEEP_STUDY_SCHEMA_VERSION,
@@ -1096,6 +1126,12 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
         "status": status,
         "generated_at": datetime.now(UTC).isoformat(),
         "validation_run_id": validation_run_id,
+        "source_db_snapshot_id": (observations.get("lineage") or {}).get("source_db_snapshot_id"),
+        "source_data_time_range": source_data_time_range,
+        "feature_version": (observations.get("lineage") or {}).get("feature_version"),
+        "label_version": (observations.get("lineage") or {}).get("label_version"),
+        "code_version": (observations.get("lineage") or {}).get("code_version"),
+        "config_version": VALIDATION_PROTOCOL_VERSION,
         "validation_protocol": {
             **_validation_protocol(),
             "weight_sweep_policy": "diagnostic_only_no_auto_promotion",
@@ -1109,6 +1145,7 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
         "lineage": observations.get("lineage", {}),
         "gate_readout": observations.get("gate_readout", {}),
         "promotion_status": "blocked_from_production",
+        "claim_ceiling": (observations.get("gate_readout") or {}).get("claim_ceiling", "diagnostic_research_only"),
         "baseline_weights": FUSION_BASELINE,
         "benchmark_context": observations.get("benchmark_context", {}),
         "observation_count": observations.get("observation_count", 0),
@@ -1119,7 +1156,7 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
     multiple_testing_diagnostics = build_multiple_testing_diagnostics_artifact(
         validation_run_id=validation_run_id,
         source_db_snapshot_id=(observations.get("lineage") or {}).get("source_db_snapshot_id"),
-        source_data_time_range=(observations.get("lineage") or {}).get("source_data_time_range", {}),
+        source_data_time_range=source_data_time_range,
         weight_sweep=results,
     )
     results["multiple_testing_diagnostics"] = multiple_testing_diagnostics_summary(multiple_testing_diagnostics)
@@ -1131,6 +1168,22 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
     results["lineage"] = {
         **dict(results.get("lineage") or {}),
         "multiple_testing_diagnostics_id": multiple_testing_diagnostics["artifact_id"],
+    }
+    governance_decision = build_governance_promotion_decision_artifact(
+        validation_run_id=validation_run_id,
+        source_db_snapshot_id=(observations.get("lineage") or {}).get("source_db_snapshot_id"),
+        source_data_time_range=source_data_time_range,
+        candidate_kind="weight_sweep_study",
+        candidate_artifact=results,
+        objective_universe=observations.get("objective_universe", {}),
+        walk_forward_protocol=observations.get("walk_forward_protocol", {}),
+        oos_validation=observations.get("oos_validation", {}),
+        multiple_testing_diagnostics=multiple_testing_diagnostics,
+    )
+    results["governance_promotion"] = governance_promotion_summary(governance_decision)
+    results["lineage"] = {
+        **dict(results.get("lineage") or {}),
+        "governance_promotion_decision_id": governance_decision["artifact_id"],
     }
     if persist:
         objective_universe = observations.get("objective_universe_artifact")
@@ -1154,6 +1207,7 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
         if isinstance(oos_validation, dict) and oos_validation.get("artifact_id"):
             write_oos_validation_artifact(oos_validation, artifact_root=artifact_root)
         write_multiple_testing_diagnostics_artifact(multiple_testing_diagnostics, artifact_root=artifact_root)
+        write_governance_promotion_decision_artifact(governance_decision, artifact_root=artifact_root)
         _write_sweep_artifact(results, artifact_root=artifact_root, artifact_id=artifact_id)
     return results
 

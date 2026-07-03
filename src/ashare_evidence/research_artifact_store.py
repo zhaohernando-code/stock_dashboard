@@ -113,6 +113,7 @@ def write_research_validation_artifact(
         "walk_forward_purge_embargo",
         "pbo_dsr_multiple_comparison",
         "oos_validation",
+        "governance_promotion_decision",
         "factor_ic_study",
         "weight_sweep_study",
     }:

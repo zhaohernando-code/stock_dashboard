@@ -14,6 +14,7 @@ from ashare_evidence.dashboard import get_stock_dashboard
 from ashare_evidence.data_quality import build_data_quality_summary
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.factor_observation import build_factor_observations, sweep_weights
+from ashare_evidence.governance_promotion import build_governance_promotion_decision_artifact
 from ashare_evidence.lineage import build_lineage
 from ashare_evidence.market_rules import account_trade_eligibility, board_rule
 from ashare_evidence.models import FeatureSnapshot, NewsEntityLink, NewsItem, Stock
@@ -33,6 +34,62 @@ class ProfessionalizationPlanTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+
+    def test_governance_promotion_state_machine_fails_closed(self) -> None:
+        decision = build_governance_promotion_decision_artifact(
+            validation_run_id="governance-test",
+            source_db_snapshot_id="snapshot",
+            source_data_time_range={"as_of_start": "2026-01-01", "as_of_end": "2026-01-31"},
+            candidate_kind="factor_ic_study",
+            candidate_artifact={
+                "artifact_id": "factor",
+                "validation_protocol": {"feature_source_status": "legacy_diagnostic_only"},
+                "gate_readout": {"blocking_gate_ids": ["independent_feature_source"]},
+                "lineage": {"feature_version": "legacy_recommendation_payload_factor_breakdown:v1"},
+            },
+            objective_universe={
+                "artifact_id": "objective",
+                "gate_readout": {"gate_status": "objective_universe_ready", "blocking_gate_ids": []},
+            },
+            walk_forward_protocol={
+                "artifact_id": "wf",
+                "gate_readout": {"gate_status": "blocked", "blocking_gate_ids": ["walk_forward_min_splits"]},
+            },
+            oos_validation={
+                "artifact_id": "oos",
+                "gate_readout": {"gate_status": "blocked", "blocking_gate_ids": ["insufficient_oos_rows"]},
+            },
+        )
+
+        self.assertEqual(decision["artifact_type"], "governance_promotion_decision")
+        self.assertEqual(decision["current_state"], "diagnostic_only")
+        self.assertEqual(decision["gate_readout"]["gate_status"], "blocked")
+        self.assertEqual(decision["promotion_status"], "blocked_from_production")
+        self.assertFalse(decision["approved_for_dashboard_projection"])
+        self.assertEqual(decision["allowed_next_states"], ["research_candidate"])
+        transitions = decision["validation_protocol"]["state_machine_transitions"]
+        self.assertEqual(
+            decision["validation_protocol"]["state_machine_states"],
+            [
+                "diagnostic_only",
+                "research_candidate",
+                "oos_candidate",
+                "paper_tracking_candidate",
+                "production_eligible",
+            ],
+        )
+        self.assertEqual(transitions["research_candidate"], ["oos_candidate"])
+        self.assertNotIn("paper_tracking_candidate", transitions["research_candidate"])
+        self.assertNotIn("rejected", transitions["research_candidate"])
+        self.assertNotIn("retired", decision["validation_protocol"]["state_machine_states"])
+        self.assertIn("retired", decision["validation_protocol"]["terminal_dispositions"])
+        self.assertEqual(decision["terminal_disposition"], "none")
+        blockers = decision["gate_readout"]["blocking_gate_ids"]
+        self.assertIn("legacy_recommendation_payload_diagnostic_only", blockers)
+        self.assertIn("multiple_testing_diagnostics_missing", blockers)
+        self.assertIn("execution:t_plus_1_execution_model", blockers)
+        self.assertIn("factor_ic_study:independent_feature_source", blockers)
+        self.assertIn("factor_ic_study_missing_required_field_schema_version", blockers)
 
     def test_walk_forward_protocol_blocks_false_ready_after_purge(self) -> None:
         rows = [
@@ -378,6 +435,7 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(study["validation_protocol"]["walk_forward_status"], "artifact_implemented")
         self.assertEqual(study["validation_protocol"]["purge_embargo_status"], "artifact_implemented")
         self.assertEqual(study["promotion_status"], "blocked_from_production")
+        self.assertEqual(study["claim_ceiling"], "diagnostic_research_only")
         self.assertEqual(study["gate_readout"]["promotion_status"], "blocked_from_production")
         self.assertEqual(study["objective_universe"]["artifact_type"], "objective_frozen_universe")
         self.assertEqual(study["objective_universe"]["promotion_status"], "blocked_from_production")
@@ -446,7 +504,14 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertNotIn("oos_validation_artifact", study)
         self.assertNotIn("oos_rows", study["oos_validation"])
         self.assertNotIn("period_metrics", study["oos_validation"])
+        self.assertEqual(study["governance_promotion"]["artifact_type"], "governance_promotion_decision")
+        self.assertEqual(study["governance_promotion"]["current_state"], "diagnostic_only")
+        self.assertEqual(study["governance_promotion"]["gate_readout"]["gate_status"], "blocked")
+        self.assertEqual(study["governance_promotion"]["promotion_status"], "blocked_from_production")
+        self.assertFalse(study["governance_promotion"]["approved_for_dashboard_projection"])
+        self.assertNotIn("transition_log", study["governance_promotion"])
         self.assertNotIn("pit_feature_store_artifact", study)
+        self.assertNotIn("governance_promotion_artifact", study)
         self.assertNotIn("feature_rows", json.dumps(study, ensure_ascii=False))
         self.assertEqual(
             study["lineage"]["research_input_snapshot_id"],
@@ -456,6 +521,10 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(study["lineage"]["objective_universe_id"], study["objective_universe"]["artifact_id"])
         self.assertEqual(study["lineage"]["walk_forward_protocol_id"], study["walk_forward_protocol"]["artifact_id"])
         self.assertEqual(study["lineage"]["oos_validation_id"], study["oos_validation"]["artifact_id"])
+        self.assertEqual(
+            study["lineage"]["governance_promotion_decision_id"],
+            study["governance_promotion"]["artifact_id"],
+        )
         self.assertIn("benchmark_availability", study["gate_readout"]["blocking_gate_ids"])
         self.assertNotIn("objective_research_universe", study["gate_readout"]["blocking_gate_ids"])
         self.assertIn("walk_forward_purged_cv", study["gate_readout"]["blocking_gate_ids"])
@@ -466,6 +535,7 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(sweep["schema_version"], "weight_sweep_study.v2")
         self.assertEqual(sweep["status"], "insufficient_sample")
         self.assertEqual(sweep["promotion_status"], "blocked_from_production")
+        self.assertEqual(sweep["claim_ceiling"], "diagnostic_research_only")
         self.assertEqual(sweep["objective_universe"]["artifact_type"], "objective_frozen_universe")
         self.assertEqual(sweep["research_input_snapshot"]["artifact_type"], "research_input_snapshot")
         self.assertEqual(sweep["pit_feature_store"]["artifact_type"], "pit_feature_store")
@@ -473,6 +543,11 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(sweep["oos_validation"]["artifact_type"], "oos_validation")
         self.assertEqual(sweep["multiple_testing_diagnostics"]["artifact_type"], "pbo_dsr_multiple_comparison")
         self.assertEqual(sweep["multiple_testing_diagnostics"]["promotion_status"], "blocked_from_production")
+        self.assertEqual(sweep["governance_promotion"]["artifact_type"], "governance_promotion_decision")
+        self.assertEqual(sweep["governance_promotion"]["current_state"], "diagnostic_only")
+        self.assertEqual(sweep["governance_promotion"]["gate_readout"]["gate_status"], "blocked")
+        self.assertEqual(sweep["governance_promotion"]["promotion_status"], "blocked_from_production")
+        self.assertFalse(sweep["governance_promotion"]["approved_for_dashboard_projection"])
         self.assertEqual(
             sweep["validation_protocol"]["multiple_testing_status"],
             "artifact_implemented",
@@ -507,11 +582,23 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             / "oos_validations"
             / f"{study['oos_validation']['artifact_id']}.json"
         )
+        governance_path = (
+            artifact_root
+            / "research_validation"
+            / "governance_promotion_decisions"
+            / f"{study['governance_promotion']['artifact_id']}.json"
+        )
         multiple_testing_path = (
             artifact_root
             / "research_validation"
             / "multiple_testing_diagnostics"
             / f"{sweep['multiple_testing_diagnostics']['artifact_id']}.json"
+        )
+        sweep_governance_path = (
+            artifact_root
+            / "research_validation"
+            / "governance_promotion_decisions"
+            / f"{sweep['governance_promotion']['artifact_id']}.json"
         )
         sweep_path = artifact_root / "research_validation" / "weight_sweep_studies" / f"{sweep['artifact_id']}.json"
         self.assertTrue(universe_path.exists())
@@ -519,7 +606,9 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertTrue(pit_path.exists())
         self.assertTrue(walk_forward_path.exists())
         self.assertTrue(oos_path.exists())
+        self.assertTrue(governance_path.exists())
         self.assertTrue(multiple_testing_path.exists())
+        self.assertTrue(sweep_governance_path.exists())
         self.assertTrue(factor_path.exists())
         self.assertTrue(sweep_path.exists())
         universe_payload = json.loads(universe_path.read_text(encoding="utf-8"))
@@ -549,10 +638,21 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertIn("oos_rows", oos_payload)
         self.assertIn("period_metrics", oos_payload)
         self.assertIn("insufficient_oos_rows", oos_payload["gate_readout"]["blocking_gate_ids"])
+        governance_payload = json.loads(governance_path.read_text(encoding="utf-8"))
+        self.assertEqual(governance_payload["artifact_type"], "governance_promotion_decision")
+        self.assertEqual(governance_payload["current_state"], "diagnostic_only")
+        self.assertIn("transition_log", governance_payload)
+        self.assertIn(
+            "legacy_recommendation_payload_diagnostic_only",
+            governance_payload["gate_readout"]["blocking_gate_ids"],
+        )
         multiple_testing_payload = json.loads(multiple_testing_path.read_text(encoding="utf-8"))
         self.assertEqual(multiple_testing_payload["artifact_type"], "pbo_dsr_multiple_comparison")
         self.assertIn("trials", multiple_testing_payload)
         self.assertIn("insufficient_eligible_trials_for_pbo", multiple_testing_payload["gate_readout"]["blocking_gate_ids"])
+        sweep_governance_payload = json.loads(sweep_governance_path.read_text(encoding="utf-8"))
+        self.assertEqual(sweep_governance_payload["artifact_type"], "governance_promotion_decision")
+        self.assertIn("multiple_testing_not_ready", sweep_governance_payload["gate_readout"]["blocking_gate_ids"])
         pit_feature_row = pit_payload["feature_rows"][0]
         self.assertIn("price_baseline", pit_feature_row["features"])
         self.assertIn("liquidity", pit_feature_row["features"])
@@ -560,17 +660,33 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertIn("news_text", pit_feature_row["features"])
         self.assertNotIn("factor_breakdown", json.dumps(pit_feature_row, ensure_ascii=False))
         factor_payload = json.loads(factor_path.read_text(encoding="utf-8"))
+        self.assertEqual(factor_payload["claim_ceiling"], "diagnostic_research_only")
+        self.assertTrue(
+            {
+                "source_db_snapshot_id",
+                "source_data_time_range",
+                "feature_version",
+                "label_version",
+                "code_version",
+                "config_version",
+                "claim_ceiling",
+            }.issubset(factor_payload)
+        )
         self.assertNotIn("pit_feature_store_artifact", factor_payload)
         self.assertNotIn("objective_universe_artifact", factor_payload)
         self.assertNotIn("walk_forward_protocol_artifact", factor_payload)
+        self.assertNotIn("governance_promotion_artifact", factor_payload)
         self.assertNotIn("feature_rows", json.dumps(factor_payload, ensure_ascii=False))
         self.assertNotIn('"members"', json.dumps(factor_payload.get("objective_universe", {}), ensure_ascii=False))
         self.assertNotIn("splits", factor_payload.get("walk_forward_protocol", {}))
         self.assertNotIn("oos_rows", factor_payload.get("oos_validation", {}))
         self.assertNotIn("period_metrics", factor_payload.get("oos_validation", {}))
+        self.assertNotIn("transition_log", factor_payload.get("governance_promotion", {}))
         sweep_payload = json.loads(sweep_path.read_text(encoding="utf-8"))
+        self.assertEqual(sweep_payload["claim_ceiling"], "diagnostic_research_only")
         self.assertNotIn("trials", sweep_payload["multiple_testing_diagnostics"])
         self.assertNotIn("oos_rows", sweep_payload["oos_validation"])
+        self.assertNotIn("transition_log", sweep_payload["governance_promotion"])
 
     def test_operations_summary_is_light_and_details_are_sectioned(self) -> None:
         with session_scope(self.database_url) as session:
@@ -591,15 +707,19 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertIn("factor_observation_summary", factor_detail)
         factor_summary = factor_detail["factor_observation_summary"]
         self.assertEqual(factor_summary["promotion_status"], "blocked_from_production")
+        self.assertEqual(factor_summary["claim_ceiling"], "diagnostic_research_only")
         self.assertEqual(factor_summary["objective_universe"]["artifact_type"], "objective_frozen_universe")
         self.assertEqual(factor_summary["research_input_snapshot"]["artifact_type"], "research_input_snapshot")
         self.assertEqual(factor_summary["pit_feature_store"]["artifact_type"], "pit_feature_store")
         self.assertEqual(factor_summary["walk_forward_protocol"]["artifact_type"], "walk_forward_purge_embargo")
         self.assertEqual(factor_summary["oos_validation"]["artifact_type"], "oos_validation")
+        self.assertEqual(factor_summary["governance_promotion"]["artifact_type"], "governance_promotion_decision")
+        self.assertEqual(factor_summary["governance_promotion"]["current_state"], "diagnostic_only")
         self.assertNotIn("feature_rows", json.dumps(factor_summary, ensure_ascii=False))
         self.assertNotIn('"members"', json.dumps(factor_summary, ensure_ascii=False))
         self.assertNotIn("splits", factor_summary["walk_forward_protocol"])
         self.assertNotIn("oos_rows", factor_summary["oos_validation"])
+        self.assertNotIn("transition_log", factor_summary["governance_promotion"])
         self.assertEqual(factor_summary["validation_protocol"]["feature_source_status"], "legacy_diagnostic_only")
         self.assertIn("independent_feature_source", factor_summary["gate_readout"]["blocking_gate_ids"])
         self.assertEqual(factor_summary["lineage"]["feature_version"], "legacy_recommendation_payload_factor_breakdown:v1")
@@ -631,14 +751,20 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             operations_payload["factor_observation_summary"]["oos_validation"]["artifact_type"],
             "oos_validation",
         )
+        self.assertEqual(
+            operations_payload["factor_observation_summary"]["governance_promotion"]["artifact_type"],
+            "governance_promotion_decision",
+        )
         self.assertNotIn("feature_rows", json.dumps(operations_payload["factor_observation_summary"], ensure_ascii=False))
         self.assertNotIn('"members"', json.dumps(operations_payload["factor_observation_summary"], ensure_ascii=False))
         self.assertNotIn("splits", operations_payload["factor_observation_summary"]["walk_forward_protocol"])
         self.assertNotIn("oos_rows", operations_payload["factor_observation_summary"]["oos_validation"])
+        self.assertNotIn("transition_log", operations_payload["factor_observation_summary"]["governance_promotion"])
 
         dashboard_response = client.get("/stocks/600519.SH/dashboard")
         self.assertEqual(dashboard_response.status_code, 200)
         dashboard_payload = dashboard_response.json()
+        self.assertEqual(dashboard_payload["factor_validation"]["claim_ceiling"], "diagnostic_research_only")
         self.assertEqual(
             dashboard_payload["factor_validation"]["objective_universe"]["artifact_type"],
             "objective_frozen_universe",
@@ -659,10 +785,15 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             dashboard_payload["factor_validation"]["oos_validation"]["artifact_type"],
             "oos_validation",
         )
+        self.assertEqual(
+            dashboard_payload["factor_validation"]["governance_promotion"]["artifact_type"],
+            "governance_promotion_decision",
+        )
         self.assertNotIn("feature_rows", json.dumps(dashboard_payload["factor_validation"], ensure_ascii=False))
         self.assertNotIn('"members"', json.dumps(dashboard_payload["factor_validation"], ensure_ascii=False))
         self.assertNotIn("splits", dashboard_payload["factor_validation"]["walk_forward_protocol"])
         self.assertNotIn("oos_rows", dashboard_payload["factor_validation"]["oos_validation"])
+        self.assertNotIn("transition_log", dashboard_payload["factor_validation"]["governance_promotion"])
 
     def test_stock_dashboard_schema_accepts_string_horizon_readout_and_new_fields(self) -> None:
         with session_scope(self.database_url) as session:
@@ -677,11 +808,13 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(parsed.data_quality["symbol"], "600519.SH")
         self.assertIn("benchmark_context", parsed.factor_validation)
         self.assertEqual(parsed.factor_validation["promotion_status"], "blocked_from_production")
+        self.assertEqual(parsed.factor_validation["claim_ceiling"], "diagnostic_research_only")
         self.assertEqual(parsed.factor_validation["objective_universe"]["artifact_type"], "objective_frozen_universe")
         self.assertEqual(parsed.factor_validation["research_input_snapshot"]["artifact_type"], "research_input_snapshot")
         self.assertEqual(parsed.factor_validation["pit_feature_store"]["artifact_type"], "pit_feature_store")
         self.assertEqual(parsed.factor_validation["walk_forward_protocol"]["artifact_type"], "walk_forward_purge_embargo")
         self.assertEqual(parsed.factor_validation["oos_validation"]["artifact_type"], "oos_validation")
+        self.assertEqual(parsed.factor_validation["governance_promotion"]["artifact_type"], "governance_promotion_decision")
         self.assertEqual(parsed.factor_validation["validation_protocol"]["feature_source_status"], "legacy_diagnostic_only")
 
 

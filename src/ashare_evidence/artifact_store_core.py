@@ -26,6 +26,7 @@ ARTIFACT_FOLDERS = {
     "walk_forward_purge_embargo": "research_validation/walk_forward_protocols",
     "pbo_dsr_multiple_comparison": "research_validation/multiple_testing_diagnostics",
     "oos_validation": "research_validation/oos_validations",
+    "governance_promotion_decision": "research_validation/governance_promotion_decisions",
     "factor_ic_study": "research_validation/factor_ic_studies",
     "weight_sweep_study": "research_validation/weight_sweep_studies",
     "shortpick_lab": "shortpick_lab",
