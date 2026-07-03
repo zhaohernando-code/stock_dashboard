@@ -683,48 +683,18 @@ def get_stock_dashboard(session: Session, symbol: str) -> dict[str, Any]:
     trace["follow_up"] = _follow_up_payload(trace, change, trace["evidence"])
     from ashare_evidence.benchmark import benchmark_context_summary
     from ashare_evidence.data_quality import build_stock_data_quality
-    from ashare_evidence.factor_observation import build_factor_observations
+    from ashare_evidence.factor_validation_projection import build_factor_observation_summary_projection
 
     trace["data_quality"] = build_stock_data_quality(
         session,
         latest.stock,
         as_of=latest.as_of_data_time,
     )
-    try:
-        factor_study = build_factor_observations(
-            session,
-            artifact_root=str(artifact_root or ""),
-            persist=False,
-        )
-        trace["factor_validation"] = {
-            "status": factor_study.get("status"),
-            "note": factor_study.get("note"),
-            "schema_version": factor_study.get("schema_version"),
-            "artifact_id": factor_study.get("artifact_id"),
-            "objective_universe": factor_study.get("objective_universe", {}),
-            "research_input_snapshot": factor_study.get("research_input_snapshot", {}),
-            "pit_feature_store": factor_study.get("pit_feature_store", {}),
-            "walk_forward_protocol": factor_study.get("walk_forward_protocol", {}),
-            "oos_validation": factor_study.get("oos_validation", {}),
-            "governance_promotion": factor_study.get("governance_promotion", {}),
-            "dashboard_projection_registry": factor_study.get("dashboard_projection_registry", {}),
-            "validation_protocol": factor_study.get("validation_protocol", {}),
-            "lineage": factor_study.get("lineage", {}),
-            "gate_readout": factor_study.get("gate_readout", {}),
-            "promotion_status": factor_study.get("promotion_status", "blocked_from_production"),
-            "claim_ceiling": factor_study.get("claim_ceiling", "diagnostic_research_only"),
-            "observation_count": factor_study.get("observation_count", 0),
-            "distinct_as_of_date_count": factor_study.get("distinct_as_of_date_count", 0),
-            "benchmark_context": factor_study.get("benchmark_context", {}),
-        }
-    except Exception as exc:
-        trace["factor_validation"] = {
-            "status": "unavailable",
-            "note": f"因子验证摘要暂不可用：{exc}",
-            "observation_count": 0,
-            "distinct_as_of_date_count": 0,
-            "benchmark_context": {},
-        }
+    trace["factor_validation"] = build_factor_observation_summary_projection(
+        session,
+        artifact_root=artifact_root,
+        active_symbols=set(active_watchlist_symbols(session)),
+    )
     trace["benchmark_context"] = benchmark_context_summary(session)
     from ashare_evidence.horizon_readout import build_horizon_readout
     trace["research_horizon_readout"] = build_horizon_readout(str(artifact_root) if artifact_root else "")

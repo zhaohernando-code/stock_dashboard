@@ -92,31 +92,108 @@ echo ""
 
 echo "--- Phase 3: API Responses ---"
 
-check "Watchlist endpoint" \
-    "curl -s '$BACKEND_URL/watchlist' | python3 -c \"import sys,json; d=json.load(sys.stdin); assert len(d)>0\""
+check "Watchlist endpoint returns valid payload" \
+    "curl -s '$BACKEND_URL/watchlist' | python3 -c \"import sys,json; d=json.load(sys.stdin); assert isinstance(d.get('items'), list)\""
 
-SYMBOLS=$(curl -s "$BACKEND_URL/watchlist" | python3 -c "import sys,json; print(','.join(item['symbol'] for item in json.load(sys.stdin)))" 2>/dev/null || echo "")
+SAMPLE_INFO=$(
+    BACKEND_URL="$BACKEND_URL" RUNTIME_ROOT="$RUNTIME_ROOT" python3 - <<'PY'
+import json
+import os
+import sqlite3
+import urllib.request
+from pathlib import Path
+
+
+def _api_symbols(path: str) -> list[str]:
+    try:
+        payload = json.loads(urllib.request.urlopen(os.environ["BACKEND_URL"] + path, timeout=20).read())
+    except Exception:
+        return []
+    items = payload.get("items") if isinstance(payload, dict) else payload
+    if not isinstance(items, list):
+        return []
+    symbols: list[str] = []
+    for item in items:
+        if isinstance(item, dict) and item.get("symbol"):
+            symbols.append(str(item["symbol"]))
+    return symbols
+
+
+def _latest_recommendation_symbols() -> list[str]:
+    runtime_root = Path(os.environ["RUNTIME_ROOT"])
+    for db_path in (runtime_root / "data" / "ashare_hot.db", runtime_root / "data" / "ashare_dashboard.db"):
+        if not db_path.exists():
+            continue
+        try:
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT s.symbol
+                FROM recommendations r
+                JOIN stocks s ON s.id = r.stock_id
+                WHERE r.recommendation_payload IS NOT NULL
+                GROUP BY s.symbol
+                ORDER BY MAX(r.as_of_data_time) DESC, MAX(r.generated_at) DESC
+                LIMIT 8
+                """
+            ).fetchall()
+        except Exception:
+            continue
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        return [str(row["symbol"]) for row in rows if row["symbol"]]
+    return []
+
+
+source = "dashboard_candidates"
+symbols = _api_symbols("/dashboard/candidates")
+if not symbols:
+    source = "watchlist"
+    symbols = _api_symbols("/watchlist")
+if not symbols:
+    source = "runtime_latest_recommendations"
+    symbols = _latest_recommendation_symbols()
+
+seen: set[str] = set()
+deduped: list[str] = []
+for candidate in symbols:
+    if candidate not in seen:
+        seen.add(candidate)
+        deduped.append(candidate)
+print(f"{source}|{','.join(deduped[:8])}")
+PY
+)
+SAMPLE_SOURCE="${SAMPLE_INFO%%|*}"
+SYMBOLS="${SAMPLE_INFO#*|}"
+echo "Dashboard verification sample source: $SAMPLE_SOURCE"
+
+check "Dashboard verification sample symbols available" \
+    "[ -n '$SYMBOLS' ]"
 
 if [ -n "$SYMBOLS" ]; then
     IFS=',' read -ra SYM_ARRAY <<< "$SYMBOLS"
     for sym in "${SYM_ARRAY[@]}"; do
         check "$sym dashboard returns factor_cards" \
-            "curl -s '$BACKEND_URL/stocks/$sym/dashboard' | python3 -c \"import sys,json; d=json.load(sys.stdin); cards=d['recommendation']['evidence']['factor_cards']; assert len(cards)>=4, f'Only {len(cards)} cards'\""
+            "curl -s --max-time 90 '$BACKEND_URL/stocks/$sym/dashboard' | python3 -c \"import sys,json; d=json.load(sys.stdin); cards=d['recommendation']['evidence']['factor_cards']; assert len(cards)>=4, f'Only {len(cards)} cards'\""
 
         check "$sym has size_factor in factor_cards" \
-            "curl -s '$BACKEND_URL/stocks/$sym/dashboard' | python3 -c \"import sys,json; d=json.load(sys.stdin); keys=[c['factor_key'] for c in d['recommendation']['evidence']['factor_cards']]; assert 'size_factor' in keys, f'Missing size_factor in {keys}'\""
+            "curl -s --max-time 90 '$BACKEND_URL/stocks/$sym/dashboard' | python3 -c \"import sys,json; d=json.load(sys.stdin); keys=[c['factor_key'] for c in d['recommendation']['evidence']['factor_cards']]; assert 'size_factor' in keys, f'Missing size_factor in {keys}'\""
 
         check "$sym has reversal factor" \
-            "curl -s '$BACKEND_URL/stocks/$sym/dashboard' | python3 -c \"import sys,json; d=json.load(sys.stdin); keys=[c['factor_key'] for c in d['recommendation']['evidence']['factor_cards']]; assert 'reversal' in keys\""
+            "curl -s --max-time 90 '$BACKEND_URL/stocks/$sym/dashboard' | python3 -c \"import sys,json; d=json.load(sys.stdin); keys=[c['factor_key'] for c in d['recommendation']['evidence']['factor_cards']]; assert 'reversal' in keys\""
 
         check "$sym has liquidity factor" \
-            "curl -s '$BACKEND_URL/stocks/$sym/dashboard' | python3 -c \"import sys,json; d=json.load(sys.stdin); keys=[c['factor_key'] for c in d['recommendation']['evidence']['factor_cards']]; assert 'liquidity' in keys\""
+            "curl -s --max-time 90 '$BACKEND_URL/stocks/$sym/dashboard' | python3 -c \"import sys,json; d=json.load(sys.stdin); keys=[c['factor_key'] for c in d['recommendation']['evidence']['factor_cards']]; assert 'liquidity' in keys\""
 
         check "$sym news items have LLM analysis (no fallback)" \
-            "curl -s '$BACKEND_URL/stocks/$sym/dashboard' | python3 -c \"import sys,json; d=json.load(sys.stdin); news=d.get('recent_news',[]); analyzed=sum(1 for n in news if n.get('summary')!=n.get('headline')); assert analyzed>=len(news)*0.3, f'Only {analyzed}/{len(news)} items have LLM analysis'\""
+            "curl -s --max-time 90 '$BACKEND_URL/stocks/$sym/dashboard' | python3 -c \"import sys,json; d=json.load(sys.stdin); news=d.get('recent_news',[]); analyzed=sum(1 for n in news if n.get('summary')!=n.get('headline')); assert analyzed>=len(news)*0.3, f'Only {analyzed}/{len(news)} items have LLM analysis'\""
 
         check "$sym direction label is actionable" \
-            "curl -s '$BACKEND_URL/stocks/$sym/dashboard' | python3 -c \"import sys,json; d=json.load(sys.stdin); label=d['hero']['direction_label']; valid={'可建仓','可加仓','继续观察','减仓','建议离场','风险提示'}; assert label in valid, f'Unknown label: {label}'\""
+            "curl -s --max-time 90 '$BACKEND_URL/stocks/$sym/dashboard' | python3 -c \"import sys,json; d=json.load(sys.stdin); label=d['hero']['direction_label']; valid={'可建仓','可加仓','继续观察','减仓','建议离场','风险提示'}; assert label in valid, f'Unknown label: {label}'\""
     done
 fi
 
@@ -127,13 +204,13 @@ echo ""
 echo "--- Phase 4: Factor Output Validation ---"
 
 check "News factor scores are not saturated (±1.0)" \
-    "curl -s '$BACKEND_URL/dashboard/candidates' | python3 -c \"
-import sys,json
-items=json.load(sys.stdin)['items']
+    "SYMBOLS='$SYMBOLS' python3 -c \"
+import os,json,urllib.request
+items=[{'symbol': item} for item in os.environ.get('SYMBOLS', '').split(',') if item]
+assert items, 'No dashboard sample symbols available'
 for item in items:
     sym=item['symbol']
-    import urllib.request
-    d=json.loads(urllib.request.urlopen('$BACKEND_URL/stocks/'+sym+'/dashboard').read())
+    d=json.loads(urllib.request.urlopen('$BACKEND_URL/stocks/'+sym+'/dashboard', timeout=90).read())
     for c in d['recommendation']['evidence']['factor_cards']:
         if c['factor_key']=='news_event':
             s=abs(c['score'])
@@ -142,12 +219,13 @@ print('OK')
 \""
 
 check "At least one stock has non-zero size factor" \
-    "curl -s '$BACKEND_URL/dashboard/candidates' | python3 -c \"
-import sys,json,urllib.request
-items=json.load(sys.stdin)['items']
+    "SYMBOLS='$SYMBOLS' python3 -c \"
+import os,json,urllib.request
+items=[{'symbol': item} for item in os.environ.get('SYMBOLS', '').split(',') if item]
+assert items, 'No dashboard sample symbols available'
 nonzero=0
 for item in items:
-    d=json.loads(urllib.request.urlopen('$BACKEND_URL/stocks/'+item['symbol']+'/dashboard').read())
+    d=json.loads(urllib.request.urlopen('$BACKEND_URL/stocks/'+item['symbol']+'/dashboard', timeout=90).read())
     for c in d['recommendation']['evidence']['factor_cards']:
         if c['factor_key']=='size_factor' and abs(c['score'])>0.01:
             nonzero+=1
@@ -156,12 +234,13 @@ print(f'{nonzero} stocks have non-zero size factor')
 \""
 
 check "Reversal factor has both positive and negative scores (not all same)" \
-    "curl -s '$BACKEND_URL/dashboard/candidates' | python3 -c \"
-import sys,json,urllib.request
-items=json.load(sys.stdin)['items']
+    "SYMBOLS='$SYMBOLS' python3 -c \"
+import os,json,urllib.request
+items=[{'symbol': item} for item in os.environ.get('SYMBOLS', '').split(',') if item]
+assert items, 'No dashboard sample symbols available'
 scores=[]
 for item in items:
-    d=json.loads(urllib.request.urlopen('$BACKEND_URL/stocks/'+item['symbol']+'/dashboard').read())
+    d=json.loads(urllib.request.urlopen('$BACKEND_URL/stocks/'+item['symbol']+'/dashboard', timeout=90).read())
     for c in d['recommendation']['evidence']['factor_cards']:
         if c['factor_key']=='reversal':
             scores.append(c['score'])

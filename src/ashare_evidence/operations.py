@@ -14,7 +14,7 @@ from ashare_evidence.access import load_beta_access_config
 from ashare_evidence.benchmark import benchmark_context_summary
 from ashare_evidence.contract_status import STATUS_PENDING_REBUILD
 from ashare_evidence.data_quality import build_data_quality_summary
-from ashare_evidence.factor_observation import build_factor_observations
+from ashare_evidence.factor_validation_projection import build_factor_observation_summary_projection
 from ashare_evidence.intraday_market import (
     INTRADAY_MARKET_TIMEFRAME,
     get_intraday_market_status,
@@ -1179,58 +1179,12 @@ def _manual_research_queue_payload(
 
 
 def _factor_observation_summary(session: Session, *, artifact_root: Any, active_symbols: set[str]) -> dict[str, Any]:
-    try:
-        study = build_factor_observations(
-            session,
-            artifact_root=str(artifact_root or ""),
-            min_records=5,
-            persist=False,
-        )
-    except Exception as exc:
-        return {
-            "status": "unavailable",
-            "note": f"因子 IC 研究摘要暂不可用：{exc}",
-            "observation_count": 0,
-            "distinct_as_of_date_count": 0,
-            "symbol_count": len(active_symbols),
-            "horizons": {},
-        }
-    horizons: dict[str, Any] = {}
-    for horizon, factors in (study.get("factor_results") or {}).items():
-        horizons[horizon] = {
-            factor_key: {
-                "rank_ic_mean": factor_data.get("rank_ic_mean"),
-                "ic_ir": factor_data.get("ic_ir"),
-                "positive_ic_rate": factor_data.get("positive_ic_rate"),
-                "sample_count": factor_data.get("sample_count"),
-            }
-            for factor_key, factor_data in factors.items()
-        }
-    return {
-        "artifact_type": study.get("artifact_type", "factor_ic_study"),
-        "status": study.get("status", "insufficient_sample"),
-        "note": study.get("note"),
-        "schema_version": study.get("schema_version"),
-        "artifact_id": study.get("artifact_id"),
-        "objective_universe": study.get("objective_universe", {}),
-        "research_input_snapshot": study.get("research_input_snapshot", {}),
-        "pit_feature_store": study.get("pit_feature_store", {}),
-        "walk_forward_protocol": study.get("walk_forward_protocol", {}),
-        "oos_validation": study.get("oos_validation", {}),
-        "governance_promotion": study.get("governance_promotion", {}),
-        "dashboard_projection_registry": study.get("dashboard_projection_registry", {}),
-        "validation_protocol": study.get("validation_protocol", {}),
-        "lineage": study.get("lineage", {}),
-        "gate_readout": study.get("gate_readout", {}),
-        "promotion_status": study.get("promotion_status", "blocked_from_production"),
-        "claim_ceiling": study.get("claim_ceiling", "diagnostic_research_only"),
-        "observation_count": study.get("observation_count", 0),
-        "distinct_as_of_date_count": study.get("distinct_as_of_date_count", 0),
-        "symbol_count": study.get("universe_symbol_count", len(active_symbols)),
-        "recommendation_sample_symbol_count": study.get("recommendation_sample_symbol_count", len(active_symbols)),
-        "benchmark_context": study.get("benchmark_context", {}),
-        "horizons": horizons,
-    }
+    return build_factor_observation_summary_projection(
+        session,
+        artifact_root=artifact_root,
+        active_symbols=active_symbols,
+        min_records=5,
+    )
 
 
 def _today_at_a_glance(
