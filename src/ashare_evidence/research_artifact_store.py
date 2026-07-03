@@ -114,6 +114,7 @@ def write_research_validation_artifact(
         "pbo_dsr_multiple_comparison",
         "oos_validation",
         "governance_promotion_decision",
+        "dashboard_approved_projection_registry",
         "factor_ic_study",
         "weight_sweep_study",
     }:

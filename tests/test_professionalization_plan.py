@@ -11,6 +11,7 @@ from sqlalchemy import delete, select
 
 from ashare_evidence.api import create_app
 from ashare_evidence.dashboard import get_stock_dashboard
+from ashare_evidence.dashboard_projection_registry import build_dashboard_projection_registry_artifact
 from ashare_evidence.data_quality import build_data_quality_summary
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.factor_observation import build_factor_observations, sweep_weights
@@ -34,6 +35,67 @@ class ProfessionalizationPlanTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+
+    def test_dashboard_projection_registry_blocks_unapproved_governance(self) -> None:
+        registry = build_dashboard_projection_registry_artifact(
+            validation_run_id="projection-test",
+            source_db_snapshot_id="snapshot",
+            source_data_time_range={"as_of_start": "2026-01-01", "as_of_end": "2026-01-31"},
+            candidate_kind="factor_ic_study",
+            candidate_artifact={
+                "schema_version": "factor_ic_study.v2",
+                "artifact_id": "factor",
+                "validation_run_id": "projection-test",
+                "generated_at": "2026-07-03T00:00:00+00:00",
+                "source_db_snapshot_id": "snapshot",
+                "source_data_time_range": {},
+                "feature_version": "legacy_recommendation_payload_factor_breakdown:v1",
+                "label_version": "daily_close_forward_excess_return:v1",
+                "code_version": "test",
+                "config_version": "research_validation_protocol.v1",
+                "validation_protocol": {"feature_source_status": "legacy_diagnostic_only"},
+                "gate_readout": {"blocking_gate_ids": ["independent_feature_source"]},
+                "claim_ceiling": "diagnostic_research_only",
+                "promotion_status": "blocked_from_production",
+                "lineage": {"feature_version": "legacy_recommendation_payload_factor_breakdown:v1"},
+            },
+            governance_decision={
+                "schema_version": "governance_promotion_decision.v1",
+                "artifact_id": "governance",
+                "validation_run_id": "projection-test",
+                "generated_at": "2026-07-03T00:00:00+00:00",
+                "source_db_snapshot_id": "snapshot",
+                "source_data_time_range": {},
+                "feature_version": "legacy_recommendation_payload_factor_breakdown:v1",
+                "label_version": "daily_close_forward_excess_return:v1",
+                "code_version": "test",
+                "config_version": "shortpick_governance_promotion_state_machine:v1",
+                "validation_protocol": {"artifact_role": "governance_promotion_decision"},
+                "gate_readout": {"blocking_gate_ids": ["legacy_recommendation_payload_diagnostic_only"]},
+                "claim_ceiling": "diagnostic_research_only",
+                "promotion_status": "blocked_from_production",
+                "current_state": "diagnostic_only",
+                "approved_for_dashboard_projection": False,
+            },
+        )
+
+        self.assertEqual(registry["artifact_type"], "dashboard_approved_projection_registry")
+        self.assertEqual(registry["approved_projection_count"], 0)
+        self.assertEqual(registry["blocked_projection_count"], 1)
+        self.assertEqual(registry["gate_readout"]["gate_status"], "blocked")
+        self.assertEqual(registry["claim_ceiling"], "diagnostic_summary_only")
+        self.assertIn(
+            "governance_not_approved_for_dashboard_projection",
+            registry["gate_readout"]["blocking_gate_ids"],
+        )
+        self.assertIn(
+            "governance_lifecycle_not_production_eligible:diagnostic_only",
+            registry["gate_readout"]["blocking_gate_ids"],
+        )
+        self.assertEqual(
+            registry["dashboard_consumption_boundary"],
+            "dashboard_reads_registry_summary_not_raw_validation_artifacts",
+        )
 
     def test_governance_promotion_state_machine_fails_closed(self) -> None:
         decision = build_governance_promotion_decision_artifact(
@@ -510,8 +572,14 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(study["governance_promotion"]["promotion_status"], "blocked_from_production")
         self.assertFalse(study["governance_promotion"]["approved_for_dashboard_projection"])
         self.assertNotIn("transition_log", study["governance_promotion"])
+        self.assertEqual(study["dashboard_projection_registry"]["artifact_type"], "dashboard_approved_projection_registry")
+        self.assertEqual(study["dashboard_projection_registry"]["approved_projection_count"], 0)
+        self.assertEqual(study["dashboard_projection_registry"]["blocked_projection_count"], 1)
+        self.assertEqual(study["dashboard_projection_registry"]["claim_ceiling"], "diagnostic_summary_only")
+        self.assertNotIn("approved_projection_entries", study["dashboard_projection_registry"])
         self.assertNotIn("pit_feature_store_artifact", study)
         self.assertNotIn("governance_promotion_artifact", study)
+        self.assertNotIn("dashboard_projection_registry_artifact", study)
         self.assertNotIn("feature_rows", json.dumps(study, ensure_ascii=False))
         self.assertEqual(
             study["lineage"]["research_input_snapshot_id"],
@@ -524,6 +592,10 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(
             study["lineage"]["governance_promotion_decision_id"],
             study["governance_promotion"]["artifact_id"],
+        )
+        self.assertEqual(
+            study["lineage"]["dashboard_projection_registry_id"],
+            study["dashboard_projection_registry"]["artifact_id"],
         )
         self.assertIn("benchmark_availability", study["gate_readout"]["blocking_gate_ids"])
         self.assertNotIn("objective_research_universe", study["gate_readout"]["blocking_gate_ids"])
@@ -548,6 +620,10 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(sweep["governance_promotion"]["gate_readout"]["gate_status"], "blocked")
         self.assertEqual(sweep["governance_promotion"]["promotion_status"], "blocked_from_production")
         self.assertFalse(sweep["governance_promotion"]["approved_for_dashboard_projection"])
+        self.assertEqual(sweep["dashboard_projection_registry"]["artifact_type"], "dashboard_approved_projection_registry")
+        self.assertEqual(sweep["dashboard_projection_registry"]["approved_projection_count"], 0)
+        self.assertEqual(sweep["dashboard_projection_registry"]["blocked_projection_count"], 1)
+        self.assertNotIn("approved_projection_entries", sweep["dashboard_projection_registry"])
         self.assertEqual(
             sweep["validation_protocol"]["multiple_testing_status"],
             "artifact_implemented",
@@ -588,6 +664,12 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             / "governance_promotion_decisions"
             / f"{study['governance_promotion']['artifact_id']}.json"
         )
+        projection_registry_path = (
+            artifact_root
+            / "research_validation"
+            / "dashboard_approved_projection_registries"
+            / f"{study['dashboard_projection_registry']['artifact_id']}.json"
+        )
         multiple_testing_path = (
             artifact_root
             / "research_validation"
@@ -600,6 +682,12 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             / "governance_promotion_decisions"
             / f"{sweep['governance_promotion']['artifact_id']}.json"
         )
+        sweep_projection_registry_path = (
+            artifact_root
+            / "research_validation"
+            / "dashboard_approved_projection_registries"
+            / f"{sweep['dashboard_projection_registry']['artifact_id']}.json"
+        )
         sweep_path = artifact_root / "research_validation" / "weight_sweep_studies" / f"{sweep['artifact_id']}.json"
         self.assertTrue(universe_path.exists())
         self.assertTrue(snapshot_path.exists())
@@ -607,8 +695,10 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertTrue(walk_forward_path.exists())
         self.assertTrue(oos_path.exists())
         self.assertTrue(governance_path.exists())
+        self.assertTrue(projection_registry_path.exists())
         self.assertTrue(multiple_testing_path.exists())
         self.assertTrue(sweep_governance_path.exists())
+        self.assertTrue(sweep_projection_registry_path.exists())
         self.assertTrue(factor_path.exists())
         self.assertTrue(sweep_path.exists())
         universe_payload = json.loads(universe_path.read_text(encoding="utf-8"))
@@ -646,6 +736,15 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             "legacy_recommendation_payload_diagnostic_only",
             governance_payload["gate_readout"]["blocking_gate_ids"],
         )
+        projection_registry_payload = json.loads(projection_registry_path.read_text(encoding="utf-8"))
+        self.assertEqual(projection_registry_payload["artifact_type"], "dashboard_approved_projection_registry")
+        self.assertEqual(projection_registry_payload["approved_projection_count"], 0)
+        self.assertIn("approved_projection_entries", projection_registry_payload)
+        self.assertIn("blocked_projection_entries", projection_registry_payload)
+        self.assertIn(
+            "governance_not_approved_for_dashboard_projection",
+            projection_registry_payload["gate_readout"]["blocking_gate_ids"],
+        )
         multiple_testing_payload = json.loads(multiple_testing_path.read_text(encoding="utf-8"))
         self.assertEqual(multiple_testing_payload["artifact_type"], "pbo_dsr_multiple_comparison")
         self.assertIn("trials", multiple_testing_payload)
@@ -653,6 +752,12 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         sweep_governance_payload = json.loads(sweep_governance_path.read_text(encoding="utf-8"))
         self.assertEqual(sweep_governance_payload["artifact_type"], "governance_promotion_decision")
         self.assertIn("multiple_testing_not_ready", sweep_governance_payload["gate_readout"]["blocking_gate_ids"])
+        sweep_projection_registry_payload = json.loads(sweep_projection_registry_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            sweep_projection_registry_payload["artifact_type"],
+            "dashboard_approved_projection_registry",
+        )
+        self.assertEqual(sweep_projection_registry_payload["approved_projection_count"], 0)
         pit_feature_row = pit_payload["feature_rows"][0]
         self.assertIn("price_baseline", pit_feature_row["features"])
         self.assertIn("liquidity", pit_feature_row["features"])
@@ -682,11 +787,13 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertNotIn("oos_rows", factor_payload.get("oos_validation", {}))
         self.assertNotIn("period_metrics", factor_payload.get("oos_validation", {}))
         self.assertNotIn("transition_log", factor_payload.get("governance_promotion", {}))
+        self.assertNotIn("approved_projection_entries", factor_payload.get("dashboard_projection_registry", {}))
         sweep_payload = json.loads(sweep_path.read_text(encoding="utf-8"))
         self.assertEqual(sweep_payload["claim_ceiling"], "diagnostic_research_only")
         self.assertNotIn("trials", sweep_payload["multiple_testing_diagnostics"])
         self.assertNotIn("oos_rows", sweep_payload["oos_validation"])
         self.assertNotIn("transition_log", sweep_payload["governance_promotion"])
+        self.assertNotIn("approved_projection_entries", sweep_payload["dashboard_projection_registry"])
 
     def test_operations_summary_is_light_and_details_are_sectioned(self) -> None:
         with session_scope(self.database_url) as session:
@@ -715,11 +822,17 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(factor_summary["oos_validation"]["artifact_type"], "oos_validation")
         self.assertEqual(factor_summary["governance_promotion"]["artifact_type"], "governance_promotion_decision")
         self.assertEqual(factor_summary["governance_promotion"]["current_state"], "diagnostic_only")
+        self.assertEqual(
+            factor_summary["dashboard_projection_registry"]["artifact_type"],
+            "dashboard_approved_projection_registry",
+        )
+        self.assertEqual(factor_summary["dashboard_projection_registry"]["approved_projection_count"], 0)
         self.assertNotIn("feature_rows", json.dumps(factor_summary, ensure_ascii=False))
         self.assertNotIn('"members"', json.dumps(factor_summary, ensure_ascii=False))
         self.assertNotIn("splits", factor_summary["walk_forward_protocol"])
         self.assertNotIn("oos_rows", factor_summary["oos_validation"])
         self.assertNotIn("transition_log", factor_summary["governance_promotion"])
+        self.assertNotIn("approved_projection_entries", factor_summary["dashboard_projection_registry"])
         self.assertEqual(factor_summary["validation_protocol"]["feature_source_status"], "legacy_diagnostic_only")
         self.assertIn("independent_feature_source", factor_summary["gate_readout"]["blocking_gate_ids"])
         self.assertEqual(factor_summary["lineage"]["feature_version"], "legacy_recommendation_payload_factor_breakdown:v1")
@@ -755,11 +868,19 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             operations_payload["factor_observation_summary"]["governance_promotion"]["artifact_type"],
             "governance_promotion_decision",
         )
+        self.assertEqual(
+            operations_payload["factor_observation_summary"]["dashboard_projection_registry"]["artifact_type"],
+            "dashboard_approved_projection_registry",
+        )
         self.assertNotIn("feature_rows", json.dumps(operations_payload["factor_observation_summary"], ensure_ascii=False))
         self.assertNotIn('"members"', json.dumps(operations_payload["factor_observation_summary"], ensure_ascii=False))
         self.assertNotIn("splits", operations_payload["factor_observation_summary"]["walk_forward_protocol"])
         self.assertNotIn("oos_rows", operations_payload["factor_observation_summary"]["oos_validation"])
         self.assertNotIn("transition_log", operations_payload["factor_observation_summary"]["governance_promotion"])
+        self.assertNotIn(
+            "approved_projection_entries",
+            operations_payload["factor_observation_summary"]["dashboard_projection_registry"],
+        )
 
         dashboard_response = client.get("/stocks/600519.SH/dashboard")
         self.assertEqual(dashboard_response.status_code, 200)
@@ -789,11 +910,16 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             dashboard_payload["factor_validation"]["governance_promotion"]["artifact_type"],
             "governance_promotion_decision",
         )
+        self.assertEqual(
+            dashboard_payload["factor_validation"]["dashboard_projection_registry"]["artifact_type"],
+            "dashboard_approved_projection_registry",
+        )
         self.assertNotIn("feature_rows", json.dumps(dashboard_payload["factor_validation"], ensure_ascii=False))
         self.assertNotIn('"members"', json.dumps(dashboard_payload["factor_validation"], ensure_ascii=False))
         self.assertNotIn("splits", dashboard_payload["factor_validation"]["walk_forward_protocol"])
         self.assertNotIn("oos_rows", dashboard_payload["factor_validation"]["oos_validation"])
         self.assertNotIn("transition_log", dashboard_payload["factor_validation"]["governance_promotion"])
+        self.assertNotIn("approved_projection_entries", dashboard_payload["factor_validation"]["dashboard_projection_registry"])
 
     def test_stock_dashboard_schema_accepts_string_horizon_readout_and_new_fields(self) -> None:
         with session_scope(self.database_url) as session:
@@ -815,6 +941,10 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(parsed.factor_validation["walk_forward_protocol"]["artifact_type"], "walk_forward_purge_embargo")
         self.assertEqual(parsed.factor_validation["oos_validation"]["artifact_type"], "oos_validation")
         self.assertEqual(parsed.factor_validation["governance_promotion"]["artifact_type"], "governance_promotion_decision")
+        self.assertEqual(
+            parsed.factor_validation["dashboard_projection_registry"]["artifact_type"],
+            "dashboard_approved_projection_registry",
+        )
         self.assertEqual(parsed.factor_validation["validation_protocol"]["feature_source_status"], "legacy_diagnostic_only")
 
 

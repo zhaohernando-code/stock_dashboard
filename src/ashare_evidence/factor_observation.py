@@ -11,6 +11,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from ashare_evidence.benchmark import CSI_BENCHMARKS, DEFAULT_BENCHMARK_ID, benchmark_close_maps
+from ashare_evidence.dashboard_projection_registry import (
+    build_dashboard_projection_registry_artifact,
+    dashboard_projection_registry_summary,
+    write_dashboard_projection_registry_artifact,
+)
 from ashare_evidence.governance_promotion import (
     build_governance_promotion_decision_artifact,
     governance_promotion_summary,
@@ -1007,12 +1012,26 @@ def build_factor_observations(
         **dict(results.get("lineage") or {}),
         "governance_promotion_decision_id": governance_decision["artifact_id"],
     }
+    dashboard_projection_registry = build_dashboard_projection_registry_artifact(
+        validation_run_id=validation_run_id,
+        source_db_snapshot_id=input_snapshot["source_db_snapshot_id"],
+        source_data_time_range=_source_data_time_range(observation_rows),
+        candidate_kind="factor_ic_study",
+        candidate_artifact=results,
+        governance_decision=governance_decision,
+    )
+    results["dashboard_projection_registry"] = dashboard_projection_registry_summary(dashboard_projection_registry)
+    results["lineage"] = {
+        **dict(results.get("lineage") or {}),
+        "dashboard_projection_registry_id": dashboard_projection_registry["artifact_id"],
+    }
     if include_raw_research_artifacts:
         results["objective_universe_artifact"] = objective_universe
         results["pit_feature_store_artifact"] = pit_feature_store
         results["walk_forward_protocol_artifact"] = walk_forward_protocol
         results["oos_validation_artifact"] = oos_validation
         results["governance_promotion_artifact"] = governance_decision
+        results["dashboard_projection_registry_artifact"] = dashboard_projection_registry
     if persist:
         write_objective_universe_artifact(objective_universe, artifact_root=artifact_root)
         _write_research_input_snapshot(input_snapshot, artifact_root=artifact_root, artifact_id=input_snapshot_id)
@@ -1020,6 +1039,7 @@ def build_factor_observations(
         write_walk_forward_protocol_artifact(walk_forward_protocol, artifact_root=artifact_root)
         write_oos_validation_artifact(oos_validation, artifact_root=artifact_root)
         write_governance_promotion_decision_artifact(governance_decision, artifact_root=artifact_root)
+        write_dashboard_projection_registry_artifact(dashboard_projection_registry, artifact_root=artifact_root)
         _write_artifact(results, artifact_root=artifact_root, artifact_id=artifact_id)
     return results
 
@@ -1185,6 +1205,19 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
         **dict(results.get("lineage") or {}),
         "governance_promotion_decision_id": governance_decision["artifact_id"],
     }
+    dashboard_projection_registry = build_dashboard_projection_registry_artifact(
+        validation_run_id=validation_run_id,
+        source_db_snapshot_id=(observations.get("lineage") or {}).get("source_db_snapshot_id"),
+        source_data_time_range=source_data_time_range,
+        candidate_kind="weight_sweep_study",
+        candidate_artifact=results,
+        governance_decision=governance_decision,
+    )
+    results["dashboard_projection_registry"] = dashboard_projection_registry_summary(dashboard_projection_registry)
+    results["lineage"] = {
+        **dict(results.get("lineage") or {}),
+        "dashboard_projection_registry_id": dashboard_projection_registry["artifact_id"],
+    }
     if persist:
         objective_universe = observations.get("objective_universe_artifact")
         if isinstance(objective_universe, dict) and objective_universe.get("artifact_id"):
@@ -1208,6 +1241,7 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
             write_oos_validation_artifact(oos_validation, artifact_root=artifact_root)
         write_multiple_testing_diagnostics_artifact(multiple_testing_diagnostics, artifact_root=artifact_root)
         write_governance_promotion_decision_artifact(governance_decision, artifact_root=artifact_root)
+        write_dashboard_projection_registry_artifact(dashboard_projection_registry, artifact_root=artifact_root)
         _write_sweep_artifact(results, artifact_root=artifact_root, artifact_id=artifact_id)
     return results
 
