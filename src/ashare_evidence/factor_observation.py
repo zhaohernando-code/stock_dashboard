@@ -25,6 +25,11 @@ from ashare_evidence.pit_feature_store import (
 )
 from ashare_evidence.recommendation_selection import recommendation_recency_ordering
 from ashare_evidence.research_artifact_store import write_research_validation_artifact
+from ashare_evidence.walk_forward_protocol import (
+    build_walk_forward_protocol_artifact,
+    walk_forward_protocol_summary,
+    write_walk_forward_protocol_artifact,
+)
 from ashare_evidence.watchlist import active_watchlist_symbols
 
 FACTOR_KEYS = ("price_baseline", "news_event", "fundamental", "size_factor", "reversal", "liquidity")
@@ -356,8 +361,8 @@ def _validation_protocol() -> dict[str, Any]:
         "storage_boundary": "runtime_db_read_only_input__independent_research_validation_artifact_store",
         "feature_source": LEGACY_FACTOR_SCORE_SOURCE,
         "feature_source_status": "legacy_diagnostic_only",
-        "walk_forward_status": "not_implemented",
-        "purge_embargo_status": "not_implemented",
+        "walk_forward_status": "artifact_implemented",
+        "purge_embargo_status": "artifact_implemented",
         "execution_constraint_status": "daily_close_forward_return_only",
         "promotion_rule": "raw validation artifacts cannot directly modify production weights or recommendations",
     }
@@ -413,11 +418,13 @@ def _gate_readout(
     status: str,
     symbols: list[str],
     objective_universe: dict[str, Any],
+    walk_forward_protocol: dict[str, Any],
     distinct_as_of_count: int,
     observation_count: int,
     benchmark_status: str,
 ) -> dict[str, Any]:
     objective_symbol_count = int(objective_universe.get("eligible_symbol_count") or 0)
+    walk_forward_gate = (walk_forward_protocol.get("gate_readout") or {}).get("gate_status")
     checks = [
         {
             "gate_id": "independent_feature_source",
@@ -431,8 +438,10 @@ def _gate_readout(
         },
         {
             "gate_id": "walk_forward_purged_cv",
-            "status": "blocked",
-            "reason": "walk-forward split, purge, and embargo are not implemented in this diagnostic path",
+            "status": "pass" if walk_forward_gate == "walk_forward_ready" else "blocked",
+            "reason": None
+            if walk_forward_gate == "walk_forward_ready"
+            else "walk-forward/purge/embargo artifact has insufficient ready splits",
         },
         {
             "gate_id": "benchmark_availability",
@@ -853,10 +862,21 @@ def build_factor_observations(
     distinct_as_of = sorted({row["as_of_date"] for row in observation_rows})
     sample_ready = len(distinct_as_of) >= MIN_SNAPSHOT_COUNT and len(observation_rows) >= MIN_SNAPSHOT_COUNT * min_records
     status = "diagnostic_only_blocked" if sample_ready else "insufficient_sample"
+    walk_forward_protocol = build_walk_forward_protocol_artifact(
+        validation_run_id=validation_run_id,
+        source_db_snapshot_id=input_snapshot["source_db_snapshot_id"],
+        source_data_time_range=_source_data_time_range(observation_rows),
+        objective_universe=objective_universe,
+        input_snapshot=input_snapshot,
+        pit_feature_store=pit_feature_store,
+        observation_rows=observation_rows,
+        horizons=list(horizons),
+    )
     gate_readout = _gate_readout(
         status=status,
         symbols=symbols,
         objective_universe=objective_universe,
+        walk_forward_protocol=walk_forward_protocol,
         distinct_as_of_count=len(distinct_as_of),
         observation_count=len(observation_rows),
         benchmark_status=benchmark_status,
@@ -879,6 +899,7 @@ def build_factor_observations(
         },
         "research_input_snapshot_artifact": input_snapshot,
         "objective_universe": objective_universe_summary(objective_universe),
+        "walk_forward_protocol": walk_forward_protocol_summary(walk_forward_protocol),
         "pit_feature_store": {
             "artifact_type": "pit_feature_store",
             "schema_version": PIT_FEATURE_STORE_SCHEMA_VERSION,
@@ -895,6 +916,7 @@ def build_factor_observations(
             "objective_universe_id": objective_universe["artifact_id"],
             "research_input_snapshot_id": input_snapshot_id,
             "pit_feature_store_id": pit_feature_store["artifact_id"],
+            "walk_forward_protocol_id": walk_forward_protocol["artifact_id"],
             "source_data_time_range": _source_data_time_range(observation_rows),
             "feature_version": "legacy_recommendation_payload_factor_breakdown:v1",
             "independent_pit_feature_version": pit_feature_store["feature_version"],
@@ -939,10 +961,12 @@ def build_factor_observations(
     if include_raw_research_artifacts:
         results["objective_universe_artifact"] = objective_universe
         results["pit_feature_store_artifact"] = pit_feature_store
+        results["walk_forward_protocol_artifact"] = walk_forward_protocol
     if persist:
         write_objective_universe_artifact(objective_universe, artifact_root=artifact_root)
         _write_research_input_snapshot(input_snapshot, artifact_root=artifact_root, artifact_id=input_snapshot_id)
         write_pit_feature_store_artifact(pit_feature_store, artifact_root=artifact_root)
+        write_walk_forward_protocol_artifact(walk_forward_protocol, artifact_root=artifact_root)
         _write_artifact(results, artifact_root=artifact_root, artifact_id=artifact_id)
     return results
 
@@ -1056,6 +1080,7 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
         "objective_universe": observations.get("objective_universe", {}),
         "research_input_snapshot": observations.get("research_input_snapshot", {}),
         "pit_feature_store": observations.get("pit_feature_store", {}),
+        "walk_forward_protocol": observations.get("walk_forward_protocol", {}),
         "lineage": observations.get("lineage", {}),
         "gate_readout": observations.get("gate_readout", {}),
         "promotion_status": "blocked_from_production",
@@ -1081,6 +1106,9 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
         pit_feature_store = observations.get("pit_feature_store_artifact")
         if isinstance(pit_feature_store, dict) and pit_feature_store.get("artifact_id"):
             write_pit_feature_store_artifact(pit_feature_store, artifact_root=artifact_root)
+        walk_forward_protocol = observations.get("walk_forward_protocol_artifact")
+        if isinstance(walk_forward_protocol, dict) and walk_forward_protocol.get("artifact_id"):
+            write_walk_forward_protocol_artifact(walk_forward_protocol, artifact_root=artifact_root)
         _write_sweep_artifact(results, artifact_root=artifact_root, artifact_id=artifact_id)
     return results
 

@@ -22,7 +22,7 @@ Owner: stock_dashboard / Short Pick research governance
 | research input snapshot | implemented | Factor validation / weight sweep path now creates an addressable `research_input_snapshot` artifact under `research_validation/input_snapshots`; it freezes runtime DB read-only inputs before validation and remains non-promotional. |
 | PIT feature store | implemented | Factor validation / weight sweep path now builds a research-only `pit_feature_store` artifact from the frozen input snapshot, with independent price, liquidity, risk/trading, valuation, news/text, regime, crowding and placeholder availability groups. Legacy `recommendation_payload.factor_breakdown` remains diagnostic-only and is not used to compute PIT features. |
 | objective frozen universe | implemented | Factor validation / weight sweep path now freezes a pre-validation `objective_frozen_universe` artifact from DB stocks with 1d market-bar coverage, records recommendation/watchlist rows only as a coverage subset, and keeps promotion blocked by legacy factor source, OOS and governance gates. |
-| walk-forward / purge / embargo | not_started | 当前 P0 artifact 显式标记 `walk_forward_status=not_implemented`、`purge_embargo_status=not_implemented`。 |
+| walk-forward / purge / embargo | implemented | Factor validation / weight sweep path now writes a `walk_forward_purge_embargo` protocol artifact with anchored splits, purge days and embargo days. Current data may still have zero ready splits and remain blocked from promotion. |
 | PBO / DSR / multiple comparison | not_started | 尚未实现 PBO、Deflated Sharpe Ratio、多重比较校正；weight sweep 标记 `multiple_testing_status=not_corrected`。 |
 | OOS artifacts | not_started | 尚无 out-of-sample validation artifact；任何 promotion 仍 blocked。 |
 | governance promotion state machine | not_started | 当前只有 blocked gate readout；尚无状态机、审批、回滚、retirement / unretirement 协议实现。 |
@@ -399,11 +399,12 @@ Those gaps were expected for P0. Later slices may close individual items only by
 
 | Contract area | Current files | Implemented behavior |
 |---|---|---|
-| research validation artifact folders | `src/ashare_evidence/artifact_store_core.py` | Adds `research_validation/objective_universes`, `research_validation/input_snapshots`, `research_validation/pit_feature_store`, `research_validation/factor_ic_studies`, and `research_validation/weight_sweep_studies`. |
-| research validation artifact writer | `src/ashare_evidence/research_artifact_store.py` | Adds `write_research_validation_artifact(...)` with artifact type whitelist and repo-write guard, including `objective_frozen_universe`, `research_input_snapshot` and `pit_feature_store`. |
+| research validation artifact folders | `src/ashare_evidence/artifact_store_core.py` | Adds `research_validation/objective_universes`, `research_validation/input_snapshots`, `research_validation/pit_feature_store`, `research_validation/walk_forward_protocols`, `research_validation/factor_ic_studies`, and `research_validation/weight_sweep_studies`. |
+| research validation artifact writer | `src/ashare_evidence/research_artifact_store.py` | Adds `write_research_validation_artifact(...)` with artifact type whitelist and repo-write guard, including `objective_frozen_universe`, `research_input_snapshot`, `pit_feature_store` and `walk_forward_purge_embargo`. |
 | objective frozen universe | `src/ashare_evidence/objective_universe.py` | Freezes a deterministic pre-validation universe from runtime DB stocks with 1d market-bar coverage; recommendation/watchlist symbols are measured only as a coverage subset, not as the research universe. |
 | research input snapshot | `src/ashare_evidence/factor_observation.py` | Builds a non-promotional `research_input_snapshot` artifact that freezes symbols, recommendation as-of dates, source data ranges, horizons, benchmark context, validation protocol, and snapshot gates before IC/weight validation. |
 | PIT feature store | `src/ashare_evidence/pit_feature_store.py` | Builds non-promotional `pit_feature_store` artifacts from the frozen snapshot only; feature rows include independent price, liquidity, risk/trading, valuation, news/text, regime, crowding, fundamental availability, industry diffusion availability and dynamic-weight context groups. |
+| walk-forward / purge / embargo | `src/ashare_evidence/walk_forward_protocol.py` | Builds non-promotional anchored walk-forward protocol artifacts from observation dates, with purge and embargo days equal to the maximum validation horizon. |
 | legacy diagnostic-only factor path | `src/ashare_evidence/factor_observation.py` | Reads `recommendation_payload.factor_breakdown` only as `legacy_diagnostic_only`; writes validation protocol and feature lineage linked to the input snapshot. |
 | benchmark fail-closed | `src/ashare_evidence/factor_observation.py` | Missing primary benchmark bars skip IC rows; artifact records `fallback_policy=block_ic_rows_when_primary_benchmark_unavailable`. |
 | gate / lineage / promotion readout | `src/ashare_evidence/factor_observation.py` | Emits `lineage`, `gate_readout` with `claim_ceiling`, `promotion_status=blocked_from_production`, and diagnostic notes. |
@@ -420,7 +421,7 @@ The following blocked states are intentional completion status, not omissions. P
 
 - Full upstream coverage for PIT fundamental statement availability and frozen industry membership is still source-limited; the PIT feature store records those groups with explicit availability status instead of synthesizing unavailable data.
 - Full-market breadth is still limited by whatever runtime DB stocks and market bars are available locally; the objective universe artifact records that coverage explicitly, while active watchlist remains only the recommendation sample source.
-- Walk-forward validation, purge, and embargo are still blocked.
+- Walk-forward promotion is still blocked until the protocol artifact has enough ready splits; the split/purge/embargo machinery itself is implemented.
 - PBO / DSR / multiple-comparison correction is still blocked.
 - OOS validation artifacts are still blocked.
 - Governance promotion state machine is still blocked; P0 only emits blocked gate readout.
@@ -465,8 +466,7 @@ The external review themes that shaped this contract:
 
 ### P3 - Walk-Forward / Purged CV / PBO
 
-- Add walk-forward split artifacts.
-- Add purge and embargo for overlapping horizons.
+- Status: walk-forward split / purge / embargo protocol artifacts implemented for the factor validation / weight sweep path through `walk_forward_purge_embargo.v1`.
 - Add PBO / DSR / multiple-comparison reporting.
 - Produce OOS validation artifacts before any promotion candidate.
 
@@ -497,4 +497,4 @@ The external review themes that shaped this contract:
 
 Commit `3621f2d` implements the P0 slice only. It aligns with the P0 contract by isolating `factor_ic_study` and `weight_sweep_study` under `research_validation`, marking legacy factor payloads diagnostic-only, blocking benchmark fallback, carrying lineage/gate/promotion readouts, and tightening small-sample/dynamic-weight gates.
 
-Subsequent commits add the objective frozen universe, research input snapshot and PIT feature store slices for the factor validation / weight sweep path. The remaining end-state items are walk-forward/purged CV/PBO, OOS artifacts, promotion state machine, and materialized dashboard projection registry. Those are intentional next slices, not removed design scope.
+Subsequent commits add the objective frozen universe, research input snapshot, PIT feature store, and walk-forward/purge/embargo protocol slices for the factor validation / weight sweep path. The remaining end-state items are PBO/DSR/multiple-comparison reporting, OOS artifacts, promotion state machine, and materialized dashboard projection registry. Those are intentional next slices, not removed design scope, and implemented protocol artifacts do not imply promotion readiness.

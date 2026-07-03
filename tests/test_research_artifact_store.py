@@ -136,6 +136,16 @@ class ResearchArtifactStoreTests(unittest.TestCase):
                 },
                 root=root,
             )
+            walk_forward_path = write_research_validation_artifact(
+                "walk_forward_purge_embargo",
+                "walk-forward-protocol-unit",
+                {
+                    "artifact_type": "walk_forward_purge_embargo",
+                    "claim_ceiling": "walk_forward_protocol_only",
+                    "promotion_status": "blocked_from_production",
+                },
+                root=root,
+            )
             sweep_path = write_research_validation_artifact(
                 "weight_sweep_study",
                 "weight-sweep-study-unit",
@@ -146,6 +156,7 @@ class ResearchArtifactStoreTests(unittest.TestCase):
             self.assertEqual(universe_path.parent, root / "research_validation" / "objective_universes")
             self.assertEqual(snapshot_path.parent, root / "research_validation" / "input_snapshots")
             self.assertEqual(pit_path.parent, root / "research_validation" / "pit_feature_store")
+            self.assertEqual(walk_forward_path.parent, root / "research_validation" / "walk_forward_protocols")
             self.assertEqual(factor_path.parent, root / "research_validation" / "factor_ic_studies")
             self.assertEqual(sweep_path.parent, root / "research_validation" / "weight_sweep_studies")
             self.assertFalse((root / "studies" / factor_path.name).exists())

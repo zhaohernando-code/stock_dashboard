@@ -110,6 +110,7 @@ def write_research_validation_artifact(
         "objective_frozen_universe",
         "research_input_snapshot",
         "pit_feature_store",
+        "walk_forward_purge_embargo",
         "factor_ic_study",
         "weight_sweep_study",
     }:

@@ -23,6 +23,7 @@ ARTIFACT_FOLDERS = {
     "objective_frozen_universe": "research_validation/objective_universes",
     "research_input_snapshot": "research_validation/input_snapshots",
     "pit_feature_store": "research_validation/pit_feature_store",
+    "walk_forward_purge_embargo": "research_validation/walk_forward_protocols",
     "factor_ic_study": "research_validation/factor_ic_studies",
     "weight_sweep_study": "research_validation/weight_sweep_studies",
     "shortpick_lab": "shortpick_lab",

@@ -704,6 +704,7 @@ def get_stock_dashboard(session: Session, symbol: str) -> dict[str, Any]:
             "objective_universe": factor_study.get("objective_universe", {}),
             "research_input_snapshot": factor_study.get("research_input_snapshot", {}),
             "pit_feature_store": factor_study.get("pit_feature_store", {}),
+            "walk_forward_protocol": factor_study.get("walk_forward_protocol", {}),
             "validation_protocol": factor_study.get("validation_protocol", {}),
             "lineage": factor_study.get("lineage", {}),
             "gate_readout": factor_study.get("gate_readout", {}),

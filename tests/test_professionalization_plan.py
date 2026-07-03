@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -19,6 +19,7 @@ from ashare_evidence.market_rules import account_trade_eligibility, board_rule
 from ashare_evidence.models import FeatureSnapshot, NewsEntityLink, NewsItem, Stock
 from ashare_evidence.operations import build_operations_detail, build_operations_summary
 from ashare_evidence.schemas import StockDashboardResponse
+from ashare_evidence.walk_forward_protocol import build_walk_forward_protocol_artifact
 from tests.fixtures import seed_watchlist_fixture
 
 
@@ -30,6 +31,55 @@ class ProfessionalizationPlanTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+
+    def test_walk_forward_protocol_blocks_false_ready_after_purge(self) -> None:
+        rows = [
+            {"as_of_date": (date(2026, 1, 1) + timedelta(days=index)).isoformat()}
+            for index in range(12)
+        ]
+
+        artifact = build_walk_forward_protocol_artifact(
+            validation_run_id="wf-test",
+            source_db_snapshot_id="snapshot",
+            source_data_time_range={},
+            objective_universe={"artifact_id": "objective"},
+            input_snapshot={"artifact_id": "snapshot"},
+            pit_feature_store={"artifact_id": "pit", "feature_version": "pit:v1"},
+            observation_rows=rows,
+            horizons=[5],
+        )
+
+        self.assertGreaterEqual(artifact["split_count"], 3)
+        self.assertEqual(artifact["ready_split_count"], 0)
+        self.assertEqual(artifact["gate_readout"]["gate_status"], "blocked")
+        self.assertTrue(all(split["purged_train_period_count"] < 6 for split in artifact["splits"]))
+
+    def test_walk_forward_protocol_can_be_ready_with_enough_purged_training_periods(self) -> None:
+        rows = [
+            {"as_of_date": (date(2026, 1, 1) + timedelta(days=index)).isoformat()}
+            for index in range(18)
+        ]
+
+        artifact = build_walk_forward_protocol_artifact(
+            validation_run_id="wf-test",
+            source_db_snapshot_id="snapshot",
+            source_data_time_range={},
+            objective_universe={"artifact_id": "objective"},
+            input_snapshot={"artifact_id": "snapshot"},
+            pit_feature_store={"artifact_id": "pit", "feature_version": "pit:v1"},
+            observation_rows=rows,
+            horizons=[1],
+        )
+
+        self.assertGreaterEqual(artifact["ready_split_count"], 3)
+        self.assertEqual(artifact["gate_readout"]["gate_status"], "walk_forward_ready")
+        self.assertTrue(
+            all(
+                split["purged_train_period_count"] >= 6 and split["test_period_count"] >= 2
+                for split in artifact["splits"]
+                if split["status"] == "ready"
+            )
+        )
 
     def test_data_quality_snapshot_scores_and_missing_news_is_soft_gap(self) -> None:
         with session_scope(self.database_url) as session:
@@ -154,6 +204,8 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(study["benchmark_context"]["status"], "missing_primary_benchmark_bars")
         self.assertEqual(study["benchmark_context"]["fallback_policy"], "block_ic_rows_when_primary_benchmark_unavailable")
         self.assertEqual(study["validation_protocol"]["feature_source_status"], "legacy_diagnostic_only")
+        self.assertEqual(study["validation_protocol"]["walk_forward_status"], "artifact_implemented")
+        self.assertEqual(study["validation_protocol"]["purge_embargo_status"], "artifact_implemented")
         self.assertEqual(study["promotion_status"], "blocked_from_production")
         self.assertEqual(study["gate_readout"]["promotion_status"], "blocked_from_production")
         self.assertEqual(study["objective_universe"]["artifact_type"], "objective_frozen_universe")
@@ -212,6 +264,11 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(study["pit_feature_store"]["artifact_type"], "pit_feature_store")
         self.assertEqual(study["pit_feature_store"]["promotion_status"], "blocked_from_production")
         self.assertGreater(study["pit_feature_store"]["feature_row_count"], 0)
+        self.assertEqual(study["walk_forward_protocol"]["artifact_type"], "walk_forward_purge_embargo")
+        self.assertEqual(study["walk_forward_protocol"]["promotion_status"], "blocked_from_production")
+        self.assertEqual(study["walk_forward_protocol"]["claim_ceiling"], "walk_forward_protocol_only")
+        self.assertNotIn("walk_forward_protocol_artifact", study)
+        self.assertNotIn("splits", study["walk_forward_protocol"])
         self.assertNotIn("pit_feature_store_artifact", study)
         self.assertNotIn("feature_rows", json.dumps(study, ensure_ascii=False))
         self.assertEqual(
@@ -220,8 +277,10 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         )
         self.assertEqual(study["lineage"]["pit_feature_store_id"], study["pit_feature_store"]["artifact_id"])
         self.assertEqual(study["lineage"]["objective_universe_id"], study["objective_universe"]["artifact_id"])
+        self.assertEqual(study["lineage"]["walk_forward_protocol_id"], study["walk_forward_protocol"]["artifact_id"])
         self.assertIn("benchmark_availability", study["gate_readout"]["blocking_gate_ids"])
         self.assertNotIn("objective_research_universe", study["gate_readout"]["blocking_gate_ids"])
+        self.assertIn("walk_forward_purged_cv", study["gate_readout"]["blocking_gate_ids"])
         self.assertIn("independent_feature_source", study["gate_readout"]["blocking_gate_ids"])
         self.assertEqual(study["lineage"]["feature_version"], "legacy_recommendation_payload_factor_breakdown:v1")
         self.assertEqual(study["observation_count"], 0)
@@ -232,6 +291,7 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(sweep["objective_universe"]["artifact_type"], "objective_frozen_universe")
         self.assertEqual(sweep["research_input_snapshot"]["artifact_type"], "research_input_snapshot")
         self.assertEqual(sweep["pit_feature_store"]["artifact_type"], "pit_feature_store")
+        self.assertEqual(sweep["walk_forward_protocol"]["artifact_type"], "walk_forward_purge_embargo")
         self.assertEqual(sweep["validation_protocol"]["weight_sweep_policy"], "diagnostic_only_no_auto_promotion")
         self.assertIn("不自动修改生产权重", sweep["note"])
         artifact_root = Path(self.temp_dir.name)
@@ -249,10 +309,17 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         )
         factor_path = artifact_root / "research_validation" / "factor_ic_studies" / f"{study['artifact_id']}.json"
         pit_path = artifact_root / "research_validation" / "pit_feature_store" / f"{study['pit_feature_store']['artifact_id']}.json"
+        walk_forward_path = (
+            artifact_root
+            / "research_validation"
+            / "walk_forward_protocols"
+            / f"{study['walk_forward_protocol']['artifact_id']}.json"
+        )
         sweep_path = artifact_root / "research_validation" / "weight_sweep_studies" / f"{sweep['artifact_id']}.json"
         self.assertTrue(universe_path.exists())
         self.assertTrue(snapshot_path.exists())
         self.assertTrue(pit_path.exists())
+        self.assertTrue(walk_forward_path.exists())
         self.assertTrue(factor_path.exists())
         self.assertTrue(sweep_path.exists())
         universe_payload = json.loads(universe_path.read_text(encoding="utf-8"))
@@ -270,6 +337,13 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         pit_payload = json.loads(pit_path.read_text(encoding="utf-8"))
         self.assertEqual(pit_payload["artifact_type"], "pit_feature_store")
         self.assertEqual(pit_payload["source_input_snapshot"]["artifact_id"], study["research_input_snapshot"]["artifact_id"])
+        walk_forward_payload = json.loads(walk_forward_path.read_text(encoding="utf-8"))
+        self.assertEqual(walk_forward_payload["artifact_type"], "walk_forward_purge_embargo")
+        self.assertEqual(
+            walk_forward_payload["source_artifacts"]["pit_feature_store_id"],
+            study["pit_feature_store"]["artifact_id"],
+        )
+        self.assertIn("splits", walk_forward_payload)
         pit_feature_row = pit_payload["feature_rows"][0]
         self.assertIn("price_baseline", pit_feature_row["features"])
         self.assertIn("liquidity", pit_feature_row["features"])
@@ -279,8 +353,10 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         factor_payload = json.loads(factor_path.read_text(encoding="utf-8"))
         self.assertNotIn("pit_feature_store_artifact", factor_payload)
         self.assertNotIn("objective_universe_artifact", factor_payload)
+        self.assertNotIn("walk_forward_protocol_artifact", factor_payload)
         self.assertNotIn("feature_rows", json.dumps(factor_payload, ensure_ascii=False))
         self.assertNotIn('"members"', json.dumps(factor_payload.get("objective_universe", {}), ensure_ascii=False))
+        self.assertNotIn("splits", factor_payload.get("walk_forward_protocol", {}))
 
     def test_operations_summary_is_light_and_details_are_sectioned(self) -> None:
         with session_scope(self.database_url) as session:
@@ -304,8 +380,10 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(factor_summary["objective_universe"]["artifact_type"], "objective_frozen_universe")
         self.assertEqual(factor_summary["research_input_snapshot"]["artifact_type"], "research_input_snapshot")
         self.assertEqual(factor_summary["pit_feature_store"]["artifact_type"], "pit_feature_store")
+        self.assertEqual(factor_summary["walk_forward_protocol"]["artifact_type"], "walk_forward_purge_embargo")
         self.assertNotIn("feature_rows", json.dumps(factor_summary, ensure_ascii=False))
         self.assertNotIn('"members"', json.dumps(factor_summary, ensure_ascii=False))
+        self.assertNotIn("splits", factor_summary["walk_forward_protocol"])
         self.assertEqual(factor_summary["validation_protocol"]["feature_source_status"], "legacy_diagnostic_only")
         self.assertIn("independent_feature_source", factor_summary["gate_readout"]["blocking_gate_ids"])
         self.assertEqual(factor_summary["lineage"]["feature_version"], "legacy_recommendation_payload_factor_breakdown:v1")
@@ -329,8 +407,13 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             operations_payload["factor_observation_summary"]["pit_feature_store"]["artifact_type"],
             "pit_feature_store",
         )
+        self.assertEqual(
+            operations_payload["factor_observation_summary"]["walk_forward_protocol"]["artifact_type"],
+            "walk_forward_purge_embargo",
+        )
         self.assertNotIn("feature_rows", json.dumps(operations_payload["factor_observation_summary"], ensure_ascii=False))
         self.assertNotIn('"members"', json.dumps(operations_payload["factor_observation_summary"], ensure_ascii=False))
+        self.assertNotIn("splits", operations_payload["factor_observation_summary"]["walk_forward_protocol"])
 
         dashboard_response = client.get("/stocks/600519.SH/dashboard")
         self.assertEqual(dashboard_response.status_code, 200)
@@ -347,8 +430,13 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             dashboard_payload["factor_validation"]["pit_feature_store"]["artifact_type"],
             "pit_feature_store",
         )
+        self.assertEqual(
+            dashboard_payload["factor_validation"]["walk_forward_protocol"]["artifact_type"],
+            "walk_forward_purge_embargo",
+        )
         self.assertNotIn("feature_rows", json.dumps(dashboard_payload["factor_validation"], ensure_ascii=False))
         self.assertNotIn('"members"', json.dumps(dashboard_payload["factor_validation"], ensure_ascii=False))
+        self.assertNotIn("splits", dashboard_payload["factor_validation"]["walk_forward_protocol"])
 
     def test_stock_dashboard_schema_accepts_string_horizon_readout_and_new_fields(self) -> None:
         with session_scope(self.database_url) as session:
@@ -366,6 +454,7 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(parsed.factor_validation["objective_universe"]["artifact_type"], "objective_frozen_universe")
         self.assertEqual(parsed.factor_validation["research_input_snapshot"]["artifact_type"], "research_input_snapshot")
         self.assertEqual(parsed.factor_validation["pit_feature_store"]["artifact_type"], "pit_feature_store")
+        self.assertEqual(parsed.factor_validation["walk_forward_protocol"]["artifact_type"], "walk_forward_purge_embargo")
         self.assertEqual(parsed.factor_validation["validation_protocol"]["feature_source_status"], "legacy_diagnostic_only")
 
 
