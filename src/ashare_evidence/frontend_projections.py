@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from ashare_evidence.db import utcnow
 from ashare_evidence.models import FrontendProjection
+from ashare_evidence.operations_projection_compaction import compact_operations_simulation_workspace
 
 FRONTEND_PROJECTION_VERSION = "frontend-projection-v1"
 SHORTPICK_REPLAY_FEEDBACK_PROJECTION_KEY = "shortpick_replay_feedback:v1"
@@ -290,6 +291,7 @@ def refresh_simulation_workspace_summary_frontend_projection(
         actor_role="root" if target_login == "root" else "member",
         record_presence=False,
     )
+    workspace = compact_operations_simulation_workspace(workspace)
     payload = {
         "section": "simulation_workspace",
         "generated_at": workspace["session"].get("last_data_time") or workspace["session"].get("started_at"),

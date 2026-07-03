@@ -1,6 +1,7 @@
 # ruff: noqa: F403,F405
 from __future__ import annotations
 
+from ashare_evidence.operations_projection_compaction import compact_operations_simulation_workspace
 from tests.dashboard_views_test_support import *
 
 
@@ -313,6 +314,57 @@ class DashboardOperationsViewTests(DashboardViewTestCase):
         self.assertEqual(detail["section"], "factor_observation")
         self.assertEqual(detail["factor_observation_summary"], blocked_projection)
         self.assertEqual(projection.call_args.kwargs["active_symbols"], set())
+
+    def test_simulation_workspace_detail_bounds_nav_history(self) -> None:
+        with session_scope(self.database_url) as session:
+            seed_watchlist_fixture(session)
+
+        with session_scope(self.database_url) as session:
+            detail = build_operations_detail(
+                session,
+                section="simulation_workspace",
+                sample_symbol="600519.SH",
+                target_login="root",
+            )
+
+        workspace = detail["simulation_workspace"]
+        self.assertLessEqual(
+            len(workspace["manual_track"]["portfolio"]["nav_history"]),
+            OPERATIONS_NAV_HISTORY_POINT_LIMIT,
+        )
+        self.assertLessEqual(
+            len(workspace["model_track"]["portfolio"]["nav_history"]),
+            OPERATIONS_NAV_HISTORY_POINT_LIMIT,
+        )
+
+    def test_simulation_workspace_compaction_samples_oversized_nav_history(self) -> None:
+        nav_history = [
+            {
+                "date": f"2026-01-{(index % 28) + 1:02d}",
+                "nav": 1 + index / 1000,
+                "benchmark_nav": 1 - index / 2000,
+                "drawdown": -index / 10000,
+                "exposure": index / 100,
+            }
+            for index in range(OPERATIONS_NAV_HISTORY_POINT_LIMIT + 20)
+        ]
+        workspace = {
+            "session": {"watch_symbols": ["600519.SH"]},
+            "manual_track": {"portfolio": {"nav_history": nav_history, "cash": 100000}},
+            "model_track": {"portfolio": {"nav_history": list(reversed(nav_history)), "cash": 200000}},
+        }
+
+        compact = compact_operations_simulation_workspace(workspace)
+        manual_history = compact["manual_track"]["portfolio"]["nav_history"]
+        model_history = compact["model_track"]["portfolio"]["nav_history"]
+
+        self.assertLessEqual(len(manual_history), OPERATIONS_NAV_HISTORY_POINT_LIMIT)
+        self.assertLessEqual(len(model_history), OPERATIONS_NAV_HISTORY_POINT_LIMIT)
+        self.assertEqual(manual_history[0], nav_history[0])
+        self.assertEqual(manual_history[-1], nav_history[-1])
+        self.assertEqual(model_history[0], nav_history[-1])
+        self.assertEqual(model_history[-1], nav_history[0])
+        self.assertEqual(compact["manual_track"]["portfolio"]["cash"], 100000)
 
     def test_completed_improvement_plan_does_not_pass_replay_gate_without_formal_evidence(self) -> None:
         with session_scope(self.database_url) as session:

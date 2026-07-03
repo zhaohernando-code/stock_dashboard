@@ -7,11 +7,11 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from ashare_evidence.operations import (
-    OPERATIONS_NAV_HISTORY_POINT_LIMIT,
     _compact_operations_portfolio_payload,
     _portfolio_payload,
     build_operations_detail,
 )
+from ashare_evidence.operations_projection_compaction import OPERATIONS_NAV_HISTORY_POINT_LIMIT
 
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 

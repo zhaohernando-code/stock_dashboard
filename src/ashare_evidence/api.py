@@ -62,6 +62,7 @@ from ashare_evidence.operations import (
     build_operations_detail,
     build_operations_summary,
 )
+from ashare_evidence.operations_projection_compaction import compact_operations_simulation_workspace
 from ashare_evidence.policy_audit import build_policy_audit_report
 from ashare_evidence.policy_config_loader import build_policy_governance_summary, list_policy_config_versions
 from ashare_evidence.research_artifact_store import (
@@ -2761,6 +2762,12 @@ def create_app(
                     target_login=access.target_login,
                 )
                 if projection is not None:
+                    workspace = projection.get("simulation_workspace")
+                    if isinstance(workspace, dict):
+                        projection = {
+                            **projection,
+                            "simulation_workspace": compact_operations_simulation_workspace(workspace),
+                        }
                     return projection
             return build_operations_detail(
                 active_session,

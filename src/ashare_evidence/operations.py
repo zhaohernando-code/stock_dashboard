@@ -21,6 +21,10 @@ from ashare_evidence.intraday_market import (
 )
 from ashare_evidence.manual_research_workflow import list_manual_research_requests
 from ashare_evidence.models import MarketBar, ModelVersion, PaperOrder, PaperPortfolio, Recommendation, Stock
+from ashare_evidence.operations_projection_compaction import (
+    compact_operations_simulation_workspace,
+    sample_operations_nav_history,
+)
 from ashare_evidence.phase2.common import build_equal_weight_proxy
 from ashare_evidence.phase2.holding_policy_study import (
     build_phase5_holding_policy_study,
@@ -112,8 +116,6 @@ REFRESH_SCHEDULE = [
         "trigger": "工作日 21:15 补全龙虎榜、大宗交易、质押等夜间数据，并做日终归档。",
     },
 ]
-OPERATIONS_NAV_HISTORY_POINT_LIMIT = 90
-
 @dataclass
 class PositionState:
     symbol: str
@@ -1246,47 +1248,11 @@ def _summary_payload_from_dashboard(payload: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
-def _sample_nav_history(points: list[dict[str, Any]], *, limit: int = OPERATIONS_NAV_HISTORY_POINT_LIMIT) -> list[dict[str, Any]]:
-    if len(points) <= limit:
-        return list(points)
-    if limit <= 0:
-        return []
-    if limit == 1:
-        return [points[-1]]
-
-    def numeric_value(index: int, key: str, *, default: float) -> float:
-        value = points[index].get(key)
-        return float(value) if isinstance(value, (int, float)) else default
-
-    last_index = len(points) - 1
-    priority_indexes: list[int] = [0, last_index]
-    extrema_specs = [
-        ("nav", min, float("inf")),
-        ("nav", max, float("-inf")),
-        ("benchmark_nav", min, float("inf")),
-        ("benchmark_nav", max, float("-inf")),
-        ("drawdown", min, float("inf")),
-        ("exposure", max, float("-inf")),
-    ]
-    for key, picker, default in extrema_specs:
-        candidate = picker(range(len(points)), key=lambda index: numeric_value(index, key, default=default))
-        if candidate not in priority_indexes:
-            priority_indexes.append(candidate)
-        if len(priority_indexes) >= limit:
-            return [points[index] for index in sorted(priority_indexes[:limit])]
-
-    sampled_indexes = set(priority_indexes)
-    remaining_budget = limit - len(sampled_indexes)
-    for index in range(remaining_budget):
-        sampled_indexes.add(round(index * last_index / max(remaining_budget - 1, 1)))
-    return [points[index] for index in sorted(sampled_indexes)]
-
-
 def _compact_operations_portfolio_payload(portfolio: dict[str, Any]) -> dict[str, Any]:
     compact = dict(portfolio)
     nav_history = compact.get("nav_history")
     if isinstance(nav_history, list):
-        compact["nav_history"] = _sample_nav_history(nav_history)
+        compact["nav_history"] = sample_operations_nav_history(nav_history)
     return compact
 
 
@@ -1765,12 +1731,13 @@ def _build_operations_section_detail(
 def _build_operations_simulation_workspace_detail(session: Session, *, target_login: str) -> dict[str, Any]:
     from ashare_evidence.simulation import get_simulation_workspace
 
-    return get_simulation_workspace(
+    workspace = get_simulation_workspace(
         session,
         owner_login=target_login,
         actor_login=target_login,
         actor_role="root",
     )
+    return compact_operations_simulation_workspace(workspace)
 
 
 def build_operations_dashboard(

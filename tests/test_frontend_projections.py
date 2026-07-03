@@ -22,6 +22,7 @@ from ashare_evidence.frontend_projections import (
 )
 from ashare_evidence.models import FrontendProjection
 from ashare_evidence.operations import annotate_operations_summary_endpoint_metrics
+from ashare_evidence.operations_projection_compaction import OPERATIONS_NAV_HISTORY_POINT_LIMIT
 from tests.fixtures import seed_watchlist_fixture
 
 
@@ -400,6 +401,102 @@ def test_simulation_workspace_summary_projection_materializes_detail_payload() -
     assert payload["section"] == "simulation_workspace"
     assert set(payload["simulation_workspace"]["session"]["watch_symbols"]) == {"600519.SH", "300750.SZ"}
     assert set(payload["simulation_workspace"]["configuration"]["watch_symbols"]) == {"600519.SH", "300750.SZ"}
+
+
+def test_simulation_workspace_summary_projection_bounds_nav_history() -> None:
+    database_url = "sqlite:///:memory:"
+    init_database(database_url)
+    nav_history = [
+        {
+            "date": f"2026-02-{(index % 28) + 1:02d}",
+            "nav": 1 + index / 1000,
+            "benchmark_nav": 1 - index / 2000,
+            "drawdown": -index / 10000,
+            "exposure": index / 100,
+        }
+        for index in range(OPERATIONS_NAV_HISTORY_POINT_LIMIT + 20)
+    ]
+    workspace = {
+        "session": {"started_at": "2026-02-01T09:30:00", "watch_symbols": ["600519.SH"]},
+        "configuration": {"watch_symbols": ["600519.SH"]},
+        "manual_track": {"portfolio": {"nav_history": nav_history}},
+        "model_track": {"portfolio": {"nav_history": list(reversed(nav_history))}},
+    }
+
+    with session_scope(database_url) as session:
+        with patch("ashare_evidence.simulation.get_simulation_workspace", return_value=workspace):
+            refresh_frontend_projections(
+                session,
+                projection="simulation_workspace_summary",
+                target_login="root",
+            )
+        session.flush()
+        payload = get_ready_frontend_projection_payload(
+            session,
+            simulation_workspace_summary_projection_key(target_login="root"),
+            target_login="root",
+        )
+
+    assert payload is not None
+    manual_history = payload["simulation_workspace"]["manual_track"]["portfolio"]["nav_history"]
+    model_history = payload["simulation_workspace"]["model_track"]["portfolio"]["nav_history"]
+    assert len(manual_history) <= OPERATIONS_NAV_HISTORY_POINT_LIMIT
+    assert len(model_history) <= OPERATIONS_NAV_HISTORY_POINT_LIMIT
+    assert manual_history[0] == nav_history[0]
+    assert manual_history[-1] == nav_history[-1]
+    assert model_history[0] == nav_history[-1]
+    assert model_history[-1] == nav_history[0]
+
+
+def test_operations_simulation_workspace_detail_compacts_legacy_ready_projection(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'legacy-simulation-projection.db'}"
+    init_database(database_url)
+    nav_history = [
+        {
+            "date": f"2026-03-{(index % 28) + 1:02d}",
+            "nav": 1 + index / 1000,
+            "benchmark_nav": 1 - index / 2000,
+            "drawdown": -index / 10000,
+            "exposure": index / 100,
+        }
+        for index in range(OPERATIONS_NAV_HISTORY_POINT_LIMIT + 20)
+    ]
+    legacy_payload = {
+        "section": "simulation_workspace",
+        "generated_at": "2026-03-01T09:30:00",
+        "simulation_workspace": {
+            "session": {"watch_symbols": ["600519.SH"]},
+            "configuration": {"watch_symbols": ["600519.SH"]},
+            "manual_track": {"portfolio": {"nav_history": nav_history}},
+            "model_track": {"portfolio": {"nav_history": list(reversed(nav_history))}},
+        },
+    }
+    with session_scope(database_url) as session:
+        upsert_frontend_projection(
+            session,
+            simulation_workspace_summary_projection_key(target_login="root"),
+            projection_group="simulation",
+            target_login="root",
+            payload=legacy_payload,
+        )
+
+    client = TestClient(create_app(database_url, enable_background_ops_tick=False))
+    with patch("ashare_evidence.api.build_operations_detail", side_effect=AssertionError("projection should satisfy request")):
+        response = client.get(
+            "/dashboard/operations/details?section=simulation_workspace&sample_symbol=600519.SH",
+            headers={"X-HZ-User-Login": "root", "X-HZ-User-Role": "root"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    manual_history = payload["simulation_workspace"]["manual_track"]["portfolio"]["nav_history"]
+    model_history = payload["simulation_workspace"]["model_track"]["portfolio"]["nav_history"]
+    assert len(manual_history) <= OPERATIONS_NAV_HISTORY_POINT_LIMIT
+    assert len(model_history) <= OPERATIONS_NAV_HISTORY_POINT_LIMIT
+    assert manual_history[0] == nav_history[0]
+    assert manual_history[-1] == nav_history[-1]
+    assert model_history[0] == nav_history[-1]
+    assert model_history[-1] == nav_history[0]
 
 
 def test_operations_summary_endpoint_metrics_replace_full_dashboard_metrics() -> None:

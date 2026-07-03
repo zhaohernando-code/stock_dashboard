@@ -26,10 +26,10 @@ from ashare_evidence.manual_research_workflow import (
 )
 from ashare_evidence.models import Recommendation, Stock
 from ashare_evidence.operations import (
-    OPERATIONS_NAV_HISTORY_POINT_LIMIT,
     build_operations_dashboard,
     build_operations_detail,
 )
+from ashare_evidence.operations_projection_compaction import OPERATIONS_NAV_HISTORY_POINT_LIMIT
 from ashare_evidence.phase2 import PHASE2_WINDOW_DEFINITION, phase2_target_horizon_label
 from ashare_evidence.release_verifier import audit_user_visible_operations_text
 from ashare_evidence.research_artifact_store import artifact_root_from_database_url
