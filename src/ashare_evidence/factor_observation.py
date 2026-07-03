@@ -22,6 +22,11 @@ from ashare_evidence.objective_universe import (
     objective_universe_summary,
     write_objective_universe_artifact,
 )
+from ashare_evidence.oos_validation import (
+    build_oos_validation_artifact,
+    oos_validation_summary,
+    write_oos_validation_artifact,
+)
 from ashare_evidence.phase2.factor_ic import FactorICResult, aggregate_ic_results, compute_rank_ic
 from ashare_evidence.pit_feature_store import (
     PIT_FEATURE_STORE_SCHEMA_VERSION,
@@ -963,15 +968,29 @@ def build_factor_observations(
             else "样本不足，不能输出精确因子可信度或权重结论。"
         ),
     }
+    oos_validation = build_oos_validation_artifact(
+        validation_run_id=validation_run_id,
+        source_db_snapshot_id=input_snapshot["source_db_snapshot_id"],
+        source_data_time_range=_source_data_time_range(observation_rows),
+        factor_study=results,
+        walk_forward_protocol=walk_forward_protocol,
+    )
+    results["oos_validation"] = oos_validation_summary(oos_validation)
+    results["lineage"] = {
+        **dict(results.get("lineage") or {}),
+        "oos_validation_id": oos_validation["artifact_id"],
+    }
     if include_raw_research_artifacts:
         results["objective_universe_artifact"] = objective_universe
         results["pit_feature_store_artifact"] = pit_feature_store
         results["walk_forward_protocol_artifact"] = walk_forward_protocol
+        results["oos_validation_artifact"] = oos_validation
     if persist:
         write_objective_universe_artifact(objective_universe, artifact_root=artifact_root)
         _write_research_input_snapshot(input_snapshot, artifact_root=artifact_root, artifact_id=input_snapshot_id)
         write_pit_feature_store_artifact(pit_feature_store, artifact_root=artifact_root)
         write_walk_forward_protocol_artifact(walk_forward_protocol, artifact_root=artifact_root)
+        write_oos_validation_artifact(oos_validation, artifact_root=artifact_root)
         _write_artifact(results, artifact_root=artifact_root, artifact_id=artifact_id)
     return results
 
@@ -1086,6 +1105,7 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
         "research_input_snapshot": observations.get("research_input_snapshot", {}),
         "pit_feature_store": observations.get("pit_feature_store", {}),
         "walk_forward_protocol": observations.get("walk_forward_protocol", {}),
+        "oos_validation": observations.get("oos_validation", {}),
         "lineage": observations.get("lineage", {}),
         "gate_readout": observations.get("gate_readout", {}),
         "promotion_status": "blocked_from_production",
@@ -1130,6 +1150,9 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
         walk_forward_protocol = observations.get("walk_forward_protocol_artifact")
         if isinstance(walk_forward_protocol, dict) and walk_forward_protocol.get("artifact_id"):
             write_walk_forward_protocol_artifact(walk_forward_protocol, artifact_root=artifact_root)
+        oos_validation = observations.get("oos_validation_artifact")
+        if isinstance(oos_validation, dict) and oos_validation.get("artifact_id"):
+            write_oos_validation_artifact(oos_validation, artifact_root=artifact_root)
         write_multiple_testing_diagnostics_artifact(multiple_testing_diagnostics, artifact_root=artifact_root)
         _write_sweep_artifact(results, artifact_root=artifact_root, artifact_id=artifact_id)
     return results

@@ -1432,3 +1432,4 @@ canonical checkout 中的 `data/artifacts` 改动经抽样确认是正常 phase2
 - 后续切片继续落地 objective frozen universe：factor validation / weight sweep 路径在验证前冻结 `objective_frozen_universe` artifact；active watchlist / recommendation rows 只能作为覆盖子集记录，不能再作为研究 universe 定义或 promotion 证据。
 - 后续切片继续落地 walk-forward / purge / embargo：factor validation / weight sweep 路径写入 `walk_forward_purge_embargo` protocol artifact；该制品只证明切分与泄漏防护协议存在，ready split 不足时仍必须 blocked，不能作为 promotion 证据。
 - 后续切片继续落地 PBO/DSR/multiple comparison：weight sweep 路径写入 `pbo_dsr_multiple_comparison` diagnostics artifact；eligible trials、PBO、Deflated-Sharpe confidence、alpha t-stat gate 未通过时仍必须 blocked，不能把 in-sample best sweep 变成 production 权重。
+- 后续切片继续落地 OOS validation：factor validation / weight sweep 路径从 ready walk-forward holdout windows 写入 `oos_validation` artifact；OOS Rank IC、ICIR、positive-rate、top-quantile gates 未通过时仍必须 blocked，不能 promotion。

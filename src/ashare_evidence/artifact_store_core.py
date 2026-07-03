@@ -25,6 +25,7 @@ ARTIFACT_FOLDERS = {
     "pit_feature_store": "research_validation/pit_feature_store",
     "walk_forward_purge_embargo": "research_validation/walk_forward_protocols",
     "pbo_dsr_multiple_comparison": "research_validation/multiple_testing_diagnostics",
+    "oos_validation": "research_validation/oos_validations",
     "factor_ic_study": "research_validation/factor_ic_studies",
     "weight_sweep_study": "research_validation/weight_sweep_studies",
     "shortpick_lab": "shortpick_lab",

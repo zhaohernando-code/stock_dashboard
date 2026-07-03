@@ -156,6 +156,16 @@ class ResearchArtifactStoreTests(unittest.TestCase):
                 },
                 root=root,
             )
+            oos_path = write_research_validation_artifact(
+                "oos_validation",
+                "oos-validation-unit",
+                {
+                    "artifact_type": "oos_validation",
+                    "claim_ceiling": "oos_validation_only",
+                    "promotion_status": "blocked_from_production",
+                },
+                root=root,
+            )
             sweep_path = write_research_validation_artifact(
                 "weight_sweep_study",
                 "weight-sweep-study-unit",
@@ -168,6 +178,7 @@ class ResearchArtifactStoreTests(unittest.TestCase):
             self.assertEqual(pit_path.parent, root / "research_validation" / "pit_feature_store")
             self.assertEqual(walk_forward_path.parent, root / "research_validation" / "walk_forward_protocols")
             self.assertEqual(multiple_testing_path.parent, root / "research_validation" / "multiple_testing_diagnostics")
+            self.assertEqual(oos_path.parent, root / "research_validation" / "oos_validations")
             self.assertEqual(factor_path.parent, root / "research_validation" / "factor_ic_studies")
             self.assertEqual(sweep_path.parent, root / "research_validation" / "weight_sweep_studies")
             self.assertFalse((root / "studies" / factor_path.name).exists())

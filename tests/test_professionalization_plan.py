@@ -18,6 +18,7 @@ from ashare_evidence.lineage import build_lineage
 from ashare_evidence.market_rules import account_trade_eligibility, board_rule
 from ashare_evidence.models import FeatureSnapshot, NewsEntityLink, NewsItem, Stock
 from ashare_evidence.multiple_testing_diagnostics import build_multiple_testing_diagnostics_artifact
+from ashare_evidence.oos_validation import build_oos_validation_artifact
 from ashare_evidence.operations import build_operations_detail, build_operations_summary
 from ashare_evidence.schemas import StockDashboardResponse
 from ashare_evidence.walk_forward_protocol import build_walk_forward_protocol_artifact
@@ -126,6 +127,130 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertGreaterEqual(ready["deflated_sharpe_confidence"], 0.95)
         self.assertLessEqual(ready["pbo"], 0.10)
         self.assertGreaterEqual(ready["alpha_t_stat_equivalent"], 3.0)
+
+    def test_oos_validation_blocks_and_can_pass_with_holdout_rows(self) -> None:
+        blocked = build_oos_validation_artifact(
+            validation_run_id="oos-test",
+            source_db_snapshot_id="snapshot",
+            source_data_time_range={},
+            factor_study={"artifact_id": "factor", "lineage": {}, "observation_rows": []},
+            walk_forward_protocol={"artifact_id": "wf", "splits": []},
+        )
+        self.assertEqual(blocked["gate_readout"]["gate_status"], "blocked")
+        self.assertIn("insufficient_oos_rows", blocked["gate_readout"]["blocking_gate_ids"])
+
+        one_day_multi_horizon_rows = []
+        for horizon in (10, 20, 40):
+            for rank in range(20):
+                one_day_multi_horizon_rows.append(
+                    {
+                        "symbol": f"{rank:06d}.SH",
+                        "recommendation_key": f"rec-one-day-{horizon}-{rank}",
+                        "as_of_date": "2026-01-01",
+                        "horizon_days": horizon,
+                        "scores": {"fusion": float(rank)},
+                        "dynamic_weights": {"fusion": 1.0},
+                        "forward_excess_return": float(rank) / 100.0,
+                    }
+                )
+        one_day = build_oos_validation_artifact(
+            validation_run_id="oos-test",
+            source_db_snapshot_id="snapshot",
+            source_data_time_range={},
+            factor_study={"artifact_id": "factor", "lineage": {}, "observation_rows": one_day_multi_horizon_rows},
+            walk_forward_protocol={
+                "artifact_id": "wf",
+                "splits": [
+                    {
+                        "status": "ready",
+                        "test_range": {"start": "2026-01-01", "end": "2026-01-01"},
+                    }
+                ],
+            },
+        )
+        self.assertEqual(one_day["gate_readout"]["gate_status"], "blocked")
+        self.assertEqual(one_day["oos_period_count"], 1)
+        self.assertIn("insufficient_oos_periods", one_day["gate_readout"]["blocking_gate_ids"])
+
+        negative_top_rows = []
+        for day_index in range(3):
+            as_of = (date(2026, 1, 1) + timedelta(days=day_index)).isoformat()
+            for rank in range(20):
+                negative_top_rows.append(
+                    {
+                        "symbol": f"{rank:06d}.SH",
+                        "recommendation_key": f"rec-negative-top-{day_index}-{rank}",
+                        "as_of_date": as_of,
+                        "horizon_days": 10,
+                        "scores": {"fusion": float(rank)},
+                        "dynamic_weights": {"fusion": 1.0},
+                        "forward_excess_return": -0.20 + float(rank) / 1000.0,
+                    }
+                )
+        negative_top = build_oos_validation_artifact(
+            validation_run_id="oos-test",
+            source_db_snapshot_id="snapshot",
+            source_data_time_range={},
+            factor_study={"artifact_id": "factor", "lineage": {}, "observation_rows": negative_top_rows},
+            walk_forward_protocol={
+                "artifact_id": "wf",
+                "splits": [
+                    {
+                        "status": "ready",
+                        "test_range": {
+                            "start": (date(2026, 1, 1) + timedelta(days=day_index)).isoformat(),
+                            "end": (date(2026, 1, 1) + timedelta(days=day_index)).isoformat(),
+                        },
+                    }
+                    for day_index in range(3)
+                ],
+            },
+        )
+        self.assertEqual(negative_top["gate_readout"]["gate_status"], "blocked")
+        self.assertLessEqual(negative_top["top_quantile_mean_excess"], 0)
+        self.assertIn("top_quantile_net_excess_not_positive", negative_top["gate_readout"]["blocking_gate_ids"])
+
+        observation_rows = []
+        for day_index in range(3):
+            as_of = (date(2026, 1, 1) + timedelta(days=day_index)).isoformat()
+            for rank in range(20):
+                observation_rows.append(
+                    {
+                        "symbol": f"{rank:06d}.SH",
+                        "recommendation_key": f"rec-{day_index}-{rank}",
+                        "as_of_date": as_of,
+                        "horizon_days": 10,
+                        "scores": {"fusion": float(rank)},
+                        "dynamic_weights": {"fusion": 1.0},
+                        "forward_excess_return": float(rank) / 100.0,
+                    }
+                )
+        ready = build_oos_validation_artifact(
+            validation_run_id="oos-test",
+            source_db_snapshot_id="snapshot",
+            source_data_time_range={},
+            factor_study={"artifact_id": "factor", "lineage": {}, "observation_rows": observation_rows},
+            walk_forward_protocol={
+                "artifact_id": "wf",
+                "validation_protocol": {"protocol_version": "wf:v1"},
+                "splits": [
+                    {
+                        "status": "ready",
+                        "test_range": {
+                            "start": (date(2026, 1, 1) + timedelta(days=day_index)).isoformat(),
+                            "end": (date(2026, 1, 1) + timedelta(days=day_index)).isoformat(),
+                        },
+                    }
+                    for day_index in range(3)
+                ],
+            },
+        )
+        self.assertEqual(ready["gate_readout"]["gate_status"], "oos_ready")
+        self.assertGreater(ready["oos_rank_ic"], 0.02)
+        self.assertGreater(ready["oos_icir"], 0.35)
+        self.assertGreaterEqual(ready["positive_ic_rate"], 0.55)
+        self.assertGreater(ready["top_quantile_mean_excess"], 0)
+        self.assertTrue(ready["top_quantile_net_excess_positive"])
 
     def test_data_quality_snapshot_scores_and_missing_news_is_soft_gap(self) -> None:
         with session_scope(self.database_url) as session:
@@ -315,6 +440,12 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(study["walk_forward_protocol"]["claim_ceiling"], "walk_forward_protocol_only")
         self.assertNotIn("walk_forward_protocol_artifact", study)
         self.assertNotIn("splits", study["walk_forward_protocol"])
+        self.assertEqual(study["oos_validation"]["artifact_type"], "oos_validation")
+        self.assertEqual(study["oos_validation"]["promotion_status"], "blocked_from_production")
+        self.assertEqual(study["oos_validation"]["claim_ceiling"], "oos_validation_only")
+        self.assertNotIn("oos_validation_artifact", study)
+        self.assertNotIn("oos_rows", study["oos_validation"])
+        self.assertNotIn("period_metrics", study["oos_validation"])
         self.assertNotIn("pit_feature_store_artifact", study)
         self.assertNotIn("feature_rows", json.dumps(study, ensure_ascii=False))
         self.assertEqual(
@@ -324,6 +455,7 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(study["lineage"]["pit_feature_store_id"], study["pit_feature_store"]["artifact_id"])
         self.assertEqual(study["lineage"]["objective_universe_id"], study["objective_universe"]["artifact_id"])
         self.assertEqual(study["lineage"]["walk_forward_protocol_id"], study["walk_forward_protocol"]["artifact_id"])
+        self.assertEqual(study["lineage"]["oos_validation_id"], study["oos_validation"]["artifact_id"])
         self.assertIn("benchmark_availability", study["gate_readout"]["blocking_gate_ids"])
         self.assertNotIn("objective_research_universe", study["gate_readout"]["blocking_gate_ids"])
         self.assertIn("walk_forward_purged_cv", study["gate_readout"]["blocking_gate_ids"])
@@ -338,6 +470,7 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(sweep["research_input_snapshot"]["artifact_type"], "research_input_snapshot")
         self.assertEqual(sweep["pit_feature_store"]["artifact_type"], "pit_feature_store")
         self.assertEqual(sweep["walk_forward_protocol"]["artifact_type"], "walk_forward_purge_embargo")
+        self.assertEqual(sweep["oos_validation"]["artifact_type"], "oos_validation")
         self.assertEqual(sweep["multiple_testing_diagnostics"]["artifact_type"], "pbo_dsr_multiple_comparison")
         self.assertEqual(sweep["multiple_testing_diagnostics"]["promotion_status"], "blocked_from_production")
         self.assertEqual(
@@ -368,6 +501,12 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             / "walk_forward_protocols"
             / f"{study['walk_forward_protocol']['artifact_id']}.json"
         )
+        oos_path = (
+            artifact_root
+            / "research_validation"
+            / "oos_validations"
+            / f"{study['oos_validation']['artifact_id']}.json"
+        )
         multiple_testing_path = (
             artifact_root
             / "research_validation"
@@ -379,6 +518,7 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertTrue(snapshot_path.exists())
         self.assertTrue(pit_path.exists())
         self.assertTrue(walk_forward_path.exists())
+        self.assertTrue(oos_path.exists())
         self.assertTrue(multiple_testing_path.exists())
         self.assertTrue(factor_path.exists())
         self.assertTrue(sweep_path.exists())
@@ -404,6 +544,11 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             study["pit_feature_store"]["artifact_id"],
         )
         self.assertIn("splits", walk_forward_payload)
+        oos_payload = json.loads(oos_path.read_text(encoding="utf-8"))
+        self.assertEqual(oos_payload["artifact_type"], "oos_validation")
+        self.assertIn("oos_rows", oos_payload)
+        self.assertIn("period_metrics", oos_payload)
+        self.assertIn("insufficient_oos_rows", oos_payload["gate_readout"]["blocking_gate_ids"])
         multiple_testing_payload = json.loads(multiple_testing_path.read_text(encoding="utf-8"))
         self.assertEqual(multiple_testing_payload["artifact_type"], "pbo_dsr_multiple_comparison")
         self.assertIn("trials", multiple_testing_payload)
@@ -421,8 +566,11 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertNotIn("feature_rows", json.dumps(factor_payload, ensure_ascii=False))
         self.assertNotIn('"members"', json.dumps(factor_payload.get("objective_universe", {}), ensure_ascii=False))
         self.assertNotIn("splits", factor_payload.get("walk_forward_protocol", {}))
+        self.assertNotIn("oos_rows", factor_payload.get("oos_validation", {}))
+        self.assertNotIn("period_metrics", factor_payload.get("oos_validation", {}))
         sweep_payload = json.loads(sweep_path.read_text(encoding="utf-8"))
         self.assertNotIn("trials", sweep_payload["multiple_testing_diagnostics"])
+        self.assertNotIn("oos_rows", sweep_payload["oos_validation"])
 
     def test_operations_summary_is_light_and_details_are_sectioned(self) -> None:
         with session_scope(self.database_url) as session:
@@ -447,9 +595,11 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(factor_summary["research_input_snapshot"]["artifact_type"], "research_input_snapshot")
         self.assertEqual(factor_summary["pit_feature_store"]["artifact_type"], "pit_feature_store")
         self.assertEqual(factor_summary["walk_forward_protocol"]["artifact_type"], "walk_forward_purge_embargo")
+        self.assertEqual(factor_summary["oos_validation"]["artifact_type"], "oos_validation")
         self.assertNotIn("feature_rows", json.dumps(factor_summary, ensure_ascii=False))
         self.assertNotIn('"members"', json.dumps(factor_summary, ensure_ascii=False))
         self.assertNotIn("splits", factor_summary["walk_forward_protocol"])
+        self.assertNotIn("oos_rows", factor_summary["oos_validation"])
         self.assertEqual(factor_summary["validation_protocol"]["feature_source_status"], "legacy_diagnostic_only")
         self.assertIn("independent_feature_source", factor_summary["gate_readout"]["blocking_gate_ids"])
         self.assertEqual(factor_summary["lineage"]["feature_version"], "legacy_recommendation_payload_factor_breakdown:v1")
@@ -477,9 +627,14 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             operations_payload["factor_observation_summary"]["walk_forward_protocol"]["artifact_type"],
             "walk_forward_purge_embargo",
         )
+        self.assertEqual(
+            operations_payload["factor_observation_summary"]["oos_validation"]["artifact_type"],
+            "oos_validation",
+        )
         self.assertNotIn("feature_rows", json.dumps(operations_payload["factor_observation_summary"], ensure_ascii=False))
         self.assertNotIn('"members"', json.dumps(operations_payload["factor_observation_summary"], ensure_ascii=False))
         self.assertNotIn("splits", operations_payload["factor_observation_summary"]["walk_forward_protocol"])
+        self.assertNotIn("oos_rows", operations_payload["factor_observation_summary"]["oos_validation"])
 
         dashboard_response = client.get("/stocks/600519.SH/dashboard")
         self.assertEqual(dashboard_response.status_code, 200)
@@ -500,9 +655,14 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             dashboard_payload["factor_validation"]["walk_forward_protocol"]["artifact_type"],
             "walk_forward_purge_embargo",
         )
+        self.assertEqual(
+            dashboard_payload["factor_validation"]["oos_validation"]["artifact_type"],
+            "oos_validation",
+        )
         self.assertNotIn("feature_rows", json.dumps(dashboard_payload["factor_validation"], ensure_ascii=False))
         self.assertNotIn('"members"', json.dumps(dashboard_payload["factor_validation"], ensure_ascii=False))
         self.assertNotIn("splits", dashboard_payload["factor_validation"]["walk_forward_protocol"])
+        self.assertNotIn("oos_rows", dashboard_payload["factor_validation"]["oos_validation"])
 
     def test_stock_dashboard_schema_accepts_string_horizon_readout_and_new_fields(self) -> None:
         with session_scope(self.database_url) as session:
@@ -521,6 +681,7 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(parsed.factor_validation["research_input_snapshot"]["artifact_type"], "research_input_snapshot")
         self.assertEqual(parsed.factor_validation["pit_feature_store"]["artifact_type"], "pit_feature_store")
         self.assertEqual(parsed.factor_validation["walk_forward_protocol"]["artifact_type"], "walk_forward_purge_embargo")
+        self.assertEqual(parsed.factor_validation["oos_validation"]["artifact_type"], "oos_validation")
         self.assertEqual(parsed.factor_validation["validation_protocol"]["feature_source_status"], "legacy_diagnostic_only")
 
 

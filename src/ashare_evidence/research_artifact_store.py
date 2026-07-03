@@ -112,6 +112,7 @@ def write_research_validation_artifact(
         "pit_feature_store",
         "walk_forward_purge_embargo",
         "pbo_dsr_multiple_comparison",
+        "oos_validation",
         "factor_ic_study",
         "weight_sweep_study",
     }:

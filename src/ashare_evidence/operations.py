@@ -1216,6 +1216,7 @@ def _factor_observation_summary(session: Session, *, artifact_root: Any, active_
         "research_input_snapshot": study.get("research_input_snapshot", {}),
         "pit_feature_store": study.get("pit_feature_store", {}),
         "walk_forward_protocol": study.get("walk_forward_protocol", {}),
+        "oos_validation": study.get("oos_validation", {}),
         "validation_protocol": study.get("validation_protocol", {}),
         "lineage": study.get("lineage", {}),
         "gate_readout": study.get("gate_readout", {}),
