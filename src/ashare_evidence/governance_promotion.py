@@ -168,10 +168,13 @@ def build_governance_promotion_decision_artifact(
         "generated_at": datetime.now(UTC).isoformat(),
         "source_db_snapshot_id": source_db_snapshot_id,
         "source_data_time_range": source_data_time_range,
-        "feature_version": candidate_artifact.get("lineage", {}).get("independent_pit_feature_version")
+        "feature_version": candidate_artifact.get("feature_version")
+        or candidate_artifact.get("lineage", {}).get("independent_pit_feature_version")
         or candidate_artifact.get("lineage", {}).get("feature_version"),
-        "label_version": candidate_artifact.get("lineage", {}).get("label_version", "daily_close_forward_excess_return:v1"),
-        "code_version": candidate_artifact.get("lineage", {}).get("code_version", "unresolved_local_checkout"),
+        "label_version": candidate_artifact.get("label_version")
+        or candidate_artifact.get("lineage", {}).get("label_version", "daily_close_forward_excess_return:v1"),
+        "code_version": candidate_artifact.get("code_version")
+        or candidate_artifact.get("lineage", {}).get("code_version", "unresolved_local_checkout"),
         "config_version": GOVERNANCE_PROMOTION_PROTOCOL_VERSION,
         "validation_protocol": {
             "artifact_role": "governance_promotion_decision",

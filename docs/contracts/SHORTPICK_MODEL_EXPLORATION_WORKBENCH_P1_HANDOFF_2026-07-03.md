@@ -32,6 +32,7 @@ The mechanism must not answer this by copying known strong-stock traits from 生
 | P1 candidate runner | foundation_completed | `src/ashare_evidence/model_candidate_runner.py` executes only registered model specs, records trial predictions and keeps promotion blocked. |
 | P1 comparison report | foundation_completed | `src/ashare_evidence/model_comparison_report.py` summarizes leaderboard, baseline comparison, PBO/DSR proxy diagnostics, winner-dependency removal checks and kill/block reasons. |
 | Offline workflow runner | foundation_completed | `shortpick-model-exploration-run` runs the workbench from runtime DB read-only facts and writes research-validation artifacts only. |
+| Runtime bounded smoke | completed_blocked | 2026-07-03 smoke against `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/ashare_dashboard.db` completed for 20 as-of dates and the baseline spec. Artifacts were written under runtime `data/artifacts/research_validation/*`. Claim ceiling remains blocked because date coverage is insufficient, executable label rows were not ready in the bounded window, multiple-testing diagnostics are insufficient, execution gates are fail-closed, and governance is not production eligible. |
 | Dashboard/runtime integration | blocked | Dashboard projection registry exists but approved projection count remains 0 until governance reaches `production_eligible`. Do not expose raw workbench artifacts to live dashboard. |
 
 ## Non-Negotiable Boundaries

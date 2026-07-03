@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from math import sqrt
 from pathlib import Path
 from statistics import mean, pstdev
@@ -323,15 +323,47 @@ def _label_for_row(
     return row
 
 
-def _bars_by_stock(session: Session) -> tuple[dict[str, Stock], dict[str, list[dict[str, Any]]]]:
+def _recent_as_of_dates(session: Session, *, benchmark_symbol: str, limit: int) -> list[date]:
+    benchmark = session.scalar(select(Stock).where(Stock.symbol == benchmark_symbol).limit(1))
+    if benchmark is not None:
+        rows = list(
+            session.scalars(
+                select(MarketBar.observed_at)
+                .where(MarketBar.stock_id == benchmark.id, MarketBar.timeframe == "1d")
+                .order_by(MarketBar.observed_at.desc(), MarketBar.id.desc())
+                .limit(limit)
+            )
+        )
+        return sorted({_observed_day(row) for row in rows})
+    rows = list(
+        session.scalars(
+            select(MarketBar.observed_at)
+            .where(MarketBar.timeframe == "1d")
+            .order_by(MarketBar.observed_at.desc(), MarketBar.id.desc())
+            .limit(limit * 20)
+        )
+    )
+    return sorted({_observed_day(row) for row in rows})[-limit:]
+
+
+def _bars_by_stock(
+    session: Session,
+    *,
+    start_day: date | None = None,
+    end_day: date | None = None,
+) -> tuple[dict[str, Stock], dict[str, list[dict[str, Any]]]]:
     stocks = list(session.scalars(select(Stock).order_by(Stock.symbol.asc(), Stock.id.asc())).all())
     stocks_by_symbol = {stock.symbol: stock for stock in stocks}
-    bars = list(
-        session.scalars(select(MarketBar).where(MarketBar.timeframe == "1d").order_by(MarketBar.observed_at, MarketBar.id))
-    )
+    stocks_by_id = {int(stock.id): stock for stock in stocks}
+    bar_query = select(MarketBar).where(MarketBar.timeframe == "1d")
+    if start_day is not None:
+        bar_query = bar_query.where(MarketBar.observed_at >= datetime.combine(start_day, datetime.min.time(), tzinfo=UTC))
+    if end_day is not None:
+        bar_query = bar_query.where(MarketBar.observed_at <= datetime.combine(end_day, datetime.max.time(), tzinfo=UTC))
+    bars = list(session.scalars(bar_query.order_by(MarketBar.observed_at, MarketBar.id)))
     by_symbol: dict[str, list[dict[str, Any]]] = {symbol: [] for symbol in stocks_by_symbol}
     for bar in bars:
-        stock = next((candidate for candidate in stocks if candidate.id == bar.stock_id), None)
+        stock = stocks_by_id.get(int(bar.stock_id))
         if stock is None:
             continue
         by_symbol.setdefault(stock.symbol, []).append(_bar_row(stock, bar))
@@ -350,7 +382,12 @@ def build_model_exploration_p1_artifacts(
     min_history_days: int = 2,
     max_as_of_dates: int | None = None,
 ) -> dict[str, dict[str, Any]]:
-    stocks_by_symbol, bars_by_symbol = _bars_by_stock(session)
+    ordered_days = sorted(set(as_of_dates or []))
+    if not ordered_days and max_as_of_dates is not None:
+        ordered_days = _recent_as_of_dates(session, benchmark_symbol=benchmark_symbol, limit=max_as_of_dates)
+    start_day = min(ordered_days) - timedelta(days=90) if ordered_days else None
+    end_day = max(ordered_days) + timedelta(days=max(horizons) * 3 + 10) if ordered_days else None
+    stocks_by_symbol, bars_by_symbol = _bars_by_stock(session, start_day=start_day, end_day=end_day)
     benchmark_bars = bars_by_symbol.get(benchmark_symbol, [])
     benchmark_by_day = {row["observed_date"]: index for index, row in enumerate(benchmark_bars)}
     eligible_symbols: list[str] = []
@@ -372,7 +409,7 @@ def build_model_exploration_p1_artifacts(
             }
         )
 
-    candidate_days = set(as_of_dates or [])
+    candidate_days = set(ordered_days)
     if not candidate_days:
         for symbol in eligible_symbols:
             rows = bars_by_symbol.get(symbol, [])

@@ -224,6 +224,18 @@ class ModelCandidateWorkbenchTests(unittest.TestCase):
         self.assertIn("multiple_testing_not_ready", governance["gate_readout"]["blocking_gate_ids"])
         self.assertEqual(projection["artifact_type"], "dashboard_approved_projection_registry")
         self.assertEqual(projection["approved_projection_count"], 0)
+        self.assertEqual(
+            governance["feature_version"],
+            report["feature_version"],
+        )
+        self.assertEqual(
+            projection["feature_version"],
+            report["feature_version"],
+        )
+        self.assertNotIn(
+            "governance_promotion_decision_missing_required_field_feature_version",
+            projection["gate_readout"]["blocking_gate_ids"],
+        )
         self.assertIn(
             "governance_not_approved_for_dashboard_projection",
             projection["gate_readout"]["blocking_gate_ids"],
