@@ -27,7 +27,7 @@ Owner: stock_dashboard / Short Pick research governance
 | OOS artifacts | legacy diagnostic prototype completed | Current OOS validation consumes legacy factor-study observation rows. It does not validate independent model predictions produced from a model registry over a frozen universe-date feature matrix. |
 | governance promotion state machine | legacy diagnostic prototype completed | Current state machine blocks promotion correctly for legacy artifacts. It does not yet promote or reject independent model-exploration candidates because those candidate artifacts do not exist. |
 | dashboard approved projection registry | legacy diagnostic prototype completed | Current registry correctly approves zero projections for blocked legacy artifacts. It is not evidence that any new model is ready for dashboard claims. |
-| independent model exploration mechanism | in_progress | P1 matrix foundation is implemented in `src/ashare_evidence/model_exploration_snapshot.py`: input snapshot, universe-date matrix, PIT feature matrix and executable label matrix. Model spec registry, candidate runner, walk-forward validation, comparison report and kill/promote gates remain pending. |
+| independent model exploration mechanism | in_progress | P1 matrix foundation is implemented in `src/ashare_evidence/model_exploration_snapshot.py`, and governed model specs are implemented in `src/ashare_evidence/model_spec_registry.py`. Candidate runner, walk-forward validation, comparison report and kill/promote gates remain pending. |
 | runtime publish / served verification | completed | commit `04fe909` published to local runtime with `ASHARE_PUBLISH_REFRESH_MODE=skip`; release manifest `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260703T142623Z-04fe909c3142/manifest.json` has `status=passed`, commit `04fe909c31428094b76c021b2b4c7751ca49f56d`, canonical/local parity match for factor observation and simulation workspace, and deploy verifier `44 passed, 0 failed`. Served factor observation remains `blocked_from_production` / `diagnostic_research_only`; simulation workspace detail is bounded at about 67.5 KB with 88 nav points per track. |
 
 ## Course Correction / 当前真实结论
@@ -454,7 +454,7 @@ The following blocked states are intentional completion status, not omissions. P
 - Approved dashboard projection registry artifacts are implemented, but current approved projection count remains 0 until governance reaches `production_eligible`; current API is diagnostic summary projection only.
 - Production weight update is still blocked; weight sweep cannot change policy config or recommendation generation.
 - Paper/live candidate promotion is still blocked until research, OOS, execution, PBO/DSR and governance gates pass.
-- Independent model exploration remains incomplete: the P1 matrix foundation exists, but no governed model-spec registry, model candidate prediction artifact, or model comparison report has been implemented yet.
+- Independent model exploration remains incomplete: the P1 matrix foundation and governed model-spec registry exist, but no model candidate prediction artifact or model comparison report has been implemented yet.
 
 ## Review / Verification Log
 
@@ -532,4 +532,4 @@ Commit `3621f2d` implements the P0 safety slice only. It aligns with the P0 cont
 
 Subsequent commits add useful legacy diagnostic prototypes for objective frozen universe, research input snapshot, PIT feature store, walk-forward/purge/embargo protocol, PBO/DSR/multiple-comparison diagnostics, OOS validation, governance promotion state machine, and dashboard approved projection registry. These prototypes are scoped to the factor validation / weight sweep path. They do not imply promotion readiness and do not prove a new model.
 
-The independent model exploration mechanism is now in progress through the P1 matrix foundation: `model_exploration_input_snapshot`, `universe_date_matrix`, `pit_feature_matrix`, and `executable_label_matrix` are implemented as research-validation artifacts. The mechanism is still incomplete until `model_spec_registry`, `walk_forward_model_candidate_run`, `model_comparison_report`, OOS/PBO/DSR gates and governance promotion are implemented and verified.
+The independent model exploration mechanism is now in progress through the P1 matrix and registry foundation: `model_exploration_input_snapshot`, `universe_date_matrix`, `pit_feature_matrix`, `executable_label_matrix`, and `model_spec_registry` are implemented as research-validation artifacts. The mechanism is still incomplete until `walk_forward_model_candidate_run`, `model_comparison_report`, OOS/PBO/DSR gates and governance promotion are implemented and verified.
