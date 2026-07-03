@@ -106,7 +106,7 @@ def write_research_validation_artifact(
     *,
     root: Path | None = None,
 ) -> Path:
-    if artifact_type not in {"research_input_snapshot", "factor_ic_study", "weight_sweep_study"}:
+    if artifact_type not in {"research_input_snapshot", "pit_feature_store", "factor_ic_study", "weight_sweep_study"}:
         raise ValueError(f"unsupported research validation artifact type: {artifact_type}")
     if not artifact_id.strip():
         raise ValueError("research validation artifact requires artifact_id")

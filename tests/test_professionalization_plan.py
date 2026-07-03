@@ -162,6 +162,7 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             "recommendation_source",
             "market_bar_source",
             "benchmark_bar_source",
+            "news_source",
         }
         self.assertTrue(required_snapshot_fields.issubset(study["research_input_snapshot_artifact"]))
         self.assertEqual(len(study["research_input_snapshot_artifact"]["source_db_snapshot_id"]), 16)
@@ -175,10 +176,17 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertIn("evidence_factor_cards", recommendation_source_rows[0]["factor_score_input"])
         self.assertIn("rows", study["research_input_snapshot_artifact"]["market_bar_source"])
         self.assertIn("rows", study["research_input_snapshot_artifact"]["benchmark_bar_source"])
+        self.assertIn("rows", study["research_input_snapshot_artifact"]["news_source"])
+        self.assertEqual(study["pit_feature_store"]["artifact_type"], "pit_feature_store")
+        self.assertEqual(study["pit_feature_store"]["promotion_status"], "blocked_from_production")
+        self.assertGreater(study["pit_feature_store"]["feature_row_count"], 0)
+        self.assertNotIn("pit_feature_store_artifact", study)
+        self.assertNotIn("feature_rows", json.dumps(study, ensure_ascii=False))
         self.assertEqual(
             study["lineage"]["research_input_snapshot_id"],
             study["research_input_snapshot"]["artifact_id"],
         )
+        self.assertEqual(study["lineage"]["pit_feature_store_id"], study["pit_feature_store"]["artifact_id"])
         self.assertIn("benchmark_availability", study["gate_readout"]["blocking_gate_ids"])
         self.assertIn("independent_feature_source", study["gate_readout"]["blocking_gate_ids"])
         self.assertEqual(study["lineage"]["feature_version"], "legacy_recommendation_payload_factor_breakdown:v1")
@@ -188,6 +196,7 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(sweep["status"], "insufficient_sample")
         self.assertEqual(sweep["promotion_status"], "blocked_from_production")
         self.assertEqual(sweep["research_input_snapshot"]["artifact_type"], "research_input_snapshot")
+        self.assertEqual(sweep["pit_feature_store"]["artifact_type"], "pit_feature_store")
         self.assertEqual(sweep["validation_protocol"]["weight_sweep_policy"], "diagnostic_only_no_auto_promotion")
         self.assertIn("不自动修改生产权重", sweep["note"])
         artifact_root = Path(self.temp_dir.name)
@@ -198,13 +207,27 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             / f"{study['research_input_snapshot']['artifact_id']}.json"
         )
         factor_path = artifact_root / "research_validation" / "factor_ic_studies" / f"{study['artifact_id']}.json"
+        pit_path = artifact_root / "research_validation" / "pit_feature_store" / f"{study['pit_feature_store']['artifact_id']}.json"
         sweep_path = artifact_root / "research_validation" / "weight_sweep_studies" / f"{sweep['artifact_id']}.json"
         self.assertTrue(snapshot_path.exists())
+        self.assertTrue(pit_path.exists())
         self.assertTrue(factor_path.exists())
         self.assertTrue(sweep_path.exists())
         snapshot_payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
         self.assertEqual(snapshot_payload["artifact_type"], "research_input_snapshot")
         self.assertEqual(snapshot_payload["input_content_digest"], study["research_input_snapshot_artifact"]["input_content_digest"])
+        pit_payload = json.loads(pit_path.read_text(encoding="utf-8"))
+        self.assertEqual(pit_payload["artifact_type"], "pit_feature_store")
+        self.assertEqual(pit_payload["source_input_snapshot"]["artifact_id"], study["research_input_snapshot"]["artifact_id"])
+        pit_feature_row = pit_payload["feature_rows"][0]
+        self.assertIn("price_baseline", pit_feature_row["features"])
+        self.assertIn("liquidity", pit_feature_row["features"])
+        self.assertIn("risk_trading_constraints", pit_feature_row["features"])
+        self.assertIn("news_text", pit_feature_row["features"])
+        self.assertNotIn("factor_breakdown", json.dumps(pit_feature_row, ensure_ascii=False))
+        factor_payload = json.loads(factor_path.read_text(encoding="utf-8"))
+        self.assertNotIn("pit_feature_store_artifact", factor_payload)
+        self.assertNotIn("feature_rows", json.dumps(factor_payload, ensure_ascii=False))
 
     def test_operations_summary_is_light_and_details_are_sectioned(self) -> None:
         with session_scope(self.database_url) as session:
@@ -226,6 +249,8 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         factor_summary = factor_detail["factor_observation_summary"]
         self.assertEqual(factor_summary["promotion_status"], "blocked_from_production")
         self.assertEqual(factor_summary["research_input_snapshot"]["artifact_type"], "research_input_snapshot")
+        self.assertEqual(factor_summary["pit_feature_store"]["artifact_type"], "pit_feature_store")
+        self.assertNotIn("feature_rows", json.dumps(factor_summary, ensure_ascii=False))
         self.assertEqual(factor_summary["validation_protocol"]["feature_source_status"], "legacy_diagnostic_only")
         self.assertIn("independent_feature_source", factor_summary["gate_readout"]["blocking_gate_ids"])
         self.assertEqual(factor_summary["lineage"]["feature_version"], "legacy_recommendation_payload_factor_breakdown:v1")
@@ -241,6 +266,11 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             operations_payload["factor_observation_summary"]["research_input_snapshot"]["artifact_type"],
             "research_input_snapshot",
         )
+        self.assertEqual(
+            operations_payload["factor_observation_summary"]["pit_feature_store"]["artifact_type"],
+            "pit_feature_store",
+        )
+        self.assertNotIn("feature_rows", json.dumps(operations_payload["factor_observation_summary"], ensure_ascii=False))
 
         dashboard_response = client.get("/stocks/600519.SH/dashboard")
         self.assertEqual(dashboard_response.status_code, 200)
@@ -249,6 +279,11 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             dashboard_payload["factor_validation"]["research_input_snapshot"]["artifact_type"],
             "research_input_snapshot",
         )
+        self.assertEqual(
+            dashboard_payload["factor_validation"]["pit_feature_store"]["artifact_type"],
+            "pit_feature_store",
+        )
+        self.assertNotIn("feature_rows", json.dumps(dashboard_payload["factor_validation"], ensure_ascii=False))
 
     def test_stock_dashboard_schema_accepts_string_horizon_readout_and_new_fields(self) -> None:
         with session_scope(self.database_url) as session:
@@ -264,6 +299,7 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertIn("benchmark_context", parsed.factor_validation)
         self.assertEqual(parsed.factor_validation["promotion_status"], "blocked_from_production")
         self.assertEqual(parsed.factor_validation["research_input_snapshot"]["artifact_type"], "research_input_snapshot")
+        self.assertEqual(parsed.factor_validation["pit_feature_store"]["artifact_type"], "pit_feature_store")
         self.assertEqual(parsed.factor_validation["validation_protocol"]["feature_source_status"], "legacy_diagnostic_only")
 
 

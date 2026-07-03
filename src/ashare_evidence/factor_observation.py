@@ -11,8 +11,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from ashare_evidence.benchmark import CSI_BENCHMARKS, DEFAULT_BENCHMARK_ID, benchmark_close_maps
-from ashare_evidence.models import MarketBar, Recommendation, Stock
+from ashare_evidence.models import MarketBar, NewsEntityLink, NewsItem, Recommendation, Stock
 from ashare_evidence.phase2.factor_ic import FactorICResult, aggregate_ic_results, compute_rank_ic
+from ashare_evidence.pit_feature_store import (
+    PIT_FEATURE_STORE_SCHEMA_VERSION,
+    build_pit_feature_store_artifact,
+    write_pit_feature_store_artifact,
+)
 from ashare_evidence.recommendation_selection import recommendation_recency_ordering
 from ashare_evidence.research_artifact_store import write_research_validation_artifact
 from ashare_evidence.watchlist import active_watchlist_symbols
@@ -151,6 +156,12 @@ def _market_bar_source_fingerprint(session: Session, symbols: list[str]) -> dict
             MarketBar.close_price,
             MarketBar.volume,
             MarketBar.amount,
+            MarketBar.turnover_rate,
+            MarketBar.adj_factor,
+            MarketBar.total_mv,
+            MarketBar.circ_mv,
+            MarketBar.pe_ttm,
+            MarketBar.pb,
             MarketBar.updated_at,
         )
         .join(MarketBar, MarketBar.stock_id == Stock.id)
@@ -169,6 +180,12 @@ def _market_bar_source_fingerprint(session: Session, symbols: list[str]) -> dict
             "close_price": close_price,
             "volume": volume,
             "amount": amount,
+            "turnover_rate": turnover_rate,
+            "adj_factor": adj_factor,
+            "total_mv": total_mv,
+            "circ_mv": circ_mv,
+            "pe_ttm": pe_ttm,
+            "pb": pb,
             "updated_at": updated_at.isoformat() if updated_at else None,
         }
         for (
@@ -182,6 +199,12 @@ def _market_bar_source_fingerprint(session: Session, symbols: list[str]) -> dict
             close_price,
             volume,
             amount,
+            turnover_rate,
+            adj_factor,
+            total_mv,
+            circ_mv,
+            pe_ttm,
+            pb,
             updated_at,
         ) in rows
     ]
@@ -195,6 +218,96 @@ def _market_bar_source_fingerprint(session: Session, symbols: list[str]) -> dict
             "date_start": days[0] if days else None,
             "date_end": days[-1] if days else None,
             "row_ids_digest": _stable_digest(row_ids),
+            "row_digest": _stable_digest(symbol_rows),
+        }
+    return {
+        "symbols": symbols,
+        "row_count": len(serialized_rows),
+        "rows": serialized_rows,
+        "row_digest": _stable_digest(serialized_rows),
+        "by_symbol": by_symbol,
+    }
+
+
+def _news_source_fingerprint(session: Session, symbols: list[str]) -> dict[str, Any]:
+    if not symbols:
+        return {
+            "symbols": [],
+            "row_count": 0,
+            "rows": [],
+            "row_digest": _stable_digest([]),
+            "by_symbol": {},
+        }
+    rows = session.execute(
+        select(
+            Stock.symbol,
+            NewsItem.id,
+            NewsItem.news_key,
+            NewsItem.provider_name,
+            NewsItem.external_id,
+            NewsItem.headline,
+            NewsItem.summary,
+            NewsItem.content_excerpt,
+            NewsItem.published_at,
+            NewsItem.event_scope,
+            NewsEntityLink.id,
+            NewsEntityLink.relevance_score,
+            NewsEntityLink.impact_direction,
+            NewsEntityLink.effective_at,
+            NewsEntityLink.decay_half_life_hours,
+            NewsEntityLink.market_tag,
+        )
+        .join(NewsEntityLink, NewsEntityLink.stock_id == Stock.id)
+        .join(NewsItem, NewsItem.id == NewsEntityLink.news_id)
+        .where(Stock.symbol.in_(symbols))
+        .order_by(Stock.symbol.asc(), NewsEntityLink.effective_at.asc(), NewsItem.id.asc(), NewsEntityLink.id.asc())
+    ).all()
+    serialized_rows = [
+        {
+            "symbol": str(symbol),
+            "id": news_id,
+            "news_key": news_key,
+            "provider_name": provider_name,
+            "external_id": external_id,
+            "headline": headline,
+            "summary": summary,
+            "content_excerpt": content_excerpt,
+            "published_at": published_at.isoformat() if published_at else None,
+            "event_scope": event_scope,
+            "link_id": link_id,
+            "relevance_score": relevance_score,
+            "impact_direction": impact_direction,
+            "effective_at": effective_at.isoformat() if effective_at else None,
+            "decay_half_life_hours": decay_half_life_hours,
+            "market_tag": market_tag,
+        }
+        for (
+            symbol,
+            news_id,
+            news_key,
+            provider_name,
+            external_id,
+            headline,
+            summary,
+            content_excerpt,
+            published_at,
+            event_scope,
+            link_id,
+            relevance_score,
+            impact_direction,
+            effective_at,
+            decay_half_life_hours,
+            market_tag,
+        ) in rows
+    ]
+    by_symbol: dict[str, dict[str, Any]] = {}
+    for symbol in symbols:
+        symbol_rows = [row for row in serialized_rows if row["symbol"] == symbol]
+        days = sorted(str(row["effective_at"] or row["published_at"] or "")[:10] for row in symbol_rows)
+        by_symbol[symbol] = {
+            "row_count": len(symbol_rows),
+            "date_start": days[0] if days else None,
+            "date_end": days[-1] if days else None,
             "row_digest": _stable_digest(symbol_rows),
         }
     return {
@@ -259,8 +372,8 @@ def _snapshot_gate_readout(*, benchmark_status: str, symbols: list[str], recomme
         },
         {
             "gate_id": "pit_feature_store",
-            "status": "blocked",
-            "reason": "snapshot freezes inputs but does not yet compute independent PIT features",
+            "status": "pass",
+            "reason": "factor validation path builds an independent PIT feature store artifact from this frozen snapshot",
         },
         {
             "gate_id": "benchmark_availability",
@@ -358,6 +471,7 @@ def _build_research_input_snapshot(
     recommendation_source_rows: list[dict[str, Any]],
     market_bar_fingerprint: dict[str, Any],
     benchmark_bar_fingerprint: dict[str, Any],
+    news_source_fingerprint: dict[str, Any],
     horizons: tuple[int, ...],
     primary_benchmark_symbol: str,
     primary_benchmark: dict[date, float],
@@ -377,6 +491,7 @@ def _build_research_input_snapshot(
         "recommendation_source_rows": recommendation_source_rows,
         "market_bar_fingerprint": market_bar_fingerprint,
         "benchmark_bar_fingerprint": benchmark_bar_fingerprint,
+        "news_source_fingerprint": news_source_fingerprint,
         "symbols": symbols,
         "horizons": list(horizons),
         "primary_benchmark_symbol": primary_benchmark_symbol,
@@ -427,6 +542,7 @@ def _build_research_input_snapshot(
         },
         "market_bar_source": market_bar_fingerprint,
         "benchmark_bar_source": benchmark_bar_fingerprint,
+        "news_source": news_source_fingerprint,
         "horizons": list(horizons),
         "benchmark_context": {
             "primary_benchmark": DEFAULT_BENCHMARK_ID,
@@ -565,6 +681,7 @@ def build_factor_observations(
     min_records: int = MIN_SYMBOLS_PER_SNAPSHOT,
     horizons: tuple[int, ...] = HORIZONS,
     persist: bool = True,
+    include_raw_research_artifacts: bool = False,
 ) -> dict[str, Any]:
     validation_run_id = _validation_run_id("factor-ic")
     input_snapshot_id = _artifact_id("research-input-snapshot", validation_run_id)
@@ -591,6 +708,7 @@ def build_factor_observations(
         benchmark_status = "missing_primary_benchmark_bars"
     market_bar_fingerprint = _market_bar_source_fingerprint(session, symbols)
     benchmark_bar_fingerprint = _market_bar_source_fingerprint(session, [primary_benchmark_symbol])
+    news_source_fingerprint = _news_source_fingerprint(session, symbols)
     input_snapshot = _build_research_input_snapshot(
         session=session,
         validation_run_id=validation_run_id,
@@ -601,11 +719,13 @@ def build_factor_observations(
         recommendation_source_rows=recommendation_source_rows,
         market_bar_fingerprint=market_bar_fingerprint,
         benchmark_bar_fingerprint=benchmark_bar_fingerprint,
+        news_source_fingerprint=news_source_fingerprint,
         horizons=horizons,
         primary_benchmark_symbol=primary_benchmark_symbol,
         primary_benchmark=primary_benchmark,
         benchmark_status=benchmark_status,
     )
+    pit_feature_store = build_pit_feature_store_artifact(input_snapshot)
 
     for as_of_day, records in sorted(by_as_of.items()):
         scored_records: list[dict[str, Any]] = []
@@ -729,12 +849,24 @@ def build_factor_observations(
             "claim_ceiling": input_snapshot["claim_ceiling"],
         },
         "research_input_snapshot_artifact": input_snapshot,
+        "pit_feature_store": {
+            "artifact_type": "pit_feature_store",
+            "schema_version": PIT_FEATURE_STORE_SCHEMA_VERSION,
+            "artifact_id": pit_feature_store["artifact_id"],
+            "storage_boundary": pit_feature_store["storage_boundary"],
+            "promotion_status": pit_feature_store["promotion_status"],
+            "claim_ceiling": pit_feature_store["claim_ceiling"],
+            "feature_row_count": pit_feature_store["feature_row_count"],
+            "feature_version": pit_feature_store["feature_version"],
+        },
         "validation_protocol": _validation_protocol(),
         "lineage": {
             "source_db_snapshot_id": input_snapshot["source_db_snapshot_id"],
             "research_input_snapshot_id": input_snapshot_id,
+            "pit_feature_store_id": pit_feature_store["artifact_id"],
             "source_data_time_range": _source_data_time_range(observation_rows),
             "feature_version": "legacy_recommendation_payload_factor_breakdown:v1",
+            "independent_pit_feature_version": pit_feature_store["feature_version"],
             "label_version": "daily_close_forward_excess_return:v1",
             "config_version": VALIDATION_PROTOCOL_VERSION,
             "code_version": "unresolved_local_checkout",
@@ -771,8 +903,11 @@ def build_factor_observations(
             else "样本不足，不能输出精确因子可信度或权重结论。"
         ),
     }
+    if include_raw_research_artifacts:
+        results["pit_feature_store_artifact"] = pit_feature_store
     if persist:
         _write_research_input_snapshot(input_snapshot, artifact_root=artifact_root, artifact_id=input_snapshot_id)
+        write_pit_feature_store_artifact(pit_feature_store, artifact_root=artifact_root)
         _write_artifact(results, artifact_root=artifact_root, artifact_id=artifact_id)
     return results
 
@@ -826,6 +961,7 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
         artifact_root=artifact_root,
         min_records=MIN_SYMBOLS_PER_SNAPSHOT,
         persist=False,
+        include_raw_research_artifacts=True,
     )
     rows = observations.get("observation_rows", [])
     weight_grid = _build_weight_grid()
@@ -883,6 +1019,7 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
             "multiple_testing_status": "not_corrected",
         },
         "research_input_snapshot": observations.get("research_input_snapshot", {}),
+        "pit_feature_store": observations.get("pit_feature_store", {}),
         "lineage": observations.get("lineage", {}),
         "gate_readout": observations.get("gate_readout", {}),
         "promotion_status": "blocked_from_production",
@@ -902,6 +1039,9 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
                 artifact_root=artifact_root,
                 artifact_id=str(input_snapshot_ref["artifact_id"]),
             )
+        pit_feature_store = observations.get("pit_feature_store_artifact")
+        if isinstance(pit_feature_store, dict) and pit_feature_store.get("artifact_id"):
+            write_pit_feature_store_artifact(pit_feature_store, artifact_root=artifact_root)
         _write_sweep_artifact(results, artifact_root=artifact_root, artifact_id=artifact_id)
     return results
 

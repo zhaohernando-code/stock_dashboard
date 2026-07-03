@@ -21,6 +21,7 @@ ARTIFACT_FOLDERS = {
     "phase5_holding_policy_experiment": "studies",
     "phase5_producer_contract_study": "studies",
     "research_input_snapshot": "research_validation/input_snapshots",
+    "pit_feature_store": "research_validation/pit_feature_store",
     "factor_ic_study": "research_validation/factor_ic_studies",
     "weight_sweep_study": "research_validation/weight_sweep_studies",
     "shortpick_lab": "shortpick_lab",

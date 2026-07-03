@@ -1428,3 +1428,4 @@ canonical checkout 中的 `data/artifacts` 改动经抽样确认是正常 phase2
 - 从 `recommendation_payload.factor_breakdown` 反取的 legacy 因子分数只能用于 diagnostic-only 路径，不能用于生产权重、horizon approval、自动 promotion 或模拟盘毕业。
 - 当前 `3621f2d` 只实现 P0 切片：独立 `research_validation` artifact store、legacy diagnostic-only、lineage/gate/promotion blocked、benchmark fallback blocked、小样本和 rolling IC 动态权重门禁。PIT feature store、objective frozen universe、walk-forward/purged CV/PBO、OOS artifact、promotion state machine 和 materialized dashboard projection registry 仍是后续切片。
 - 后续切片的第一个增量开始落地 research input snapshot：factor validation / weight sweep 路径先把 runtime DB 只读输入冻结成独立 `research_input_snapshot` artifact；该制品仅证明输入边界，不提升 claim ceiling，不替代 PIT feature store、OOS 或 promotion state machine。
+- 后续切片继续落地 PIT feature store：factor validation / weight sweep 路径从 frozen input snapshot 生成独立 `pit_feature_store` artifact；legacy `recommendation_payload.factor_breakdown` 仍只作 diagnostic comparator，不能用于生产权重、promotion 或自动调参。

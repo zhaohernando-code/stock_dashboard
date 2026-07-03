@@ -116,6 +116,16 @@ class ResearchArtifactStoreTests(unittest.TestCase):
                 },
                 root=root,
             )
+            pit_path = write_research_validation_artifact(
+                "pit_feature_store",
+                "pit-feature-store-unit",
+                {
+                    "artifact_type": "pit_feature_store",
+                    "claim_ceiling": "feature_store_only",
+                    "promotion_status": "blocked_from_production",
+                },
+                root=root,
+            )
             sweep_path = write_research_validation_artifact(
                 "weight_sweep_study",
                 "weight-sweep-study-unit",
@@ -124,6 +134,7 @@ class ResearchArtifactStoreTests(unittest.TestCase):
             )
 
             self.assertEqual(snapshot_path.parent, root / "research_validation" / "input_snapshots")
+            self.assertEqual(pit_path.parent, root / "research_validation" / "pit_feature_store")
             self.assertEqual(factor_path.parent, root / "research_validation" / "factor_ic_studies")
             self.assertEqual(sweep_path.parent, root / "research_validation" / "weight_sweep_studies")
             self.assertFalse((root / "studies" / factor_path.name).exists())

@@ -1213,6 +1213,7 @@ def _factor_observation_summary(session: Session, *, artifact_root: Any, active_
         "schema_version": study.get("schema_version"),
         "artifact_id": study.get("artifact_id"),
         "research_input_snapshot": study.get("research_input_snapshot", {}),
+        "pit_feature_store": study.get("pit_feature_store", {}),
         "validation_protocol": study.get("validation_protocol", {}),
         "lineage": study.get("lineage", {}),
         "gate_readout": study.get("gate_readout", {}),

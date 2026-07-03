@@ -20,7 +20,7 @@ Owner: stock_dashboard / Short Pick research governance
 | P0 validation artifact boundary | implemented | commit `3621f2d`；`factor_ic_study` / `weight_sweep_study` 写入独立 `research_validation` artifact namespace。 |
 | runtime DB read-only input boundary | implemented/partial | 当前只在 factor validation / weight sweep 路径落地；runtime DB 作为只读输入源，验证结果写 artifact，不写业务表。其他研究路径仍需逐步迁移到同一边界。 |
 | research input snapshot | implemented | Factor validation / weight sweep path now creates an addressable `research_input_snapshot` artifact under `research_validation/input_snapshots`; it freezes runtime DB read-only inputs before validation and remains non-promotional. |
-| PIT feature store | not_started | 尚未实现独立 point-in-time feature artifacts；legacy `recommendation_payload.factor_breakdown` 仍仅作 diagnostic comparator。 |
+| PIT feature store | implemented | Factor validation / weight sweep path now builds a research-only `pit_feature_store` artifact from the frozen input snapshot, with independent price, liquidity, risk/trading, valuation, news/text, regime, crowding and placeholder availability groups. Legacy `recommendation_payload.factor_breakdown` remains diagnostic-only and is not used to compute PIT features. |
 | objective frozen universe | not_started | 当前 P0 仍使用 active watchlist scope，并在 gate 中标记 `objective_research_universe` blocked。 |
 | walk-forward / purge / embargo | not_started | 当前 P0 artifact 显式标记 `walk_forward_status=not_implemented`、`purge_embargo_status=not_implemented`。 |
 | PBO / DSR / multiple comparison | not_started | 尚未实现 PBO、Deflated Sharpe Ratio、多重比较校正；weight sweep 标记 `multiple_testing_status=not_corrected`。 |
@@ -384,7 +384,7 @@ P0 must deliver:
 - rolling IC dynamic weight adjustment requires a long enough independent history and bounded multipliers.
 - weight sweep remains diagnostic-only and cannot auto-promote into production.
 
-P0 does not deliver:
+Original P0 did not deliver:
 
 - independent PIT factor feature store.
 - objective full-market or frozen research universe.
@@ -393,22 +393,23 @@ P0 does not deliver:
 - production weight state machine.
 - final dashboard projection artifact registry.
 
-Those gaps are expected for P0, but they must remain visible as blocked gates and next slices.
+Those gaps were expected for P0. Later slices may close individual items only by implementing the full contract for that item and keeping remaining blocked gates visible.
 
 ## Implementation Mapping / 当前实现映射
 
 | Contract area | Current files | Implemented behavior |
 |---|---|---|
-| research validation artifact folders | `src/ashare_evidence/artifact_store_core.py` | Adds `research_validation/input_snapshots`, `research_validation/factor_ic_studies`, and `research_validation/weight_sweep_studies`. |
-| research validation artifact writer | `src/ashare_evidence/research_artifact_store.py` | Adds `write_research_validation_artifact(...)` with artifact type whitelist and repo-write guard, including `research_input_snapshot`. |
+| research validation artifact folders | `src/ashare_evidence/artifact_store_core.py` | Adds `research_validation/input_snapshots`, `research_validation/pit_feature_store`, `research_validation/factor_ic_studies`, and `research_validation/weight_sweep_studies`. |
+| research validation artifact writer | `src/ashare_evidence/research_artifact_store.py` | Adds `write_research_validation_artifact(...)` with artifact type whitelist and repo-write guard, including `research_input_snapshot` and `pit_feature_store`. |
 | research input snapshot | `src/ashare_evidence/factor_observation.py` | Builds a non-promotional `research_input_snapshot` artifact that freezes symbols, recommendation as-of dates, source data ranges, horizons, benchmark context, validation protocol, and snapshot gates before IC/weight validation. |
+| PIT feature store | `src/ashare_evidence/pit_feature_store.py` | Builds non-promotional `pit_feature_store` artifacts from the frozen snapshot only; feature rows include independent price, liquidity, risk/trading, valuation, news/text, regime, crowding, fundamental availability, industry diffusion availability and dynamic-weight context groups. |
 | legacy diagnostic-only factor path | `src/ashare_evidence/factor_observation.py` | Reads `recommendation_payload.factor_breakdown` only as `legacy_diagnostic_only`; writes validation protocol and feature lineage linked to the input snapshot. |
 | benchmark fail-closed | `src/ashare_evidence/factor_observation.py` | Missing primary benchmark bars skip IC rows; artifact records `fallback_policy=block_ic_rows_when_primary_benchmark_unavailable`. |
 | gate / lineage / promotion readout | `src/ashare_evidence/factor_observation.py` | Emits `lineage`, `gate_readout` with `claim_ceiling`, `promotion_status=blocked_from_production`, and diagnostic notes. |
 | factor eligibility and rolling IC bounds | `src/ashare_evidence/phase2/factor_ic.py` | Requires 20 windows and 600 samples for weighting eligibility; rolling weight adjustment requires 60 periods and clips multiplier to `[0.5, 1.5]`. |
-| operations projection summary | `src/ashare_evidence/operations.py` | Exposes schema/artifact id, validation protocol, lineage, gate readout and promotion summary; does not expose raw `observation_rows`. |
-| stock dashboard factor validation | `src/ashare_evidence/dashboard.py` | Exposes factor validation protocol, lineage, gate readout and promotion summary in product-facing payload. |
-| artifact store tests | `tests/test_research_artifact_store.py` | Verifies isolated `research_validation` paths and rejects unsupported artifact types. |
+| operations projection summary | `src/ashare_evidence/operations.py` | Exposes schema/artifact id, input snapshot, PIT feature store, validation protocol, lineage, gate readout and promotion summary; does not expose raw `observation_rows` or raw PIT feature rows. |
+| stock dashboard factor validation | `src/ashare_evidence/dashboard.py` | Exposes factor validation protocol, input snapshot, PIT feature store, lineage, gate readout and promotion summary in product-facing payload. |
+| artifact store tests | `tests/test_research_artifact_store.py` | Verifies isolated `research_validation` paths for input snapshots, PIT feature store, factor IC and weight sweep artifacts; rejects unsupported artifact types. |
 | factor IC tests | `tests/test_factor_ic.py` | Verifies small-sample weighting block and rolling IC adjustment gate. |
 | P0 product contract tests | `tests/test_professionalization_plan.py` | Verifies diagnostic-only, benchmark fallback block, lineage, gate and promotion summary in study/sweep/API payloads. |
 
@@ -416,7 +417,7 @@ Those gaps are expected for P0, but they must remain visible as blocked gates an
 
 The following blocked states are intentional completion status, not omissions. P0 must keep them visible until later slices implement and verify them.
 
-- Independent PIT feature computation is still blocked; P0 legacy payload features are diagnostic-only.
+- Full upstream coverage for PIT fundamental statement availability and frozen industry membership is still source-limited; the PIT feature store records those groups with explicit availability status instead of synthesizing unavailable data.
 - Objective frozen universe is still blocked; active watchlist scope remains operational and cannot support promotion.
 - Walk-forward validation, purge, and embargo are still blocked.
 - PBO / DSR / multiple-comparison correction is still blocked.
@@ -449,9 +450,9 @@ The external review themes that shaped this contract:
 
 ### P1 - Independent Factor Feature Store
 
-- Extend research input snapshots beyond the factor validation / weight sweep path where needed.
-- Build PIT feature artifacts independent from recommendation payload.
-- Add feature lineage and missingness policy.
+- Status: implemented for the factor validation / weight sweep path through `pit_feature_store.v1`.
+- Extend research input snapshots beyond this path where needed.
+- Add richer upstream source coverage for currently unavailable fundamental statement timing and frozen industry membership inputs.
 - Keep legacy payload path as diagnostic-only comparator.
 
 ### P2 - Objective Universe And PIT Labels
@@ -495,4 +496,4 @@ The external review themes that shaped this contract:
 
 Commit `3621f2d` implements the P0 slice only. It aligns with the P0 contract by isolating `factor_ic_study` and `weight_sweep_study` under `research_validation`, marking legacy factor payloads diagnostic-only, blocking benchmark fallback, carrying lineage/gate/promotion readouts, and tightening small-sample/dynamic-weight gates.
 
-It does not implement the end-state PIT feature store, objective frozen universe, walk-forward/purged CV/PBO, OOS artifacts, promotion state machine, or materialized dashboard projection registry. Those are intentional next slices, not removed design scope.
+Subsequent commits add the research input snapshot and PIT feature store slices for the factor validation / weight sweep path. The remaining end-state items are objective frozen universe, walk-forward/purged CV/PBO, OOS artifacts, promotion state machine, and materialized dashboard projection registry. Those are intentional next slices, not removed design scope.
