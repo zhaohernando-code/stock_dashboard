@@ -28,12 +28,19 @@ class ModelSpecRegistryTests(unittest.TestCase):
                 "ranked_feature_linear_v1",
                 "ranked_tree_shallow_v1",
                 "regime_conditioned_linear_v1",
+                "pullback_reversal_5d_v1",
+                "liquidity_breakout_5d_v1",
+                "trend_quality_20d_v1",
             ],
         )
         for spec in artifact["model_specs"]:
             self.assertLessEqual(spec["max_trials"], 16)
             self.assertEqual(spec["production_effect"], "forbidden")
             self.assertTrue(spec["allowed_feature_groups"])
+        horizons = {spec["model_spec_id"]: spec["prediction_horizon_days"] for spec in artifact["model_specs"]}
+        self.assertEqual(horizons["pullback_reversal_5d_v1"], 5)
+        self.assertEqual(horizons["liquidity_breakout_5d_v1"], 5)
+        self.assertEqual(horizons["trend_quality_20d_v1"], 20)
 
     def test_dynamic_weight_spec_requires_oos_and_governance(self) -> None:
         artifact = build_model_spec_registry_artifact(validation_run_id="unit-run")

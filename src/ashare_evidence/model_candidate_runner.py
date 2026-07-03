@@ -57,11 +57,14 @@ def _model_feature_values(feature_row: dict[str, Any]) -> dict[str, float]:
     return {name: _feature(feature_row, group, key) for name, group, key in MODEL_FEATURE_DEFS}
 
 
-def _target(row: dict[str, Any]) -> float | None:
-    value = row.get("target_label")
+def _target(row: dict[str, Any], *, horizon_days: int = 10) -> float | None:
+    value = row.get("target_labels_by_horizon", {}).get(str(horizon_days))
+    if value is None:
+        value = row.get("target_label")
     if value is None:
         return None
-    return _safe_float(value)
+    target = _safe_float(value)
+    return target if horizon_days == 10 else target - 0.001
 
 
 def _correlation(xs: list[float], ys: list[float]) -> float:
@@ -76,9 +79,9 @@ def _correlation(xs: list[float], ys: list[float]) -> float:
     return sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys, strict=True)) / len(xs) / (std_x * std_y)
 
 
-def _linear_fit(rows: list[dict[str, Any]], *, alpha: float) -> dict[str, Any]:
+def _linear_fit(rows: list[dict[str, Any]], *, alpha: float, horizon_days: int) -> dict[str, Any]:
     feature_values = [
-        (row, row.get("feature_values_flat") or _model_feature_values(row["feature_row"]), _target(row))
+        (row, row.get("feature_values_flat") or _model_feature_values(row["feature_row"]), _target(row, horizon_days=horizon_days))
         for row in rows
     ]
     feature_values = [(row, values, target) for row, values, target in feature_values if target is not None]
@@ -118,10 +121,12 @@ def _linear_score(values: dict[str, float], fitted_model: dict[str, Any]) -> flo
 
 def _fit_model(rows: list[dict[str, Any]], *, model_spec: dict[str, Any], params: dict[str, Any]) -> dict[str, Any]:
     spec_type = str(model_spec.get("model_type") or "")
+    horizon_days = int(model_spec.get("prediction_horizon_days") or 10)
     if spec_type == "deterministic_baseline":
         return {
             "model_family": "deterministic_baseline_no_fit",
             "train_row_count": len(rows),
+            "prediction_horizon_days": horizon_days,
             "feature_stats": {},
         }
     alpha = _safe_float(params.get("regularization_alpha"), 1.0)
@@ -139,13 +144,14 @@ def _fit_model(rows: list[dict[str, Any]], *, model_spec: dict[str, Any], params
         return {
             "model_family": "split_fitted_regime_conditioned_linear",
             "train_row_count": len(rows),
+            "prediction_horizon_days": horizon_days,
             "regime_models": {
-                "benchmark_nonnegative": _linear_fit(uptrend_rows or rows, alpha=alpha),
-                "benchmark_negative": _linear_fit(downtrend_rows or rows, alpha=alpha),
+                "benchmark_nonnegative": _linear_fit(uptrend_rows or rows, alpha=alpha, horizon_days=horizon_days),
+                "benchmark_negative": _linear_fit(downtrend_rows or rows, alpha=alpha, horizon_days=horizon_days),
             },
         }
     if spec_type == "shallow_tree_ranker":
-        linear_model = _linear_fit(rows, alpha=alpha)
+        linear_model = _linear_fit(rows, alpha=alpha, horizon_days=horizon_days)
         max_depth = max(1, int(_safe_float(params.get("max_depth"), 2.0)))
         ranked_features = sorted(
             (linear_model.get("feature_stats") or {}).items(),
@@ -167,9 +173,10 @@ def _fit_model(rows: list[dict[str, Any]], *, model_spec: dict[str, Any], params
         return {
             "model_family": "split_fitted_shallow_tree_stumps",
             "train_row_count": len(rows),
+            "prediction_horizon_days": horizon_days,
             "stumps": stumps,
         }
-    return _linear_fit(rows, alpha=alpha)
+    return _linear_fit(rows, alpha=alpha, horizon_days=horizon_days)
 
 
 def _fitted_model_summary(fitted_model: dict[str, Any]) -> dict[str, Any]:
@@ -257,6 +264,26 @@ def _score_row(
         elif regime < 0:
             multiplier = 1.0 + max(regime, -0.3)
         return (momentum + 0.15 * crowding - 0.25 * volatility) * min(max(multiplier, 0.5), 1.5)
+    if spec_type == "pullback_reversal_ranker":
+        return (
+            -_safe_float(params.get("pullback_weight"), 1.2) * overheat
+            + _safe_float(params.get("trend_context_weight"), 0.35) * momentum
+            - _safe_float(params.get("volatility_penalty"), 0.35) * volatility
+            + 0.03 * crowding
+        )
+    if spec_type == "liquidity_breakout_ranker":
+        return (
+            _safe_float(params.get("momentum_weight"), 0.6) * momentum
+            + _safe_float(params.get("liquidity_confirmation_weight"), 0.35) * crowding
+            - 0.4 * volatility
+            - _safe_float(params.get("overheat_penalty"), 0.25) * max(overheat, 0.0)
+        )
+    if spec_type == "trend_quality_ranker":
+        return (
+            _safe_float(params.get("trend_weight"), 1.0) * values.get("return_20d", 0.0)
+            + _safe_float(params.get("high_distance_weight"), 0.5) * values.get("distance_from_20d_high", 0.0)
+            - _safe_float(params.get("volatility_penalty"), 0.45) * volatility
+        )
     return momentum
 
 
@@ -277,6 +304,11 @@ def _join_rows(feature_matrix: dict[str, Any], label_matrix: dict[str, Any]) -> 
                 "feature_values_flat": _model_feature_values(feature_row),
                 "label_row": label_row,
                 "target_label": (label_row.get("labels") or {}).get("net_excess_return_10d_after_costs"),
+                "target_labels_by_horizon": {
+                    str(horizon): (label_row.get("labels") or {}).get(f"excess_return_{horizon}d")
+                    for horizon in (5, 20)
+                }
+                | {"10": (label_row.get("labels") or {}).get("net_excess_return_10d_after_costs")},
                 "label_status": label_row.get("label_status"),
             }
         )
@@ -419,14 +451,6 @@ def build_walk_forward_model_candidate_run_artifact(
     selected_model_spec_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     joined_rows = _join_rows(feature_matrix, label_matrix)
-    evaluable_rows = [
-        row for row in joined_rows if row.get("label_status") == "ready" and row.get("target_label") is not None
-    ]
-    evaluable_rows_by_date: dict[str, list[dict[str, Any]]] = {}
-    for row in evaluable_rows:
-        evaluable_rows_by_date.setdefault(str(row.get("as_of_date") or ""), []).append(row)
-    dates = sorted({str(row.get("as_of_date")) for row in evaluable_rows if row.get("as_of_date")})
-    splits = _walk_forward_splits(dates, min_train_dates=min_train_dates, test_window_dates=test_window_dates)
     specs = list(model_spec_registry.get("model_specs") or [])
     selected = set(selected_model_spec_ids or [str(spec.get("model_spec_id")) for spec in specs])
     known = {str(spec.get("model_spec_id")) for spec in specs}
@@ -437,11 +461,27 @@ def build_walk_forward_model_candidate_run_artifact(
     trial_diagnostics: list[dict[str, Any]] = []
     prediction_rows: list[dict[str, Any]] = []
     total_prediction_row_count = 0
+    all_evaluable_keys: set[str] = set()
+    max_split_count = 0
 
     for spec in specs:
         spec_id = str(spec.get("model_spec_id") or "")
         if spec_id not in selected:
             continue
+        horizon_days = int(spec.get("prediction_horizon_days") or 10)
+        evaluable_rows = [
+            row
+            for row in joined_rows
+            if row.get("label_status") == "ready"
+            and _target(row, horizon_days=horizon_days) is not None
+        ]
+        all_evaluable_keys.update(str(row["universe_row_id"]) for row in evaluable_rows)
+        evaluable_rows_by_date: dict[str, list[dict[str, Any]]] = {}
+        for row in evaluable_rows:
+            evaluable_rows_by_date.setdefault(str(row.get("as_of_date") or ""), []).append(row)
+        dates = sorted({str(row.get("as_of_date")) for row in evaluable_rows if row.get("as_of_date")})
+        splits = _walk_forward_splits(dates, min_train_dates=min_train_dates, test_window_dates=test_window_dates)
+        max_split_count = max(max_split_count, len(splits))
         trials = _grid_trials(spec.get("hyperparameter_grid") or {})
         for trial_index, params in enumerate(trials):
             trial_id = f"{spec_id}:trial-{trial_index:03d}"
@@ -498,7 +538,8 @@ def build_walk_forward_model_candidate_run_artifact(
                         "as_of_date": joined["as_of_date"],
                         "universe_row_id": joined["universe_row_id"],
                         "score": score,
-                        "target_label": joined["target_label"],
+                        "target_label": _target(joined, horizon_days=horizon_days),
+                        "target_horizon_days": horizon_days,
                         "label_status": joined["label_status"],
                     }
                     prediction["row_digest"] = _stable_digest(prediction)
@@ -531,7 +572,7 @@ def build_walk_forward_model_candidate_run_artifact(
             "feature_matrix": feature_matrix.get("artifact_id"),
             "label_matrix": label_matrix.get("artifact_id"),
             "registry": model_spec_registry.get("artifact_id"),
-            "splits": splits,
+            "max_split_count": max_split_count,
             "trial_summaries": trial_summaries,
             "trial_diagnostics": trial_diagnostics,
             "total_prediction_row_count": total_prediction_row_count,
@@ -571,10 +612,10 @@ def build_walk_forward_model_candidate_run_artifact(
         "source_feature_matrix_id": feature_matrix.get("artifact_id"),
         "source_label_matrix_id": label_matrix.get("artifact_id"),
         "source_model_spec_registry_id": model_spec_registry.get("artifact_id"),
-        "split_count": len(splits),
+        "split_count": max_split_count,
         "trial_count": len(trial_summaries),
         "joined_row_count": len(joined_rows),
-        "evaluable_row_count": len(evaluable_rows),
+        "evaluable_row_count": len(all_evaluable_keys),
         "prediction_row_count": total_prediction_row_count,
         "stored_prediction_row_count": len(prediction_rows),
         "prediction_rows_truncated": total_prediction_row_count > len(prediction_rows),

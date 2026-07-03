@@ -168,6 +168,67 @@ def default_model_specs() -> list[dict[str, Any]]:
                 "requires_governance_approval": True,
             },
         ),
+        _base_spec(
+            model_spec_id="pullback_reversal_5d_v1",
+            model_type="pullback_reversal_ranker",
+            purpose="Search for short-horizon recoveries after mild pullbacks without chasing one-day overheated names.",
+            feature_groups=[
+                "price_momentum",
+                "reversal_overheat",
+                "volatility_risk",
+                "liquidity",
+                "execution",
+                "regime",
+            ],
+            prediction_horizon_days=5,
+            training_window_days=[60, 120],
+            hyperparameter_grid={
+                "pullback_weight": [1.0, 1.2],
+                "trend_context_weight": [0.25, 0.35],
+                "volatility_penalty": [0.35],
+            },
+        ),
+        _base_spec(
+            model_spec_id="liquidity_breakout_5d_v1",
+            model_type="liquidity_breakout_ranker",
+            purpose="Search for short-horizon momentum names with liquidity confirmation and overheat penalty.",
+            feature_groups=[
+                "price_momentum",
+                "reversal_overheat",
+                "volatility_risk",
+                "liquidity",
+                "execution",
+                "crowding",
+                "regime",
+            ],
+            prediction_horizon_days=5,
+            training_window_days=[60, 120],
+            hyperparameter_grid={
+                "momentum_weight": [0.5, 0.7],
+                "liquidity_confirmation_weight": [0.25, 0.35],
+                "overheat_penalty": [0.25],
+            },
+        ),
+        _base_spec(
+            model_spec_id="trend_quality_20d_v1",
+            model_type="trend_quality_ranker",
+            purpose="Search for longer-horizon trend quality after controlling volatility and distance from recent highs.",
+            feature_groups=[
+                "price_momentum",
+                "reversal_overheat",
+                "volatility_risk",
+                "liquidity",
+                "execution",
+                "regime",
+            ],
+            prediction_horizon_days=20,
+            training_window_days=[120, 240],
+            hyperparameter_grid={
+                "trend_weight": [0.8, 1.0],
+                "high_distance_weight": [0.4, 0.5],
+                "volatility_penalty": [0.35, 0.45],
+            },
+        ),
     ]
 
 
