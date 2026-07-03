@@ -16,6 +16,10 @@ from ashare_evidence.model_comparison_report import (
     write_model_comparison_report_artifact,
 )
 from ashare_evidence.model_exploration_snapshot import build_model_exploration_p1_artifacts
+from ashare_evidence.model_governance_gate import (
+    build_model_governance_and_projection_artifacts,
+    write_model_governance_and_projection_artifacts,
+)
 from ashare_evidence.model_spec_registry import build_model_spec_registry_artifact
 from ashare_evidence.models import MarketBar, Stock
 
@@ -155,7 +159,13 @@ class ModelCandidateWorkbenchTests(unittest.TestCase):
         self.assertEqual(report["promotion_status"], "blocked_from_production")
         self.assertEqual(report["summary"]["candidate_run_id"], run["artifact_id"])
         self.assertEqual(len(report["candidate_leaderboard"]), 1)
-        self.assertIn("pbo_dsr_diagnostics_pending", report["gate_readout"]["blocking_gate_ids"])
+        self.assertEqual(report["overfit_diagnostics"]["diagnostic_scope"], "candidate_run_trial_split_proxy")
+        self.assertIn(
+            "overfit:insufficient_eligible_trials_for_pbo",
+            report["gate_readout"]["blocking_gate_ids"],
+        )
+        self.assertEqual(report["winner_dependency"]["best_trial_id"], "baseline_momentum_10d_turnover_cooldown_v1:trial-000")
+        self.assertIn("removal_checks", report["winner_dependency"])
 
     def test_candidate_run_and_report_write_to_research_validation_namespace(self) -> None:
         feature_matrix, label_matrix, registry = self._build_inputs()
@@ -183,6 +193,75 @@ class ModelCandidateWorkbenchTests(unittest.TestCase):
             root / "research_validation" / "walk_forward_model_candidate_runs",
         )
         self.assertEqual(report_path.parent, root / "research_validation" / "model_comparison_reports")
+
+    def test_governance_and_dashboard_projection_gate_model_report(self) -> None:
+        feature_matrix, label_matrix, registry = self._build_inputs()
+        run = build_walk_forward_model_candidate_run_artifact(
+            validation_run_id="unit-run",
+            feature_matrix=feature_matrix,
+            label_matrix=label_matrix,
+            model_spec_registry=registry,
+            min_train_dates=1,
+            test_window_dates=2,
+            selected_model_spec_ids=["baseline_momentum_10d_turnover_cooldown_v1"],
+        )
+        report = build_model_comparison_report_artifact(
+            validation_run_id="unit-run",
+            candidate_run=run,
+            model_spec_registry=registry,
+        )
+
+        artifacts = build_model_governance_and_projection_artifacts(
+            validation_run_id="unit-run",
+            candidate_run=run,
+            comparison_report=report,
+        )
+        governance = artifacts["governance_promotion_decision"]
+        projection = artifacts["dashboard_approved_projection_registry"]
+
+        self.assertEqual(governance["artifact_type"], "governance_promotion_decision")
+        self.assertEqual(governance["current_state"], "diagnostic_only")
+        self.assertIn("multiple_testing_not_ready", governance["gate_readout"]["blocking_gate_ids"])
+        self.assertEqual(projection["artifact_type"], "dashboard_approved_projection_registry")
+        self.assertEqual(projection["approved_projection_count"], 0)
+        self.assertIn(
+            "governance_not_approved_for_dashboard_projection",
+            projection["gate_readout"]["blocking_gate_ids"],
+        )
+
+    def test_governance_and_projection_artifacts_write_to_research_validation_namespace(self) -> None:
+        feature_matrix, label_matrix, registry = self._build_inputs()
+        run = build_walk_forward_model_candidate_run_artifact(
+            validation_run_id="unit-run",
+            feature_matrix=feature_matrix,
+            label_matrix=label_matrix,
+            model_spec_registry=registry,
+            min_train_dates=1,
+            test_window_dates=2,
+            selected_model_spec_ids=["baseline_momentum_10d_turnover_cooldown_v1"],
+        )
+        report = build_model_comparison_report_artifact(
+            validation_run_id="unit-run",
+            candidate_run=run,
+            model_spec_registry=registry,
+        )
+        artifacts = build_model_governance_and_projection_artifacts(
+            validation_run_id="unit-run",
+            candidate_run=run,
+            comparison_report=report,
+        )
+        root = Path(self.temp_dir.name) / "artifacts"
+
+        written = write_model_governance_and_projection_artifacts(artifacts, artifact_root=root)
+
+        self.assertEqual(
+            written["governance_promotion_decision"].parent,
+            root / "research_validation" / "governance_promotion_decisions",
+        )
+        self.assertEqual(
+            written["dashboard_approved_projection_registry"].parent,
+            root / "research_validation" / "dashboard_approved_projection_registries",
+        )
 
 
 if __name__ == "__main__":
