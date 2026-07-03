@@ -17,17 +17,36 @@ Owner: stock_dashboard / Short Pick research governance
 | Item | Status | Evidence / note |
 |---|---|---|
 | End-state design contract | completed | 本合同已落地，commit `a4303d6`；本次修订补充完成状态、量化门禁、制品字段合同和实现映射。 |
-| P0 validation artifact boundary | completed | commit `3621f2d`；`factor_ic_study` / `weight_sweep_study` 写入独立 `research_validation` artifact namespace。 |
-| runtime DB read-only input boundary | completed for factor validation / weight sweep scope | runtime DB 在当前 factor validation / weight sweep 路径只作为只读输入源；验证结果写 artifact，不写业务表。其他研究路径迁移仍受同一终局边界约束。 |
-| research input snapshot | completed for factor validation / weight sweep scope | Factor validation / weight sweep path now creates an addressable `research_input_snapshot` artifact under `research_validation/input_snapshots`; it freezes runtime DB read-only inputs before validation and remains non-promotional. |
-| PIT feature store | completed for factor validation / weight sweep scope | Factor validation / weight sweep path now builds a research-only `pit_feature_store` artifact from the frozen input snapshot, with independent price, liquidity, risk/trading, valuation, news/text, regime, crowding and placeholder availability groups. Legacy `recommendation_payload.factor_breakdown` remains diagnostic-only and is not used to compute PIT features. |
-| objective frozen universe | completed for factor validation / weight sweep scope | Factor validation / weight sweep path now freezes a pre-validation `objective_frozen_universe` artifact from DB stocks with 1d market-bar coverage, records recommendation/watchlist rows only as a coverage subset, and keeps promotion blocked by legacy factor source, OOS and governance gates. |
-| walk-forward / purge / embargo | completed for factor validation / weight sweep scope | Factor validation / weight sweep path now writes a `walk_forward_purge_embargo` protocol artifact with anchored splits, purge days and embargo days. Current data may still have zero ready splits and remain blocked from promotion. |
-| PBO / DSR / multiple comparison | completed for factor validation / weight sweep scope | Weight sweep now writes a `pbo_dsr_multiple_comparison` diagnostics artifact with trial counts, PBO proxy, Deflated-Sharpe confidence proxy and alpha t-stat gate readout. Insufficient eligible trials remain blocked and cannot promote. |
-| OOS artifacts | completed for factor validation / weight sweep scope | Factor validation / weight sweep path now writes `oos_validation` artifacts from ready walk-forward holdout windows, with OOS Rank IC, ICIR, positive-IC rate and top-quantile excess gates. Current data may remain blocked when holdout rows or periods are insufficient. |
-| governance promotion state machine | completed for factor validation / weight sweep scope | Factor validation / weight sweep path now writes `governance_promotion_decision` artifacts with the lifecycle `diagnostic_only -> research_candidate -> oos_candidate -> paper_tracking_candidate -> production_eligible`; current artifacts remain `diagnostic_only` with blocked gate outcome and cannot promote. |
-| dashboard approved projection registry | completed for factor validation / weight sweep scope | Factor validation / weight sweep path now writes `dashboard_approved_projection_registry` artifacts. Current approved projection count is 0 because governance is not `production_eligible`; dashboard/API only receive registry summary and cannot consume raw validation artifacts. |
+| P0 validation artifact boundary | completed | commit `3621f2d`；`factor_ic_study` / `weight_sweep_study` 写入独立 `research_validation` artifact namespace。This is a safety boundary for the legacy diagnostic path, not the model exploration mechanism. |
+| runtime DB read-only input boundary | completed for legacy diagnostic factor validation only | runtime DB 在当前 factor validation / weight sweep 路径只作为只读输入源；验证结果写 artifact，不写业务表。This proves the storage boundary pattern, but it does not complete the end-state model workbench. |
+| legacy research input snapshot | legacy diagnostic prototype completed | Current `research_input_snapshot` freezes the legacy factor validation input rows before validation. It is not yet a model-exploration snapshot because it remains anchored to recommendation/factor-observation inputs rather than a primary universe-date research matrix. |
+| legacy PIT feature artifact | legacy diagnostic prototype completed | Current `pit_feature_store` is useful for isolating diagnostic features in the legacy factor validation flow, but it is not the final independent model feature matrix. The end-state matrix must be keyed by `symbol` x `as_of_date` from an objective universe, not by recommendation rows. |
+| objective frozen universe artifact | legacy diagnostic prototype completed | Current `objective_frozen_universe` records a pre-validation DB-stock universe and recommendation/watchlist coverage subsets. It is not yet wired as the primary row generator for model exploration, labels, candidate scoring, or walk-forward model training. |
+| walk-forward / purge / embargo artifact | legacy diagnostic prototype completed | Current protocol artifacts describe splits for legacy observation dates. The model-exploration runner that trains/scores candidate model specs across objective universe-date rows is still not implemented. |
+| PBO / DSR / multiple comparison | legacy diagnostic prototype completed | Current diagnostics summarize weight-sweep trials. They do not yet evaluate a governed model-spec registry or hyperparameter search space. |
+| OOS artifacts | legacy diagnostic prototype completed | Current OOS validation consumes legacy factor-study observation rows. It does not validate independent model predictions produced from a model registry over a frozen universe-date feature matrix. |
+| governance promotion state machine | legacy diagnostic prototype completed | Current state machine blocks promotion correctly for legacy artifacts. It does not yet promote or reject independent model-exploration candidates because those candidate artifacts do not exist. |
+| dashboard approved projection registry | legacy diagnostic prototype completed | Current registry correctly approves zero projections for blocked legacy artifacts. It is not evidence that any new model is ready for dashboard claims. |
+| independent model exploration mechanism | not_started | Required next slice is defined in `SHORTPICK_MODEL_EXPLORATION_WORKBENCH_P1_HANDOFF_2026-07-03.md`: objective universe-date matrix, model spec registry, candidate runner, walk-forward validation, comparison report, and kill/promote gates. |
 | runtime publish / served verification | completed | commit `04fe909` published to local runtime with `ASHARE_PUBLISH_REFRESH_MODE=skip`; release manifest `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260703T142623Z-04fe909c3142/manifest.json` has `status=passed`, commit `04fe909c31428094b76c021b2b4c7751ca49f56d`, canonical/local parity match for factor observation and simulation workspace, and deploy verifier `44 passed, 0 failed`. Served factor observation remains `blocked_from_production` / `diagnostic_research_only`; simulation workspace detail is bounded at about 67.5 KB with 88 nav points per track. |
+
+## Course Correction / 当前真实结论
+
+The branch currently contains valuable P0 safety work, but it must not be read as completion of the new model exploration mechanism. The completed work creates guardrails around the legacy factor validation / weight-sweep path and proves that research outputs can stay outside the runtime DB. It does not yet create an independent system that discovers stronger stock-selection models.
+
+The next implementation must start from a primary research matrix:
+
+```text
+objective universe x as_of_date
+  -> point-in-time features
+  -> point-in-time executable labels
+  -> governed model specs
+  -> walk-forward candidate predictions
+  -> OOS / PBO / DSR / execution gates
+  -> approved projection only after governance passes
+```
+
+The next implementation must not start from `recommendation_rows`, `factor_observation` rows, `recommendation_payload.factor_breakdown`, or existing weight-sweep outputs except as blocked diagnostic comparators.
 
 ## Background
 
@@ -395,7 +414,9 @@ Original P0 did not deliver:
 
 Those gaps were expected for P0. Later slices may close individual items only by implementing the full contract for that item and keeping remaining blocked gates visible.
 
-## Implementation Mapping / 当前实现映射
+## Legacy Diagnostic Implementation Mapping / 当前旧链路实现映射
+
+The mapping below documents what the current branch implemented for the legacy factor validation / weight-sweep path. It is intentionally retained because these guardrails are useful. It is not a mapping for the independent model exploration workbench.
 
 | Contract area | Current files | Implemented behavior |
 |---|---|---|
@@ -433,6 +454,7 @@ The following blocked states are intentional completion status, not omissions. P
 - Approved dashboard projection registry artifacts are implemented, but current approved projection count remains 0 until governance reaches `production_eligible`; current API is diagnostic summary projection only.
 - Production weight update is still blocked; weight sweep cannot change policy config or recommendation generation.
 - Paper/live candidate promotion is still blocked until research, OOS, execution, PBO/DSR and governance gates pass.
+- Independent model exploration remains `not_started`: no governed model-spec registry, no objective universe-date feature matrix as the primary input, no model candidate prediction artifact, and no model comparison report have been implemented yet.
 
 ## Review / Verification Log
 
@@ -459,33 +481,37 @@ The external review themes that shaped this contract:
 
 ### P1 - Independent Factor Feature Store
 
-- Status: implemented for the factor validation / weight sweep path through `pit_feature_store.v1`.
-- Extend research input snapshots beyond this path where needed.
-- Add richer upstream source coverage for currently unavailable fundamental statement timing and frozen industry membership inputs.
-- Keep legacy payload path as diagnostic-only comparator.
+- Status: not_started for the independent model exploration mechanism.
+- Existing `pit_feature_store.v1` is only a legacy diagnostic prototype for the factor validation / weight-sweep path.
+- Required P1 output: a primary feature matrix keyed by `symbol` x `as_of_date`, generated from objective universe membership and point-in-time sources, with recommendation/factor-observation rows excluded from the primary row generator.
+- Required handoff contract: `docs/contracts/SHORTPICK_MODEL_EXPLORATION_WORKBENCH_P1_HANDOFF_2026-07-03.md`.
+- Keep legacy payload path as a diagnostic-only comparator.
 
 ### P2 - Objective Universe And PIT Labels
 
-- Status: objective frozen universe implemented for the factor validation / weight sweep path through `objective_frozen_universe.v1`.
-- Generate PIT label artifacts with executable entry/exit definitions.
+- Status: not_started for the independent model exploration mechanism.
+- Existing `objective_frozen_universe.v1` is only a legacy diagnostic prototype until the universe-date rows drive feature generation, labels, candidate scoring and validation.
+- Generate PIT label artifacts with executable entry/exit definitions for every eligible `symbol` x `as_of_date` row.
 - Require benchmark bars before official excess-return labels.
 - Add winner-dependency and universe-width reporting.
 
 ### P3 - Walk-Forward / Purged CV / PBO
 
-- Status: walk-forward split / purge / embargo protocol artifacts implemented for the factor validation / weight sweep path through `walk_forward_purge_embargo.v1`.
-- Status: PBO / DSR / multiple-comparison diagnostics implemented for weight sweep through `pbo_dsr_multiple_comparison.v1`.
-- Status: OOS validation artifacts implemented for ready walk-forward holdout windows through `oos_validation.v1`.
+- Status: not_started for model candidate validation.
+- Existing split, OOS and PBO/DSR artifacts only wrap legacy observation rows / weight sweeps.
+- Required P3 output: walk-forward candidate prediction and validation artifacts for governed model specs and hyperparameter grids.
 
 ### P4 - Governance Promotion State Machine
 
-- Status: governance promotion decision artifacts implemented for the factor validation / weight sweep path through `governance_promotion_decision.v1`.
+- Status: not_started for independent model candidates.
+- Existing governance promotion decision artifacts are implemented for the factor validation / weight sweep path through `governance_promotion_decision.v1`.
 - Current state remains `diagnostic_only`, gate outcome remains blocked, and automatic promotion from weight sweep or a single validation artifact remains forbidden.
 - Remaining hardening: human approval workflow, retirement/recovery operations, and rollback evidence for candidates that eventually pass all upstream gates.
 
 ### P5 - Dashboard Projection
 
-- Status: dashboard approved projection registry artifacts implemented for the factor validation / weight sweep path through `dashboard_approved_projection_registry.v1`.
+- Status: not_started for independent model candidates.
+- Existing dashboard approved projection registry artifacts are implemented for the factor validation / weight sweep path through `dashboard_approved_projection_registry.v1`.
 - Current approved projection count remains 0; frontend and operations APIs read registry summary, not raw validation artifacts or raw registry entries.
 - Remaining hardening: produce approved projection entries only after governance reaches `production_eligible`, then bind user-facing copy to `claim_ceiling` and canonical/full parity verification.
 
@@ -502,6 +528,6 @@ The external review themes that shaped this contract:
 
 ## Current Alignment Statement
 
-Commit `3621f2d` implements the P0 slice only. It aligns with the P0 contract by isolating `factor_ic_study` and `weight_sweep_study` under `research_validation`, marking legacy factor payloads diagnostic-only, blocking benchmark fallback, carrying lineage/gate/promotion readouts, and tightening small-sample/dynamic-weight gates.
+Commit `3621f2d` implements the P0 safety slice only. It aligns with the P0 contract by isolating `factor_ic_study` and `weight_sweep_study` under `research_validation`, marking legacy factor payloads diagnostic-only, blocking benchmark fallback, carrying lineage/gate/promotion readouts, and tightening small-sample/dynamic-weight gates.
 
-Subsequent commits add the objective frozen universe, research input snapshot, PIT feature store, walk-forward/purge/embargo protocol, PBO/DSR/multiple-comparison diagnostics, OOS validation, governance promotion state machine, and dashboard approved projection registry slices for the factor validation / weight sweep path. These implemented slices do not imply promotion readiness: current lifecycle remains `diagnostic_only`, governance gate outcome remains blocked, and dashboard registry `approved_projection_count` remains 0 until production eligibility is proven.
+Subsequent commits add useful legacy diagnostic prototypes for objective frozen universe, research input snapshot, PIT feature store, walk-forward/purge/embargo protocol, PBO/DSR/multiple-comparison diagnostics, OOS validation, governance promotion state machine, and dashboard approved projection registry. These prototypes are scoped to the factor validation / weight sweep path. They do not implement the independent model exploration mechanism, do not imply promotion readiness, and do not prove a new model. Current lifecycle remains `diagnostic_only`, governance gate outcome remains blocked, dashboard registry `approved_projection_count` remains 0, and `independent_model_exploration` remains `not_started`.

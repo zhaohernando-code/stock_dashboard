@@ -1,5 +1,17 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-07-03T23:20:00+08:00] Short Pick deep research branch is P0 guardrail, not the model exploration mechanism:
+
+项目所有者重新确认：当前 `codex/shortpick-validation-boundary-p0` 分支完成的是旧 `factor_observation / weight_sweep` 链路的研究边界、安全门禁和诊断 artifact prototype，不能被表述为“新模型探索机制已经完成”。`research_input_snapshot`、`pit_feature_store`、`objective_frozen_universe`、`walk_forward_purge_embargo`、`oos_validation`、`governance_promotion_decision`、`dashboard_approved_projection_registry` 这些当前实现都只覆盖 legacy diagnostic factor validation / weight sweep scope。
+
+新的模型探索机制必须另行从 `objective universe x as_of_date` 主矩阵开始，生成独立 PIT feature matrix、executable label matrix、model spec registry、walk-forward candidate predictions 和 comparison report。它不得从 `recommendation_rows`、active watchlist、`factor_observation` 行、`recommendation_payload.factor_breakdown` 或既有强势股票后验特征开始。
+
+执行约定
+- `docs/contracts/SHORTPICK_DEEP_RESEARCH_END_STATE_DESIGN_2026-07-03.md` 是终局边界合同，但其中当前实现映射只能解释为 legacy diagnostic prototype。
+- `docs/contracts/SHORTPICK_MODEL_EXPLORATION_WORKBENCH_P1_HANDOFF_2026-07-03.md` 是下一轮实现入口。
+- 后续开发会话必须先声明实现哪个 P1 artifact family，再更新 handoff 文档的完成状态。
+- 在 P1 artifact families、测试和 comparison report 完成前，`independent_model_exploration` 状态必须保持 `not_started` 或 `in_progress`，不得写成 completed。
+
 [2026-06-15T09:50:24+08:00] Short Pick Lab V2 h10 quiet champion is the mandatory benchmark line:
 
 项目所有者明确：后续 `试验田v2` 策略搜索必须以 10 日交易日口径的 quiet champion 为对标标准，不能因为长上下文丢失重新回到无边界的大方向发散。当前固化的主 benchmark 是 `quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1`（历史简称 `quiet_r2_poolhot10_mtw__fixed85_top5_v1`），保守资金影子是 `quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1`（历史简称 `quiet_r2_poolhot10_mtw__fixed80_top5_v1`）。
