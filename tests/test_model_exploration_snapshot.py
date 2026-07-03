@@ -139,6 +139,26 @@ class ModelExplorationSnapshotTests(unittest.TestCase):
         self.assertIn("missing_benchmark_exit_bar_2d", label_row["label_block_reasons"])
         self.assertIsNone(label_row["labels"]["excess_return_2d"])
 
+    def test_recent_auto_as_of_dates_leave_forward_label_window(self) -> None:
+        self._seed_stock("600001.SH", "主板甲", [10 + index * 0.2 for index in range(14)])
+        self._seed_stock("000300.SH", "沪深300", [100 + index * 0.2 for index in range(14)], industry="benchmark")
+
+        with session_scope(self.database_url) as session:
+            artifacts = build_model_exploration_p1_artifacts(
+                session,
+                validation_run_id="unit-run",
+                max_as_of_dates=2,
+                horizons=(10,),
+                min_history_days=2,
+            )
+
+        snapshot = artifacts["model_exploration_input_snapshot"]
+        label_rows = artifacts["executable_label_matrix"]["rows"]
+
+        self.assertEqual(snapshot["source_data_time_range"]["as_of_start"], "2026-01-03")
+        self.assertEqual(snapshot["source_data_time_range"]["as_of_end"], "2026-01-04")
+        self.assertEqual({row["label_status"] for row in label_rows}, {"ready"})
+
     def test_model_exploration_artifacts_write_to_research_validation_namespace(self) -> None:
         self._seed_stock("600001.SH", "主板甲", [10, 11, 12, 13])
         self._seed_stock("000300.SH", "沪深300", [100, 101, 102, 103], industry="benchmark")

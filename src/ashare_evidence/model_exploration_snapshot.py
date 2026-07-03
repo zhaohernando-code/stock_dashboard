@@ -323,27 +323,43 @@ def _label_for_row(
     return row
 
 
-def _recent_as_of_dates(session: Session, *, benchmark_symbol: str, limit: int) -> list[date]:
+def _recent_as_of_dates(
+    session: Session,
+    *,
+    benchmark_symbol: str,
+    limit: int,
+    forward_horizon_days: int = 0,
+) -> list[date]:
     benchmark = session.scalar(select(Stock).where(Stock.symbol == benchmark_symbol).limit(1))
     if benchmark is not None:
         rows = list(
             session.scalars(
                 select(MarketBar.observed_at)
                 .where(MarketBar.stock_id == benchmark.id, MarketBar.timeframe == "1d")
-                .order_by(MarketBar.observed_at.desc(), MarketBar.id.desc())
-                .limit(limit)
+                .order_by(MarketBar.observed_at.asc(), MarketBar.id.asc())
             )
         )
-        return sorted({_observed_day(row) for row in rows})
+        benchmark_days = sorted({_observed_day(row) for row in rows})
+        eligible_days = (
+            benchmark_days[: -forward_horizon_days]
+            if forward_horizon_days > 0 and len(benchmark_days) > forward_horizon_days
+            else benchmark_days
+        )
+        return eligible_days[-limit:]
     rows = list(
         session.scalars(
             select(MarketBar.observed_at)
             .where(MarketBar.timeframe == "1d")
-            .order_by(MarketBar.observed_at.desc(), MarketBar.id.desc())
-            .limit(limit * 20)
+            .order_by(MarketBar.observed_at.asc(), MarketBar.id.asc())
         )
     )
-    return sorted({_observed_day(row) for row in rows})[-limit:]
+    market_days = sorted({_observed_day(row) for row in rows})
+    eligible_days = (
+        market_days[: -forward_horizon_days]
+        if forward_horizon_days > 0 and len(market_days) > forward_horizon_days
+        else market_days
+    )
+    return eligible_days[-limit:]
 
 
 def _bars_by_stock(
@@ -384,7 +400,12 @@ def build_model_exploration_p1_artifacts(
 ) -> dict[str, dict[str, Any]]:
     ordered_days = sorted(set(as_of_dates or []))
     if not ordered_days and max_as_of_dates is not None:
-        ordered_days = _recent_as_of_dates(session, benchmark_symbol=benchmark_symbol, limit=max_as_of_dates)
+        ordered_days = _recent_as_of_dates(
+            session,
+            benchmark_symbol=benchmark_symbol,
+            limit=max_as_of_dates,
+            forward_horizon_days=max(horizons),
+        )
     start_day = min(ordered_days) - timedelta(days=90) if ordered_days else None
     end_day = max(ordered_days) + timedelta(days=max(horizons) * 3 + 10) if ordered_days else None
     stocks_by_symbol, bars_by_symbol = _bars_by_stock(session, start_day=start_day, end_day=end_day)

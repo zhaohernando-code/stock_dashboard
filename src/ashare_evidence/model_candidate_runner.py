@@ -169,7 +169,11 @@ def build_walk_forward_model_candidate_run_artifact(
     selected_model_spec_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     joined_rows = _join_rows(feature_matrix, label_matrix)
-    dates = sorted({str(row.get("as_of_date")) for row in joined_rows if row.get("as_of_date")})
+    evaluable_rows = [
+        row for row in joined_rows if row.get("label_status") == "ready" and row.get("target_label") is not None
+    ]
+    evaluable_row_keys = {str(row["universe_row_id"]) for row in evaluable_rows}
+    dates = sorted({str(row.get("as_of_date")) for row in evaluable_rows if row.get("as_of_date")})
     splits = _walk_forward_splits(dates, min_train_dates=min_train_dates, test_window_dates=test_window_dates)
     specs = list(model_spec_registry.get("model_specs") or [])
     selected = set(selected_model_spec_ids or [str(spec.get("model_spec_id")) for spec in specs])
@@ -194,6 +198,8 @@ def build_walk_forward_model_candidate_run_artifact(
                 test_dates = set(split["test_dates"])
                 for joined in joined_rows:
                     if str(joined["as_of_date"]) not in test_dates:
+                        continue
+                    if str(joined["universe_row_id"]) not in evaluable_row_keys:
                         continue
                     score = _score_row(joined["feature_row"], model_spec=spec, params=params)
                     prediction = {
@@ -248,6 +254,7 @@ def build_walk_forward_model_candidate_run_artifact(
         "validation_protocol": {
             "runner_policy": "registered_model_specs_only",
             "primary_row_source": "pit_feature_matrix_joined_to_executable_label_matrix",
+            "evaluation_row_policy": "label_status_ready_and_target_label_present_only",
             "production_effect": "forbidden",
             "min_train_dates": min_train_dates,
             "test_window_dates": test_window_dates,
@@ -266,6 +273,8 @@ def build_walk_forward_model_candidate_run_artifact(
         "source_model_spec_registry_id": model_spec_registry.get("artifact_id"),
         "split_count": len(splits),
         "trial_count": len(trial_summaries),
+        "joined_row_count": len(joined_rows),
+        "evaluable_row_count": len(evaluable_rows),
         "prediction_row_count": len(prediction_rows),
         "splits": splits,
         "trial_summaries": trial_summaries,

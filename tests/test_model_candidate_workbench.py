@@ -120,6 +120,7 @@ class ModelCandidateWorkbenchTests(unittest.TestCase):
         self.assertEqual(run["promotion_status"], "blocked_from_production")
         self.assertEqual(run["trial_count"], 1)
         self.assertGreater(run["prediction_row_count"], 0)
+        self.assertEqual(run["evaluable_row_count"], run["joined_row_count"])
         self.assertEqual(run["validation_protocol"]["runner_policy"], "registered_model_specs_only")
         self.assertIn("governance_promotion_pending", run["gate_readout"]["blocking_gate_ids"])
 
@@ -160,8 +161,13 @@ class ModelCandidateWorkbenchTests(unittest.TestCase):
         self.assertEqual(report["summary"]["candidate_run_id"], run["artifact_id"])
         self.assertEqual(len(report["candidate_leaderboard"]), 1)
         self.assertEqual(report["overfit_diagnostics"]["diagnostic_scope"], "candidate_run_trial_split_proxy")
+        self.assertEqual(report["overfit_diagnostics"]["period_source"], "best_trial_as_of_date_rank_ic")
         self.assertIn(
             "overfit:insufficient_eligible_trials_for_pbo",
+            report["gate_readout"]["blocking_gate_ids"],
+        )
+        self.assertIn(
+            "overfit:insufficient_independent_walk_forward_splits_for_overfit",
             report["gate_readout"]["blocking_gate_ids"],
         )
         self.assertEqual(report["winner_dependency"]["best_trial_id"], "baseline_momentum_10d_turnover_cooldown_v1:trial-000")

@@ -69,6 +69,16 @@ def _split_rank_ic(predictions: list[dict[str, Any]]) -> float | None:
     return spearman_correlation(scores, labels)
 
 
+def _period_rank_ics(predictions: list[dict[str, Any]], *, period_field: str) -> list[float]:
+    by_period: dict[str, list[dict[str, Any]]] = {}
+    for row in predictions:
+        period = str(row.get(period_field) or "")
+        if not period:
+            continue
+        by_period.setdefault(period, []).append(row)
+    return [value for rows in by_period.values() if (value := _split_rank_ic(rows)) is not None]
+
+
 def _top_pick_returns(predictions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     by_date: dict[str, list[dict[str, Any]]] = {}
     for row in predictions:
@@ -101,7 +111,6 @@ def _overfit_diagnostics(candidate_run: dict[str, Any], leaderboard: list[dict[s
     trial_count = len(leaderboard)
     eligible_trial_count = len(eligible)
     split_ids = sorted({str(row.get("split_id")) for row in candidate_run.get("prediction_rows") or [] if row.get("split_id")})
-    split_rank_ics: list[float] = []
     overfit_like_count = 0
     for row in eligible:
         predictions = _prediction_rows(candidate_run, str(row.get("trial_id") or ""))
@@ -109,16 +118,18 @@ def _overfit_diagnostics(candidate_run: dict[str, Any], leaderboard: list[dict[s
         for prediction in predictions:
             by_split.setdefault(str(prediction.get("split_id") or ""), []).append(prediction)
         trial_split_ics = [value for rows in by_split.values() if (value := _split_rank_ic(rows)) is not None]
-        split_rank_ics.extend(trial_split_ics)
         if trial_split_ics and _safe_float(row.get("rank_ic_mean")) > 0 and mean(trial_split_ics) <= 0:
             overfit_like_count += 1
     pbo_proxy = overfit_like_count / eligible_trial_count if eligible_trial_count else None
-    period_count = len(split_rank_ics)
+    best_trial_id = str((leaderboard[0] if leaderboard else {}).get("trial_id") or "")
+    best_trial_predictions = _prediction_rows(candidate_run, best_trial_id) if best_trial_id else []
+    period_rank_ics = _period_rank_ics(best_trial_predictions, period_field="as_of_date")
+    period_count = len(period_rank_ics)
     alpha_t_stat = None
     deflated_sharpe_confidence = None
     if period_count >= 2:
-        avg = mean(split_rank_ics)
-        std = pstdev(split_rank_ics)
+        avg = mean(period_rank_ics)
+        std = pstdev(period_rank_ics)
         if std > 0:
             alpha_t_stat = avg / (std / sqrt(period_count))
             multiple_testing_penalty = sqrt(2 * log(max(eligible_trial_count, 2)))
@@ -126,6 +137,8 @@ def _overfit_diagnostics(candidate_run: dict[str, Any], leaderboard: list[dict[s
     blockers: list[str] = []
     if eligible_trial_count < 4:
         blockers.append("insufficient_eligible_trials_for_pbo")
+    if len(split_ids) < 4:
+        blockers.append("insufficient_independent_walk_forward_splits_for_overfit")
     if period_count < 20:
         blockers.append("insufficient_periods_for_dsr")
     if pbo_proxy is None:
@@ -147,12 +160,14 @@ def _overfit_diagnostics(candidate_run: dict[str, Any], leaderboard: list[dict[s
         "eligible_trial_count": eligible_trial_count,
         "split_count": len(split_ids),
         "period_count": period_count,
+        "period_source": "best_trial_as_of_date_rank_ic",
         "pbo_proxy": pbo_proxy,
         "deflated_sharpe_confidence": deflated_sharpe_confidence,
         "alpha_t_stat": alpha_t_stat,
         "blocking_gate_ids": blockers,
         "thresholds": {
             "minimum_eligible_trials_for_pbo": 4,
+            "minimum_independent_walk_forward_splits_for_overfit": 4,
             "minimum_periods_for_dsr": 20,
             "pbo_proxy_max": 0.10,
             "deflated_sharpe_confidence_min": 0.95,
