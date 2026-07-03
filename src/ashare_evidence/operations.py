@@ -1721,11 +1721,12 @@ def _build_operations_section_detail(
             )
         }
     elif section == "factor_observation":
+        validation_symbols = set(active_watchlist_symbols(session))
         section_payload = {
             "factor_observation_summary": _factor_observation_summary(
                 session,
                 artifact_root=artifact_root,
-                active_symbols=active_symbols,
+                active_symbols=validation_symbols,
             )
         }
     elif section == "sector_exposure":

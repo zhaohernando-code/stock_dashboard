@@ -284,6 +284,36 @@ class DashboardOperationsViewTests(DashboardViewTestCase):
         self.assertEqual(detail["section"], "replay")
         self.assertEqual(detail["recommendation_replay"], [])
 
+    def test_factor_observation_detail_uses_real_active_watchlist_scope(self) -> None:
+        with session_scope(self.database_url) as session:
+            seed_watchlist_fixture(session)
+
+        blocked_projection = {
+            "status": "insufficient_sample",
+            "promotion_status": "blocked_from_production",
+            "claim_ceiling": "diagnostic_research_only",
+            "gate_readout": {"gate_status": "blocked"},
+        }
+        with session_scope(self.database_url) as session:
+            with (
+                patch("ashare_evidence.operations.active_watchlist_symbols", return_value=[]),
+                patch("ashare_evidence.operations._operations_detail_symbols", return_value={"600519.SH"}),
+                patch(
+                    "ashare_evidence.operations.build_factor_observation_summary_projection",
+                    return_value=blocked_projection,
+                ) as projection,
+            ):
+                detail = build_operations_detail(
+                    session,
+                    section="factor_observation",
+                    sample_symbol="600519.SH",
+                    target_login="root",
+                )
+
+        self.assertEqual(detail["section"], "factor_observation")
+        self.assertEqual(detail["factor_observation_summary"], blocked_projection)
+        self.assertEqual(projection.call_args.kwargs["active_symbols"], set())
+
     def test_completed_improvement_plan_does_not_pass_replay_gate_without_formal_evidence(self) -> None:
         with session_scope(self.database_url) as session:
             seed_watchlist_fixture(session)
