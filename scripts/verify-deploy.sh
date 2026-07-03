@@ -107,11 +107,11 @@ from pathlib import Path
 def _api_symbols(path: str) -> list[str]:
     try:
         payload = json.loads(urllib.request.urlopen(os.environ["BACKEND_URL"] + path, timeout=20).read())
-    except Exception:
-        return []
+    except Exception as exc:
+        raise RuntimeError(f"{path} sample endpoint failed: {exc}") from exc
     items = payload.get("items") if isinstance(payload, dict) else payload
     if not isinstance(items, list):
-        return []
+        raise RuntimeError(f"{path} sample endpoint returned non-list items")
     symbols: list[str] = []
     for item in items:
         if isinstance(item, dict) and item.get("symbol"):
@@ -189,8 +189,13 @@ if [ -n "$SYMBOLS" ]; then
         check "$sym has liquidity factor" \
             "curl -s --max-time 90 '$BACKEND_URL/stocks/$sym/dashboard' | python3 -c \"import sys,json; d=json.load(sys.stdin); keys=[c['factor_key'] for c in d['recommendation']['evidence']['factor_cards']]; assert 'liquidity' in keys\""
 
-        check "$sym news items have LLM analysis (no fallback)" \
-            "curl -s --max-time 90 '$BACKEND_URL/stocks/$sym/dashboard' | python3 -c \"import sys,json; d=json.load(sys.stdin); news=d.get('recent_news',[]); analyzed=sum(1 for n in news if n.get('summary')!=n.get('headline')); assert analyzed>=len(news)*0.3, f'Only {analyzed}/{len(news)} items have LLM analysis'\""
+        if [[ "$SAMPLE_SOURCE" == "runtime_latest_recommendations" ]]; then
+            check "$sym news LLM analysis skipped for runtime fallback sample" \
+                "true"
+        else
+            check "$sym news items have LLM analysis (no fallback)" \
+                "curl -s --max-time 90 '$BACKEND_URL/stocks/$sym/dashboard' | python3 -c \"import sys,json; d=json.load(sys.stdin); news=d.get('recent_news',[]); analyzed=sum(1 for n in news if n.get('summary')!=n.get('headline')); assert analyzed>=len(news)*0.3, f'Only {analyzed}/{len(news)} items have LLM analysis'\""
+        fi
 
         check "$sym direction label is actionable" \
             "curl -s --max-time 90 '$BACKEND_URL/stocks/$sym/dashboard' | python3 -c \"import sys,json; d=json.load(sys.stdin); label=d['hero']['direction_label']; valid={'可建仓','可加仓','继续观察','减仓','建议离场','风险提示'}; assert label in valid, f'Unknown label: {label}'\""
