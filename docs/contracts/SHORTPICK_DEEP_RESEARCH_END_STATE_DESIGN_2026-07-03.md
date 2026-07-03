@@ -27,7 +27,7 @@ Owner: stock_dashboard / Short Pick research governance
 | OOS artifacts | legacy diagnostic prototype completed | Current OOS validation consumes legacy factor-study observation rows. It does not validate independent model predictions produced from a model registry over a frozen universe-date feature matrix. |
 | governance promotion state machine | legacy diagnostic prototype completed | Current state machine blocks promotion correctly for legacy artifacts. It does not yet promote or reject independent model-exploration candidates because those candidate artifacts do not exist. |
 | dashboard approved projection registry | legacy diagnostic prototype completed | Current registry correctly approves zero projections for blocked legacy artifacts. It is not evidence that any new model is ready for dashboard claims. |
-| independent model exploration mechanism | not_started | Required next slice is defined in `SHORTPICK_MODEL_EXPLORATION_WORKBENCH_P1_HANDOFF_2026-07-03.md`: objective universe-date matrix, model spec registry, candidate runner, walk-forward validation, comparison report, and kill/promote gates. |
+| independent model exploration mechanism | in_progress | P1 matrix foundation is implemented in `src/ashare_evidence/model_exploration_snapshot.py`: input snapshot, universe-date matrix, PIT feature matrix and executable label matrix. Model spec registry, candidate runner, walk-forward validation, comparison report and kill/promote gates remain pending. |
 | runtime publish / served verification | completed | commit `04fe909` published to local runtime with `ASHARE_PUBLISH_REFRESH_MODE=skip`; release manifest `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260703T142623Z-04fe909c3142/manifest.json` has `status=passed`, commit `04fe909c31428094b76c021b2b4c7751ca49f56d`, canonical/local parity match for factor observation and simulation workspace, and deploy verifier `44 passed, 0 failed`. Served factor observation remains `blocked_from_production` / `diagnostic_research_only`; simulation workspace detail is bounded at about 67.5 KB with 88 nav points per track. |
 
 ## Course Correction / 当前真实结论
@@ -454,7 +454,7 @@ The following blocked states are intentional completion status, not omissions. P
 - Approved dashboard projection registry artifacts are implemented, but current approved projection count remains 0 until governance reaches `production_eligible`; current API is diagnostic summary projection only.
 - Production weight update is still blocked; weight sweep cannot change policy config or recommendation generation.
 - Paper/live candidate promotion is still blocked until research, OOS, execution, PBO/DSR and governance gates pass.
-- Independent model exploration remains `not_started`: no governed model-spec registry, no objective universe-date feature matrix as the primary input, no model candidate prediction artifact, and no model comparison report have been implemented yet.
+- Independent model exploration remains incomplete: the P1 matrix foundation exists, but no governed model-spec registry, model candidate prediction artifact, or model comparison report has been implemented yet.
 
 ## Review / Verification Log
 
@@ -481,9 +481,9 @@ The external review themes that shaped this contract:
 
 ### P1 - Independent Factor Feature Store
 
-- Status: not_started for the independent model exploration mechanism.
-- Existing `pit_feature_store.v1` is only a legacy diagnostic prototype for the factor validation / weight-sweep path.
-- Required P1 output: a primary feature matrix keyed by `symbol` x `as_of_date`, generated from objective universe membership and point-in-time sources, with recommendation/factor-observation rows excluded from the primary row generator.
+- Status: foundation_completed for the independent model exploration mechanism.
+- Existing `pit_feature_store.v1` remains only a legacy diagnostic prototype for the factor validation / weight-sweep path.
+- Current P1 output: `pit_feature_matrix.v1`, keyed by `symbol` x `as_of_date`, generated from objective universe membership and point-in-time sources, with recommendation/factor-observation rows excluded from the primary row generator.
 - Required handoff contract: `docs/contracts/SHORTPICK_MODEL_EXPLORATION_WORKBENCH_P1_HANDOFF_2026-07-03.md`.
 - Keep legacy payload path as a diagnostic-only comparator.
 
@@ -530,4 +530,6 @@ The external review themes that shaped this contract:
 
 Commit `3621f2d` implements the P0 safety slice only. It aligns with the P0 contract by isolating `factor_ic_study` and `weight_sweep_study` under `research_validation`, marking legacy factor payloads diagnostic-only, blocking benchmark fallback, carrying lineage/gate/promotion readouts, and tightening small-sample/dynamic-weight gates.
 
-Subsequent commits add useful legacy diagnostic prototypes for objective frozen universe, research input snapshot, PIT feature store, walk-forward/purge/embargo protocol, PBO/DSR/multiple-comparison diagnostics, OOS validation, governance promotion state machine, and dashboard approved projection registry. These prototypes are scoped to the factor validation / weight sweep path. They do not implement the independent model exploration mechanism, do not imply promotion readiness, and do not prove a new model. Current lifecycle remains `diagnostic_only`, governance gate outcome remains blocked, dashboard registry `approved_projection_count` remains 0, and `independent_model_exploration` remains `not_started`.
+Subsequent commits add useful legacy diagnostic prototypes for objective frozen universe, research input snapshot, PIT feature store, walk-forward/purge/embargo protocol, PBO/DSR/multiple-comparison diagnostics, OOS validation, governance promotion state machine, and dashboard approved projection registry. These prototypes are scoped to the factor validation / weight sweep path. They do not imply promotion readiness and do not prove a new model.
+
+The independent model exploration mechanism is now in progress through the P1 matrix foundation: `model_exploration_input_snapshot`, `universe_date_matrix`, `pit_feature_matrix`, and `executable_label_matrix` are implemented as research-validation artifacts. The mechanism is still incomplete until `model_spec_registry`, `walk_forward_model_candidate_run`, `model_comparison_report`, OOS/PBO/DSR gates and governance promotion are implemented and verified.

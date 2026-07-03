@@ -186,6 +186,76 @@ class ResearchArtifactStoreTests(unittest.TestCase):
                 },
                 root=root,
             )
+            model_snapshot_path = write_research_validation_artifact(
+                "model_exploration_input_snapshot",
+                "model-exploration-input-snapshot-unit",
+                {
+                    "artifact_type": "model_exploration_input_snapshot",
+                    "claim_ceiling": "data_coverage_blocked",
+                    "promotion_status": "blocked_from_production",
+                },
+                root=root,
+            )
+            universe_date_matrix_path = write_research_validation_artifact(
+                "universe_date_matrix",
+                "universe-date-matrix-unit",
+                {
+                    "artifact_type": "universe_date_matrix",
+                    "claim_ceiling": "data_coverage_blocked",
+                    "promotion_status": "blocked_from_production",
+                },
+                root=root,
+            )
+            feature_matrix_path = write_research_validation_artifact(
+                "pit_feature_matrix",
+                "pit-feature-matrix-unit",
+                {
+                    "artifact_type": "pit_feature_matrix",
+                    "claim_ceiling": "feature_matrix_only",
+                    "promotion_status": "blocked_from_production",
+                },
+                root=root,
+            )
+            label_matrix_path = write_research_validation_artifact(
+                "executable_label_matrix",
+                "executable-label-matrix-unit",
+                {
+                    "artifact_type": "executable_label_matrix",
+                    "claim_ceiling": "label_matrix_only",
+                    "promotion_status": "blocked_from_production",
+                },
+                root=root,
+            )
+            spec_registry_path = write_research_validation_artifact(
+                "model_spec_registry",
+                "model-spec-registry-unit",
+                {
+                    "artifact_type": "model_spec_registry",
+                    "claim_ceiling": "registry_only",
+                    "promotion_status": "blocked_from_production",
+                },
+                root=root,
+            )
+            candidate_run_path = write_research_validation_artifact(
+                "walk_forward_model_candidate_run",
+                "walk-forward-model-candidate-run-unit",
+                {
+                    "artifact_type": "walk_forward_model_candidate_run",
+                    "claim_ceiling": "candidate_run_only",
+                    "promotion_status": "blocked_from_production",
+                },
+                root=root,
+            )
+            comparison_report_path = write_research_validation_artifact(
+                "model_comparison_report",
+                "model-comparison-report-unit",
+                {
+                    "artifact_type": "model_comparison_report",
+                    "claim_ceiling": "comparison_report_only",
+                    "promotion_status": "blocked_from_production",
+                },
+                root=root,
+            )
             sweep_path = write_research_validation_artifact(
                 "weight_sweep_study",
                 "weight-sweep-study-unit",
@@ -204,6 +274,19 @@ class ResearchArtifactStoreTests(unittest.TestCase):
                 projection_registry_path.parent,
                 root / "research_validation" / "dashboard_approved_projection_registries",
             )
+            self.assertEqual(
+                model_snapshot_path.parent,
+                root / "research_validation" / "model_exploration_input_snapshots",
+            )
+            self.assertEqual(universe_date_matrix_path.parent, root / "research_validation" / "universe_date_matrices")
+            self.assertEqual(feature_matrix_path.parent, root / "research_validation" / "pit_feature_matrices")
+            self.assertEqual(label_matrix_path.parent, root / "research_validation" / "executable_label_matrices")
+            self.assertEqual(spec_registry_path.parent, root / "research_validation" / "model_spec_registries")
+            self.assertEqual(
+                candidate_run_path.parent,
+                root / "research_validation" / "walk_forward_model_candidate_runs",
+            )
+            self.assertEqual(comparison_report_path.parent, root / "research_validation" / "model_comparison_reports")
             self.assertEqual(factor_path.parent, root / "research_validation" / "factor_ic_studies")
             self.assertEqual(sweep_path.parent, root / "research_validation" / "weight_sweep_studies")
             self.assertFalse((root / "studies" / factor_path.name).exists())

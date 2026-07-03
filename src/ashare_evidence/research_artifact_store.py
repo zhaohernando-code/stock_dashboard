@@ -115,6 +115,13 @@ def write_research_validation_artifact(
         "oos_validation",
         "governance_promotion_decision",
         "dashboard_approved_projection_registry",
+        "model_exploration_input_snapshot",
+        "universe_date_matrix",
+        "pit_feature_matrix",
+        "executable_label_matrix",
+        "model_spec_registry",
+        "walk_forward_model_candidate_run",
+        "model_comparison_report",
         "factor_ic_study",
         "weight_sweep_study",
     }:
