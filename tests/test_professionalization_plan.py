@@ -17,6 +17,7 @@ from ashare_evidence.factor_observation import build_factor_observations, sweep_
 from ashare_evidence.lineage import build_lineage
 from ashare_evidence.market_rules import account_trade_eligibility, board_rule
 from ashare_evidence.models import FeatureSnapshot, NewsEntityLink, NewsItem, Stock
+from ashare_evidence.multiple_testing_diagnostics import build_multiple_testing_diagnostics_artifact
 from ashare_evidence.operations import build_operations_detail, build_operations_summary
 from ashare_evidence.schemas import StockDashboardResponse
 from ashare_evidence.walk_forward_protocol import build_walk_forward_protocol_artifact
@@ -80,6 +81,51 @@ class ProfessionalizationPlanTests(unittest.TestCase):
                 if split["status"] == "ready"
             )
         )
+
+    def test_multiple_testing_diagnostics_blocks_and_can_pass_when_inputs_are_sufficient(self) -> None:
+        blocked = build_multiple_testing_diagnostics_artifact(
+            validation_run_id="multi-test",
+            source_db_snapshot_id="snapshot",
+            source_data_time_range={},
+            weight_sweep={
+                "artifact_id": "sweep-blocked",
+                "sweep_results": [
+                    {
+                        "label": "baseline",
+                        "horizon_metrics": {
+                            "10d": {"ic_ir": None, "sample_count": 0, "snapshot_count": 0},
+                        },
+                    }
+                ],
+            },
+        )
+        self.assertEqual(blocked["gate_readout"]["gate_status"], "blocked")
+        self.assertIn("insufficient_eligible_trials_for_pbo", blocked["gate_readout"]["blocking_gate_ids"])
+
+        ready_trials = [
+            {
+                "label": f"trial_{index}",
+                "horizon_metrics": {
+                    "10d": {
+                        "ic_ir": 1.1 + index * 0.05,
+                        "sample_count": 800,
+                        "snapshot_count": 24,
+                        "mean_top_bottom_spread": 0.02,
+                    }
+                },
+            }
+            for index in range(4)
+        ]
+        ready = build_multiple_testing_diagnostics_artifact(
+            validation_run_id="multi-test",
+            source_db_snapshot_id="snapshot",
+            source_data_time_range={},
+            weight_sweep={"artifact_id": "sweep-ready", "sweep_results": ready_trials},
+        )
+        self.assertEqual(ready["gate_readout"]["gate_status"], "multiple_testing_ready")
+        self.assertGreaterEqual(ready["deflated_sharpe_confidence"], 0.95)
+        self.assertLessEqual(ready["pbo"], 0.10)
+        self.assertGreaterEqual(ready["alpha_t_stat_equivalent"], 3.0)
 
     def test_data_quality_snapshot_scores_and_missing_news_is_soft_gap(self) -> None:
         with session_scope(self.database_url) as session:
@@ -292,6 +338,13 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(sweep["research_input_snapshot"]["artifact_type"], "research_input_snapshot")
         self.assertEqual(sweep["pit_feature_store"]["artifact_type"], "pit_feature_store")
         self.assertEqual(sweep["walk_forward_protocol"]["artifact_type"], "walk_forward_purge_embargo")
+        self.assertEqual(sweep["multiple_testing_diagnostics"]["artifact_type"], "pbo_dsr_multiple_comparison")
+        self.assertEqual(sweep["multiple_testing_diagnostics"]["promotion_status"], "blocked_from_production")
+        self.assertEqual(
+            sweep["validation_protocol"]["multiple_testing_status"],
+            "artifact_implemented",
+        )
+        self.assertNotIn("trials", sweep["multiple_testing_diagnostics"])
         self.assertEqual(sweep["validation_protocol"]["weight_sweep_policy"], "diagnostic_only_no_auto_promotion")
         self.assertIn("不自动修改生产权重", sweep["note"])
         artifact_root = Path(self.temp_dir.name)
@@ -315,11 +368,18 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             / "walk_forward_protocols"
             / f"{study['walk_forward_protocol']['artifact_id']}.json"
         )
+        multiple_testing_path = (
+            artifact_root
+            / "research_validation"
+            / "multiple_testing_diagnostics"
+            / f"{sweep['multiple_testing_diagnostics']['artifact_id']}.json"
+        )
         sweep_path = artifact_root / "research_validation" / "weight_sweep_studies" / f"{sweep['artifact_id']}.json"
         self.assertTrue(universe_path.exists())
         self.assertTrue(snapshot_path.exists())
         self.assertTrue(pit_path.exists())
         self.assertTrue(walk_forward_path.exists())
+        self.assertTrue(multiple_testing_path.exists())
         self.assertTrue(factor_path.exists())
         self.assertTrue(sweep_path.exists())
         universe_payload = json.loads(universe_path.read_text(encoding="utf-8"))
@@ -344,6 +404,10 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             study["pit_feature_store"]["artifact_id"],
         )
         self.assertIn("splits", walk_forward_payload)
+        multiple_testing_payload = json.loads(multiple_testing_path.read_text(encoding="utf-8"))
+        self.assertEqual(multiple_testing_payload["artifact_type"], "pbo_dsr_multiple_comparison")
+        self.assertIn("trials", multiple_testing_payload)
+        self.assertIn("insufficient_eligible_trials_for_pbo", multiple_testing_payload["gate_readout"]["blocking_gate_ids"])
         pit_feature_row = pit_payload["feature_rows"][0]
         self.assertIn("price_baseline", pit_feature_row["features"])
         self.assertIn("liquidity", pit_feature_row["features"])
@@ -357,6 +421,8 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertNotIn("feature_rows", json.dumps(factor_payload, ensure_ascii=False))
         self.assertNotIn('"members"', json.dumps(factor_payload.get("objective_universe", {}), ensure_ascii=False))
         self.assertNotIn("splits", factor_payload.get("walk_forward_protocol", {}))
+        sweep_payload = json.loads(sweep_path.read_text(encoding="utf-8"))
+        self.assertNotIn("trials", sweep_payload["multiple_testing_diagnostics"])
 
     def test_operations_summary_is_light_and_details_are_sectioned(self) -> None:
         with session_scope(self.database_url) as session:

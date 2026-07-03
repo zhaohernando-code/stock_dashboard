@@ -12,6 +12,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from ashare_evidence.benchmark import CSI_BENCHMARKS, DEFAULT_BENCHMARK_ID, benchmark_close_maps
 from ashare_evidence.models import MarketBar, NewsEntityLink, NewsItem, Recommendation, Stock
+from ashare_evidence.multiple_testing_diagnostics import (
+    build_multiple_testing_diagnostics_artifact,
+    multiple_testing_diagnostics_summary,
+    write_multiple_testing_diagnostics_artifact,
+)
 from ashare_evidence.objective_universe import (
     build_objective_universe_artifact,
     objective_universe_summary,
@@ -1091,6 +1096,22 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
         "sweep_results": sweep_results,
         "note": "权重 sweep 只产出独立验证制品，不自动修改生产权重；不得把 in-sample 最优组合作为上线结论。",
     }
+    multiple_testing_diagnostics = build_multiple_testing_diagnostics_artifact(
+        validation_run_id=validation_run_id,
+        source_db_snapshot_id=(observations.get("lineage") or {}).get("source_db_snapshot_id"),
+        source_data_time_range=(observations.get("lineage") or {}).get("source_data_time_range", {}),
+        weight_sweep=results,
+    )
+    results["multiple_testing_diagnostics"] = multiple_testing_diagnostics_summary(multiple_testing_diagnostics)
+    results["validation_protocol"]["multiple_testing_status"] = (
+        "artifact_implemented"
+        if multiple_testing_diagnostics.get("artifact_id")
+        else "not_corrected"
+    )
+    results["lineage"] = {
+        **dict(results.get("lineage") or {}),
+        "multiple_testing_diagnostics_id": multiple_testing_diagnostics["artifact_id"],
+    }
     if persist:
         objective_universe = observations.get("objective_universe_artifact")
         if isinstance(objective_universe, dict) and objective_universe.get("artifact_id"):
@@ -1109,6 +1130,7 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
         walk_forward_protocol = observations.get("walk_forward_protocol_artifact")
         if isinstance(walk_forward_protocol, dict) and walk_forward_protocol.get("artifact_id"):
             write_walk_forward_protocol_artifact(walk_forward_protocol, artifact_root=artifact_root)
+        write_multiple_testing_diagnostics_artifact(multiple_testing_diagnostics, artifact_root=artifact_root)
         _write_sweep_artifact(results, artifact_root=artifact_root, artifact_id=artifact_id)
     return results
 

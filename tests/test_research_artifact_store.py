@@ -146,6 +146,16 @@ class ResearchArtifactStoreTests(unittest.TestCase):
                 },
                 root=root,
             )
+            multiple_testing_path = write_research_validation_artifact(
+                "pbo_dsr_multiple_comparison",
+                "pbo-dsr-unit",
+                {
+                    "artifact_type": "pbo_dsr_multiple_comparison",
+                    "claim_ceiling": "multiple_testing_diagnostic_only",
+                    "promotion_status": "blocked_from_production",
+                },
+                root=root,
+            )
             sweep_path = write_research_validation_artifact(
                 "weight_sweep_study",
                 "weight-sweep-study-unit",
@@ -157,6 +167,7 @@ class ResearchArtifactStoreTests(unittest.TestCase):
             self.assertEqual(snapshot_path.parent, root / "research_validation" / "input_snapshots")
             self.assertEqual(pit_path.parent, root / "research_validation" / "pit_feature_store")
             self.assertEqual(walk_forward_path.parent, root / "research_validation" / "walk_forward_protocols")
+            self.assertEqual(multiple_testing_path.parent, root / "research_validation" / "multiple_testing_diagnostics")
             self.assertEqual(factor_path.parent, root / "research_validation" / "factor_ic_studies")
             self.assertEqual(sweep_path.parent, root / "research_validation" / "weight_sweep_studies")
             self.assertFalse((root / "studies" / factor_path.name).exists())
