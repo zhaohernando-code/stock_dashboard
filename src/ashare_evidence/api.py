@@ -36,6 +36,7 @@ from ashare_evidence.frontend_projections import (
     home_shell_projection_key,
     operations_summary_projection_key,
     simulation_workspace_summary_projection_key,
+    upsert_frontend_projection,
 )
 from ashare_evidence.improvement_suggestions import (
     accept_suggestion_for_plan,
@@ -59,6 +60,7 @@ from ashare_evidence.operations import (
     annotate_operations_summary_endpoint_metrics,
     build_operations_dashboard,
     build_operations_detail,
+    build_operations_summary,
 )
 from ashare_evidence.policy_audit import build_policy_audit_report
 from ashare_evidence.policy_config_loader import build_policy_governance_summary, list_policy_config_versions
@@ -99,6 +101,7 @@ from ashare_evidence.schemas import (
     ModelApiKeyCreateRequest,
     ModelApiKeyDeleteResponse,
     ModelApiKeyUpdateRequest,
+    OperationsDashboardResponse,
     ProviderCredentialUpsertRequest,
     RecommendationTraceResponse,
     RuntimeOverviewResponse,
@@ -241,57 +244,6 @@ def _operations_json_content_response(content: str) -> Response:
     return Response(
         content=content,
         media_type="application/json",
-    )
-
-
-OPERATIONS_DETAIL_SECTIONS = {
-    "portfolios",
-    "replay",
-    "factor_observation",
-    "sector_exposure",
-    "manual_queue",
-    "simulation_workspace",
-    "policy_governance",
-}
-
-
-def _operations_degraded_payload(
-    *,
-    kind: str,
-    reason: str,
-    target_login: str,
-    sample_symbol: str | None = None,
-    section: str | None = None,
-) -> dict[str, object]:
-    return {
-        "status": "degraded",
-        "degraded": True,
-        "kind": kind,
-        "section": section,
-        "sample_symbol": sample_symbol.upper() if sample_symbol else None,
-        "target_login": target_login,
-        "reason": reason,
-        "generated_at": utcnow().isoformat(),
-        "scheduled_refresh_status": get_scheduled_refresh_status(),
-    }
-
-
-def _operations_degraded_response(
-    *,
-    kind: str,
-    reason: str,
-    target_login: str,
-    sample_symbol: str | None = None,
-    section: str | None = None,
-) -> Response:
-    return _operations_json_response(
-        _operations_degraded_payload(
-            kind=kind,
-            reason=reason,
-            target_login=target_login,
-            sample_symbol=sample_symbol,
-            section=section,
-        )
     )
 
 
@@ -1794,9 +1746,6 @@ def create_app(
     def prewarm_operations_response_cache() -> None:
         if os.getenv("ASHARE_DISABLE_OPERATIONS_RESPONSE_PREWARM", "").strip().lower() in {"1", "true", "yes", "on"}:
             return
-        if scheduled_refresh_lock_active():
-            LOGGER.info("operations response cache prewarm skipped while scheduled refresh lock is active")
-            return
         try:
             with session_factory() as session:
                 sample_symbol = os.getenv("ASHARE_OPERATIONS_PREWARM_SAMPLE_SYMBOL", "600519.SH")
@@ -2740,14 +2689,9 @@ def create_app(
         cached = get_cached_operations_response(cache_key, refresh_payload)
         if cached is not None:
             return cached
-        return _operations_degraded_response(
-            kind="legacy",
-            reason="operations_response_cache_miss",
-            target_login=access.target_login,
-            sample_symbol=sample_symbol,
-        )
+        return store_operations_response(cache_key, build_payload(session))
 
-    @app.get("/dashboard/operations/summary", response_model=None)
+    @app.get("/dashboard/operations/summary", response_model=OperationsDashboardResponse)
     def dashboard_operations_summary(
         access: StockAccessContext = Depends(require_stock_access),
         sample_symbol: str = Query(default="600519.SH"),
@@ -2764,7 +2708,27 @@ def create_app(
             )
             if projection is not None:
                 return annotate_operations_summary_endpoint_metrics(projection, started_at=started_at)
-            raise LookupError("operations_summary_projection_miss")
+            payload = build_operations_summary(
+                active_session,
+                sample_symbol,
+                target_login=access.target_login,
+            )
+            normalized_symbol = sample_symbol.upper()
+            upsert_frontend_projection(
+                active_session,
+                operations_summary_projection_key(target_login=access.target_login, sample_symbol=normalized_symbol),
+                projection_group="operations",
+                target_login=access.target_login,
+                payload=payload,
+                metadata_payload={
+                    "source": "dashboard_operations_summary_fallback",
+                    "usage": "GET /dashboard/operations/summary",
+                    "sample_symbol": normalized_symbol,
+                    "target_login": access.target_login,
+                },
+            )
+            active_session.commit()
+            return annotate_operations_summary_endpoint_metrics(payload, started_at=started_at)
 
         def refresh_payload() -> object:
             with session_factory() as refresh_session:
@@ -2773,15 +2737,7 @@ def create_app(
         cached = get_cached_operations_response(cache_key, refresh_payload)
         if cached is not None:
             return cached
-        try:
-            return store_operations_response(cache_key, build_payload(session))
-        except LookupError:
-            return _operations_degraded_response(
-                kind="summary",
-                reason="operations_summary_projection_miss",
-                target_login=access.target_login,
-                sample_symbol=sample_symbol,
-            )
+        return store_operations_response(cache_key, build_payload(session))
 
     @app.get("/dashboard/operations/details")
     def dashboard_operations_details(
@@ -2790,8 +2746,6 @@ def create_app(
         sample_symbol: str = Query(default="600519.SH"),
         session: Session = Depends(get_session),
     ) -> Response:
-        if section not in OPERATIONS_DETAIL_SECTIONS:
-            raise HTTPException(status_code=400, detail=f"Unsupported operations detail section: {section}")
         cache_key = operations_cache_key(
             kind="details",
             target_login=access.target_login,
@@ -2822,21 +2776,10 @@ def create_app(
         cached = get_cached_operations_response(cache_key, refresh_payload)
         if cached is not None:
             return cached
-        if section == "simulation_workspace":
-            projection = get_ready_frontend_projection_payload(
-                session,
-                simulation_workspace_summary_projection_key(target_login=access.target_login),
-                target_login=access.target_login,
-            )
-            if projection is not None:
-                return store_operations_response(cache_key, projection)
-        return _operations_degraded_response(
-            kind="details",
-            reason="operations_response_cache_miss",
-            target_login=access.target_login,
-            sample_symbol=sample_symbol,
-            section=section,
-        )
+        try:
+            return store_operations_response(cache_key, build_payload(session))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/dashboard/improvement-suggestions/summary")
     def dashboard_improvement_suggestions_summary(

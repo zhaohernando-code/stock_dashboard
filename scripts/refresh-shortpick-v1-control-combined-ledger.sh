@@ -4,11 +4,13 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ASHARE_LOCAL_BACKEND_ENV_FILE:-$HOME/.config/codex/ashare-dashboard.backend.env}"
-BACKEND_ENV_HELPER="$REPO_ROOT/scripts/ashare-backend-env.sh"
 
-# shellcheck source=scripts/ashare-backend-env.sh
-source "$BACKEND_ENV_HELPER"
-ashare_source_backend_env "$ENV_FILE"
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
 
 VENV_PATH="${ASHARE_LOCAL_VENV_PATH:-$REPO_ROOT/.venv-mac}"
 PYTHON_BIN="$VENV_PATH/bin/python"
@@ -23,7 +25,7 @@ fi
 source "$ARTIFACT_ROOT_HELPER"
 
 export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
-export ASHARE_DATABASE_URL="${ASHARE_DATABASE_URL:-sqlite:///$REPO_ROOT/data/ashare_hot.db}"
+export ASHARE_DATABASE_URL="${ASHARE_DATABASE_URL:-sqlite:///$REPO_ROOT/data/ashare_dashboard.db}"
 ashare_resolve_local_artifact_root "$REPO_ROOT"
 
 API_BASE_URL="${ASHARE_API_BASE_URL:-http://127.0.0.1:8000}"

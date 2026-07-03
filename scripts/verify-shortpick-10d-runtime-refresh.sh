@@ -3,22 +3,7 @@
 set -euo pipefail
 
 RUNTIME_ROOT="${ASHARE_RUNTIME_ROOT:-$HOME/codex/runtime/projects/ashare-dashboard}"
-SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${ASHARE_LOCAL_BACKEND_ENV_FILE:-$HOME/.config/codex/ashare-dashboard.backend.env}"
-BACKEND_ENV_HELPER="$SCRIPT_ROOT/scripts/ashare-backend-env.sh"
-
-# shellcheck source=scripts/ashare-backend-env.sh
-source "$BACKEND_ENV_HELPER"
-ashare_source_backend_env "$ENV_FILE"
-RUNTIME_ROOT="${ASHARE_RUNTIME_ROOT:-$RUNTIME_ROOT}"
-
-if [[ -n "${ASHARE_RUNTIME_DB_PATH:-}" ]]; then
-  DB_PATH="$ASHARE_RUNTIME_DB_PATH"
-elif [[ "${ASHARE_DATABASE_URL:-}" == sqlite:///* ]]; then
-  DB_PATH="${ASHARE_DATABASE_URL#sqlite:///}"
-else
-  DB_PATH="$RUNTIME_ROOT/data/ashare_hot.db"
-fi
+DB_PATH="${ASHARE_RUNTIME_DB_PATH:-$RUNTIME_ROOT/data/ashare_dashboard.db}"
 PYTHON_BIN="${ASHARE_RUNTIME_PYTHON_BIN:-$RUNTIME_ROOT/.venv-mac/bin/python}"
 VERIFY_DATE="${ASHARE_VERIFY_SHORTPICK_SIGNAL_DATE:-2026-05-26}"
 VERIFY_HORIZON="${ASHARE_VERIFY_SHORTPICK_HORIZON:-10}"

@@ -9,7 +9,6 @@ FRONTEND_URL="${ASHARE_LOCAL_FRONTEND_URL:-http://127.0.0.1:5173/}"
 LOCAL_API_BASE_URL="${ASHARE_LOCAL_API_BASE_URL:-http://127.0.0.1:8000/}"
 CANONICAL_BASE_URL="${ASHARE_CANONICAL_BASE_URL:-https://hernando-zhao.cn/projects/ashare-dashboard/}"
 BACKEND_ENV_FILE="${ASHARE_LOCAL_BACKEND_ENV_FILE:-$HOME/.config/codex/ashare-dashboard.backend.env}"
-BACKEND_ENV_HELPER="$REPO_ROOT/scripts/ashare-backend-env.sh"
 FRONTEND_ENV_FILE="${ASHARE_LOCAL_FRONTEND_ENV_FILE:-$HOME/.config/codex/ashare-dashboard.frontend.env}"
 RSYNC_BIN="${RSYNC_BIN:-rsync}"
 MAX_WAIT_SECONDS="${ASHARE_PUBLISH_MAX_WAIT_SECONDS:-180}"
@@ -129,7 +128,6 @@ ensure_scheduled_refresh_calendar() {
   fi
   "$PYTHON_BIN" - "$SCHEDULED_PLIST" <<'PY'
 from pathlib import Path
-import os
 import plistlib
 import sys
 
@@ -160,16 +158,10 @@ payload["StartCalendarInterval"] = sorted(
     intervals,
     key=lambda item: (int(item.get("Hour", 0)), int(item.get("Minute", 0))),
 )
-if os.getenv("ASHARE_SCHEDULED_REFRESH_KEEP_INTERVAL") == "1":
-    payload["StartInterval"] = int(payload.get("StartInterval") or 300)
-else:
-    payload.pop("StartInterval", None)
 # RunAtLoad must stay false: launchctl bootstrap (below, and any reload during
 # governance work) would otherwise fire a full ~50min phase5-daily-refresh on
-# every publish/reload. Calendar ticks plus the .ok slot guard already trigger
-# exactly one refresh per trading day; the old 5-minute interval is opt-in only
-# because it wakes macOS background activity far more often than the dashboard
-# now needs.
+# every publish/reload. The StartCalendarInterval/StartInterval ticks plus the
+# .ok slot guard already trigger exactly one refresh per trading day.
 payload["RunAtLoad"] = False
 with path.open("wb") as handle:
     plistlib.dump(payload, handle)
@@ -187,8 +179,6 @@ scheduled_refresh_lock_active() {
 
 scheduled_refresh_process_active() {
   pgrep -f "$RUNTIME_ROOT/scripts/run-scheduled-refresh.sh" >/dev/null 2>&1 && return 0
-  pgrep -f "ashare_evidence.cli phase5-daily-refresh .*${RUNTIME_ROOT}/data/ashare_hot.db" >/dev/null 2>&1 && return 0
-  pgrep -f "ashare_evidence.cli refresh-runtime-data .*${RUNTIME_ROOT}/data/ashare_hot.db" >/dev/null 2>&1 && return 0
   pgrep -f "ashare_evidence.cli phase5-daily-refresh .*${RUNTIME_ROOT}/data/ashare_dashboard.db" >/dev/null 2>&1 && return 0
   pgrep -f "ashare_evidence.cli refresh-runtime-data .*${RUNTIME_ROOT}/data/ashare_dashboard.db" >/dev/null 2>&1 && return 0
   return 1
@@ -206,25 +196,6 @@ wait_for_scheduled_refresh_quiescent() {
   return 1
 }
 
-scheduled_refresh_loaded() {
-  launchctl print "gui/$(id -u)/$SCHEDULED_LABEL" >/dev/null 2>&1
-}
-
-scheduled_refresh_plist_hash() {
-  if [[ ! -f "$SCHEDULED_PLIST" ]]; then
-    printf 'missing\n'
-    return 0
-  fi
-  "$PYTHON_BIN" - "$SCHEDULED_PLIST" <<'PY'
-from pathlib import Path
-import hashlib
-import sys
-
-path = Path(sys.argv[1])
-print(hashlib.sha256(path.read_bytes()).hexdigest())
-PY
-}
-
 resume_scheduled_refresh() {
   if [[ "$SCHEDULED_REFRESH_PAUSED" != "1" ]]; then
     return 0
@@ -234,26 +205,14 @@ resume_scheduled_refresh() {
     echo "Scheduled refresh plist missing: $SCHEDULED_PLIST" >&2
     return 1
   fi
-  local was_loaded=0
-  local plist_hash_before
-  local plist_hash_after
-  if scheduled_refresh_loaded; then
-    was_loaded=1
-  fi
-  plist_hash_before="$(scheduled_refresh_plist_hash)"
   ensure_scheduled_refresh_calendar
-  plist_hash_after="$(scheduled_refresh_plist_hash)"
-  if [[ "$was_loaded" == "1" && "$plist_hash_before" == "$plist_hash_after" ]]; then
-    echo "[publish] scheduled-refresh already loaded and plist unchanged; reload skipped"
-    SCHEDULED_REFRESH_PAUSED=0
-    return 0
-  fi
   launchctl bootout "gui/$(id -u)" "$SCHEDULED_PLIST" 2>/dev/null || true
   launchctl bootstrap "gui/$(id -u)" "$SCHEDULED_PLIST"
   # Do NOT kickstart here. The agent is loaded with RunAtLoad=false; its
-  # calendar ticks plus the .ok slot guard fire exactly one scheduled refresh
-  # per trading day. Force-starting on every publish would launch a heavy
-  # refresh that holds the DB lock and times out the dashboard.
+  # StartCalendarInterval/StartInterval ticks plus the .ok slot guard fire
+  # exactly one phase5-daily-refresh per trading day. Force-starting on every
+  # publish would launch a ~50min full refresh that holds the DB lock and times
+  # out the dashboard (the original outage).
   SCHEDULED_REFRESH_PAUSED=0
 }
 
@@ -498,9 +457,11 @@ else
 fi
 
 echo "[publish] Triggering post-deploy data refresh"
-# shellcheck source=scripts/ashare-backend-env.sh
-source "$BACKEND_ENV_HELPER"
-ashare_source_backend_env "$BACKEND_ENV_FILE"
+if [[ -f "$BACKEND_ENV_FILE" ]]; then
+  set -a
+  source "$BACKEND_ENV_FILE"
+  set +a
+fi
 export ASHARE_ARTIFACT_ROOT="${ASHARE_ARTIFACT_ROOT:-$RUNTIME_ROOT/data/artifacts}"
 if [[ "$REFRESH_MODE" == "skip" ]]; then
   echo "[publish] Data refresh skipped by ASHARE_PUBLISH_REFRESH_MODE=skip"

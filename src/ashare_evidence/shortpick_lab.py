@@ -10,7 +10,6 @@ import signal
 import subprocess
 import tempfile
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 from collections.abc import Iterable
 from contextlib import contextmanager
@@ -147,13 +146,10 @@ SHORTPICK_BENCHMARK_DIMENSIONS = [
 SHORTPICK_MIN_SECTOR_PEER_SYMBOLS = 2
 SHORTPICK_TARGET_SECTOR_PEER_SYMBOLS = 10
 SHORTPICK_CODEX_TIMEOUT_SECONDS = 240
-SHORTPICK_CLAUDE_DEEPSEEK_TIMEOUT_SECONDS = 420
 SHORTPICK_SEARXNG_TIMEOUT_SECONDS = 12
 SHORTPICK_DEEPSEEK_SEARCH_TIMEOUT_SECONDS = 180
 SHORTPICK_DEEPSEEK_MIN_SEARCH_RESULTS = 3
 SHORTPICK_DEEPSEEK_QUERY_RETRY_ATTEMPTS = 2
-SHORTPICK_CLAUDE_DEEPSEEK_LAUNCHER_ENV = "DEEPSEEK_LAUNCHER"
-SHORTPICK_CLAUDE_DEEPSEEK_DEFAULT_LAUNCHER = "~/codex/start-claude-deepseek-no-proxy.sh"
 SHORTPICK_LOBECHAT_SEARXNG_URL_ENV = "SHORTPICK_LOBECHAT_SEARXNG_URL"
 SHORTPICK_LOBECHAT_SEARXNG_DEFAULT_URL = "http://127.0.0.1:18080"
 _SHORTPICK_MARKET_FACTOR_CONFIG = SHORTPICK_FROZEN_STRATEGY_CONFIG["market_factor"]
@@ -731,20 +727,6 @@ class StaticShortpickExecutor:
 
 
 @dataclass(frozen=True)
-class _ShortpickRoundTask:
-    round_record_id: int
-    executor: ShortpickExecutor
-    prompt: str
-
-
-@dataclass(frozen=True)
-class _ShortpickRoundCompletion:
-    task: _ShortpickRoundTask
-    raw_answer: str | None
-    error_message: str | None
-
-
-@dataclass(frozen=True)
 class CodexCliShortpickExecutor:
     codex_bin: str
     model_name: str
@@ -783,62 +765,6 @@ class CodexCliShortpickExecutor:
             answer = output_path.read_text(encoding="utf-8").strip()
         if not answer:
             raise RuntimeError("isolated Codex shortpick execution returned an empty answer.")
-        return answer
-
-
-@dataclass(frozen=True)
-class ClaudeDeepseekCliShortpickExecutor:
-    launcher_path: str
-    model_name: str = "deepseek-v4-pro[1m]"
-    provider_name: str = "deepseek"
-    executor_kind: str = "deepseek_claude_cli_native_web_v1"
-    timeout_seconds: int = SHORTPICK_CLAUDE_DEEPSEEK_TIMEOUT_SECONDS
-    tools: str = "WebSearch,WebFetch"
-    max_budget_usd: str = "1"
-    effort: str = "high"
-
-    def complete(self, prompt: str) -> str:
-        launcher = Path(self.launcher_path).expanduser()
-        if not launcher.exists():
-            raise RuntimeError(f"Claude/DeepSeek launcher not found: {launcher}")
-        with tempfile.TemporaryDirectory(prefix="ashare-shortpick-claude-deepseek-") as cwd:
-            command = [
-                str(launcher),
-                "--bare",
-                "-p",
-                "--output-format",
-                "text",
-                "--no-session-persistence",
-                "--max-budget-usd",
-                self.max_budget_usd,
-                "--effort",
-                self.effort,
-                "--tools",
-                self.tools,
-            ]
-            process = subprocess.Popen(
-                command,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                cwd=cwd,
-                env=_isolated_codex_env(),
-                start_new_session=True,
-            )
-            try:
-                stdout, stderr = process.communicate(prompt, timeout=self.timeout_seconds)
-            except subprocess.TimeoutExpired as exc:
-                _terminate_process_group(process)
-                raise TimeoutError(
-                    f"Claude/DeepSeek shortpick execution timed out after {self.timeout_seconds}s."
-                ) from exc
-            if process.returncode != 0:
-                detail = (stderr or stdout or "unknown Claude/DeepSeek execution error").strip()
-                raise RuntimeError(f"Claude/DeepSeek shortpick execution failed: {detail}")
-            answer = stdout.strip()
-        if not answer:
-            raise RuntimeError("Claude/DeepSeek shortpick execution returned an empty answer.")
         return answer
 
 
@@ -1399,21 +1325,6 @@ def _deepseek_search_backend_label(search_results: list[dict[str, Any]]) -> str:
     return "lobechat_searxng"
 
 
-def _terminate_process_group(process: subprocess.Popen[str]) -> None:
-    try:
-        os.killpg(process.pid, signal.SIGTERM)
-    except ProcessLookupError:
-        return
-    try:
-        process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            return
-        process.wait(timeout=5)
-
-
 def _shortpick_deepseek_round_timeout_seconds() -> int:
     raw_value = os.getenv(
         "ASHARE_SHORTPICK_DEEPSEEK_ROUND_TIMEOUT_SECONDS",
@@ -1477,42 +1388,9 @@ def default_shortpick_executors(session: Session) -> list[ShortpickExecutor]:
         (key for key in resolve_llm_key_candidates(session) if "deepseek" in key.provider_name.lower() or "deepseek" in key.base_url.lower()),
         None,
     )
-    deepseek_launcher = _shortpick_claude_deepseek_launcher_path()
-    deepseek_mode = os.getenv("ASHARE_SHORTPICK_DEEPSEEK_EXECUTOR_KIND", "claude_cli")
-    if deepseek_mode == "claude_cli" and deepseek_launcher.exists():
-        executors.append(
-            ClaudeDeepseekCliShortpickExecutor(
-                launcher_path=str(deepseek_launcher),
-                model_name=os.getenv("ASHARE_SHORTPICK_CLAUDE_DEEPSEEK_MODEL_LABEL", "deepseek-v4-pro[1m]"),
-                timeout_seconds=_shortpick_claude_deepseek_timeout_seconds(),
-                tools=os.getenv("ASHARE_SHORTPICK_CLAUDE_DEEPSEEK_TOOLS", "WebSearch,WebFetch"),
-                max_budget_usd=os.getenv("ASHARE_SHORTPICK_CLAUDE_DEEPSEEK_MAX_BUDGET_USD", "1"),
-                effort=os.getenv("ASHARE_SHORTPICK_CLAUDE_DEEPSEEK_EFFORT", "high"),
-            )
-        )
-    elif deepseek is not None:
+    if deepseek is not None:
         executors.append(_executor_from_key(deepseek))
     return executors
-
-
-def _shortpick_claude_deepseek_launcher_path() -> Path:
-    return Path(
-        os.getenv(
-            SHORTPICK_CLAUDE_DEEPSEEK_LAUNCHER_ENV,
-            SHORTPICK_CLAUDE_DEEPSEEK_DEFAULT_LAUNCHER,
-        )
-    ).expanduser()
-
-
-def _shortpick_claude_deepseek_timeout_seconds() -> int:
-    raw_value = os.getenv(
-        "ASHARE_SHORTPICK_CLAUDE_DEEPSEEK_TIMEOUT_SECONDS",
-        str(SHORTPICK_CLAUDE_DEEPSEEK_TIMEOUT_SECONDS),
-    )
-    try:
-        return max(1, int(raw_value))
-    except ValueError:
-        return SHORTPICK_CLAUDE_DEEPSEEK_TIMEOUT_SECONDS
 
 
 def _executor_from_key(key: ModelApiKey) -> DeepseekLobeChatSearchShortpickExecutor:
@@ -1534,7 +1412,6 @@ def run_shortpick_experiment(
     *,
     run_date: date | None = None,
     rounds_per_model: int = 5,
-    llm_pool_size: int | None = None,
     triggered_by: str | None = None,
     trigger_source: str = "manual_api",
     executors: list[ShortpickExecutor] | None = None,
@@ -1569,7 +1446,6 @@ def run_shortpick_experiment(
         failed_at=None,
         model_config={
             "rounds_per_model": normalized_rounds,
-            "llm_pool_size": _normalize_shortpick_llm_pool_size(llm_pool_size),
             "native_web_search": True,
             "controlled_search": False,
             "market_factor_overlay": {
@@ -1609,13 +1485,9 @@ def run_shortpick_experiment(
         session.refresh(run)
         return serialize_shortpick_run(session, run, include_raw=True)
 
-    _execute_shortpick_round_pool(
-        session,
-        run,
-        active_executors,
-        rounds_per_model=normalized_rounds,
-        llm_pool_size=llm_pool_size,
-    )
+    for executor in active_executors:
+        for round_index in range(1, normalized_rounds + 1):
+            _execute_shortpick_round(session, run, executor, round_index)
 
     if _should_auto_topic_backfill(active_executors):
         normalize_shortpick_candidate_topics(session, run_id=run.id)
@@ -2043,152 +1915,6 @@ def _execute_shortpick_round(
     session.flush()
 
 
-def _normalize_shortpick_llm_pool_size(llm_pool_size: int | None) -> int:
-    if llm_pool_size is None:
-        raw_value = os.getenv("ASHARE_SHORTPICK_LLM_POOL_SIZE", "4")
-        try:
-            llm_pool_size = int(raw_value)
-        except ValueError:
-            llm_pool_size = 4
-    return max(1, min(int(llm_pool_size), 10))
-
-
-def _execute_shortpick_round_pool(
-    session: Session,
-    run: ShortpickExperimentRun,
-    executors: list[ShortpickExecutor],
-    *,
-    rounds_per_model: int,
-    llm_pool_size: int | None,
-) -> None:
-    tasks = [
-        _prepare_shortpick_round_task(session, run, executor, round_index)
-        for executor in executors
-        for round_index in range(1, rounds_per_model + 1)
-    ]
-    if not tasks:
-        return
-    pool_size = min(_normalize_shortpick_llm_pool_size(llm_pool_size), len(tasks))
-    if pool_size <= 1:
-        for task in tasks:
-            _finalize_shortpick_round_completion(session, run, _complete_shortpick_round_task(task))
-        return
-    with ThreadPoolExecutor(max_workers=pool_size, thread_name_prefix="shortpick-llm") as pool:
-        future_map = {pool.submit(_complete_shortpick_round_task, task): task for task in tasks}
-        for future in as_completed(future_map):
-            task = future_map[future]
-            try:
-                completion = future.result()
-            except Exception as exc:
-                completion = _ShortpickRoundCompletion(task=task, raw_answer=None, error_message=str(exc))
-            _finalize_shortpick_round_completion(session, run, completion)
-
-
-def _prepare_shortpick_round_task(
-    session: Session,
-    run: ShortpickExperimentRun,
-    executor: ShortpickExecutor,
-    round_index: int,
-) -> _ShortpickRoundTask:
-    started_at = utcnow()
-    round_record = ShortpickModelRound(
-        run_id=run.id,
-        round_key=f"{run.run_key}:{executor.provider_name}:{executor.model_name}:{round_index}",
-        provider_name=executor.provider_name,
-        model_name=executor.model_name,
-        executor_kind=executor.executor_kind,
-        round_index=round_index,
-        status="running",
-        raw_answer=None,
-        parsed_payload={},
-        sources_payload=[],
-        artifact_id=None,
-        error_message=None,
-        started_at=started_at,
-        completed_at=None,
-    )
-    session.add(round_record)
-    session.commit()
-    prompt = build_shortpick_prompt(
-        run_date=run.run_date,
-        round_index=round_index,
-        provider_name=executor.provider_name,
-        model_name=executor.model_name,
-    )
-    return _ShortpickRoundTask(round_record_id=round_record.id, executor=executor, prompt=prompt)
-
-
-def _complete_shortpick_round_task(task: _ShortpickRoundTask) -> _ShortpickRoundCompletion:
-    try:
-        with _shortpick_executor_round_timeout(task.executor):
-            raw_answer = task.executor.complete(task.prompt)
-        return _ShortpickRoundCompletion(task=task, raw_answer=raw_answer, error_message=None)
-    except Exception as exc:
-        return _ShortpickRoundCompletion(task=task, raw_answer=None, error_message=str(exc))
-
-
-def _finalize_shortpick_round_completion(
-    session: Session,
-    run: ShortpickExperimentRun,
-    completion: _ShortpickRoundCompletion,
-) -> None:
-    round_record = session.get(ShortpickModelRound, completion.task.round_record_id)
-    if round_record is None:
-        return
-    raw_answer = completion.raw_answer
-    try:
-        if completion.error_message is not None:
-            raise RuntimeError(completion.error_message)
-        if raw_answer is None:
-            raise RuntimeError("shortpick executor returned no answer")
-        round_record.raw_answer = raw_answer
-        parsed = extract_shortpick_json(raw_answer)
-        sources = _normalize_sources(parsed.get("sources_used"))
-        source_failure = _web_source_integrity_failure(
-            executor=completion.task.executor,
-            parsed=parsed,
-            sources=sources,
-        )
-        if source_failure:
-            raise RuntimeError(source_failure)
-        round_record.parsed_payload = parsed
-        round_record.sources_payload = sources
-        round_record.status = "completed"
-        round_record.completed_at = utcnow()
-        round_record.artifact_id = f"shortpick-round:{round_record.id}"
-        _write_round_artifact(session, run, round_record, prompt=completion.task.prompt)
-        _delete_parse_failed_candidates_for_round(session, round_record.id)
-        _candidate_from_round(session, run, round_record, parsed, parse_status="parsed")
-    except Exception as exc:
-        session.rollback()
-        round_record = session.get(ShortpickModelRound, completion.task.round_record_id)
-        if round_record is None:
-            return
-        round_record.status = "failed"
-        round_record.error_message = str(exc)
-        round_record.completed_at = utcnow()
-        round_record.artifact_id = f"shortpick-round:{round_record.id}"
-        round_record.raw_answer = raw_answer
-        _write_round_artifact(session, run, round_record, prompt=completion.task.prompt)
-        _candidate_from_round(
-            session,
-            run,
-            round_record,
-            {
-                "primary_pick": {
-                    "symbol": "PARSE_FAILED",
-                    "name": "解析失败",
-                    "theme": "parse_failed",
-                    "thesis": str(exc),
-                },
-                "sources_used": [],
-                "limitations": [str(exc)],
-            },
-            parse_status="parse_failed",
-        )
-    session.commit()
-
-
 def extract_shortpick_json(raw_answer: str) -> dict[str, Any]:
     text = raw_answer.strip()
     candidates = [text]
@@ -2215,7 +1941,6 @@ def extract_shortpick_json(raw_answer: str) -> dict[str, Any]:
 def _web_source_integrity_failure(*, executor: ShortpickExecutor, parsed: dict[str, Any], sources: list[dict[str, Any]]) -> str | None:
     if executor.executor_kind not in {
         "isolated_codex_cli",
-        "deepseek_claude_cli_native_web_v1",
         "deepseek_tool_search_lobechat_searxng_v1",
         "configured_api_key_native_web_search",
         "builtin_openai_api_native_web",

@@ -101,7 +101,6 @@ from ashare_evidence.shortpick_strategy_retirement_writer import (
     run_shortpick_strategy_retirement_artifact,
 )
 from ashare_evidence.shortpick_strategy_slices import build_shortpick_strategy_slice_evidence
-from ashare_evidence.sqlite_hot_cold_split import migrate_sqlite_hot_cold_split
 from ashare_evidence.shortpick_v2_h10_artifact_validation import validate_shortpick_v2_h10_artifacts
 from ashare_evidence.shortpick_v2_h10_execution_decomposition import (
     build_shortpick_v2_h10_execution_decomposition_artifact,
@@ -131,11 +130,6 @@ from ashare_evidence.shortpick_v2_h10_weekday_drawdown_notional_matrix import (
     validate_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact,
     write_shortpick_v2_h10_weekday_drawdown_notional_matrix_artifact,
 )
-from ashare_evidence.shortpick_v2_industry_theme_experiment import (
-    build_shortpick_v2_industry_theme_experiment_artifact,
-    validate_shortpick_v2_industry_theme_experiment_artifact,
-    write_shortpick_v2_industry_theme_experiment_artifact,
-)
 from ashare_evidence.shortpick_v2_next_diagnostics import (
     build_shortpick_v2_next_diagnostics_artifact,
     validate_shortpick_v2_next_diagnostics_artifact,
@@ -156,7 +150,6 @@ from ashare_evidence.shortpick_v2_out_of_sample_risk import (
     validate_shortpick_v2_out_of_sample_risk_artifact,
     write_shortpick_v2_out_of_sample_risk_artifact,
 )
-from ashare_evidence.shortpick_v2_paper_ledger import refresh_shortpick_v2_paper_ledger_artifact
 from ashare_evidence.shortpick_v2_ranking_backtest import (
     build_shortpick_v2_ranking_backtest_artifact,
     validate_shortpick_v2_ranking_backtest_artifact,
@@ -308,7 +301,6 @@ def _should_initialize_database(database_url: str | None) -> bool:
 
 # Commands in this set are pure file/plan commands and may omit --database-url.
 NO_DB_COMMANDS = {
-    "sqlite-hot-cold-split",
     "shortpick-governance-credible-control-plan",
     "shortpick-v2-h10-artifact-validate",
     "shortpick-v2-h10-paper-governance",
@@ -316,7 +308,6 @@ NO_DB_COMMANDS = {
     "shortpick-v2-h10-parameter-significance-validate",
     "shortpick-v2-h10-rank-ablation-validate",
     "shortpick-v2-h10-weekday-drawdown-notional-matrix-validate",
-    "shortpick-v2-industry-theme-experiment-validate",
     "shortpick-v2-next-diagnostics-validate",
     "shortpick-v2-oos-loss-filter-validate",
     "shortpick-v2-oos-position-rank-diagnostics-validate",
@@ -688,7 +679,6 @@ def build_parser() -> argparse.ArgumentParser:
     shortpick_run.add_argument("--database-url", default=None)
     shortpick_run.add_argument("--run-date", default=None)
     shortpick_run.add_argument("--rounds-per-model", type=int, default=5)
-    shortpick_run.add_argument("--llm-pool-size", type=int, default=None)
 
     shortpick_intraday = subparsers.add_parser(
         "shortpick-lab-intraday-same-day",
@@ -856,48 +846,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Sample symbol to precompute for operations_summary. May be provided multiple times.",
     )
 
-    sqlite_hot_cold_split = subparsers.add_parser(
-        "sqlite-hot-cold-split",
-        help="Materialize denormalized cold SQLite stores from the current monolithic dashboard database.",
-    )
-    sqlite_hot_cold_split.add_argument("--source-database-url", required=True)
-    sqlite_hot_cold_split.add_argument("--market-history-database-url", default=None)
-    sqlite_hot_cold_split.add_argument("--research-archive-database-url", default=None)
-    sqlite_hot_cold_split.add_argument("--hot-database-url", default=None)
-    sqlite_hot_cold_split.add_argument(
-        "--timeframe",
-        action="append",
-        default=None,
-        help="Market bar timeframe to archive. Defaults to 1d. May be provided multiple times.",
-    )
-    sqlite_hot_cold_split.add_argument(
-        "--verify-only",
-        action="store_true",
-        help="Validate existing split targets without copying rows.",
-    )
-    sqlite_hot_cold_split.add_argument(
-        "--create-hot",
-        action="store_true",
-        help="Create a slim hot database copy after cold migration/verification.",
-    )
-    sqlite_hot_cold_split.add_argument(
-        "--overwrite-hot",
-        action="store_true",
-        help="Replace an existing --hot-database-url file set.",
-    )
-    sqlite_hot_cold_split.add_argument(
-        "--hot-retain-days",
-        type=int,
-        default=450,
-        help="Keep this many latest calendar days of all 1d bars in the slim hot database.",
-    )
-    sqlite_hot_cold_split.add_argument(
-        "--hot-symbol",
-        action="append",
-        default=None,
-        help="Additional symbol whose full 1d history should remain in the slim hot database.",
-    )
-
     shortpick_market_factor_study = subparsers.add_parser(
         "shortpick-market-factor-study",
         help="Run a market-only shortpick factor ranking study across a broader daily-bar history.",
@@ -1036,16 +984,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=SELECTION_THRESHOLD_PROFILE_STANDARD,
     )
     shortpick_v2_rule_selection.add_argument("--generated-at", default=None)
-
-    shortpick_v2_paper_ledger_refresh = subparsers.add_parser(
-        "shortpick-v2-paper-ledger-refresh",
-        help="Refresh the Short Pick Lab v2 true-forward paper tracking ledger artifact.",
-    )
-    shortpick_v2_paper_ledger_refresh.add_argument("--database-url", default=None)
-    shortpick_v2_paper_ledger_refresh.add_argument("--output", default="output/shortpick-v2-paper-tracking-ledger.json")
-    shortpick_v2_paper_ledger_refresh.add_argument("--rule-selection-artifact", default=None)
-    shortpick_v2_paper_ledger_refresh.add_argument("--paper-governance-artifact", default=None)
-    shortpick_v2_paper_ledger_refresh.add_argument("--target-date", default=None)
 
     shortpick_v2_h10_robustness = subparsers.add_parser(
         "shortpick-v2-h10-robustness",
@@ -1529,56 +1467,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     shortpick_v2_ranking_backtest_validate.add_argument("--artifact", required=True)
 
-    shortpick_v2_industry_theme_experiment = subparsers.add_parser(
-        "shortpick-v2-industry-theme-experiment",
-        help="Generate research-only v2 industry/theme leadership experiments without candidate promotion.",
-    )
-    shortpick_v2_industry_theme_experiment.add_argument("--database-url", default=None)
-    shortpick_v2_industry_theme_experiment.add_argument("--historical-start-date", default="2023-04-13")
-    shortpick_v2_industry_theme_experiment.add_argument("--train-end-date", default="2025-04-30")
-    shortpick_v2_industry_theme_experiment.add_argument("--holdout-start-date", default="2025-05-01")
-    shortpick_v2_industry_theme_experiment.add_argument("--historical-end-date", default="2026-05-08")
-    shortpick_v2_industry_theme_experiment.add_argument("--paper-start-date", default="2026-05-08")
-    shortpick_v2_industry_theme_experiment.add_argument("--paper-end-date", default="2026-06-17")
-    shortpick_v2_industry_theme_experiment.add_argument("--current-month-start-date", default="2026-06-01")
-    shortpick_v2_industry_theme_experiment.add_argument("--initial-cash", type=float, default=200_000.0)
-    shortpick_v2_industry_theme_experiment.add_argument("--target-notional", type=float, default=85_000.0)
-    shortpick_v2_industry_theme_experiment.add_argument(
-        "--entry-price-source",
-        choices=["next_close", "next_open", "same_close_proxy"],
-        default="next_close",
-    )
-    shortpick_v2_industry_theme_experiment.add_argument("--horizon-days", type=int, default=10)
-    shortpick_v2_industry_theme_experiment.add_argument("--pool-limit", type=int, default=40)
-    shortpick_v2_industry_theme_experiment.add_argument("--rank-limit", type=int, default=6)
-    shortpick_v2_industry_theme_experiment.add_argument("--cost-bps", type=float, default=20.0)
-    shortpick_v2_industry_theme_experiment.add_argument("--stamp-tax-bps", type=float, default=5.0)
-    shortpick_v2_industry_theme_experiment.add_argument("--min-signal-symbol-count", type=int, default=45)
-    shortpick_v2_industry_theme_experiment.add_argument("--min-acceptable-annualized-return", type=float, default=0.30)
-    shortpick_v2_industry_theme_experiment.add_argument("--max-acceptable-drawdown", type=float, default=-0.25)
-    shortpick_v2_industry_theme_experiment.add_argument("--min-holdout-return-delta", type=float, default=0.10)
-    shortpick_v2_industry_theme_experiment.add_argument("--max-holdout-drawdown-worsening", type=float, default=-0.05)
-    shortpick_v2_industry_theme_experiment.add_argument("--top-winner-count", type=int, default=50)
-    shortpick_v2_industry_theme_experiment.add_argument(
-        "--account-profile",
-        choices=["new_retail_cash_account", "unrestricted"],
-        default="new_retail_cash_account",
-    )
-    shortpick_v2_industry_theme_experiment.add_argument(
-        "--output",
-        default="output/shortpick-v2-industry-theme-experiment-20260618.json",
-    )
-    shortpick_v2_industry_theme_experiment.add_argument(
-        "--summary-output",
-        default="docs/archive/SHORTPICK_V2_INDUSTRY_THEME_EXPERIMENT_2026-06-18.md",
-    )
-
-    shortpick_v2_industry_theme_experiment_validate = subparsers.add_parser(
-        "shortpick-v2-industry-theme-experiment-validate",
-        help="Validate the research-only v2 industry/theme leadership experiment artifact.",
-    )
-    shortpick_v2_industry_theme_experiment_validate.add_argument("--artifact", required=True)
-
     shortpick_paper_divergence_attribution = subparsers.add_parser(
         "shortpick-paper-divergence-attribution",
         help="Generate research-only attribution for v1/v2 paper-window divergence.",
@@ -2000,7 +1888,6 @@ def main(argv: list[str] | None = None) -> int:
                 session,
                 run_date=target_date,
                 rounds_per_model=args.rounds_per_model,
-                llm_pool_size=args.llm_pool_size,
                 triggered_by="scheduled_cli",
                 trigger_source="scheduled_cli",
             )
@@ -2178,26 +2065,6 @@ def main(argv: list[str] | None = None) -> int:
         _print_json(payload)
         return 0
 
-    if args.command == "sqlite-hot-cold-split":
-        payload = migrate_sqlite_hot_cold_split(
-            source_database_url=args.source_database_url,
-            market_history_database_url=args.market_history_database_url,
-            research_archive_database_url=args.research_archive_database_url,
-            timeframes=args.timeframe or ("1d",),
-            verify_only=args.verify_only,
-            hot_database_url=args.hot_database_url,
-            create_hot=args.create_hot,
-            overwrite_hot=args.overwrite_hot,
-            hot_retain_days=args.hot_retain_days,
-            extra_hot_symbols=args.hot_symbol or (),
-        )
-        _print_json(payload)
-        passed = bool(payload["passed"])
-        if args.create_hot:
-            hot_result = payload.get("hot_database")
-            passed = passed and isinstance(hot_result, dict) and hot_result.get("status") == "ok"
-        return 0 if passed else 1
-
     if args.command == "shortpick-market-factor-study":
         with session_scope(args.database_url) as session:
             payload = build_shortpick_market_factor_study(
@@ -2329,27 +2196,6 @@ def main(argv: list[str] | None = None) -> int:
                 "baseline_config_ids": [item["config_id"] for item in payload.get("baseline_configs") or []],
                 "holdout_count": len(payload.get("holdout_configs") or []),
                 "rejected_count": len(payload.get("rejected_configs") or []),
-            }
-        )
-        return 0
-
-    if args.command == "shortpick-v2-paper-ledger-refresh":
-        target_date = date.fromisoformat(args.target_date) if args.target_date else None
-        with session_scope(args.database_url) as session:
-            payload, path = refresh_shortpick_v2_paper_ledger_artifact(
-                session,
-                output_path=args.output,
-                rule_selection_artifact_path=args.rule_selection_artifact,
-                paper_governance_artifact_path=args.paper_governance_artifact,
-                target_date=target_date,
-            )
-        _print_json(
-            {
-                "status": "ok",
-                "artifact_family": payload.get("artifact_family"),
-                "ledger_id": payload.get("ledger_id"),
-                "output_path": str(path),
-                "summary": payload.get("summary"),
             }
         )
         return 0
@@ -2817,57 +2663,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "shortpick-v2-ranking-backtest-validate":
         payload = validate_shortpick_v2_ranking_backtest_artifact(artifact_path=args.artifact)
-        _print_json(payload)
-        return 0 if payload.get("status") == "passed" else 1
-
-    if args.command == "shortpick-v2-industry-theme-experiment":
-        with session_scope(args.database_url) as session:
-            payload = build_shortpick_v2_industry_theme_experiment_artifact(
-                session,
-                historical_start_date=date.fromisoformat(args.historical_start_date),
-                train_end_date=date.fromisoformat(args.train_end_date),
-                holdout_start_date=date.fromisoformat(args.holdout_start_date),
-                historical_end_date=date.fromisoformat(args.historical_end_date),
-                paper_start_date=date.fromisoformat(args.paper_start_date),
-                paper_end_date=date.fromisoformat(args.paper_end_date),
-                current_month_start_date=date.fromisoformat(args.current_month_start_date),
-                initial_cash=args.initial_cash,
-                target_notional=args.target_notional,
-                entry_price_source=args.entry_price_source,
-                horizon_days=args.horizon_days,
-                pool_limit=args.pool_limit,
-                rank_limit=args.rank_limit,
-                cost_bps=args.cost_bps,
-                stamp_tax_bps=args.stamp_tax_bps,
-                min_signal_symbol_count=args.min_signal_symbol_count,
-                account_profile=args.account_profile,
-                min_acceptable_annualized_return=args.min_acceptable_annualized_return,
-                max_acceptable_drawdown=args.max_acceptable_drawdown,
-                min_holdout_return_delta=args.min_holdout_return_delta,
-                max_holdout_drawdown_worsening=args.max_holdout_drawdown_worsening,
-                top_winner_count=args.top_winner_count,
-            )
-        paths = write_shortpick_v2_industry_theme_experiment_artifact(
-            payload,
-            output_path=args.output,
-            summary_path=args.summary_output,
-        )
-        comparison = payload.get("comparison") if isinstance(payload.get("comparison"), dict) else {}
-        _print_json(
-            {
-                "status": "ok",
-                "artifact_family": payload.get("artifact_family"),
-                "artifact_id": payload.get("artifact_id"),
-                "output_path": str(paths["artifact"]),
-                "summary_output_path": str(paths.get("summary")) if paths.get("summary") else None,
-                "future_research_variant_ids": comparison.get("future_research_variant_ids"),
-                "interpretation_status": (payload.get("interpretation") or {}).get("status"),
-            }
-        )
-        return 0
-
-    if args.command == "shortpick-v2-industry-theme-experiment-validate":
-        payload = validate_shortpick_v2_industry_theme_experiment_artifact(artifact_path=args.artifact)
         _print_json(payload)
         return 0 if payload.get("status") == "passed" else 1
 

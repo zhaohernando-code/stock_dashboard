@@ -4,11 +4,13 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ASHARE_LOCAL_BACKEND_ENV_FILE:-$HOME/.config/codex/ashare-dashboard.backend.env}"
-BACKEND_ENV_HELPER="$REPO_ROOT/scripts/ashare-backend-env.sh"
 
-# shellcheck source=scripts/ashare-backend-env.sh
-source "$BACKEND_ENV_HELPER"
-ashare_source_backend_env "$ENV_FILE"
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
 
 VENV_PATH="${ASHARE_LOCAL_VENV_PATH:-$REPO_ROOT/.venv-mac}"
 PYTHON_BIN="$VENV_PATH/bin/python"
@@ -23,7 +25,7 @@ fi
 source "$ARTIFACT_ROOT_HELPER"
 
 export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
-export ASHARE_DATABASE_URL="${ASHARE_DATABASE_URL:-sqlite:///$REPO_ROOT/data/ashare_hot.db}"
+export ASHARE_DATABASE_URL="${ASHARE_DATABASE_URL:-sqlite:///$REPO_ROOT/data/ashare_dashboard.db}"
 ashare_resolve_local_artifact_root "$REPO_ROOT"
 
 TIMEZONE="${ASHARE_REFRESH_TIMEZONE:-Asia/Shanghai}"
@@ -39,7 +41,6 @@ SHORTPICK_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_TIMEOUT_SECONDS:-7200}"
 SHORTPICK_INTRADAY_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_INTRADAY_TIMEOUT_SECONDS:-600}"
 SHORTPICK_VALIDATION_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_VALIDATION_TIMEOUT_SECONDS:-600}"
 SHORTPICK_COMBINED_LEDGER_REFRESH_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_COMBINED_LEDGER_REFRESH_TIMEOUT_SECONDS:-900}"
-SHORTPICK_V2_PAPER_LEDGER_REFRESH_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_V2_PAPER_LEDGER_REFRESH_TIMEOUT_SECONDS:-900}"
 SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS:-180}"
 SHORTPICK_VALIDATE_RECENT_DAYS="${ASHARE_SHORTPICK_VALIDATE_RECENT_DAYS:-30}"
 SHORTPICK_VALIDATE_RECENT_LIMIT="${ASHARE_SHORTPICK_VALIDATE_RECENT_LIMIT:-20}"
@@ -76,8 +77,7 @@ run_shortpick_lab() {
   "$PYTHON_BIN" -m ashare_evidence.cli shortpick-lab-run \
     --database-url "$ASHARE_DATABASE_URL" \
     --run-date "$target_date" \
-    --rounds-per-model "${ASHARE_SHORTPICK_ROUNDS_PER_MODEL:-5}" \
-    --llm-pool-size "${ASHARE_SHORTPICK_LLM_POOL_SIZE:-4}"
+    --rounds-per-model "${ASHARE_SHORTPICK_ROUNDS_PER_MODEL:-5}"
 }
 
 run_shortpick_intraday_same_day() {
@@ -108,26 +108,8 @@ run_frontend_projection_refresh() {
     --projection all
 }
 
-active_watchlist_count() {
-  "$PYTHON_BIN" - "$ASHARE_DATABASE_URL" <<'PY'
-from sqlalchemy import create_engine, text
-import sys
-
-engine = create_engine(sys.argv[1])
-with engine.connect() as connection:
-    count = connection.execute(
-        text("select count(*) from watchlist_follows where status = 'active'")
-    ).scalar_one()
-print(int(count or 0))
-PY
-}
-
 prewarm_shortpick_v2_paper_cache() {
   bash "$REPO_ROOT/scripts/prewarm-shortpick-v2-paper-cache.sh"
-}
-
-refresh_shortpick_v2_paper_ledger() {
-  bash "$REPO_ROOT/scripts/refresh-shortpick-v2-paper-ledger.sh"
 }
 
 refresh_shortpick_v1_control_combined_ledger() {
@@ -455,7 +437,7 @@ mark_slot_failed() {
     printf 'started_at=%s\n' "$started_at"
     printf 'failed_at=%s\n' "$(TZ="$TIMEZONE" date '+%Y-%m-%dT%H:%M:%S%z')"
     printf 'exit_code=%s\n' "$exit_code"
-    printf 'reason=%s\n' "daily refresh 执行失败，将等待下一次调度触发重试。"
+    printf 'reason=%s\n' "daily refresh 执行失败，将等待下一次 5 分钟轮询重试。"
   } > "$(slot_state_file "$target_date" "$slot_name" | sed 's/\.ok$/.failed/')"
 }
 
@@ -489,19 +471,9 @@ run_daily_refresh_slot() {
   write_run_context "$target_date" "$slot_name"
   trap release_run_lock EXIT
   echo "Running ${slot_name} daily refresh for ${target_date} at ${NOW_HHMM}."
-  local exit_code=0
-  local watchlist_count="1"
-  watchlist_count="$(active_watchlist_count 2>/dev/null || printf '1\n')"
-  if [[ "${ASHARE_SKIP_PHASE5_DAILY_WHEN_WATCHLIST_EMPTY:-1}" == "1" && "$watchlist_count" == "0" ]]; then
-    echo "Skipping ${slot_name} Phase 5 watchlist daily refresh for ${target_date}; active watchlist is empty." >&2
-  else
-    run_with_timeout "$DAILY_REFRESH_TIMEOUT_SECONDS" run_phase5_daily_refresh --analysis-only
-    exit_code=$?
-  fi
+  run_with_timeout "$DAILY_REFRESH_TIMEOUT_SECONDS" run_phase5_daily_refresh --analysis-only
+  local exit_code=$?
   if [[ "$exit_code" == "0" ]]; then
-    if ! run_with_timeout "$SHORTPICK_V2_PAPER_LEDGER_REFRESH_TIMEOUT_SECONDS" refresh_shortpick_v2_paper_ledger; then
-      echo "Shortpick v2 paper ledger refresh failed after daily refresh; keeping previous artifact rows." >&2
-    fi
     if ! run_with_timeout "$SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS" prewarm_shortpick_v2_paper_cache; then
       echo "Shortpick v2 paper cache prewarm failed after daily refresh; the next page load may rebuild the cache." >&2
     fi

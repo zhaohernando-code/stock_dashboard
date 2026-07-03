@@ -68,9 +68,6 @@ class FrontendShortpickStaticTests(unittest.TestCase):
             component_source.index("function ShortpickV2PaperTab"):
             component_source.index("function ShortpickV2ReplayTab")
         ]
-        self.assertIn("display?.strategy_observations", paper_tab_source)
-        self.assertIn("paperStrategyObservationColumns", paper_tab_source)
-        self.assertNotIn("tracking?.selected_configs", paper_tab_source)
         for forbidden in (
             "v2 Paper Ledger Rows",
             "blocked：",

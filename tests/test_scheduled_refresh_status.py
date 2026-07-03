@@ -149,7 +149,7 @@ def test_scheduled_refresh_status_reports_failed_marker(tmp_path, monkeypatch) -
                 "started_at=2026-05-06T16:20:05+0800",
                 "failed_at=2026-05-06T16:30:00+0800",
                 "exit_code=124",
-                "reason=daily refresh 执行失败，将等待下一次调度触发重试。",
+                "reason=daily refresh 执行失败，将等待下一次 5 分钟轮询重试。",
             ]
         ),
         encoding="utf-8",

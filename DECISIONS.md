@@ -1,14 +1,5 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
-[2026-06-27T00:55:00+08:00] Scheduled refresh defaults to calendar-only LaunchAgent wakeups:
-
-为减少 macOS “App 后台活动”反复提示和无意义后台唤醒，`com.codex.ashare-dashboard.scheduled-refresh` 默认不再保留 `StartInterval=300` 的 5 分钟轮询。发布脚本会规范化 plist：保留明确的 `13:55 / 14:00 / 14:05 / 16:20` `StartCalendarInterval`，保持 `RunAtLoad=false`，并移除 `StartInterval`。如果未来确实需要恢复 5 分钟 catch-up/ops-only 轮询，必须显式设置 `ASHARE_SCHEDULED_REFRESH_KEEP_INTERVAL=1` 发布，并重新评估后台提示、DB 锁窗口和看板读接口影响。
-
-执行边界
-- 普通发布不得在 scheduled-refresh plist 未变化时重复 `bootout/bootstrap`；避免把每次发布变成 Login Items/后台活动重新注册。
-- 盘后核心刷新仍由 calendar slots + `.ok/.attempted/.failed` slot state 控制，不依赖 `RunAtLoad` 或 `kickstart -k`。
-- 失败状态文案不得承诺“下一次 5 分钟轮询”，只能描述为下一次调度触发或显式维护补跑。
-
 [2026-06-15T09:50:24+08:00] Short Pick Lab V2 h10 quiet champion is the mandatory benchmark line:
 
 项目所有者明确：后续 `试验田v2` 策略搜索必须以 10 日交易日口径的 quiet champion 为对标标准，不能因为长上下文丢失重新回到无边界的大方向发散。当前固化的主 benchmark 是 `quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1`（历史简称 `quiet_r2_poolhot10_mtw__fixed85_top5_v1`），保守资金影子是 `quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1`（历史简称 `quiet_r2_poolhot10_mtw__fixed80_top5_v1`）。

@@ -93,9 +93,9 @@ echo ""
 echo "--- Phase 3: API Responses ---"
 
 check "Watchlist endpoint" \
-    "curl -s '$BACKEND_URL/watchlist' | python3 -c \"import sys,json; d=json.load(sys.stdin); assert isinstance(d.get('items'), list)\""
+    "curl -s '$BACKEND_URL/watchlist' | python3 -c \"import sys,json; d=json.load(sys.stdin); assert len(d)>0\""
 
-SYMBOLS=$(curl -s "$BACKEND_URL/watchlist" | python3 -c "import sys,json; d=json.load(sys.stdin); print(','.join(item['symbol'] for item in d.get('items', [])))" 2>/dev/null || echo "")
+SYMBOLS=$(curl -s "$BACKEND_URL/watchlist" | python3 -c "import sys,json; print(','.join(item['symbol'] for item in json.load(sys.stdin)))" 2>/dev/null || echo "")
 
 if [ -n "$SYMBOLS" ]; then
     IFS=',' read -ra SYM_ARRAY <<< "$SYMBOLS"
@@ -130,9 +130,6 @@ check "News factor scores are not saturated (±1.0)" \
     "curl -s '$BACKEND_URL/dashboard/candidates' | python3 -c \"
 import sys,json
 items=json.load(sys.stdin)['items']
-if not items:
-    print('No dashboard candidates; factor saturation check skipped.')
-    raise SystemExit(0)
 for item in items:
     sym=item['symbol']
     import urllib.request
@@ -148,9 +145,6 @@ check "At least one stock has non-zero size factor" \
     "curl -s '$BACKEND_URL/dashboard/candidates' | python3 -c \"
 import sys,json,urllib.request
 items=json.load(sys.stdin)['items']
-if not items:
-    print('No dashboard candidates; size factor check skipped.')
-    raise SystemExit(0)
 nonzero=0
 for item in items:
     d=json.loads(urllib.request.urlopen('$BACKEND_URL/stocks/'+item['symbol']+'/dashboard').read())
@@ -165,9 +159,6 @@ check "Reversal factor has both positive and negative scores (not all same)" \
     "curl -s '$BACKEND_URL/dashboard/candidates' | python3 -c \"
 import sys,json,urllib.request
 items=json.load(sys.stdin)['items']
-if not items:
-    print('No dashboard candidates; reversal distribution check skipped.')
-    raise SystemExit(0)
 scores=[]
 for item in items:
     d=json.loads(urllib.request.urlopen('$BACKEND_URL/stocks/'+item['symbol']+'/dashboard').read())

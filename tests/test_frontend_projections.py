@@ -127,22 +127,20 @@ def test_operations_summary_projection_materializes_per_symbol_payload() -> None
     assert payload["recommendation_replay"] == []
 
 
-def test_operations_summary_api_degrades_without_projection_and_does_not_write(tmp_path) -> None:
+def test_operations_summary_api_caches_fallback_projection(tmp_path) -> None:
     database_url = f"sqlite:///{tmp_path / 'projection-api.db'}"
     init_database(database_url)
     with session_scope(database_url) as session:
         seed_watchlist_fixture(session, symbols=("600519.SH", "300750.SZ"))
 
     client = TestClient(create_app(database_url, enable_background_ops_tick=False))
-    with patch("ashare_evidence.api.build_operations_dashboard", side_effect=AssertionError("GET must not rebuild")):
-        response = client.get(
-            "/dashboard/operations/summary?sample_symbol=300750.SZ",
-            headers={"X-HZ-User-Login": "root", "X-HZ-User-Role": "root"},
-        )
+    response = client.get(
+        "/dashboard/operations/summary?sample_symbol=300750.SZ",
+        headers={"X-HZ-User-Login": "root", "X-HZ-User-Role": "root"},
+    )
 
     assert response.status_code == 200
-    assert response.json()["degraded"] is True
-    assert response.json()["reason"] == "operations_summary_projection_miss"
+    assert "T" in response.json()["overview"]["generated_at"]
     with session_scope(database_url) as session:
         payload = get_ready_frontend_projection_payload(
             session,
@@ -152,10 +150,10 @@ def test_operations_summary_api_degrades_without_projection_and_does_not_write(t
         stored = session.query(FrontendProjection).filter_by(
             projection_key=operations_summary_projection_key(target_login="root", sample_symbol="300750.SZ"),
             target_login="root",
-        ).one_or_none()
+        ).one()
 
-    assert payload is None
-    assert stored is None
+    assert payload is not None
+    assert stored.metadata_payload["source"] == "dashboard_operations_summary_fallback"
 
 
 def test_operations_legacy_get_does_not_run_operations_tick(tmp_path) -> None:
@@ -165,18 +163,15 @@ def test_operations_legacy_get_does_not_run_operations_tick(tmp_path) -> None:
         seed_watchlist_fixture(session, symbols=("600519.SH", "300750.SZ"))
 
     client = TestClient(create_app(database_url, enable_background_ops_tick=False))
-    with (
-        patch("ashare_evidence.api.run_operations_tick", side_effect=AssertionError("GET must stay read-only")),
-        patch("ashare_evidence.api.build_operations_dashboard", side_effect=AssertionError("GET must not rebuild")),
-    ):
+    with patch("ashare_evidence.api.run_operations_tick", side_effect=AssertionError("GET must stay read-only")):
         response = client.get(
             "/dashboard/operations?sample_symbol=300750.SZ",
             headers={"X-HZ-User-Login": "root", "X-HZ-User-Role": "root"},
         )
 
     assert response.status_code == 200
-    assert response.json()["degraded"] is True
-    assert response.json()["reason"] == "operations_response_cache_miss"
+    assert "portfolios" in response.json()
+    assert response.json()["simulation_workspace"] is None
 
 
 def test_operations_portfolios_detail_uses_prewarmed_response_cache(tmp_path) -> None:
@@ -216,18 +211,24 @@ def test_operations_replay_detail_uses_prewarmed_response_cache(tmp_path) -> Non
     assert "recommendation_replay" in response.json()
 
 
-def test_operations_detail_hard_expiry_degrades_instead_of_sync_rebuild(tmp_path) -> None:
+def test_operations_detail_cache_expiry_rebuilds_payload(tmp_path) -> None:
     database_url = f"sqlite:///{tmp_path / 'operations-detail-cache-expiry.db'}"
     init_database(database_url)
     with session_scope(database_url) as session:
         seed_watchlist_fixture(session, symbols=("600519.SH", "300750.SZ"))
+
+    fresh_payload = {
+        "section": "replay",
+        "generated_at": "2026-06-13T00:00:00+08:00",
+        "recommendation_replay": [{"summary": "fresh payload after ttl expiry"}],
+    }
 
     client = TestClient(create_app(database_url, enable_background_ops_tick=False))
     with patch.dict("os.environ", {"ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE": "sync"}), client:
         with (
             patch("ashare_evidence.api.OPERATIONS_RESPONSE_CACHE_TTL_SECONDS", -2.0),
             patch("ashare_evidence.api.OPERATIONS_RESPONSE_CACHE_STALE_GRACE_SECONDS", 0.0),
-            patch("ashare_evidence.api.build_operations_detail") as build_detail,
+            patch("ashare_evidence.api.build_operations_detail", return_value=fresh_payload) as build_detail,
         ):
             response = client.get(
                 "/dashboard/operations/details?section=replay&sample_symbol=600519.SH",
@@ -235,9 +236,8 @@ def test_operations_detail_hard_expiry_degrades_instead_of_sync_rebuild(tmp_path
             )
 
     assert response.status_code == 200
-    assert build_detail.call_count == 0
-    assert response.json()["degraded"] is True
-    assert response.json()["reason"] == "operations_response_cache_miss"
+    assert build_detail.call_count == 1
+    assert response.json()["recommendation_replay"][0]["summary"] == "fresh payload after ttl expiry"
 
 
 def test_operations_detail_soft_expiry_returns_stale_and_refreshes_in_background(tmp_path) -> None:
