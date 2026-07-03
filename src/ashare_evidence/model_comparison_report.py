@@ -60,6 +60,13 @@ def _prediction_rows(candidate_run: dict[str, Any], trial_id: str) -> list[dict[
     return [row for row in candidate_run.get("prediction_rows") or [] if str(row.get("trial_id")) == trial_id]
 
 
+def _trial_diagnostic(candidate_run: dict[str, Any], trial_id: str) -> dict[str, Any] | None:
+    for row in candidate_run.get("trial_diagnostics") or []:
+        if str(row.get("trial_id") or "") == trial_id:
+            return row
+    return None
+
+
 def _split_rank_ic(predictions: list[dict[str, Any]]) -> float | None:
     scored = [row for row in predictions if row.get("target_label") is not None]
     if len(scored) < 2:
@@ -110,20 +117,43 @@ def _overfit_diagnostics(candidate_run: dict[str, Any], leaderboard: list[dict[s
     ]
     trial_count = len(leaderboard)
     eligible_trial_count = len(eligible)
-    split_ids = sorted({str(row.get("split_id")) for row in candidate_run.get("prediction_rows") or [] if row.get("split_id")})
+    split_ids = sorted(
+        {
+            str(split.get("split_id"))
+            for split in candidate_run.get("splits") or []
+            if split.get("status") == "ready" and split.get("split_id")
+        }
+    )
     overfit_like_count = 0
     for row in eligible:
-        predictions = _prediction_rows(candidate_run, str(row.get("trial_id") or ""))
-        by_split: dict[str, list[dict[str, Any]]] = {}
-        for prediction in predictions:
-            by_split.setdefault(str(prediction.get("split_id") or ""), []).append(prediction)
-        trial_split_ics = [value for rows in by_split.values() if (value := _split_rank_ic(rows)) is not None]
+        trial_id = str(row.get("trial_id") or "")
+        diagnostic = _trial_diagnostic(candidate_run, trial_id)
+        if diagnostic is not None:
+            trial_split_ics = [
+                _safe_float(item.get("rank_ic"))
+                for item in diagnostic.get("split_rank_ics") or []
+                if item.get("rank_ic") is not None
+            ]
+        else:
+            predictions = _prediction_rows(candidate_run, trial_id)
+            by_split: dict[str, list[dict[str, Any]]] = {}
+            for prediction in predictions:
+                by_split.setdefault(str(prediction.get("split_id") or ""), []).append(prediction)
+            trial_split_ics = [value for rows in by_split.values() if (value := _split_rank_ic(rows)) is not None]
         if trial_split_ics and _safe_float(row.get("rank_ic_mean")) > 0 and mean(trial_split_ics) <= 0:
             overfit_like_count += 1
     pbo_proxy = overfit_like_count / eligible_trial_count if eligible_trial_count else None
     best_trial_id = str((leaderboard[0] if leaderboard else {}).get("trial_id") or "")
-    best_trial_predictions = _prediction_rows(candidate_run, best_trial_id) if best_trial_id else []
-    period_rank_ics = _period_rank_ics(best_trial_predictions, period_field="as_of_date")
+    best_diagnostic = _trial_diagnostic(candidate_run, best_trial_id) if best_trial_id else None
+    if best_diagnostic is not None:
+        period_rank_ics = [
+            _safe_float(item.get("rank_ic"))
+            for item in best_diagnostic.get("date_rank_ics") or []
+            if item.get("rank_ic") is not None
+        ]
+    else:
+        best_trial_predictions = _prediction_rows(candidate_run, best_trial_id) if best_trial_id else []
+        period_rank_ics = _period_rank_ics(best_trial_predictions, period_field="as_of_date")
     period_count = len(period_rank_ics)
     alpha_t_stat = None
     deflated_sharpe_confidence = None
@@ -196,7 +226,12 @@ def _winner_dependency(candidate_run: dict[str, Any], leaderboard: list[dict[str
             "best_trial_id": None,
         }
     best_trial_id = str(best.get("trial_id") or "")
-    top_picks = _top_pick_returns(_prediction_rows(candidate_run, best_trial_id))
+    diagnostic = _trial_diagnostic(candidate_run, best_trial_id)
+    top_picks = (
+        list(diagnostic.get("top_picks_by_date") or [])
+        if diagnostic is not None
+        else _top_pick_returns(_prediction_rows(candidate_run, best_trial_id))
+    )
     returns = [_safe_float(row.get("net_excess_return")) for row in top_picks]
     baseline_mean = mean(returns) if returns else None
     blockers: list[str] = []

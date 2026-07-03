@@ -120,7 +120,15 @@ class ModelCandidateWorkbenchTests(unittest.TestCase):
         self.assertEqual(run["promotion_status"], "blocked_from_production")
         self.assertEqual(run["trial_count"], 1)
         self.assertGreater(run["prediction_row_count"], 0)
+        self.assertGreater(run["stored_prediction_row_count"], 0)
         self.assertEqual(run["evaluable_row_count"], run["joined_row_count"])
+        self.assertGreater(len(run["trial_summaries"][0]["fit_summaries"]), 0)
+        self.assertGreater(len(run["trial_diagnostics"][0]["date_rank_ics"]), 0)
+        self.assertIn("fitted_model_digest", run["prediction_rows"][0])
+        self.assertEqual(
+            run["prediction_storage_policy"]["mode"],
+            "bounded_inline_sample_with_full_trial_diagnostics",
+        )
         self.assertEqual(run["validation_protocol"]["runner_policy"], "registered_model_specs_only")
         self.assertIn("governance_promotion_pending", run["gate_readout"]["blocking_gate_ids"])
 
