@@ -12,6 +12,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from ashare_evidence.benchmark import CSI_BENCHMARKS, DEFAULT_BENCHMARK_ID, benchmark_close_maps
 from ashare_evidence.models import MarketBar, NewsEntityLink, NewsItem, Recommendation, Stock
+from ashare_evidence.objective_universe import (
+    build_objective_universe_artifact,
+    objective_universe_summary,
+    write_objective_universe_artifact,
+)
 from ashare_evidence.phase2.factor_ic import FactorICResult, aggregate_ic_results, compute_rank_ic
 from ashare_evidence.pit_feature_store import (
     PIT_FEATURE_STORE_SCHEMA_VERSION,
@@ -358,7 +363,13 @@ def _validation_protocol() -> dict[str, Any]:
     }
 
 
-def _snapshot_gate_readout(*, benchmark_status: str, symbols: list[str], recommendation_count: int) -> dict[str, Any]:
+def _snapshot_gate_readout(
+    *,
+    benchmark_status: str,
+    symbols: list[str],
+    recommendation_count: int,
+    objective_universe: dict[str, Any],
+) -> dict[str, Any]:
     checks = [
         {
             "gate_id": "runtime_db_read_only_source",
@@ -367,8 +378,10 @@ def _snapshot_gate_readout(*, benchmark_status: str, symbols: list[str], recomme
         },
         {
             "gate_id": "objective_research_universe",
-            "status": "blocked",
-            "reason": "current snapshot scope is still active watchlist, not a frozen objective universe",
+            "status": "pass" if objective_universe.get("eligible_symbol_count", 0) else "blocked",
+            "reason": None
+            if objective_universe.get("eligible_symbol_count", 0)
+            else "objective frozen universe artifact has no eligible members",
         },
         {
             "gate_id": "pit_feature_store",
@@ -390,6 +403,7 @@ def _snapshot_gate_readout(*, benchmark_status: str, symbols: list[str], recomme
         "snapshot_counts": {
             "symbol_count": len(symbols),
             "recommendation_count": recommendation_count,
+            "objective_universe_symbol_count": objective_universe.get("eligible_symbol_count", 0),
         },
     }
 
@@ -398,10 +412,12 @@ def _gate_readout(
     *,
     status: str,
     symbols: list[str],
+    objective_universe: dict[str, Any],
     distinct_as_of_count: int,
     observation_count: int,
     benchmark_status: str,
 ) -> dict[str, Any]:
+    objective_symbol_count = int(objective_universe.get("eligible_symbol_count") or 0)
     checks = [
         {
             "gate_id": "independent_feature_source",
@@ -410,8 +426,8 @@ def _gate_readout(
         },
         {
             "gate_id": "objective_research_universe",
-            "status": "blocked",
-            "reason": "current factor observation scope uses active watchlist symbols",
+            "status": "pass" if objective_symbol_count else "blocked",
+            "reason": None if objective_symbol_count else "objective frozen universe artifact has no eligible members",
         },
         {
             "gate_id": "walk_forward_purged_cv",
@@ -425,10 +441,10 @@ def _gate_readout(
         },
         {
             "gate_id": "research_universe_width",
-            "status": "pass" if len(symbols) >= MIN_UNIQUE_SYMBOLS_FOR_WEIGHTING else "blocked",
+            "status": "pass" if objective_symbol_count >= MIN_UNIQUE_SYMBOLS_FOR_WEIGHTING else "blocked",
             "reason": (
                 None
-                if len(symbols) >= MIN_UNIQUE_SYMBOLS_FOR_WEIGHTING
+                if objective_symbol_count >= MIN_UNIQUE_SYMBOLS_FOR_WEIGHTING
                 else f"requires_at_least_{MIN_UNIQUE_SYMBOLS_FOR_WEIGHTING}_unique_symbols"
             ),
         },
@@ -457,6 +473,8 @@ def _gate_readout(
         "claim_ceiling": "diagnostic_research_only",
         "checks": checks,
         "blocking_gate_ids": [check["gate_id"] for check in checks if check["status"] == "blocked"],
+        "objective_universe_symbol_count": objective_symbol_count,
+        "recommendation_sample_symbol_count": len(symbols),
     }
 
 
@@ -469,6 +487,7 @@ def _build_research_input_snapshot(
     symbols: list[str],
     close_maps: dict[str, dict[date, float]],
     recommendation_source_rows: list[dict[str, Any]],
+    objective_universe: dict[str, Any],
     market_bar_fingerprint: dict[str, Any],
     benchmark_bar_fingerprint: dict[str, Any],
     news_source_fingerprint: dict[str, Any],
@@ -489,6 +508,7 @@ def _build_research_input_snapshot(
     input_content = {
         "source_db_locator_id": source_db_locator_id,
         "recommendation_source_rows": recommendation_source_rows,
+        "objective_universe": objective_universe_summary(objective_universe),
         "market_bar_fingerprint": market_bar_fingerprint,
         "benchmark_bar_fingerprint": benchmark_bar_fingerprint,
         "news_source_fingerprint": news_source_fingerprint,
@@ -522,15 +542,17 @@ def _build_research_input_snapshot(
             benchmark_status=benchmark_status,
             symbols=symbols,
             recommendation_count=len(recommendations),
+            objective_universe=objective_universe,
         ),
         "claim_ceiling": "input_boundary_only",
         "promotion_status": "blocked_from_production",
         "storage_boundary": "runtime_db_read_only_input__independent_research_validation_artifact_store",
         "source_tables": ["recommendations", "stocks", "market_bars"],
+        "objective_universe": objective_universe_summary(objective_universe),
         "universe_context": {
-            "source": "active_watchlist_symbols",
-            "status": "snapshot_created_but_objective_universe_not_started",
-            "promotion_blocker": "research universe is not an objective frozen cross-section",
+            "source": "objective_frozen_universe",
+            "status": "frozen_before_validation",
+            "promotion_blocker": "promotion still requires independent feature IC/OOS/governance despite frozen universe",
         },
         "symbols": symbols,
         "recommendation_count": len(recommendations),
@@ -687,6 +709,11 @@ def build_factor_observations(
     input_snapshot_id = _artifact_id("research-input-snapshot", validation_run_id)
     recommendations = _records_for_scope(session)
     symbols = sorted({record.stock.symbol for record in recommendations if record.stock is not None})
+    objective_universe = build_objective_universe_artifact(
+        session,
+        validation_run_id=validation_run_id,
+        recommended_symbols=symbols,
+    )
     close_maps = _close_maps(session, symbols)
     recommendation_source_rows = _recommendation_source_rows(recommendations)
     benchmark_maps = benchmark_close_maps(session)
@@ -717,6 +744,7 @@ def build_factor_observations(
         symbols=symbols,
         close_maps=close_maps,
         recommendation_source_rows=recommendation_source_rows,
+        objective_universe=objective_universe,
         market_bar_fingerprint=market_bar_fingerprint,
         benchmark_bar_fingerprint=benchmark_bar_fingerprint,
         news_source_fingerprint=news_source_fingerprint,
@@ -828,6 +856,7 @@ def build_factor_observations(
     gate_readout = _gate_readout(
         status=status,
         symbols=symbols,
+        objective_universe=objective_universe,
         distinct_as_of_count=len(distinct_as_of),
         observation_count=len(observation_rows),
         benchmark_status=benchmark_status,
@@ -849,6 +878,7 @@ def build_factor_observations(
             "claim_ceiling": input_snapshot["claim_ceiling"],
         },
         "research_input_snapshot_artifact": input_snapshot,
+        "objective_universe": objective_universe_summary(objective_universe),
         "pit_feature_store": {
             "artifact_type": "pit_feature_store",
             "schema_version": PIT_FEATURE_STORE_SCHEMA_VERSION,
@@ -862,6 +892,7 @@ def build_factor_observations(
         "validation_protocol": _validation_protocol(),
         "lineage": {
             "source_db_snapshot_id": input_snapshot["source_db_snapshot_id"],
+            "objective_universe_id": objective_universe["artifact_id"],
             "research_input_snapshot_id": input_snapshot_id,
             "pit_feature_store_id": pit_feature_store["artifact_id"],
             "source_data_time_range": _source_data_time_range(observation_rows),
@@ -871,12 +902,14 @@ def build_factor_observations(
             "config_version": VALIDATION_PROTOCOL_VERSION,
             "code_version": "unresolved_local_checkout",
         },
-        "universe_symbol_count": len(symbols),
+        "universe_symbol_count": objective_universe["eligible_symbol_count"],
+        "recommendation_sample_symbol_count": len(symbols),
         "symbols": symbols,
         "universe_context": {
-            "source": "active_watchlist_symbols",
-            "status": "legacy_diagnostic_only",
-            "promotion_blocker": "research universe is not an objective frozen cross-section",
+            "source": "objective_frozen_universe",
+            "status": "frozen_before_validation",
+            "recommendation_sample_source": "active_watchlist_recommendation_records",
+            "promotion_blocker": "legacy factor observations are still diagnostic-only and require OOS/governance",
         },
         "horizons": list(horizons),
         "benchmark_context": {
@@ -904,8 +937,10 @@ def build_factor_observations(
         ),
     }
     if include_raw_research_artifacts:
+        results["objective_universe_artifact"] = objective_universe
         results["pit_feature_store_artifact"] = pit_feature_store
     if persist:
+        write_objective_universe_artifact(objective_universe, artifact_root=artifact_root)
         _write_research_input_snapshot(input_snapshot, artifact_root=artifact_root, artifact_id=input_snapshot_id)
         write_pit_feature_store_artifact(pit_feature_store, artifact_root=artifact_root)
         _write_artifact(results, artifact_root=artifact_root, artifact_id=artifact_id)
@@ -1018,6 +1053,7 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
             "weight_sweep_policy": "diagnostic_only_no_auto_promotion",
             "multiple_testing_status": "not_corrected",
         },
+        "objective_universe": observations.get("objective_universe", {}),
         "research_input_snapshot": observations.get("research_input_snapshot", {}),
         "pit_feature_store": observations.get("pit_feature_store", {}),
         "lineage": observations.get("lineage", {}),
@@ -1031,6 +1067,9 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
         "note": "权重 sweep 只产出独立验证制品，不自动修改生产权重；不得把 in-sample 最优组合作为上线结论。",
     }
     if persist:
+        objective_universe = observations.get("objective_universe_artifact")
+        if isinstance(objective_universe, dict) and objective_universe.get("artifact_id"):
+            write_objective_universe_artifact(objective_universe, artifact_root=artifact_root)
         input_snapshot = observations.get("research_input_snapshot_artifact")
         input_snapshot_ref = observations.get("research_input_snapshot") or {}
         if isinstance(input_snapshot, dict) and input_snapshot_ref.get("artifact_id"):

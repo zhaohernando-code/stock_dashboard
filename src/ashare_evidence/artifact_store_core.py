@@ -20,6 +20,7 @@ ARTIFACT_FOLDERS = {
     "phase5_holding_policy_study": "studies",
     "phase5_holding_policy_experiment": "studies",
     "phase5_producer_contract_study": "studies",
+    "objective_frozen_universe": "research_validation/objective_universes",
     "research_input_snapshot": "research_validation/input_snapshots",
     "pit_feature_store": "research_validation/pit_feature_store",
     "factor_ic_study": "research_validation/factor_ic_studies",

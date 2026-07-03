@@ -96,6 +96,16 @@ class ResearchArtifactStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
 
+            universe_path = write_research_validation_artifact(
+                "objective_frozen_universe",
+                "objective-frozen-universe-unit",
+                {
+                    "artifact_type": "objective_frozen_universe",
+                    "claim_ceiling": "universe_definition_only",
+                    "promotion_status": "blocked_from_production",
+                },
+                root=root,
+            )
             snapshot_path = write_research_validation_artifact(
                 "research_input_snapshot",
                 "research-input-snapshot-unit",
@@ -133,6 +143,7 @@ class ResearchArtifactStoreTests(unittest.TestCase):
                 root=root,
             )
 
+            self.assertEqual(universe_path.parent, root / "research_validation" / "objective_universes")
             self.assertEqual(snapshot_path.parent, root / "research_validation" / "input_snapshots")
             self.assertEqual(pit_path.parent, root / "research_validation" / "pit_feature_store")
             self.assertEqual(factor_path.parent, root / "research_validation" / "factor_ic_studies")

@@ -1212,6 +1212,7 @@ def _factor_observation_summary(session: Session, *, artifact_root: Any, active_
         "note": study.get("note"),
         "schema_version": study.get("schema_version"),
         "artifact_id": study.get("artifact_id"),
+        "objective_universe": study.get("objective_universe", {}),
         "research_input_snapshot": study.get("research_input_snapshot", {}),
         "pit_feature_store": study.get("pit_feature_store", {}),
         "validation_protocol": study.get("validation_protocol", {}),
@@ -1221,6 +1222,7 @@ def _factor_observation_summary(session: Session, *, artifact_root: Any, active_
         "observation_count": study.get("observation_count", 0),
         "distinct_as_of_date_count": study.get("distinct_as_of_date_count", 0),
         "symbol_count": study.get("universe_symbol_count", len(active_symbols)),
+        "recommendation_sample_symbol_count": study.get("recommendation_sample_symbol_count", len(active_symbols)),
         "benchmark_context": study.get("benchmark_context", {}),
         "horizons": horizons,
     }
