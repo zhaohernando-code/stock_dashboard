@@ -99,6 +99,24 @@ def write_shortpick_lab_artifact(
     return target
 
 
+def write_research_validation_artifact(
+    artifact_type: str,
+    artifact_id: str,
+    payload: dict[str, Any],
+    *,
+    root: Path | None = None,
+) -> Path:
+    if artifact_type not in {"factor_ic_study", "weight_sweep_study"}:
+        raise ValueError(f"unsupported research validation artifact type: {artifact_type}")
+    if not artifact_id.strip():
+        raise ValueError("research validation artifact requires artifact_id")
+    target = artifact_path(artifact_type, artifact_id, root=root)
+    _ensure_artifact_write_allowed(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    return target
+
+
 def read_shortpick_lab_artifact_if_exists(
     artifact_id: str | None,
     *,

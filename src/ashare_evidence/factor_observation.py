@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+import hashlib
 from bisect import bisect_left
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -13,12 +13,20 @@ from ashare_evidence.benchmark import CSI_BENCHMARKS, DEFAULT_BENCHMARK_ID, benc
 from ashare_evidence.models import MarketBar, Recommendation, Stock
 from ashare_evidence.phase2.factor_ic import FactorICResult, aggregate_ic_results, compute_rank_ic
 from ashare_evidence.recommendation_selection import recommendation_recency_ordering
+from ashare_evidence.research_artifact_store import write_research_validation_artifact
 from ashare_evidence.watchlist import active_watchlist_symbols
 
 FACTOR_KEYS = ("price_baseline", "news_event", "fundamental", "size_factor", "reversal", "liquidity")
 HORIZONS = (10, 20, 40)
-MIN_SYMBOLS_PER_SNAPSHOT = 5
-MIN_SNAPSHOT_COUNT = 3
+MIN_SYMBOLS_PER_SNAPSHOT = 20
+MIN_SNAPSHOT_COUNT = 10
+MIN_UNIQUE_SYMBOLS_FOR_WEIGHTING = 50
+MIN_TOTAL_SAMPLES_FOR_WEIGHTING = 600
+MIN_WINDOWS_FOR_WEIGHTING = 20
+FACTOR_IC_STUDY_SCHEMA_VERSION = "factor_ic_study.v2"
+WEIGHT_SWEEP_STUDY_SCHEMA_VERSION = "weight_sweep_study.v2"
+LEGACY_FACTOR_SCORE_SOURCE = "recommendation_payload.factor_breakdown"
+VALIDATION_PROTOCOL_VERSION = "research_validation_protocol.v1"
 FUSION_BASELINE = {
     "price_baseline": 0.35,
     "news_event": 0.20,
@@ -38,7 +46,117 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _validation_run_id(prefix: str) -> str:
+    return f"{prefix}:{datetime.now(UTC).strftime('%Y%m%dT%H%M%S%f')}"
+
+
+def _artifact_id(prefix: str, validation_run_id: str) -> str:
+    digest = hashlib.sha256(validation_run_id.encode("utf-8")).hexdigest()[:12]
+    return f"{prefix}-{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}-{digest}"
+
+
+def _source_db_snapshot_id(session: Session) -> str:
+    bind = session.get_bind()
+    if bind is None:
+        return "unknown-session-bind"
+    rendered = bind.url.render_as_string(hide_password=True)
+    return hashlib.sha256(rendered.encode("utf-8")).hexdigest()[:16]
+
+
+def _source_data_time_range(rows: list[dict[str, Any]]) -> dict[str, str | None]:
+    as_of_dates = sorted(str(row.get("as_of_date") or "") for row in rows if row.get("as_of_date"))
+    entry_days = sorted(str(row.get("entry_trade_day") or "") for row in rows if row.get("entry_trade_day"))
+    exit_days = sorted(str(row.get("exit_trade_day") or "") for row in rows if row.get("exit_trade_day"))
+    return {
+        "as_of_start": as_of_dates[0] if as_of_dates else None,
+        "as_of_end": as_of_dates[-1] if as_of_dates else None,
+        "entry_trade_day_start": entry_days[0] if entry_days else None,
+        "exit_trade_day_end": exit_days[-1] if exit_days else None,
+    }
+
+
+def _validation_protocol() -> dict[str, Any]:
+    return {
+        "protocol_version": VALIDATION_PROTOCOL_VERSION,
+        "storage_boundary": "runtime_db_read_only_input__independent_research_validation_artifact_store",
+        "feature_source": LEGACY_FACTOR_SCORE_SOURCE,
+        "feature_source_status": "legacy_diagnostic_only",
+        "walk_forward_status": "not_implemented",
+        "purge_embargo_status": "not_implemented",
+        "execution_constraint_status": "daily_close_forward_return_only",
+        "promotion_rule": "raw validation artifacts cannot directly modify production weights or recommendations",
+    }
+
+
+def _gate_readout(
+    *,
+    status: str,
+    symbols: list[str],
+    distinct_as_of_count: int,
+    observation_count: int,
+    benchmark_status: str,
+) -> dict[str, Any]:
+    checks = [
+        {
+            "gate_id": "independent_feature_source",
+            "status": "blocked",
+            "reason": f"factor scores still come from {LEGACY_FACTOR_SCORE_SOURCE}",
+        },
+        {
+            "gate_id": "objective_research_universe",
+            "status": "blocked",
+            "reason": "current factor observation scope uses active watchlist symbols",
+        },
+        {
+            "gate_id": "walk_forward_purged_cv",
+            "status": "blocked",
+            "reason": "walk-forward split, purge, and embargo are not implemented in this diagnostic path",
+        },
+        {
+            "gate_id": "benchmark_availability",
+            "status": "pass" if benchmark_status == "available" else "blocked",
+            "reason": None if benchmark_status == "available" else "primary benchmark bars are unavailable for this run",
+        },
+        {
+            "gate_id": "research_universe_width",
+            "status": "pass" if len(symbols) >= MIN_UNIQUE_SYMBOLS_FOR_WEIGHTING else "blocked",
+            "reason": (
+                None
+                if len(symbols) >= MIN_UNIQUE_SYMBOLS_FOR_WEIGHTING
+                else f"requires_at_least_{MIN_UNIQUE_SYMBOLS_FOR_WEIGHTING}_unique_symbols"
+            ),
+        },
+        {
+            "gate_id": "independent_time_windows",
+            "status": "pass" if distinct_as_of_count >= MIN_WINDOWS_FOR_WEIGHTING else "blocked",
+            "reason": (
+                None
+                if distinct_as_of_count >= MIN_WINDOWS_FOR_WEIGHTING
+                else f"requires_at_least_{MIN_WINDOWS_FOR_WEIGHTING}_independent_as_of_dates"
+            ),
+        },
+        {
+            "gate_id": "cross_section_samples",
+            "status": "pass" if observation_count >= MIN_TOTAL_SAMPLES_FOR_WEIGHTING else "blocked",
+            "reason": (
+                None
+                if observation_count >= MIN_TOTAL_SAMPLES_FOR_WEIGHTING
+                else f"requires_at_least_{MIN_TOTAL_SAMPLES_FOR_WEIGHTING}_observation_rows"
+            ),
+        },
+    ]
+    return {
+        "gate_status": "blocked" if any(check["status"] == "blocked" for check in checks) else status,
+        "promotion_status": "blocked_from_production",
+        "claim_ceiling": "diagnostic_research_only",
+        "checks": checks,
+        "blocking_gate_ids": [check["gate_id"] for check in checks if check["status"] == "blocked"],
+    }
+
+
 def _extract_factor_scores(payload: dict[str, Any]) -> dict[str, float]:
+    # Legacy diagnostic path: this reads producer output, not independent point-in-time features.
+    # Do not use these scores for production weighting or promotion decisions.
     factor_breakdown = payload.get("factor_breakdown") if isinstance(payload.get("factor_breakdown"), dict) else {}
     evidence = payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {}
     cards = {
@@ -151,6 +269,9 @@ def _ic_result_to_dict(result: FactorICResult) -> dict[str, Any]:
         "positive_ic_rate": result.ic_positive_rate,
         "sample_count": result.sample_count,
         "computed_at": result.computed_at,
+        "period_count": result.period_count,
+        "weighting_status": result.weighting_status,
+        "weighting_reason": result.weighting_reason,
     }
 
 
@@ -162,6 +283,7 @@ def build_factor_observations(
     horizons: tuple[int, ...] = HORIZONS,
     persist: bool = True,
 ) -> dict[str, Any]:
+    validation_run_id = _validation_run_id("factor-ic")
     recommendations = _records_for_scope(session)
     symbols = sorted({record.stock.symbol for record in recommendations if record.stock is not None})
     close_maps = _close_maps(session, symbols)
@@ -178,8 +300,10 @@ def build_factor_observations(
     snapshot_results: dict[int, list[FactorICResult]] = {horizon: [] for horizon in horizons}
     per_horizon_rows: dict[int, list[dict[str, Any]]] = {horizon: [] for horizon in horizons}
     benchmark_source = "csi_index_daily"
+    benchmark_status = "available"
     if not primary_benchmark:
-        benchmark_source = "active_universe_equal_weight_proxy_pending_csi_index_bars"
+        benchmark_source = "unavailable"
+        benchmark_status = "missing_primary_benchmark_bars"
 
     for as_of_day, records in sorted(by_as_of.items()):
         scored_records: list[dict[str, Any]] = []
@@ -236,7 +360,7 @@ def build_factor_observations(
                 if benchmark_forward is not None:
                     benchmark_return = benchmark_forward[0]
             if benchmark_return is None:
-                benchmark_return = sum(stock_returns) / len(stock_returns) if stock_returns else 0.0
+                continue
             for row in horizon_rows:
                 row["benchmark_return"] = round(float(benchmark_return), 6)
                 row["benchmark_source"] = benchmark_source
@@ -252,7 +376,11 @@ def build_factor_observations(
 
     factor_results: dict[str, Any] = {}
     for horizon in horizons:
-        aggregate = aggregate_ic_results(snapshot_results[horizon])
+        aggregate = aggregate_ic_results(
+            snapshot_results[horizon],
+            min_period_count_for_weighting=MIN_WINDOWS_FOR_WEIGHTING,
+            min_sample_count_for_weighting=MIN_TOTAL_SAMPLES_FOR_WEIGHTING,
+        )
         horizon_key = f"{horizon}d"
         factor_results[horizon_key] = {}
         for factor_key in FACTOR_KEYS:
@@ -273,47 +401,76 @@ def build_factor_observations(
             }
 
     distinct_as_of = sorted({row["as_of_date"] for row in observation_rows})
-    status = (
-        "verified_candidate"
-        if len(distinct_as_of) >= MIN_SNAPSHOT_COUNT and len(observation_rows) >= MIN_SNAPSHOT_COUNT * min_records
-        else "insufficient_sample"
+    sample_ready = len(distinct_as_of) >= MIN_SNAPSHOT_COUNT and len(observation_rows) >= MIN_SNAPSHOT_COUNT * min_records
+    status = "diagnostic_only_blocked" if sample_ready else "insufficient_sample"
+    gate_readout = _gate_readout(
+        status=status,
+        symbols=symbols,
+        distinct_as_of_count=len(distinct_as_of),
+        observation_count=len(observation_rows),
+        benchmark_status=benchmark_status,
     )
+    artifact_id = _artifact_id("factor-ic-study", validation_run_id)
     results: dict[str, Any] = {
         "artifact_type": "factor_ic_study",
+        "schema_version": FACTOR_IC_STUDY_SCHEMA_VERSION,
+        "artifact_id": artifact_id,
         "status": status,
         "generated_at": datetime.now(UTC).isoformat(),
+        "validation_run_id": validation_run_id,
+        "validation_protocol": _validation_protocol(),
+        "lineage": {
+            "source_db_snapshot_id": _source_db_snapshot_id(session),
+            "source_data_time_range": _source_data_time_range(observation_rows),
+            "feature_version": "legacy_recommendation_payload_factor_breakdown:v1",
+            "label_version": "daily_close_forward_excess_return:v1",
+            "config_version": VALIDATION_PROTOCOL_VERSION,
+            "code_version": "unresolved_local_checkout",
+        },
         "universe_symbol_count": len(symbols),
         "symbols": symbols,
+        "universe_context": {
+            "source": "active_watchlist_symbols",
+            "status": "legacy_diagnostic_only",
+            "promotion_blocker": "research universe is not an objective frozen cross-section",
+        },
         "horizons": list(horizons),
         "benchmark_context": {
             "primary_benchmark": DEFAULT_BENCHMARK_ID,
             "primary_symbol": primary_benchmark_symbol,
             "source": benchmark_source,
-            "status": "available" if primary_benchmark else "pending_csi_index_bars",
+            "status": benchmark_status,
+            "fallback_policy": "block_ic_rows_when_primary_benchmark_unavailable",
         },
         "observation_count": len(observation_rows),
         "distinct_as_of_date_count": len(distinct_as_of),
         "min_symbols_per_snapshot": min_records,
         "min_snapshot_count": MIN_SNAPSHOT_COUNT,
+        "min_unique_symbols_for_weighting": MIN_UNIQUE_SYMBOLS_FOR_WEIGHTING,
+        "min_total_samples_for_weighting": MIN_TOTAL_SAMPLES_FOR_WEIGHTING,
+        "min_windows_for_weighting": MIN_WINDOWS_FOR_WEIGHTING,
+        "gate_readout": gate_readout,
+        "promotion_status": gate_readout["promotion_status"],
         "factor_results": factor_results,
         "observation_rows": observation_rows,
         "note": (
-            "因子可信度基于滚动 RankIC/IC_IR；当前融合贡献仍单独按 factor_score × dynamic_weight 解释。"
+            "该结果仅为 legacy diagnostic：因子分数仍来自 recommendation_payload，不能用于生产权重或 promotion。"
             if status != "insufficient_sample"
             else "样本不足，不能输出精确因子可信度或权重结论。"
         ),
     }
     if persist:
-        _write_artifact(results, artifact_root=artifact_root)
+        _write_artifact(results, artifact_root=artifact_root, artifact_id=artifact_id)
     return results
 
 
-def _write_artifact(results: dict[str, Any], *, artifact_root: str) -> None:
-    directory = Path(artifact_root) / "studies"
-    directory.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
-    filepath = directory / f"factor-ic-study:{ts}.json"
-    filepath.write_text(json.dumps(results, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+def _write_artifact(results: dict[str, Any], *, artifact_root: str, artifact_id: str) -> None:
+    write_research_validation_artifact(
+        "factor_ic_study",
+        artifact_id,
+        results,
+        root=Path(artifact_root) if artifact_root else None,
+    )
 
 
 def _build_weight_grid() -> list[tuple[str, dict[str, float]]]:
@@ -341,6 +498,7 @@ def _weighted_score(row: dict[str, Any], weights: dict[str, float]) -> float:
 
 
 def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True) -> dict[str, Any]:
+    validation_run_id = _validation_run_id("weight-sweep")
     observations = build_factor_observations(
         session,
         artifact_root=artifact_root,
@@ -372,7 +530,11 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
             )
         horizon_metrics: dict[str, Any] = {}
         for horizon, ic_rows in by_horizon.items():
-            aggregate = aggregate_ic_results(ic_rows)
+            aggregate = aggregate_ic_results(
+                ic_rows,
+                min_period_count_for_weighting=MIN_WINDOWS_FOR_WEIGHTING,
+                min_sample_count_for_weighting=MIN_TOTAL_SAMPLES_FOR_WEIGHTING,
+            )
             fusion = aggregate.get("fusion_score")
             spreads = spread_rows.get(horizon, [])
             horizon_metrics[f"{horizon}d"] = {
@@ -384,26 +546,39 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
                 "snapshot_count": len(spreads),
             }
         sweep_results.append({"label": label, "weights": weights, "horizon_metrics": horizon_metrics})
-    status = "insufficient_sample" if observations.get("status") == "insufficient_sample" else "research_candidate"
+    status = "insufficient_sample" if observations.get("status") == "insufficient_sample" else "diagnostic_only_blocked"
+    artifact_id = _artifact_id("weight-sweep-study", validation_run_id)
     results: dict[str, Any] = {
         "artifact_type": "weight_sweep_study",
+        "schema_version": WEIGHT_SWEEP_STUDY_SCHEMA_VERSION,
+        "artifact_id": artifact_id,
         "status": status,
         "generated_at": datetime.now(UTC).isoformat(),
+        "validation_run_id": validation_run_id,
+        "validation_protocol": {
+            **_validation_protocol(),
+            "weight_sweep_policy": "diagnostic_only_no_auto_promotion",
+            "multiple_testing_status": "not_corrected",
+        },
+        "lineage": observations.get("lineage", {}),
+        "gate_readout": observations.get("gate_readout", {}),
+        "promotion_status": "blocked_from_production",
         "baseline_weights": FUSION_BASELINE,
         "benchmark_context": observations.get("benchmark_context", {}),
         "observation_count": observations.get("observation_count", 0),
         "distinct_as_of_date_count": observations.get("distinct_as_of_date_count", 0),
         "sweep_results": sweep_results,
-        "note": "权重 sweep 只产出研究证据，不自动修改生产权重；不得把 in-sample 最优组合作为上线结论。",
+        "note": "权重 sweep 只产出独立验证制品，不自动修改生产权重；不得把 in-sample 最优组合作为上线结论。",
     }
     if persist:
-        _write_sweep_artifact(results, artifact_root=artifact_root)
+        _write_sweep_artifact(results, artifact_root=artifact_root, artifact_id=artifact_id)
     return results
 
 
-def _write_sweep_artifact(results: dict[str, Any], *, artifact_root: str) -> None:
-    directory = Path(artifact_root) / "studies"
-    directory.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
-    filepath = directory / f"weight-sweep-study:{ts}.json"
-    filepath.write_text(json.dumps(results, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+def _write_sweep_artifact(results: dict[str, Any], *, artifact_root: str, artifact_id: str) -> None:
+    write_research_validation_artifact(
+        "weight_sweep_study",
+        artifact_id,
+        results,
+        root=Path(artifact_root) if artifact_root else None,
+    )

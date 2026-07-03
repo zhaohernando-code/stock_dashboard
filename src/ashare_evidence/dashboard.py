@@ -699,6 +699,12 @@ def get_stock_dashboard(session: Session, symbol: str) -> dict[str, Any]:
         trace["factor_validation"] = {
             "status": factor_study.get("status"),
             "note": factor_study.get("note"),
+            "schema_version": factor_study.get("schema_version"),
+            "artifact_id": factor_study.get("artifact_id"),
+            "validation_protocol": factor_study.get("validation_protocol", {}),
+            "lineage": factor_study.get("lineage", {}),
+            "gate_readout": factor_study.get("gate_readout", {}),
+            "promotion_status": factor_study.get("promotion_status", "blocked_from_production"),
             "observation_count": factor_study.get("observation_count", 0),
             "distinct_as_of_date_count": factor_study.get("distinct_as_of_date_count", 0),
             "benchmark_context": factor_study.get("benchmark_context", {}),

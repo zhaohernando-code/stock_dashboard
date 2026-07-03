@@ -105,6 +105,8 @@ def aggregate_ic_results(
     results: list[FactorICResult],
     *,
     periods_per_year: int = 20,
+    min_period_count_for_weighting: int = 20,
+    min_sample_count_for_weighting: int = 600,
 ) -> dict[str, FactorICResult]:
     """Aggregate multiple IC snapshots into per-factor metrics.
 
@@ -129,6 +131,7 @@ def aggregate_ic_results(
         ic_std = sqrt(sum((v - ic_mean) ** 2 for v in ic_vals) / (n - 1)) if n > 1 else 0.0
         ic_ir = (ic_mean / ic_std * sqrt(periods_per_year)) if ic_std > 0 else 0.0
         pos_rate = sum(1 for v in ic_vals if v > 0) / n
+        weighting_eligible = n >= min_period_count_for_weighting and sum(r.sample_count for r in items) >= min_sample_count_for_weighting and ic_ir > 0
         aggregated[name] = FactorICResult(
             factor_name=name,
             horizon_days=items[0].horizon_days,
@@ -140,15 +143,11 @@ def aggregate_ic_results(
             computed_at=datetime.now().isoformat(),
             period_count=n,
             standard_error=round(ic_std / sqrt(n), 6) if n > 0 else None,
-            weighting_status=(
-                "eligible"
-                if n >= 20 and sum(r.sample_count for r in items) >= 600 and ic_ir > 0
-                else "blocked"
-            ),
+            weighting_status=("eligible" if weighting_eligible else "blocked"),
             weighting_reason=(
                 None
-                if n >= 20 and sum(r.sample_count for r in items) >= 600 and ic_ir > 0
-                else "requires_at_least_20_windows_and_30_symbol_cross_sections_with_positive_ic_ir"
+                if weighting_eligible
+                else "requires_at_least_20_windows_and_600_cross_section_samples_with_positive_ic_ir"
             ),
         )
     return aggregated
@@ -195,7 +194,10 @@ def rolling_ic_weights(
     base_weights: dict[str, float],
     recent_ic_series: dict[str, RollingICSeries],
     *,
-    sensitivity: float = 0.5,
+    sensitivity: float = 0.3,
+    min_periods_for_adjustment: int = 60,
+    min_multiplier: float = 0.5,
+    max_multiplier: float = 1.5,
 ) -> dict[str, float]:
     """Adjust weights based on recent IC vs historical mean.
 
@@ -217,7 +219,7 @@ def rolling_ic_weights(
     adjusted: dict[str, float] = {}
     for name, bw in base_weights.items():
         series = recent_ic_series.get(name)
-        if series is None or not series.ic_values:
+        if series is None or len(series.ic_values) < min_periods_for_adjustment:
             adjusted[name] = bw
             continue
         recent = series.recent_ic_mean(periods=5)
@@ -227,8 +229,8 @@ def rolling_ic_weights(
             deviation = (recent - hist_mean) / hist_std
         else:
             deviation = 0.0
-        multiplier = 1.0 + tanh(deviation) * sensitivity
-        adjusted[name] = bw * max(0.3, min(2.0, multiplier))
+        multiplier = 1.0 + tanh(deviation) * min(sensitivity, 0.3)
+        adjusted[name] = bw * max(min_multiplier, min(max_multiplier, multiplier))
 
     total = sum(adjusted.values())
     return {name: round(w / total, 4) for name, w in adjusted.items()} if total > 0 else dict(base_weights)

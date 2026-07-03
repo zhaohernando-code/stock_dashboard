@@ -30,6 +30,7 @@ from ashare_evidence.research_artifact_store import (
     write_phase5_horizon_study_artifact,
     write_phase5_producer_contract_study_artifact,
     write_replay_alignment_artifact,
+    write_research_validation_artifact,
     write_shortpick_combined_ledger_backfill_artifact_record,
     write_shortpick_control_inventory_archive_artifact_record,
     write_shortpick_lab_artifact,
@@ -90,6 +91,42 @@ class ResearchArtifactStoreTests(unittest.TestCase):
 
             self.assertEqual(artifact_path.parent, target_root / "shortpick_lab")
             self.assertTrue(artifact_path.exists())
+
+    def test_research_validation_artifacts_write_to_isolated_validation_store(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+
+            factor_path = write_research_validation_artifact(
+                "factor_ic_study",
+                "factor-ic-study-unit",
+                {
+                    "artifact_type": "factor_ic_study",
+                    "promotion_status": "blocked_from_production",
+                    "validation_protocol": {"feature_source_status": "legacy_diagnostic_only"},
+                },
+                root=root,
+            )
+            sweep_path = write_research_validation_artifact(
+                "weight_sweep_study",
+                "weight-sweep-study-unit",
+                {"artifact_type": "weight_sweep_study", "promotion_status": "blocked_from_production"},
+                root=root,
+            )
+
+            self.assertEqual(factor_path.parent, root / "research_validation" / "factor_ic_studies")
+            self.assertEqual(sweep_path.parent, root / "research_validation" / "weight_sweep_studies")
+            self.assertFalse((root / "studies" / factor_path.name).exists())
+            self.assertEqual(json.loads(factor_path.read_text(encoding="utf-8"))["promotion_status"], "blocked_from_production")
+
+    def test_research_validation_artifact_rejects_unknown_type(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaisesRegex(ValueError, "unsupported research validation artifact type"):
+                write_research_validation_artifact(
+                    "phase5_horizon_study",
+                    "not-validation",
+                    {"artifact_type": "phase5_horizon_study"},
+                    root=Path(temp_dir),
+                )
 
     def test_shortpick_retirement_artifact_source_reads_only_ready_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

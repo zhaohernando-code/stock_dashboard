@@ -126,10 +126,23 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             sweep = sweep_weights(session, artifact_root=self.temp_dir.name, persist=False)
 
         self.assertEqual(study["artifact_type"], "factor_ic_study")
+        self.assertEqual(study["schema_version"], "factor_ic_study.v2")
         self.assertEqual(study["status"], "insufficient_sample")
         self.assertEqual(study["benchmark_context"]["primary_benchmark"], "CSI300")
+        self.assertEqual(study["benchmark_context"]["status"], "missing_primary_benchmark_bars")
+        self.assertEqual(study["benchmark_context"]["fallback_policy"], "block_ic_rows_when_primary_benchmark_unavailable")
+        self.assertEqual(study["validation_protocol"]["feature_source_status"], "legacy_diagnostic_only")
+        self.assertEqual(study["promotion_status"], "blocked_from_production")
+        self.assertEqual(study["gate_readout"]["promotion_status"], "blocked_from_production")
+        self.assertIn("benchmark_availability", study["gate_readout"]["blocking_gate_ids"])
+        self.assertIn("independent_feature_source", study["gate_readout"]["blocking_gate_ids"])
+        self.assertEqual(study["lineage"]["feature_version"], "legacy_recommendation_payload_factor_breakdown:v1")
+        self.assertEqual(study["observation_count"], 0)
         self.assertEqual(sweep["artifact_type"], "weight_sweep_study")
+        self.assertEqual(sweep["schema_version"], "weight_sweep_study.v2")
         self.assertEqual(sweep["status"], "insufficient_sample")
+        self.assertEqual(sweep["promotion_status"], "blocked_from_production")
+        self.assertEqual(sweep["validation_protocol"]["weight_sweep_policy"], "diagnostic_only_no_auto_promotion")
         self.assertIn("不自动修改生产权重", sweep["note"])
 
     def test_operations_summary_is_light_and_details_are_sectioned(self) -> None:
@@ -149,6 +162,11 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertIn("data_quality_summary", summary)
         self.assertGreaterEqual(len(portfolios["portfolios"]), 1)
         self.assertIn("factor_observation_summary", factor_detail)
+        factor_summary = factor_detail["factor_observation_summary"]
+        self.assertEqual(factor_summary["promotion_status"], "blocked_from_production")
+        self.assertEqual(factor_summary["validation_protocol"]["feature_source_status"], "legacy_diagnostic_only")
+        self.assertIn("independent_feature_source", factor_summary["gate_readout"]["blocking_gate_ids"])
+        self.assertEqual(factor_summary["lineage"]["feature_version"], "legacy_recommendation_payload_factor_breakdown:v1")
 
     def test_stock_dashboard_schema_accepts_string_horizon_readout_and_new_fields(self) -> None:
         with session_scope(self.database_url) as session:
@@ -162,6 +180,8 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertIsNotNone(parsed.research_horizon_readout)
         self.assertEqual(parsed.data_quality["symbol"], "600519.SH")
         self.assertIn("benchmark_context", parsed.factor_validation)
+        self.assertEqual(parsed.factor_validation["promotion_status"], "blocked_from_production")
+        self.assertEqual(parsed.factor_validation["validation_protocol"]["feature_source_status"], "legacy_diagnostic_only")
 
 
 if __name__ == "__main__":

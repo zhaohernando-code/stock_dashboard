@@ -68,6 +68,8 @@ def test_aggregate_ic():
     a = agg["f1"]
     assert abs(a.ic_mean - 0.053333) < 0.01
     assert a.ic_positive_rate == 1.0
+    assert a.weighting_status == "blocked"
+    assert a.weighting_reason == "requires_at_least_20_windows_and_600_cross_section_samples_with_positive_ic_ir"
     print("PASS: aggregate IC")
 
 
@@ -113,6 +115,23 @@ def test_rolling_ic_decay_detection():
     print("PASS: rolling IC decay detection")
 
 
+def test_rolling_ic_weights_require_long_history_before_adjustment():
+    """Dynamic weight changes stay blocked until there is enough independent IC history."""
+    from ashare_evidence.phase2.factor_ic import RollingICSeries, rolling_ic_weights
+
+    base_weights = {"price": 0.6, "news": 0.4}
+    short_price_series = RollingICSeries("price", 20, 60, [0.01] * 54 + [0.10] * 5, [])
+    short_news_series = RollingICSeries("news", 20, 60, [0.10] * 54 + [0.01] * 5, [])
+
+    weights = rolling_ic_weights(
+        base_weights,
+        {"price": short_price_series, "news": short_news_series},
+    )
+
+    assert weights == base_weights
+    print("PASS: rolling IC adjustment gate requires long history")
+
+
 if __name__ == "__main__":
     test_spearman_ic()
     test_spearman_ic_negative()
@@ -122,4 +141,5 @@ if __name__ == "__main__":
     test_ic_based_weights()
     test_ic_based_weights_block_small_sample_gate()
     test_rolling_ic_decay_detection()
+    test_rolling_ic_weights_require_long_history_before_adjustment()
     print("\nAll factor IC tests passed!")
