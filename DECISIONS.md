@@ -1418,3 +1418,12 @@ canonical checkout 中的 `data/artifacts` 改动经抽样确认是正常 phase2
 - **模拟操作后的运营刷新走 summary + details**：前端成功执行 simulation action 后只刷新 `getOperationsSummary`，再按需补拉 `simulation_workspace` 和 `portfolios` 明细，不回退到 full dashboard API。
 - **bounded details 必须真有界，不得复用全量 dashboard 构建**：`replay`、`manual_queue`、`factor_observation`、`sector_exposure`、`policy_governance`、`simulation_workspace` 这类小 section 只能调用对应领域 builder。发布验证里的 `19.6s` 残余慢路径证明“URL 是 details”不等于“实现已 details 化”。
 - **服务启动不能同步等待 operations 预热**：operations response cache 可以后台 best-effort 预热，测试可用 `ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE=sync` 保持确定性；生产 lifespan 不得因为预热阻塞 `/health` 和发布健康检查。
+
+[2026-07-03T12:10:00+08:00] Shortpick deep research end-state design contract:
+本轮补落地 `docs/contracts/SHORTPICK_DEEP_RESEARCH_END_STATE_DESIGN_2026-07-03.md`，作为 Short Pick 深度研究验证的终局设计合同。后续开发必须以该文档为准：设计不阶段化，实施阶段化；P0/P1/P2/P3/P4/P5 只是完整设计的交付切片，不允许把 P0 当前实现误读成终局范围缩小。
+
+补充说明
+- 终局数据流固定为 `runtime DB(read-only source) -> research input snapshot -> PIT feature store -> validation store -> governance/promotion gate -> dashboard projection`。
+- runtime DB / 业务库只作为研究只读输入；raw validation rows、weight sweep、IC 研究结果不得写回 runtime DB 或生产 policy config。
+- 从 `recommendation_payload.factor_breakdown` 反取的 legacy 因子分数只能用于 diagnostic-only 路径，不能用于生产权重、horizon approval、自动 promotion 或模拟盘毕业。
+- 当前 `3621f2d` 只实现 P0 切片：独立 `research_validation` artifact store、legacy diagnostic-only、lineage/gate/promotion blocked、benchmark fallback blocked、小样本和 rolling IC 动态权重门禁。PIT feature store、objective frozen universe、walk-forward/purged CV/PBO、OOS artifact、promotion state machine 和 materialized dashboard projection registry 仍是后续切片。
