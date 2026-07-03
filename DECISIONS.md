@@ -1,5 +1,16 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-07-04T01:15:00+08:00] Short Pick model exploration must let evidence seed strategies before more formula design:
+
+当前目标不是继续手写一个更复杂的固定公式，而是让模型探索机制先从历史矩阵中发现可验证的特征方向，再把通过基础信号检查的方向注册成候选模型 spec 进入 walk-forward 门禁。`model_feature_diagnostic_report` 因此作为 `research_validation/*` artifact 家族加入：它只读取已有 PIT feature matrix 和 executable label matrix，不写业务库、不更新 policy config、不暴露到 dashboard。
+
+2026-07-04 真实 runtime 诊断 `model-feature-diagnostic-report-d66487dc8ad41c57` 覆盖 80 个 label-ready 日期、234,257 条可评估行、10 个特征、2 个方向、5/10/20 日 horizon。结果是 `passing_basic_signal_gate_count=0`。最接近的方向是低 20 日波动、远离 20 日高点、低 20 日平均成交额，但它们的 top-quantile net excess 仍为负。当前可靠结论：现有特征池还没有找到可交易的正收益策略种子；后续应扩展特征来源和组合搜索，而不是继续围绕当前 momentum/turnover/volatility 小公式调权重。
+
+执行约定
+- 单特征诊断只负责发现策略种子，不得作为策略通过证明。
+- 若诊断没有任何方向通过基础信号门槛，后续优先增加新特征族、交互特征和 regime/industry/relative-strength 信息；不要把负收益 top bucket 包装成“防守策略”。
+- 候选策略必须由注册 spec 进入 walk-forward comparison report，并通过 Rank IC、top quantile net excess、PBO/DSR、cost stress、winner dependency 和 governance gates，才能进入任何纸面跟踪或 dashboard projection 讨论。
+
 [2026-07-03T23:20:00+08:00] Short Pick deep research branch is P0 guardrail, not the model exploration mechanism:
 
 项目所有者重新确认：当前 `codex/shortpick-validation-boundary-p0` 分支完成的是旧 `factor_observation / weight_sweep` 链路的研究边界、安全门禁和诊断 artifact prototype，不能被表述为“新模型探索机制已经完成”。`research_input_snapshot`、`pit_feature_store`、`objective_frozen_universe`、`walk_forward_purge_embargo`、`oos_validation`、`governance_promotion_decision`、`dashboard_approved_projection_registry` 这些当前实现都只覆盖 legacy diagnostic factor validation / weight sweep scope。

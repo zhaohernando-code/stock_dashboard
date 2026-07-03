@@ -35,6 +35,7 @@ ARTIFACT_FOLDERS = {
     "model_spec_registry": "research_validation/model_spec_registries",
     "walk_forward_model_candidate_run": "research_validation/walk_forward_model_candidate_runs",
     "model_comparison_report": "research_validation/model_comparison_reports",
+    "model_feature_diagnostic_report": "research_validation/model_feature_diagnostic_reports",
     "factor_ic_study": "research_validation/factor_ic_studies",
     "weight_sweep_study": "research_validation/weight_sweep_studies",
     "shortpick_lab": "shortpick_lab",

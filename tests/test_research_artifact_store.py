@@ -256,6 +256,16 @@ class ResearchArtifactStoreTests(unittest.TestCase):
                 },
                 root=root,
             )
+            feature_diagnostic_report_path = write_research_validation_artifact(
+                "model_feature_diagnostic_report",
+                "model-feature-diagnostic-report-unit",
+                {
+                    "artifact_type": "model_feature_diagnostic_report",
+                    "claim_ceiling": "feature_signal_diagnostic_only",
+                    "promotion_status": "blocked_from_production",
+                },
+                root=root,
+            )
             sweep_path = write_research_validation_artifact(
                 "weight_sweep_study",
                 "weight-sweep-study-unit",
@@ -287,6 +297,10 @@ class ResearchArtifactStoreTests(unittest.TestCase):
                 root / "research_validation" / "walk_forward_model_candidate_runs",
             )
             self.assertEqual(comparison_report_path.parent, root / "research_validation" / "model_comparison_reports")
+            self.assertEqual(
+                feature_diagnostic_report_path.parent,
+                root / "research_validation" / "model_feature_diagnostic_reports",
+            )
             self.assertEqual(factor_path.parent, root / "research_validation" / "factor_ic_studies")
             self.assertEqual(sweep_path.parent, root / "research_validation" / "weight_sweep_studies")
             self.assertFalse((root / "studies" / factor_path.name).exists())

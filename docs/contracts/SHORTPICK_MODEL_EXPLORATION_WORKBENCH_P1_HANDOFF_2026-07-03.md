@@ -36,6 +36,7 @@ The mechanism must not answer this by copying known strong-stock traits from 生
 | Runtime full registered-spec smoke | completed_blocked | 2026-07-04 smoke completed with 80 auto-selected label-ready as-of dates, 4 walk-forward test splits, 11 registered trials, 238,942 joined rows, 234,257 evaluable rows and 1,287,341 prediction rows. Input coverage gates passed. Candidate artifact now stores bounded inline samples plus full trial diagnostics instead of 600MB-class raw prediction arrays; latest split-fit artifact is 12MB. All candidate trials remained killed/blocked: the baseline had `rank_ic_mean=0.0237` and positive IC date rate `0.60`, but `top_quantile_net_excess_mean=-0.0083`; learned shallow/regime/linear specs did not clear Rank IC, positive-rate, top-quantile net-excess and overfit gates. Latest overfit diagnostics blocked with `pbo_proxy=0.1818`, `deflated_sharpe_confidence=0.4993`, and `alpha_t_stat=2.1881`. Governance and dashboard projection remain blocked. |
 | Runtime horizon-expansion strategy search | completed_blocked | 2026-07-04 added per-spec target horizons and first non-baseline formula families: `pullback_reversal_5d_v1`, `liquidity_breakout_5d_v1`, and `trend_quality_20d_v1`. Separate real-runtime searches still found no successful strategy. 5d candidates had negative Rank IC and negative top-quantile net excess. 20d trend quality had positive IC date rate (`0.675-0.700`) but Rank IC stayed below gate (`best rank_ic_mean=0.0115`) and top-quantile net excess remained negative (`best=-0.0248`). Next step should be matrix-artifact reuse plus systematic candidate generation, not more manual formula patching. |
 | Runtime matrix artifact reuse | completed | 2026-07-04 `shortpick-model-exploration-run` can reuse existing `model_exploration_input_snapshot`, `pit_feature_matrix`, and `executable_label_matrix` artifacts via CLI paths. Reuse is validated on real runtime artifacts and skips rewriting large matrix files; the payload exposes `matrix_artifacts_reused=true` and reused matrix summaries have `path=null`. |
+| Runtime feature signal diagnostics | completed_blocked | 2026-07-04 added `model_feature_diagnostic_report` and CLI `shortpick-model-feature-diagnostics-run` to let the mechanism inspect existing PIT feature/label matrices before hand-writing more model specs. Real runtime artifact `model-feature-diagnostic-report-d66487dc8ad41c57` evaluated 10 features x 2 directions x 3 horizons across 80 label-ready dates / 234,257 rows. Result: `passing_basic_signal_gate_count=0`. The closest signals were low 20d volatility, distance from 20d high and low 20d average amount; their Rank IC could be positive, but top-quantile net excess remained negative after costs. This means the current feature pool can rank relative losers better than it can find a tradable positive-return top bucket. Next step must expand feature families and combination search rather than tune current formulas. |
 | Dashboard/runtime integration | blocked | Dashboard projection registry exists but approved projection count remains 0 until governance reaches `production_eligible`. Do not expose raw workbench artifacts to live dashboard. |
 
 ## Non-Negotiable Boundaries
@@ -55,6 +56,7 @@ runtime DB read-only facts
   -> universe_date_matrix
   -> pit_feature_matrix
   -> executable_label_matrix
+  -> optional model_feature_diagnostic_report for strategy seed discovery
   -> model_spec_registry
   -> walk_forward_model_candidate_run
   -> model_comparison_report
@@ -72,6 +74,7 @@ Add these artifact families under the existing `research_validation` namespace. 
 | `universe_date_matrix` | implemented | One row per eligible `symbol` x `as_of_date`; this is the primary row generator. |
 | `pit_feature_matrix` | implemented | One feature row per matrix row; all features must be point-in-time and versioned. |
 | `executable_label_matrix` | implemented | Forward labels using executable entry/exit assumptions, benchmark excess return and cost assumptions. |
+| `model_feature_diagnostic_report` | implemented | Diagnose feature x direction x horizon signals from existing matrices before registering more candidate specs. It may seed future specs, but it cannot promote a strategy. |
 | `model_spec_registry` | implemented | Governed model definitions, feature groups, hyperparameters and allowed search spaces. |
 | `walk_forward_model_candidate_run` | foundation_completed | Candidate model predictions, train/test windows, purge/embargo metadata and split-level metrics. |
 | `model_comparison_report` | foundation_completed | Model ranking, kill reasons, OOS metrics, PBO/DSR proxy diagnostics, winner-dependency recomputation and promotion blockers. |
@@ -86,6 +89,7 @@ Prefer new modules instead of extending `factor_observation.py` further.
 | `src/ashare_evidence/model_feature_matrix.py` | Build point-in-time features for each `symbol` x `as_of_date` row. |
 | `src/ashare_evidence/model_label_matrix.py` | Build executable forward-return labels and benchmark-relative labels. |
 | `src/ashare_evidence/model_spec_registry.py` | Define first governed model specs and feature groups. |
+| `src/ashare_evidence/model_feature_diagnostics.py` | Diagnose single-feature direction/horizon signal from reusable matrices and write blocked research-validation reports. |
 | `src/ashare_evidence/model_candidate_runner.py` | Run walk-forward model candidates and write prediction artifacts. |
 | `src/ashare_evidence/model_comparison_report.py` | Build comparison, kill, blocker and claim-ceiling reports. |
 
@@ -258,6 +262,7 @@ At minimum:
 - Feature matrix rejects future data and marks missing sources. Foundation completed by `tests/test_model_exploration_snapshot.py`.
 - Label matrix blocks missing benchmark labels instead of falling back to self-benchmark. Completed by `tests/test_model_exploration_snapshot.py`.
 - Model spec registry has stable ids and bounded search spaces. Completed by `tests/test_model_spec_registry.py`.
+- Feature diagnostic report writes isolated research-validation artifacts and blocks promotion. Completed by `tests/test_model_feature_diagnostics.py`.
 - Candidate runner records all trials and cannot emit production promotion. Foundation completed by `tests/test_model_candidate_workbench.py`.
 - Comparison report blocks claims when coverage/windows/OOS/PBO/DSR gates fail. Foundation completed by `tests/test_model_candidate_workbench.py`; full CSCV-grade PBO/DSR can replace the current proxy diagnostics after sample width is sufficient.
 
@@ -290,3 +295,14 @@ python3 -m ashare_evidence.cli shortpick-model-exploration-run \
 ```
 
 This command writes only `research_validation/*` artifacts. It does not refresh market data, does not write business tables, does not update policy config, does not publish runtime, and does not create dashboard-approved projection entries while governance remains blocked.
+
+Existing matrices can also be diagnosed without rebuilding them:
+
+```bash
+python3 -m ashare_evidence.cli shortpick-model-feature-diagnostics-run \
+  --validation-run-id manual-feature-diagnostics-YYYYMMDD \
+  --feature-matrix-artifact /path/to/pit-feature-matrix.json \
+  --label-matrix-artifact /path/to/executable-label-matrix.json
+```
+
+This diagnostic can produce candidate-generation hints only. A hinted feature/direction/horizon must still become a registered model spec and pass the full walk-forward comparison, PBO/DSR, cost-stress and winner-dependency gates before it can affect any dashboard-facing claim.

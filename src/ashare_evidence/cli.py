@@ -25,6 +25,7 @@ from ashare_evidence.frontend_projections import refresh_frontend_projections
 from ashare_evidence.improvement_suggestions import run_improvement_suggestion_review
 from ashare_evidence.intraday_market import sync_intraday_market
 from ashare_evidence.model_exploration_workflow import run_shortpick_model_exploration_workbench
+from ashare_evidence.model_feature_diagnostics import run_model_feature_diagnostics
 from ashare_evidence.operations import build_operations_dashboard
 from ashare_evidence.phase2 import rebuild_phase2_research_state
 from ashare_evidence.phase2.holding_policy_experiments import (
@@ -302,6 +303,7 @@ def _should_initialize_database(database_url: str | None) -> bool:
 
 # Commands in this set are pure file/plan commands and may omit --database-url.
 NO_DB_COMMANDS = {
+    "shortpick-model-feature-diagnostics-run",
     "shortpick-governance-credible-control-plan",
     "shortpick-v2-h10-artifact-validate",
     "shortpick-v2-h10-paper-governance",
@@ -677,6 +679,16 @@ def build_parser() -> argparse.ArgumentParser:
     model_exploration.add_argument("--label-matrix-artifact", default=None)
     model_exploration.add_argument("--artifact-root", default=None)
     model_exploration.add_argument("--no-write-artifacts", action="store_true")
+
+    model_feature_diagnostics = subparsers.add_parser(
+        "shortpick-model-feature-diagnostics-run",
+        help="Diagnose feature, direction and horizon signal from existing Short Pick model exploration matrices.",
+    )
+    model_feature_diagnostics.add_argument("--validation-run-id", required=True)
+    model_feature_diagnostics.add_argument("--feature-matrix-artifact", required=True)
+    model_feature_diagnostics.add_argument("--label-matrix-artifact", required=True)
+    model_feature_diagnostics.add_argument("--artifact-root", default=None)
+    model_feature_diagnostics.add_argument("--no-write-artifacts", action="store_true")
 
     refresh_runtime = subparsers.add_parser(
         "refresh-runtime-data",
@@ -1900,6 +1912,17 @@ def main(argv: list[str] | None = None) -> int:
                 feature_matrix_artifact=args.feature_matrix_artifact,
                 label_matrix_artifact=args.label_matrix_artifact,
             )
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-model-feature-diagnostics-run":
+        payload = run_model_feature_diagnostics(
+            validation_run_id=args.validation_run_id,
+            feature_matrix_artifact=args.feature_matrix_artifact,
+            label_matrix_artifact=args.label_matrix_artifact,
+            artifact_root=args.artifact_root,
+            write_artifacts=not args.no_write_artifacts,
+        )
         _print_json(payload)
         return 0
 

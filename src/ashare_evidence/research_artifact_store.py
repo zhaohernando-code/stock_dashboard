@@ -122,6 +122,7 @@ def write_research_validation_artifact(
         "model_spec_registry",
         "walk_forward_model_candidate_run",
         "model_comparison_report",
+        "model_feature_diagnostic_report",
         "factor_ic_study",
         "weight_sweep_study",
     }:
