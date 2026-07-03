@@ -1634,16 +1634,33 @@ def _recommendation_replay_hit_rate(
 
 def _build_operations_portfolios_detail(session: Session) -> dict[str, Any]:
     generated_at = datetime.now().astimezone()
-    active_symbols = set(active_watchlist_symbols(session))
+    portfolios = _load_operations_portfolios(session)
+    watchlist_symbols = set(active_watchlist_symbols(session))
+    portfolio_symbols = {
+        order.stock.symbol
+        for portfolio in portfolios
+        for order in portfolio.orders
+        if order.stock is not None and order.stock.symbol
+    }
+    active_symbols = watchlist_symbols or portfolio_symbols
     artifact_root = _operations_artifact_root(session)
-    intraday_history, stock_names, intraday_points = _market_history(
-        session,
-        active_symbols,
-        timeframe=INTRADAY_MARKET_TIMEFRAME,
-    )
-    daily_history, daily_stock_names, daily_points = _market_history(session, active_symbols, timeframe="1d")
-    stock_names = {**daily_stock_names, **stock_names}
-    timeline_points = intraday_points or daily_points
+    if not active_symbols:
+        return {
+            "generated_at": generated_at,
+            "portfolios": [],
+        }
+    daily_history, stock_names, daily_points = _market_history(session, active_symbols, timeframe="1d")
+    if daily_points:
+        price_history = daily_history
+        timeline_points = daily_points
+        market_data_timeframe = "1d"
+    else:
+        price_history, stock_names, timeline_points = _market_history(
+            session,
+            active_symbols,
+            timeframe=INTRADAY_MARKET_TIMEFRAME,
+        )
+        market_data_timeframe = INTRADAY_MARKET_TIMEFRAME
     if not timeline_points:
         return {
             "generated_at": generated_at,
@@ -1651,14 +1668,14 @@ def _build_operations_portfolios_detail(session: Session) -> dict[str, Any]:
         }
 
     benchmark_close_map = _benchmark_close_map(
-        _distinct_trade_days(daily_points or timeline_points),
-        price_history=daily_history or intraday_history,
+        _distinct_trade_days(timeline_points),
+        price_history=price_history,
         active_symbols=active_symbols,
     )
     replay_hit_rate = _recommendation_replay_hit_rate(
         session,
         active_symbols=active_symbols,
-        price_history=daily_history or intraday_history,
+        price_history=price_history,
         benchmark_close_map=benchmark_close_map,
     )
     portfolio_payloads = [
@@ -1666,14 +1683,14 @@ def _build_operations_portfolios_detail(session: Session) -> dict[str, Any]:
             portfolio,
             active_symbols=active_symbols,
             stock_names=stock_names,
-            price_history=intraday_history or daily_history,
+            price_history=price_history,
             timeline_points=timeline_points,
             benchmark_close_map=benchmark_close_map,
             recommendation_hit_rate=replay_hit_rate,
-            market_data_timeframe=INTRADAY_MARKET_TIMEFRAME if intraday_points else "1d",
+            market_data_timeframe=market_data_timeframe,
             artifact_root=artifact_root,
         )
-        for portfolio in _load_operations_portfolios(session)
+        for portfolio in portfolios
     ]
     return {
         "generated_at": generated_at,

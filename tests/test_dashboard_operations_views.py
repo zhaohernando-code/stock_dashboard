@@ -168,13 +168,6 @@ class DashboardOperationsViewTests(DashboardViewTestCase):
             seed_watchlist_fixture(session)
 
         with session_scope(self.database_url) as session:
-            expected_dashboard = build_operations_dashboard(
-                session,
-                sample_symbol="600519.SH",
-                include_simulation_workspace=False,
-            )
-
-        with session_scope(self.database_url) as session:
             with patch(
                 "ashare_evidence.operations.build_operations_dashboard",
                 side_effect=AssertionError("portfolios detail should not build the full dashboard"),
@@ -189,9 +182,60 @@ class DashboardOperationsViewTests(DashboardViewTestCase):
         self.assertEqual(detail["section"], "portfolios")
         self.assertIn("generated_at", detail)
         self.assertIsInstance(detail["portfolios"], list)
-        self.assertEqual(detail["portfolios"], expected_dashboard["portfolios"])
+        self.assertTrue(detail["portfolios"])
         self.assertTrue(all(portfolio["nav_history"] for portfolio in detail["portfolios"]))
         self.assertTrue(all(portfolio["recent_orders"] for portfolio in detail["portfolios"]))
+        self.assertTrue(all(portfolio["rules"] for portfolio in detail["portfolios"]))
+        self.assertTrue(all(portfolio["market_data_timeframe"] == "1d" for portfolio in detail["portfolios"]))
+        self.assertTrue(
+            all(len(portfolio["nav_history"]) <= OPERATIONS_NAV_HISTORY_POINT_LIMIT for portfolio in detail["portfolios"])
+        )
+
+    def test_portfolios_detail_derives_market_symbols_when_watchlist_is_empty(self) -> None:
+        from ashare_evidence import operations as operations_module
+
+        with session_scope(self.database_url) as session:
+            seed_watchlist_fixture(session)
+
+        with session_scope(self.database_url) as session:
+            with (
+                patch("ashare_evidence.operations.active_watchlist_symbols", return_value=[]),
+                patch("ashare_evidence.operations._market_history", wraps=operations_module._market_history) as market_history,
+            ):
+                detail = build_operations_detail(
+                    session,
+                    section="portfolios",
+                    sample_symbol="600519.SH",
+                    target_login="root",
+                )
+
+        self.assertTrue(detail["portfolios"])
+        self.assertTrue(market_history.call_args_list)
+        for call in market_history.call_args_list:
+            self.assertTrue(set(call.args[1]))
+
+    def test_portfolios_detail_does_not_scan_market_history_without_symbols(self) -> None:
+        with session_scope(self.database_url) as session:
+            seed_watchlist_fixture(session)
+
+        with session_scope(self.database_url) as session:
+            with (
+                patch("ashare_evidence.operations.active_watchlist_symbols", return_value=[]),
+                patch("ashare_evidence.operations._load_operations_portfolios", return_value=[]),
+                patch(
+                    "ashare_evidence.operations._market_history",
+                    side_effect=AssertionError("empty portfolio detail must not scan all market bars"),
+                ),
+            ):
+                detail = build_operations_detail(
+                    session,
+                    section="portfolios",
+                    sample_symbol="600519.SH",
+                    target_login="root",
+                )
+
+        self.assertEqual(detail["section"], "portfolios")
+        self.assertEqual(detail["portfolios"], [])
 
     def test_completed_improvement_plan_does_not_pass_replay_gate_without_formal_evidence(self) -> None:
         with session_scope(self.database_url) as session:
