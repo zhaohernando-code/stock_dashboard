@@ -1420,7 +1420,7 @@ canonical checkout 中的 `data/artifacts` 改动经抽样确认是正常 phase2
 - **服务启动不能同步等待 operations 预热**：operations response cache 可以后台 best-effort 预热，测试可用 `ASHARE_OPERATIONS_RESPONSE_PREWARM_MODE=sync` 保持确定性；生产 lifespan 不得因为预热阻塞 `/health` 和发布健康检查。
 
 [2026-07-03T12:10:00+08:00] Shortpick deep research end-state design contract:
-本轮补落地 `docs/contracts/SHORTPICK_DEEP_RESEARCH_END_STATE_DESIGN_2026-07-03.md`，作为 Short Pick 深度研究验证的终局设计合同。后续开发必须以该文档为准：设计不阶段化，实施阶段化；P0/P1/P2/P3/P4/P5 只是完整设计的交付切片，不允许把 P0 当前实现误读成终局范围缩小。
+本轮补落地 `docs/contracts/SHORTPICK_DEEP_RESEARCH_END_STATE_DESIGN_2026-07-03.md`，作为 Short Pick 深度研究验证的终局设计合同。后续开发必须以该文档为准：设计不阶段化，实施阶段化；P0/P1/P2/P3/P4/P5 只是完整设计的交付切片，不允许把 P0 当前实现误读成终局范围缩小。该合同现已包含完成状态、量化技术门禁、制品字段合同、当前实现映射和仍阻断项。
 
 补充说明
 - 终局数据流固定为 `runtime DB(read-only source) -> research input snapshot -> PIT feature store -> validation store -> governance/promotion gate -> dashboard projection`。

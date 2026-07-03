@@ -12,6 +12,23 @@ Owner: stock_dashboard / Short Pick research governance
 
 后续实现可以分 P0/P1/P2/P3/P4/P5 逐步交付，但设计边界必须一次性固定：任何阶段切片都不得把终局范围缩小成当前已经实现的能力，也不得把临时诊断路径包装成可推广生产路径。
 
+## Completion Status / 完成状态
+
+| Item | Status | Evidence / note |
+|---|---|---|
+| End-state design contract | completed | 本合同已落地，commit `a4303d6`；本次修订补充完成状态、量化门禁、制品字段合同和实现映射。 |
+| P0 validation artifact boundary | implemented | commit `3621f2d`；`factor_ic_study` / `weight_sweep_study` 写入独立 `research_validation` artifact namespace。 |
+| runtime DB read-only input boundary | implemented/partial | 当前只在 factor validation / weight sweep 路径落地；runtime DB 作为只读输入源，验证结果写 artifact，不写业务表。其他研究路径仍需逐步迁移到同一边界。 |
+| research input snapshot | not_started | 尚未生成独立、可寻址、可重放的 research input snapshot artifact。 |
+| PIT feature store | not_started | 尚未实现独立 point-in-time feature artifacts；legacy `recommendation_payload.factor_breakdown` 仍仅作 diagnostic comparator。 |
+| objective frozen universe | not_started | 当前 P0 仍使用 active watchlist scope，并在 gate 中标记 `objective_research_universe` blocked。 |
+| walk-forward / purge / embargo | not_started | 当前 P0 artifact 显式标记 `walk_forward_status=not_implemented`、`purge_embargo_status=not_implemented`。 |
+| PBO / DSR / multiple comparison | not_started | 尚未实现 PBO、Deflated Sharpe Ratio、多重比较校正；weight sweep 标记 `multiple_testing_status=not_corrected`。 |
+| OOS artifacts | not_started | 尚无 out-of-sample validation artifact；任何 promotion 仍 blocked。 |
+| governance promotion state machine | not_started | 当前只有 blocked gate readout；尚无状态机、审批、回滚、retirement / unretirement 协议实现。 |
+| dashboard approved projection registry | not_started | 当前 operations/dashboard 只透传 gate/lineage/promotion summary；尚无 materialized approved projection artifact registry。 |
+| runtime publish / served verification | P0 factor_observation verified; full publish parity blocked | P0 `factor_observation` served API 已验证返回 diagnostic-only、lineage、gate 和 `blocked_from_production`；完整 publish parity 被无关 `portfolios` detail endpoint timeout 阻断。 |
+
 ## Background
 
 Short Pick v1 和后续纸面/回放证据曾出现过高收益表现，但收益高度依赖少数标的，尤其是生益科技这类单一大赢家贡献。该现象说明当前策略不能被视为稳定 alpha，也不能把某一轮回放收益直接解释为可复用、可生产化的选股能力。
@@ -255,6 +272,87 @@ runtime DB (read-only source)
 - weight updates require sufficient independent windows, sufficient samples, positive OOS evidence, and governance approval.
 - rolling IC adjustment must be bounded, slow-moving, and blocked under small samples.
 
+## Quantitative Gates / 具体技术门禁
+
+这些数值是当前合同门槛，不是 UI 文案。实现可以在后续治理决策中提高门槛，但不得为了让当前样本显得可推广而降低门槛。
+
+### P0 Constants
+
+| Constant | Value | Contract meaning |
+|---|---:|---|
+| `MIN_SYMBOLS_PER_SNAPSHOT` | 20 | 单个 as-of 截面少于 20 只股票时，不生成该截面的 IC / bucket 证据。 |
+| `MIN_SNAPSHOT_COUNT` | 10 | 少于 10 个有效 as-of 截面时，整体 status 保持 `insufficient_sample`。 |
+| `MIN_UNIQUE_SYMBOLS_FOR_WEIGHTING` | 50 | 少于 50 个 unique symbols 时，`research_universe_width` gate blocked。 |
+| `MIN_TOTAL_SAMPLES_FOR_WEIGHTING` | 600 | 少于 600 条截面观察行时，因子 weighting eligibility blocked。 |
+| `MIN_WINDOWS_FOR_WEIGHTING` | 20 | 少于 20 个独立时间窗口时，因子 weighting eligibility blocked。 |
+
+### Rolling IC Dynamic Weight Gates
+
+| Parameter | Value | Contract meaning |
+|---|---:|---|
+| `min_periods_for_adjustment` | 60 | 少于 60 个 rolling IC 观测期时，不允许动态调整权重。 |
+| `sensitivity` | `<= 0.3` | 动态权重响应强度上限为 0.3。 |
+| multiplier clip | `[0.5, 1.5]` | 单因子动态权重乘数必须裁剪在 0.5 到 1.5 之间。 |
+
+### Research Candidate Target Gates
+
+这些是进入 `research_candidate` 的目标门槛；达不到时只能保持 diagnostic / observe-only。
+
+| Gate | Threshold |
+|---|---:|
+| OOS Rank IC | `> 0.02` |
+| ICIR | `> 0.35` |
+| Positive IC months | `>= 55%` |
+| Top quantile net excess | positive after costs |
+| Quantile shape | roughly monotonic from low-score to high-score buckets |
+
+### Promotion / Paper / Live Candidate Gates
+
+这些是从 research candidate 继续进入 paper/live 候选前的最低门槛；任一未达标时 promotion remains blocked。
+
+| Gate | Threshold |
+|---|---:|
+| Net Sharpe | `>= 1.0` |
+| Deflated Sharpe confidence | `>= 95%` |
+| PBO | `<= 10%` |
+| Alpha t-stat or multiple-testing equivalent | `>= 3.0` |
+| Cost stress | Still positive under `2x` costs |
+
+### Execution Gates
+
+进入 promotion 前，验证和回放必须包含以下执行约束，不允许只看理论收益：
+
+- T+1 sell availability.
+- Suspension / stale quote exclusion.
+- Limit-up buyability.
+- Limit-down sellability.
+- Fee, slippage, and sell stamp tax.
+- ADV / capacity / fill-rate constraints.
+- Board eligibility, lot size, cash deployment, and position concentration.
+
+## Required Artifact Contract / 制品字段合同
+
+任何进入 validation store、governance gate 或 dashboard approved projection 的 artifact 至少必须包含以下字段。缺任一关键字段时，不得进入 dashboard approved projection，也不得参与 promotion。
+
+| Field | Required | Meaning |
+|---|---:|---|
+| `schema_version` | yes | Artifact schema version. |
+| `artifact_id` | yes | Stable artifact identifier. |
+| `validation_run_id` | yes | Concrete run id for reproducibility. |
+| `generated_at` | yes | Generation timestamp. |
+| `source_db_snapshot_id` | yes | Source runtime DB snapshot/hash identifier. |
+| `source_data_time_range` | yes | Input and label time coverage. |
+| `feature_version` | yes | Feature generation version; legacy payload features must be marked diagnostic. |
+| `label_version` | yes | Label and benchmark construction version. |
+| `code_version` | yes | Code commit or explicit unresolved local checkout marker. |
+| `config_version` | yes | Validation/gate/config protocol version. |
+| `validation_protocol` | yes | Storage boundary, feature source, walk-forward, execution and promotion policy. |
+| `gate_readout` | yes | Machine-readable pass/block checks and blocking gate ids. |
+| `claim_ceiling` | yes | Highest allowed user-facing claim. |
+| `promotion_status` | yes | `blocked_from_production` unless all governance gates pass. |
+
+P0 `factor_ic_study` currently carries these fields partly nested under `lineage`: `source_db_snapshot_id`, `source_data_time_range`, `feature_version`, `label_version`, `code_version`, and `config_version`. P0 carries `claim_ceiling` inside `gate_readout`, which is acceptable only for the current diagnostic summary path. A future approved projection registry must keep all required fields machine-addressable and stable for validators before any stronger dashboard claim or promotion.
+
 ## Overfitting Protections
 
 End-state promotion requires all of the following classes of protection:
@@ -296,6 +394,36 @@ P0 does not deliver:
 - final dashboard projection artifact registry.
 
 Those gaps are expected for P0, but they must remain visible as blocked gates and next slices.
+
+## Implementation Mapping / 当前实现映射
+
+| Contract area | Current files | Implemented behavior |
+|---|---|---|
+| research validation artifact folders | `src/ashare_evidence/artifact_store_core.py` | Adds `research_validation/factor_ic_studies` and `research_validation/weight_sweep_studies`. |
+| research validation artifact writer | `src/ashare_evidence/research_artifact_store.py` | Adds `write_research_validation_artifact(...)` with artifact type whitelist and repo-write guard. |
+| legacy diagnostic-only factor path | `src/ashare_evidence/factor_observation.py` | Reads `recommendation_payload.factor_breakdown` only as `legacy_diagnostic_only`; writes validation protocol and feature lineage. |
+| benchmark fail-closed | `src/ashare_evidence/factor_observation.py` | Missing primary benchmark bars skip IC rows; artifact records `fallback_policy=block_ic_rows_when_primary_benchmark_unavailable`. |
+| gate / lineage / promotion readout | `src/ashare_evidence/factor_observation.py` | Emits `lineage`, `gate_readout` with `claim_ceiling`, `promotion_status=blocked_from_production`, and diagnostic notes. |
+| factor eligibility and rolling IC bounds | `src/ashare_evidence/phase2/factor_ic.py` | Requires 20 windows and 600 samples for weighting eligibility; rolling weight adjustment requires 60 periods and clips multiplier to `[0.5, 1.5]`. |
+| operations projection summary | `src/ashare_evidence/operations.py` | Exposes schema/artifact id, validation protocol, lineage, gate readout and promotion summary; does not expose raw `observation_rows`. |
+| stock dashboard factor validation | `src/ashare_evidence/dashboard.py` | Exposes factor validation protocol, lineage, gate readout and promotion summary in product-facing payload. |
+| artifact store tests | `tests/test_research_artifact_store.py` | Verifies isolated `research_validation` paths and rejects unsupported artifact types. |
+| factor IC tests | `tests/test_factor_ic.py` | Verifies small-sample weighting block and rolling IC adjustment gate. |
+| P0 product contract tests | `tests/test_professionalization_plan.py` | Verifies diagnostic-only, benchmark fallback block, lineage, gate and promotion summary in study/sweep/API payloads. |
+
+## Non-Goals / Still Blocked
+
+The following blocked states are intentional completion status, not omissions. P0 must keep them visible until later slices implement and verify them.
+
+- Independent PIT feature computation is still blocked; P0 legacy payload features are diagnostic-only.
+- Objective frozen universe is still blocked; active watchlist scope remains operational and cannot support promotion.
+- Walk-forward validation, purge, and embargo are still blocked.
+- PBO / DSR / multiple-comparison correction is still blocked.
+- OOS validation artifacts are still blocked.
+- Governance promotion state machine is still blocked; P0 only emits blocked gate readout.
+- Approved dashboard projection registry is still blocked; current API is summary projection, not final materialized governance projection.
+- Production weight update is still blocked; weight sweep cannot change policy config or recommendation generation.
+- Paper/live candidate promotion is still blocked until research, OOS, execution, PBO/DSR and governance gates pass.
 
 ## DS / MiMo Review Summary
 
