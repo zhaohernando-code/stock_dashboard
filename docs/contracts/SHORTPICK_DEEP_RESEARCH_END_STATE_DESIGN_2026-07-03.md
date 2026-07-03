@@ -27,7 +27,7 @@ Owner: stock_dashboard / Short Pick research governance
 | OOS artifacts | implemented | Factor validation / weight sweep path now writes `oos_validation` artifacts from ready walk-forward holdout windows, with OOS Rank IC, ICIR, positive-IC rate and top-quantile excess gates. Current data may remain blocked when holdout rows or periods are insufficient. |
 | governance promotion state machine | implemented | Factor validation / weight sweep path now writes `governance_promotion_decision` artifacts with the lifecycle `diagnostic_only -> research_candidate -> oos_candidate -> paper_tracking_candidate -> production_eligible`; current artifacts remain `diagnostic_only` with blocked gate outcome and cannot promote. |
 | dashboard approved projection registry | implemented | Factor validation / weight sweep path now writes `dashboard_approved_projection_registry` artifacts. Current approved projection count is 0 because governance is not `production_eligible`; dashboard/API only receive registry summary and cannot consume raw validation artifacts. |
-| runtime publish / served verification | P0 factor_observation verified; full publish parity blocked | P0 `factor_observation` served API 已验证返回 diagnostic-only、lineage、gate 和 `blocked_from_production`；完整 publish parity 被无关 `portfolios` detail endpoint timeout 阻断。 |
+| runtime publish / served verification | local runtime publish and served stock dashboard verified; canonical parity blocked | commit `a0ae04f` 已发布到 local runtime with `ASHARE_PUBLISH_REFRESH_MODE=skip ASHARE_PUBLISH_VERIFY_MODE=local`；served `/stocks/002028.SZ/dashboard` verified `blocked_from_production`, `diagnostic_only`, `approved_projection_count=0`, registry lineage and no raw registry entries. Full canonical/parity verifier remains blocked by unrelated `/dashboard/operations/details?section=portfolios&sample_symbol=600519.SH` 90s timeout. |
 
 ## Background
 
@@ -351,7 +351,7 @@ runtime DB (read-only source)
 | `claim_ceiling` | yes | Highest allowed user-facing claim. |
 | `promotion_status` | yes | `blocked_from_production` unless all governance gates pass. |
 
-P0 `factor_ic_study` currently carries these fields partly nested under `lineage`: `source_db_snapshot_id`, `source_data_time_range`, `feature_version`, `label_version`, `code_version`, and `config_version`. P0 carries `claim_ceiling` inside `gate_readout`, which is acceptable only for the current diagnostic summary path. A future approved projection registry must keep all required fields machine-addressable and stable for validators before any stronger dashboard claim or promotion.
+`factor_ic_study`, `weight_sweep_study`, `governance_promotion_decision`, and `dashboard_approved_projection_registry` now carry the required fields as top-level machine-addressable fields in the factor validation / weight sweep path. Any future stronger dashboard claim or promotion must preserve these fields and pass validator checks before an approved projection entry can be produced.
 
 ## Overfitting Protections
 
@@ -476,15 +476,15 @@ The external review themes that shaped this contract:
 
 ### P4 - Governance Promotion State Machine
 
-- Implement machine-checkable state transitions.
-- Add promotion blockers, approvals, retirements, and rollback.
-- Forbid automatic promotion from weight sweep or single validation artifact.
+- Status: governance promotion decision artifacts implemented for the factor validation / weight sweep path through `governance_promotion_decision.v1`.
+- Current state remains `diagnostic_only`, gate outcome remains blocked, and automatic promotion from weight sweep or a single validation artifact remains forbidden.
+- Remaining hardening: human approval workflow, retirement/recovery operations, and rollback evidence for candidates that eventually pass all upstream gates.
 
 ### P5 - Dashboard Projection
 
-- Materialize approved governance projection artifacts.
-- Frontend and operations APIs read projection, not raw validation artifacts.
-- User-facing copy follows `claim_ceiling` and abstains when gates block.
+- Status: dashboard approved projection registry artifacts implemented for the factor validation / weight sweep path through `dashboard_approved_projection_registry.v1`.
+- Current approved projection count remains 0; frontend and operations APIs read registry summary, not raw validation artifacts or raw registry entries.
+- Remaining hardening: produce approved projection entries only after governance reaches `production_eligible`, then bind user-facing copy to `claim_ceiling` and canonical/full parity verification.
 
 ## Explicit Prohibitions
 
