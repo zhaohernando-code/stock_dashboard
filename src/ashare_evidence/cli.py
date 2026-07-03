@@ -24,6 +24,7 @@ from ashare_evidence.db import init_database, preflight_database_writable, sessi
 from ashare_evidence.frontend_projections import refresh_frontend_projections
 from ashare_evidence.improvement_suggestions import run_improvement_suggestion_review
 from ashare_evidence.intraday_market import sync_intraday_market
+from ashare_evidence.model_exploration_workflow import run_shortpick_model_exploration_workbench
 from ashare_evidence.operations import build_operations_dashboard
 from ashare_evidence.phase2 import rebuild_phase2_research_state
 from ashare_evidence.phase2.holding_policy_experiments import (
@@ -648,6 +649,31 @@ def build_parser() -> argparse.ArgumentParser:
     policy_config_activate.add_argument("--approved-by", required=True)
     add_event_check_parser(subparsers)
     add_research_parsers(subparsers)
+
+    model_exploration = subparsers.add_parser(
+        "shortpick-model-exploration-run",
+        help="Run the offline Short Pick model exploration workbench and write research-validation artifacts only.",
+    )
+    model_exploration.add_argument("--database-url", default=None)
+    model_exploration.add_argument("--validation-run-id", required=True)
+    model_exploration.add_argument(
+        "--as-of-date",
+        action="append",
+        default=None,
+        help="Restrict the universe-date matrix to one YYYY-MM-DD as-of date; may be repeated.",
+    )
+    model_exploration.add_argument("--max-as-of-dates", type=int, default=None)
+    model_exploration.add_argument("--benchmark-symbol", default="000300.SH")
+    model_exploration.add_argument(
+        "--model-spec-id",
+        action="append",
+        default=None,
+        help="Run only this registered model spec id; may be repeated.",
+    )
+    model_exploration.add_argument("--min-train-dates", type=int, default=60)
+    model_exploration.add_argument("--test-window-dates", type=int, default=20)
+    model_exploration.add_argument("--artifact-root", default=None)
+    model_exploration.add_argument("--no-write-artifacts", action="store_true")
 
     refresh_runtime = subparsers.add_parser(
         "refresh-runtime-data",
@@ -1850,6 +1876,25 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "weight-sweep":
         with session_scope(args.database_url) as session:
             _print_json(handle_weight_sweep(session, database_url=args.database_url))
+        return 0
+
+    if args.command == "shortpick-model-exploration-run":
+        as_of_dates = [date.fromisoformat(value) for value in args.as_of_date or []] or None
+        with session_scope(args.database_url) as session:
+            payload = run_shortpick_model_exploration_workbench(
+                session,
+                database_url=args.database_url,
+                validation_run_id=args.validation_run_id,
+                as_of_dates=as_of_dates,
+                max_as_of_dates=args.max_as_of_dates,
+                benchmark_symbol=args.benchmark_symbol,
+                selected_model_spec_ids=args.model_spec_id,
+                min_train_dates=args.min_train_dates,
+                test_window_dates=args.test_window_dates,
+                write_artifacts=not args.no_write_artifacts,
+                artifact_root=args.artifact_root,
+            )
+        _print_json(payload)
         return 0
 
     if args.command in ("refresh-runtime-data", "phase5-daily-refresh"):

@@ -24,13 +24,14 @@ The mechanism must not answer this by copying known strong-stock traits from 生
 |---|---|---|
 | P0 research validation storage boundary | completed | Existing branch writes legacy validation outputs to `research_validation/*` artifacts instead of runtime DB business tables. |
 | Legacy factor validation guardrails | completed | Existing factor validation / weight-sweep path is diagnostic-only and blocks promotion. |
-| Independent model exploration mechanism | in_progress | P1 vertical foundation exists: matrix artifacts, governed model spec registry, registered-spec candidate run, comparison report, PBO/DSR proxy diagnostics, winner-dependency recomputation, governance decision and dashboard projection registry. Promotion remains blocked until full-sample diagnostics and governance gates pass. |
+| Independent model exploration mechanism | in_progress | P1 vertical foundation exists: matrix artifacts, governed model spec registry, registered-spec candidate run, comparison report, PBO/DSR proxy diagnostics, winner-dependency recomputation, governance decision, dashboard projection registry and offline CLI/workflow runner. Promotion remains blocked until full-sample diagnostics and governance gates pass. |
 | P1 objective universe-date snapshot | foundation_completed | `src/ashare_evidence/model_exploration_snapshot.py` builds `model_exploration_input_snapshot` and `universe_date_matrix` from runtime DB read-only `Stock` / `MarketBar` facts, not from recommendation rows. |
 | P1 PIT feature matrix | foundation_completed | `pit_feature_matrix` rows are keyed by `symbol` x `as_of_date`; tests assert feature cutoff stays at or before `as_of_date` and winner identity is not used. |
 | P1 label matrix | foundation_completed | `executable_label_matrix` emits benchmark-aware forward labels and blocks missing benchmark labels instead of self-benchmarking. |
 | P1 model spec registry | foundation_completed | `src/ashare_evidence/model_spec_registry.py` defines stable model specs, feature groups, bounded hyperparameter grids, dynamic-weight governance requirements and production-effect blocks. |
 | P1 candidate runner | foundation_completed | `src/ashare_evidence/model_candidate_runner.py` executes only registered model specs, records trial predictions and keeps promotion blocked. |
 | P1 comparison report | foundation_completed | `src/ashare_evidence/model_comparison_report.py` summarizes leaderboard, baseline comparison, PBO/DSR proxy diagnostics, winner-dependency removal checks and kill/block reasons. |
+| Offline workflow runner | foundation_completed | `shortpick-model-exploration-run` runs the workbench from runtime DB read-only facts and writes research-validation artifacts only. |
 | Dashboard/runtime integration | blocked | Dashboard projection registry exists but approved projection count remains 0 until governance reaches `production_eligible`. Do not expose raw workbench artifacts to live dashboard. |
 
 ## Non-Negotiable Boundaries
@@ -271,3 +272,17 @@ Default `python3 -m pytest -q` should remain fast. Slow full-matrix or long repl
 ## Handoff Instruction For Development Sessions
 
 When a development session resumes this work, it must state which P1 artifact family it is implementing first and update the Completion Status table above. A session must not mark the independent model exploration mechanism complete until all P1 artifacts exist, tests pass, and the comparison report shows the mechanism can kill or block weak candidates without dashboard/runtime side effects.
+
+## Offline Runner
+
+The P1 workbench can be run manually as offline research:
+
+```bash
+python3 -m ashare_evidence.cli shortpick-model-exploration-run \
+  --database-url sqlite:////path/to/ashare_dashboard.db \
+  --validation-run-id manual-model-exploration-YYYYMMDD \
+  --max-as-of-dates 120 \
+  --model-spec-id baseline_momentum_10d_turnover_cooldown_v1
+```
+
+This command writes only `research_validation/*` artifacts. It does not refresh market data, does not write business tables, does not update policy config, does not publish runtime, and does not create dashboard-approved projection entries while governance remains blocked.
