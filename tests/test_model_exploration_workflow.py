@@ -135,6 +135,44 @@ class ModelExplorationWorkflowTests(unittest.TestCase):
         self.assertEqual(payload["runtime_db_write_policy"], "read_only_input_no_business_table_writes")
         self.assertEqual(payload["promotion_status"], "blocked_from_production")
 
+    def test_workflow_can_reuse_existing_matrix_artifacts(self) -> None:
+        artifact_root = Path(self.temp_dir.name) / "reuse-artifacts"
+        with session_scope(self.database_url) as session:
+            first = run_shortpick_model_exploration_workbench(
+                session,
+                database_url=self.database_url,
+                validation_run_id="workflow-reuse-source",
+                as_of_dates=[date(2026, 1, 11), date(2026, 1, 12), date(2026, 1, 13)],
+                selected_model_spec_ids=["baseline_momentum_10d_turnover_cooldown_v1"],
+                min_train_dates=1,
+                test_window_dates=1,
+                artifact_root=artifact_root,
+            )
+        input_path = first["artifact_summaries"]["model_exploration_input_snapshot"]["path"]
+        feature_path = first["artifact_summaries"]["pit_feature_matrix"]["path"]
+        label_path = first["artifact_summaries"]["executable_label_matrix"]["path"]
+
+        with session_scope(self.database_url) as session:
+            second = run_shortpick_model_exploration_workbench(
+                session,
+                database_url=self.database_url,
+                validation_run_id="workflow-reuse-consumer",
+                selected_model_spec_ids=["baseline_momentum_10d_turnover_cooldown_v1"],
+                min_train_dates=1,
+                test_window_dates=1,
+                artifact_root=artifact_root,
+                input_snapshot_artifact=input_path,
+                feature_matrix_artifact=feature_path,
+                label_matrix_artifact=label_path,
+            )
+
+        self.assertTrue(second["matrix_artifacts_reused"])
+        self.assertIsNone(second["artifact_summaries"]["pit_feature_matrix"]["path"])
+        self.assertEqual(
+            second["matrix_artifact_ids"]["pit_feature_matrix"],
+            first["artifact_summaries"]["pit_feature_matrix"]["artifact_id"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -672,6 +672,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     model_exploration.add_argument("--min-train-dates", type=int, default=60)
     model_exploration.add_argument("--test-window-dates", type=int, default=20)
+    model_exploration.add_argument("--input-snapshot-artifact", default=None)
+    model_exploration.add_argument("--feature-matrix-artifact", default=None)
+    model_exploration.add_argument("--label-matrix-artifact", default=None)
     model_exploration.add_argument("--artifact-root", default=None)
     model_exploration.add_argument("--no-write-artifacts", action="store_true")
 
@@ -1893,6 +1896,9 @@ def main(argv: list[str] | None = None) -> int:
                 test_window_dates=args.test_window_dates,
                 write_artifacts=not args.no_write_artifacts,
                 artifact_root=args.artifact_root,
+                input_snapshot_artifact=args.input_snapshot_artifact,
+                feature_matrix_artifact=args.feature_matrix_artifact,
+                label_matrix_artifact=args.label_matrix_artifact,
             )
         _print_json(payload)
         return 0
