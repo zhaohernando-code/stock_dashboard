@@ -24,13 +24,13 @@ The mechanism must not answer this by copying known strong-stock traits from 生
 |---|---|---|
 | P0 research validation storage boundary | completed | Existing branch writes legacy validation outputs to `research_validation/*` artifacts instead of runtime DB business tables. |
 | Legacy factor validation guardrails | completed | Existing factor validation / weight-sweep path is diagnostic-only and blocks promotion. |
-| Independent model exploration mechanism | in_progress | P1 matrix foundation and governed model spec registry exist, but no candidate prediction artifact or model comparison report exists yet. |
+| Independent model exploration mechanism | in_progress | P1 vertical foundation exists: matrix artifacts, governed model spec registry, registered-spec candidate run, and comparison report. Promotion remains blocked until full OOS/PBO/DSR, winner-dependency and governance gates are hardened. |
 | P1 objective universe-date snapshot | foundation_completed | `src/ashare_evidence/model_exploration_snapshot.py` builds `model_exploration_input_snapshot` and `universe_date_matrix` from runtime DB read-only `Stock` / `MarketBar` facts, not from recommendation rows. |
 | P1 PIT feature matrix | foundation_completed | `pit_feature_matrix` rows are keyed by `symbol` x `as_of_date`; tests assert feature cutoff stays at or before `as_of_date` and winner identity is not used. |
 | P1 label matrix | foundation_completed | `executable_label_matrix` emits benchmark-aware forward labels and blocks missing benchmark labels instead of self-benchmarking. |
 | P1 model spec registry | foundation_completed | `src/ashare_evidence/model_spec_registry.py` defines stable model specs, feature groups, bounded hyperparameter grids, dynamic-weight governance requirements and production-effect blocks. |
-| P1 candidate runner | not_started | Produce candidate predictions from model specs over walk-forward train/test splits. |
-| P1 comparison report | not_started | Write kill/observe/promote-blocked reports with OOS, PBO/DSR, winner-dependency and execution gates. |
+| P1 candidate runner | foundation_completed | `src/ashare_evidence/model_candidate_runner.py` executes only registered model specs, records trial predictions and keeps promotion blocked. |
+| P1 comparison report | foundation_completed | `src/ashare_evidence/model_comparison_report.py` summarizes leaderboard, baseline comparison and kill/block reasons; full PBO/DSR and winner-dependency recomputation remain pending. |
 | Dashboard/runtime integration | blocked | Do not expose new workbench results to live dashboard until approved projection artifacts exist. |
 
 ## Non-Negotiable Boundaries
@@ -68,8 +68,8 @@ Add these artifact families under the existing `research_validation` namespace. 
 | `pit_feature_matrix` | implemented | One feature row per matrix row; all features must be point-in-time and versioned. |
 | `executable_label_matrix` | implemented | Forward labels using executable entry/exit assumptions, benchmark excess return and cost assumptions. |
 | `model_spec_registry` | implemented | Governed model definitions, feature groups, hyperparameters and allowed search spaces. |
-| `walk_forward_model_candidate_run` | not_started | Candidate model predictions, train/test windows, purge/embargo metadata and split-level metrics. |
-| `model_comparison_report` | not_started | Model ranking, kill reasons, OOS metrics, PBO/DSR diagnostics, winner-dependency and promotion blockers. |
+| `walk_forward_model_candidate_run` | foundation_completed | Candidate model predictions, train/test windows, purge/embargo metadata and split-level metrics. |
+| `model_comparison_report` | foundation_completed | Model ranking, kill reasons, OOS metrics, PBO/DSR placeholders, winner-dependency blockers and promotion blockers. |
 
 ## Required Module Shape
 
@@ -253,8 +253,8 @@ At minimum:
 - Feature matrix rejects future data and marks missing sources. Foundation completed by `tests/test_model_exploration_snapshot.py`.
 - Label matrix blocks missing benchmark labels instead of falling back to self-benchmark. Completed by `tests/test_model_exploration_snapshot.py`.
 - Model spec registry has stable ids and bounded search spaces. Completed by `tests/test_model_spec_registry.py`.
-- Candidate runner records all trials and cannot emit production promotion.
-- Comparison report blocks claims when coverage/windows/OOS/PBO/DSR gates fail.
+- Candidate runner records all trials and cannot emit production promotion. Foundation completed by `tests/test_model_candidate_workbench.py`.
+- Comparison report blocks claims when coverage/windows/OOS/PBO/DSR gates fail. Foundation completed by `tests/test_model_candidate_workbench.py`; full PBO/DSR and winner-dependency recomputation remain pending.
 
 Default `python3 -m pytest -q` should remain fast. Slow full-matrix or long replay tests must be separate integration commands.
 
