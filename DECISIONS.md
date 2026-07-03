@@ -11,6 +11,8 @@
 - 若诊断没有任何方向通过基础信号门槛，后续优先增加新特征族、交互特征和 regime/industry/relative-strength 信息；不要把负收益 top bucket 包装成“防守策略”。
 - 候选策略必须由注册 spec 进入 walk-forward comparison report，并通过 Rank IC、top quantile net excess、PBO/DSR、cost stress、winner dependency 和 governance gates，才能进入任何纸面跟踪或 dashboard projection 讨论。
 
+2026-07-04 追加迭代：把诊断/候选 runner 的 flattened feature universe 从初始 10 个字段扩展到已有 PIT 矩阵中的 24 个数值字段。真实 runtime 诊断 `model-feature-diagnostic-report-1f84ee542071edea` 仍为 `passing_basic_signal_gate_count=0`；低换手率成为最强单特征方向，但 top-quantile net excess 仍为负。扩展特征后的 learned linear/tree walk-forward 报告 `model-comparison-report-aeb8a5e2c686c9f2` 也失败，最佳 tree trial 只有 `rank_ic_mean=0.0117`、top quantile `-0.0279`、`pbo_proxy=0.5`。因此下一步必须新增特征来源或构造方式，不能继续假设现有矩阵字段里藏着可通过门禁的策略。
+
 [2026-07-03T23:20:00+08:00] Short Pick deep research branch is P0 guardrail, not the model exploration mechanism:
 
 项目所有者重新确认：当前 `codex/shortpick-validation-boundary-p0` 分支完成的是旧 `factor_observation / weight_sweep` 链路的研究边界、安全门禁和诊断 artifact prototype，不能被表述为“新模型探索机制已经完成”。`research_input_snapshot`、`pit_feature_store`、`objective_frozen_universe`、`walk_forward_purge_embargo`、`oos_validation`、`governance_promotion_decision`、`dashboard_approved_projection_registry` 这些当前实现都只覆盖 legacy diagnostic factor validation / weight sweep scope。

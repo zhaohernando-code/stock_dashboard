@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from ashare_evidence.cli import main
+from ashare_evidence.model_candidate_runner import MODEL_FEATURE_DEFS
 from ashare_evidence.model_feature_diagnostics import (
     build_model_feature_diagnostic_report_artifact,
     run_model_feature_diagnostics,
@@ -94,9 +95,19 @@ class ModelFeatureDiagnosticsTests(unittest.TestCase):
         self.assertEqual(payload["artifact_type"], "model_feature_diagnostic_report")
         self.assertEqual(payload["promotion_status"], "blocked_from_production")
         self.assertGreater(payload["passing_direction_horizon_count"], 0)
+        self.assertGreaterEqual(payload["tested_feature_count"], 20)
         self.assertEqual(payload["feature_leaderboard"][0]["feature_name"], "return_5d")
         self.assertTrue(payload["feature_leaderboard"][0]["passes_basic_signal_gate"])
         self.assertEqual(payload["candidate_generation_hints"][0]["status"], "eligible_for_candidate_spec_seed")
+
+    def test_diagnostic_feature_universe_includes_existing_matrix_fields_beyond_initial_ten(self) -> None:
+        feature_names = {name for name, _, _ in MODEL_FEATURE_DEFS}
+
+        self.assertIn("turnover_rate", feature_names)
+        self.assertIn("return_40d", feature_names)
+        self.assertIn("volatility_10d", feature_names)
+        self.assertIn("max_drawdown_40d", feature_names)
+        self.assertIn("avg_amount_10d", feature_names)
 
     def test_run_writes_report_to_research_validation_store(self) -> None:
         feature_matrix, label_matrix = self._matrices()

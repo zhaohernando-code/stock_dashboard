@@ -14,14 +14,27 @@ from ashare_evidence.research_artifact_store import write_research_validation_ar
 MODEL_CANDIDATE_RUN_SCHEMA_VERSION = "walk_forward_model_candidate_run.v1"
 MAX_STORED_PREDICTIONS_PER_TRIAL = 2000
 MODEL_FEATURE_DEFS = (
+    ("return_3d", "price_momentum", "return_3d"),
     ("return_5d", "price_momentum", "return_5d"),
     ("return_10d", "price_momentum", "return_10d"),
     ("return_20d", "price_momentum", "return_20d"),
+    ("return_40d", "price_momentum", "return_40d"),
+    ("price_benchmark_return_20d", "price_momentum", "benchmark_return_20d"),
     ("return_1d", "reversal_overheat", "return_1d"),
     ("distance_from_20d_high", "reversal_overheat", "distance_from_20d_high"),
+    ("distance_from_40d_high", "reversal_overheat", "distance_from_40d_high"),
+    ("volatility_10d", "volatility_risk", "volatility_10d"),
     ("volatility_20d", "volatility_risk", "volatility_20d"),
+    ("max_drawdown_20d", "volatility_risk", "max_drawdown_20d"),
+    ("max_drawdown_40d", "volatility_risk", "max_drawdown_40d"),
+    ("avg_amount_10d", "liquidity", "avg_amount_10d"),
     ("avg_amount_20d", "liquidity", "avg_amount_20d"),
+    ("avg_volume_20d", "liquidity", "avg_volume_20d"),
+    ("turnover_rate", "liquidity", "turnover_rate"),
+    ("zero_volume_count_20d", "liquidity", "zero_volume_count_20d"),
     ("amount_vs_20d_avg", "crowding", "amount_vs_20d_avg"),
+    ("symbol_recent_exposure_count", "crowding", "symbol_recent_exposure_count"),
+    ("benchmark_return_10d", "regime", "benchmark_return_10d"),
     ("benchmark_return_20d", "regime", "benchmark_return_20d"),
     ("benchmark_volatility_20d", "regime", "benchmark_volatility_20d"),
 )
