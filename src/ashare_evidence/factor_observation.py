@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from bisect import bisect_left
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -23,6 +24,7 @@ MIN_SNAPSHOT_COUNT = 10
 MIN_UNIQUE_SYMBOLS_FOR_WEIGHTING = 50
 MIN_TOTAL_SAMPLES_FOR_WEIGHTING = 600
 MIN_WINDOWS_FOR_WEIGHTING = 20
+RESEARCH_INPUT_SNAPSHOT_SCHEMA_VERSION = "research_input_snapshot.v1"
 FACTOR_IC_STUDY_SCHEMA_VERSION = "factor_ic_study.v2"
 WEIGHT_SWEEP_STUDY_SCHEMA_VERSION = "weight_sweep_study.v2"
 LEGACY_FACTOR_SCORE_SOURCE = "recommendation_payload.factor_breakdown"
@@ -63,6 +65,11 @@ def _source_db_snapshot_id(session: Session) -> str:
     return hashlib.sha256(rendered.encode("utf-8")).hexdigest()[:16]
 
 
+def _stable_digest(payload: Any) -> str:
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
 def _source_data_time_range(rows: list[dict[str, Any]]) -> dict[str, str | None]:
     as_of_dates = sorted(str(row.get("as_of_date") or "") for row in rows if row.get("as_of_date"))
     entry_days = sorted(str(row.get("entry_trade_day") or "") for row in rows if row.get("entry_trade_day"))
@@ -72,6 +79,156 @@ def _source_data_time_range(rows: list[dict[str, Any]]) -> dict[str, str | None]
         "as_of_end": as_of_dates[-1] if as_of_dates else None,
         "entry_trade_day_start": entry_days[0] if entry_days else None,
         "exit_trade_day_end": exit_days[-1] if exit_days else None,
+    }
+
+
+def _recommendation_source_rows(recommendations: list[Recommendation]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for record in recommendations:
+        payload = record.recommendation_payload or {}
+        factor_breakdown = payload.get("factor_breakdown") if isinstance(payload.get("factor_breakdown"), dict) else {}
+        evidence = payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {}
+        factor_cards = [
+            {
+                "factor_key": card.get("factor_key"),
+                "score": card.get("score"),
+                "weight": card.get("weight"),
+                "status": card.get("status"),
+                "direction": card.get("direction"),
+                "raw_value": card.get("raw_value"),
+            }
+            for card in evidence.get("factor_cards", [])
+            if isinstance(card, dict) and card.get("factor_key")
+        ]
+        rows.append(
+            {
+                "id": record.id,
+                "recommendation_key": record.recommendation_key,
+                "stock_id": record.stock_id,
+                "symbol": record.stock.symbol if record.stock is not None else None,
+                "model_version_id": record.model_version_id,
+                "model_run_id": record.model_run_id,
+                "prompt_version_id": record.prompt_version_id,
+                "as_of_data_time": record.as_of_data_time.isoformat() if record.as_of_data_time else None,
+                "generated_at": record.generated_at.isoformat() if record.generated_at else None,
+                "updated_at": record.updated_at.isoformat() if record.updated_at else None,
+                "direction": record.direction,
+                "confidence_score": record.confidence_score,
+                "horizon_min_days": record.horizon_min_days,
+                "horizon_max_days": record.horizon_max_days,
+                "evidence_status": record.evidence_status,
+                "factor_score_input": {
+                    "factor_breakdown": factor_breakdown,
+                    "evidence_factor_cards": sorted(
+                        factor_cards,
+                        key=lambda card: str(card.get("factor_key") or ""),
+                    ),
+                },
+                "payload_digest": _stable_digest(payload),
+            }
+        )
+    return sorted(rows, key=lambda row: (str(row["symbol"] or ""), str(row["recommendation_key"] or "")))
+
+
+def _market_bar_source_fingerprint(session: Session, symbols: list[str]) -> dict[str, Any]:
+    if not symbols:
+        return {
+            "symbols": [],
+            "row_count": 0,
+            "rows": [],
+            "row_digest": _stable_digest([]),
+            "by_symbol": {},
+        }
+    rows = session.execute(
+        select(
+            Stock.symbol,
+            MarketBar.id,
+            MarketBar.bar_key,
+            MarketBar.observed_at,
+            MarketBar.open_price,
+            MarketBar.high_price,
+            MarketBar.low_price,
+            MarketBar.close_price,
+            MarketBar.volume,
+            MarketBar.amount,
+            MarketBar.updated_at,
+        )
+        .join(MarketBar, MarketBar.stock_id == Stock.id)
+        .where(Stock.symbol.in_(symbols), MarketBar.timeframe == "1d")
+        .order_by(Stock.symbol.asc(), MarketBar.observed_at.asc(), MarketBar.id.asc())
+    ).all()
+    serialized_rows = [
+        {
+            "symbol": str(symbol),
+            "id": row_id,
+            "bar_key": bar_key,
+            "observed_at": observed_at.isoformat() if observed_at else None,
+            "open_price": open_price,
+            "high_price": high_price,
+            "low_price": low_price,
+            "close_price": close_price,
+            "volume": volume,
+            "amount": amount,
+            "updated_at": updated_at.isoformat() if updated_at else None,
+        }
+        for (
+            symbol,
+            row_id,
+            bar_key,
+            observed_at,
+            open_price,
+            high_price,
+            low_price,
+            close_price,
+            volume,
+            amount,
+            updated_at,
+        ) in rows
+    ]
+    by_symbol: dict[str, dict[str, Any]] = {}
+    for symbol in symbols:
+        symbol_rows = [row for row in serialized_rows if row["symbol"] == symbol]
+        days = sorted(str(row["observed_at"] or "")[:10] for row in symbol_rows if row.get("observed_at"))
+        row_ids = [row["id"] for row in symbol_rows]
+        by_symbol[symbol] = {
+            "row_count": len(symbol_rows),
+            "date_start": days[0] if days else None,
+            "date_end": days[-1] if days else None,
+            "row_ids_digest": _stable_digest(row_ids),
+            "row_digest": _stable_digest(symbol_rows),
+        }
+    return {
+        "symbols": symbols,
+        "row_count": len(serialized_rows),
+        "rows": serialized_rows,
+        "row_digest": _stable_digest(serialized_rows),
+        "by_symbol": by_symbol,
+    }
+
+
+def _date_range(values: list[date]) -> dict[str, str | None]:
+    days = sorted(values)
+    return {
+        "start": days[0].isoformat() if days else None,
+        "end": days[-1].isoformat() if days else None,
+    }
+
+
+def _input_source_time_range(
+    recommendations: list[Recommendation],
+    close_maps: dict[str, dict[date, float]],
+    primary_benchmark: dict[date, float],
+) -> dict[str, Any]:
+    as_of_days = [
+        record.as_of_data_time.date()
+        for record in recommendations
+        if record.as_of_data_time is not None
+    ]
+    market_days = [day for series in close_maps.values() for day in series]
+    return {
+        "recommendation_as_of": _date_range(as_of_days),
+        "market_bar": _date_range(market_days),
+        "primary_benchmark_bar": _date_range(list(primary_benchmark)),
     }
 
 
@@ -85,6 +242,42 @@ def _validation_protocol() -> dict[str, Any]:
         "purge_embargo_status": "not_implemented",
         "execution_constraint_status": "daily_close_forward_return_only",
         "promotion_rule": "raw validation artifacts cannot directly modify production weights or recommendations",
+    }
+
+
+def _snapshot_gate_readout(*, benchmark_status: str, symbols: list[str], recommendation_count: int) -> dict[str, Any]:
+    checks = [
+        {
+            "gate_id": "runtime_db_read_only_source",
+            "status": "pass",
+            "reason": "snapshot builder reads runtime DB inputs and writes only artifact store output",
+        },
+        {
+            "gate_id": "objective_research_universe",
+            "status": "blocked",
+            "reason": "current snapshot scope is still active watchlist, not a frozen objective universe",
+        },
+        {
+            "gate_id": "pit_feature_store",
+            "status": "blocked",
+            "reason": "snapshot freezes inputs but does not yet compute independent PIT features",
+        },
+        {
+            "gate_id": "benchmark_availability",
+            "status": "pass" if benchmark_status == "available" else "blocked",
+            "reason": None if benchmark_status == "available" else "primary benchmark bars are unavailable for this snapshot",
+        },
+    ]
+    return {
+        "gate_status": "blocked" if any(check["status"] == "blocked" for check in checks) else "input_snapshot_ready",
+        "promotion_status": "blocked_from_production",
+        "claim_ceiling": "input_boundary_only",
+        "checks": checks,
+        "blocking_gate_ids": [check["gate_id"] for check in checks if check["status"] == "blocked"],
+        "snapshot_counts": {
+            "symbol_count": len(symbols),
+            "recommendation_count": recommendation_count,
+        },
     }
 
 
@@ -151,6 +344,96 @@ def _gate_readout(
         "claim_ceiling": "diagnostic_research_only",
         "checks": checks,
         "blocking_gate_ids": [check["gate_id"] for check in checks if check["status"] == "blocked"],
+    }
+
+
+def _build_research_input_snapshot(
+    *,
+    session: Session,
+    validation_run_id: str,
+    artifact_id: str,
+    recommendations: list[Recommendation],
+    symbols: list[str],
+    close_maps: dict[str, dict[date, float]],
+    recommendation_source_rows: list[dict[str, Any]],
+    market_bar_fingerprint: dict[str, Any],
+    benchmark_bar_fingerprint: dict[str, Any],
+    horizons: tuple[int, ...],
+    primary_benchmark_symbol: str,
+    primary_benchmark: dict[date, float],
+    benchmark_status: str,
+) -> dict[str, Any]:
+    source_db_locator_id = _source_db_snapshot_id(session)
+    generated_at = datetime.now(UTC).isoformat()
+    recommendation_as_of_dates = sorted(
+        {
+            record.as_of_data_time.date().isoformat()
+            for record in recommendations
+            if record.as_of_data_time is not None
+        }
+    )
+    input_content = {
+        "source_db_locator_id": source_db_locator_id,
+        "recommendation_source_rows": recommendation_source_rows,
+        "market_bar_fingerprint": market_bar_fingerprint,
+        "benchmark_bar_fingerprint": benchmark_bar_fingerprint,
+        "symbols": symbols,
+        "horizons": list(horizons),
+        "primary_benchmark_symbol": primary_benchmark_symbol,
+        "benchmark_status": benchmark_status,
+        "validation_protocol_version": VALIDATION_PROTOCOL_VERSION,
+    }
+    input_content_digest = _stable_digest(input_content)
+    return {
+        "artifact_type": "research_input_snapshot",
+        "schema_version": RESEARCH_INPUT_SNAPSHOT_SCHEMA_VERSION,
+        "artifact_id": artifact_id,
+        "validation_run_id": validation_run_id,
+        "generated_at": generated_at,
+        "source_db_snapshot_id": input_content_digest[:16],
+        "source_db_locator_id": source_db_locator_id,
+        "input_content_digest": input_content_digest,
+        "source_data_time_range": _input_source_time_range(recommendations, close_maps, primary_benchmark),
+        "feature_version": "legacy_recommendation_payload_factor_breakdown:v1",
+        "label_version": "daily_close_forward_excess_return:v1",
+        "code_version": "unresolved_local_checkout",
+        "config_version": VALIDATION_PROTOCOL_VERSION,
+        "validation_protocol": {
+            **_validation_protocol(),
+            "artifact_role": "research_input_snapshot",
+            "snapshot_policy": "freeze_runtime_db_read_only_inputs_before_validation",
+        },
+        "gate_readout": _snapshot_gate_readout(
+            benchmark_status=benchmark_status,
+            symbols=symbols,
+            recommendation_count=len(recommendations),
+        ),
+        "claim_ceiling": "input_boundary_only",
+        "promotion_status": "blocked_from_production",
+        "storage_boundary": "runtime_db_read_only_input__independent_research_validation_artifact_store",
+        "source_tables": ["recommendations", "stocks", "market_bars"],
+        "universe_context": {
+            "source": "active_watchlist_symbols",
+            "status": "snapshot_created_but_objective_universe_not_started",
+            "promotion_blocker": "research universe is not an objective frozen cross-section",
+        },
+        "symbols": symbols,
+        "recommendation_count": len(recommendations),
+        "recommendation_as_of_dates": recommendation_as_of_dates,
+        "recommendation_source": {
+            "row_count": len(recommendation_source_rows),
+            "row_digest": _stable_digest(recommendation_source_rows),
+            "rows": recommendation_source_rows,
+        },
+        "market_bar_source": market_bar_fingerprint,
+        "benchmark_bar_source": benchmark_bar_fingerprint,
+        "horizons": list(horizons),
+        "benchmark_context": {
+            "primary_benchmark": DEFAULT_BENCHMARK_ID,
+            "primary_symbol": primary_benchmark_symbol,
+            "status": benchmark_status,
+            "fallback_policy": "block_ic_rows_when_primary_benchmark_unavailable",
+        },
     }
 
 
@@ -284,9 +567,11 @@ def build_factor_observations(
     persist: bool = True,
 ) -> dict[str, Any]:
     validation_run_id = _validation_run_id("factor-ic")
+    input_snapshot_id = _artifact_id("research-input-snapshot", validation_run_id)
     recommendations = _records_for_scope(session)
     symbols = sorted({record.stock.symbol for record in recommendations if record.stock is not None})
     close_maps = _close_maps(session, symbols)
+    recommendation_source_rows = _recommendation_source_rows(recommendations)
     benchmark_maps = benchmark_close_maps(session)
     primary_benchmark_symbol = CSI_BENCHMARKS[DEFAULT_BENCHMARK_ID]["symbol"]
     primary_benchmark = benchmark_maps.get(primary_benchmark_symbol, {})
@@ -304,6 +589,23 @@ def build_factor_observations(
     if not primary_benchmark:
         benchmark_source = "unavailable"
         benchmark_status = "missing_primary_benchmark_bars"
+    market_bar_fingerprint = _market_bar_source_fingerprint(session, symbols)
+    benchmark_bar_fingerprint = _market_bar_source_fingerprint(session, [primary_benchmark_symbol])
+    input_snapshot = _build_research_input_snapshot(
+        session=session,
+        validation_run_id=validation_run_id,
+        artifact_id=input_snapshot_id,
+        recommendations=recommendations,
+        symbols=symbols,
+        close_maps=close_maps,
+        recommendation_source_rows=recommendation_source_rows,
+        market_bar_fingerprint=market_bar_fingerprint,
+        benchmark_bar_fingerprint=benchmark_bar_fingerprint,
+        horizons=horizons,
+        primary_benchmark_symbol=primary_benchmark_symbol,
+        primary_benchmark=primary_benchmark,
+        benchmark_status=benchmark_status,
+    )
 
     for as_of_day, records in sorted(by_as_of.items()):
         scored_records: list[dict[str, Any]] = []
@@ -418,9 +720,19 @@ def build_factor_observations(
         "status": status,
         "generated_at": datetime.now(UTC).isoformat(),
         "validation_run_id": validation_run_id,
+        "research_input_snapshot": {
+            "artifact_type": "research_input_snapshot",
+            "schema_version": RESEARCH_INPUT_SNAPSHOT_SCHEMA_VERSION,
+            "artifact_id": input_snapshot_id,
+            "storage_boundary": input_snapshot["storage_boundary"],
+            "promotion_status": input_snapshot["promotion_status"],
+            "claim_ceiling": input_snapshot["claim_ceiling"],
+        },
+        "research_input_snapshot_artifact": input_snapshot,
         "validation_protocol": _validation_protocol(),
         "lineage": {
-            "source_db_snapshot_id": _source_db_snapshot_id(session),
+            "source_db_snapshot_id": input_snapshot["source_db_snapshot_id"],
+            "research_input_snapshot_id": input_snapshot_id,
             "source_data_time_range": _source_data_time_range(observation_rows),
             "feature_version": "legacy_recommendation_payload_factor_breakdown:v1",
             "label_version": "daily_close_forward_excess_return:v1",
@@ -460,8 +772,18 @@ def build_factor_observations(
         ),
     }
     if persist:
+        _write_research_input_snapshot(input_snapshot, artifact_root=artifact_root, artifact_id=input_snapshot_id)
         _write_artifact(results, artifact_root=artifact_root, artifact_id=artifact_id)
     return results
+
+
+def _write_research_input_snapshot(results: dict[str, Any], *, artifact_root: str, artifact_id: str) -> None:
+    write_research_validation_artifact(
+        "research_input_snapshot",
+        artifact_id,
+        results,
+        root=Path(artifact_root) if artifact_root else None,
+    )
 
 
 def _write_artifact(results: dict[str, Any], *, artifact_root: str, artifact_id: str) -> None:
@@ -560,6 +882,7 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
             "weight_sweep_policy": "diagnostic_only_no_auto_promotion",
             "multiple_testing_status": "not_corrected",
         },
+        "research_input_snapshot": observations.get("research_input_snapshot", {}),
         "lineage": observations.get("lineage", {}),
         "gate_readout": observations.get("gate_readout", {}),
         "promotion_status": "blocked_from_production",
@@ -571,6 +894,14 @@ def sweep_weights(session: Session, *, artifact_root: str, persist: bool = True)
         "note": "权重 sweep 只产出独立验证制品，不自动修改生产权重；不得把 in-sample 最优组合作为上线结论。",
     }
     if persist:
+        input_snapshot = observations.get("research_input_snapshot_artifact")
+        input_snapshot_ref = observations.get("research_input_snapshot") or {}
+        if isinstance(input_snapshot, dict) and input_snapshot_ref.get("artifact_id"):
+            _write_research_input_snapshot(
+                input_snapshot,
+                artifact_root=artifact_root,
+                artifact_id=str(input_snapshot_ref["artifact_id"]),
+            )
         _write_sweep_artifact(results, artifact_root=artifact_root, artifact_id=artifact_id)
     return results
 

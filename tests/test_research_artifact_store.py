@@ -96,6 +96,16 @@ class ResearchArtifactStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
 
+            snapshot_path = write_research_validation_artifact(
+                "research_input_snapshot",
+                "research-input-snapshot-unit",
+                {
+                    "artifact_type": "research_input_snapshot",
+                    "claim_ceiling": "input_boundary_only",
+                    "promotion_status": "blocked_from_production",
+                },
+                root=root,
+            )
             factor_path = write_research_validation_artifact(
                 "factor_ic_study",
                 "factor-ic-study-unit",
@@ -113,6 +123,7 @@ class ResearchArtifactStoreTests(unittest.TestCase):
                 root=root,
             )
 
+            self.assertEqual(snapshot_path.parent, root / "research_validation" / "input_snapshots")
             self.assertEqual(factor_path.parent, root / "research_validation" / "factor_ic_studies")
             self.assertEqual(sweep_path.parent, root / "research_validation" / "weight_sweep_studies")
             self.assertFalse((root / "studies" / factor_path.name).exists())

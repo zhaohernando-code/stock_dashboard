@@ -6,8 +6,10 @@ import unittest
 from datetime import date
 from pathlib import Path
 
+from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 
+from ashare_evidence.api import create_app
 from ashare_evidence.dashboard import get_stock_dashboard
 from ashare_evidence.data_quality import build_data_quality_summary
 from ashare_evidence.db import init_database, session_scope
@@ -122,8 +124,8 @@ class ProfessionalizationPlanTests(unittest.TestCase):
     def test_factor_ic_and_weight_sweep_emit_insufficient_sample_not_fake_precision(self) -> None:
         with session_scope(self.database_url) as session:
             seed_watchlist_fixture(session, symbols=("600519.SH", "300750.SZ", "601318.SH", "002594.SZ"))
-            study = build_factor_observations(session, artifact_root=self.temp_dir.name, persist=False)
-            sweep = sweep_weights(session, artifact_root=self.temp_dir.name, persist=False)
+            study = build_factor_observations(session, artifact_root=self.temp_dir.name, persist=True)
+            sweep = sweep_weights(session, artifact_root=self.temp_dir.name, persist=True)
 
         self.assertEqual(study["artifact_type"], "factor_ic_study")
         self.assertEqual(study["schema_version"], "factor_ic_study.v2")
@@ -134,6 +136,49 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(study["validation_protocol"]["feature_source_status"], "legacy_diagnostic_only")
         self.assertEqual(study["promotion_status"], "blocked_from_production")
         self.assertEqual(study["gate_readout"]["promotion_status"], "blocked_from_production")
+        self.assertEqual(study["research_input_snapshot"]["artifact_type"], "research_input_snapshot")
+        self.assertEqual(study["research_input_snapshot"]["claim_ceiling"], "input_boundary_only")
+        self.assertEqual(study["research_input_snapshot"]["promotion_status"], "blocked_from_production")
+        self.assertEqual(
+            study["research_input_snapshot_artifact"]["validation_protocol"]["snapshot_policy"],
+            "freeze_runtime_db_read_only_inputs_before_validation",
+        )
+        required_snapshot_fields = {
+            "schema_version",
+            "artifact_id",
+            "validation_run_id",
+            "generated_at",
+            "source_db_snapshot_id",
+            "source_data_time_range",
+            "feature_version",
+            "label_version",
+            "code_version",
+            "config_version",
+            "validation_protocol",
+            "gate_readout",
+            "claim_ceiling",
+            "promotion_status",
+            "input_content_digest",
+            "recommendation_source",
+            "market_bar_source",
+            "benchmark_bar_source",
+        }
+        self.assertTrue(required_snapshot_fields.issubset(study["research_input_snapshot_artifact"]))
+        self.assertEqual(len(study["research_input_snapshot_artifact"]["source_db_snapshot_id"]), 16)
+        self.assertEqual(len(study["research_input_snapshot_artifact"]["input_content_digest"]), 64)
+        self.assertGreater(study["research_input_snapshot_artifact"]["recommendation_source"]["row_count"], 0)
+        self.assertGreater(study["research_input_snapshot_artifact"]["market_bar_source"]["row_count"], 0)
+        recommendation_source_rows = study["research_input_snapshot_artifact"]["recommendation_source"]["rows"]
+        self.assertGreater(len(recommendation_source_rows), 0)
+        self.assertIn("factor_score_input", recommendation_source_rows[0])
+        self.assertIn("factor_breakdown", recommendation_source_rows[0]["factor_score_input"])
+        self.assertIn("evidence_factor_cards", recommendation_source_rows[0]["factor_score_input"])
+        self.assertIn("rows", study["research_input_snapshot_artifact"]["market_bar_source"])
+        self.assertIn("rows", study["research_input_snapshot_artifact"]["benchmark_bar_source"])
+        self.assertEqual(
+            study["lineage"]["research_input_snapshot_id"],
+            study["research_input_snapshot"]["artifact_id"],
+        )
         self.assertIn("benchmark_availability", study["gate_readout"]["blocking_gate_ids"])
         self.assertIn("independent_feature_source", study["gate_readout"]["blocking_gate_ids"])
         self.assertEqual(study["lineage"]["feature_version"], "legacy_recommendation_payload_factor_breakdown:v1")
@@ -142,8 +187,24 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(sweep["schema_version"], "weight_sweep_study.v2")
         self.assertEqual(sweep["status"], "insufficient_sample")
         self.assertEqual(sweep["promotion_status"], "blocked_from_production")
+        self.assertEqual(sweep["research_input_snapshot"]["artifact_type"], "research_input_snapshot")
         self.assertEqual(sweep["validation_protocol"]["weight_sweep_policy"], "diagnostic_only_no_auto_promotion")
         self.assertIn("不自动修改生产权重", sweep["note"])
+        artifact_root = Path(self.temp_dir.name)
+        snapshot_path = (
+            artifact_root
+            / "research_validation"
+            / "input_snapshots"
+            / f"{study['research_input_snapshot']['artifact_id']}.json"
+        )
+        factor_path = artifact_root / "research_validation" / "factor_ic_studies" / f"{study['artifact_id']}.json"
+        sweep_path = artifact_root / "research_validation" / "weight_sweep_studies" / f"{sweep['artifact_id']}.json"
+        self.assertTrue(snapshot_path.exists())
+        self.assertTrue(factor_path.exists())
+        self.assertTrue(sweep_path.exists())
+        snapshot_payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        self.assertEqual(snapshot_payload["artifact_type"], "research_input_snapshot")
+        self.assertEqual(snapshot_payload["input_content_digest"], study["research_input_snapshot_artifact"]["input_content_digest"])
 
     def test_operations_summary_is_light_and_details_are_sectioned(self) -> None:
         with session_scope(self.database_url) as session:
@@ -164,9 +225,30 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertIn("factor_observation_summary", factor_detail)
         factor_summary = factor_detail["factor_observation_summary"]
         self.assertEqual(factor_summary["promotion_status"], "blocked_from_production")
+        self.assertEqual(factor_summary["research_input_snapshot"]["artifact_type"], "research_input_snapshot")
         self.assertEqual(factor_summary["validation_protocol"]["feature_source_status"], "legacy_diagnostic_only")
         self.assertIn("independent_feature_source", factor_summary["gate_readout"]["blocking_gate_ids"])
         self.assertEqual(factor_summary["lineage"]["feature_version"], "legacy_recommendation_payload_factor_breakdown:v1")
+
+        client = TestClient(create_app(self.database_url, enable_background_ops_tick=False))
+        operations_response = client.get(
+            "/dashboard/operations/details",
+            params={"section": "factor_observation", "sample_symbol": "600519.SH"},
+        )
+        self.assertEqual(operations_response.status_code, 200)
+        operations_payload = operations_response.json()
+        self.assertEqual(
+            operations_payload["factor_observation_summary"]["research_input_snapshot"]["artifact_type"],
+            "research_input_snapshot",
+        )
+
+        dashboard_response = client.get("/stocks/600519.SH/dashboard")
+        self.assertEqual(dashboard_response.status_code, 200)
+        dashboard_payload = dashboard_response.json()
+        self.assertEqual(
+            dashboard_payload["factor_validation"]["research_input_snapshot"]["artifact_type"],
+            "research_input_snapshot",
+        )
 
     def test_stock_dashboard_schema_accepts_string_horizon_readout_and_new_fields(self) -> None:
         with session_scope(self.database_url) as session:
@@ -181,6 +263,7 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertEqual(parsed.data_quality["symbol"], "600519.SH")
         self.assertIn("benchmark_context", parsed.factor_validation)
         self.assertEqual(parsed.factor_validation["promotion_status"], "blocked_from_production")
+        self.assertEqual(parsed.factor_validation["research_input_snapshot"]["artifact_type"], "research_input_snapshot")
         self.assertEqual(parsed.factor_validation["validation_protocol"]["feature_source_status"], "legacy_diagnostic_only")
 
 

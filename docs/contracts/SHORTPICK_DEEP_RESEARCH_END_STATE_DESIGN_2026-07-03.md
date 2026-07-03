@@ -19,7 +19,7 @@ Owner: stock_dashboard / Short Pick research governance
 | End-state design contract | completed | 本合同已落地，commit `a4303d6`；本次修订补充完成状态、量化门禁、制品字段合同和实现映射。 |
 | P0 validation artifact boundary | implemented | commit `3621f2d`；`factor_ic_study` / `weight_sweep_study` 写入独立 `research_validation` artifact namespace。 |
 | runtime DB read-only input boundary | implemented/partial | 当前只在 factor validation / weight sweep 路径落地；runtime DB 作为只读输入源，验证结果写 artifact，不写业务表。其他研究路径仍需逐步迁移到同一边界。 |
-| research input snapshot | not_started | 尚未生成独立、可寻址、可重放的 research input snapshot artifact。 |
+| research input snapshot | implemented | Factor validation / weight sweep path now creates an addressable `research_input_snapshot` artifact under `research_validation/input_snapshots`; it freezes runtime DB read-only inputs before validation and remains non-promotional. |
 | PIT feature store | not_started | 尚未实现独立 point-in-time feature artifacts；legacy `recommendation_payload.factor_breakdown` 仍仅作 diagnostic comparator。 |
 | objective frozen universe | not_started | 当前 P0 仍使用 active watchlist scope，并在 gate 中标记 `objective_research_universe` blocked。 |
 | walk-forward / purge / embargo | not_started | 当前 P0 artifact 显式标记 `walk_forward_status=not_implemented`、`purge_embargo_status=not_implemented`。 |
@@ -399,9 +399,10 @@ Those gaps are expected for P0, but they must remain visible as blocked gates an
 
 | Contract area | Current files | Implemented behavior |
 |---|---|---|
-| research validation artifact folders | `src/ashare_evidence/artifact_store_core.py` | Adds `research_validation/factor_ic_studies` and `research_validation/weight_sweep_studies`. |
-| research validation artifact writer | `src/ashare_evidence/research_artifact_store.py` | Adds `write_research_validation_artifact(...)` with artifact type whitelist and repo-write guard. |
-| legacy diagnostic-only factor path | `src/ashare_evidence/factor_observation.py` | Reads `recommendation_payload.factor_breakdown` only as `legacy_diagnostic_only`; writes validation protocol and feature lineage. |
+| research validation artifact folders | `src/ashare_evidence/artifact_store_core.py` | Adds `research_validation/input_snapshots`, `research_validation/factor_ic_studies`, and `research_validation/weight_sweep_studies`. |
+| research validation artifact writer | `src/ashare_evidence/research_artifact_store.py` | Adds `write_research_validation_artifact(...)` with artifact type whitelist and repo-write guard, including `research_input_snapshot`. |
+| research input snapshot | `src/ashare_evidence/factor_observation.py` | Builds a non-promotional `research_input_snapshot` artifact that freezes symbols, recommendation as-of dates, source data ranges, horizons, benchmark context, validation protocol, and snapshot gates before IC/weight validation. |
+| legacy diagnostic-only factor path | `src/ashare_evidence/factor_observation.py` | Reads `recommendation_payload.factor_breakdown` only as `legacy_diagnostic_only`; writes validation protocol and feature lineage linked to the input snapshot. |
 | benchmark fail-closed | `src/ashare_evidence/factor_observation.py` | Missing primary benchmark bars skip IC rows; artifact records `fallback_policy=block_ic_rows_when_primary_benchmark_unavailable`. |
 | gate / lineage / promotion readout | `src/ashare_evidence/factor_observation.py` | Emits `lineage`, `gate_readout` with `claim_ceiling`, `promotion_status=blocked_from_production`, and diagnostic notes. |
 | factor eligibility and rolling IC bounds | `src/ashare_evidence/phase2/factor_ic.py` | Requires 20 windows and 600 samples for weighting eligibility; rolling weight adjustment requires 60 periods and clips multiplier to `[0.5, 1.5]`. |
@@ -432,6 +433,7 @@ The following blocked states are intentional completion status, not omissions. P
 | 2026-07-03 | Main Codex local requirement check | passed | Checked required section names, status rows, numeric gates, artifact fields, implementation mappings, and blocked-state language against this document. |
 | 2026-07-03 | Independent subagent review `019f26ab-ff4c-7842-961d-997d0dc3aead` | PASS | Reviewer reported no required fixes; confirmed completion status, quantitative gates, artifact field contract, P0 implementation/test mapping, Non-Goals/Still Blocked, and `DECISIONS.md` coverage. |
 | 2026-07-03 | `git diff --check` | passed | No whitespace or patch formatting errors. |
+| 2026-07-03 | Research input snapshot slice local verification | passed | `ruff check` passed for changed Python/tests; `pytest -q tests/test_research_artifact_store.py tests/test_professionalization_plan.py` passed with 18 tests. |
 
 ## DS / MiMo Review Summary
 
@@ -447,7 +449,7 @@ The external review themes that shaped this contract:
 
 ### P1 - Independent Factor Feature Store
 
-- Create research input snapshots.
+- Extend research input snapshots beyond the factor validation / weight sweep path where needed.
 - Build PIT feature artifacts independent from recommendation payload.
 - Add feature lineage and missingness policy.
 - Keep legacy payload path as diagnostic-only comparator.
