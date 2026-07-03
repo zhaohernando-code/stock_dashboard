@@ -425,6 +425,14 @@ The following blocked states are intentional completion status, not omissions. P
 - Production weight update is still blocked; weight sweep cannot change policy config or recommendation generation.
 - Paper/live candidate promotion is still blocked until research, OOS, execution, PBO/DSR and governance gates pass.
 
+## Review / Verification Log
+
+| Time | Reviewer / process | Result | Evidence |
+|---|---|---|---|
+| 2026-07-03 | Main Codex local requirement check | passed | Checked required section names, status rows, numeric gates, artifact fields, implementation mappings, and blocked-state language against this document. |
+| 2026-07-03 | Independent subagent review `019f26ab-ff4c-7842-961d-997d0dc3aead` | PASS | Reviewer reported no required fixes; confirmed completion status, quantitative gates, artifact field contract, P0 implementation/test mapping, Non-Goals/Still Blocked, and `DECISIONS.md` coverage. |
+| 2026-07-03 | `git diff --check` | passed | No whitespace or patch formatting errors. |
+
 ## DS / MiMo Review Summary
 
 The external review themes that shaped this contract:
