@@ -1540,18 +1540,24 @@ def _build_operations_replay_detail(
     active_symbols: set[str],
     artifact_root: Any,
 ) -> list[dict[str, Any]]:
-    intraday_history, _intraday_stock_names, intraday_points = _market_history(
-        session,
-        active_symbols,
-        timeframe=INTRADAY_MARKET_TIMEFRAME,
-    )
+    if not active_symbols:
+        return []
     daily_history, _daily_stock_names, daily_points = _market_history(session, active_symbols, timeframe="1d")
-    timeline_points = intraday_points or daily_points
+    if daily_points:
+        price_history = daily_history
+        timeline_points = daily_points
+    else:
+        intraday_history, _intraday_stock_names, intraday_points = _market_history(
+            session,
+            active_symbols,
+            timeframe=INTRADAY_MARKET_TIMEFRAME,
+        )
+        price_history = intraday_history
+        timeline_points = intraday_points
     if not timeline_points:
         return []
-    price_history = daily_history or intraday_history
     benchmark_close_map = _benchmark_close_map(
-        _distinct_trade_days(daily_points or timeline_points),
+        _distinct_trade_days(timeline_points),
         price_history=price_history,
         active_symbols=active_symbols,
     )
@@ -1579,6 +1585,46 @@ def _load_operations_portfolios(session: Session) -> list[PaperPortfolio]:
             .order_by(PaperPortfolio.mode.asc(), PaperPortfolio.name.asc())
         ).all()
     )
+
+
+def _operations_detail_symbols(
+    session: Session,
+    *,
+    portfolios: list[PaperPortfolio] | None = None,
+) -> set[str]:
+    watchlist_symbols = set(active_watchlist_symbols(session))
+    if watchlist_symbols:
+        return watchlist_symbols
+
+    portfolio_symbols = {
+        order.stock.symbol
+        for portfolio in portfolios or []
+        for order in portfolio.orders
+        if order.stock is not None and order.stock.symbol
+    }
+    if portfolio_symbols:
+        return portfolio_symbols
+
+    recommendation_symbols = set(
+        session.scalars(
+            select(Stock.symbol)
+            .join(Recommendation, Recommendation.stock_id == Stock.id)
+            .where(Stock.symbol.is_not(None))
+            .distinct()
+        ).all()
+    )
+    if recommendation_symbols:
+        return {str(symbol) for symbol in recommendation_symbols if symbol}
+
+    order_symbols = set(
+        session.scalars(
+            select(Stock.symbol)
+            .join(PaperOrder, PaperOrder.stock_id == Stock.id)
+            .where(Stock.symbol.is_not(None))
+            .distinct()
+        ).all()
+    )
+    return {str(symbol) for symbol in order_symbols if symbol}
 
 
 def _recommendation_replay_hit_rate(
@@ -1635,14 +1681,12 @@ def _recommendation_replay_hit_rate(
 def _build_operations_portfolios_detail(session: Session) -> dict[str, Any]:
     generated_at = datetime.now().astimezone()
     portfolios = _load_operations_portfolios(session)
-    watchlist_symbols = set(active_watchlist_symbols(session))
-    portfolio_symbols = {
-        order.stock.symbol
-        for portfolio in portfolios
-        for order in portfolio.orders
-        if order.stock is not None and order.stock.symbol
-    }
-    active_symbols = watchlist_symbols or portfolio_symbols
+    if not portfolios:
+        return {
+            "generated_at": generated_at,
+            "portfolios": [],
+        }
+    active_symbols = _operations_detail_symbols(session, portfolios=portfolios)
     artifact_root = _operations_artifact_root(session)
     if not active_symbols:
         return {
@@ -1706,7 +1750,7 @@ def _build_operations_section_detail(
     target_login: str,
 ) -> dict[str, Any]:
     generated_at = datetime.now().astimezone()
-    active_symbols = set(active_watchlist_symbols(session))
+    active_symbols = _operations_detail_symbols(session)
     artifact_root = _operations_artifact_root(session)
     normalized_sample_symbol = sample_symbol.upper()
     focus_symbol = (

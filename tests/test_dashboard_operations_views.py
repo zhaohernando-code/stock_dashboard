@@ -237,6 +237,53 @@ class DashboardOperationsViewTests(DashboardViewTestCase):
         self.assertEqual(detail["section"], "portfolios")
         self.assertEqual(detail["portfolios"], [])
 
+    def test_replay_detail_derives_market_symbols_when_watchlist_is_empty(self) -> None:
+        from ashare_evidence import operations as operations_module
+
+        with session_scope(self.database_url) as session:
+            seed_watchlist_fixture(session)
+
+        with session_scope(self.database_url) as session:
+            with (
+                patch("ashare_evidence.operations.active_watchlist_symbols", return_value=[]),
+                patch("ashare_evidence.operations._market_history", wraps=operations_module._market_history) as market_history,
+            ):
+                detail = build_operations_detail(
+                    session,
+                    section="replay",
+                    sample_symbol="600519.SH",
+                    target_login="root",
+                )
+
+        self.assertEqual(detail["section"], "replay")
+        self.assertIn("recommendation_replay", detail)
+        self.assertTrue(market_history.call_args_list)
+        for call in market_history.call_args_list:
+            self.assertTrue(set(call.args[1]))
+
+    def test_replay_detail_does_not_scan_market_history_without_symbols(self) -> None:
+        with session_scope(self.database_url) as session:
+            seed_watchlist_fixture(session)
+
+        with session_scope(self.database_url) as session:
+            with (
+                patch("ashare_evidence.operations.active_watchlist_symbols", return_value=[]),
+                patch("ashare_evidence.operations._operations_detail_symbols", return_value=set()),
+                patch(
+                    "ashare_evidence.operations._market_history",
+                    side_effect=AssertionError("empty replay detail must not scan all market bars"),
+                ),
+            ):
+                detail = build_operations_detail(
+                    session,
+                    section="replay",
+                    sample_symbol="600519.SH",
+                    target_login="root",
+                )
+
+        self.assertEqual(detail["section"], "replay")
+        self.assertEqual(detail["recommendation_replay"], [])
+
     def test_completed_improvement_plan_does_not_pass_replay_gate_without_formal_evidence(self) -> None:
         with session_scope(self.database_url) as session:
             seed_watchlist_fixture(session)
