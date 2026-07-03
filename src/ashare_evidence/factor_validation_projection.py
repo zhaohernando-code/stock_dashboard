@@ -67,6 +67,43 @@ def _factor_horizon_summary(study: dict[str, Any]) -> dict[str, Any]:
     return horizons
 
 
+def _blocked_projection(
+    *,
+    status: str,
+    note: str,
+    active_symbol_count: int,
+    blocking_gate_id: str,
+) -> dict[str, Any]:
+    return {
+        "artifact_type": "factor_ic_study",
+        "status": status,
+        "note": note,
+        "objective_universe": {},
+        "research_input_snapshot": {},
+        "pit_feature_store": {},
+        "walk_forward_protocol": {},
+        "oos_validation": {},
+        "governance_promotion": {},
+        "dashboard_projection_registry": {},
+        "validation_protocol": {},
+        "lineage": {},
+        "gate_readout": {
+            "gate_status": "blocked",
+            "promotion_status": "blocked_from_production",
+            "claim_ceiling": "diagnostic_research_only",
+            "blocking_gate_ids": [blocking_gate_id],
+        },
+        "promotion_status": "blocked_from_production",
+        "claim_ceiling": "diagnostic_research_only",
+        "observation_count": 0,
+        "distinct_as_of_date_count": 0,
+        "symbol_count": active_symbol_count,
+        "recommendation_sample_symbol_count": active_symbol_count,
+        "benchmark_context": {},
+        "horizons": {},
+    }
+
+
 def _project_factor_observation_summary(
     study: dict[str, Any],
     *,
@@ -109,6 +146,14 @@ def build_factor_observation_summary_projection(
 ) -> dict[str, Any]:
     """Return the dashboard-approved summary projection for factor validation."""
     try:
+        if not active_symbols:
+            return _blocked_projection(
+                status="insufficient_sample",
+                note="当前没有 active watchlist symbol，因子验证看板投影保持阻断状态，不回退扫描历史 removed 样本。",
+                active_symbol_count=0,
+                blocking_gate_id="no_active_watchlist_symbols",
+            )
+
         key = (
             _database_identity(session),
             tuple(sorted(active_symbols)),
@@ -133,29 +178,9 @@ def build_factor_observation_summary_projection(
             _SUMMARY_CACHE[key] = (now, deepcopy(projected))
         return projected
     except Exception as exc:
-        return {
-            "artifact_type": "factor_ic_study",
-            "status": "unavailable",
-            "note": f"因子 IC 研究摘要暂不可用：{exc}",
-            "objective_universe": {},
-            "research_input_snapshot": {},
-            "pit_feature_store": {},
-            "walk_forward_protocol": {},
-            "oos_validation": {},
-            "governance_promotion": {},
-            "dashboard_projection_registry": {},
-            "validation_protocol": {},
-            "lineage": {},
-            "gate_readout": {
-                "gate_status": "blocked",
-                "promotion_status": "blocked_from_production",
-                "claim_ceiling": "diagnostic_research_only",
-                "blocking_gate_ids": ["factor_validation_projection_unavailable"],
-            },
-            "promotion_status": "blocked_from_production",
-            "claim_ceiling": "diagnostic_research_only",
-            "observation_count": 0,
-            "distinct_as_of_date_count": 0,
-            "symbol_count": len(active_symbols),
-            "horizons": {},
-        }
+        return _blocked_projection(
+            status="unavailable",
+            note=f"因子 IC 研究摘要暂不可用：{exc}",
+            active_symbol_count=len(active_symbols),
+            blocking_gate_id="factor_validation_projection_unavailable",
+        )

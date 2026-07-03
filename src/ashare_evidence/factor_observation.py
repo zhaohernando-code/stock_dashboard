@@ -668,14 +668,15 @@ def _forward_return(series: dict[date, float], as_of: date, horizon: int) -> tup
 
 def _records_for_scope(session: Session) -> list[Recommendation]:
     symbols = active_watchlist_symbols(session)
+    if not symbols:
+        return []
     query = (
         select(Recommendation)
         .join(Stock)
         .options(joinedload(Recommendation.stock))
         .order_by(*recommendation_recency_ordering(stock_symbol=True))
     )
-    if symbols:
-        query = query.where(Stock.symbol.in_(symbols))
+    query = query.where(Stock.symbol.in_(symbols))
     return list(session.scalars(query).all())
 
 
