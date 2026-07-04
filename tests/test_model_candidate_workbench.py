@@ -173,6 +173,12 @@ class ModelCandidateWorkbenchTests(unittest.TestCase):
         self.assertIn("top_5_net_excess_mean", report["candidate_leaderboard"][0])
         self.assertEqual(report["overfit_diagnostics"]["diagnostic_scope"], "candidate_run_trial_split_proxy")
         self.assertEqual(report["overfit_diagnostics"]["period_source"], "best_trial_as_of_date_rank_ic")
+        self.assertEqual(
+            report["execution_diagnostics"]["diagnostic_scope"],
+            "comparison_report_execution_stress_proxy",
+        )
+        self.assertIn("cost_stress", report["execution_diagnostics"])
+        self.assertIn("monthly_return_summary", report["execution_diagnostics"])
         self.assertIn(
             "overfit:insufficient_eligible_trials_for_pbo",
             report["gate_readout"]["blocking_gate_ids"],

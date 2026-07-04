@@ -1479,3 +1479,12 @@ P1 model exploration no longer停留在“没有成功案例”。在先前 base
 - `confirmed_concentrated_liquidity_momentum_20d_v1` 加入 `return_20d_percentile` 和 `industry_return_20d_excess` 确认过滤。160-date report `model-comparison-report-af5214debc6b5fea`：best `trial-002` top5 net excess `0.0982`、positive top5 rate `0.6750`、top10 net excess `0.0681`、Rank IC `-0.0042`、DSR `0.999996`、PBO `0.0`、winner dependency ready。相对 base concentrated，收益和 rank 行为均改善，是当前收益最优 research candidate。
 - `balanced_confirmed_concentrated_liquidity_momentum_20d_v1` 在 confirmed 上叠加 turnover/volatility caps。160-date report `model-comparison-report-b7852b296bb2bca8`：best `trial-004` top5 net excess `0.0784`、positive top5 rate `0.7625`、top10 net excess `0.0420`、Rank IC `-0.0039`、DSR `0.999992`、PBO `0.0`、winner dependency ready。它牺牲强趋势收益，但把 Jan/Feb monthly means 从负转正，因此只能作为弱市/胜率控制候选，不是收益最优主线。
 - 下一步不应继续无限阈值调参。优先补 execution-aware label/gates：T+1、涨停买入/跌停卖出可成交性、费用/滑点/印花税、ADV capacity/fill，然后做 cost/capacity/regime stress。工程上还需要更快的 candidate evaluation cache/streaming digest，否则每个 160-date spec 约 10 分钟，搜索效率太低。
+
+[2026-07-04T05:35:00+08:00] Comparison reports must carry execution-stress diagnostics before any promotion discussion:
+仅有 top5 均值、DSR、PBO 和 winner dependency 仍不足以判断策略可推进。本轮把 execution stress proxy 加入 `model_comparison_report`：2x/3x 成本压力、月度均值稳定性、top5 日期组合路径回撤。该诊断参与 comparison gate，但不解除治理层的真实执行门禁。
+
+补充说明
+- Base concentrated refreshed report `model-comparison-report-d9a5fff2bf8a0399`：top5 net excess `0.0833`，2x/3x cost stress 仍为正，但 Jan/Feb monthly means 为负，path drawdown proxy `-1.6019`，因此 execution stress blocked。
+- Confirmed refreshed report `model-comparison-report-24ae0a4e31be1bde`：top5 net excess `0.0982`，2x/3x cost stress 仍为正，收益最优地位不变；但 Jan/Feb monthly means 为负，path drawdown proxy `-1.2213`，因此仍 blocked。
+- Balanced refreshed report `model-comparison-report-8445b5b9b1ef2d9e`：top5 net excess `0.0784`，positive top5 rate `0.7625`，2x/3x cost stress 仍为正，negative months cleared；但 path drawdown proxy `-1.0856` 仍略低于当前 stress 阈值，仍 blocked。
+- 下一轮优化重点改为 path drawdown：退出规则、持有期/现金开关、弱市 exposure control、真实 T+1/limit/ADV fill label，而不是继续堆 entry filters。

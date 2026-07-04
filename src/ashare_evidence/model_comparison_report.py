@@ -375,6 +375,125 @@ def _winner_dependency(candidate_run: dict[str, Any], leaderboard: list[dict[str
     }
 
 
+def _series_drawdown(values: list[float]) -> dict[str, Any]:
+    cumulative = 0.0
+    peak = 0.0
+    max_drawdown = 0.0
+    for value in values:
+        cumulative += value
+        peak = max(peak, cumulative)
+        max_drawdown = min(max_drawdown, cumulative - peak)
+    return {
+        "cumulative_return_sum": cumulative,
+        "max_drawdown_sum": max_drawdown,
+    }
+
+
+def _monthly_return_summary(returns_by_date: list[dict[str, Any]], *, extra_cost: float = 0.0) -> list[dict[str, Any]]:
+    by_month: dict[str, list[float]] = {}
+    for row in returns_by_date:
+        month = str(row.get("month") or str(row.get("as_of_date") or "")[:7])
+        if not month:
+            continue
+        by_month.setdefault(month, []).append(_safe_float(row.get("mean_net_excess_return")) - extra_cost)
+    return [
+        {
+            "month": month,
+            "date_count": len(values),
+            "mean_net_excess_return": mean(values),
+            "positive_date_rate": sum(1 for value in values if value > 0) / len(values),
+            "min_date_return": min(values),
+            "max_date_return": max(values),
+        }
+        for month, values in sorted(by_month.items())
+        if values
+    ]
+
+
+def _execution_stress_diagnostics(candidate_run: dict[str, Any], leaderboard: list[dict[str, Any]]) -> dict[str, Any]:
+    best = leaderboard[0] if leaderboard else None
+    if not best:
+        return {
+            "status": "blocked",
+            "blocking_gate_ids": ["missing_best_trial"],
+        }
+    best_trial_id = str(best.get("trial_id") or "")
+    diagnostic = _trial_diagnostic(candidate_run, best_trial_id)
+    if _is_concentrated_top5(best):
+        if diagnostic is not None:
+            returns_by_date = list(diagnostic.get("top_5_returns_by_date") or [])
+        else:
+            returns_by_date = _top5_returns_from_predictions(_prediction_rows(candidate_run, best_trial_id))
+        portfolio_scope = "top_5_equal_weight_by_date"
+    else:
+        if diagnostic is not None:
+            picks = list(diagnostic.get("top_picks_by_date") or [])
+        else:
+            picks = _top_pick_returns(_prediction_rows(candidate_run, best_trial_id))
+        returns_by_date = [
+            {
+                "as_of_date": row.get("as_of_date"),
+                "month": row.get("month"),
+                "pick_count": 1,
+                "mean_net_excess_return": row.get("net_excess_return"),
+            }
+            for row in picks
+        ]
+        portfolio_scope = "top_1_pick_by_date"
+    values = [_safe_float(row.get("mean_net_excess_return")) for row in returns_by_date]
+    blockers: list[str] = []
+    if len(values) < 20:
+        blockers.append("insufficient_periods_for_execution_stress")
+    cost_stress = []
+    base_round_trip_cost = 0.001
+    for multiplier in (1.0, 2.0, 3.0):
+        extra_cost = base_round_trip_cost * (multiplier - 1.0)
+        stressed_values = [value - extra_cost for value in values]
+        stress_mean = mean(stressed_values) if stressed_values else None
+        cost_stress.append(
+            {
+                "cost_multiplier": multiplier,
+                "extra_cost_subtracted": extra_cost,
+                "mean_net_excess_after_cost_stress": stress_mean,
+                "positive_date_rate_after_cost_stress": sum(1 for value in stressed_values if value > 0)
+                / len(stressed_values)
+                if stressed_values
+                else None,
+            }
+        )
+        if multiplier == 2.0 and (stress_mean is None or stress_mean <= 0):
+            blockers.append("cost_stress_2x_not_positive")
+        if multiplier == 3.0 and (stress_mean is None or stress_mean <= 0):
+            blockers.append("cost_stress_3x_not_positive")
+    monthly = _monthly_return_summary(returns_by_date)
+    negative_months = [row["month"] for row in monthly if _safe_float(row.get("mean_net_excess_return")) <= 0]
+    if negative_months:
+        blockers.append("negative_monthly_mean_under_base_cost")
+    drawdown = _series_drawdown(values)
+    if _safe_float(drawdown.get("max_drawdown_sum")) <= -1.0:
+        blockers.append("portfolio_path_drawdown_sum_below_minus_1")
+    return {
+        "status": "blocked" if blockers else "ready",
+        "diagnostic_scope": "comparison_report_execution_stress_proxy",
+        "best_trial_id": best_trial_id,
+        "portfolio_scope": portfolio_scope,
+        "period_count": len(values),
+        "mean_net_excess_return": mean(values) if values else None,
+        "positive_date_rate": sum(1 for value in values if value > 0) / len(values) if values else None,
+        "cost_stress": cost_stress,
+        "monthly_return_summary": monthly,
+        "negative_months": negative_months,
+        "path_drawdown": drawdown,
+        "blocking_gate_ids": blockers,
+        "thresholds": {
+            "minimum_periods": 20,
+            "cost_stress_multipliers": [1.0, 2.0, 3.0],
+            "monthly_mean_must_be_positive": True,
+            "max_drawdown_sum_min": -1.0,
+        },
+    }
+
+
 def build_model_comparison_report_artifact(
     *,
     validation_run_id: str,
@@ -399,9 +518,11 @@ def build_model_comparison_report_artifact(
     ]
     overfit_diagnostics = _overfit_diagnostics(candidate_run, leaderboard)
     winner_dependency = _winner_dependency(candidate_run, leaderboard)
+    execution_diagnostics = _execution_stress_diagnostics(candidate_run, leaderboard)
     gate_blockers = [
         *[f"overfit:{blocker}" for blocker in overfit_diagnostics.get("blocking_gate_ids") or []],
         *[f"winner_dependency:{blocker}" for blocker in winner_dependency.get("blocking_gate_ids") or []],
+        *[f"execution_stress:{blocker}" for blocker in execution_diagnostics.get("blocking_gate_ids") or []],
         "governance_promotion_pending",
     ]
     report_body = {
@@ -423,15 +544,12 @@ def build_model_comparison_report_artifact(
         },
         "overfit_diagnostics": overfit_diagnostics,
         "winner_dependency": winner_dependency,
-        "execution_diagnostics": {
-            "status": "partial",
-            "source": "executable_label_matrix label block reasons are included through candidate run labels",
-        },
+        "execution_diagnostics": execution_diagnostics,
         "kill_list": kill_list,
         "next_research_questions": [
             "Replace proxy PBO/DSR with full combinatorially symmetric cross-validation diagnostics when sample width is sufficient.",
             "Broaden winner-dependency checks to top 3 symbols, top 3 dates and industry concentration.",
-            "Harden candidate runner training logic beyond deterministic foundation scoring.",
+            "Convert execution-stress proxies into executable labels for T+1, limit-state fillability, fee/slippage/stamp-tax and ADV capacity.",
         ],
     }
     content_digest = _stable_digest(report_body)
