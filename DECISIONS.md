@@ -1515,3 +1515,12 @@ P1 model exploration no longer停留在“没有成功案例”。在先前 base
 - Rolling 20-sleeve 资金曲线：总收益 `+43.0%`、年化约 `+12.5%`、最大回撤约 `-43.3%`；同期沪深300约 `+29.9%`、年化约 `+9.0%`、最大回撤约 `-21.4%`。Non-overlap 20d rebalance 只有 `+17.7%`，最大回撤约 `-49.7%`。
 - 该结果远低于当前 Short Pick V2 quiet champion 的已知目标线：`quiet_r2_poolhot10_mtw__fixed85_top5_v1` 历史总收益约 `+271.2%`，年化约 `53.96%`，最大回撤约 `-11.9%`；也不满足 2026-06-13 定下的 30% 年化门槛。
 - 结论：这个模型只证明“近期窗口里风险缩放能改善路径诊断”，不能作为“模型找到理想策略”的成功案例。后续模型搜索必须把 V1/V2 冻结/quiet champion 和回撤反转控制作为显式收益下限；新模型允许牺牲少量收益换稳定性，但不能把三年收益降到 `+43%` 且回撤扩大到 `-43%`。
+
+[2026-07-04T07:38:00+08:00] Model-search return anchor should be V1 outcomes, not V2 method or constraints:
+修正上一条对照口径：本轮模型探索主要对标试验田 V1 的历史结果，不应以 V2 quiet champion 作为主锚点。V2 有更多限制和独立治理语境；V1 才是用户当前关注的收益结果锚点。
+
+补充说明
+- V1 只能作为结果锚点，不能作为方法模板。后续模型仍必须探索更完善的多因素/动态权重/执行约束体系，不能退回 V1 那种单一来源判断和简单规则。
+- 当前可引用的 V1-oriented 锚点包括：legacy frozen strategy 的高收益历史读数约 `+62.6%`（但 mixed-permission，不作为 executable proof），以及 runtime drawdown-reversal control artifact 的 next-close total return 约 `+59.5%`、excess 约 `+20.2%`（仍有自身样本/执行 caveat）。
+- 因此 `risk_scaled_balanced_concentrated_liquidity_momentum_20d_v1` 的三年 `+43.0%`、年化 `+12.5%`、最大回撤 `-43.3%` 仍不合格：它低于 V1 结果锚点，且稳定性没有换来足够好的收益/回撤组合。
+- 后续 qualification floor 应写成：不能比 V1 冻结策略/回撤反转过滤的历史结果低很多；允许为稳定性牺牲一部分收益，但必须保持同一量级，并证明更强的数据来源、多因素解释、regime 稳定性和真实执行约束。
