@@ -261,6 +261,70 @@ def default_model_specs() -> list[dict[str, Any]]:
                 "broad_top_quantile_metric": "diagnostic_only_not_promotion_gate_for_this_spec",
             },
         ),
+        _base_spec(
+            model_spec_id="confirmed_concentrated_liquidity_momentum_20d_v1",
+            model_type="confirmed_concentrated_liquidity_momentum_ranker",
+            purpose=(
+                "Test whether PIT momentum confirmation, industry-relative strength and volume expansion "
+                "can improve the concentrated liquidity/momentum top5 candidate without hardcoding symbols or industries."
+            ),
+            feature_groups=[
+                "price_momentum",
+                "volatility_risk",
+                "liquidity",
+                "regime",
+                "cross_sectional",
+            ],
+            prediction_horizon_days=20,
+            training_window_days=[120],
+            hyperparameter_grid={
+                "liquidity_weight": [1.0],
+                "momentum_weight": [0.25],
+                "industry_relative_weight": [0.0, 0.25],
+                "min_return_20d_percentile": [0.85, 0.92],
+                "min_industry_return_20d_excess": [0.0, 0.12],
+            },
+            selection_policy={
+                "mode": "concentrated_top_k",
+                "top_k": 5,
+                "evaluation_return_metric": "top_5_net_excess_mean",
+                "broad_top_quantile_metric": "diagnostic_only_not_promotion_gate_for_this_spec",
+                "confirmation_policy": "pit_momentum_industry_strength_filter",
+            },
+        ),
+        _base_spec(
+            model_spec_id="balanced_confirmed_concentrated_liquidity_momentum_20d_v1",
+            model_type="confirmed_concentrated_liquidity_momentum_ranker",
+            purpose=(
+                "Test whether adding bounded turnover and volatility caps reduces tail losses in the "
+                "confirmed concentrated top5 candidate without symbol or industry blacklists."
+            ),
+            feature_groups=[
+                "price_momentum",
+                "volatility_risk",
+                "liquidity",
+                "regime",
+                "cross_sectional",
+            ],
+            prediction_horizon_days=20,
+            training_window_days=[120],
+            hyperparameter_grid={
+                "liquidity_weight": [1.0],
+                "momentum_weight": [0.25],
+                "industry_relative_weight": [0.0],
+                "min_return_20d_percentile": [0.85, 0.92],
+                "min_industry_return_20d_excess": [0.0, 0.12],
+                "max_turnover_rate_percentile": [0.93],
+                "max_volatility_20d_percentile": [0.94, 0.96],
+            },
+            selection_policy={
+                "mode": "concentrated_top_k",
+                "top_k": 5,
+                "evaluation_return_metric": "top_5_net_excess_mean",
+                "broad_top_quantile_metric": "diagnostic_only_not_promotion_gate_for_this_spec",
+                "confirmation_policy": "pit_momentum_industry_strength_turnover_volatility_filter",
+            },
+        ),
     ]
 
 

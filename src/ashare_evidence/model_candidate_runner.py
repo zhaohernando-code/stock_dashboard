@@ -321,6 +321,28 @@ def _score_row(
             + _safe_float(params.get("industry_relative_weight"), 0.0) * industry_score
             - _safe_float(params.get("volatility_penalty"), 0.0) * volatility
         )
+    if spec_type == "confirmed_concentrated_liquidity_momentum_ranker":
+        min_return_percentile = _safe_float(params.get("min_return_20d_percentile"), 0.85)
+        min_industry_excess = _safe_float(params.get("min_industry_return_20d_excess"), 0.0)
+        max_turnover_percentile = _safe_float(params.get("max_turnover_rate_percentile"), 1.0)
+        max_volatility_percentile = _safe_float(params.get("max_volatility_20d_percentile"), 1.0)
+        if (
+            values.get("return_20d_percentile", 0.0) < min_return_percentile
+            or values.get("industry_return_20d_excess", 0.0) < min_industry_excess
+            or values.get("turnover_rate_percentile", 0.0) > max_turnover_percentile
+            or values.get("volatility_20d_percentile", 0.0) > max_volatility_percentile
+        ):
+            return -1_000_000.0 + values.get("return_20d_percentile", 0.0)
+        liquidity_score = log1p(max(values.get("avg_amount_20d", 0.0), 0.0))
+        momentum_score = values.get("return_40d", 0.0) + values.get("return_20d", 0.0)
+        industry_score = values.get("industry_return_20d_excess", 0.0)
+        confirmation_score = values.get("return_20d_percentile", 0.0) + values.get("amount_10d_vs_20d", 0.0)
+        return (
+            _safe_float(params.get("liquidity_weight"), 1.0) * liquidity_score
+            + _safe_float(params.get("momentum_weight"), 0.25) * momentum_score
+            + _safe_float(params.get("industry_relative_weight"), 0.0) * industry_score
+            + 0.1 * confirmation_score
+        )
     return momentum
 
 

@@ -1471,3 +1471,11 @@ P1 model exploration no longer停留在“没有成功案例”。在先前 base
 - 80-date report `model-comparison-report-2e22bed9d56ff356`：best `trial-002` top5 net excess `0.1888`、positive top5 rate `1.0`、top10 net excess `0.1692`、DSR `1.0`、PBO `0.0`、winner dependency ready；comparison-level blocker only `governance_promotion_pending`。
 - 160-date report `model-comparison-report-dd08e1b37b308058`：best `trial-002` top5 net excess `0.0833`、positive top5 rate `0.6625`、top10 net excess `0.0718`、DSR `0.99996`、PBO `0.0`、winner dependency ready；removing top symbol/date/month still leaves positive mean net excess. However, 160-date Rank IC remains `-0.0299` and broad top-quantile net excess remains `-0.0140`, so claims must stay limited to concentrated top5 selection.
 - Production/dashboard promotion remains blocked. Required next gates are execution-aware labels and stress tests: T+1, limit-up/down buy/sellability, fees/slippage/stamp tax, ADV capacity/fill, cost stress, regime/month stability and governance approval. No dashboard exposure is allowed from the raw workbench artifacts.
+
+[2026-07-04T05:06:00+08:00] Confirmed top5 is the current收益最优 optimization; balanced top5 is a weak-regime control:
+进一步拆解 `concentrated_liquidity_momentum_20d_v1` 后，负贡献并不主要来自流动性不足，而来自动量确认弱、行业相对强度弱，以及局部极端换手/波动。优化不能硬编码股票或行业黑名单，因此本轮只用 PIT 动态特征注册了两个后续候选。
+
+补充说明
+- `confirmed_concentrated_liquidity_momentum_20d_v1` 加入 `return_20d_percentile` 和 `industry_return_20d_excess` 确认过滤。160-date report `model-comparison-report-af5214debc6b5fea`：best `trial-002` top5 net excess `0.0982`、positive top5 rate `0.6750`、top10 net excess `0.0681`、Rank IC `-0.0042`、DSR `0.999996`、PBO `0.0`、winner dependency ready。相对 base concentrated，收益和 rank 行为均改善，是当前收益最优 research candidate。
+- `balanced_confirmed_concentrated_liquidity_momentum_20d_v1` 在 confirmed 上叠加 turnover/volatility caps。160-date report `model-comparison-report-b7852b296bb2bca8`：best `trial-004` top5 net excess `0.0784`、positive top5 rate `0.7625`、top10 net excess `0.0420`、Rank IC `-0.0039`、DSR `0.999992`、PBO `0.0`、winner dependency ready。它牺牲强趋势收益，但把 Jan/Feb monthly means 从负转正，因此只能作为弱市/胜率控制候选，不是收益最优主线。
+- 下一步不应继续无限阈值调参。优先补 execution-aware label/gates：T+1、涨停买入/跌停卖出可成交性、费用/滑点/印花税、ADV capacity/fill，然后做 cost/capacity/regime stress。工程上还需要更快的 candidate evaluation cache/streaming digest，否则每个 160-date spec 约 10 分钟，搜索效率太低。

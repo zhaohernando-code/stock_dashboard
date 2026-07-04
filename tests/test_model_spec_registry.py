@@ -32,6 +32,8 @@ class ModelSpecRegistryTests(unittest.TestCase):
                 "liquidity_breakout_5d_v1",
                 "trend_quality_20d_v1",
                 "concentrated_liquidity_momentum_20d_v1",
+                "confirmed_concentrated_liquidity_momentum_20d_v1",
+                "balanced_confirmed_concentrated_liquidity_momentum_20d_v1",
             ],
         )
         for spec in artifact["model_specs"]:
@@ -43,11 +45,30 @@ class ModelSpecRegistryTests(unittest.TestCase):
         self.assertEqual(horizons["liquidity_breakout_5d_v1"], 5)
         self.assertEqual(horizons["trend_quality_20d_v1"], 20)
         self.assertEqual(horizons["concentrated_liquidity_momentum_20d_v1"], 20)
+        self.assertEqual(horizons["confirmed_concentrated_liquidity_momentum_20d_v1"], 20)
+        self.assertEqual(horizons["balanced_confirmed_concentrated_liquidity_momentum_20d_v1"], 20)
         concentrated = next(
             spec for spec in artifact["model_specs"] if spec["model_spec_id"] == "concentrated_liquidity_momentum_20d_v1"
         )
         self.assertEqual(concentrated["selection_policy"]["mode"], "concentrated_top_k")
         self.assertEqual(concentrated["selection_policy"]["evaluation_return_metric"], "top_5_net_excess_mean")
+        confirmed = next(
+            spec
+            for spec in artifact["model_specs"]
+            if spec["model_spec_id"] == "confirmed_concentrated_liquidity_momentum_20d_v1"
+        )
+        self.assertEqual(confirmed["selection_policy"]["mode"], "concentrated_top_k")
+        self.assertEqual(confirmed["selection_policy"]["confirmation_policy"], "pit_momentum_industry_strength_filter")
+        balanced = next(
+            spec
+            for spec in artifact["model_specs"]
+            if spec["model_spec_id"] == "balanced_confirmed_concentrated_liquidity_momentum_20d_v1"
+        )
+        self.assertEqual(balanced["selection_policy"]["mode"], "concentrated_top_k")
+        self.assertEqual(
+            balanced["selection_policy"]["confirmation_policy"],
+            "pit_momentum_industry_strength_turnover_volatility_filter",
+        )
 
     def test_dynamic_weight_spec_requires_oos_and_governance(self) -> None:
         artifact = build_model_spec_registry_artifact(validation_run_id="unit-run")
