@@ -1496,3 +1496,13 @@ P1 model exploration no longer停留在“没有成功案例”。在先前 base
 - Hard cash-switch report `model-comparison-report-53f0f7091c31c582`：path drawdown proxy 从 balanced 的 `-1.0856` 降到 `-0.0728`，但 top5 net excess 降到 `0.0441`，positive top5 rate `0.325`，Feb monthly mean 仍为负，PBO proxy `1.0`，OOS gate blocked。
 - Soft cash-switch report `model-comparison-report-53d479f49d08bd9c`：path drawdown proxy `-0.2297`，top5 net excess `0.0519`，positive top5 rate `0.425`，Feb/Mar monthly means 为负，PBO proxy `1.0`，OOS gate blocked。
 - 结论：cash-switch 机制可作为 future policy primitive 保留，但 benchmark-only cash-switch 不应作为下一轮主优化方向。优先探索 exit/hold-period logic、position sizing、真实可成交性和容量约束，而不是继续调 benchmark gate 阈值。
+
+[2026-07-04T06:46:00+08:00] Light PIT risk-scaled top5 is the first comparison-ready Short Pick model candidate:
+本轮继续优化 balanced concentrated top5，不再调 benchmark-only cash switch。固定 10 日退出被淘汰，轻量 PIT 风险仓位缩放成为当前第一条在 `model_comparison_report` 层面通过过拟合、赢家依赖和执行压力诊断的 research candidate。
+
+补充说明
+- 10d exit report `model-comparison-report-3acd5312ea1c17c1`：path drawdown 改善到 `-0.8880`，但 top5 net excess 只有 `0.0330`，positive top5 rate `0.6125`，DSR `0.9364 < 0.95`，Jan/Mar monthly means 为负，因此 killed。
+- 第一版更重的 risk scaling report `model-comparison-report-fe023f85fe7ce9dc`：path drawdown `-0.6092`、DSR/PBO ready、positive top5 rate `0.7625`，但 Jan monthly mean 仍略负 `-0.000089`，因此 blocked。
+- 轻量版 risk scaling report `model-comparison-report-863ce9de9ed3a4fb`：best `risk_scaled_balanced_concentrated_liquidity_momentum_20d_v1:trial-005`，top5 net excess `0.0722`，positive top5 rate `0.7750`，top10 net excess `0.0383`，DSR `0.999998`，PBO `0.0`，execution stress ready，all monthly means positive，path drawdown `-0.9362`，winner dependency ready。
+- Best params are PIT-only and non-symbol-specific: `full_weight_max_volatility_20d_percentile=0.90`, `full_weight_max_turnover_rate_percentile=0.85`, `min_position_weight=0.80`, with the same balanced entry filters. High-risk top5 picks are position-scaled; unused exposure is cash.
+- This is not production approval. Governance remains blocked by required real execution gates: T+1, suspension/limit-up buyability and limit-down sellability, fees/slippage/stamp tax, ADV capacity/fill, plus explicit governance promotion. Dashboard exposure remains forbidden.

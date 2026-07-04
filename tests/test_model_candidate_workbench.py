@@ -129,6 +129,7 @@ class ModelCandidateWorkbenchTests(unittest.TestCase):
         self.assertIn("fitted_model_digest", run["prediction_rows"][0])
         self.assertIn("selection_allowed", run["prediction_rows"][0])
         self.assertIn("selection_block_reasons", run["prediction_rows"][0])
+        self.assertIn("portfolio_weight", run["prediction_rows"][0])
         self.assertEqual(
             run["prediction_storage_policy"]["mode"],
             "bounded_inline_sample_with_full_trial_diagnostics",

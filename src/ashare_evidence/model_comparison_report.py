@@ -126,10 +126,19 @@ def _top_pick_returns(predictions: list[dict[str, Any]]) -> list[dict[str, Any]]
                 "as_of_date": as_of_date,
                 "month": as_of_date[:7],
                 "net_excess_return": _safe_float(best.get("target_label")),
+                "weighted_net_excess_return": _safe_float(best.get("target_label"))
+                * _safe_float(best.get("portfolio_weight"), 1.0),
+                "portfolio_weight": _safe_float(best.get("portfolio_weight"), 1.0),
                 "score": _safe_float(best.get("score")),
             }
         )
     return top_picks
+
+
+def _weighted_return(rows: list[dict[str, Any]]) -> float:
+    if not rows:
+        return 0.0
+    return mean(_safe_float(row.get("target_label")) * _safe_float(row.get("portfolio_weight"), 1.0) for row in rows)
 
 
 def _top5_returns_from_predictions(predictions: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -161,7 +170,8 @@ def _top5_returns_from_predictions(predictions: list[dict[str, Any]]) -> list[di
                 "as_of_date": as_of_date,
                 "month": as_of_date[:7],
                 "pick_count": len(top_rows),
-                "mean_net_excess_return": mean(_safe_float(row.get("target_label")) for row in top_rows),
+                "mean_net_excess_return": _weighted_return(top_rows),
+                "gross_exposure": mean(_safe_float(row.get("portfolio_weight"), 1.0) for row in top_rows),
                 "selection_state": "invested",
             }
         )
@@ -188,6 +198,9 @@ def _top5_picks_from_predictions(predictions: list[dict[str, Any]]) -> list[dict
                     "month": as_of_date[:7],
                     "rank": rank,
                     "net_excess_return": _safe_float(picked.get("target_label")),
+                    "weighted_net_excess_return": _safe_float(picked.get("target_label"))
+                    * _safe_float(picked.get("portfolio_weight"), 1.0),
+                    "portfolio_weight": _safe_float(picked.get("portfolio_weight"), 1.0),
                     "score": _safe_float(picked.get("score")),
                 }
             )
@@ -310,7 +323,10 @@ def _overfit_diagnostics(candidate_run: dict[str, Any], leaderboard: list[dict[s
 
 def _remove_and_recompute(top_picks: list[dict[str, Any]], *, field: str, value: str | None) -> dict[str, Any]:
     remaining = [row for row in top_picks if str(row.get(field) or "") != str(value or "")]
-    returns = [_safe_float(row.get("net_excess_return")) for row in remaining]
+    returns = [
+        _safe_float(row.get("weighted_net_excess_return"), _safe_float(row.get("net_excess_return")))
+        for row in remaining
+    ]
     return {
         "removed_field": field,
         "removed_value": value,
@@ -343,7 +359,10 @@ def _winner_dependency(candidate_run: dict[str, Any], leaderboard: list[dict[str
             else _top_pick_returns(_prediction_rows(candidate_run, best_trial_id))
         )
         pick_scope = "top_1_pick_by_date"
-    returns = [_safe_float(row.get("net_excess_return")) for row in top_picks]
+    returns = [
+        _safe_float(row.get("weighted_net_excess_return"), _safe_float(row.get("net_excess_return")))
+        for row in top_picks
+    ]
     baseline_mean = mean(returns) if returns else None
     blockers: list[str] = []
     if len(top_picks) < 20:
@@ -354,7 +373,10 @@ def _winner_dependency(candidate_run: dict[str, Any], leaderboard: list[dict[str
     by_date: dict[str, float] = {}
     by_month: dict[str, float] = {}
     for row in top_picks:
-        contribution = _safe_float(row.get("net_excess_return"))
+        contribution = _safe_float(
+            row.get("weighted_net_excess_return"),
+            _safe_float(row.get("net_excess_return")),
+        )
         symbol = str(row.get("symbol") or "")
         as_of_date = str(row.get("as_of_date") or "")
         month = str(row.get("month") or "")

@@ -377,6 +377,71 @@ def _selection_allowed(
     return not blockers, blockers
 
 
+def _linear_scale_down(value: float, *, full_weight_max: float, min_weight_at: float, min_weight: float) -> float:
+    if value <= full_weight_max:
+        return 1.0
+    if value >= min_weight_at:
+        return min_weight
+    denominator = max(min_weight_at - full_weight_max, 0.000001)
+    progress = (value - full_weight_max) / denominator
+    return 1.0 - progress * (1.0 - min_weight)
+
+
+def _position_weight(
+    feature_values: dict[str, float],
+    *,
+    selection_policy: dict[str, Any],
+    params: dict[str, Any],
+) -> float:
+    weighting = selection_policy.get("position_weighting") if isinstance(selection_policy, dict) else None
+    if not isinstance(weighting, dict) or not weighting.get("enabled"):
+        return 1.0
+    mode = str(weighting.get("mode") or "")
+    if mode != "volatility_turnover_scaled":
+        return 1.0
+    min_weight = min(
+        max(
+            _safe_float(
+                params.get("min_position_weight"),
+                _safe_float(weighting.get("min_position_weight"), 0.35),
+            ),
+            0.0,
+        ),
+        1.0,
+    )
+    volatility_scale = _linear_scale_down(
+        feature_values.get("volatility_20d_percentile", 0.0),
+        full_weight_max=_safe_float(
+            params.get("full_weight_max_volatility_20d_percentile"),
+            _safe_float(weighting.get("full_weight_max_volatility_20d_percentile"), 0.80),
+        ),
+        min_weight_at=_safe_float(
+            params.get("min_weight_volatility_20d_percentile"),
+            _safe_float(weighting.get("min_weight_volatility_20d_percentile"), 0.96),
+        ),
+        min_weight=min_weight,
+    )
+    turnover_scale = _linear_scale_down(
+        feature_values.get("turnover_rate_percentile", 0.0),
+        full_weight_max=_safe_float(
+            params.get("full_weight_max_turnover_rate_percentile"),
+            _safe_float(weighting.get("full_weight_max_turnover_rate_percentile"), 0.80),
+        ),
+        min_weight_at=_safe_float(
+            params.get("min_weight_turnover_rate_percentile"),
+            _safe_float(weighting.get("min_weight_turnover_rate_percentile"), 0.93),
+        ),
+        min_weight=min_weight,
+    )
+    return min(max(min(volatility_scale, turnover_scale), 0.0), 1.0)
+
+
+def _weighted_return(rows: list[dict[str, Any]]) -> float:
+    if not rows:
+        return 0.0
+    return mean(_safe_float(row.get("target_label")) * _safe_float(row.get("portfolio_weight"), 1.0) for row in rows)
+
+
 def _join_rows(feature_matrix: dict[str, Any], label_matrix: dict[str, Any]) -> list[dict[str, Any]]:
     labels_by_universe_id = {str(row.get("universe_row_id")): row for row in label_matrix.get("rows") or []}
     joined: list[dict[str, Any]] = []
@@ -467,8 +532,8 @@ def _trial_metrics(predictions: list[dict[str, Any]]) -> dict[str, Any]:
         bucket_size = max(1, len(ordered) // 5)
         top = [_safe_float(row.get("target_label")) for row in ordered[:bucket_size]]
         bottom = [_safe_float(row.get("target_label")) for row in ordered[-bucket_size:]]
-        top_5_returns.append(mean(_safe_float(row.get("target_label")) for row in ordered[: min(5, len(ordered))]))
-        top_10_returns.append(mean(_safe_float(row.get("target_label")) for row in ordered[: min(10, len(ordered))]))
+        top_5_returns.append(_weighted_return(ordered[: min(5, len(ordered))]))
+        top_10_returns.append(_weighted_return(ordered[: min(10, len(ordered))]))
         top_returns.append(mean(top))
         spreads.append(mean(top) - mean(bottom))
     return {
@@ -527,6 +592,9 @@ def _top_picks_by_date(predictions: list[dict[str, Any]]) -> list[dict[str, Any]
                 "as_of_date": as_of_date,
                 "month": as_of_date[:7],
                 "net_excess_return": _safe_float(best.get("target_label")),
+                "weighted_net_excess_return": _safe_float(best.get("target_label"))
+                * _safe_float(best.get("portfolio_weight"), 1.0),
+                "portfolio_weight": _safe_float(best.get("portfolio_weight"), 1.0),
                 "score": _safe_float(best.get("score")),
             }
         )
@@ -553,6 +621,9 @@ def _top_k_picks_by_date(predictions: list[dict[str, Any]], *, top_k: int) -> li
                     "month": as_of_date[:7],
                     "rank": rank,
                     "net_excess_return": _safe_float(picked.get("target_label")),
+                    "weighted_net_excess_return": _safe_float(picked.get("target_label"))
+                    * _safe_float(picked.get("portfolio_weight"), 1.0),
+                    "portfolio_weight": _safe_float(picked.get("portfolio_weight"), 1.0),
                     "score": _safe_float(picked.get("score")),
                 }
             )
@@ -588,7 +659,8 @@ def _top_k_returns_by_date(predictions: list[dict[str, Any]], *, top_k: int) -> 
                 "as_of_date": as_of_date,
                 "month": as_of_date[:7],
                 "pick_count": len(top_rows),
-                "mean_net_excess_return": mean(_safe_float(row.get("target_label")) for row in top_rows),
+                "mean_net_excess_return": _weighted_return(top_rows),
+                "gross_exposure": mean(_safe_float(row.get("portfolio_weight"), 1.0) for row in top_rows),
                 "selection_state": "invested",
             }
         )
@@ -700,6 +772,11 @@ def build_walk_forward_model_candidate_run_artifact(
                         selection_policy=spec.get("selection_policy") or {},
                         params=params,
                     )
+                    portfolio_weight = _position_weight(
+                        joined["feature_values_flat"],
+                        selection_policy=spec.get("selection_policy") or {},
+                        params=params,
+                    )
                     score = _score_row(
                         joined["feature_row"],
                         model_spec=spec,
@@ -721,6 +798,7 @@ def build_walk_forward_model_candidate_run_artifact(
                         "label_status": joined["label_status"],
                         "selection_allowed": selection_allowed,
                         "selection_block_reasons": selection_block_reasons,
+                        "portfolio_weight": portfolio_weight if selection_allowed else 0.0,
                     }
                     prediction["row_digest"] = _stable_digest(prediction)
                     trial_predictions.append(prediction)

@@ -293,6 +293,38 @@ def default_model_specs() -> list[dict[str, Any]]:
             },
         ),
         _base_spec(
+            model_spec_id="confirmed_concentrated_liquidity_momentum_10d_v1",
+            model_type="confirmed_concentrated_liquidity_momentum_ranker",
+            purpose=(
+                "Test whether the confirmed concentrated top5 entry logic has better path stability "
+                "with a 10-trading-day exit horizon."
+            ),
+            feature_groups=[
+                "price_momentum",
+                "volatility_risk",
+                "liquidity",
+                "regime",
+                "cross_sectional",
+            ],
+            prediction_horizon_days=10,
+            training_window_days=[120],
+            hyperparameter_grid={
+                "liquidity_weight": [1.0],
+                "momentum_weight": [0.25],
+                "industry_relative_weight": [0.0, 0.25],
+                "min_return_20d_percentile": [0.85, 0.92],
+                "min_industry_return_20d_excess": [0.0, 0.12],
+            },
+            selection_policy={
+                "mode": "concentrated_top_k",
+                "top_k": 5,
+                "evaluation_return_metric": "top_5_net_excess_mean",
+                "broad_top_quantile_metric": "diagnostic_only_not_promotion_gate_for_this_spec",
+                "confirmation_policy": "pit_momentum_industry_strength_filter",
+                "exit_policy": "fixed_10_trading_day_horizon",
+            },
+        ),
+        _base_spec(
             model_spec_id="balanced_confirmed_concentrated_liquidity_momentum_20d_v1",
             model_type="confirmed_concentrated_liquidity_momentum_ranker",
             purpose=(
@@ -323,6 +355,40 @@ def default_model_specs() -> list[dict[str, Any]]:
                 "evaluation_return_metric": "top_5_net_excess_mean",
                 "broad_top_quantile_metric": "diagnostic_only_not_promotion_gate_for_this_spec",
                 "confirmation_policy": "pit_momentum_industry_strength_turnover_volatility_filter",
+            },
+        ),
+        _base_spec(
+            model_spec_id="balanced_confirmed_concentrated_liquidity_momentum_10d_v1",
+            model_type="confirmed_concentrated_liquidity_momentum_ranker",
+            purpose=(
+                "Test whether the balanced concentrated top5 entry logic has better path stability "
+                "with a 10-trading-day exit horizon."
+            ),
+            feature_groups=[
+                "price_momentum",
+                "volatility_risk",
+                "liquidity",
+                "regime",
+                "cross_sectional",
+            ],
+            prediction_horizon_days=10,
+            training_window_days=[120],
+            hyperparameter_grid={
+                "liquidity_weight": [1.0],
+                "momentum_weight": [0.25],
+                "industry_relative_weight": [0.0],
+                "min_return_20d_percentile": [0.85, 0.92],
+                "min_industry_return_20d_excess": [0.0, 0.12],
+                "max_turnover_rate_percentile": [0.93],
+                "max_volatility_20d_percentile": [0.94, 0.96],
+            },
+            selection_policy={
+                "mode": "concentrated_top_k",
+                "top_k": 5,
+                "evaluation_return_metric": "top_5_net_excess_mean",
+                "broad_top_quantile_metric": "diagnostic_only_not_promotion_gate_for_this_spec",
+                "confirmation_policy": "pit_momentum_industry_strength_turnover_volatility_filter",
+                "exit_policy": "fixed_10_trading_day_horizon",
             },
         ),
         _base_spec(
@@ -364,6 +430,52 @@ def default_model_specs() -> list[dict[str, Any]]:
                     "min_benchmark_return_10d": -0.004,
                     "min_benchmark_return_20d": -1.0,
                     "max_benchmark_volatility_20d": 999.0,
+                },
+            },
+        ),
+        _base_spec(
+            model_spec_id="risk_scaled_balanced_concentrated_liquidity_momentum_20d_v1",
+            model_type="confirmed_concentrated_liquidity_momentum_ranker",
+            purpose=(
+                "Test whether PIT volatility/turnover position scaling can keep the balanced top5 signal's "
+                "20-trading-day return edge while reducing portfolio path drawdown without date, symbol or industry filters."
+            ),
+            feature_groups=[
+                "price_momentum",
+                "volatility_risk",
+                "liquidity",
+                "regime",
+                "cross_sectional",
+            ],
+            prediction_horizon_days=20,
+            training_window_days=[120],
+            hyperparameter_grid={
+                "liquidity_weight": [1.0],
+                "momentum_weight": [0.25],
+                "industry_relative_weight": [0.0],
+                "min_return_20d_percentile": [0.85],
+                "min_industry_return_20d_excess": [0.0],
+                "max_turnover_rate_percentile": [0.93],
+                "max_volatility_20d_percentile": [0.96],
+                "full_weight_max_volatility_20d_percentile": [0.85, 0.90],
+                "full_weight_max_turnover_rate_percentile": [0.85],
+                "min_position_weight": [0.50, 0.65, 0.80],
+            },
+            selection_policy={
+                "mode": "concentrated_top_k",
+                "top_k": 5,
+                "evaluation_return_metric": "top_5_net_excess_mean",
+                "broad_top_quantile_metric": "diagnostic_only_not_promotion_gate_for_this_spec",
+                "confirmation_policy": "pit_momentum_industry_strength_turnover_volatility_filter",
+                "position_weighting": {
+                    "enabled": True,
+                    "mode": "volatility_turnover_scaled",
+                    "cash_return": 0.0,
+                    "full_weight_max_volatility_20d_percentile": 0.80,
+                    "min_weight_volatility_20d_percentile": 0.96,
+                    "full_weight_max_turnover_rate_percentile": 0.80,
+                    "min_weight_turnover_rate_percentile": 0.93,
+                    "min_position_weight": 0.35,
                 },
             },
         ),
