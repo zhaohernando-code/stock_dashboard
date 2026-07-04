@@ -140,7 +140,19 @@ def _top5_returns_from_predictions(predictions: list[dict[str, Any]]) -> list[di
         by_date.setdefault(str(row.get("as_of_date") or ""), []).append(row)
     returns: list[dict[str, Any]] = []
     for as_of_date, rows in sorted(by_date.items()):
-        ordered = sorted(rows, key=lambda row: _safe_float(row.get("score")), reverse=True)
+        active_rows = [row for row in rows if row.get("selection_allowed", True)]
+        if not active_rows:
+            returns.append(
+                {
+                    "as_of_date": as_of_date,
+                    "month": as_of_date[:7],
+                    "pick_count": 0,
+                    "mean_net_excess_return": 0.0,
+                    "selection_state": "cash",
+                }
+            )
+            continue
+        ordered = sorted(active_rows, key=lambda row: _safe_float(row.get("score")), reverse=True)
         top_rows = ordered[: min(5, len(ordered))]
         if not top_rows:
             continue
@@ -150,6 +162,7 @@ def _top5_returns_from_predictions(predictions: list[dict[str, Any]]) -> list[di
                 "month": as_of_date[:7],
                 "pick_count": len(top_rows),
                 "mean_net_excess_return": mean(_safe_float(row.get("target_label")) for row in top_rows),
+                "selection_state": "invested",
             }
         )
     return returns
@@ -163,7 +176,10 @@ def _top5_picks_from_predictions(predictions: list[dict[str, Any]]) -> list[dict
         by_date.setdefault(str(row.get("as_of_date") or ""), []).append(row)
     picks: list[dict[str, Any]] = []
     for as_of_date, rows in sorted(by_date.items()):
-        ordered = sorted(rows, key=lambda row: _safe_float(row.get("score")), reverse=True)
+        active_rows = [row for row in rows if row.get("selection_allowed", True)]
+        if not active_rows:
+            continue
+        ordered = sorted(active_rows, key=lambda row: _safe_float(row.get("score")), reverse=True)
         for rank, picked in enumerate(ordered[: min(5, len(ordered))], start=1):
             picks.append(
                 {

@@ -1488,3 +1488,11 @@ P1 model exploration no longer停留在“没有成功案例”。在先前 base
 - Confirmed refreshed report `model-comparison-report-24ae0a4e31be1bde`：top5 net excess `0.0982`，2x/3x cost stress 仍为正，收益最优地位不变；但 Jan/Feb monthly means 为负，path drawdown proxy `-1.2213`，因此仍 blocked。
 - Balanced refreshed report `model-comparison-report-8445b5b9b1ef2d9e`：top5 net excess `0.0784`，positive top5 rate `0.7625`，2x/3x cost stress 仍为正，negative months cleared；但 path drawdown proxy `-1.0856` 仍略低于当前 stress 阈值，仍 blocked。
 - 下一轮优化重点改为 path drawdown：退出规则、持有期/现金开关、弱市 exposure control、真实 T+1/limit/ADV fill label，而不是继续堆 entry filters。
+
+[2026-07-04T05:58:00+08:00] Benchmark-only cash-switch is killed as the next top5 optimization path:
+为了降低 balanced 候选的 path drawdown，本轮在 candidate runner 中加入 selection-policy cash-switch 支持：被 regime gate 关闭的日期按 cash return `0.0` 计入 top5 returns，而不是从样本中删除。机制可以保留，但用基准收益做硬/软空仓开关的具体候选失败。
+
+补充说明
+- Hard cash-switch report `model-comparison-report-53f0f7091c31c582`：path drawdown proxy 从 balanced 的 `-1.0856` 降到 `-0.0728`，但 top5 net excess 降到 `0.0441`，positive top5 rate `0.325`，Feb monthly mean 仍为负，PBO proxy `1.0`，OOS gate blocked。
+- Soft cash-switch report `model-comparison-report-53d479f49d08bd9c`：path drawdown proxy `-0.2297`，top5 net excess `0.0519`，positive top5 rate `0.425`，Feb/Mar monthly means 为负，PBO proxy `1.0`，OOS gate blocked。
+- 结论：cash-switch 机制可作为 future policy primitive 保留，但 benchmark-only cash-switch 不应作为下一轮主优化方向。优先探索 exit/hold-period logic、position sizing、真实可成交性和容量约束，而不是继续调 benchmark gate 阈值。

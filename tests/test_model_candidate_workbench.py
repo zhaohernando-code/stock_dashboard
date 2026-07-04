@@ -127,6 +127,8 @@ class ModelCandidateWorkbenchTests(unittest.TestCase):
         self.assertIn("top_10_net_excess_mean", run["trial_summaries"][0]["metrics"])
         self.assertGreater(len(run["trial_diagnostics"][0]["date_rank_ics"]), 0)
         self.assertIn("fitted_model_digest", run["prediction_rows"][0])
+        self.assertIn("selection_allowed", run["prediction_rows"][0])
+        self.assertIn("selection_block_reasons", run["prediction_rows"][0])
         self.assertEqual(
             run["prediction_storage_policy"]["mode"],
             "bounded_inline_sample_with_full_trial_diagnostics",

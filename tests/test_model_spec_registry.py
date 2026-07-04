@@ -34,6 +34,7 @@ class ModelSpecRegistryTests(unittest.TestCase):
                 "concentrated_liquidity_momentum_20d_v1",
                 "confirmed_concentrated_liquidity_momentum_20d_v1",
                 "balanced_confirmed_concentrated_liquidity_momentum_20d_v1",
+                "regime_gated_balanced_concentrated_liquidity_momentum_20d_v1",
             ],
         )
         for spec in artifact["model_specs"]:
@@ -47,6 +48,7 @@ class ModelSpecRegistryTests(unittest.TestCase):
         self.assertEqual(horizons["concentrated_liquidity_momentum_20d_v1"], 20)
         self.assertEqual(horizons["confirmed_concentrated_liquidity_momentum_20d_v1"], 20)
         self.assertEqual(horizons["balanced_confirmed_concentrated_liquidity_momentum_20d_v1"], 20)
+        self.assertEqual(horizons["regime_gated_balanced_concentrated_liquidity_momentum_20d_v1"], 20)
         concentrated = next(
             spec for spec in artifact["model_specs"] if spec["model_spec_id"] == "concentrated_liquidity_momentum_20d_v1"
         )
@@ -69,6 +71,13 @@ class ModelSpecRegistryTests(unittest.TestCase):
             balanced["selection_policy"]["confirmation_policy"],
             "pit_momentum_industry_strength_turnover_volatility_filter",
         )
+        regime_gated = next(
+            spec
+            for spec in artifact["model_specs"]
+            if spec["model_spec_id"] == "regime_gated_balanced_concentrated_liquidity_momentum_20d_v1"
+        )
+        self.assertEqual(regime_gated["selection_policy"]["mode"], "concentrated_top_k")
+        self.assertTrue(regime_gated["selection_policy"]["cash_switch"]["enabled"])
 
     def test_dynamic_weight_spec_requires_oos_and_governance(self) -> None:
         artifact = build_model_spec_registry_artifact(validation_run_id="unit-run")

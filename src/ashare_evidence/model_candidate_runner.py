@@ -346,6 +346,37 @@ def _score_row(
     return momentum
 
 
+def _selection_allowed(
+    feature_values: dict[str, float],
+    *,
+    selection_policy: dict[str, Any],
+    params: dict[str, Any],
+) -> tuple[bool, list[str]]:
+    cash_switch = selection_policy.get("cash_switch") if isinstance(selection_policy, dict) else None
+    if not isinstance(cash_switch, dict) or not cash_switch.get("enabled"):
+        return True, []
+    blockers: list[str] = []
+    min_benchmark_return_10d = _safe_float(
+        params.get("min_benchmark_return_10d"),
+        _safe_float(cash_switch.get("min_benchmark_return_10d"), -1.0),
+    )
+    min_benchmark_return_20d = _safe_float(
+        params.get("min_benchmark_return_20d"),
+        _safe_float(cash_switch.get("min_benchmark_return_20d"), -1.0),
+    )
+    max_benchmark_volatility_20d = _safe_float(
+        params.get("max_benchmark_volatility_20d"),
+        _safe_float(cash_switch.get("max_benchmark_volatility_20d"), 999.0),
+    )
+    if feature_values.get("benchmark_return_10d", 0.0) < min_benchmark_return_10d:
+        blockers.append("benchmark_return_10d_below_cash_switch")
+    if feature_values.get("benchmark_return_20d", 0.0) < min_benchmark_return_20d:
+        blockers.append("benchmark_return_20d_below_cash_switch")
+    if feature_values.get("benchmark_volatility_20d", 0.0) > max_benchmark_volatility_20d:
+        blockers.append("benchmark_volatility_20d_above_cash_switch")
+    return not blockers, blockers
+
+
 def _join_rows(feature_matrix: dict[str, Any], label_matrix: dict[str, Any]) -> list[dict[str, Any]]:
     labels_by_universe_id = {str(row.get("universe_row_id")): row for row in label_matrix.get("rows") or []}
     joined: list[dict[str, Any]] = []
@@ -422,10 +453,17 @@ def _trial_metrics(predictions: list[dict[str, Any]]) -> dict[str, Any]:
     for rows in by_date.values():
         if len(rows) < 2:
             continue
+        if not any(row.get("selection_allowed", True) for row in rows):
+            top_5_returns.append(0.0)
+            top_10_returns.append(0.0)
+            top_returns.append(0.0)
+            spreads.append(0.0)
+            continue
         scores = [_safe_float(row.get("score")) for row in rows]
         labels = [_safe_float(row.get("target_label")) for row in rows]
         rank_ics.append(spearman_correlation(scores, labels))
-        ordered = sorted(rows, key=lambda row: _safe_float(row.get("score")), reverse=True)
+        active_rows = [row for row in rows if row.get("selection_allowed", True)]
+        ordered = sorted(active_rows, key=lambda row: _safe_float(row.get("score")), reverse=True)
         bucket_size = max(1, len(ordered) // 5)
         top = [_safe_float(row.get("target_label")) for row in ordered[:bucket_size]]
         bottom = [_safe_float(row.get("target_label")) for row in ordered[-bucket_size:]]
@@ -479,7 +517,10 @@ def _top_picks_by_date(predictions: list[dict[str, Any]]) -> list[dict[str, Any]
         by_date.setdefault(str(row.get("as_of_date") or ""), []).append(row)
     top_picks: list[dict[str, Any]] = []
     for as_of_date, rows in sorted(by_date.items()):
-        best = max(rows, key=lambda row: _safe_float(row.get("score")))
+        active_rows = [row for row in rows if row.get("selection_allowed", True)]
+        if not active_rows:
+            continue
+        best = max(active_rows, key=lambda row: _safe_float(row.get("score")))
         top_picks.append(
             {
                 "symbol": best.get("symbol"),
@@ -500,7 +541,10 @@ def _top_k_picks_by_date(predictions: list[dict[str, Any]], *, top_k: int) -> li
         by_date.setdefault(str(row.get("as_of_date") or ""), []).append(row)
     picks: list[dict[str, Any]] = []
     for as_of_date, rows in sorted(by_date.items()):
-        ordered = sorted(rows, key=lambda row: _safe_float(row.get("score")), reverse=True)
+        active_rows = [row for row in rows if row.get("selection_allowed", True)]
+        if not active_rows:
+            continue
+        ordered = sorted(active_rows, key=lambda row: _safe_float(row.get("score")), reverse=True)
         for rank, picked in enumerate(ordered[: max(1, top_k)], start=1):
             picks.append(
                 {
@@ -523,7 +567,19 @@ def _top_k_returns_by_date(predictions: list[dict[str, Any]], *, top_k: int) -> 
         by_date.setdefault(str(row.get("as_of_date") or ""), []).append(row)
     returns: list[dict[str, Any]] = []
     for as_of_date, rows in sorted(by_date.items()):
-        ordered = sorted(rows, key=lambda row: _safe_float(row.get("score")), reverse=True)
+        active_rows = [row for row in rows if row.get("selection_allowed", True)]
+        if not active_rows:
+            returns.append(
+                {
+                    "as_of_date": as_of_date,
+                    "month": as_of_date[:7],
+                    "pick_count": 0,
+                    "mean_net_excess_return": 0.0,
+                    "selection_state": "cash",
+                }
+            )
+            continue
+        ordered = sorted(active_rows, key=lambda row: _safe_float(row.get("score")), reverse=True)
         top_rows = ordered[: max(1, top_k)]
         if not top_rows:
             continue
@@ -533,6 +589,7 @@ def _top_k_returns_by_date(predictions: list[dict[str, Any]], *, top_k: int) -> 
                 "month": as_of_date[:7],
                 "pick_count": len(top_rows),
                 "mean_net_excess_return": mean(_safe_float(row.get("target_label")) for row in top_rows),
+                "selection_state": "invested",
             }
         )
     return returns
@@ -638,6 +695,11 @@ def build_walk_forward_model_candidate_run_artifact(
                     }
                 )
                 for joined in test_rows:
+                    selection_allowed, selection_block_reasons = _selection_allowed(
+                        joined["feature_values_flat"],
+                        selection_policy=spec.get("selection_policy") or {},
+                        params=params,
+                    )
                     score = _score_row(
                         joined["feature_row"],
                         model_spec=spec,
@@ -657,6 +719,8 @@ def build_walk_forward_model_candidate_run_artifact(
                         "target_label": _target(joined, horizon_days=horizon_days),
                         "target_horizon_days": horizon_days,
                         "label_status": joined["label_status"],
+                        "selection_allowed": selection_allowed,
+                        "selection_block_reasons": selection_block_reasons,
                     }
                     prediction["row_digest"] = _stable_digest(prediction)
                     trial_predictions.append(prediction)
