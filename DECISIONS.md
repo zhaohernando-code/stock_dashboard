@@ -1506,3 +1506,12 @@ P1 model exploration no longer停留在“没有成功案例”。在先前 base
 - 轻量版 risk scaling report `model-comparison-report-863ce9de9ed3a4fb`：best `risk_scaled_balanced_concentrated_liquidity_momentum_20d_v1:trial-005`，top5 net excess `0.0722`，positive top5 rate `0.7750`，top10 net excess `0.0383`，DSR `0.999998`，PBO `0.0`，execution stress ready，all monthly means positive，path drawdown `-0.9362`，winner dependency ready。
 - Best params are PIT-only and non-symbol-specific: `full_weight_max_volatility_20d_percentile=0.90`, `full_weight_max_turnover_rate_percentile=0.85`, `min_position_weight=0.80`, with the same balanced entry filters. High-risk top5 picks are position-scaled; unused exposure is cash.
 - This is not production approval. Governance remains blocked by required real execution gates: T+1, suspension/limit-up buyability and limit-down sellability, fees/slippage/stamp tax, ADV capacity/fill, plus explicit governance promotion. Dashboard exposure remains forbidden.
+
+[2026-07-04T07:25:00+08:00] Risk-scaled top5 is downgraded after long-window return reality check:
+上条 decision 的“comparison-ready”只能说明短窗 report gate 通过，不能说明策略达标。补跑固定参数的 720-date 轻量历史资金曲线后，`risk_scaled_balanced_concentrated_liquidity_momentum_20d_v1` 必须降级为 diagnostic risk-control line，不再作为候选主线。
+
+补充说明
+- 720-date lightweight backtest 覆盖信号日 `2023-06-13` 到 `2026-05-27`，3121 只新开户主板候选，20 日持有，round-trip cost `0.1%`，按同一 PIT 选股和仓位缩放公式计算。
+- Rolling 20-sleeve 资金曲线：总收益 `+43.0%`、年化约 `+12.5%`、最大回撤约 `-43.3%`；同期沪深300约 `+29.9%`、年化约 `+9.0%`、最大回撤约 `-21.4%`。Non-overlap 20d rebalance 只有 `+17.7%`，最大回撤约 `-49.7%`。
+- 该结果远低于当前 Short Pick V2 quiet champion 的已知目标线：`quiet_r2_poolhot10_mtw__fixed85_top5_v1` 历史总收益约 `+271.2%`，年化约 `53.96%`，最大回撤约 `-11.9%`；也不满足 2026-06-13 定下的 30% 年化门槛。
+- 结论：这个模型只证明“近期窗口里风险缩放能改善路径诊断”，不能作为“模型找到理想策略”的成功案例。后续模型搜索必须把 V1/V2 冻结/quiet champion 和回撤反转控制作为显式收益下限；新模型允许牺牲少量收益换稳定性，但不能把三年收益降到 `+43%` 且回撤扩大到 `-43%`。
