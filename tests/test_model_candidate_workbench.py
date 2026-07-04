@@ -123,6 +123,8 @@ class ModelCandidateWorkbenchTests(unittest.TestCase):
         self.assertGreater(run["stored_prediction_row_count"], 0)
         self.assertEqual(run["evaluable_row_count"], run["joined_row_count"])
         self.assertGreater(len(run["trial_summaries"][0]["fit_summaries"]), 0)
+        self.assertIn("top_5_net_excess_mean", run["trial_summaries"][0]["metrics"])
+        self.assertIn("top_10_net_excess_mean", run["trial_summaries"][0]["metrics"])
         self.assertGreater(len(run["trial_diagnostics"][0]["date_rank_ics"]), 0)
         self.assertIn("fitted_model_digest", run["prediction_rows"][0])
         self.assertEqual(
@@ -168,6 +170,7 @@ class ModelCandidateWorkbenchTests(unittest.TestCase):
         self.assertEqual(report["promotion_status"], "blocked_from_production")
         self.assertEqual(report["summary"]["candidate_run_id"], run["artifact_id"])
         self.assertEqual(len(report["candidate_leaderboard"]), 1)
+        self.assertIn("top_5_net_excess_mean", report["candidate_leaderboard"][0])
         self.assertEqual(report["overfit_diagnostics"]["diagnostic_scope"], "candidate_run_trial_split_proxy")
         self.assertEqual(report["overfit_diagnostics"]["period_source"], "best_trial_as_of_date_rank_ic")
         self.assertIn(

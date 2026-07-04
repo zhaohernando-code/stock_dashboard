@@ -98,6 +98,8 @@ class ModelFeatureDiagnosticsTests(unittest.TestCase):
         self.assertGreaterEqual(payload["tested_feature_count"], 20)
         self.assertEqual(payload["feature_leaderboard"][0]["feature_name"], "return_5d")
         self.assertTrue(payload["feature_leaderboard"][0]["passes_basic_signal_gate"])
+        self.assertIn("top_5_net_excess_mean", payload["feature_leaderboard"][0])
+        self.assertIn("top_10_net_excess_mean", payload["feature_leaderboard"][0])
         self.assertEqual(payload["candidate_generation_hints"][0]["status"], "eligible_for_candidate_spec_seed")
 
     def test_diagnostic_feature_universe_includes_existing_matrix_fields_beyond_initial_ten(self) -> None:
@@ -108,6 +110,8 @@ class ModelFeatureDiagnosticsTests(unittest.TestCase):
         self.assertIn("volatility_10d", feature_names)
         self.assertIn("max_drawdown_40d", feature_names)
         self.assertIn("avg_amount_10d", feature_names)
+        self.assertIn("low_turnover_percentile", feature_names)
+        self.assertIn("industry_return_20d_excess", feature_names)
 
     def test_run_writes_report_to_research_validation_store(self) -> None:
         feature_matrix, label_matrix = self._matrices()

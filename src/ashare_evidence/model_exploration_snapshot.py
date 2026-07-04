@@ -15,7 +15,7 @@ from ashare_evidence.models import MarketBar, Stock
 from ashare_evidence.research_artifact_store import write_research_validation_artifact
 
 MODEL_EXPLORATION_PROTOCOL_VERSION = "shortpick_model_exploration_p1:v1"
-MODEL_EXPLORATION_FEATURE_VERSION = "shortpick_model_pit_feature_matrix:v1"
+MODEL_EXPLORATION_FEATURE_VERSION = "shortpick_model_pit_feature_matrix:v2"
 MODEL_EXPLORATION_LABEL_VERSION = "shortpick_model_executable_label_matrix:v1"
 MODEL_EXPLORATION_ACCOUNT_PROFILE = "new_retail_cash_account"
 DEFAULT_BENCHMARK_SYMBOL = "000300.SH"
@@ -44,6 +44,16 @@ def _pct_change(current: float, previous: float) -> float | None:
 
 def _mean(values: list[float]) -> float:
     return mean(values) if values else 0.0
+
+
+def _median(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2
 
 
 def _std(values: list[float]) -> float:
@@ -250,6 +260,82 @@ def _missing_feature_flags(feature_values: dict[str, Any], benchmark_until_as_of
         if isinstance(group, dict) and any(value is None for value in group.values()):
             flags.append(f"{group_name}_partial")
     return sorted(set(flags))
+
+
+def _group_value(row: dict[str, Any], group: str, key: str) -> float:
+    return _safe_float(((row.get("feature_values") or {}).get(group) or {}).get(key))
+
+
+def _percentiles(values: list[float]) -> list[float]:
+    if len(values) <= 1:
+        return [0.0 for _ in values]
+    order = sorted(range(len(values)), key=lambda index: values[index])
+    ranks = [0.0 for _ in values]
+    for rank, index in enumerate(order):
+        ranks[index] = rank / (len(values) - 1)
+    return ranks
+
+
+def _enrich_cross_sectional_features(
+    feature_rows: list[dict[str, Any]],
+    universe_rows: list[dict[str, Any]],
+) -> None:
+    universe_by_row_id = {str(row["row_id"]): row for row in universe_rows}
+    rows_by_date: dict[str, list[dict[str, Any]]] = {}
+    for row in feature_rows:
+        rows_by_date.setdefault(str(row["as_of_date"]), []).append(row)
+
+    percentile_specs = {
+        "return_5d": ("price_momentum", "return_5d"),
+        "return_20d": ("price_momentum", "return_20d"),
+        "turnover_rate": ("liquidity", "turnover_rate"),
+        "volatility_20d": ("volatility_risk", "volatility_20d"),
+        "amount_vs_20d_avg": ("crowding", "amount_vs_20d_avg"),
+    }
+    for rows in rows_by_date.values():
+        percentile_values: dict[str, list[float]] = {}
+        for output_name, (group, key) in percentile_specs.items():
+            percentile_values[f"{output_name}_pct"] = _percentiles([_group_value(row, group, key) for row in rows])
+
+        industry_return_5d: dict[str, list[float]] = {}
+        industry_return_20d: dict[str, list[float]] = {}
+        for row in rows:
+            universe_row = universe_by_row_id.get(str(row.get("universe_row_id"))) or {}
+            industry_name = str(universe_row.get("industry_name") or "unknown")
+            industry_return_5d.setdefault(industry_name, []).append(_group_value(row, "price_momentum", "return_5d"))
+            industry_return_20d.setdefault(industry_name, []).append(_group_value(row, "price_momentum", "return_20d"))
+        industry_median_5d = {industry: _median(values) for industry, values in industry_return_5d.items()}
+        industry_median_20d = {industry: _median(values) for industry, values in industry_return_20d.items()}
+
+        for index, row in enumerate(rows):
+            values = row["feature_values"]
+            avg_amount_10d = _group_value(row, "liquidity", "avg_amount_10d")
+            avg_amount_20d = _group_value(row, "liquidity", "avg_amount_20d")
+            volatility_10d = _group_value(row, "volatility_risk", "volatility_10d")
+            volatility_20d = _group_value(row, "volatility_risk", "volatility_20d")
+            universe_row = universe_by_row_id.get(str(row.get("universe_row_id"))) or {}
+            industry_name = str(universe_row.get("industry_name") or "unknown")
+            values["cross_sectional"] = {
+                "return_5d_percentile": percentile_values["return_5d_pct"][index],
+                "return_20d_percentile": percentile_values["return_20d_pct"][index],
+                "turnover_rate_percentile": percentile_values["turnover_rate_pct"][index],
+                "volatility_20d_percentile": percentile_values["volatility_20d_pct"][index],
+                "amount_vs_20d_avg_percentile": percentile_values["amount_vs_20d_avg_pct"][index],
+                "low_turnover_percentile": 1.0 - percentile_values["turnover_rate_pct"][index],
+                "low_volatility_percentile": 1.0 - percentile_values["volatility_20d_pct"][index],
+                "industry_return_5d_excess": _group_value(row, "price_momentum", "return_5d")
+                - industry_median_5d.get(industry_name, 0.0),
+                "industry_return_20d_excess": _group_value(row, "price_momentum", "return_20d")
+                - industry_median_20d.get(industry_name, 0.0),
+                "amount_10d_vs_20d": avg_amount_10d / max(avg_amount_20d, 1.0) - 1.0,
+                "volatility_10d_vs_20d": volatility_10d / max(volatility_20d, 0.000001) - 1.0,
+            }
+            row["feature_group_versions"]["cross_sectional"] = "v1"
+            if any(value is None for value in values["cross_sectional"].values()):
+                row["missing_feature_flags"] = sorted(
+                    set(row.get("missing_feature_flags") or []) | {"cross_sectional_partial"}
+                )
+            row["row_digest"] = _stable_digest({key: value for key, value in row.items() if key != "row_digest"})
 
 
 def _label_for_row(
@@ -520,6 +606,7 @@ def build_model_exploration_p1_artifacts(
                 )
             )
 
+    _enrich_cross_sectional_features(feature_rows, universe_rows)
     universe_digest = _stable_digest(universe_rows)
     feature_digest = _stable_digest(feature_rows)
     label_digest = _stable_digest(label_rows)
@@ -612,6 +699,7 @@ def build_model_exploration_p1_artifacts(
             "execution",
             "regime",
             "crowding",
+            "cross_sectional",
         ],
         "rows": feature_rows,
     }

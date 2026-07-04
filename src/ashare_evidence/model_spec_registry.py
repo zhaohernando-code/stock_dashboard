@@ -52,6 +52,7 @@ def _base_spec(
     training_window_days: list[int],
     prediction_horizon_days: int = 10,
     dynamic_weight_policy: dict[str, Any] | None = None,
+    selection_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     max_trials = _grid_trial_count(hyperparameter_grid)
     return {
@@ -76,6 +77,11 @@ def _base_spec(
         "cost_model": {
             "round_trip_cost": 0.001,
             "stress_multiplier": 2.0,
+        },
+        "selection_policy": selection_policy
+        or {
+            "mode": "broad_rank_top_quantile",
+            "evaluation_return_metric": "top_quantile_net_excess_mean",
         },
         "promotion_gates": _promotion_gates(),
         "production_effect": "forbidden",
@@ -227,6 +233,32 @@ def default_model_specs() -> list[dict[str, Any]]:
                 "trend_weight": [0.8, 1.0],
                 "high_distance_weight": [0.4, 0.5],
                 "volatility_penalty": [0.35, 0.45],
+            },
+        ),
+        _base_spec(
+            model_spec_id="concentrated_liquidity_momentum_20d_v1",
+            model_type="concentrated_liquidity_momentum_ranker",
+            purpose="Test whether the diagnostic top5 liquidity/momentum seed can survive walk-forward gates as a concentrated strategy candidate.",
+            feature_groups=[
+                "price_momentum",
+                "volatility_risk",
+                "liquidity",
+                "regime",
+                "cross_sectional",
+            ],
+            prediction_horizon_days=20,
+            training_window_days=[120],
+            hyperparameter_grid={
+                "liquidity_weight": [1.0],
+                "momentum_weight": [0.0, 0.25],
+                "industry_relative_weight": [0.0, 0.25],
+                "volatility_penalty": [0.0, 0.25],
+            },
+            selection_policy={
+                "mode": "concentrated_top_k",
+                "top_k": 5,
+                "evaluation_return_metric": "top_5_net_excess_mean",
+                "broad_top_quantile_metric": "diagnostic_only_not_promotion_gate_for_this_spec",
             },
         ),
     ]

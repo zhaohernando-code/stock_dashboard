@@ -118,6 +118,30 @@ class ModelExplorationSnapshotTests(unittest.TestCase):
         self.assertIsNone(feature_row["feature_values"]["price_momentum"]["return_3d"])
         self.assertFalse(feature_row["feature_values"]["crowding"]["winner_identity_used"])
 
+    def test_feature_matrix_adds_cross_sectional_features_per_as_of_date(self) -> None:
+        self._seed_stock("600001.SH", "行业甲A", [10, 10.5, 11, 12, 13, 14], industry="行业甲")
+        self._seed_stock("600002.SH", "行业甲B", [10, 10.1, 10.2, 10.3, 10.4, 10.5], industry="行业甲")
+        self._seed_stock("600003.SH", "行业乙A", [10, 9.9, 9.8, 9.7, 9.6, 9.5], industry="行业乙")
+        self._seed_stock("000300.SH", "沪深300", [100, 101, 102, 103, 104, 105], industry="benchmark")
+
+        with session_scope(self.database_url) as session:
+            artifacts = build_model_exploration_p1_artifacts(
+                session,
+                validation_run_id="unit-run",
+                as_of_dates=[date(2026, 1, 6)],
+                horizons=(1,),
+                min_history_days=2,
+            )
+
+        rows_by_symbol = {row["symbol"]: row for row in artifacts["pit_feature_matrix"]["rows"]}
+        strong = rows_by_symbol["600001.SH"]["feature_values"]["cross_sectional"]
+        weak = rows_by_symbol["600003.SH"]["feature_values"]["cross_sectional"]
+
+        self.assertIn("cross_sectional", artifacts["pit_feature_matrix"]["feature_groups"])
+        self.assertGreater(strong["return_5d_percentile"], weak["return_5d_percentile"])
+        self.assertNotEqual(strong["industry_return_5d_excess"], 0.0)
+        self.assertIn("cross_sectional", rows_by_symbol["600001.SH"]["feature_group_versions"])
+
     def test_label_matrix_blocks_missing_benchmark_instead_of_self_benchmarking(self) -> None:
         self._seed_stock("600001.SH", "主板甲", [10, 11, 12, 13, 14, 15])
 

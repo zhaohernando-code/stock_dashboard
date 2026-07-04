@@ -34,8 +34,12 @@ def _leaderboard_row(trial: dict[str, Any]) -> dict[str, Any]:
     return {
         "trial_id": trial.get("trial_id"),
         "model_spec_id": trial.get("model_spec_id"),
+        "selection_policy": trial.get("selection_policy") or {},
         "rank_ic_mean": metrics.get("rank_ic_mean"),
         "positive_rank_ic_rate": metrics.get("positive_rank_ic_rate"),
+        "top_5_net_excess_mean": metrics.get("top_5_net_excess_mean"),
+        "positive_top_5_rate": metrics.get("positive_top_5_rate"),
+        "top_10_net_excess_mean": metrics.get("top_10_net_excess_mean"),
         "top_quantile_net_excess_mean": metrics.get("top_quantile_net_excess_mean"),
         "top_bottom_spread_mean": metrics.get("top_bottom_spread_mean"),
         "labeled_prediction_count": metrics.get("labeled_prediction_count"),
@@ -44,11 +48,30 @@ def _leaderboard_row(trial: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _sort_key(row: dict[str, Any]) -> tuple[float, float, float]:
+def _selection_return_metric(row: dict[str, Any]) -> str:
+    selection_policy = row.get("selection_policy") or {}
+    return str(selection_policy.get("evaluation_return_metric") or "top_quantile_net_excess_mean")
+
+
+def _is_concentrated_top5(row: dict[str, Any]) -> bool:
+    selection_policy = row.get("selection_policy") or {}
+    return selection_policy.get("mode") == "concentrated_top_k" and _selection_return_metric(row) == "top_5_net_excess_mean"
+
+
+def _sort_key(row: dict[str, Any]) -> tuple[float, float, float, float]:
+    return_metric = _selection_return_metric(row)
+    if _is_concentrated_top5(row):
+        return (
+            _safe_float(row.get(return_metric), -999.0),
+            _safe_float(row.get("positive_top_5_rate"), -999.0),
+            _safe_float(row.get("top_10_net_excess_mean"), -999.0),
+            _safe_float(row.get("rank_ic_mean"), -999.0),
+        )
     return (
         _safe_float(row.get("rank_ic_mean"), -999.0),
-        _safe_float(row.get("top_quantile_net_excess_mean"), -999.0),
+        _safe_float(row.get(return_metric), -999.0),
         _safe_float(row.get("top_bottom_spread_mean"), -999.0),
+        _safe_float(row.get("top_5_net_excess_mean"), -999.0),
     )
 
 
@@ -109,6 +132,52 @@ def _top_pick_returns(predictions: list[dict[str, Any]]) -> list[dict[str, Any]]
     return top_picks
 
 
+def _top5_returns_from_predictions(predictions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_date: dict[str, list[dict[str, Any]]] = {}
+    for row in predictions:
+        if row.get("target_label") is None:
+            continue
+        by_date.setdefault(str(row.get("as_of_date") or ""), []).append(row)
+    returns: list[dict[str, Any]] = []
+    for as_of_date, rows in sorted(by_date.items()):
+        ordered = sorted(rows, key=lambda row: _safe_float(row.get("score")), reverse=True)
+        top_rows = ordered[: min(5, len(ordered))]
+        if not top_rows:
+            continue
+        returns.append(
+            {
+                "as_of_date": as_of_date,
+                "month": as_of_date[:7],
+                "pick_count": len(top_rows),
+                "mean_net_excess_return": mean(_safe_float(row.get("target_label")) for row in top_rows),
+            }
+        )
+    return returns
+
+
+def _top5_picks_from_predictions(predictions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_date: dict[str, list[dict[str, Any]]] = {}
+    for row in predictions:
+        if row.get("target_label") is None:
+            continue
+        by_date.setdefault(str(row.get("as_of_date") or ""), []).append(row)
+    picks: list[dict[str, Any]] = []
+    for as_of_date, rows in sorted(by_date.items()):
+        ordered = sorted(rows, key=lambda row: _safe_float(row.get("score")), reverse=True)
+        for rank, picked in enumerate(ordered[: min(5, len(ordered))], start=1):
+            picks.append(
+                {
+                    "symbol": picked.get("symbol"),
+                    "as_of_date": as_of_date,
+                    "month": as_of_date[:7],
+                    "rank": rank,
+                    "net_excess_return": _safe_float(picked.get("target_label")),
+                    "score": _safe_float(picked.get("score")),
+                }
+            )
+    return picks
+
+
 def _overfit_diagnostics(candidate_run: dict[str, Any], leaderboard: list[dict[str, Any]]) -> dict[str, Any]:
     eligible = [
         row
@@ -144,22 +213,39 @@ def _overfit_diagnostics(candidate_run: dict[str, Any], leaderboard: list[dict[s
             overfit_like_count += 1
     pbo_proxy = overfit_like_count / eligible_trial_count if eligible_trial_count else None
     best_trial_id = str((leaderboard[0] if leaderboard else {}).get("trial_id") or "")
+    best_row = leaderboard[0] if leaderboard else {}
     best_diagnostic = _trial_diagnostic(candidate_run, best_trial_id) if best_trial_id else None
-    if best_diagnostic is not None:
-        period_rank_ics = [
+    period_source = "best_trial_as_of_date_rank_ic"
+    if _is_concentrated_top5(best_row):
+        if best_diagnostic is not None:
+            period_values = [
+                _safe_float(item.get("mean_net_excess_return"))
+                for item in best_diagnostic.get("top_5_returns_by_date") or []
+                if item.get("mean_net_excess_return") is not None
+            ]
+        else:
+            best_trial_predictions = _prediction_rows(candidate_run, best_trial_id) if best_trial_id else []
+            period_values = [
+                _safe_float(item.get("mean_net_excess_return"))
+                for item in _top5_returns_from_predictions(best_trial_predictions)
+                if item.get("mean_net_excess_return") is not None
+            ]
+        period_source = "best_trial_top_5_mean_net_excess_by_date"
+    elif best_diagnostic is not None:
+        period_values = [
             _safe_float(item.get("rank_ic"))
             for item in best_diagnostic.get("date_rank_ics") or []
             if item.get("rank_ic") is not None
         ]
     else:
         best_trial_predictions = _prediction_rows(candidate_run, best_trial_id) if best_trial_id else []
-        period_rank_ics = _period_rank_ics(best_trial_predictions, period_field="as_of_date")
-    period_count = len(period_rank_ics)
+        period_values = _period_rank_ics(best_trial_predictions, period_field="as_of_date")
+    period_count = len(period_values)
     alpha_t_stat = None
     deflated_sharpe_confidence = None
     if period_count >= 2:
-        avg = mean(period_rank_ics)
-        std = pstdev(period_rank_ics)
+        avg = mean(period_values)
+        std = pstdev(period_values)
         if std > 0:
             alpha_t_stat = avg / (std / sqrt(period_count))
             multiple_testing_penalty = sqrt(2 * log(max(eligible_trial_count, 2)))
@@ -190,7 +276,7 @@ def _overfit_diagnostics(candidate_run: dict[str, Any], leaderboard: list[dict[s
         "eligible_trial_count": eligible_trial_count,
         "split_count": len(split_ids),
         "period_count": period_count,
-        "period_source": "best_trial_as_of_date_rank_ic",
+        "period_source": period_source,
         "pbo_proxy": pbo_proxy,
         "deflated_sharpe_confidence": deflated_sharpe_confidence,
         "alpha_t_stat": alpha_t_stat,
@@ -227,11 +313,20 @@ def _winner_dependency(candidate_run: dict[str, Any], leaderboard: list[dict[str
         }
     best_trial_id = str(best.get("trial_id") or "")
     diagnostic = _trial_diagnostic(candidate_run, best_trial_id)
-    top_picks = (
-        list(diagnostic.get("top_picks_by_date") or [])
-        if diagnostic is not None
-        else _top_pick_returns(_prediction_rows(candidate_run, best_trial_id))
-    )
+    if _is_concentrated_top5(best):
+        top_picks = (
+            list(diagnostic.get("top_5_picks_by_date") or [])
+            if diagnostic is not None
+            else _top5_picks_from_predictions(_prediction_rows(candidate_run, best_trial_id))
+        )
+        pick_scope = "top_5_picks_by_date"
+    else:
+        top_picks = (
+            list(diagnostic.get("top_picks_by_date") or [])
+            if diagnostic is not None
+            else _top_pick_returns(_prediction_rows(candidate_run, best_trial_id))
+        )
+        pick_scope = "top_1_pick_by_date"
     returns = [_safe_float(row.get("net_excess_return")) for row in top_picks]
     baseline_mean = mean(returns) if returns else None
     blockers: list[str] = []
@@ -267,6 +362,7 @@ def _winner_dependency(candidate_run: dict[str, Any], leaderboard: list[dict[str
     return {
         "status": "blocked" if blockers else "ready",
         "best_trial_id": best_trial_id,
+        "pick_scope": pick_scope,
         "top_pick_count": len(top_picks),
         "baseline_mean_net_excess": baseline_mean,
         "top_contributors": {

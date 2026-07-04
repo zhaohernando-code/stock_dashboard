@@ -95,6 +95,8 @@ def _diagnose_feature_direction(
     direction: str,
 ) -> dict[str, Any]:
     rank_ics: list[float] = []
+    top_5_returns: list[float] = []
+    top_10_returns: list[float] = []
     top_returns: list[float] = []
     bottom_returns: list[float] = []
     spreads: list[float] = []
@@ -119,6 +121,8 @@ def _diagnose_feature_direction(
         bucket_size = max(1, len(ordered) // 5)
         top = [row["target"] for row in ordered[:bucket_size]]
         bottom = [row["target"] for row in ordered[-bucket_size:]]
+        top_5_returns.append(mean(row["target"] for row in ordered[: min(5, len(ordered))]))
+        top_10_returns.append(mean(row["target"] for row in ordered[: min(10, len(ordered))]))
         top_returns.append(mean(top))
         bottom_returns.append(mean(bottom))
         spreads.append(mean(top) - mean(bottom))
@@ -146,6 +150,8 @@ def _diagnose_feature_direction(
         "evaluated_date_count": date_count,
         "rank_ic_mean": rank_ic_mean,
         "positive_rank_ic_rate": positive_rank_ic_rate,
+        "top_5_net_excess_mean": mean(top_5_returns) if top_5_returns else None,
+        "top_10_net_excess_mean": mean(top_10_returns) if top_10_returns else None,
         "top_quantile_net_excess_mean": top_quantile_net_excess_mean,
         "bottom_quantile_net_excess_mean": mean(bottom_returns) if bottom_returns else None,
         "top_bottom_spread_mean": top_bottom_spread_mean,
@@ -163,10 +169,20 @@ def _leaderboard_sort_key(row: dict[str, Any]) -> tuple[int, float, float, float
 
 def _candidate_generation_hints(leaderboard: list[dict[str, Any]]) -> list[dict[str, Any]]:
     passed = [row for row in leaderboard if row.get("passes_basic_signal_gate")]
-    seed_rows = passed or leaderboard[:5]
+    concentrated = [
+        row
+        for row in leaderboard
+        if not row.get("passes_basic_signal_gate") and _safe_float(row.get("top_5_net_excess_mean")) > 0
+    ]
+    seed_rows = passed or concentrated or leaderboard[:5]
     hints: list[dict[str, Any]] = []
     for row in seed_rows[:8]:
-        hint_status = "eligible_for_candidate_spec_seed" if row.get("passes_basic_signal_gate") else "diagnostic_only_below_gate"
+        if row.get("passes_basic_signal_gate"):
+            hint_status = "eligible_for_candidate_spec_seed"
+        elif _safe_float(row.get("top_5_net_excess_mean")) > 0:
+            hint_status = "concentrated_top5_positive_diagnostic_seed"
+        else:
+            hint_status = "diagnostic_only_below_gate"
         hints.append(
             {
                 "status": hint_status,

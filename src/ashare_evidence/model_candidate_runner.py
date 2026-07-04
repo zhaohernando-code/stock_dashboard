@@ -4,6 +4,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from itertools import product
+from math import log1p
 from pathlib import Path
 from statistics import mean, median, pstdev
 from typing import Any
@@ -37,6 +38,17 @@ MODEL_FEATURE_DEFS = (
     ("benchmark_return_10d", "regime", "benchmark_return_10d"),
     ("benchmark_return_20d", "regime", "benchmark_return_20d"),
     ("benchmark_volatility_20d", "regime", "benchmark_volatility_20d"),
+    ("return_5d_percentile", "cross_sectional", "return_5d_percentile"),
+    ("return_20d_percentile", "cross_sectional", "return_20d_percentile"),
+    ("turnover_rate_percentile", "cross_sectional", "turnover_rate_percentile"),
+    ("volatility_20d_percentile", "cross_sectional", "volatility_20d_percentile"),
+    ("amount_vs_20d_avg_percentile", "cross_sectional", "amount_vs_20d_avg_percentile"),
+    ("low_turnover_percentile", "cross_sectional", "low_turnover_percentile"),
+    ("low_volatility_percentile", "cross_sectional", "low_volatility_percentile"),
+    ("industry_return_5d_excess", "cross_sectional", "industry_return_5d_excess"),
+    ("industry_return_20d_excess", "cross_sectional", "industry_return_20d_excess"),
+    ("amount_10d_vs_20d", "cross_sectional", "amount_10d_vs_20d"),
+    ("volatility_10d_vs_20d", "cross_sectional", "volatility_10d_vs_20d"),
 )
 
 
@@ -83,13 +95,15 @@ def _target(row: dict[str, Any], *, horizon_days: int = 10) -> float | None:
 def _correlation(xs: list[float], ys: list[float]) -> float:
     if len(xs) < 2 or len(xs) != len(ys):
         return 0.0
-    mean_x = mean(xs)
-    mean_y = mean(ys)
-    std_x = pstdev(xs)
-    std_y = pstdev(ys)
-    if std_x == 0 or std_y == 0:
+    count = float(len(xs))
+    mean_x = sum(xs) / count
+    mean_y = sum(ys) / count
+    var_x = sum((x - mean_x) ** 2 for x in xs) / count
+    var_y = sum((y - mean_y) ** 2 for y in ys) / count
+    if var_x <= 0 or var_y <= 0:
         return 0.0
-    return sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys, strict=True)) / len(xs) / (std_x * std_y)
+    covariance = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys, strict=True)) / count
+    return covariance / ((var_x**0.5) * (var_y**0.5))
 
 
 def _linear_fit(rows: list[dict[str, Any]], *, alpha: float, horizon_days: int) -> dict[str, Any]:
@@ -297,6 +311,16 @@ def _score_row(
             + _safe_float(params.get("high_distance_weight"), 0.5) * values.get("distance_from_20d_high", 0.0)
             - _safe_float(params.get("volatility_penalty"), 0.45) * volatility
         )
+    if spec_type == "concentrated_liquidity_momentum_ranker":
+        liquidity_score = log1p(max(values.get("avg_amount_20d", 0.0), 0.0))
+        momentum_score = values.get("return_40d", 0.0) + values.get("return_20d", 0.0)
+        industry_score = values.get("industry_return_20d_excess", 0.0)
+        return (
+            _safe_float(params.get("liquidity_weight"), 1.0) * liquidity_score
+            + _safe_float(params.get("momentum_weight"), 0.0) * momentum_score
+            + _safe_float(params.get("industry_relative_weight"), 0.0) * industry_score
+            - _safe_float(params.get("volatility_penalty"), 0.0) * volatility
+        )
     return momentum
 
 
@@ -370,6 +394,8 @@ def _trial_metrics(predictions: list[dict[str, Any]]) -> dict[str, Any]:
         by_date.setdefault(str(row["as_of_date"]), []).append(row)
     rank_ics: list[float] = []
     top_returns: list[float] = []
+    top_5_returns: list[float] = []
+    top_10_returns: list[float] = []
     spreads: list[float] = []
     for rows in by_date.values():
         if len(rows) < 2:
@@ -381,6 +407,8 @@ def _trial_metrics(predictions: list[dict[str, Any]]) -> dict[str, Any]:
         bucket_size = max(1, len(ordered) // 5)
         top = [_safe_float(row.get("target_label")) for row in ordered[:bucket_size]]
         bottom = [_safe_float(row.get("target_label")) for row in ordered[-bucket_size:]]
+        top_5_returns.append(mean(_safe_float(row.get("target_label")) for row in ordered[: min(5, len(ordered))]))
+        top_10_returns.append(mean(_safe_float(row.get("target_label")) for row in ordered[: min(10, len(ordered))]))
         top_returns.append(mean(top))
         spreads.append(mean(top) - mean(bottom))
     return {
@@ -388,6 +416,11 @@ def _trial_metrics(predictions: list[dict[str, Any]]) -> dict[str, Any]:
         "labeled_prediction_count": len(scored),
         "rank_ic_mean": mean(rank_ics) if rank_ics else None,
         "positive_rank_ic_rate": sum(1 for value in rank_ics if value > 0) / len(rank_ics) if rank_ics else None,
+        "top_5_net_excess_mean": mean(top_5_returns) if top_5_returns else None,
+        "positive_top_5_rate": sum(1 for value in top_5_returns if value > 0) / len(top_5_returns)
+        if top_5_returns
+        else None,
+        "top_10_net_excess_mean": mean(top_10_returns) if top_10_returns else None,
         "top_quantile_net_excess_mean": mean(top_returns) if top_returns else None,
         "top_bottom_spread_mean": mean(spreads) if spreads else None,
         "evaluated_date_count": len(rank_ics),
@@ -437,11 +470,59 @@ def _top_picks_by_date(predictions: list[dict[str, Any]]) -> list[dict[str, Any]
     return top_picks
 
 
+def _top_k_picks_by_date(predictions: list[dict[str, Any]], *, top_k: int) -> list[dict[str, Any]]:
+    by_date: dict[str, list[dict[str, Any]]] = {}
+    for row in predictions:
+        if row.get("target_label") is None:
+            continue
+        by_date.setdefault(str(row.get("as_of_date") or ""), []).append(row)
+    picks: list[dict[str, Any]] = []
+    for as_of_date, rows in sorted(by_date.items()):
+        ordered = sorted(rows, key=lambda row: _safe_float(row.get("score")), reverse=True)
+        for rank, picked in enumerate(ordered[: max(1, top_k)], start=1):
+            picks.append(
+                {
+                    "symbol": picked.get("symbol"),
+                    "as_of_date": as_of_date,
+                    "month": as_of_date[:7],
+                    "rank": rank,
+                    "net_excess_return": _safe_float(picked.get("target_label")),
+                    "score": _safe_float(picked.get("score")),
+                }
+            )
+    return picks
+
+
+def _top_k_returns_by_date(predictions: list[dict[str, Any]], *, top_k: int) -> list[dict[str, Any]]:
+    by_date: dict[str, list[dict[str, Any]]] = {}
+    for row in predictions:
+        if row.get("target_label") is None:
+            continue
+        by_date.setdefault(str(row.get("as_of_date") or ""), []).append(row)
+    returns: list[dict[str, Any]] = []
+    for as_of_date, rows in sorted(by_date.items()):
+        ordered = sorted(rows, key=lambda row: _safe_float(row.get("score")), reverse=True)
+        top_rows = ordered[: max(1, top_k)]
+        if not top_rows:
+            continue
+        returns.append(
+            {
+                "as_of_date": as_of_date,
+                "month": as_of_date[:7],
+                "pick_count": len(top_rows),
+                "mean_net_excess_return": mean(_safe_float(row.get("target_label")) for row in top_rows),
+            }
+        )
+    return returns
+
+
 def _trial_diagnostics(predictions: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "split_rank_ics": _rank_ics_by_field(predictions, field="split_id"),
         "date_rank_ics": _rank_ics_by_field(predictions, field="as_of_date"),
         "top_picks_by_date": _top_picks_by_date(predictions),
+        "top_5_picks_by_date": _top_k_picks_by_date(predictions, top_k=5),
+        "top_5_returns_by_date": _top_k_returns_by_date(predictions, top_k=5),
     }
 
 
@@ -563,11 +644,12 @@ def build_walk_forward_model_candidate_run_artifact(
                 {
                     "trial_id": trial_id,
                     "model_spec_id": spec_id,
+                    "selection_policy": spec.get("selection_policy") or {},
                     "params": params,
                     "metrics": metrics,
                     "fit_summaries": fit_summaries,
                     "gate_status": "blocked",
-                    "blocking_gate_ids": _trial_blockers(metrics, len(splits)),
+                    "blocking_gate_ids": _trial_blockers(metrics, len(splits), model_spec=spec),
                 }
             )
             trial_diagnostics.append(
@@ -644,22 +726,31 @@ def build_walk_forward_model_candidate_run_artifact(
     }
 
 
-def _trial_blockers(metrics: dict[str, Any], split_count: int) -> list[str]:
+def _trial_blockers(metrics: dict[str, Any], split_count: int, *, model_spec: dict[str, Any] | None = None) -> list[str]:
     blockers: list[str] = []
+    selection_policy = (model_spec or {}).get("selection_policy") or {}
+    return_metric = str(selection_policy.get("evaluation_return_metric") or "top_quantile_net_excess_mean")
+    is_concentrated_top5 = return_metric == "top_5_net_excess_mean"
     if split_count < 2:
         blockers.append("insufficient_walk_forward_splits")
     if _safe_float(metrics.get("labeled_prediction_count")) < 60:
         blockers.append("insufficient_labeled_predictions")
-    if metrics.get("rank_ic_mean") is None:
-        blockers.append("missing_rank_ic")
-    elif _safe_float(metrics.get("rank_ic_mean")) <= 0.02:
-        blockers.append("rank_ic_below_gate")
-    if metrics.get("positive_rank_ic_rate") is None:
-        blockers.append("missing_positive_ic_rate")
-    elif _safe_float(metrics.get("positive_rank_ic_rate")) < 0.55:
-        blockers.append("positive_ic_rate_below_gate")
-    if _safe_float(metrics.get("top_quantile_net_excess_mean")) <= 0:
-        blockers.append("top_quantile_net_excess_not_positive")
+    if is_concentrated_top5:
+        if metrics.get("positive_top_5_rate") is None:
+            blockers.append("missing_positive_top_5_rate")
+        elif _safe_float(metrics.get("positive_top_5_rate")) < 0.55:
+            blockers.append("positive_top_5_rate_below_gate")
+    else:
+        if metrics.get("rank_ic_mean") is None:
+            blockers.append("missing_rank_ic")
+        elif _safe_float(metrics.get("rank_ic_mean")) <= 0.02:
+            blockers.append("rank_ic_below_gate")
+        if metrics.get("positive_rank_ic_rate") is None:
+            blockers.append("missing_positive_ic_rate")
+        elif _safe_float(metrics.get("positive_rank_ic_rate")) < 0.55:
+            blockers.append("positive_ic_rate_below_gate")
+    if _safe_float(metrics.get(return_metric)) <= 0:
+        blockers.append(f"{return_metric}_not_positive")
     return blockers
 
 
