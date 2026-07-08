@@ -1835,7 +1835,10 @@ class ModelSpecRegistryTests(unittest.TestCase):
             screening_evidence["required_rolling_execution_contract"],
             "docs/contracts/SHORTPICK_V3_ROLLING_TRANCHE_EXECUTION_CONTRACT_2026-07-08.md",
         )
-        self.assertEqual(screening_evidence["rolling_account_replay_status"], "completed_research_only_candidate_gate_passed")
+        self.assertEqual(
+            screening_evidence["rolling_account_replay_status"],
+            "completed_research_only_candidate_gate_passed_extended_to_20260626",
+        )
         self.assertEqual(
             screening_evidence["rolling_account_full713_best_balance_config"],
             "daily_14_tranche_rank_weighted_compound_min2250_layered_rank1_quickfail_rank3_pullback_exit_v1",

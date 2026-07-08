@@ -5,6 +5,10 @@ Created: 2026-07-08
 Model candidate: `selected_exhaustion_date_scaled_v3_top3_20d_v1`
 Execution contract: `docs/contracts/SHORTPICK_V3_ROLLING_TRANCHE_EXECUTION_CONTRACT_2026-07-08.md`
 
+Supersession note: this document records the original `2026-05-26` validation baseline. The accepted static
+full-history replay has since been extended through `2026-06-26`; use
+`docs/contracts/SHORTPICK_V3_ROLLING_TRANCHE_OPTIMIZATION_RESULT_2026-07-08.md` for the current metrics.
+
 ## Valid Artifacts
 
 All valid artifacts use the runtime DB:

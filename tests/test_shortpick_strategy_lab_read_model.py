@@ -24,7 +24,8 @@ def test_historical_replay_is_static_full_history_metrics() -> None:
     assert payload["status"] == "ready"
     assert payload["evidence_basis"] == "static_full_history_account_replay"
     assert payload["data_scope"]["static_read_model"] is True
-    assert payload["summary"]["main_total_return"] == 2.9891730075000016
+    assert payload["data_scope"]["signal_date_to"] == "2026-06-26"
+    assert payload["summary"]["main_total_return"] == 3.119168564999999
     assert payload["summary"]["main_negative_month_count"] == 4
     assert payload["selected_configs"][0]["config_id"] == MAIN_CONFIG_ID
     assert payload["baseline_configs"][0]["config_id"] == CONTROL_CONFIG_ID

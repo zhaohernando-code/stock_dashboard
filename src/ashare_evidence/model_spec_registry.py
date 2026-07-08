@@ -7345,9 +7345,9 @@ def _append_selected_exhaustion_date_scaled_frontier_spec(specs: list[dict[str, 
         ),
         "required_rolling_execution_contract_builder": "src/ashare_evidence/rolling_tranche_execution_contract.py",
         "rolling_account_replay_result_contract": (
-            "docs/contracts/SHORTPICK_V3_ROLLING_TRANCHE_REPLAY_RESULT_2026-07-08.md"
+            "docs/contracts/SHORTPICK_V3_ROLLING_TRANCHE_OPTIMIZATION_RESULT_2026-07-08.md"
         ),
-        "rolling_account_replay_status": "completed_research_only_candidate_gate_passed",
+        "rolling_account_replay_status": "completed_research_only_candidate_gate_passed_extended_to_20260626",
         "rolling_account_full713_best_balance_config": (
             "daily_14_tranche_rank_weighted_compound_min2250_layered_rank1_quickfail_rank3_pullback_exit_v1"
         ),
@@ -7355,16 +7355,16 @@ def _append_selected_exhaustion_date_scaled_frontier_spec(specs: list[dict[str, 
         "rolling_account_execution_budget_mode": "current_nav_fraction",
         "rolling_account_rank3_gate": "benchmark_return_20d_lte_0.03_position_scale_0",
         "rolling_account_exit_policy": "rank3_pullback_rank1_quick_fail_guard",
-        "rolling_account_full713_best_balance_total_return": 2.989173,
-        "rolling_account_full713_best_balance_annualized_return": 0.6396,
-        "rolling_account_full713_best_balance_max_drawdown": -0.07808,
+        "rolling_account_full713_best_balance_total_return": 3.119169,
+        "rolling_account_full713_best_balance_annualized_return": 0.657717,
+        "rolling_account_full713_best_balance_max_drawdown": -0.077591,
         "rolling_account_full713_best_balance_negative_month_count": 4,
-        "rolling_account_full713_best_balance_skipped_order_rate": 0.361239,
+        "rolling_account_full713_best_balance_skipped_order_rate": 0.352261,
         "rolling_account_full713_lower_concentration_alternative_config": (
             "daily_15_tranche_rank_weighted_compound_min1000_v1"
         ),
-        "rolling_account_full713_lower_concentration_alternative_annualized_return": 0.6044,
-        "rolling_account_full713_lower_concentration_alternative_max_drawdown": -0.079066,
+        "rolling_account_full713_lower_concentration_alternative_annualized_return": 0.630692,
+        "rolling_account_full713_lower_concentration_alternative_max_drawdown": -0.079244,
         "rolling_account_recent_20260508_best_stability_config": (
             "daily_14_tranche_rank_weighted_compound_min2250_layered_rank1_quickfail_rank3_pullback_exit_v1"
         ),
