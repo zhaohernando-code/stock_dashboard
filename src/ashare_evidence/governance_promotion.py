@@ -73,32 +73,154 @@ def _prefixed_blockers(prefix: str, payload: dict[str, Any] | None) -> list[str]
     return [f"{prefix}:{gate_id}" for gate_id in _blocking_gate_ids(payload)]
 
 
-def _execution_gate_readout() -> dict[str, Any]:
+def _fees_slippage_stamp_tax_stress_ready(candidate_artifact: dict[str, Any] | None) -> bool:
+    diagnostics = (candidate_artifact or {}).get("execution_diagnostics") if isinstance(candidate_artifact, dict) else {}
+    if not isinstance(diagnostics, dict):
+        return False
+    blockers = {str(item) for item in diagnostics.get("blocking_gate_ids") or []}
+    if (
+        "insufficient_periods_for_execution_stress" in blockers
+        or "cost_stress_2x_not_positive" in blockers
+        or "cost_stress_3x_not_positive" in blockers
+    ):
+        return False
+    thresholds = diagnostics.get("thresholds")
+    minimum_periods = 20
+    if isinstance(thresholds, dict):
+        try:
+            minimum_periods = int(thresholds.get("minimum_periods", minimum_periods))
+        except (TypeError, ValueError):
+            minimum_periods = 20
+    try:
+        period_count = int(diagnostics.get("period_count"))
+    except (TypeError, ValueError):
+        return False
+    if period_count < minimum_periods:
+        return False
+    stress_by_multiplier: dict[float, dict[str, Any]] = {}
+    for row in diagnostics.get("cost_stress") or []:
+        if not isinstance(row, dict):
+            continue
+        try:
+            multiplier = float(row.get("cost_multiplier"))
+        except (TypeError, ValueError):
+            continue
+        stress_by_multiplier[multiplier] = row
+    for multiplier in (1.0, 2.0, 3.0):
+        row = stress_by_multiplier.get(multiplier)
+        if not row:
+            return False
+        try:
+            stress_mean = float(row.get("mean_net_excess_after_cost_stress"))
+        except (TypeError, ValueError):
+            return False
+        if stress_mean <= 0:
+            return False
+    return True
+
+
+def _adv_capacity_fill_rate_ready(candidate_artifact: dict[str, Any] | None) -> bool:
+    diagnostics = (candidate_artifact or {}).get("execution_diagnostics") if isinstance(candidate_artifact, dict) else {}
+    if not isinstance(diagnostics, dict):
+        return False
+    capacity = diagnostics.get("capacity_diagnostics")
+    if not isinstance(capacity, dict):
+        return False
+    if str(capacity.get("status") or "") != "ready":
+        return False
+    if capacity.get("blocking_gate_ids"):
+        return False
+    return True
+
+
+def _capacity_contract_diagnostic(candidate_artifact: dict[str, Any] | None) -> dict[str, Any] | None:
+    diagnostics = (candidate_artifact or {}).get("execution_diagnostics") if isinstance(candidate_artifact, dict) else {}
+    if not isinstance(diagnostics, dict):
+        return None
+    capacity = diagnostics.get("capacity_diagnostics")
+    if not isinstance(capacity, dict):
+        return None
+    contract = capacity.get("capacity_contract")
+    if not isinstance(contract, dict):
+        return None
+    return {
+        "status": contract.get("status"),
+        "claim_ceiling": contract.get("claim_ceiling"),
+        "configured_governance_status": contract.get("configured_governance_status"),
+        "configured_governance_portfolio_notional_cny": contract.get("configured_governance_portfolio_notional_cny"),
+        "max_ready_research_portfolio_notional_cny": contract.get("max_ready_research_portfolio_notional_cny"),
+        "blocking_gate_ids": contract.get("blocking_gate_ids") or [],
+        "interpretation": contract.get("interpretation"),
+    }
+
+
+def _execution_gate_readout(candidate_artifact: dict[str, Any] | None = None) -> dict[str, Any]:
+    contract = (candidate_artifact or {}).get("execution_label_contract") if isinstance(candidate_artifact, dict) else {}
+    covered_gate_ids = set()
+    if isinstance(contract, dict):
+        covered_gate_ids = {str(item) for item in contract.get("covered_execution_gate_ids") or []}
+    if _fees_slippage_stamp_tax_stress_ready(candidate_artifact):
+        covered_gate_ids.add("fees_slippage_stamp_tax")
+    if _adv_capacity_fill_rate_ready(candidate_artifact):
+        covered_gate_ids.add("adv_capacity_fill_rate")
+    capacity_contract = _capacity_contract_diagnostic(candidate_artifact)
+
+    def _status(gate_id: str) -> str:
+        return "ready" if gate_id in covered_gate_ids else "blocked"
+
     checks = [
         {
             "gate_id": "t_plus_1_execution_model",
-            "status": "blocked",
-            "reason": "promotion requires T+1 execution labels and fill assumptions before approval",
+            "status": _status("t_plus_1_execution_model"),
+            "reason": (
+                "covered by label-v3 entry_execution and ready-label-only candidate evaluation"
+                if "t_plus_1_execution_model" in covered_gate_ids
+                else "promotion requires T+1 execution labels and fill assumptions before approval"
+            ),
         },
         {
             "gate_id": "suspension_limit_buy_sellability",
-            "status": "blocked",
-            "reason": "promotion requires suspension, limit-up buyability and limit-down sellability constraints",
+            "status": _status("suspension_limit_buy_sellability"),
+            "reason": (
+                "covered by label-v3 entry/exit execution fields and ready-label-only candidate evaluation"
+                if "suspension_limit_buy_sellability" in covered_gate_ids
+                else "promotion requires suspension, limit-up buyability and limit-down sellability constraints"
+            ),
         },
         {
             "gate_id": "fees_slippage_stamp_tax",
-            "status": "blocked",
-            "reason": "promotion requires fee, slippage and stamp-tax modeling before approval",
+            "status": _status("fees_slippage_stamp_tax"),
+            "reason": (
+                "covered by comparison report 1x/2x/3x fee, slippage and stamp-tax cost-stress evidence"
+                if "fees_slippage_stamp_tax" in covered_gate_ids
+                else "promotion requires positive fee, slippage and stamp-tax stress evidence before approval"
+            ),
         },
         {
             "gate_id": "adv_capacity_fill_rate",
-            "status": "blocked",
-            "reason": "promotion requires ADV, capacity and fill-rate constraints before approval",
+            "status": _status("adv_capacity_fill_rate"),
+            "reason": (
+                "covered by staged-entry capacity proxy; claim ceiling remains research-only until full order-level replay"
+                if "adv_capacity_fill_rate" in covered_gate_ids
+                and capacity_contract
+                and capacity_contract.get("status") == "configured_staggered_execution_capacity_proxy_ready"
+                else "covered by selected-pick ADV capacity proxy with full fill at 5pct ADV"
+                if "adv_capacity_fill_rate" in covered_gate_ids
+                else (
+                    "configured governance notional remains blocked; lower-capital capacity contract is diagnostic only"
+                    if capacity_contract
+                    and capacity_contract.get("status") == "lower_capital_research_contract_ready"
+                    else "promotion requires selected-pick ADV, capacity and fill-rate stress evidence before approval"
+                )
+            ),
+            "capacity_contract": capacity_contract,
         },
     ]
+    blockers = [str(check["gate_id"]) for check in checks if check["status"] != "ready"]
     return {
-        "gate_status": "blocked",
-        "blocking_gate_ids": [str(check["gate_id"]) for check in checks],
+        "gate_status": "blocked" if blockers else "execution_ready",
+        "blocking_gate_ids": blockers,
+        "covered_gate_ids": sorted(covered_gate_ids),
         "checks": checks,
     }
 
@@ -116,7 +238,7 @@ def build_governance_promotion_decision_artifact(
     multiple_testing_diagnostics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     validation_protocol = candidate_artifact.get("validation_protocol") if isinstance(candidate_artifact, dict) else {}
-    execution_gate = _execution_gate_readout()
+    execution_gate = _execution_gate_readout(candidate_artifact)
     blockers: list[str] = []
     blockers.extend(_required_field_blockers(candidate_artifact, source_name=candidate_kind))
     blockers.extend(_prefixed_blockers(candidate_kind, candidate_artifact))

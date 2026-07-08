@@ -173,6 +173,36 @@ class ModelExplorationWorkflowTests(unittest.TestCase):
             first["artifact_summaries"]["pit_feature_matrix"]["artifact_id"],
         )
 
+        with session_scope(self.database_url) as session:
+            streamed = run_shortpick_model_exploration_workbench(
+                session,
+                database_url=self.database_url,
+                validation_run_id="workflow-reuse-streamed-consumer",
+                selected_model_spec_ids=["baseline_momentum_10d_turnover_cooldown_v1"],
+                min_train_dates=1,
+                test_window_dates=1,
+                artifact_root=artifact_root,
+                input_snapshot_artifact=input_path,
+                feature_matrix_artifact=feature_path,
+                label_matrix_artifact=label_path,
+                stream_matrix_replay=True,
+            )
+
+        self.assertTrue(streamed["stream_matrix_replay"])
+        self.assertEqual(
+            streamed["matrix_artifact_ids"]["pit_feature_matrix"],
+            first["artifact_summaries"]["pit_feature_matrix"]["artifact_id"],
+        )
+        self.assertEqual(
+            streamed["matrix_artifact_ids"]["executable_label_matrix"],
+            first["artifact_summaries"]["executable_label_matrix"]["artifact_id"],
+        )
+        governance_blockers = streamed["blocking_summary"]["governance"]["blocking_gate_ids"]
+        self.assertFalse(
+            any("missing_required_field_source" in blocker for blocker in governance_blockers),
+            governance_blockers,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

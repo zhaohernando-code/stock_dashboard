@@ -36,7 +36,7 @@ export interface IntradaySourceStatusView {
   message?: string | null;
 }
 
-export type ViewMode = "candidates" | "stock" | "operations" | "shortpick" | "shortpick-v2" | "settings";
+export type ViewMode = "candidates" | "stock" | "operations" | "shortpick" | "shortpick-strategy-lab" | "settings";
 export type DataMode = "online" | "offline";
 
 export interface DataSourceInfo {

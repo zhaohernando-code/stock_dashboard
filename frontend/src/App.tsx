@@ -84,7 +84,7 @@ import { TrackHoldingsTable } from "./components/TrackHoldingsTable";
 import { SimulationTrackCard } from "./components/SimulationTrackCard";
 import { CompactAnalysisReport } from "./components/CompactAnalysisReport";
 import { ShortpickLabView } from "./components/ShortpickLabView";
-import { ShortpickLabV2View } from "./components/ShortpickLabV2View";
+import { ShortpickStrategyLabView } from "./components/ShortpickStrategyLabView";
 import { PortfolioWorkspace } from "./components/PortfolioWorkspace";
 import { buildSettingsTabs } from "./components/SettingsView";
 import { buildCandidateColumns } from "./components/CandidateColumns";
@@ -103,14 +103,14 @@ import { directionLabels, factorLabels, manualResearchVerdictOptions } from "./u
 import { readRouteParam, writeWorkbenchRoute, type RouteWriteMode } from "./utils/route";
 const { Paragraph, Text, Title } = Typography;
 const { TextArea } = Input;
-type ViewMode = "candidates" | "stock" | "operations" | "shortpick" | "shortpick-v2" | "settings";
+type ViewMode = "candidates" | "stock" | "operations" | "shortpick" | "shortpick-strategy-lab" | "settings";
 type StockTabKey = "signals" | "evidence" | "followup";
 
 const OPERATIONS_REVIEW_ENABLED = false;
 const VIEW_MODES = new Set<ViewMode>(
   OPERATIONS_REVIEW_ENABLED
-    ? ["candidates", "stock", "operations", "shortpick", "shortpick-v2", "settings"]
-    : ["candidates", "stock", "shortpick", "shortpick-v2", "settings"],
+    ? ["candidates", "stock", "operations", "shortpick", "shortpick-strategy-lab", "settings"]
+    : ["candidates", "stock", "shortpick", "shortpick-strategy-lab", "settings"],
 );
 const STOCK_TAB_KEYS = new Set<StockTabKey>(["signals", "evidence", "followup"]);
 const DEFAULT_VIEW: ViewMode = "shortpick";
@@ -366,8 +366,8 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       icon: <ExperimentOutlined />,
     },
     {
-      key: "shortpick-v2",
-      label: "试验田v2",
+      key: "shortpick-strategy-lab",
+      label: "v3模型",
       description: "查看资金约束账户路径的纸面追踪与历史回放。",
       icon: <ExperimentOutlined />,
     },
@@ -1311,8 +1311,8 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
       routeView(canUseOperations ? "operations" : "candidates");
     } else if (tab === "shortpick") {
       routeView("shortpick");
-    } else if (tab === "shortpick-v2") {
-      routeView("shortpick-v2");
+    } else if (tab === "shortpick-strategy-lab") {
+      routeView("shortpick-strategy-lab");
     } else {
       routeView(canUseSettings ? "settings" : "candidates");
     }
@@ -2911,8 +2911,8 @@ function App({ themeMode, onToggleTheme }: { themeMode: ThemeMode; onToggleTheme
             <ShortpickLabView canTrigger={isRootUser} />
           ) : null}
 
-          {!loadingShell && view === "shortpick-v2" ? (
-            <ShortpickLabV2View />
+          {!loadingShell && view === "shortpick-strategy-lab" ? (
+            <ShortpickStrategyLabView />
           ) : null}
 
           {!loadingShell && view === "settings" ? (

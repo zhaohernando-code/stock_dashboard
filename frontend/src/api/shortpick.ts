@@ -9,8 +9,8 @@ import type {
   ShortpickRunListResponse,
   ShortpickRunValidateRequest,
   ShortpickRunView,
-  ShortpickV2HistoricalReplayResponse,
-  ShortpickV2PaperTrackingResponse,
+  ShortpickStrategyLabHistoricalReplayResponse,
+  ShortpickStrategyLabPaperTrackingResponse,
   ShortpickReplayFeedbackResponse,
   ShortpickReplaySourceResponse,
   ShortpickValidationQueueResponse,
@@ -265,23 +265,21 @@ export function getShortpickPaperTrackingSummary() {
   }))();
 }
 
-export function getShortpickV2PaperTracking() {
+export function getShortpickStrategyLabPaperTracking() {
   return (async () => ({
-    data: await request<ShortpickV2PaperTrackingResponse>(
-      "/shortpick-lab-v2/paper-tracking",
+    data: await request<ShortpickStrategyLabPaperTrackingResponse>(
+      "/shortpick-strategy-lab/paper-tracking",
       undefined,
-      longRunningRequestBehavior,
+      operationsDashboardRequestBehavior,
     ),
     source: buildSourceInfo(),
   }))();
 }
 
-export function getShortpickV2HistoricalReplay(sampleLimit = 0) {
-  const query = new URLSearchParams();
-  query.set("sample_limit", String(sampleLimit));
+export function getShortpickStrategyLabHistoricalReplay() {
   return (async () => ({
-    data: await request<ShortpickV2HistoricalReplayResponse>(
-      `/shortpick-lab-v2/historical-replay?${query.toString()}`,
+    data: await request<ShortpickStrategyLabHistoricalReplayResponse>(
+      "/shortpick-strategy-lab/historical-replay",
       undefined,
       operationsDashboardRequestBehavior,
     ),

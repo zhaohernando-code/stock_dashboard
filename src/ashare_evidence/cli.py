@@ -12,6 +12,40 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from ashare_evidence.benchmark import sync_benchmark_index_bars
+from ashare_evidence.capacity_opportunity_set_discovery import (
+    build_capacity_opportunity_set_discovery,
+    write_capacity_opportunity_set_discovery,
+)
+from ashare_evidence.capacity_opportunity_feature_gap import (
+    build_capacity_opportunity_feature_gap_probe,
+    write_capacity_opportunity_feature_gap_probe,
+)
+from ashare_evidence.capacity_opportunity_archetype_sample import (
+    build_capacity_opportunity_archetype_sample_preflight,
+    write_capacity_opportunity_archetype_sample_preflight,
+)
+from ashare_evidence.capacity_opportunity_learned_sample import (
+    build_capacity_opportunity_learned_sample_preflight,
+    write_capacity_opportunity_learned_sample_preflight,
+)
+from ashare_evidence.capacity_underfilled_fallback_preflight import (
+    build_capacity_underfilled_fallback_preflight,
+    write_capacity_underfilled_fallback_preflight,
+)
+from ashare_evidence.capacity_liquid_winner_feature_audit import (
+    build_capacity_liquid_winner_feature_audit,
+    write_capacity_liquid_winner_feature_audit,
+)
+from ashare_evidence.capacity_staggered_entry_proxy import (
+    SUPPORTED_EXPOSURE_OVERLAY_MODES,
+    SUPPORTED_EXIT_POLICIES,
+    build_capacity_staggered_entry_proxy,
+    write_capacity_staggered_entry_proxy,
+)
+from ashare_evidence.pit_source_readiness_audit import (
+    audit_pit_source_readiness,
+    write_pit_source_readiness_audit,
+)
 from ashare_evidence.cli_autonomous_flow import (
     add_autonomous_flow_parsers,
     handle_phase5_local_cycle_step_command,
@@ -21,11 +55,41 @@ from ashare_evidence.cli_governance import add_governance_parsers, handle_govern
 from ashare_evidence.cli_research import add_research_parsers, handle_factor_observation, handle_weight_sweep
 from ashare_evidence.dashboard import get_glossary_entries, get_stock_dashboard, list_candidate_recommendations
 from ashare_evidence.db import init_database, preflight_database_writable, session_scope
+from ashare_evidence.feature_v3_capacity_triage import build_feature_v3_capacity_triage
+from ashare_evidence.feature_v3_source_coverage import audit_feature_v3_source_coverage
 from ashare_evidence.frontend_projections import refresh_frontend_projections
 from ashare_evidence.improvement_suggestions import run_improvement_suggestion_review
 from ashare_evidence.intraday_market import sync_intraday_market
+from ashare_evidence.model_exploration_snapshot import (
+    rebuild_executable_label_matrix_from_input_snapshot,
+    rebuild_pit_feature_matrix_from_input_snapshot,
+)
+from ashare_evidence.model_candidate_runner import (
+    build_streamed_score_rank_probe_artifact,
+    build_streamed_top_candidate_inventory_artifact,
+)
+from ashare_evidence.model_comparison_report import (
+    build_model_comparison_report_artifact,
+    write_model_comparison_report_artifact,
+)
 from ashare_evidence.model_exploration_workflow import run_shortpick_model_exploration_workbench
 from ashare_evidence.model_feature_diagnostics import run_model_feature_diagnostics
+from ashare_evidence.model_governance_gate import (
+    build_model_governance_and_projection_artifacts,
+    write_model_governance_and_projection_artifacts,
+)
+from ashare_evidence.exposure_floor_overlay_governance import (
+    build_exposure_floor_overlay_governance_summary,
+    build_staggered_exposure_combo_governance_summary,
+    write_exposure_floor_overlay_governance_summary,
+    write_staggered_exposure_combo_governance_summary,
+)
+from ashare_evidence.order_level_capacity_proxy import (
+    build_capacity_soft_rerank_proxy,
+    build_capacity_contract_tier_scan,
+    build_exposure_floor_stability_proxy,
+    build_order_level_capacity_proxy,
+)
 from ashare_evidence.operations import build_operations_dashboard
 from ashare_evidence.phase2 import rebuild_phase2_research_state
 from ashare_evidence.phase2.holding_policy_experiments import (
@@ -58,6 +122,8 @@ from ashare_evidence.research_artifact_store import (
     write_phase5_horizon_study_artifact,
     write_phase5_producer_contract_study_artifact,
 )
+from ashare_evidence.research_artifact_retention import audit_research_artifact_retention
+from ashare_evidence.research_model_preflight_compaction import compact_model_preflight_root
 from ashare_evidence.services import get_latest_recommendation_summary, get_recommendation_trace
 from ashare_evidence.shortpick_combined_ledger_writer import (
     load_shortpick_combined_ledger_inputs,
@@ -185,6 +251,14 @@ from ashare_evidence.shortpick_v2_theme_position_diagnostics import (
 )
 from ashare_evidence.simulation import restart_simulation_session, step_simulation_session
 from ashare_evidence.stock_master import DEFAULT_AKSHARE_TIMEOUT_SECONDS
+from ashare_evidence.top_candidate_learned_rerank_proxy import (
+    build_top_candidate_learned_fillable_rerank_proxy,
+    write_top_candidate_learned_fillable_rerank_proxy,
+)
+from ashare_evidence.top_candidate_objective_calibration_proxy import (
+    build_top_candidate_objective_calibration_proxy,
+    write_top_candidate_objective_calibration_proxy,
+)
 from ashare_evidence.watchlist import active_watchlist_symbols, refresh_watchlist_symbol
 
 
@@ -303,6 +377,20 @@ def _should_initialize_database(database_url: str | None) -> bool:
 
 # Commands in this set are pure file/plan commands and may omit --database-url.
 NO_DB_COMMANDS = {
+    "research-model-governance-refresh",
+    "research-capacity-soft-rerank-proxy",
+    "research-capacity-contract-tier-scan",
+    "research-capacity-opportunity-feature-gap",
+    "research-exposure-floor-stability-proxy",
+    "research-exposure-floor-overlay-governance",
+    "research-staggered-exposure-combo-governance",
+    "research-order-capacity-proxy",
+    "research-score-rank-probe",
+    "research-top-candidate-inventory",
+    "research-top-candidate-learned-rerank-proxy",
+    "research-top-candidate-objective-calibration-proxy",
+    "research-artifact-retention-audit",
+    "research-model-preflight-compact",
     "shortpick-model-feature-diagnostics-run",
     "shortpick-governance-credible-control-plan",
     "shortpick-v2-h10-artifact-validate",
@@ -365,6 +453,35 @@ def _filter_governance_requests(
     if not filtered:
         raise ValueError("No governance requests matched --request-id or --control-group-id")
     return filtered
+
+
+def _target_symbols_by_date_from_probe_args(args: argparse.Namespace) -> dict[str, list[str]]:
+    targets: dict[str, list[str]] = {}
+    if getattr(args, "opportunity_discovery_artifact", None):
+        payload = json.loads(Path(args.opportunity_discovery_artifact).read_text(encoding="utf-8"))
+        top_k = max(1, int(getattr(args, "opportunity_top_k", 5) or 5))
+        for day in payload.get("dates") or []:
+            as_of_date = str(day.get("as_of_date") or "")
+            if not as_of_date:
+                continue
+            symbols = targets.setdefault(as_of_date, [])
+            source_symbol = day.get("source_symbol")
+            if source_symbol and str(source_symbol) not in symbols:
+                symbols.append(str(source_symbol))
+            for candidate in (day.get("top_liquid_by_future_excess") or [])[:top_k]:
+                symbol = candidate.get("symbol")
+                if symbol and str(symbol) not in symbols:
+                    symbols.append(str(symbol))
+    for item in getattr(args, "target", None) or []:
+        if "=" not in item:
+            raise ValueError("--target must use AS_OF_DATE=SYMBOL format")
+        as_of_date, symbol = item.split("=", 1)
+        if not as_of_date or not symbol:
+            raise ValueError("--target must use AS_OF_DATE=SYMBOL format")
+        symbols = targets.setdefault(as_of_date, [])
+        if symbol not in symbols:
+            symbols.append(symbol)
+    return targets
 
 
 def _phase5_horizon_study_output(
@@ -667,6 +784,11 @@ def build_parser() -> argparse.ArgumentParser:
     model_exploration.add_argument("--max-as-of-dates", type=int, default=None)
     model_exploration.add_argument("--benchmark-symbol", default="000300.SH")
     model_exploration.add_argument(
+        "--entry-price-source",
+        choices=["next_close", "same_day_close_research_proxy"],
+        default="next_close",
+    )
+    model_exploration.add_argument(
         "--model-spec-id",
         action="append",
         default=None,
@@ -677,6 +799,11 @@ def build_parser() -> argparse.ArgumentParser:
     model_exploration.add_argument("--input-snapshot-artifact", default=None)
     model_exploration.add_argument("--feature-matrix-artifact", default=None)
     model_exploration.add_argument("--label-matrix-artifact", default=None)
+    model_exploration.add_argument(
+        "--stream-matrix-replay",
+        action="store_true",
+        help="Reuse large feature/label matrix artifacts via streaming deterministic replay instead of loading JSON fully.",
+    )
     model_exploration.add_argument("--artifact-root", default=None)
     model_exploration.add_argument("--no-write-artifacts", action="store_true")
 
@@ -689,6 +816,328 @@ def build_parser() -> argparse.ArgumentParser:
     model_feature_diagnostics.add_argument("--label-matrix-artifact", required=True)
     model_feature_diagnostics.add_argument("--artifact-root", default=None)
     model_feature_diagnostics.add_argument("--no-write-artifacts", action="store_true")
+
+    model_governance_refresh = subparsers.add_parser(
+        "research-model-governance-refresh",
+        help="Rebuild model comparison, governance, and dashboard projection artifacts from existing candidate-run evidence.",
+    )
+    model_governance_refresh.add_argument("--validation-run-id", required=True)
+    model_governance_refresh.add_argument("--candidate-run-artifact", required=True)
+    model_governance_refresh.add_argument("--model-spec-registry-artifact", required=True)
+    model_governance_refresh.add_argument("--artifact-root", required=True)
+    model_governance_refresh.add_argument("--no-write-artifacts", action="store_true")
+
+    model_label_rebuild = subparsers.add_parser(
+        "shortpick-model-label-rebuild",
+        help="Rebuild only the executable label matrix from a model exploration input snapshot.",
+    )
+    model_label_rebuild.add_argument("--database-url", default=None)
+    model_label_rebuild.add_argument("--validation-run-id", required=True)
+    model_label_rebuild.add_argument("--input-snapshot-artifact", required=True)
+    model_label_rebuild.add_argument(
+        "--entry-price-source",
+        choices=["next_close", "same_day_close_research_proxy"],
+        default="next_close",
+    )
+    model_label_rebuild.add_argument("--artifact-root", required=True)
+
+    model_feature_rebuild = subparsers.add_parser(
+        "shortpick-model-feature-rebuild",
+        help="Rebuild only the PIT feature matrix from a model exploration input snapshot.",
+    )
+    model_feature_rebuild.add_argument("--database-url", default=None)
+    model_feature_rebuild.add_argument("--validation-run-id", required=True)
+    model_feature_rebuild.add_argument("--input-snapshot-artifact", required=True)
+    model_feature_rebuild.add_argument("--artifact-root", required=True)
+
+    retention_audit = subparsers.add_parser(
+        "research-artifact-retention-audit",
+        help="Audit compact research evidence retention boundaries to prevent artifact data growth.",
+    )
+    retention_audit.add_argument("--retained-root", required=True)
+    retention_audit.add_argument("--compact-replay-root", action="append", default=None)
+    retention_audit.add_argument("--max-retained-candidate-run-files", type=int, default=0)
+    retention_audit.add_argument("--max-compact-replay-roots", type=int, default=2)
+    retention_audit.add_argument("--max-retained-root-mb", type=int, default=256)
+    retention_audit.add_argument("--max-compact-replay-root-mb", type=int, default=128)
+
+    preflight_compaction = subparsers.add_parser(
+        "research-model-preflight-compact",
+        help="Compact a model-exploration preflight root into a small retained summary, optionally deleting the root.",
+    )
+    preflight_compaction.add_argument("--preflight-root", required=True)
+    preflight_compaction.add_argument("--output-json", required=True)
+    preflight_compaction.add_argument("--delete-source-root", action="store_true")
+
+    feature_v3_coverage = subparsers.add_parser(
+        "research-feature-v3-source-coverage-audit",
+        help="Audit PIT-safe MarketBar source coverage for feature-matrix v3 without rebuilding the matrix.",
+    )
+    feature_v3_coverage.add_argument("--database-url", default=None)
+    feature_v3_coverage.add_argument("--observed-start", default=None)
+    feature_v3_coverage.add_argument("--observed-end", default=None)
+    feature_v3_coverage.add_argument("--min-market-cap-coverage", type=float, default=0.95)
+    feature_v3_coverage.add_argument("--min-valuation-coverage", type=float, default=0.50)
+    feature_v3_coverage.add_argument("--output-json", default=None)
+
+    feature_v3_capacity_triage = subparsers.add_parser(
+        "research-feature-v3-capacity-triage",
+        help="Build a compact v3 market-cap/capacity triage from a retained TopN capacity-boundary summary.",
+    )
+    feature_v3_capacity_triage.add_argument("--database-url", default=None)
+    feature_v3_capacity_triage.add_argument("--top-candidate-summary-artifact", required=True)
+    feature_v3_capacity_triage.add_argument("--output-json", default=None)
+
+    order_capacity_proxy = subparsers.add_parser(
+        "research-order-capacity-proxy",
+        help="Build a compact order-level ADV fill proxy from an existing model candidate-run artifact.",
+    )
+    order_capacity_proxy.add_argument("--candidate-run-artifact", required=True)
+    order_capacity_proxy.add_argument("--trial-id", required=True)
+    order_capacity_proxy.add_argument("--top-candidate-inventory-artifact", default=None)
+    order_capacity_proxy.add_argument("--portfolio-notional-cny", type=float, default=1_000_000.0)
+    order_capacity_proxy.add_argument("--max-adv-participation-rate", type=float, default=0.05)
+    order_capacity_proxy.add_argument("--output-json", default=None)
+
+    capacity_contract_scan = subparsers.add_parser(
+        "research-capacity-contract-tier-scan",
+        help="Scan supported product notional tiers for an existing selected strategy under ADV fill caps.",
+    )
+    capacity_contract_scan.add_argument("--candidate-run-artifact", required=True)
+    capacity_contract_scan.add_argument("--trial-id", required=True)
+    capacity_contract_scan.add_argument("--notional-tier-cny", action="append", type=float, default=None)
+    capacity_contract_scan.add_argument("--max-adv-participation-rate", type=float, default=0.05)
+    capacity_contract_scan.add_argument("--output-json", default=None)
+
+    capacity_opportunity_discovery = subparsers.add_parser(
+        "research-capacity-opportunity-set-discovery",
+        help="Discover full-market liquid future winners on retained capacity-blocker dates without model replay.",
+    )
+    capacity_opportunity_discovery.add_argument("--database-url", default=None)
+    capacity_opportunity_discovery.add_argument("--top-candidate-summary-artifact", required=True)
+    capacity_opportunity_discovery.add_argument("--benchmark-symbol", default="000300.SH")
+    capacity_opportunity_discovery.add_argument("--portfolio-notional-cny", type=float, default=1_000_000.0)
+    capacity_opportunity_discovery.add_argument("--slot-capital-weight", type=float, default=0.91)
+    capacity_opportunity_discovery.add_argument("--max-adv-participation-rate", type=float, default=0.05)
+    capacity_opportunity_discovery.add_argument("--top-n", type=int, default=20)
+    capacity_opportunity_discovery.add_argument("--output-json", default=None)
+
+    capacity_opportunity_feature_gap = subparsers.add_parser(
+        "research-capacity-opportunity-feature-gap",
+        help="Probe whether retained full-market liquid winners are covered by broad ex-ante feature archetypes.",
+    )
+    capacity_opportunity_feature_gap.add_argument("--opportunity-discovery-artifact", required=True)
+    capacity_opportunity_feature_gap.add_argument("--top-k", type=int, default=5)
+    capacity_opportunity_feature_gap.add_argument("--near-floor-ratio", type=float, default=0.75)
+    capacity_opportunity_feature_gap.add_argument("--output-json", default=None)
+
+    capacity_opportunity_archetype_sample = subparsers.add_parser(
+        "research-capacity-opportunity-archetype-sample",
+        help="Run a bounded sampled full-market archetype opportunity-generator preflight.",
+    )
+    capacity_opportunity_archetype_sample.add_argument("--database-url", default=None)
+    capacity_opportunity_archetype_sample.add_argument("--candidate-run-artifact", required=True)
+    capacity_opportunity_archetype_sample.add_argument("--trial-id", required=True)
+    capacity_opportunity_archetype_sample.add_argument("--benchmark-symbol", default="000300.SH")
+    capacity_opportunity_archetype_sample.add_argument("--sample-date-count", type=int, default=12)
+    capacity_opportunity_archetype_sample.add_argument("--top-k", type=int, default=3)
+    capacity_opportunity_archetype_sample.add_argument("--portfolio-notional-cny", type=float, default=1_000_000.0)
+    capacity_opportunity_archetype_sample.add_argument("--slot-capital-weight", type=float, default=0.91)
+    capacity_opportunity_archetype_sample.add_argument("--max-adv-participation-rate", type=float, default=0.05)
+    capacity_opportunity_archetype_sample.add_argument("--output-json", default=None)
+
+    capacity_opportunity_learned_sample = subparsers.add_parser(
+        "research-capacity-opportunity-learned-sample",
+        help="Run a bounded sampled walk-forward learned full-market opportunity preflight.",
+    )
+    capacity_opportunity_learned_sample.add_argument("--database-url", default=None)
+    capacity_opportunity_learned_sample.add_argument("--candidate-run-artifact", required=True)
+    capacity_opportunity_learned_sample.add_argument("--trial-id", required=True)
+    capacity_opportunity_learned_sample.add_argument("--benchmark-symbol", default="000300.SH")
+    capacity_opportunity_learned_sample.add_argument("--sample-date-count", type=int, default=18)
+    capacity_opportunity_learned_sample.add_argument("--min-train-dates", type=int, default=6)
+    capacity_opportunity_learned_sample.add_argument("--top-k", type=int, default=3)
+    capacity_opportunity_learned_sample.add_argument("--portfolio-notional-cny", type=float, default=1_000_000.0)
+    capacity_opportunity_learned_sample.add_argument("--slot-capital-weight", type=float, default=0.91)
+    capacity_opportunity_learned_sample.add_argument("--max-adv-participation-rate", type=float, default=0.05)
+    capacity_opportunity_learned_sample.add_argument("--output-json", default=None)
+
+    capacity_underfilled_fallback = subparsers.add_parser(
+        "research-capacity-underfilled-fallback-preflight",
+        help="Run a targeted learned full-market fallback preflight only on selected underfilled slots.",
+    )
+    capacity_underfilled_fallback.add_argument("--database-url", default=None)
+    capacity_underfilled_fallback.add_argument("--candidate-run-artifact", required=True)
+    capacity_underfilled_fallback.add_argument("--trial-id", required=True)
+    capacity_underfilled_fallback.add_argument("--benchmark-symbol", default="000300.SH")
+    capacity_underfilled_fallback.add_argument("--train-date-count", type=int, default=24)
+    capacity_underfilled_fallback.add_argument("--portfolio-notional-cny", type=float, default=1_000_000.0)
+    capacity_underfilled_fallback.add_argument("--max-adv-participation-rate", type=float, default=0.05)
+    capacity_underfilled_fallback.add_argument("--output-json", default=None)
+
+    capacity_liquid_winner_audit = subparsers.add_parser(
+        "research-capacity-liquid-winner-feature-audit",
+        help="Audit PIT-safe feature recipes that could rank blocker-date liquid winners.",
+    )
+    capacity_liquid_winner_audit.add_argument("--database-url", default=None)
+    capacity_liquid_winner_audit.add_argument("--opportunity-discovery-artifact", required=True)
+    capacity_liquid_winner_audit.add_argument("--fallback-preflight-artifact", default=None)
+    capacity_liquid_winner_audit.add_argument("--benchmark-symbol", default="000300.SH")
+    capacity_liquid_winner_audit.add_argument("--top-rank-threshold", type=int, default=25)
+    capacity_liquid_winner_audit.add_argument("--output-json", default=None)
+
+    pit_source_readiness = subparsers.add_parser(
+        "research-pit-source-readiness-audit",
+        help="Audit whether runtime DB has additional historical PIT-safe sources for model research.",
+    )
+    pit_source_readiness.add_argument("--database-url", default=None)
+    pit_source_readiness.add_argument("--observed-start", type=date.fromisoformat, default=date(2023, 6, 13))
+    pit_source_readiness.add_argument("--observed-end", type=date.fromisoformat, default=date(2026, 5, 26))
+    pit_source_readiness.add_argument("--min-coverage-ratio", type=float, default=0.90)
+    pit_source_readiness.add_argument("--output-json", default=None)
+
+    capacity_staggered_entry = subparsers.add_parser(
+        "research-capacity-staggered-entry-proxy",
+        help="Test staggered multi-day entry for underfilled selected picks under ADV caps.",
+    )
+    capacity_staggered_entry.add_argument("--database-url", default=None)
+    capacity_staggered_entry.add_argument("--candidate-run-artifact", required=True)
+    capacity_staggered_entry.add_argument("--trial-id", required=True)
+    capacity_staggered_entry.add_argument("--benchmark-symbol", default="000300.SH")
+    capacity_staggered_entry.add_argument("--entry-days", action="append", type=int, default=None)
+    capacity_staggered_entry.add_argument(
+        "--exit-policy",
+        action="append",
+        choices=SUPPORTED_EXIT_POLICIES,
+        default=None,
+    )
+    capacity_staggered_entry.add_argument(
+        "--exposure-overlay-mode",
+        action="append",
+        choices=SUPPORTED_EXPOSURE_OVERLAY_MODES,
+        default=None,
+    )
+    capacity_staggered_entry.add_argument("--gross-exposure-floor", action="append", type=float, default=None)
+    capacity_staggered_entry.add_argument("--portfolio-notional-cny", type=float, default=1_000_000.0)
+    capacity_staggered_entry.add_argument("--max-adv-participation-rate", type=float, default=0.05)
+    capacity_staggered_entry.add_argument("--output-json", default=None)
+
+    capacity_soft_rerank_proxy = subparsers.add_parser(
+        "research-capacity-soft-rerank-proxy",
+        help="Scan bounded TopN soft capacity reranking without materializing per-order details.",
+    )
+    capacity_soft_rerank_proxy.add_argument("--candidate-run-artifact", required=True)
+    capacity_soft_rerank_proxy.add_argument("--trial-id", required=True)
+    capacity_soft_rerank_proxy.add_argument("--top-candidate-inventory-artifact", required=True)
+    capacity_soft_rerank_proxy.add_argument("--liquidity-weight", action="append", type=float, default=None)
+    capacity_soft_rerank_proxy.add_argument("--portfolio-notional-cny", type=float, default=1_000_000.0)
+    capacity_soft_rerank_proxy.add_argument("--max-adv-participation-rate", type=float, default=0.05)
+    capacity_soft_rerank_proxy.add_argument("--output-json", default=None)
+
+    exposure_floor_stability_proxy = subparsers.add_parser(
+        "research-exposure-floor-stability-proxy",
+        help="Scan a compact gross-exposure floor overlay for candidate path stability.",
+    )
+    exposure_floor_stability_proxy.add_argument("--candidate-run-artifact", required=True)
+    exposure_floor_stability_proxy.add_argument("--trial-id", required=True)
+    exposure_floor_stability_proxy.add_argument("--floor-quantile", action="append", type=float, default=None)
+    exposure_floor_stability_proxy.add_argument(
+        "--overlay-mode",
+        action="append",
+        choices=["cash_floor", "linear_scale", "sqrt_scale", "half_cash_scale"],
+        default=None,
+    )
+    exposure_floor_stability_proxy.add_argument("--output-json", default=None)
+
+    exposure_floor_overlay_governance = subparsers.add_parser(
+        "research-exposure-floor-overlay-governance",
+        help="Build compact comparison/governance evidence for a selected-return exposure-floor overlay.",
+    )
+    exposure_floor_overlay_governance.add_argument("--candidate-run-artifact", required=True)
+    exposure_floor_overlay_governance.add_argument("--model-spec-registry-artifact", required=True)
+    exposure_floor_overlay_governance.add_argument("--trial-id", required=True)
+    exposure_floor_overlay_governance.add_argument("--validation-run-id", default=None)
+    exposure_floor_overlay_governance.add_argument(
+        "--overlay-mode",
+        choices=["linear_scale", "sqrt_scale", "half_cash_scale"],
+        required=True,
+    )
+    exposure_floor_overlay_governance.add_argument("--gross-exposure-floor", type=float, required=True)
+    exposure_floor_overlay_governance.add_argument("--source-exposure-proxy-artifact", default=None)
+    exposure_floor_overlay_governance.add_argument("--output-json", required=True)
+
+    staggered_exposure_combo_governance = subparsers.add_parser(
+        "research-staggered-exposure-combo-governance",
+        help="Build compact comparison/governance evidence for a staggered-entry plus exposure overlay.",
+    )
+    staggered_exposure_combo_governance.add_argument("--candidate-run-artifact", required=True)
+    staggered_exposure_combo_governance.add_argument("--model-spec-registry-artifact", required=True)
+    staggered_exposure_combo_governance.add_argument("--combo-proxy-artifact", required=True)
+    staggered_exposure_combo_governance.add_argument("--trial-id", required=True)
+    staggered_exposure_combo_governance.add_argument("--validation-run-id", default=None)
+    staggered_exposure_combo_governance.add_argument("--entry-days", type=int, required=True)
+    staggered_exposure_combo_governance.add_argument("--exit-policy", choices=SUPPORTED_EXIT_POLICIES, required=True)
+    staggered_exposure_combo_governance.add_argument(
+        "--exposure-overlay-mode",
+        choices=["linear_scale", "sqrt_scale", "half_cash_scale"],
+        required=True,
+    )
+    staggered_exposure_combo_governance.add_argument("--gross-exposure-floor", type=float, required=True)
+    staggered_exposure_combo_governance.add_argument("--output-json", required=True)
+
+    top_candidate_inventory = subparsers.add_parser(
+        "research-top-candidate-inventory",
+        help="Stream canonical matrices and retain only TopN candidates per date for one registered trial.",
+    )
+    top_candidate_inventory.add_argument("--validation-run-id", required=True)
+    top_candidate_inventory.add_argument("--feature-matrix-artifact", required=True)
+    top_candidate_inventory.add_argument("--label-matrix-artifact", required=True)
+    top_candidate_inventory.add_argument("--model-spec-registry-artifact", required=True)
+    top_candidate_inventory.add_argument("--trial-id", required=True)
+    top_candidate_inventory.add_argument("--top-n", type=int, default=20)
+    top_candidate_inventory.add_argument("--min-train-dates", type=int, default=60)
+    top_candidate_inventory.add_argument("--test-window-dates", type=int, default=20)
+    top_candidate_inventory.add_argument("--output-json", default=None)
+
+    top_candidate_learned_rerank_proxy = subparsers.add_parser(
+        "research-top-candidate-learned-rerank-proxy",
+        help="Run a bounded TopN learned rerank diagnostic without full model replay or promotion authority.",
+    )
+    top_candidate_learned_rerank_proxy.add_argument("--top-candidate-inventory-artifact", required=True)
+    top_candidate_learned_rerank_proxy.add_argument("--min-train-dates", type=int, default=60)
+    top_candidate_learned_rerank_proxy.add_argument("--top-k", type=int, default=3)
+    top_candidate_learned_rerank_proxy.add_argument("--fillable-avg-amount-20d-threshold", type=float, default=18_200_000.0)
+    top_candidate_learned_rerank_proxy.add_argument("--output-json", default=None)
+
+    top_candidate_objective_calibration_proxy = subparsers.add_parser(
+        "research-top-candidate-objective-calibration-proxy",
+        help="Compare bounded learned objective variants over a retained TopN inventory before any full replay.",
+    )
+    top_candidate_objective_calibration_proxy.add_argument("--top-candidate-inventory-artifact", required=True)
+    top_candidate_objective_calibration_proxy.add_argument("--min-train-dates", type=int, default=60)
+    top_candidate_objective_calibration_proxy.add_argument("--top-k", type=int, default=3)
+    top_candidate_objective_calibration_proxy.add_argument(
+        "--fillable-avg-amount-20d-threshold",
+        type=float,
+        default=18_200_000.0,
+    )
+    top_candidate_objective_calibration_proxy.add_argument("--positive-top-k", type=int, default=20)
+    top_candidate_objective_calibration_proxy.add_argument("--negative-bottom-k", type=int, default=20)
+    top_candidate_objective_calibration_proxy.add_argument("--output-json", default=None)
+
+    score_rank_probe = subparsers.add_parser(
+        "research-score-rank-probe",
+        help="Score and rank targeted symbols for selected dates from an existing PIT feature matrix without labels.",
+    )
+    score_rank_probe.add_argument("--validation-run-id", required=True)
+    score_rank_probe.add_argument("--feature-matrix-artifact", required=True)
+    score_rank_probe.add_argument("--model-spec-registry-artifact", required=True)
+    score_rank_probe.add_argument("--trial-id", required=True)
+    score_rank_probe.add_argument("--opportunity-discovery-artifact", default=None)
+    score_rank_probe.add_argument("--opportunity-top-k", type=int, default=5)
+    score_rank_probe.add_argument("--target", action="append", default=None, help="AS_OF_DATE=SYMBOL")
+    score_rank_probe.add_argument("--top-n", type=int, default=20)
+    score_rank_probe.add_argument("--output-json", default=None)
 
     refresh_runtime = subparsers.add_parser(
         "refresh-runtime-data",
@@ -1903,6 +2352,7 @@ def main(argv: list[str] | None = None) -> int:
                 as_of_dates=as_of_dates,
                 max_as_of_dates=args.max_as_of_dates,
                 benchmark_symbol=args.benchmark_symbol,
+                entry_price_source=args.entry_price_source,
                 selected_model_spec_ids=args.model_spec_id,
                 min_train_dates=args.min_train_dates,
                 test_window_dates=args.test_window_dates,
@@ -1911,6 +2361,7 @@ def main(argv: list[str] | None = None) -> int:
                 input_snapshot_artifact=args.input_snapshot_artifact,
                 feature_matrix_artifact=args.feature_matrix_artifact,
                 label_matrix_artifact=args.label_matrix_artifact,
+                stream_matrix_replay=args.stream_matrix_replay,
             )
         _print_json(payload)
         return 0
@@ -1925,6 +2376,551 @@ def main(argv: list[str] | None = None) -> int:
         )
         _print_json(payload)
         return 0
+
+    if args.command == "research-model-governance-refresh":
+        candidate_run = json.loads(Path(args.candidate_run_artifact).read_text(encoding="utf-8"))
+        model_spec_registry = json.loads(Path(args.model_spec_registry_artifact).read_text(encoding="utf-8"))
+        comparison_report = build_model_comparison_report_artifact(
+            validation_run_id=args.validation_run_id,
+            candidate_run=candidate_run,
+            model_spec_registry=model_spec_registry,
+        )
+        governance_artifacts = build_model_governance_and_projection_artifacts(
+            validation_run_id=args.validation_run_id,
+            candidate_run=candidate_run,
+            comparison_report=comparison_report,
+        )
+        written_paths: dict[str, Path] = {}
+        if not args.no_write_artifacts:
+            written_paths["model_comparison_report"] = write_model_comparison_report_artifact(
+                comparison_report,
+                artifact_root=args.artifact_root,
+            )
+            written_paths.update(
+                write_model_governance_and_projection_artifacts(
+                    governance_artifacts,
+                    artifact_root=args.artifact_root,
+                )
+            )
+        payload = {
+            "status": "completed",
+            "workflow": "research_model_governance_refresh",
+            "validation_run_id": args.validation_run_id,
+            "artifact_root": args.artifact_root,
+            "write_artifacts": not args.no_write_artifacts,
+            "source_candidate_run_id": candidate_run.get("artifact_id"),
+            "source_model_spec_registry_id": model_spec_registry.get("artifact_id"),
+            "model_comparison_report_id": comparison_report.get("artifact_id"),
+            "governance_promotion_decision_id": governance_artifacts["governance_promotion_decision"].get(
+                "artifact_id"
+            ),
+            "dashboard_approved_projection_registry_id": governance_artifacts[
+                "dashboard_approved_projection_registry"
+            ].get("artifact_id"),
+            "promotion_status": "blocked_from_production",
+            "claim_ceiling": "diagnostic_research_only",
+            "written_paths": {key: str(path) for key, path in written_paths.items()},
+        }
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-model-label-rebuild":
+        input_snapshot = json.loads(Path(args.input_snapshot_artifact).read_text(encoding="utf-8"))
+        with session_scope(args.database_url) as session:
+            payload = rebuild_executable_label_matrix_from_input_snapshot(
+                session,
+                input_snapshot=input_snapshot,
+                validation_run_id=args.validation_run_id,
+                artifact_root=args.artifact_root,
+                entry_price_source=args.entry_price_source,
+            )
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-model-feature-rebuild":
+        input_snapshot = json.loads(Path(args.input_snapshot_artifact).read_text(encoding="utf-8"))
+        with session_scope(args.database_url) as session:
+            payload = rebuild_pit_feature_matrix_from_input_snapshot(
+                session,
+                input_snapshot=input_snapshot,
+                validation_run_id=args.validation_run_id,
+                artifact_root=args.artifact_root,
+            )
+        _print_json(payload)
+        return 0
+
+    if args.command == "research-artifact-retention-audit":
+        payload = audit_research_artifact_retention(
+            retained_root=args.retained_root,
+            compact_replay_roots=args.compact_replay_root,
+            max_retained_candidate_run_files=args.max_retained_candidate_run_files,
+            max_compact_replay_roots=args.max_compact_replay_roots,
+            max_retained_root_bytes=args.max_retained_root_mb * 1024 * 1024,
+            max_compact_replay_root_bytes=args.max_compact_replay_root_mb * 1024 * 1024,
+        )
+        _print_json(payload)
+        return 0 if payload["gate_status"] == "passed" else 1
+
+    if args.command == "research-model-preflight-compact":
+        payload = compact_model_preflight_root(
+            preflight_root=args.preflight_root,
+            output_json=args.output_json,
+            delete_source_root=args.delete_source_root,
+        )
+        _print_json(payload)
+        return 0
+
+    if args.command == "research-feature-v3-source-coverage-audit":
+        observed_start = date.fromisoformat(args.observed_start) if args.observed_start else None
+        observed_end = date.fromisoformat(args.observed_end) if args.observed_end else None
+        with session_scope(args.database_url) as session:
+            payload = audit_feature_v3_source_coverage(
+                session,
+                observed_start=observed_start,
+                observed_end=observed_end,
+                min_market_cap_coverage=args.min_market_cap_coverage,
+                min_valuation_coverage=args.min_valuation_coverage,
+            )
+        if args.output_json:
+            output_path = Path(args.output_json)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        _print_json(payload)
+        return 0 if payload["gate_status"] == "passed" else 1
+
+    if args.command == "research-feature-v3-capacity-triage":
+        with session_scope(args.database_url) as session:
+            payload = build_feature_v3_capacity_triage(
+                session,
+                top_candidate_summary_artifact=args.top_candidate_summary_artifact,
+            )
+        if args.output_json:
+            output_path = Path(args.output_json)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        _print_json(payload)
+        return 0 if payload["gate_status"] == "passed" else 1
+
+    if args.command == "research-order-capacity-proxy":
+        candidate_run = json.loads(Path(args.candidate_run_artifact).read_text(encoding="utf-8"))
+        diagnostics = candidate_run.get("trial_diagnostics") or []
+        trial = next((row for row in diagnostics if row.get("trial_id") == args.trial_id), None)
+        if not isinstance(trial, dict):
+            raise ValueError(f"trial_id not found in candidate run: {args.trial_id}")
+        top_candidate_picks = trial.get("top_5_picks_by_date") or []
+        source_top_candidate_inventory_id = None
+        if args.top_candidate_inventory_artifact:
+            top_candidate_inventory = json.loads(Path(args.top_candidate_inventory_artifact).read_text(encoding="utf-8"))
+            if top_candidate_inventory.get("trial_id") != args.trial_id:
+                raise ValueError("top candidate inventory trial_id does not match requested trial_id")
+            top_candidate_picks = top_candidate_inventory.get("candidate_rows") or []
+            source_top_candidate_inventory_id = top_candidate_inventory.get("artifact_id")
+        payload = build_order_level_capacity_proxy(
+            trial.get("selected_top_k_picks_by_date") or [],
+            selected_top_k=int(trial.get("selected_top_k") or 1),
+            selected_returns_by_date=trial.get("selected_top_k_returns_by_date") or [],
+            top_candidate_picks=top_candidate_picks,
+            target_horizon_days=int(float(trial.get("target_horizon_days") or 20)),
+            portfolio_notional_cny=args.portfolio_notional_cny,
+            max_adv_participation_rate=args.max_adv_participation_rate,
+        )
+        payload["source_candidate_run_artifact"] = str(Path(args.candidate_run_artifact))
+        payload["source_candidate_run_id"] = candidate_run.get("artifact_id")
+        payload["source_top_candidate_inventory_artifact"] = args.top_candidate_inventory_artifact
+        payload["source_top_candidate_inventory_id"] = source_top_candidate_inventory_id
+        payload["source_prediction_storage_boundary"] = {
+            "prediction_row_count": candidate_run.get("prediction_row_count"),
+            "stored_prediction_row_count": candidate_run.get("stored_prediction_row_count"),
+            "prediction_rows_truncated": candidate_run.get("prediction_rows_truncated"),
+            "prediction_storage_policy": candidate_run.get("prediction_storage_policy"),
+        }
+        payload["trial_id"] = args.trial_id
+        if args.output_json:
+            output_path = Path(args.output_json)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n",
+                encoding="utf-8",
+            )
+        _print_json(payload)
+        return 0
+
+    if args.command == "research-capacity-contract-tier-scan":
+        candidate_run = json.loads(Path(args.candidate_run_artifact).read_text(encoding="utf-8"))
+        diagnostics = candidate_run.get("trial_diagnostics") or []
+        trial = next((row for row in diagnostics if row.get("trial_id") == args.trial_id), None)
+        if not isinstance(trial, dict):
+            raise ValueError(f"trial_id not found in candidate run: {args.trial_id}")
+        scan_kwargs: dict[str, Any] = {}
+        if args.notional_tier_cny:
+            scan_kwargs["notional_tiers_cny"] = tuple(args.notional_tier_cny)
+        payload = build_capacity_contract_tier_scan(
+            trial.get("selected_top_k_picks_by_date") or [],
+            selected_top_k=int(trial.get("selected_top_k") or 1),
+            max_adv_participation_rate=args.max_adv_participation_rate,
+            **scan_kwargs,
+        )
+        payload["source_candidate_run_artifact"] = str(Path(args.candidate_run_artifact))
+        payload["source_candidate_run_id"] = candidate_run.get("artifact_id")
+        payload["source_prediction_storage_boundary"] = {
+            "prediction_row_count": candidate_run.get("prediction_row_count"),
+            "stored_prediction_row_count": candidate_run.get("stored_prediction_row_count"),
+            "prediction_rows_truncated": candidate_run.get("prediction_rows_truncated"),
+            "prediction_storage_policy": candidate_run.get("prediction_storage_policy"),
+        }
+        payload["trial_id"] = args.trial_id
+        if args.output_json:
+            output_path = Path(args.output_json)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n",
+                encoding="utf-8",
+            )
+        _print_json(payload)
+        return 0
+
+    if args.command == "research-capacity-opportunity-set-discovery":
+        with session_scope(args.database_url) as session:
+            payload = build_capacity_opportunity_set_discovery(
+                session,
+                top_candidate_summary_artifact=args.top_candidate_summary_artifact,
+                benchmark_symbol=args.benchmark_symbol,
+                portfolio_notional_cny=args.portfolio_notional_cny,
+                slot_capital_weight=args.slot_capital_weight,
+                max_adv_participation_rate=args.max_adv_participation_rate,
+                top_n=args.top_n,
+            )
+        if args.output_json:
+            write_capacity_opportunity_set_discovery(payload, args.output_json)
+        _print_json(payload)
+        return 0 if not payload["blocking_gate_ids"] else 1
+
+    if args.command == "research-capacity-opportunity-feature-gap":
+        opportunity_discovery = json.loads(Path(args.opportunity_discovery_artifact).read_text(encoding="utf-8"))
+        payload = build_capacity_opportunity_feature_gap_probe(
+            opportunity_discovery,
+            top_k=args.top_k,
+            near_floor_ratio=args.near_floor_ratio,
+        )
+        payload["source_opportunity_discovery_artifact"] = str(Path(args.opportunity_discovery_artifact))
+        if args.output_json:
+            write_capacity_opportunity_feature_gap_probe(payload, args.output_json)
+        _print_json(payload)
+        return 0 if payload["gate_status"] == "passed" else 1
+
+    if args.command == "research-capacity-opportunity-archetype-sample":
+        candidate_run = json.loads(Path(args.candidate_run_artifact).read_text(encoding="utf-8"))
+        with session_scope(args.database_url) as session:
+            payload = build_capacity_opportunity_archetype_sample_preflight(
+                session,
+                candidate_run=candidate_run,
+                trial_id=args.trial_id,
+                benchmark_symbol=args.benchmark_symbol,
+                sample_date_count=args.sample_date_count,
+                top_k=args.top_k,
+                portfolio_notional_cny=args.portfolio_notional_cny,
+                slot_capital_weight=args.slot_capital_weight,
+                max_adv_participation_rate=args.max_adv_participation_rate,
+            )
+        payload["source_candidate_run_artifact"] = str(Path(args.candidate_run_artifact))
+        if args.output_json:
+            write_capacity_opportunity_archetype_sample_preflight(payload, args.output_json)
+        _print_json(payload)
+        return 0 if payload["gate_status"] == "passed" else 1
+
+    if args.command == "research-capacity-opportunity-learned-sample":
+        candidate_run = json.loads(Path(args.candidate_run_artifact).read_text(encoding="utf-8"))
+        with session_scope(args.database_url) as session:
+            payload = build_capacity_opportunity_learned_sample_preflight(
+                session,
+                candidate_run=candidate_run,
+                trial_id=args.trial_id,
+                benchmark_symbol=args.benchmark_symbol,
+                sample_date_count=args.sample_date_count,
+                min_train_dates=args.min_train_dates,
+                top_k=args.top_k,
+                portfolio_notional_cny=args.portfolio_notional_cny,
+                slot_capital_weight=args.slot_capital_weight,
+                max_adv_participation_rate=args.max_adv_participation_rate,
+            )
+        payload["source_candidate_run_artifact"] = str(Path(args.candidate_run_artifact))
+        if args.output_json:
+            write_capacity_opportunity_learned_sample_preflight(payload, args.output_json)
+        _print_json(payload)
+        return 0 if payload["gate_status"] == "passed" else 1
+
+    if args.command == "research-capacity-underfilled-fallback-preflight":
+        candidate_run = json.loads(Path(args.candidate_run_artifact).read_text(encoding="utf-8"))
+        with session_scope(args.database_url) as session:
+            payload = build_capacity_underfilled_fallback_preflight(
+                session,
+                candidate_run=candidate_run,
+                trial_id=args.trial_id,
+                benchmark_symbol=args.benchmark_symbol,
+                train_date_count=args.train_date_count,
+                portfolio_notional_cny=args.portfolio_notional_cny,
+                max_adv_participation_rate=args.max_adv_participation_rate,
+            )
+        payload["source_candidate_run_artifact"] = str(Path(args.candidate_run_artifact))
+        if args.output_json:
+            write_capacity_underfilled_fallback_preflight(payload, args.output_json)
+        _print_json(payload)
+        return 0 if payload["gate_status"] == "passed" else 1
+
+    if args.command == "research-capacity-liquid-winner-feature-audit":
+        with session_scope(args.database_url) as session:
+            payload = build_capacity_liquid_winner_feature_audit(
+                session,
+                opportunity_discovery_artifact=args.opportunity_discovery_artifact,
+                fallback_preflight_artifact=args.fallback_preflight_artifact,
+                benchmark_symbol=args.benchmark_symbol,
+                top_rank_threshold=args.top_rank_threshold,
+            )
+        if args.output_json:
+            write_capacity_liquid_winner_feature_audit(payload, args.output_json)
+        _print_json(payload)
+        return 0 if payload["gate_status"] == "passed" else 1
+
+    if args.command == "research-pit-source-readiness-audit":
+        with session_scope(args.database_url) as session:
+            payload = audit_pit_source_readiness(
+                session,
+                observed_start=args.observed_start,
+                observed_end=args.observed_end,
+                min_coverage_ratio=args.min_coverage_ratio,
+            )
+        if args.output_json:
+            write_pit_source_readiness_audit(payload, args.output_json)
+        _print_json(payload)
+        return 0 if payload["gate_status"] == "passed" else 1
+
+    if args.command == "research-capacity-staggered-entry-proxy":
+        candidate_run = json.loads(Path(args.candidate_run_artifact).read_text(encoding="utf-8"))
+        entry_days = tuple(args.entry_days) if args.entry_days else None
+        exit_policies = tuple(args.exit_policy) if args.exit_policy else None
+        exposure_overlay_modes = tuple(args.exposure_overlay_mode) if args.exposure_overlay_mode else None
+        gross_exposure_floors = tuple(args.gross_exposure_floor) if args.gross_exposure_floor else None
+        kwargs: dict[str, Any] = {}
+        if entry_days:
+            kwargs["entry_day_options"] = entry_days
+        if exit_policies:
+            kwargs["exit_policies"] = exit_policies
+        if exposure_overlay_modes:
+            kwargs["exposure_overlay_modes"] = exposure_overlay_modes
+        if gross_exposure_floors:
+            kwargs["gross_exposure_floors"] = gross_exposure_floors
+        with session_scope(args.database_url) as session:
+            payload = build_capacity_staggered_entry_proxy(
+                session,
+                candidate_run=candidate_run,
+                trial_id=args.trial_id,
+                benchmark_symbol=args.benchmark_symbol,
+                portfolio_notional_cny=args.portfolio_notional_cny,
+                max_adv_participation_rate=args.max_adv_participation_rate,
+                **kwargs,
+            )
+        payload["source_candidate_run_artifact"] = str(Path(args.candidate_run_artifact))
+        if args.output_json:
+            write_capacity_staggered_entry_proxy(payload, args.output_json)
+        _print_json(payload)
+        return 0 if payload["non_degrading_scans"] else 1
+
+    if args.command == "research-capacity-soft-rerank-proxy":
+        candidate_run = json.loads(Path(args.candidate_run_artifact).read_text(encoding="utf-8"))
+        diagnostics = candidate_run.get("trial_diagnostics") or []
+        trial = next((row for row in diagnostics if row.get("trial_id") == args.trial_id), None)
+        if not isinstance(trial, dict):
+            raise ValueError(f"trial_id not found in candidate run: {args.trial_id}")
+        top_candidate_inventory = json.loads(Path(args.top_candidate_inventory_artifact).read_text(encoding="utf-8"))
+        if top_candidate_inventory.get("trial_id") != args.trial_id:
+            raise ValueError("top candidate inventory trial_id does not match requested trial_id")
+        soft_rerank_kwargs: dict[str, Any] = {}
+        if args.liquidity_weight:
+            soft_rerank_kwargs["liquidity_weights"] = tuple(args.liquidity_weight)
+        payload = build_capacity_soft_rerank_proxy(
+            trial.get("selected_top_k_picks_by_date") or [],
+            selected_top_k=int(trial.get("selected_top_k") or 1),
+            selected_returns_by_date=trial.get("selected_top_k_returns_by_date") or [],
+            top_candidate_picks=top_candidate_inventory.get("candidate_rows") or [],
+            target_horizon_days=int(float(trial.get("target_horizon_days") or 20)),
+            portfolio_notional_cny=args.portfolio_notional_cny,
+            max_adv_participation_rate=args.max_adv_participation_rate,
+            **soft_rerank_kwargs,
+        )
+        payload["source_candidate_run_artifact"] = str(Path(args.candidate_run_artifact))
+        payload["source_candidate_run_id"] = candidate_run.get("artifact_id")
+        payload["source_top_candidate_inventory_artifact"] = str(Path(args.top_candidate_inventory_artifact))
+        payload["source_top_candidate_inventory_id"] = top_candidate_inventory.get("artifact_id")
+        payload["source_prediction_storage_boundary"] = {
+            "prediction_row_count": candidate_run.get("prediction_row_count"),
+            "stored_prediction_row_count": candidate_run.get("stored_prediction_row_count"),
+            "prediction_rows_truncated": candidate_run.get("prediction_rows_truncated"),
+            "prediction_storage_policy": candidate_run.get("prediction_storage_policy"),
+        }
+        payload["trial_id"] = args.trial_id
+        if args.output_json:
+            output_path = Path(args.output_json)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n",
+                encoding="utf-8",
+            )
+        _print_json(payload)
+        return 0
+
+    if args.command == "research-exposure-floor-stability-proxy":
+        candidate_run = json.loads(Path(args.candidate_run_artifact).read_text(encoding="utf-8"))
+        diagnostics = candidate_run.get("trial_diagnostics") or []
+        trial = next((row for row in diagnostics if row.get("trial_id") == args.trial_id), None)
+        if not isinstance(trial, dict):
+            raise ValueError(f"trial_id not found in candidate run: {args.trial_id}")
+        floor_kwargs: dict[str, Any] = {}
+        if args.floor_quantile:
+            floor_kwargs["floor_quantiles"] = tuple(args.floor_quantile)
+        if args.overlay_mode:
+            floor_kwargs["overlay_modes"] = tuple(args.overlay_mode)
+        payload = build_exposure_floor_stability_proxy(
+            trial.get("selected_top_k_returns_by_date") or [],
+            target_horizon_days=int(float(trial.get("target_horizon_days") or 20)),
+            **floor_kwargs,
+        )
+        payload["source_candidate_run_artifact"] = str(Path(args.candidate_run_artifact))
+        payload["source_candidate_run_id"] = candidate_run.get("artifact_id")
+        payload["source_prediction_storage_boundary"] = {
+            "prediction_row_count": candidate_run.get("prediction_row_count"),
+            "stored_prediction_row_count": candidate_run.get("stored_prediction_row_count"),
+            "prediction_rows_truncated": candidate_run.get("prediction_rows_truncated"),
+            "prediction_storage_policy": candidate_run.get("prediction_storage_policy"),
+        }
+        payload["trial_id"] = args.trial_id
+        if args.output_json:
+            output_path = Path(args.output_json)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n",
+                encoding="utf-8",
+            )
+        _print_json(payload)
+        return 0
+
+    if args.command == "research-exposure-floor-overlay-governance":
+        candidate_run = json.loads(Path(args.candidate_run_artifact).read_text(encoding="utf-8"))
+        model_spec_registry = json.loads(Path(args.model_spec_registry_artifact).read_text(encoding="utf-8"))
+        payload = build_exposure_floor_overlay_governance_summary(
+            candidate_run=candidate_run,
+            model_spec_registry=model_spec_registry,
+            trial_id=args.trial_id,
+            overlay_mode=args.overlay_mode,
+            gross_exposure_floor=args.gross_exposure_floor,
+            validation_run_id=args.validation_run_id,
+            source_exposure_proxy_artifact=args.source_exposure_proxy_artifact,
+        )
+        payload["source_candidate_run_artifact"] = str(Path(args.candidate_run_artifact))
+        payload["source_model_spec_registry_artifact"] = str(Path(args.model_spec_registry_artifact))
+        write_exposure_floor_overlay_governance_summary(payload, args.output_json)
+        _print_json(payload)
+        return 0
+
+    if args.command == "research-staggered-exposure-combo-governance":
+        candidate_run = json.loads(Path(args.candidate_run_artifact).read_text(encoding="utf-8"))
+        model_spec_registry = json.loads(Path(args.model_spec_registry_artifact).read_text(encoding="utf-8"))
+        combo_proxy = json.loads(Path(args.combo_proxy_artifact).read_text(encoding="utf-8"))
+        payload = build_staggered_exposure_combo_governance_summary(
+            candidate_run=candidate_run,
+            model_spec_registry=model_spec_registry,
+            combo_proxy=combo_proxy,
+            trial_id=args.trial_id,
+            entry_days=args.entry_days,
+            exit_policy=args.exit_policy,
+            exposure_overlay_mode=args.exposure_overlay_mode,
+            gross_exposure_floor=args.gross_exposure_floor,
+            validation_run_id=args.validation_run_id,
+            source_combo_proxy_artifact=str(Path(args.combo_proxy_artifact)),
+        )
+        payload["source_candidate_run_artifact"] = str(Path(args.candidate_run_artifact))
+        payload["source_model_spec_registry_artifact"] = str(Path(args.model_spec_registry_artifact))
+        write_staggered_exposure_combo_governance_summary(payload, args.output_json)
+        _print_json(payload)
+        return 0
+
+    if args.command == "research-top-candidate-inventory":
+        registry = json.loads(Path(args.model_spec_registry_artifact).read_text(encoding="utf-8"))
+        payload = build_streamed_top_candidate_inventory_artifact(
+            validation_run_id=args.validation_run_id,
+            feature_matrix_artifact=args.feature_matrix_artifact,
+            label_matrix_artifact=args.label_matrix_artifact,
+            model_spec_registry=registry,
+            trial_id=args.trial_id,
+            top_n=args.top_n,
+            min_train_dates=args.min_train_dates,
+            test_window_dates=args.test_window_dates,
+        )
+        payload["source_model_spec_registry_artifact"] = str(Path(args.model_spec_registry_artifact))
+        if args.output_json:
+            output_path = Path(args.output_json)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n",
+                encoding="utf-8",
+            )
+        _print_json(payload)
+        return 0
+
+    if args.command == "research-top-candidate-learned-rerank-proxy":
+        top_candidate_inventory = json.loads(Path(args.top_candidate_inventory_artifact).read_text(encoding="utf-8"))
+        payload = build_top_candidate_learned_fillable_rerank_proxy(
+            top_candidate_inventory,
+            min_train_dates=args.min_train_dates,
+            top_k=args.top_k,
+            fillable_avg_amount_20d_threshold=args.fillable_avg_amount_20d_threshold,
+        )
+        payload["source_top_candidate_inventory_artifact"] = str(Path(args.top_candidate_inventory_artifact))
+        if args.output_json:
+            write_top_candidate_learned_fillable_rerank_proxy(payload, args.output_json)
+        _print_json(payload)
+        return 0 if payload["gate_status"] == "passed" else 1
+
+    if args.command == "research-top-candidate-objective-calibration-proxy":
+        top_candidate_inventory = json.loads(Path(args.top_candidate_inventory_artifact).read_text(encoding="utf-8"))
+        payload = build_top_candidate_objective_calibration_proxy(
+            top_candidate_inventory,
+            min_train_dates=args.min_train_dates,
+            top_k=args.top_k,
+            fillable_avg_amount_20d_threshold=args.fillable_avg_amount_20d_threshold,
+            positive_top_k=args.positive_top_k,
+            negative_bottom_k=args.negative_bottom_k,
+        )
+        payload["source_top_candidate_inventory_artifact"] = str(Path(args.top_candidate_inventory_artifact))
+        if args.output_json:
+            write_top_candidate_objective_calibration_proxy(payload, args.output_json)
+        _print_json(payload)
+        return 0 if payload["gate_status"] == "passed" else 1
+
+    if args.command == "research-score-rank-probe":
+        registry = json.loads(Path(args.model_spec_registry_artifact).read_text(encoding="utf-8"))
+        target_symbols_by_date = _target_symbols_by_date_from_probe_args(args)
+        if not target_symbols_by_date:
+            raise ValueError("Provide --opportunity-discovery-artifact or at least one --target AS_OF_DATE=SYMBOL")
+        payload = build_streamed_score_rank_probe_artifact(
+            validation_run_id=args.validation_run_id,
+            feature_matrix_artifact=args.feature_matrix_artifact,
+            model_spec_registry=registry,
+            trial_id=args.trial_id,
+            target_symbols_by_date=target_symbols_by_date,
+            top_n=args.top_n,
+        )
+        payload["source_model_spec_registry_artifact"] = str(Path(args.model_spec_registry_artifact))
+        if args.opportunity_discovery_artifact:
+            payload["source_opportunity_discovery_artifact"] = str(Path(args.opportunity_discovery_artifact))
+        if args.output_json:
+            output_path = Path(args.output_json)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n",
+                encoding="utf-8",
+            )
+        _print_json(payload)
+        return 0 if not payload["blocking_gate_ids"] else 1
 
     if args.command in ("refresh-runtime-data", "phase5-daily-refresh"):
         if args.analysis_only and args.ops_only:

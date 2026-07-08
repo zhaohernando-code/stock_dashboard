@@ -578,8 +578,9 @@ export interface ShortpickPaperTrackingResponse {
   items: ShortpickPaperTrackingItem[];
 }
 
-export interface ShortpickV2ConfigReadout {
+export interface ShortpickStrategyLabConfigReadout {
   config_id: string;
+  label?: string | null;
   role: string;
   selection_rank?: number | null;
   gate_status?: string | null;
@@ -590,7 +591,7 @@ export interface ShortpickV2ConfigReadout {
   decision_samples: Record<string, unknown>[];
 }
 
-export interface ShortpickV2HistoricalReplayResponse {
+export interface ShortpickStrategyLabHistoricalReplayResponse {
   generated_at: string;
   status: string;
   claim_ceiling: string;
@@ -601,51 +602,55 @@ export interface ShortpickV2HistoricalReplayResponse {
   data_scope: Record<string, unknown>;
   selection_policy: Record<string, unknown>;
   summary: Record<string, unknown>;
-  selected_configs: ShortpickV2ConfigReadout[];
-  baseline_configs: ShortpickV2ConfigReadout[];
-  holdout_configs: ShortpickV2ConfigReadout[];
-  rejected_configs: ShortpickV2ConfigReadout[];
+  selected_configs: ShortpickStrategyLabConfigReadout[];
+  baseline_configs: ShortpickStrategyLabConfigReadout[];
+  holdout_configs: ShortpickStrategyLabConfigReadout[];
+  rejected_configs: ShortpickStrategyLabConfigReadout[];
+  metric_groups?: Array<{
+    title: string;
+    items: Array<{ label: string; value?: string | number | null; format?: string | null }>;
+  }>;
   leakage_audit: Record<string, unknown>;
   research_labeling: Record<string, unknown>;
   event_refs: string[];
 }
 
-export interface ShortpickV2PaperDisplayTextItem {
+export interface ShortpickStrategyLabPaperDisplayTextItem {
   label: string;
   value?: string | number | null;
 }
 
-export interface ShortpickV2PaperDisplayLatestTrade {
+export interface ShortpickStrategyLabPaperDisplayLatestTrade {
   title?: string;
   tag?: string | null;
   summary?: string | null;
-  items?: ShortpickV2PaperDisplayTextItem[];
+  items?: ShortpickStrategyLabPaperDisplayTextItem[];
   note?: string | null;
 }
 
-export interface ShortpickV2PaperDisplayStrategyExplanation {
+export interface ShortpickStrategyLabPaperDisplayStrategyExplanation {
   title?: string;
-  items?: ShortpickV2PaperDisplayTextItem[];
+  items?: ShortpickStrategyLabPaperDisplayTextItem[];
 }
 
-export interface ShortpickV2PaperDisplayChartPoint {
+export interface ShortpickStrategyLabPaperDisplayChartPoint {
   name: string;
   value: number;
 }
 
-export interface ShortpickV2PaperDisplayChart {
+export interface ShortpickStrategyLabPaperDisplayChart {
   title?: string;
   subtitle?: string;
   kind?: string;
-  data?: ShortpickV2PaperDisplayChartPoint[];
+  data?: ShortpickStrategyLabPaperDisplayChartPoint[];
 }
 
-export interface ShortpickV2PaperDisplayTableColumn {
+export interface ShortpickStrategyLabPaperDisplayTableColumn {
   key: string;
   label: string;
 }
 
-export interface ShortpickV2PaperDisplayTableRow {
+export interface ShortpickStrategyLabPaperDisplayTableRow {
   row_key?: string;
   signal_date?: string;
   signal_date_text?: string;
@@ -663,14 +668,14 @@ export interface ShortpickV2PaperDisplayTableRow {
   [key: string]: unknown;
 }
 
-export interface ShortpickV2PaperDisplayTable {
+export interface ShortpickStrategyLabPaperDisplayTable {
   title?: string;
-  columns?: ShortpickV2PaperDisplayTableColumn[];
-  rows?: ShortpickV2PaperDisplayTableRow[];
+  columns?: ShortpickStrategyLabPaperDisplayTableColumn[];
+  rows?: ShortpickStrategyLabPaperDisplayTableRow[];
   empty_text?: string;
 }
 
-export interface ShortpickV2PaperDisplayAccountPoint {
+export interface ShortpickStrategyLabPaperDisplayAccountPoint {
   date: string;
   nav: number;
   account_return: number;
@@ -680,7 +685,7 @@ export interface ShortpickV2PaperDisplayAccountPoint {
   open_position_count?: number;
 }
 
-export interface ShortpickV2PaperDisplayAccountCurve {
+export interface ShortpickStrategyLabPaperDisplayAccountCurve {
   strategy: string;
   initial_cash?: number;
   latest_nav?: number;
@@ -688,23 +693,24 @@ export interface ShortpickV2PaperDisplayAccountCurve {
   max_drawdown?: number;
   point_count?: number;
   completed_trade_count?: number;
-  points?: ShortpickV2PaperDisplayAccountPoint[];
+  points?: ShortpickStrategyLabPaperDisplayAccountPoint[];
 }
 
-export interface ShortpickV2PaperDisplay {
+export interface ShortpickStrategyLabPaperDisplay {
   title?: string;
   status_label?: string;
   subtitle?: string;
-  latest_trade?: ShortpickV2PaperDisplayLatestTrade;
-  strategy_explanation?: ShortpickV2PaperDisplayStrategyExplanation;
-  charts?: ShortpickV2PaperDisplayChart[];
-  table?: ShortpickV2PaperDisplayTable;
-  account_curves?: ShortpickV2PaperDisplayAccountCurve[];
+  latest_trade?: ShortpickStrategyLabPaperDisplayLatestTrade;
+  strategy_explanation?: ShortpickStrategyLabPaperDisplayStrategyExplanation;
+  charts?: ShortpickStrategyLabPaperDisplayChart[];
+  table?: ShortpickStrategyLabPaperDisplayTable;
+  account_curves?: ShortpickStrategyLabPaperDisplayAccountCurve[];
+  planned_orders?: Record<string, unknown>[];
   coverage?: Record<string, unknown>;
-  summary_cards?: ShortpickV2PaperDisplayTextItem[];
+  summary_cards?: ShortpickStrategyLabPaperDisplayTextItem[];
 }
 
-export interface ShortpickV2PaperTrackingResponse {
+export interface ShortpickStrategyLabPaperTrackingResponse {
   generated_at: string;
   status: string;
   current_status: string;
@@ -718,10 +724,10 @@ export interface ShortpickV2PaperTrackingResponse {
   tracking_window: Record<string, unknown>;
   account_contract: Record<string, unknown>;
   row_contract: Record<string, unknown>;
-  selected_configs: ShortpickV2ConfigReadout[];
-  baseline_configs: ShortpickV2ConfigReadout[];
+  selected_configs: ShortpickStrategyLabConfigReadout[];
+  baseline_configs: ShortpickStrategyLabConfigReadout[];
   paper_governance: Record<string, unknown>;
-  paper_display?: ShortpickV2PaperDisplay;
+  paper_display?: ShortpickStrategyLabPaperDisplay;
   records: Record<string, unknown>[];
   summary: Record<string, unknown>;
   leakage_audit: Record<string, unknown>;

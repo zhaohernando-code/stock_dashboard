@@ -360,3 +360,64 @@ class ShortpickV2PaperTrackingResponse(BaseModel):
     leakage_audit: dict[str, Any] = Field(default_factory=dict)
     research_labeling: dict[str, Any] = Field(default_factory=dict)
     event_refs: list[str] = Field(default_factory=list)
+
+
+class ShortpickStrategyLabConfigReadout(BaseModel):
+    config_id: str
+    label: str | None = None
+    role: str
+    selection_rank: int | None = None
+    gate_status: str | None = None
+    reason: str | None = None
+    summary: dict[str, Any] = Field(default_factory=dict)
+    selection_summary: dict[str, Any] = Field(default_factory=dict)
+    reason_counts: dict[str, int] = Field(default_factory=dict)
+    decision_samples: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ShortpickStrategyLabHistoricalReplayResponse(BaseModel):
+    generated_at: datetime
+    schema_version: str
+    status: str
+    claim_ceiling: str
+    evidence_basis: str
+    ui_language: str
+    data_disclaimer: str
+    source_artifacts: dict[str, Any] = Field(default_factory=dict)
+    data_scope: dict[str, Any] = Field(default_factory=dict)
+    selection_policy: dict[str, Any] = Field(default_factory=dict)
+    summary: dict[str, Any] = Field(default_factory=dict)
+    selected_configs: list[ShortpickStrategyLabConfigReadout] = Field(default_factory=list)
+    baseline_configs: list[ShortpickStrategyLabConfigReadout] = Field(default_factory=list)
+    holdout_configs: list[ShortpickStrategyLabConfigReadout] = Field(default_factory=list)
+    rejected_configs: list[ShortpickStrategyLabConfigReadout] = Field(default_factory=list)
+    metric_groups: list[dict[str, Any]] = Field(default_factory=list)
+    leakage_audit: dict[str, Any] = Field(default_factory=dict)
+    research_labeling: dict[str, Any] = Field(default_factory=dict)
+    event_refs: list[str] = Field(default_factory=list)
+
+
+class ShortpickStrategyLabPaperTrackingResponse(BaseModel):
+    generated_at: datetime
+    schema_version: str
+    status: str
+    current_status: str
+    current_message: str | None = None
+    claim_ceiling: str
+    evidence_basis: str
+    ui_language: str
+    data_disclaimer: str
+    source_contract_ref: str
+    source_artifacts: dict[str, Any] = Field(default_factory=dict)
+    tracking_window: dict[str, Any] = Field(default_factory=dict)
+    account_contract: dict[str, Any] = Field(default_factory=dict)
+    row_contract: dict[str, Any] = Field(default_factory=dict)
+    selected_configs: list[ShortpickStrategyLabConfigReadout] = Field(default_factory=list)
+    baseline_configs: list[ShortpickStrategyLabConfigReadout] = Field(default_factory=list)
+    paper_governance: dict[str, Any] = Field(default_factory=dict)
+    paper_display: dict[str, Any] = Field(default_factory=dict)
+    records: list[dict[str, Any]] = Field(default_factory=list)
+    summary: dict[str, Any] = Field(default_factory=dict)
+    leakage_audit: dict[str, Any] = Field(default_factory=dict)
+    research_labeling: dict[str, Any] = Field(default_factory=dict)
+    event_refs: list[str] = Field(default_factory=list)

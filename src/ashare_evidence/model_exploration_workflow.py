@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import json
 from datetime import date
 from pathlib import Path
@@ -8,6 +9,8 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ashare_evidence.model_candidate_runner import (
+    _load_artifact_metadata_without_rows,
+    build_streamed_walk_forward_model_candidate_run_artifact,
     build_walk_forward_model_candidate_run_artifact,
     write_walk_forward_model_candidate_run_artifact,
 )
@@ -89,6 +92,7 @@ def run_shortpick_model_exploration_workbench(
     as_of_dates: list[date] | None = None,
     max_as_of_dates: int | None = None,
     benchmark_symbol: str = "000300.SH",
+    entry_price_source: str = "next_close",
     selected_model_spec_ids: list[str] | None = None,
     min_train_dates: int = 60,
     test_window_dates: int = 20,
@@ -97,18 +101,27 @@ def run_shortpick_model_exploration_workbench(
     input_snapshot_artifact: str | Path | None = None,
     feature_matrix_artifact: str | Path | None = None,
     label_matrix_artifact: str | Path | None = None,
+    stream_matrix_replay: bool = False,
 ) -> dict[str, Any]:
     root = Path(artifact_root) if artifact_root else artifact_root_from_database_url(database_url)
     supplied_matrix_artifacts = [input_snapshot_artifact, feature_matrix_artifact, label_matrix_artifact]
     if any(supplied_matrix_artifacts) and not all(supplied_matrix_artifacts):
         raise ValueError("input, feature and label matrix artifacts must be supplied together")
     matrix_artifacts_reused = all(supplied_matrix_artifacts)
-    if matrix_artifacts_reused:
+    if matrix_artifacts_reused and not stream_matrix_replay:
         matrix_artifacts = load_model_exploration_matrix_artifacts(
             input_snapshot_artifact=str(input_snapshot_artifact),
             feature_matrix_artifact=str(feature_matrix_artifact),
             label_matrix_artifact=str(label_matrix_artifact),
         )
+    elif matrix_artifacts_reused:
+        feature_matrix_metadata = _load_artifact_metadata_without_rows(str(feature_matrix_artifact))
+        label_matrix_metadata = _load_artifact_metadata_without_rows(str(label_matrix_artifact))
+        matrix_artifacts = {
+            "model_exploration_input_snapshot": _load_json_artifact(str(input_snapshot_artifact)),
+            "pit_feature_matrix": feature_matrix_metadata,
+            "executable_label_matrix": label_matrix_metadata,
+        }
     else:
         matrix_artifacts = build_model_exploration_p1_artifacts(
             session,
@@ -116,20 +129,43 @@ def run_shortpick_model_exploration_workbench(
             as_of_dates=as_of_dates,
             benchmark_symbol=benchmark_symbol,
             max_as_of_dates=max_as_of_dates,
+            entry_price_source=entry_price_source,
         )
     registry = build_model_spec_registry_artifact(
         validation_run_id=validation_run_id,
         source_input_snapshot_id=str(matrix_artifacts["model_exploration_input_snapshot"]["artifact_id"]),
     )
-    candidate_run = build_walk_forward_model_candidate_run_artifact(
-        validation_run_id=validation_run_id,
-        feature_matrix=matrix_artifacts["pit_feature_matrix"],
-        label_matrix=matrix_artifacts["executable_label_matrix"],
-        model_spec_registry=registry,
-        min_train_dates=min_train_dates,
-        test_window_dates=test_window_dates,
-        selected_model_spec_ids=selected_model_spec_ids,
-    )
+    gc_was_enabled = gc.isenabled()
+    if gc_was_enabled:
+        gc.disable()
+    try:
+        if matrix_artifacts_reused and stream_matrix_replay:
+            candidate_run = build_streamed_walk_forward_model_candidate_run_artifact(
+                validation_run_id=validation_run_id,
+                feature_matrix_artifact=str(feature_matrix_artifact),
+                label_matrix_artifact=str(label_matrix_artifact),
+                model_spec_registry=registry,
+                min_train_dates=min_train_dates,
+                test_window_dates=test_window_dates,
+                selected_model_spec_ids=selected_model_spec_ids,
+                source_db_snapshot_id=matrix_artifacts["model_exploration_input_snapshot"].get("source_db_snapshot_id"),
+                source_data_time_range=matrix_artifacts["model_exploration_input_snapshot"].get(
+                    "source_data_time_range"
+                ),
+            )
+        else:
+            candidate_run = build_walk_forward_model_candidate_run_artifact(
+                validation_run_id=validation_run_id,
+                feature_matrix=matrix_artifacts["pit_feature_matrix"],
+                label_matrix=matrix_artifacts["executable_label_matrix"],
+                model_spec_registry=registry,
+                min_train_dates=min_train_dates,
+                test_window_dates=test_window_dates,
+                selected_model_spec_ids=selected_model_spec_ids,
+            )
+    finally:
+        if gc_was_enabled:
+            gc.enable()
     comparison_report = build_model_comparison_report_artifact(
         validation_run_id=validation_run_id,
         candidate_run=candidate_run,
@@ -170,6 +206,7 @@ def run_shortpick_model_exploration_workbench(
         "artifact_root": str(root),
         "write_artifacts": write_artifacts,
         "matrix_artifacts_reused": matrix_artifacts_reused,
+        "stream_matrix_replay": stream_matrix_replay,
         "matrix_artifact_ids": {
             key: matrix_artifacts[key].get("artifact_id")
             for key in REQUIRED_MATRIX_ARTIFACT_KEYS

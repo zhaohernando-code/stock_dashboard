@@ -12,6 +12,36 @@ from ashare_evidence.phase2.common import spearman_correlation
 from ashare_evidence.research_artifact_store import write_research_validation_artifact
 
 MODEL_COMPARISON_REPORT_SCHEMA_VERSION = "model_comparison_report.v1"
+RESULT_ANCHOR_THRESHOLDS = {
+    "strict_next_close_governance_leader": {
+        "label": "低换手趋势加同标的冷却 next_close 治理口径",
+        "total_return": 0.7587,
+        "annualized_return": 0.211998,
+        "max_drawdown": -0.440409,
+    },
+    "drawdown_reversal_next_close": {
+        "label": "低换手趋势加回撤反转过滤 next_close 治理口径",
+        "total_return": 0.595009,
+        "annualized_return": 0.172328,
+        "max_drawdown": -0.326671,
+    },
+    "legacy_long_sample_research_target": {
+        "label": "老 long-sample T+1 收盘研究口径",
+        "total_return": 1.7596,
+        "annualized_return": 0.416942,
+        "max_drawdown": -0.31704,
+        "comparability": "research_target_not_same_artifact_contract",
+    },
+    "same_close_proxy_diagnostic_ceiling": {
+        "label": "same_close_proxy 诊断口径账面最高",
+        "total_return": 1.9460,
+        "annualized_return": 0.442612,
+        "max_drawdown": -0.711528,
+        "comparability": "diagnostic_proxy_not_executable_proof",
+    },
+}
+SIGNIFICANT_EDGE_OVER_NEXT_CLOSE_TOTAL_RETURN = 0.95
+MIN_RESULT_ANCHOR_PERIOD_COUNT = 500
 
 
 def _stable_digest(payload: Any) -> str:
@@ -28,18 +58,45 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def _leaderboard_row(trial: dict[str, Any]) -> dict[str, Any]:
+def _registry_selection_policies(model_spec_registry: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    policies: dict[str, dict[str, Any]] = {}
+    for spec in model_spec_registry.get("model_specs") or []:
+        if not isinstance(spec, dict):
+            continue
+        model_spec_id = str(spec.get("model_spec_id") or "")
+        selection_policy = spec.get("selection_policy")
+        if model_spec_id and isinstance(selection_policy, dict):
+            policies[model_spec_id] = selection_policy
+    return policies
+
+
+def _leaderboard_row(
+    trial: dict[str, Any],
+    *,
+    registry_selection_policies: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     metrics = trial.get("metrics") or {}
     blockers = list(trial.get("blocking_gate_ids") or [])
+    model_spec_id = str(trial.get("model_spec_id") or "")
+    candidate_run_selection_policy = trial.get("selection_policy") or {}
+    comparison_selection_policy = (
+        registry_selection_policies.get(model_spec_id, candidate_run_selection_policy)
+        if registry_selection_policies
+        else candidate_run_selection_policy
+    )
     return {
         "trial_id": trial.get("trial_id"),
         "model_spec_id": trial.get("model_spec_id"),
-        "selection_policy": trial.get("selection_policy") or {},
+        "selection_policy": comparison_selection_policy,
+        "candidate_run_selection_policy": candidate_run_selection_policy,
         "rank_ic_mean": metrics.get("rank_ic_mean"),
         "positive_rank_ic_rate": metrics.get("positive_rank_ic_rate"),
         "top_5_net_excess_mean": metrics.get("top_5_net_excess_mean"),
         "positive_top_5_rate": metrics.get("positive_top_5_rate"),
         "top_10_net_excess_mean": metrics.get("top_10_net_excess_mean"),
+        "selected_top_k": metrics.get("selected_top_k"),
+        "selected_top_k_net_excess_mean": metrics.get("selected_top_k_net_excess_mean"),
+        "positive_selected_top_k_rate": metrics.get("positive_selected_top_k_rate"),
         "top_quantile_net_excess_mean": metrics.get("top_quantile_net_excess_mean"),
         "top_bottom_spread_mean": metrics.get("top_bottom_spread_mean"),
         "labeled_prediction_count": metrics.get("labeled_prediction_count"),
@@ -53,17 +110,81 @@ def _selection_return_metric(row: dict[str, Any]) -> str:
     return str(selection_policy.get("evaluation_return_metric") or "top_quantile_net_excess_mean")
 
 
-def _is_concentrated_top5(row: dict[str, Any]) -> bool:
+def _is_concentrated_top_k(row: dict[str, Any]) -> bool:
     selection_policy = row.get("selection_policy") or {}
-    return selection_policy.get("mode") == "concentrated_top_k" and _selection_return_metric(row) == "top_5_net_excess_mean"
+    return selection_policy.get("mode") == "concentrated_top_k" and _selection_return_metric(row) in {
+        "top_5_net_excess_mean",
+        "selected_top_k_net_excess_mean",
+    }
 
 
-def _sort_key(row: dict[str, Any]) -> tuple[float, float, float, float]:
+def _sort_key(row: dict[str, Any]) -> tuple[float, ...]:
     return_metric = _selection_return_metric(row)
-    if _is_concentrated_top5(row):
+    selection_policy = row.get("selection_policy") or {}
+    trial_selection_policy = selection_policy.get("trial_selection_policy")
+    if isinstance(trial_selection_policy, dict) and trial_selection_policy.get("mode") == "stability_adjusted":
+        stability = row.get("trial_stability") if isinstance(row.get("trial_stability"), dict) else {}
+        period_count = int(_safe_float(stability.get("period_count")))
+        total_return_floor_periods = int(
+            _safe_float(trial_selection_policy.get("minimum_period_count_for_total_return_floor"), 999999.0)
+        )
+        return_value = _safe_float(row.get(return_metric), -999.0)
+        if period_count >= total_return_floor_periods:
+            minimum_total_return = _safe_float(trial_selection_policy.get("minimum_portfolio_total_return"), 0.0)
+            minimum_max_drawdown = _safe_float(trial_selection_policy.get("minimum_portfolio_max_drawdown"), -1.0)
+            portfolio_total_return = _safe_float(stability.get("portfolio_total_return"), -999.0)
+            portfolio_max_drawdown = _safe_float(stability.get("portfolio_max_drawdown"), -999.0)
+            eligible = (
+                portfolio_total_return >= minimum_total_return
+                and portfolio_max_drawdown >= minimum_max_drawdown
+            )
+            if not eligible:
+                return (
+                    0.0,
+                    portfolio_total_return,
+                    portfolio_max_drawdown,
+                    -_safe_float(stability.get("negative_month_count"), 999.0),
+                    _safe_float(stability.get("min_monthly_mean_net_excess"), -999.0),
+                )
+        else:
+            minimum_return = _safe_float(
+                trial_selection_policy.get("minimum_selected_top_k_net_excess_mean"),
+                _safe_float(trial_selection_policy.get("minimum_mean_net_excess"), 0.0),
+            )
+            eligible = return_value >= minimum_return
+        tie_break_values = {
+            "negative_month_count_asc": -_safe_float(stability.get("negative_month_count"), 999.0),
+            "portfolio_max_drawdown_desc": _safe_float(stability.get("portfolio_max_drawdown"), -999.0),
+            "portfolio_path_drawdown_sum_desc": _safe_float(stability.get("portfolio_path_drawdown_sum"), -999.0),
+            "min_monthly_mean_net_excess_desc": _safe_float(
+                stability.get("min_monthly_mean_net_excess"), -999.0
+            ),
+            "portfolio_total_return_desc": _safe_float(stability.get("portfolio_total_return"), return_value),
+            "selected_top_k_net_excess_mean_desc": return_value,
+            "top_5_net_excess_mean_desc": _safe_float(row.get("top_5_net_excess_mean"), -999.0),
+            "positive_selected_top_k_rate_desc": _safe_float(row.get("positive_selected_top_k_rate"), -999.0),
+        }
+        default_tie_break_order = [
+            "negative_month_count_asc",
+            "portfolio_max_drawdown_desc",
+            "min_monthly_mean_net_excess_desc",
+            "portfolio_total_return_desc",
+            "selected_top_k_net_excess_mean_desc",
+        ]
+        declared_order = trial_selection_policy.get("tie_break_order")
+        tie_break_order = declared_order if isinstance(declared_order, list) else default_tie_break_order
+        ordered_values = [
+            tie_break_values[key]
+            for key in tie_break_order
+            if key != "portfolio_total_return_floor_first_after_500_periods" and key in tie_break_values
+        ]
+        if not ordered_values:
+            ordered_values = [tie_break_values[key] for key in default_tie_break_order]
+        return (1.0 if eligible else 0.0, *ordered_values)
+    if _is_concentrated_top_k(row):
         return (
             _safe_float(row.get(return_metric), -999.0),
-            _safe_float(row.get("positive_top_5_rate"), -999.0),
+            _safe_float(row.get("positive_selected_top_k_rate"), _safe_float(row.get("positive_top_5_rate"), -999.0)),
             _safe_float(row.get("top_10_net_excess_mean"), -999.0),
             _safe_float(row.get("rank_ic_mean"), -999.0),
         )
@@ -88,6 +209,48 @@ def _trial_diagnostic(candidate_run: dict[str, Any], trial_id: str) -> dict[str,
         if str(row.get("trial_id") or "") == trial_id:
             return row
     return None
+
+
+def _trial_stability_summary(candidate_run: dict[str, Any], trial_id: str) -> dict[str, Any]:
+    diagnostic = _trial_diagnostic(candidate_run, trial_id)
+    if not diagnostic:
+        return {}
+    returns_by_date = diagnostic.get("selected_top_k_returns_by_date")
+    if not isinstance(returns_by_date, list):
+        return {}
+    by_month: dict[str, list[float]] = {}
+    values: list[float] = []
+    for row in returns_by_date:
+        if not isinstance(row, dict):
+            continue
+        value = _safe_float(row.get("mean_net_excess_return"))
+        values.append(value)
+        month = str(row.get("month") or str(row.get("as_of_date") or "")[:7])
+        if month:
+            by_month.setdefault(month, []).append(value)
+    monthly_means = {month: mean(month_values) for month, month_values in by_month.items() if month_values}
+    negative_months = [month for month, value in sorted(monthly_means.items()) if value < 0]
+    horizon_days = int(_safe_float(diagnostic.get("target_horizon_days"), 20.0))
+    portfolio_curve = _rolling_sleeve_curve(returns_by_date, horizon_days=horizon_days)
+    path_drawdown = _series_drawdown(values)
+    return {
+        "period_count": len(values),
+        "negative_month_count": len(negative_months),
+        "negative_months": negative_months,
+        "min_monthly_mean_net_excess": min(monthly_means.values()) if monthly_means else None,
+        "positive_date_rate": sum(1 for value in values if value > 0) / len(values) if values else None,
+        "portfolio_path_drawdown_sum": path_drawdown["max_drawdown_sum"],
+        "portfolio_total_return": portfolio_curve["total_return"],
+        "portfolio_annualized_return": portfolio_curve["annualized_return"],
+        "portfolio_max_drawdown": portfolio_curve["max_drawdown"],
+    }
+
+
+def _attach_trial_stability(leaderboard: list[dict[str, Any]], candidate_run: dict[str, Any]) -> None:
+    for row in leaderboard:
+        trial_id = str(row.get("trial_id") or "")
+        if trial_id:
+            row["trial_stability"] = _trial_stability_summary(candidate_run, trial_id)
 
 
 def _split_rank_ic(predictions: list[dict[str, Any]]) -> float | None:
@@ -157,6 +320,7 @@ def _top5_returns_from_predictions(predictions: list[dict[str, Any]]) -> list[di
                     "month": as_of_date[:7],
                     "pick_count": 0,
                     "mean_net_excess_return": 0.0,
+                    "mean_total_return_after_cost": 0.0,
                     "selection_state": "cash",
                 }
             )
@@ -171,6 +335,11 @@ def _top5_returns_from_predictions(predictions: list[dict[str, Any]]) -> list[di
                 "month": as_of_date[:7],
                 "pick_count": len(top_rows),
                 "mean_net_excess_return": _weighted_return(top_rows),
+                "mean_total_return_after_cost": mean(
+                    _safe_float(row.get("target_total_return"), _safe_float(row.get("target_label")))
+                    * _safe_float(row.get("portfolio_weight"), 1.0)
+                    for row in top_rows
+                ),
                 "gross_exposure": mean(_safe_float(row.get("portfolio_weight"), 1.0) for row in top_rows),
                 "selection_state": "invested",
             }
@@ -245,11 +414,13 @@ def _overfit_diagnostics(candidate_run: dict[str, Any], leaderboard: list[dict[s
     best_row = leaderboard[0] if leaderboard else {}
     best_diagnostic = _trial_diagnostic(candidate_run, best_trial_id) if best_trial_id else None
     period_source = "best_trial_as_of_date_rank_ic"
-    if _is_concentrated_top5(best_row):
+    if _is_concentrated_top_k(best_row):
         if best_diagnostic is not None:
             period_values = [
                 _safe_float(item.get("mean_net_excess_return"))
-                for item in best_diagnostic.get("top_5_returns_by_date") or []
+                for item in best_diagnostic.get("selected_top_k_returns_by_date")
+                or best_diagnostic.get("top_5_returns_by_date")
+                or []
                 if item.get("mean_net_excess_return") is not None
             ]
         else:
@@ -345,13 +516,13 @@ def _winner_dependency(candidate_run: dict[str, Any], leaderboard: list[dict[str
         }
     best_trial_id = str(best.get("trial_id") or "")
     diagnostic = _trial_diagnostic(candidate_run, best_trial_id)
-    if _is_concentrated_top5(best):
+    if _is_concentrated_top_k(best):
         top_picks = (
-            list(diagnostic.get("top_5_picks_by_date") or [])
+            list((diagnostic.get("selected_top_k_picks_by_date") or diagnostic.get("top_5_picks_by_date") or []))
             if diagnostic is not None
             else _top5_picks_from_predictions(_prediction_rows(candidate_run, best_trial_id))
         )
-        pick_scope = "top_5_picks_by_date"
+        pick_scope = f"top_{int(_safe_float(best.get('selected_top_k'), 5.0))}_picks_by_date"
     else:
         top_picks = (
             list(diagnostic.get("top_picks_by_date") or [])
@@ -427,6 +598,86 @@ def _series_drawdown(values: list[float]) -> dict[str, Any]:
     }
 
 
+def _compounded_curve(values: list[float]) -> dict[str, Any]:
+    equity = 1.0
+    peak = 1.0
+    max_drawdown = 0.0
+    for value in values:
+        equity *= 1.0 + value
+        peak = max(peak, equity)
+        drawdown = equity / peak - 1.0 if peak > 0 else 0.0
+        max_drawdown = min(max_drawdown, drawdown)
+    return {
+        "total_return": equity - 1.0,
+        "max_drawdown": max_drawdown,
+    }
+
+
+def _rolling_sleeve_curve(returns_by_date: list[dict[str, Any]], *, horizon_days: int) -> dict[str, Any]:
+    values = [
+        _safe_float(row.get("mean_total_return_after_cost"), _safe_float(row.get("mean_net_excess_return")))
+        for row in returns_by_date
+    ]
+    row_horizons = [
+        max(_safe_float(row.get("mean_target_horizon_days"), float(horizon_days)), 1.0)
+        for row in returns_by_date
+    ]
+    normalized = [value / row_horizons[index] for index, value in enumerate(values)]
+    curve = _compounded_curve(normalized)
+    period_count = len(values)
+    annualized = None
+    if period_count > 0 and curve["total_return"] > -1:
+        annualized = (1.0 + curve["total_return"]) ** (252.0 / period_count) - 1.0
+    return {
+        "method": "horizon_normalized_compounded_proxy",
+        "period_count": period_count,
+        "target_horizon_days": horizon_days,
+        "mean_target_horizon_days": mean(row_horizons) if row_horizons else None,
+        "total_return": curve["total_return"],
+        "annualized_return": annualized,
+        "max_drawdown": curve["max_drawdown"],
+        "note": (
+            "Proxy from model label returns, not a full order-level portfolio simulator. "
+            "Use to gate research candidates before expensive same-contract portfolio replay."
+        ),
+    }
+
+
+def _result_anchor_comparison(portfolio_curve: dict[str, Any]) -> dict[str, Any]:
+    total_return = _safe_float(portfolio_curve.get("total_return"))
+    max_drawdown = _safe_float(portfolio_curve.get("max_drawdown"))
+    period_count = int(_safe_float(portfolio_curve.get("period_count")))
+    blockers: list[str] = []
+    if period_count < MIN_RESULT_ANCHOR_PERIOD_COUNT:
+        blockers.append("insufficient_periods_for_three_year_result_anchor")
+    else:
+        if total_return < RESULT_ANCHOR_THRESHOLDS["strict_next_close_governance_leader"]["total_return"]:
+            blockers.append("total_return_below_best_strict_next_close_governance_anchor")
+        if total_return < SIGNIFICANT_EDGE_OVER_NEXT_CLOSE_TOTAL_RETURN:
+            blockers.append("total_return_lacks_significant_edge_over_next_close_anchor")
+        if max_drawdown < RESULT_ANCHOR_THRESHOLDS["drawdown_reversal_next_close"]["max_drawdown"]:
+            blockers.append("max_drawdown_worse_than_drawdown_reversal_anchor")
+    return {
+        "status": "blocked" if blockers else "anchor_floor_passed",
+        "period_count": period_count,
+        "measured_total_return": total_return,
+        "measured_max_drawdown": max_drawdown,
+        "blocking_gate_ids": blockers,
+        "thresholds": {
+            "minimum_strict_next_close_total_return": RESULT_ANCHOR_THRESHOLDS[
+                "strict_next_close_governance_leader"
+            ]["total_return"],
+            "significant_edge_total_return_min": SIGNIFICANT_EDGE_OVER_NEXT_CLOSE_TOTAL_RETURN,
+            "max_drawdown_floor": RESULT_ANCHOR_THRESHOLDS["drawdown_reversal_next_close"]["max_drawdown"],
+            "legacy_research_target_total_return": RESULT_ANCHOR_THRESHOLDS[
+                "legacy_long_sample_research_target"
+            ]["total_return"],
+            "minimum_period_count_for_three_year_anchor": MIN_RESULT_ANCHOR_PERIOD_COUNT,
+        },
+        "anchors": RESULT_ANCHOR_THRESHOLDS,
+    }
+
+
 def _monthly_return_summary(returns_by_date: list[dict[str, Any]], *, extra_cost: float = 0.0) -> list[dict[str, Any]]:
     by_month: dict[str, list[float]] = {}
     for row in returns_by_date:
@@ -448,6 +699,277 @@ def _monthly_return_summary(returns_by_date: list[dict[str, Any]], *, extra_cost
     ]
 
 
+def _capacity_fill_rate_diagnostics(
+    selected_picks: list[dict[str, Any]],
+    *,
+    selected_top_k: int,
+    selection_policy: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    portfolio_notional_cny = 1_000_000.0
+    max_adv_participation_rate = 0.05
+    minimum_active_pick_count = 20
+    capacity_tier_notionals = [50_000.0, 100_000.0, 120_000.0, 150_000.0, 250_000.0, 500_000.0, 1_000_000.0]
+    active_rows: list[dict[str, Any]] = []
+    missing_avg_amount_count = 0
+    below_full_fill: list[dict[str, Any]] = []
+    for row in selected_picks:
+        if not isinstance(row, dict):
+            continue
+        capital_weight = (
+            _safe_float(row.get("portfolio_weight"), 1.0)
+            * _safe_float(row.get("rank_weight_multiplier"), 1.0)
+            / max(float(selected_top_k), 1.0)
+        )
+        if capital_weight <= 0:
+            continue
+        avg_amount_20d = _safe_float(row.get("avg_amount_20d"))
+        required_notional = portfolio_notional_cny * capital_weight
+        fill_rate = (avg_amount_20d * max_adv_participation_rate / required_notional) if required_notional > 0 else 1.0
+        diagnostic_row = {
+            "symbol": row.get("symbol"),
+            "as_of_date": row.get("as_of_date"),
+            "rank": row.get("rank"),
+            "avg_amount_20d": avg_amount_20d,
+            "capital_weight": capital_weight,
+            "required_notional_cny": required_notional,
+            "max_notional_at_5pct_adv_cny": avg_amount_20d * max_adv_participation_rate,
+            "max_full_fill_portfolio_notional_cny": (
+                avg_amount_20d * max_adv_participation_rate / capital_weight if capital_weight > 0 else None
+            ),
+            "fill_rate": fill_rate,
+        }
+        active_rows.append(diagnostic_row)
+        if avg_amount_20d <= 0:
+            missing_avg_amount_count += 1
+        elif fill_rate < 1.0:
+            below_full_fill.append(diagnostic_row)
+
+    blockers: list[str] = []
+    if len(active_rows) < minimum_active_pick_count:
+        blockers.append("insufficient_active_picks_for_capacity_stress")
+    if missing_avg_amount_count:
+        blockers.append("capacity_pick_avg_amount_20d_missing")
+    if below_full_fill:
+        blockers.append("adv_capacity_fill_rate_below_floor")
+    worst_pick = min(active_rows, key=lambda row: _safe_float(row.get("fill_rate"), 1.0), default=None)
+    fill_rates = [_safe_float(row.get("fill_rate"), 1.0) for row in active_rows if _safe_float(row.get("avg_amount_20d")) > 0]
+    full_fill_notionals = sorted(
+        _safe_float(row.get("max_full_fill_portfolio_notional_cny"))
+        for row in active_rows
+        if _safe_float(row.get("avg_amount_20d")) > 0
+    )
+
+    def _tier_fill_stats(notional: float) -> dict[str, Any]:
+        tier_fill_rates: list[float] = []
+        tier_below_full = 0
+        for active_row in active_rows:
+            avg_amount_20d = _safe_float(active_row.get("avg_amount_20d"))
+            capital_weight = _safe_float(active_row.get("capital_weight"))
+            if avg_amount_20d <= 0 or capital_weight <= 0:
+                continue
+            required_notional = notional * capital_weight
+            fill_rate = (
+                avg_amount_20d * max_adv_participation_rate / required_notional
+                if required_notional > 0
+                else 1.0
+            )
+            tier_fill_rates.append(fill_rate)
+            if fill_rate < 1.0:
+                tier_below_full += 1
+        return {
+            "portfolio_notional_cny": notional,
+            "active_pick_count": len(tier_fill_rates),
+            "active_pick_below_full_fill_count": tier_below_full,
+            "active_pick_full_fill_rate": (len(tier_fill_rates) - tier_below_full) / len(tier_fill_rates)
+            if tier_fill_rates
+            else None,
+            "min_fill_rate": min(tier_fill_rates) if tier_fill_rates else None,
+            "p05_fill_rate": sorted(tier_fill_rates)[max(int(len(tier_fill_rates) * 0.05) - 1, 0)]
+            if tier_fill_rates
+            else None,
+        }
+
+    capacity_envelope = {
+        "all_active_full_fill_portfolio_notional_cny": min(full_fill_notionals) if full_fill_notionals else None,
+        "p05_full_fill_portfolio_notional_cny": full_fill_notionals[max(int(len(full_fill_notionals) * 0.05) - 1, 0)]
+        if full_fill_notionals
+        else None,
+        "median_full_fill_portfolio_notional_cny": full_fill_notionals[len(full_fill_notionals) // 2]
+        if full_fill_notionals
+        else None,
+        "capacity_tier_stats": [_tier_fill_stats(notional) for notional in capacity_tier_notionals],
+        "interpretation": (
+            "This envelope does not clear the configured 1,000,000 CNY governance stress by itself; it reports "
+            "the capital scale at which the same percentage-return strategy can be fully filled under the ADV proxy."
+        ),
+    }
+    tier_stats = capacity_envelope["capacity_tier_stats"]
+    ready_tiers = [
+        row
+        for row in tier_stats
+        if _safe_float(row.get("active_pick_count")) >= minimum_active_pick_count
+        and int(_safe_float(row.get("active_pick_below_full_fill_count"), 999999.0)) == 0
+    ]
+    largest_ready_tier = max(
+        ready_tiers,
+        key=lambda row: _safe_float(row.get("portfolio_notional_cny")),
+        default=None,
+    )
+    capacity_contract = {
+        "status": (
+            "configured_governance_capacity_ready"
+            if not blockers
+            else "lower_capital_research_contract_ready"
+            if largest_ready_tier
+            else "no_full_fill_research_contract_tier"
+        ),
+        "claim_ceiling": (
+            "production_capacity_clearance"
+            if not blockers
+            else "research_only_lower_capital_capacity_diagnostic"
+            if largest_ready_tier
+            else "capacity_blocked_diagnostic"
+        ),
+        "configured_governance_portfolio_notional_cny": portfolio_notional_cny,
+        "configured_governance_status": "ready" if not blockers else "blocked",
+        "max_ready_research_portfolio_notional_cny": (
+            largest_ready_tier.get("portfolio_notional_cny") if largest_ready_tier else None
+        ),
+        "max_ready_research_tier": largest_ready_tier,
+        "blocking_gate_ids": (
+            [] if not blockers else ["configured_governance_capacity_stress_not_cleared"]
+        ),
+        "interpretation": (
+            "A lower-capital tier can be used as a research-only capacity contract, but it must not be used to "
+            "clear the configured governance notional or dashboard/production claims."
+            if blockers and largest_ready_tier
+            else "The configured governance notional is fully fillable under the ADV proxy."
+            if not blockers
+            else "No configured tier clears the full-fill ADV proxy."
+        ),
+    }
+    diagnostics = {
+        "status": "blocked" if blockers else "ready",
+        "diagnostic_scope": "selected_pick_adv_capacity_proxy",
+        "blocking_gate_ids": blockers,
+        "selected_pick_count": len(selected_picks),
+        "active_pick_count": len(active_rows),
+        "missing_avg_amount_20d_count": missing_avg_amount_count,
+        "active_pick_below_full_fill_count": len(below_full_fill),
+        "active_pick_full_fill_rate": (len(active_rows) - len(below_full_fill) - missing_avg_amount_count) / len(active_rows)
+        if active_rows
+        else None,
+        "min_fill_rate": min(fill_rates) if fill_rates else None,
+        "p05_fill_rate": sorted(fill_rates)[max(int(len(fill_rates) * 0.05) - 1, 0)] if fill_rates else None,
+        "worst_pick": worst_pick,
+        "capacity_envelope": capacity_envelope,
+        "capacity_contract": capacity_contract,
+        "thresholds": {
+            "portfolio_notional_cny": portfolio_notional_cny,
+            "max_adv_participation_rate": max_adv_participation_rate,
+            "minimum_active_pick_count": minimum_active_pick_count,
+            "required_min_fill_rate": 1.0,
+            "capital_weight_formula": "portfolio_weight * rank_weight_multiplier / selected_top_k",
+        },
+    }
+    return _apply_staggered_capacity_overlay(diagnostics, selection_policy=selection_policy)
+
+
+def _apply_staggered_capacity_overlay(
+    capacity_diagnostics: dict[str, Any],
+    *,
+    selection_policy: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if not isinstance(selection_policy, dict):
+        return capacity_diagnostics
+    overlay = selection_policy.get("staggered_entry_execution_overlay")
+    if not isinstance(overlay, dict) or not overlay.get("enabled"):
+        return capacity_diagnostics
+    repaired_count = int(_safe_float(overlay.get("full_fill_repaired_pick_count")))
+    min_fill_rate = _safe_float(overlay.get("min_staggered_fill_rate"))
+    underfilled_count = int(_safe_float(capacity_diagnostics.get("active_pick_below_full_fill_count")))
+    missing_count = int(_safe_float(capacity_diagnostics.get("missing_avg_amount_20d_count")))
+    active_count = int(_safe_float(capacity_diagnostics.get("active_pick_count")))
+    minimum_active_count = int(
+        _safe_float((capacity_diagnostics.get("thresholds") or {}).get("minimum_active_pick_count"), 20.0)
+    )
+    blockers = [str(item) for item in capacity_diagnostics.get("blocking_gate_ids") or []]
+    repair_covers_capacity_gap = (
+        underfilled_count > 0
+        and repaired_count >= underfilled_count
+        and min_fill_rate >= 1.0
+        and missing_count == 0
+        and active_count >= minimum_active_count
+    )
+    if not repair_covers_capacity_gap:
+        adjusted = dict(capacity_diagnostics)
+        adjusted["staggered_entry_execution_overlay"] = {
+            "status": "not_capacity_clearing",
+            "entry_days": overlay.get("entry_days"),
+            "exit_policy": overlay.get("exit_policy"),
+            "full_fill_repaired_pick_count": repaired_count,
+            "min_staggered_fill_rate": min_fill_rate,
+            "source_proxy_artifact": overlay.get("source_proxy_artifact"),
+            "reason": (
+                "staggered overlay is present but does not cover every below-full-fill active pick with "
+                "min_staggered_fill_rate >= 1.0"
+            ),
+        }
+        return adjusted
+
+    adjusted = dict(capacity_diagnostics)
+    original_contract = capacity_diagnostics.get("capacity_contract")
+    adjusted["status"] = "ready"
+    adjusted["diagnostic_scope"] = "selected_pick_adv_capacity_proxy_with_staggered_entry_overlay"
+    adjusted["blocking_gate_ids"] = [
+        blocker for blocker in blockers if blocker != "adv_capacity_fill_rate_below_floor"
+    ]
+    adjusted["staggered_entry_execution_overlay"] = {
+        "status": "configured_notional_proxy_ready",
+        "claim_ceiling": "research_only_staggered_execution_capacity_proxy",
+        "entry_days": overlay.get("entry_days"),
+        "exit_policy": overlay.get("exit_policy"),
+        "full_fill_repaired_pick_count": repaired_count,
+        "covered_underfilled_pick_count": underfilled_count,
+        "min_staggered_fill_rate": min_fill_rate,
+        "source_proxy_artifact": overlay.get("source_proxy_artifact"),
+        "interpretation": (
+            "The original same-day selected-pick ADV proxy is below full fill, but the declared staggered-entry "
+            "execution overlay repairs every below-full-fill active pick in the retained proxy evidence."
+        ),
+    }
+    adjusted["original_same_day_capacity_diagnostics"] = {
+        "status": capacity_diagnostics.get("status"),
+        "diagnostic_scope": capacity_diagnostics.get("diagnostic_scope"),
+        "blocking_gate_ids": capacity_diagnostics.get("blocking_gate_ids") or [],
+        "active_pick_count": capacity_diagnostics.get("active_pick_count"),
+        "active_pick_below_full_fill_count": capacity_diagnostics.get("active_pick_below_full_fill_count"),
+        "active_pick_full_fill_rate": capacity_diagnostics.get("active_pick_full_fill_rate"),
+        "min_fill_rate": capacity_diagnostics.get("min_fill_rate"),
+        "worst_pick": capacity_diagnostics.get("worst_pick"),
+        "capacity_contract": original_contract,
+    }
+    adjusted["capacity_contract"] = {
+        "status": "configured_staggered_execution_capacity_proxy_ready",
+        "claim_ceiling": "research_only_staggered_execution_capacity_proxy",
+        "configured_governance_portfolio_notional_cny": (original_contract or {}).get(
+            "configured_governance_portfolio_notional_cny",
+            (capacity_diagnostics.get("thresholds") or {}).get("portfolio_notional_cny"),
+        ),
+        "configured_governance_status": "ready",
+        "max_ready_research_portfolio_notional_cny": (original_contract or {}).get(
+            "configured_governance_portfolio_notional_cny",
+            (capacity_diagnostics.get("thresholds") or {}).get("portfolio_notional_cny"),
+        ),
+        "blocking_gate_ids": [],
+        "interpretation": (
+            "Capacity is ready only under the declared staggered-entry execution proxy. This does not upgrade "
+            "the claim ceiling to production clearance without a full order-level replay."
+        ),
+    }
+    return adjusted
+
+
 def _execution_stress_diagnostics(candidate_run: dict[str, Any], leaderboard: list[dict[str, Any]]) -> dict[str, Any]:
     best = leaderboard[0] if leaderboard else None
     if not best:
@@ -457,17 +979,26 @@ def _execution_stress_diagnostics(candidate_run: dict[str, Any], leaderboard: li
         }
     best_trial_id = str(best.get("trial_id") or "")
     diagnostic = _trial_diagnostic(candidate_run, best_trial_id)
-    if _is_concentrated_top5(best):
+    horizon_days = int(_safe_float((diagnostic or {}).get("target_horizon_days"), 10.0))
+    selected_top_k = int(_safe_float(best.get("selected_top_k"), _safe_float((diagnostic or {}).get("selected_top_k"), 5.0)))
+    if _is_concentrated_top_k(best):
         if diagnostic is not None:
-            returns_by_date = list(diagnostic.get("top_5_returns_by_date") or [])
+            returns_by_date = list(
+                diagnostic.get("selected_top_k_returns_by_date") or diagnostic.get("top_5_returns_by_date") or []
+            )
+            selected_picks = list(
+                diagnostic.get("selected_top_k_picks_by_date") or diagnostic.get("top_5_picks_by_date") or []
+            )
         else:
             returns_by_date = _top5_returns_from_predictions(_prediction_rows(candidate_run, best_trial_id))
-        portfolio_scope = "top_5_equal_weight_by_date"
+            selected_picks = _top5_picks_from_predictions(_prediction_rows(candidate_run, best_trial_id))
+        portfolio_scope = f"top_{int(_safe_float(best.get('selected_top_k'), 5.0))}_equal_weight_by_date"
     else:
         if diagnostic is not None:
             picks = list(diagnostic.get("top_picks_by_date") or [])
         else:
             picks = _top_pick_returns(_prediction_rows(candidate_run, best_trial_id))
+        selected_picks = picks
         returns_by_date = [
             {
                 "as_of_date": row.get("as_of_date"),
@@ -510,6 +1041,16 @@ def _execution_stress_diagnostics(candidate_run: dict[str, Any], leaderboard: li
     drawdown = _series_drawdown(values)
     if _safe_float(drawdown.get("max_drawdown_sum")) <= -1.0:
         blockers.append("portfolio_path_drawdown_sum_below_minus_1")
+    portfolio_curve = _rolling_sleeve_curve(returns_by_date, horizon_days=horizon_days)
+    result_anchor_comparison = _result_anchor_comparison(portfolio_curve)
+    blockers.extend(f"result_anchor:{blocker}" for blocker in result_anchor_comparison.get("blocking_gate_ids") or [])
+    selection_policy = best.get("candidate_run_selection_policy") if isinstance(best, dict) else None
+    capacity_diagnostics = _capacity_fill_rate_diagnostics(
+        selected_picks,
+        selected_top_k=selected_top_k,
+        selection_policy=selection_policy if isinstance(selection_policy, dict) else best.get("selection_policy"),
+    )
+    blockers.extend(f"capacity:{blocker}" for blocker in capacity_diagnostics.get("blocking_gate_ids") or [])
     return {
         "status": "blocked" if blockers else "ready",
         "diagnostic_scope": "comparison_report_execution_stress_proxy",
@@ -522,13 +1063,145 @@ def _execution_stress_diagnostics(candidate_run: dict[str, Any], leaderboard: li
         "monthly_return_summary": monthly,
         "negative_months": negative_months,
         "path_drawdown": drawdown,
+        "portfolio_curve": portfolio_curve,
+        "capacity_diagnostics": capacity_diagnostics,
+        "result_anchor_comparison": result_anchor_comparison,
         "blocking_gate_ids": blockers,
         "thresholds": {
             "minimum_periods": 20,
             "cost_stress_multipliers": [1.0, 2.0, 3.0],
             "monthly_mean_must_be_positive": True,
             "max_drawdown_sum_min": -1.0,
+            "result_anchor_thresholds": result_anchor_comparison["thresholds"],
         },
+    }
+
+
+def _fees_slippage_stamp_tax_stress_ready(execution_diagnostics: dict[str, Any] | None) -> bool:
+    if not isinstance(execution_diagnostics, dict):
+        return False
+    blockers = {str(item) for item in execution_diagnostics.get("blocking_gate_ids") or []}
+    if (
+        "insufficient_periods_for_execution_stress" in blockers
+        or "cost_stress_2x_not_positive" in blockers
+        or "cost_stress_3x_not_positive" in blockers
+    ):
+        return False
+    thresholds = execution_diagnostics.get("thresholds")
+    minimum_periods = 20
+    if isinstance(thresholds, dict):
+        try:
+            minimum_periods = int(thresholds.get("minimum_periods", minimum_periods))
+        except (TypeError, ValueError):
+            minimum_periods = 20
+    try:
+        period_count = int(execution_diagnostics.get("period_count"))
+    except (TypeError, ValueError):
+        return False
+    if period_count < minimum_periods:
+        return False
+    stress_by_multiplier: dict[float, dict[str, Any]] = {}
+    for row in execution_diagnostics.get("cost_stress") or []:
+        if not isinstance(row, dict):
+            continue
+        try:
+            multiplier = float(row.get("cost_multiplier"))
+        except (TypeError, ValueError):
+            continue
+        stress_by_multiplier[multiplier] = row
+    for multiplier in (1.0, 2.0, 3.0):
+        row = stress_by_multiplier.get(multiplier)
+        if not row:
+            return False
+        try:
+            stress_mean = float(row.get("mean_net_excess_after_cost_stress"))
+        except (TypeError, ValueError):
+            return False
+        if stress_mean <= 0:
+            return False
+    return True
+
+
+def _adv_capacity_fill_rate_ready(execution_diagnostics: dict[str, Any] | None) -> bool:
+    if not isinstance(execution_diagnostics, dict):
+        return False
+    capacity = execution_diagnostics.get("capacity_diagnostics")
+    if not isinstance(capacity, dict):
+        return False
+    if str(capacity.get("status") or "") != "ready":
+        return False
+    if capacity.get("blocking_gate_ids"):
+        return False
+    return True
+
+
+def _execution_label_contract_diagnostics(
+    candidate_run: dict[str, Any],
+    *,
+    execution_diagnostics: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    label_version = str(candidate_run.get("label_version") or "")
+    validation_protocol = candidate_run.get("validation_protocol") if isinstance(candidate_run, dict) else {}
+    evaluation_row_policy = (
+        str(validation_protocol.get("evaluation_row_policy") or "")
+        if isinstance(validation_protocol, dict)
+        else ""
+    )
+    v3_ready = label_version == "shortpick_model_executable_label_matrix:v3"
+    ready_only = evaluation_row_policy == "label_status_ready_and_target_label_present_only"
+    fees_ready = _fees_slippage_stamp_tax_stress_ready(execution_diagnostics)
+    capacity_ready = _adv_capacity_fill_rate_ready(execution_diagnostics)
+    covered_gate_ids: list[str] = []
+    checks = [
+        {
+            "gate_id": "t_plus_1_execution_model",
+            "status": "ready" if v3_ready and ready_only else "blocked",
+            "evidence": (
+                "label-v3 rows persist entry_execution and runner evaluates ready labels only"
+                if v3_ready and ready_only
+                else "requires label-v3 entry_execution plus ready-label-only evaluation"
+            ),
+        },
+        {
+            "gate_id": "suspension_limit_buy_sellability",
+            "status": "ready" if v3_ready and ready_only else "blocked",
+            "evidence": (
+                "label-v3 rows persist entry and per-horizon exit execution including limit/suspension blocks"
+                if v3_ready and ready_only
+                else "requires label-v3 entry/exit execution fields plus ready-label-only evaluation"
+            ),
+        },
+        {
+            "gate_id": "fees_slippage_stamp_tax",
+            "status": "ready" if fees_ready else "blocked",
+            "evidence": (
+                "comparison report cost stress covers 1x/2x/3x fee, slippage and stamp-tax proxy with positive mean"
+                if fees_ready
+                else "requires positive 1x/2x/3x fee, slippage and stamp-tax stress evidence"
+            ),
+        },
+        {
+            "gate_id": "adv_capacity_fill_rate",
+            "status": "ready" if capacity_ready else "blocked",
+            "evidence": (
+                "selected-pick ADV capacity proxy has sufficient pick-level liquidity and full fill at 5pct ADV"
+                if capacity_ready
+                else "requires selected-pick avg_amount_20d capacity stress with full fill at 5pct ADV"
+            ),
+        },
+    ]
+    for check in checks:
+        if check["status"] == "ready":
+            covered_gate_ids.append(str(check["gate_id"]))
+    return {
+        "status": "partial_ready" if covered_gate_ids else "blocked",
+        "label_version": label_version,
+        "evaluation_row_policy": evaluation_row_policy,
+        "fees_slippage_stamp_tax_stress_ready": fees_ready,
+        "adv_capacity_fill_rate_ready": capacity_ready,
+        "covered_execution_gate_ids": covered_gate_ids,
+        "blocking_gate_ids": [str(check["gate_id"]) for check in checks if check["status"] != "ready"],
+        "checks": checks,
     }
 
 
@@ -538,7 +1211,12 @@ def build_model_comparison_report_artifact(
     candidate_run: dict[str, Any],
     model_spec_registry: dict[str, Any],
 ) -> dict[str, Any]:
-    leaderboard = [_leaderboard_row(trial) for trial in candidate_run.get("trial_summaries") or []]
+    registry_selection_policies = _registry_selection_policies(model_spec_registry)
+    leaderboard = [
+        _leaderboard_row(trial, registry_selection_policies=registry_selection_policies)
+        for trial in candidate_run.get("trial_summaries") or []
+    ]
+    _attach_trial_stability(leaderboard, candidate_run)
     leaderboard.sort(key=_sort_key, reverse=True)
     spec_ids = [str(spec.get("model_spec_id")) for spec in model_spec_registry.get("model_specs") or []]
     baseline_rows = [
@@ -557,6 +1235,10 @@ def build_model_comparison_report_artifact(
     overfit_diagnostics = _overfit_diagnostics(candidate_run, leaderboard)
     winner_dependency = _winner_dependency(candidate_run, leaderboard)
     execution_diagnostics = _execution_stress_diagnostics(candidate_run, leaderboard)
+    execution_label_contract = _execution_label_contract_diagnostics(
+        candidate_run,
+        execution_diagnostics=execution_diagnostics,
+    )
     gate_blockers = [
         *[f"overfit:{blocker}" for blocker in overfit_diagnostics.get("blocking_gate_ids") or []],
         *[f"winner_dependency:{blocker}" for blocker in winner_dependency.get("blocking_gate_ids") or []],
@@ -583,11 +1265,12 @@ def build_model_comparison_report_artifact(
         "overfit_diagnostics": overfit_diagnostics,
         "winner_dependency": winner_dependency,
         "execution_diagnostics": execution_diagnostics,
+        "execution_label_contract": execution_label_contract,
         "kill_list": kill_list,
         "next_research_questions": [
             "Replace proxy PBO/DSR with full combinatorially symmetric cross-validation diagnostics when sample width is sufficient.",
             "Broaden winner-dependency checks to top 3 symbols, top 3 dates and industry concentration.",
-            "Convert execution-stress proxies into executable labels for T+1, limit-state fillability, fee/slippage/stamp-tax and ADV capacity.",
+            "Extend executable labels from T+1 and limit/suspension readiness into fee/slippage/stamp-tax and ADV capacity.",
         ],
     }
     content_digest = _stable_digest(report_body)

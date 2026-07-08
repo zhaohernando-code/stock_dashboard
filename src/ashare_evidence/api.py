@@ -116,7 +116,8 @@ from ashare_evidence.schemas import (
     ShortpickRunListResponse,
     ShortpickRunValidateRequest,
     ShortpickRunView,
-    ShortpickV2HistoricalReplayResponse,
+    ShortpickStrategyLabHistoricalReplayResponse,
+    ShortpickStrategyLabPaperTrackingResponse,
     ShortpickValidationQueueResponse,
     SimulationConfigRequest,
     SimulationControlActionResponse,
@@ -166,9 +167,9 @@ from ashare_evidence.shortpick_strategy_governance import (
     project_shortpick_strategy_view_sections,
     shortpick_control_inventory_archive_items_from_artifacts,
 )
-from ashare_evidence.shortpick_v2_read_model import (
-    build_shortpick_v2_historical_replay_read_model,
-    build_shortpick_v2_paper_tracking_read_model,
+from ashare_evidence.shortpick_strategy_lab_read_model import (
+    build_shortpick_strategy_lab_historical_replay_read_model,
+    build_shortpick_strategy_lab_paper_tracking_read_model,
 )
 from ashare_evidence.simulation import (
     end_simulation_session,
@@ -2299,37 +2300,40 @@ def create_app(
             return projection
         return build_shortpick_model_feedback(session)
 
-    @app.get("/shortpick-lab-v2/paper-tracking", response_model=None)
-    def shortpick_v2_paper_tracking(
+    @app.get("/shortpick-strategy-lab/paper-tracking", response_model=ShortpickStrategyLabPaperTrackingResponse)
+    def shortpick_strategy_lab_paper_tracking(
         access: StockAccessContext = Depends(require_stock_access),
-        session: Session = Depends(get_session),
     ) -> dict[str, object]:
         try:
-            return build_shortpick_v2_paper_tracking_read_model(include_records=True, session=session)
+            return build_shortpick_strategy_lab_paper_tracking_read_model(include_records=True)
         except LookupError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    @app.get("/shortpick-lab-v2/paper-tracking/summary", response_model=None)
-    def shortpick_v2_paper_tracking_summary(
+    @app.get(
+        "/shortpick-strategy-lab/paper-tracking/summary",
+        response_model=ShortpickStrategyLabPaperTrackingResponse,
+    )
+    def shortpick_strategy_lab_paper_tracking_summary(
         access: StockAccessContext = Depends(require_stock_access),
-        session: Session = Depends(get_session),
     ) -> dict[str, object]:
         try:
-            return build_shortpick_v2_paper_tracking_read_model(include_records=False, session=session)
+            return build_shortpick_strategy_lab_paper_tracking_read_model(include_records=False)
         except LookupError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    @app.get("/shortpick-lab-v2/historical-replay", response_model=ShortpickV2HistoricalReplayResponse)
-    def shortpick_v2_historical_replay(
-        sample_limit: int = Query(default=20, ge=0, le=40),
+    @app.get(
+        "/shortpick-strategy-lab/historical-replay",
+        response_model=ShortpickStrategyLabHistoricalReplayResponse,
+    )
+    def shortpick_strategy_lab_historical_replay(
         access: StockAccessContext = Depends(require_stock_access),
     ) -> dict[str, object]:
         try:
-            return build_shortpick_v2_historical_replay_read_model(sample_limit=sample_limit)
+            return build_shortpick_strategy_lab_historical_replay_read_model()
         except LookupError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:

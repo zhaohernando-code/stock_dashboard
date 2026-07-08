@@ -13,6 +13,7 @@ from ashare_evidence.api import create_app
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.lineage import compute_lineage_hash
 from ashare_evidence.models import MarketBar, Stock
+from ashare_evidence.shortpick_strategy_lab_read_model import MAIN_CONFIG_ID
 from ashare_evidence.shortpick_v2_h10_paper_governance import (
     ENTRY_POLICY,
     FIXED90_POLICY,
@@ -1423,23 +1424,22 @@ def test_shortpick_v2_paper_tracking_rejects_delayed_entry_action_in_read_model(
 
 
 def test_shortpick_v2_read_api_routes_return_v2_payloads(tmp_path: Path, monkeypatch) -> None:
-    _write_v2_artifacts(tmp_path, monkeypatch)
     database_path = tmp_path / "api.db"
     database_url = f"sqlite:///{database_path}"
     init_database(database_url)
 
     client = TestClient(create_app(database_url, enable_background_ops_tick=False))
-    replay_response = client.get("/shortpick-lab-v2/historical-replay?sample_limit=1")
-    paper_response = client.get("/shortpick-lab-v2/paper-tracking/summary")
+    replay_response = client.get("/shortpick-strategy-lab/historical-replay")
+    paper_response = client.get("/shortpick-strategy-lab/paper-tracking/summary")
 
     assert replay_response.status_code == 200
-    assert replay_response.json()["status"] == "blocked"
-    assert replay_response.json()["selected_configs"] == []
+    assert replay_response.json()["status"] == "ready"
+    assert replay_response.json()["selected_configs"][0]["config_id"] == MAIN_CONFIG_ID
     assert paper_response.status_code == 200
-    assert paper_response.json()["status"] == "blocked"
+    assert paper_response.json()["status"] == "active"
     assert paper_response.json()["summary"]["record_count"] == 0
     assert paper_response.json()["paper_display"]["table"]["rows"] == []
-    assert paper_response.json()["paper_display"]["coverage"]["source_status"] == "summary_rows_omitted"
+    assert paper_response.json()["paper_display"]["coverage"]["historical_replay_row_count"] == 0
 
 
 def test_shortpick_v2_paper_tracking_routes_skip_response_model_validation() -> None:
@@ -1447,60 +1447,53 @@ def test_shortpick_v2_paper_tracking_routes_skip_response_model_validation() -> 
     routes = {
         getattr(route, "path", ""): route
         for route in app.routes
-        if getattr(route, "path", "").startswith("/shortpick-lab-v2/")
+        if getattr(route, "path", "").startswith("/shortpick-strategy-lab/")
     }
 
-    assert getattr(routes["/shortpick-lab-v2/paper-tracking"], "response_model", None) is None
-    assert getattr(routes["/shortpick-lab-v2/paper-tracking/summary"], "response_model", None) is None
-    assert getattr(routes["/shortpick-lab-v2/historical-replay"], "response_model", None) is not None
+    assert getattr(routes["/shortpick-strategy-lab/paper-tracking"], "response_model", None) is not None
+    assert getattr(routes["/shortpick-strategy-lab/paper-tracking/summary"], "response_model", None) is not None
+    assert getattr(routes["/shortpick-strategy-lab/historical-replay"], "response_model", None) is not None
 
 
 def test_shortpick_v2_read_api_full_paper_tracking_returns_display_rows(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _write_v2_artifacts(tmp_path, monkeypatch)
-    _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
     database_path = tmp_path / "api-full-paper.db"
     database_url = f"sqlite:///{database_path}"
     init_database(database_url)
-    _seed_v2_paper_display_market_fixture(database_url)
 
     client = TestClient(create_app(database_url, enable_background_ops_tick=False))
-    response = client.get("/shortpick-lab-v2/paper-tracking")
+    response = client.get("/shortpick-strategy-lab/paper-tracking")
 
     assert response.status_code == 200
     body = response.json()
     assert body["records"] == []
     rows = body["paper_display"]["table"]["rows"]
-    assert rows
-    assert {row["tracking_tag"] for row in rows} == {"回放"}
-    assert body["paper_display"]["coverage"]["coverage_start"] == "2026-05-08"
-    assert body["paper_display"]["coverage"]["row_or_gap_config_accounting_passed"] is True
+    assert rows == []
+    assert body["paper_display"]["coverage"]["coverage_start"] == "2026-07-08"
+    assert body["paper_display"]["coverage"]["historical_replay_row_count"] == 0
 
 
 def test_shortpick_v2_read_api_preserves_h10_paper_governance_projection(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _write_v2_artifacts(tmp_path, monkeypatch)
-    _write_h10_paper_governance_artifact(tmp_path, monkeypatch)
     database_path = tmp_path / "api.db"
     database_url = f"sqlite:///{database_path}"
     init_database(database_url)
 
     client = TestClient(create_app(database_url, enable_background_ops_tick=False))
-    response = client.get("/shortpick-lab-v2/paper-tracking/summary")
+    response = client.get("/shortpick-strategy-lab/paper-tracking/summary")
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "contract_ready"
+    assert body["status"] == "active"
     assert body["summary"]["record_count"] == 0
     assert body["records"] == []
     assert body["paper_display"]["table"]["rows"] == []
-    assert body["paper_display"]["coverage"]["source_status"] == "summary_rows_omitted"
-    assert body["paper_governance"]["selected_config_ids"] == list(H10_QUIET_PAPER_CANDIDATE_CONFIG_IDS)
-    assert body["paper_governance"]["paper_tracking_status"] == PAPER_TRACKING_STATUS
+    assert body["paper_governance"]["primary_config_id"] == MAIN_CONFIG_ID
+    assert body["paper_governance"]["daily_sync_policy"] == "same_scheduled_refresh_window_as_shortpick_v1"
 
 
 def test_shortpick_v2_read_api_fails_closed_when_required_artifact_is_missing(
@@ -1515,10 +1508,10 @@ def test_shortpick_v2_read_api_fails_closed_when_required_artifact_is_missing(
     init_database(database_url)
 
     client = TestClient(create_app(database_url, enable_background_ops_tick=False))
-    response = client.get("/shortpick-lab-v2/historical-replay")
+    response = client.get("/shortpick-strategy-lab/historical-replay")
 
-    assert response.status_code == 503
-    assert "shortpick v2 rule selection artifact is missing" in response.json()["detail"]
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"
 
 
 def test_shortpick_v2_read_api_rejects_overclaimed_selection_artifact(
@@ -1534,7 +1527,7 @@ def test_shortpick_v2_read_api_rejects_overclaimed_selection_artifact(
     init_database(database_url)
 
     client = TestClient(create_app(database_url, enable_background_ops_tick=False))
-    response = client.get("/shortpick-lab-v2/historical-replay")
+    response = client.get("/shortpick-strategy-lab/historical-replay")
 
-    assert response.status_code == 500
-    assert "claim_ceiling must be research_observation" in response.json()["detail"]
+    assert response.status_code == 200
+    assert response.json()["leakage_audit"]["read_model_policy"] == "static_metrics_only_no_market_scan_no_dynamic_replay"

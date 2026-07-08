@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 class FrontendShortpickStaticTests(unittest.TestCase):
-    def test_shortpick_v2_tab_uses_separate_read_only_surface(self) -> None:
+    def test_shortpick_strategy_lab_replaces_v2_surface(self) -> None:
         frontend_root = Path(__file__).resolve().parents[1] / "frontend" / "src"
         app_source = (frontend_root / "App.tsx").read_text(encoding="utf-8")
         mobile_source = (frontend_root / "components" / "mobile" / "MobileAppShell.tsx").read_text(encoding="utf-8")
@@ -12,42 +12,45 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         common_types_source = (frontend_root / "types" / "common.ts").read_text(encoding="utf-8")
         api_source = (frontend_root / "api" / "shortpick.ts").read_text(encoding="utf-8")
         api_index_source = (frontend_root / "api" / "index.ts").read_text(encoding="utf-8")
-        component_source = (frontend_root / "components" / "ShortpickLabV2View.tsx").read_text(encoding="utf-8")
+        component_source = (frontend_root / "components" / "ShortpickStrategyLabView.tsx").read_text(encoding="utf-8")
 
-        self.assertIn('label: "试验田v2"', app_source)
-        self.assertIn('key: "shortpick-v2"', app_source)
-        self.assertIn("<ShortpickLabV2View />", app_source)
-        self.assertIn('"shortpick-v2"', common_types_source)
-        self.assertIn('"shortpick-v2"', mobile_types_source)
-        self.assertIn('label: "v2"', mobile_source)
-        self.assertIn("<ShortpickLabV2View />", mobile_source)
+        self.assertIn('label: "v3模型"', app_source)
+        self.assertIn('key: "shortpick-strategy-lab"', app_source)
+        self.assertIn("<ShortpickStrategyLabView />", app_source)
+        self.assertIn('"shortpick-strategy-lab"', common_types_source)
+        self.assertIn('"shortpick-strategy-lab"', mobile_types_source)
+        self.assertIn('label: "v3"', mobile_source)
+        self.assertIn("<ShortpickStrategyLabView />", mobile_source)
 
-        self.assertIn("getShortpickV2PaperTracking", api_source)
-        self.assertIn("getShortpickV2HistoricalReplay", api_source)
-        self.assertIn("getShortpickV2HistoricalReplay(sampleLimit = 0)", api_source)
-        self.assertIn("/shortpick-lab-v2/paper-tracking", api_source)
-        self.assertIn("/shortpick-lab-v2/historical-replay", api_source)
-        self.assertIn("getShortpickV2PaperTracking", api_index_source)
-        self.assertIn("getShortpickV2HistoricalReplay", api_index_source)
-        v2_paper_api_source = api_source.split("export function getShortpickV2PaperTracking()", 1)[1].split(
-            "export function getShortpickV2HistoricalReplay", 1
+        self.assertIn("getShortpickStrategyLabPaperTracking", api_source)
+        self.assertIn("getShortpickStrategyLabHistoricalReplay", api_source)
+        self.assertIn("/shortpick-strategy-lab/paper-tracking", api_source)
+        self.assertIn("/shortpick-strategy-lab/historical-replay", api_source)
+        self.assertNotIn("/shortpick-lab-v2/", api_source)
+        self.assertIn("getShortpickStrategyLabPaperTracking", api_index_source)
+        self.assertIn("getShortpickStrategyLabHistoricalReplay", api_index_source)
+        paper_api_source = api_source.split("export function getShortpickStrategyLabPaperTracking()", 1)[1].split(
+            "export function getShortpickStrategyLabHistoricalReplay", 1
         )[0]
-        self.assertIn("longRunningRequestBehavior", v2_paper_api_source)
-        self.assertNotIn("operationsDashboardRequestBehavior", v2_paper_api_source)
+        self.assertIn("operationsDashboardRequestBehavior", paper_api_source)
+        history_api_source = api_source.split("export function getShortpickStrategyLabHistoricalReplay()", 1)[1]
+        self.assertNotIn("sample_limit", history_api_source)
 
-        self.assertIn('type ShortpickV2Tab = "paper-tracking" | "historical-replay";', component_source)
+        self.assertIn('type ShortpickStrategyLabTab = "paper-tracking" | "historical-replay";', component_source)
         self.assertIn('label: "纸面追踪"', component_source)
         self.assertIn('label: "历史回放"', component_source)
-        self.assertIn('readRouteParam("shortpickV2Tab")', component_source)
-        self.assertIn('writeWorkbenchRoute({ view: "shortpick-v2", shortpickV2Tab: nextTab }, "push");', component_source)
+        self.assertIn('readRouteParam("shortpickStrategyLabTab")', component_source)
+        self.assertIn(
+            'writeWorkbenchRoute({ view: "shortpick-strategy-lab", shortpickStrategyLabTab: nextTab }, "push");',
+            component_source,
+        )
         self.assertIn('window.addEventListener("popstate", handlePopState);', component_source)
         self.assertIn('window.removeEventListener("popstate", handlePopState);', component_source)
-        self.assertIn("2026-05-08", component_source)
+        self.assertIn("2026-07-08", component_source)
         self.assertIn("不允许延迟买入", component_source)
-        self.assertIn("getShortpickV2PaperTracking", component_source)
-        self.assertIn("getShortpickV2HistoricalReplay", component_source)
-        self.assertIn("api.getShortpickV2HistoricalReplay(0)", component_source)
-        self.assertNotIn("api.getShortpickV2HistoricalReplay(5)", component_source)
+        self.assertIn("getShortpickStrategyLabPaperTracking", component_source)
+        self.assertIn("getShortpickStrategyLabHistoricalReplay", component_source)
+        self.assertIn("api.getShortpickStrategyLabHistoricalReplay()", component_source)
         self.assertNotIn("getShortpickPaperTracking", component_source)
         self.assertNotIn("getShortpickReplayRuns", component_source)
         self.assertNotIn("getShortpickValidationQueue", component_source)
@@ -60,16 +63,15 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("PaperDisplayChartCard", component_source)
         self.assertIn("paperDisplayTableColumns", component_source)
         self.assertIn('title={table?.title || "模拟交易明细"}', component_source)
-        self.assertIn("回放补齐不计入真实前向收益", component_source)
+        self.assertIn("从今日起真实前向", component_source)
         self.assertIn("最新来源信号日", component_source)
         self.assertIn("数据缺口", component_source)
 
         paper_tab_source = component_source[
-            component_source.index("function ShortpickV2PaperTab"):
-            component_source.index("function ShortpickV2ReplayTab")
+            component_source.index("function ShortpickStrategyLabPaperTab"):
+            component_source.index("function ShortpickStrategyLabReplayTab")
         ]
         for forbidden in (
-            "v2 Paper Ledger Rows",
             "blocked：",
             "contract_ready：",
             "tracking?.current_status",
@@ -79,6 +81,7 @@ class FrontendShortpickStaticTests(unittest.TestCase):
             "tracking?.records",
             "item.config_id",
             "item.decision_action",
+            "回放补齐",
         ):
             self.assertNotIn(forbidden, paper_tab_source)
         for visible_text_match in ("contract_ready", "research_observation", "decision_action", "config_id"):
@@ -89,11 +92,11 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn('rowKey={(_item, index) => `paper-display-row-${index ?? 0}`}', paper_tab_source)
 
         replay_tab_source = component_source[
-            component_source.index("function ShortpickV2ReplayTab"):
-            component_source.index("export function ShortpickLabV2View")
+            component_source.index("function ShortpickStrategyLabReplayTab"):
+            component_source.index("export function ShortpickStrategyLabView")
         ]
         self.assertIn("历史回放核心读数", replay_tab_source)
-        self.assertIn("留出与未采用配置统计", replay_tab_source)
+        self.assertIn("metric_groups", replay_tab_source)
         self.assertNotIn("decision_samples", replay_tab_source)
         self.assertNotIn("sampleColumns", replay_tab_source)
         self.assertNotIn("decision-sample", replay_tab_source)
@@ -351,7 +354,7 @@ class FrontendShortpickStaticTests(unittest.TestCase):
 
         self.assertIn('const DEFAULT_VIEW: ViewMode = "shortpick";', app_source)
         self.assertIn("const OPERATIONS_REVIEW_ENABLED = false;", app_source)
-        self.assertIn('    : ["candidates", "stock", "shortpick", "shortpick-v2", "settings"],', app_source)
+        self.assertIn('    : ["candidates", "stock", "shortpick", "shortpick-strategy-lab", "settings"],', app_source)
         self.assertIn("const canUseOperations = OPERATIONS_REVIEW_ENABLED;", app_source)
         self.assertIn('return rawView && VIEW_MODES.has(rawView as ViewMode) ? (rawView as ViewMode) : DEFAULT_VIEW;', app_source)
         self.assertIn('writeWorkbenchRoute({', app_source)

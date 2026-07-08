@@ -966,24 +966,24 @@ body[data-theme="dark"] {
   flex: 1 1 auto;
 }
 
-.shortpick-v2-return-chart-grid {
+.shortpick-strategy-lab-return-chart-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
-.shortpick-v2-filter-bar {
+.shortpick-strategy-lab-filter-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
 }
 
-.shortpick-v2-filter-search {
+.shortpick-strategy-lab-filter-search {
   width: min(100%, 280px);
 }
 
-.shortpick-v2-filter-select {
+.shortpick-strategy-lab-filter-select {
   width: 160px;
 }
 
@@ -1016,12 +1016,12 @@ body[data-theme="dark"] {
     min-width: min(100%, 160px);
   }
 
-  .shortpick-v2-return-chart-grid {
+  .shortpick-strategy-lab-return-chart-grid {
     grid-template-columns: 1fr;
   }
 
-  .shortpick-v2-filter-search,
-  .shortpick-v2-filter-select {
+  .shortpick-strategy-lab-filter-search,
+  .shortpick-strategy-lab-filter-select {
     width: 100%;
   }
 }
@@ -1154,12 +1154,12 @@ body[data-theme="dark"] {
   font-weight: 700;
 }
 
-.shortpick-v2-header .ant-card-body {
+.shortpick-strategy-lab-header .ant-card-body {
   display: grid;
   gap: 12px;
 }
 
-.shortpick-v2-header .shortpick-header-main {
+.shortpick-strategy-lab-header .shortpick-header-main {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1167,16 +1167,16 @@ body[data-theme="dark"] {
   gap: 16px;
 }
 
-.shortpick-v2-tabs .ant-tabs-nav {
+.shortpick-strategy-lab-tabs .ant-tabs-nav {
   margin-bottom: 12px;
 }
 
-.shortpick-v2-tab-body {
+.shortpick-strategy-lab-tab-body {
   gap: 12px;
 }
 
-.shortpick-v2-config-table table,
-.shortpick-v2-reference-collapse table {
+.shortpick-strategy-lab-config-table table,
+.shortpick-strategy-lab-reference-collapse table {
   min-width: 760px;
 }
 

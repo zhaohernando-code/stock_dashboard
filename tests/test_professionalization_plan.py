@@ -153,6 +153,187 @@ class ProfessionalizationPlanTests(unittest.TestCase):
         self.assertIn("factor_ic_study:independent_feature_source", blockers)
         self.assertIn("factor_ic_study_missing_required_field_schema_version", blockers)
 
+    def test_governance_execution_gate_uses_label_contract_evidence(self) -> None:
+        decision = build_governance_promotion_decision_artifact(
+            validation_run_id="governance-execution-contract-test",
+            source_db_snapshot_id="snapshot",
+            source_data_time_range={"as_of_start": "2026-01-01", "as_of_end": "2026-01-31"},
+            candidate_kind="model_comparison_report",
+            candidate_artifact={
+                "schema_version": "model_comparison_report.v1",
+                "artifact_id": "report",
+                "validation_run_id": "governance-execution-contract-test",
+                "generated_at": "2026-01-31T00:00:00+00:00",
+                "source_db_snapshot_id": "snapshot",
+                "source_data_time_range": {"as_of_start": "2026-01-01", "as_of_end": "2026-01-31"},
+                "feature_version": "features:v1",
+                "label_version": "shortpick_model_executable_label_matrix:v3",
+                "code_version": "test",
+                "config_version": "test",
+                "validation_protocol": {"production_effect": "forbidden"},
+                "gate_readout": {
+                    "gate_status": "blocked",
+                    "blocking_gate_ids": ["execution_stress:negative_monthly_mean_under_base_cost"],
+                },
+                "claim_ceiling": "comparison_report_only",
+                "promotion_status": "blocked_from_production",
+                "execution_label_contract": {
+                    "covered_execution_gate_ids": [
+                        "t_plus_1_execution_model",
+                        "suspension_limit_buy_sellability",
+                    ]
+                },
+            },
+            objective_universe={
+                "artifact_id": "objective",
+                "gate_readout": {"gate_status": "objective_universe_ready", "blocking_gate_ids": []},
+            },
+            walk_forward_protocol={
+                "artifact_id": "wf",
+                "gate_readout": {"gate_status": "walk_forward_ready", "blocking_gate_ids": []},
+            },
+            oos_validation={
+                "artifact_id": "oos",
+                "gate_readout": {"gate_status": "oos_ready", "blocking_gate_ids": []},
+            },
+            multiple_testing_diagnostics={
+                "artifact_id": "multiple",
+                "gate_readout": {"gate_status": "multiple_testing_ready", "blocking_gate_ids": []},
+            },
+        )
+
+        blockers = decision["gate_readout"]["blocking_gate_ids"]
+        self.assertNotIn("execution:t_plus_1_execution_model", blockers)
+        self.assertNotIn("execution:suspension_limit_buy_sellability", blockers)
+        self.assertIn("execution:fees_slippage_stamp_tax", blockers)
+        self.assertIn("execution:adv_capacity_fill_rate", blockers)
+        self.assertIn("model_comparison_report:execution_stress:negative_monthly_mean_under_base_cost", blockers)
+
+    def test_governance_execution_gate_uses_cost_stress_evidence_for_fees(self) -> None:
+        decision = build_governance_promotion_decision_artifact(
+            validation_run_id="governance-cost-stress-test",
+            source_db_snapshot_id="snapshot",
+            source_data_time_range={"as_of_start": "2026-01-01", "as_of_end": "2026-01-31"},
+            candidate_kind="model_comparison_report",
+            candidate_artifact={
+                "schema_version": "model_comparison_report.v1",
+                "artifact_id": "report",
+                "validation_run_id": "governance-cost-stress-test",
+                "generated_at": "2026-01-31T00:00:00+00:00",
+                "source_db_snapshot_id": "snapshot",
+                "source_data_time_range": {"as_of_start": "2026-01-01", "as_of_end": "2026-01-31"},
+                "feature_version": "features:v1",
+                "label_version": "shortpick_model_executable_label_matrix:v3",
+                "code_version": "test",
+                "config_version": "test",
+                "validation_protocol": {"production_effect": "forbidden"},
+                "gate_readout": {"gate_status": "blocked", "blocking_gate_ids": []},
+                "claim_ceiling": "comparison_report_only",
+                "promotion_status": "blocked_from_production",
+                "execution_label_contract": {
+                    "covered_execution_gate_ids": [
+                        "t_plus_1_execution_model",
+                        "suspension_limit_buy_sellability",
+                    ]
+                },
+                "execution_diagnostics": {
+                    "period_count": 120,
+                    "blocking_gate_ids": [],
+                    "thresholds": {"minimum_periods": 20},
+                    "cost_stress": [
+                        {"cost_multiplier": 1.0, "mean_net_excess_after_cost_stress": 0.030},
+                        {"cost_multiplier": 2.0, "mean_net_excess_after_cost_stress": 0.029},
+                        {"cost_multiplier": 3.0, "mean_net_excess_after_cost_stress": 0.028},
+                    ],
+                },
+            },
+            objective_universe={
+                "artifact_id": "objective",
+                "gate_readout": {"gate_status": "objective_universe_ready", "blocking_gate_ids": []},
+            },
+            walk_forward_protocol={
+                "artifact_id": "wf",
+                "gate_readout": {"gate_status": "walk_forward_ready", "blocking_gate_ids": []},
+            },
+            oos_validation={
+                "artifact_id": "oos",
+                "gate_readout": {"gate_status": "oos_ready", "blocking_gate_ids": []},
+            },
+            multiple_testing_diagnostics={
+                "artifact_id": "multiple",
+                "gate_readout": {"gate_status": "multiple_testing_ready", "blocking_gate_ids": []},
+            },
+        )
+
+        execution_gate = decision["gate_readout"]["execution_gate_readout"]
+        blockers = decision["gate_readout"]["blocking_gate_ids"]
+        self.assertIn("fees_slippage_stamp_tax", execution_gate["covered_gate_ids"])
+        self.assertNotIn("execution:fees_slippage_stamp_tax", blockers)
+        self.assertIn("execution:adv_capacity_fill_rate", blockers)
+
+    def test_governance_execution_gate_uses_capacity_stress_evidence_for_adv(self) -> None:
+        decision = build_governance_promotion_decision_artifact(
+            validation_run_id="governance-capacity-stress-test",
+            source_db_snapshot_id="snapshot",
+            source_data_time_range={"as_of_start": "2026-01-01", "as_of_end": "2026-01-31"},
+            candidate_kind="model_comparison_report",
+            candidate_artifact={
+                "schema_version": "model_comparison_report.v1",
+                "artifact_id": "report",
+                "validation_run_id": "governance-capacity-stress-test",
+                "generated_at": "2026-01-31T00:00:00+00:00",
+                "source_db_snapshot_id": "snapshot",
+                "source_data_time_range": {"as_of_start": "2026-01-01", "as_of_end": "2026-01-31"},
+                "feature_version": "features:v1",
+                "label_version": "shortpick_model_executable_label_matrix:v3",
+                "code_version": "test",
+                "config_version": "test",
+                "validation_protocol": {"production_effect": "forbidden"},
+                "gate_readout": {"gate_status": "blocked", "blocking_gate_ids": []},
+                "claim_ceiling": "comparison_report_only",
+                "promotion_status": "blocked_from_production",
+                "execution_label_contract": {
+                    "covered_execution_gate_ids": [
+                        "t_plus_1_execution_model",
+                        "suspension_limit_buy_sellability",
+                        "fees_slippage_stamp_tax",
+                    ]
+                },
+                "execution_diagnostics": {
+                    "period_count": 120,
+                    "blocking_gate_ids": [],
+                    "capacity_diagnostics": {
+                        "status": "ready",
+                        "blocking_gate_ids": [],
+                        "active_pick_count": 120,
+                        "active_pick_below_full_fill_count": 0,
+                        "missing_avg_amount_20d_count": 0,
+                    },
+                },
+            },
+            objective_universe={
+                "artifact_id": "objective",
+                "gate_readout": {"gate_status": "objective_universe_ready", "blocking_gate_ids": []},
+            },
+            walk_forward_protocol={
+                "artifact_id": "wf",
+                "gate_readout": {"gate_status": "walk_forward_ready", "blocking_gate_ids": []},
+            },
+            oos_validation={
+                "artifact_id": "oos",
+                "gate_readout": {"gate_status": "oos_ready", "blocking_gate_ids": []},
+            },
+            multiple_testing_diagnostics={
+                "artifact_id": "multiple",
+                "gate_readout": {"gate_status": "multiple_testing_ready", "blocking_gate_ids": []},
+            },
+        )
+
+        execution_gate = decision["gate_readout"]["execution_gate_readout"]
+        blockers = decision["gate_readout"]["blocking_gate_ids"]
+        self.assertIn("adv_capacity_fill_rate", execution_gate["covered_gate_ids"])
+        self.assertNotIn("execution:adv_capacity_fill_rate", blockers)
+
     def test_walk_forward_protocol_blocks_false_ready_after_purge(self) -> None:
         rows = [
             {"as_of_date": (date(2026, 1, 1) + timedelta(days=index)).isoformat()}

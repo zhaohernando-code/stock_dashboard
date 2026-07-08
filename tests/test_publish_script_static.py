@@ -40,19 +40,8 @@ def test_publish_python_bin_covers_verifier_and_refresh() -> None:
     assert '--operations-sample-symbol "$RELEASE_OPERATIONS_SAMPLE_SYMBOL"' in script
     assert '--operations-warmup-timeout-seconds "$RELEASE_OPERATIONS_WARMUP_TIMEOUT_SECONDS"' in script
     assert 'PYTHONPATH="$RUNTIME_ROOT/src" "$PYTHON_BIN" -m ashare_evidence.cli refresh-runtime-data' in script
-    assert 'bash "$RUNTIME_ROOT/scripts/prewarm-shortpick-v2-paper-cache.sh"' in script
-    assert '[publish:shortpick-v2-prewarm]' in script
-    assert script.index('echo "[publish] Prewarming shortpick v2 paper cache"') < script.index(
-        'echo "[publish] Running deploy verification..."'
-    )
-
-
-def test_shortpick_v2_paper_prewarm_uses_ignored_runtime_artifact_root() -> None:
-    script = (REPO_ROOT / "scripts" / "prewarm-shortpick-v2-paper-cache.sh").read_text(encoding="utf-8")
-
-    assert "ASHARE_SHORTPICK_V2_PAPER_CACHE_PREWARM_ARTIFACT_ROOT" in script
-    assert 'export ASHARE_ARTIFACT_ROOT="${ASHARE_SHORTPICK_V2_PAPER_CACHE_PREWARM_ARTIFACT_ROOT:-$REPO_ROOT/data/runtime-artifacts}"' in script
-    assert script.index("export ASHARE_ARTIFACT_ROOT=") < script.index('ashare_resolve_local_artifact_root "$REPO_ROOT"')
+    assert "prewarm-shortpick-v2-paper-cache.sh" not in script
+    assert "shortpick-v2-prewarm" not in script
 
 
 def test_local_backend_forces_operations_response_prewarm_by_default() -> None:

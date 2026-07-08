@@ -19,26 +19,26 @@ import { init } from "echarts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type {
-  ShortpickV2ConfigReadout,
-  ShortpickV2HistoricalReplayResponse,
-  ShortpickV2PaperDisplayAccountCurve,
-  ShortpickV2PaperDisplayChart,
-  ShortpickV2PaperDisplayTableColumn,
-  ShortpickV2PaperDisplayTableRow,
-  ShortpickV2PaperDisplayTextItem,
-  ShortpickV2PaperTrackingResponse,
+  ShortpickStrategyLabConfigReadout,
+  ShortpickStrategyLabHistoricalReplayResponse,
+  ShortpickStrategyLabPaperDisplayAccountCurve,
+  ShortpickStrategyLabPaperDisplayChart,
+  ShortpickStrategyLabPaperDisplayTableColumn,
+  ShortpickStrategyLabPaperDisplayTableRow,
+  ShortpickStrategyLabPaperDisplayTextItem,
+  ShortpickStrategyLabPaperTrackingResponse,
 } from "../types";
 import { formatDate, formatNumber, formatPercent, valueTone } from "../utils/format";
 import { readRouteParam, writeWorkbenchRoute } from "../utils/route";
 
 const { Paragraph, Text, Title } = Typography;
-type ShortpickV2Tab = "paper-tracking" | "historical-replay";
-const SHORTPICK_V2_TABS = new Set<ShortpickV2Tab>(["paper-tracking", "historical-replay"]);
+type ShortpickStrategyLabTab = "paper-tracking" | "historical-replay";
+const SHORTPICK_STRATEGY_LAB_TABS = new Set<ShortpickStrategyLabTab>(["paper-tracking", "historical-replay"]);
 
-function initialShortpickV2Tab(): ShortpickV2Tab {
-  const rawTab = readRouteParam("shortpickV2Tab");
-  return rawTab && SHORTPICK_V2_TABS.has(rawTab as ShortpickV2Tab)
-    ? rawTab as ShortpickV2Tab
+function initialShortpickStrategyLabTab(): ShortpickStrategyLabTab {
+  const rawTab = readRouteParam("shortpickStrategyLabTab");
+  return rawTab && SHORTPICK_STRATEGY_LAB_TABS.has(rawTab as ShortpickStrategyLabTab)
+    ? rawTab as ShortpickStrategyLabTab
     : "paper-tracking";
 }
 
@@ -53,6 +53,8 @@ function stringField(source: Record<string, unknown> | undefined, key: string): 
 }
 
 function configRoleLabel(role?: string | null): string {
+  if (role === "primary_forward_observation") return "主策略";
+  if (role === "lower_concentration_control") return "低集中对照";
   if (role === "phase6_forward_observation_candidate") return "前向观察候选";
   if (role === "primary_future_observation_candidate") return "冻结主策略";
   if (role === "capital_shadow_future_observation_candidate") return "资金影子对照";
@@ -68,6 +70,8 @@ function configRoleLabel(role?: string | null): string {
 }
 
 function configRoleColor(role?: string | null): string {
+  if (role === "primary_forward_observation") return "green";
+  if (role === "lower_concentration_control") return "blue";
   if (role === "phase6_forward_observation_candidate") return "green";
   if (role === "primary_future_observation_candidate") return "green";
   if (role === "capital_shadow_future_observation_candidate") return "blue";
@@ -82,7 +86,7 @@ function configRoleColor(role?: string | null): string {
 
 function statusColor(value?: string | null): string {
   if (value === "ready" || value === "active" || value === "passed") return "green";
-  if (value === "contract_ready" || value === "baseline_control") return "blue";
+  if (value === "contract_ready" || value === "baseline_control" || value === "active_control") return "blue";
   if (value === "failed" || value === "blocked") return "red";
   if (value === "holdout" || value === "diagnostic_only") return "gold";
   return "default";
@@ -99,6 +103,9 @@ function readableStatusLabel(value?: string | null): string {
   if (value === "contract_ready") return "已满足展示合同";
   if (value === "ready") return "已就绪";
   if (value === "active") return "跟踪中";
+  if (value === "awaiting_first_forward_fill") return "等待首笔前向成交";
+  if (value === "active_control") return "对照观察中";
+  if (value === "static_full_history_ready") return "静态历史指标已就绪";
   if (value === "passed") return "已通过";
   if (value === "failed") return "未通过";
   if (value === "blocked") return "暂不可用";
@@ -108,7 +115,6 @@ function readableStatusLabel(value?: string | null): string {
   if (value === "true_forward_tracking") return "真实前向跟踪";
   if (value === "historical_account_replay") return "历史账户回放";
   if (value === "historical_account_replay_selection") return "历史账户回放筛选";
-  if (value === "h10_governance_summary_only") return "H10 治理结论";
   if (value === "diagnostic_only") return "仅作诊断";
   if (value === "legacy_reference") return "旧结果参照";
   if (value === "forward_observation_ready_with_open_risks") return "可前向观察，仍有开放风险";
@@ -126,30 +132,16 @@ function reasonLabel(value?: string | null): string {
   if (value === "limit_up_unfillable") return "入场日涨停不可成交。";
   if (value === "no_ranked_candidates") return "当天没有满足条件的候选。";
   if (value === "no_executable_candidate") return "当天候选都不满足买入约束。";
-  if (value === "h10_forward_observation_candidate_executable") return "H10 候选满足资金和整手约束，可进入纸面观察。";
-  if (value === "旧 strategy-search 结果只作为历史弱结果参照，不属于 H10 quiet champion 同窗候选。") {
-    return "旧策略搜索结果只作为历史弱结果参照，不属于当前 H10 冠军策略候选。";
-  }
   return value ? "按既定规则完成判断。" : "暂无说明。";
 }
 
 function configReadableLabel(configId?: string | null): string {
-  if (configId === "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_85k_top5_h10_v1") {
-    return "8.5 万目标买入方案";
+  if (configId === "daily_14_tranche_rank_weighted_compound_min2250_layered_rank1_quickfail_rank3_pullback_exit_v1") {
+    return "主策略：14 tranche 分层退出";
   }
-  if (configId === "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_80k_top5_h10_v1") {
-    return "8 万目标买入方案";
+  if (configId === "daily_15_tranche_rank_weighted_compound_min1000_v1") {
+    return "对照组：15 tranche 低集中复投";
   }
-  if (configId === "quiet_breakout_rank2_poolhot10_mtw__fixed_notional_90k_top5_h10_v1") {
-    return "9 万目标买入诊断方案";
-  }
-  if (configId === "quiet_r2_poolhot10_mtw__fixed85_top5_v1") return "8.5 万目标买入方案";
-  if (configId === "quiet_r2_poolhot10_mtw__fixed80_top5_v1") return "8 万目标买入方案";
-  if (configId === "top1_or_skip_v1") return "首位候选对照策略";
-  if (configId === "top3_fallback_v1") return "前三候选对照策略";
-  if (configId === "fixed_notional_40k_top5_v1") return "4 万目标买入旧候选策略";
-  if (configId === "conservative_cash_reserve_60k_top5_v1") return "保留 6 万现金的旧候选策略";
-  if (configId === "position_cap_utilization_top5_v1") return "仓位上限旧候选策略";
   return configId ? "未命名策略" : "暂无策略";
 }
 
@@ -159,11 +151,18 @@ function displayValue(value: unknown, fallback = "暂无"): string {
   return String(value);
 }
 
+function metricDisplayValue(item: { value?: string | number | null; format?: string | null }): string {
+  if (typeof item.value !== "number") return displayValue(item.value);
+  if (item.format === "percent") return formatPercent(item.value);
+  if (item.format === "currency") return `${formatNumber(item.value)} 元`;
+  return formatNumber(item.value);
+}
+
 function appendPaperSummaryCard(
-  cards: ShortpickV2PaperDisplayTextItem[],
+  cards: ShortpickStrategyLabPaperDisplayTextItem[],
   label: string,
   value: unknown,
-): ShortpickV2PaperDisplayTextItem[] {
+): ShortpickStrategyLabPaperDisplayTextItem[] {
   if (cards.some((item) => item.label === label)) return cards;
   return [...cards, { label, value: displayValue(value) }];
 }
@@ -181,7 +180,7 @@ function chartPercent(value: number, maxValue: number): number {
   return Math.max(0, Math.min(100, Math.round((value / maxValue) * 100)));
 }
 
-function paperRowSearchText(row: ShortpickV2PaperDisplayTableRow): string {
+function paperRowSearchText(row: ShortpickStrategyLabPaperDisplayTableRow): string {
   return [
     row.signal_date_text,
     row.tracking_tag,
@@ -200,7 +199,7 @@ function paperRowSearchText(row: ShortpickV2PaperDisplayTableRow): string {
   ].map((value) => displayValue(value, "")).join(" ");
 }
 
-function uniquePaperOptions(rows: ShortpickV2PaperDisplayTableRow[], key: string): { label: string; value: string }[] {
+function uniquePaperOptions(rows: ShortpickStrategyLabPaperDisplayTableRow[], key: string): { label: string; value: string }[] {
   return Array.from(
     new Set(rows.map((row) => displayValue(row[key], "")).filter(Boolean)),
   ).map((value) => ({ label: value, value }));
@@ -210,16 +209,16 @@ function ConfigSummaryTable({
   rows,
   loading,
 }: {
-  rows: ShortpickV2ConfigReadout[];
+  rows: ShortpickStrategyLabConfigReadout[];
   loading: boolean;
 }) {
-  const columns: ColumnsType<ShortpickV2ConfigReadout> = [
+  const columns: ColumnsType<ShortpickStrategyLabConfigReadout> = [
     {
       title: "配置",
       key: "config",
-      render: (_, item) => (
-        <Space direction="vertical" size={0}>
-          <Text strong>{configReadableLabel(item.config_id)}</Text>
+        render: (_, item) => (
+          <Space direction="vertical" size={0}>
+          <Text strong>{item.label || configReadableLabel(item.config_id)}</Text>
           <Space wrap size={4}>
             <Tag color={configRoleColor(item.role)}>{configRoleLabel(item.role)}</Tag>
             <Tag color={statusColor(item.gate_status)}>{readableStatusLabel(item.gate_status) || "未过闸"}</Tag>
@@ -264,7 +263,7 @@ function ConfigSummaryTable({
   ];
   return (
     <Table
-      className="shortpick-v2-config-table"
+      className="shortpick-strategy-lab-config-table"
       rowKey={(item, index) => `config-summary-${configRoleLabel(item.role)}-${index ?? 0}`}
       size="small"
       loading={loading}
@@ -275,12 +274,12 @@ function ConfigSummaryTable({
   );
 }
 
-function ShortpickV2PaperTab({
+function ShortpickStrategyLabPaperTab({
   tracking,
   loading,
   onReload,
 }: {
-  tracking: ShortpickV2PaperTrackingResponse | null;
+  tracking: ShortpickStrategyLabPaperTrackingResponse | null;
   loading: boolean;
   onReload: () => void;
 }) {
@@ -313,7 +312,7 @@ function ShortpickV2PaperTab({
   const baseSummaryCards = display?.summary_cards ?? [
     { label: "真实前向记录", value: numberField(tracking?.summary, "true_forward_record_count") ?? 0 },
     { label: "回放展示行", value: numberField(tracking?.summary, "replay_record_count") ?? 0 },
-    { label: "覆盖起点", value: stringField(display?.coverage, "coverage_start") || "2026-05-08" },
+    { label: "追踪起点", value: stringField(display?.coverage, "coverage_start") || "2026-07-08" },
     { label: "最新来源信号日", value: stringField(display?.coverage, "latest_source_signal_date") || "暂无" },
   ];
   const summaryCards = appendPaperSummaryCard(
@@ -328,10 +327,10 @@ function ShortpickV2PaperTab({
   const pageStatus = display?.status_label || readableStatusLabel(tracking?.status);
   const pageSubtitle = display?.subtitle || tracking?.data_disclaimer || "暂无纸面追踪展示数据。";
   return (
-    <div className="panel-stack shortpick-v2-tab-body">
+    <div className="panel-stack shortpick-strategy-lab-tab-body">
       <Card
         className="panel-card"
-        title={display?.title || "试验田v2纸面追踪"}
+        title={display?.title || "v3模型纸面追踪"}
         extra={<Button icon={<ReloadOutlined />} onClick={onReload} loading={loading}>刷新</Button>}
       >
         {loading && !tracking ? (
@@ -344,7 +343,7 @@ function ShortpickV2PaperTab({
               message={pageStatus}
               description={pageSubtitle}
             />
-            <div className="metric-strip shortpick-v2-metrics">
+            <div className="metric-strip shortpick-strategy-lab-metrics">
               {summaryCards.map((item) => (
                 <div className="metric-strip-item" key={item.label}>
                   <span>{item.label}</span>
@@ -353,7 +352,7 @@ function ShortpickV2PaperTab({
               ))}
             </div>
             <Space wrap className="inline-tags">
-              <Tag color="blue">回放补齐不计入真实前向收益</Tag>
+              <Tag color="blue">从今日起真实前向</Tag>
               <Tag color="red">不允许延迟买入</Tag>
               <Tag color="green">研究观察，不构成建议</Tag>
             </Space>
@@ -371,7 +370,7 @@ function ShortpickV2PaperTab({
         ) : (
           <Space direction="vertical" size="middle" className="full-width">
             <Paragraph className="panel-description">{latestTrade?.summary || "暂无可展示的模拟交易。"}</Paragraph>
-            <div className="metric-strip shortpick-v2-metrics">
+            <div className="metric-strip shortpick-strategy-lab-metrics">
               {(latestTrade?.items ?? []).map((item) => (
                 <div className="metric-strip-item" key={item.label}>
                   <span>{item.label}</span>
@@ -390,7 +389,7 @@ function ShortpickV2PaperTab({
         ) : (
           <Space direction="vertical" size="middle" className="full-width">
             {(strategyExplanation?.items ?? []).map((item) => (
-              <div className="shortpick-v2-explanation-row" key={item.label}>
+              <div className="shortpick-strategy-lab-explanation-row" key={item.label}>
                 <Text strong>{item.label}</Text>
                 <Paragraph className="panel-description">{displayValue(item.value)}</Paragraph>
               </div>
@@ -411,7 +410,7 @@ function ShortpickV2PaperTab({
 
       <PaperReturnCharts accountCurves={accountCurves} strategyFilter={strategyFilter} />
 
-      <div className="shortpick-v2-chart-grid">
+      <div className="shortpick-strategy-lab-chart-grid">
         {charts.length ? charts.map((chart) => <PaperDisplayChartCard key={chart.title || chart.kind} chart={chart} />) : (
           <Card className="panel-card" title="图表">
             <Empty description="暂无可展示的图表数据。" />
@@ -422,9 +421,9 @@ function ShortpickV2PaperTab({
       <Card className="panel-card" title={table?.title || "模拟交易明细"}>
         {tableRows.length ? (
           <Space direction="vertical" size="middle" className="full-width">
-            <div className="shortpick-v2-filter-bar">
+            <div className="shortpick-strategy-lab-filter-bar">
               <Input.Search
-                className="shortpick-v2-filter-search"
+                className="shortpick-strategy-lab-filter-search"
                 allowClear
                 placeholder="搜索日期、标的、动作、原因"
                 value={tableSearch}
@@ -432,7 +431,7 @@ function ShortpickV2PaperTab({
               />
               <Select
                 allowClear
-                className="shortpick-v2-filter-select"
+                className="shortpick-strategy-lab-filter-select"
                 options={strategyOptions}
                 placeholder="策略"
                 value={strategyFilter || undefined}
@@ -440,7 +439,7 @@ function ShortpickV2PaperTab({
               />
               <Select
                 allowClear
-                className="shortpick-v2-filter-select"
+                className="shortpick-strategy-lab-filter-select"
                 options={actionOptions}
                 placeholder="动作"
                 value={actionFilter || undefined}
@@ -448,7 +447,7 @@ function ShortpickV2PaperTab({
               />
               <Select
                 allowClear
-                className="shortpick-v2-filter-select"
+                className="shortpick-strategy-lab-filter-select"
                 options={exitOptions}
                 placeholder="退出状态"
                 value={exitFilter || undefined}
@@ -486,7 +485,7 @@ function PaperReturnCharts({
   accountCurves,
   strategyFilter,
 }: {
-  accountCurves: ShortpickV2PaperDisplayAccountCurve[];
+  accountCurves: ShortpickStrategyLabPaperDisplayAccountCurve[];
   strategyFilter: string;
 }) {
   const cumulativeChartRef = useRef<HTMLDivElement | null>(null);
@@ -603,7 +602,7 @@ function PaperReturnCharts({
       <div className="shortpick-paper-effect-head">
         <Space direction="vertical" size={2}>
           <Text strong>账户净值走势</Text>
-          <Text type="secondary">按 20 万纸面账户、实际买入成本和持仓市值计算。</Text>
+          <Text type="secondary">按 20 万纸面账户、实际买入成本和持仓市值计算；产生真实成交后显示。</Text>
         </Space>
         <Space wrap className="shortpick-paper-effect-summary-tags">
           <Tag color="blue">策略 {formatNumber(visibleCurves.length)}</Tag>
@@ -611,7 +610,7 @@ function PaperReturnCharts({
           <Tag color="red">最大回撤 {formatPercent(latestDrawdown)}</Tag>
         </Space>
       </div>
-      <div className="shortpick-v2-return-chart-grid">
+      <div className="shortpick-strategy-lab-return-chart-grid">
         <div className="shortpick-paper-effect-chart-block">
           <div className="shortpick-paper-effect-chart-head">
             <Space direction="vertical" size={0} className="shortpick-paper-effect-chart-title">
@@ -635,7 +634,7 @@ function PaperReturnCharts({
   );
 }
 
-function PaperDisplayChartCard({ chart }: { chart: ShortpickV2PaperDisplayChart }) {
+function PaperDisplayChartCard({ chart }: { chart: ShortpickStrategyLabPaperDisplayChart }) {
   const points = chart.data ?? [];
   const maxValue = Math.max(...points.map((item) => item.value), 0);
   return (
@@ -643,7 +642,7 @@ function PaperDisplayChartCard({ chart }: { chart: ShortpickV2PaperDisplayChart 
       <Space direction="vertical" size="middle" className="full-width">
         {chart.subtitle ? <Text type="secondary">{chart.subtitle}</Text> : null}
         {points.length ? points.map((item) => (
-          <div className="shortpick-v2-chart-row" key={item.name}>
+          <div className="shortpick-strategy-lab-chart-row" key={item.name}>
             <Space className="full-width" direction="vertical" size={2}>
               <Space className="full-width" style={{ justifyContent: "space-between" }}>
                 <Text>{item.name}</Text>
@@ -659,9 +658,9 @@ function PaperDisplayChartCard({ chart }: { chart: ShortpickV2PaperDisplayChart 
 }
 
 function paperDisplayTableColumns(
-  sourceColumns: ShortpickV2PaperDisplayTableColumn[],
-): ColumnsType<ShortpickV2PaperDisplayTableRow> {
-  const fallbackColumns: ShortpickV2PaperDisplayTableColumn[] = [
+  sourceColumns: ShortpickStrategyLabPaperDisplayTableColumn[],
+): ColumnsType<ShortpickStrategyLabPaperDisplayTableRow> {
+  const fallbackColumns: ShortpickStrategyLabPaperDisplayTableColumn[] = [
     { key: "signal_date_text", label: "信号日" },
     { key: "tracking_tag", label: "记录类型" },
     { key: "strategy_text", label: "策略" },
@@ -683,7 +682,7 @@ function paperDisplayTableColumns(
   }));
 }
 
-function paperDisplayTableCell(key: string, item: ShortpickV2PaperDisplayTableRow) {
+function paperDisplayTableCell(key: string, item: ShortpickStrategyLabPaperDisplayTableRow) {
   if (key === "tracking_tag") {
     return <Tag color={tagColorByTone(item.tracking_tag_tone)}>{displayValue(item.tracking_tag)}</Tag>;
   }
@@ -696,12 +695,12 @@ function paperDisplayTableCell(key: string, item: ShortpickV2PaperDisplayTableRo
   return <Text>{displayValue(item[key])}</Text>;
 }
 
-function ShortpickV2ReplayTab({
+function ShortpickStrategyLabReplayTab({
   replay,
   loading,
   onReload,
 }: {
-  replay: ShortpickV2HistoricalReplayResponse | null;
+  replay: ShortpickStrategyLabHistoricalReplayResponse | null;
   loading: boolean;
   onReload: () => void;
 }) {
@@ -710,7 +709,7 @@ function ShortpickV2ReplayTab({
   const holdoutRows = replay?.holdout_configs ?? [];
   const rejectedRows = replay?.rejected_configs ?? [];
   return (
-    <div className="panel-stack shortpick-v2-tab-body">
+    <div className="panel-stack shortpick-strategy-lab-tab-body">
       <Card
         className="panel-card"
         title="历史回放核心读数"
@@ -720,7 +719,7 @@ function ShortpickV2ReplayTab({
           <Skeleton active paragraph={{ rows: 4 }} />
         ) : (
           <>
-            <div className="metric-strip shortpick-v2-metrics">
+            <div className="metric-strip shortpick-strategy-lab-metrics">
               <div className="metric-strip-item">
                 <span>信号日</span>
                 <strong>{formatNumber(numberField(replay?.summary, "signal_day_count"))}</strong>
@@ -752,6 +751,23 @@ function ShortpickV2ReplayTab({
         )}
       </Card>
 
+      {replay?.metric_groups?.length ? (
+        <div className="shortpick-strategy-lab-chart-grid">
+          {replay.metric_groups.map((group) => (
+            <Card className="panel-card" title={group.title} key={group.title}>
+              <div className="metric-strip shortpick-strategy-lab-metrics">
+                {group.items.map((item) => (
+                  <div className="metric-strip-item" key={item.label}>
+                    <span>{item.label}</span>
+                    <strong>{metricDisplayValue(item)}</strong>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : null}
+
       <Card className="panel-card" title={selectedRows.length ? "推广配置与基线" : "合格配置与基线"}>
         <ConfigSummaryTable rows={[...selectedRows, ...baselineRows]} loading={loading} />
       </Card>
@@ -763,11 +779,11 @@ function ShortpickV2ReplayTab({
   );
 }
 
-export function ShortpickLabV2View() {
-  const [activeTab, setActiveTab] = useState<ShortpickV2Tab>(() => initialShortpickV2Tab());
-  const activeTabRef = useRef<ShortpickV2Tab>(activeTab);
-  const [paperTracking, setPaperTracking] = useState<ShortpickV2PaperTrackingResponse | null>(null);
-  const [historicalReplay, setHistoricalReplay] = useState<ShortpickV2HistoricalReplayResponse | null>(null);
+export function ShortpickStrategyLabView() {
+  const [activeTab, setActiveTab] = useState<ShortpickStrategyLabTab>(() => initialShortpickStrategyLabTab());
+  const activeTabRef = useRef<ShortpickStrategyLabTab>(activeTab);
+  const [paperTracking, setPaperTracking] = useState<ShortpickStrategyLabPaperTrackingResponse | null>(null);
+  const [historicalReplay, setHistoricalReplay] = useState<ShortpickStrategyLabHistoricalReplayResponse | null>(null);
   const [paperLoading, setPaperLoading] = useState(false);
   const [replayLoading, setReplayLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -776,10 +792,10 @@ export function ShortpickLabV2View() {
     setPaperLoading(true);
     setError(null);
     try {
-      const result = await api.getShortpickV2PaperTracking();
+      const result = await api.getShortpickStrategyLabPaperTracking();
       setPaperTracking(result.data);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "加载 v2 纸面追踪失败。");
+      setError(loadError instanceof Error ? loadError.message : "加载 模型纸面追踪失败。");
     } finally {
       setPaperLoading(false);
     }
@@ -789,16 +805,16 @@ export function ShortpickLabV2View() {
     setReplayLoading(true);
     setError(null);
     try {
-      const result = await api.getShortpickV2HistoricalReplay(0);
+      const result = await api.getShortpickStrategyLabHistoricalReplay();
       setHistoricalReplay(result.data);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "加载 v2 历史回放失败。");
+      setError(loadError instanceof Error ? loadError.message : "加载 v3 历史回放失败。");
     } finally {
       setReplayLoading(false);
     }
   }
 
-  function loadActiveTab(tab: ShortpickV2Tab): void {
+  function loadActiveTab(tab: ShortpickStrategyLabTab): void {
     if (tab === "paper-tracking") {
       void loadPaperTracking();
     } else {
@@ -816,7 +832,7 @@ export function ShortpickLabV2View() {
 
   useEffect(() => {
     function handlePopState(): void {
-      const nextTab = initialShortpickV2Tab();
+      const nextTab = initialShortpickStrategyLabTab();
       if (activeTabRef.current === nextTab) return;
       activeTabRef.current = nextTab;
       setActiveTab(nextTab);
@@ -828,16 +844,16 @@ export function ShortpickLabV2View() {
   }, []);
 
   useEffect(() => {
-    writeWorkbenchRoute({ view: "shortpick-v2", shortpickV2Tab: activeTab }, "replace");
+    writeWorkbenchRoute({ view: "shortpick-strategy-lab", shortpickStrategyLabTab: activeTab }, "replace");
   }, [activeTab]);
 
   return (
-    <section className="shortpick-lab-v2 panel-stack">
-      <Card className="panel-card shortpick-v2-header">
+    <section className="shortpick-strategy-lab panel-stack">
+      <Card className="panel-card shortpick-strategy-lab-header">
         <div className="shortpick-header-main">
           <Space direction="vertical" size={4}>
-            <Title level={3}>试验田v2</Title>
-            <Text type="secondary">资金约束账户路径研究</Text>
+            <Title level={3}>v3 模型策略</Title>
+            <Text type="secondary">20 万资金池滚动纸面追踪与静态历史验证</Text>
           </Space>
           <Space wrap className="inline-tags">
             <Tag color="green">研究观察，不构成建议</Tag>
@@ -852,20 +868,20 @@ export function ShortpickLabV2View() {
           icon={<SafetyCertificateOutlined />}
           type="info"
           message="只读研究口径"
-          description="页面只读取 v2 后端只读接口；不触发回放生成、行情刷新、模型调用、纸面记录写入或参数搜索。"
+          description="页面只读取策略实验只读接口；历史回放不触发全量重算，纸面追踪不从历史回放补齐交易行。"
         />
       </Card>
 
       {error ? <Alert type="error" showIcon message={error} /> : null}
 
       <Tabs
-        className="shortpick-v2-tabs"
+        className="shortpick-strategy-lab-tabs"
         activeKey={activeTab}
         onChange={(key) => {
-          if (!SHORTPICK_V2_TABS.has(key as ShortpickV2Tab)) return;
-          const nextTab = key as ShortpickV2Tab;
+          if (!SHORTPICK_STRATEGY_LAB_TABS.has(key as ShortpickStrategyLabTab)) return;
+          const nextTab = key as ShortpickStrategyLabTab;
           activeTabRef.current = nextTab;
-          writeWorkbenchRoute({ view: "shortpick-v2", shortpickV2Tab: nextTab }, "push");
+          writeWorkbenchRoute({ view: "shortpick-strategy-lab", shortpickStrategyLabTab: nextTab }, "push");
           setActiveTab(nextTab);
           loadActiveTab(nextTab);
         }}
@@ -874,7 +890,7 @@ export function ShortpickLabV2View() {
             key: "paper-tracking",
             label: "纸面追踪",
             children: (
-              <ShortpickV2PaperTab
+              <ShortpickStrategyLabPaperTab
                 tracking={paperTracking}
                 loading={paperLoading}
                 onReload={() => void loadPaperTracking()}
@@ -885,7 +901,7 @@ export function ShortpickLabV2View() {
             key: "historical-replay",
             label: "历史回放",
             children: (
-              <ShortpickV2ReplayTab
+              <ShortpickStrategyLabReplayTab
                 replay={historicalReplay}
                 loading={replayLoading}
                 onReload={() => void loadHistoricalReplay()}

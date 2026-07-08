@@ -108,12 +108,12 @@ run_frontend_projection_refresh() {
     --projection all
 }
 
-prewarm_shortpick_v2_paper_cache() {
-  bash "$REPO_ROOT/scripts/prewarm-shortpick-v2-paper-cache.sh"
-}
-
 refresh_shortpick_v1_control_combined_ledger() {
   bash "$REPO_ROOT/scripts/refresh-shortpick-v1-control-combined-ledger.sh"
+}
+
+refresh_shortpick_strategy_lab_paper_state() {
+  PYTHONPATH="$REPO_ROOT/src" "$PYTHON_BIN" "$REPO_ROOT/scripts/refresh-shortpick-strategy-lab-paper-state.py"
 }
 
 wait_for_database_writable() {
@@ -179,11 +179,11 @@ PY
   if ! run_with_timeout "$SHORTPICK_COMBINED_LEDGER_REFRESH_TIMEOUT_SECONDS" refresh_shortpick_v1_control_combined_ledger; then
     echo "Shortpick v1 control combined-ledger refresh failed; keeping previous artifact rows." >&2
   fi
+  if ! run_with_timeout "$SHORTPICK_COMBINED_LEDGER_REFRESH_TIMEOUT_SECONDS" refresh_shortpick_strategy_lab_paper_state; then
+    echo "Shortpick strategy lab paper state refresh failed; keeping previous state." >&2
+  fi
   if ! run_frontend_projection_refresh; then
     echo "Frontend projection refresh failed; keeping previous projection rows." >&2
-  fi
-  if ! run_with_timeout "$SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS" prewarm_shortpick_v2_paper_cache; then
-    echo "Shortpick v2 paper cache prewarm failed; the next page load may rebuild the cache." >&2
   fi
 }
 
@@ -474,9 +474,6 @@ run_daily_refresh_slot() {
   run_with_timeout "$DAILY_REFRESH_TIMEOUT_SECONDS" run_phase5_daily_refresh --analysis-only
   local exit_code=$?
   if [[ "$exit_code" == "0" ]]; then
-    if ! run_with_timeout "$SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS" prewarm_shortpick_v2_paper_cache; then
-      echo "Shortpick v2 paper cache prewarm failed after daily refresh; the next page load may rebuild the cache." >&2
-    fi
     mark_slot_completed "$target_date" "$slot_name"
     release_run_lock
     trap - EXIT
