@@ -16,6 +16,9 @@ INITIAL_CASH_CNY = 200_000
 BOARD_LOT_SIZE = 100
 MAIN_CONFIG_ID = "daily_14_tranche_rank_weighted_compound_min2250_layered_rank1_quickfail_rank3_pullback_exit_v1"
 CONTROL_CONFIG_ID = "daily_15_tranche_rank_weighted_compound_min1000_v1"
+CONDITIONAL_AGGRESSIVE_CONTROL_ID = (
+    "daily_14_tranche_conditional_aggressive_ret20_98_benchmark_nonweak_industry35_dist8_scale14_11_v1"
+)
 PAPER_STATE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_PAPER_STATE"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -47,6 +50,11 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
                 "path": "/private/tmp/stock_dashboard_v3_rolling_account_replay_20w_recent_20260508_layered_exit_rank3_gate_20260708.json",
                 "artifact_type": "shortpick_v3_rolling_tranche_account_replay",
             },
+            "conditional_aggressive_control_replay": {
+                "status": "persisted_static_metrics",
+                "path": "/tmp/stock_dashboard_v3_conditional_aggressive_control_formal_replay_20260709.json",
+                "artifact_type": "shortpick_v3_rolling_tranche_account_replay",
+            },
         },
         "data_scope": {
             "signal_date_from": "2023-09-07",
@@ -67,7 +75,7 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
         },
         "summary": {
             "selected_config_count": 1,
-            "baseline_config_count": 1,
+            "baseline_config_count": 2,
             "signal_day_count": 509,
             "coverage_status": "static_full_history_ready",
             "initial_cash_cny": INITIAL_CASH_CNY,
@@ -80,7 +88,7 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
             "main_final_nav_cny": 823833.7129999999,
         },
         "selected_configs": [_main_config_readout()],
-        "baseline_configs": [_control_config_readout()],
+        "baseline_configs": [_conditional_aggressive_control_readout(), _control_config_readout()],
         "holdout_configs": [],
         "rejected_configs": [],
         "metric_groups": _historical_metric_groups(),
@@ -283,6 +291,60 @@ def _control_config_readout() -> dict[str, Any]:
             "missing_entry_bar_near_signal": 18,
             "price_too_high_for_slot": 90,
             "single_symbol_concentration_cap": 3,
+        },
+        "decision_samples": [],
+    }
+
+
+def _conditional_aggressive_control_readout() -> dict[str, Any]:
+    return {
+        "config_id": CONDITIONAL_AGGRESSIVE_CONTROL_ID,
+        "label": "候选对照：条件化攻击模式",
+        "role": "conditional_aggressive_control_candidate",
+        "selection_rank": 2,
+        "gate_status": "candidate_control",
+        "reason": (
+            "在 Rank1 动量极强、基准不弱、行业不过热且未明显跌离 20 日高点的 26 个信号日，"
+            "把当日 Rank 权重放大到 14/11；收益和年化优于主策略，回撤略优，跳过率仅小幅上升。"
+        ),
+        "summary": {
+            "total_return": 3.1897186824999997,
+            "annualized_return": 0.6677990260254718,
+            "max_drawdown": -0.0773095502778558,
+            "negative_month_count": 4,
+            "worst_monthly_return": -0.017802132479532773,
+            "skipped_order_rate": 0.35541535226077814,
+            "skipped_signal_rate": 0.24950884086444008,
+            "buy_order_count": 613,
+            "sell_order_count": 595,
+            "final_nav_cny": 837943.7365,
+            "mean_invested_ratio": 0.6642791352600816,
+            "p95_invested_ratio": 0.9779863369527485,
+            "max_single_symbol_exposure_pct": 0.2676534208214223,
+            "max_position_count": 36,
+            "turnover": 88.65149354249999,
+        },
+        "selection_summary": {
+            "tranche_count": 14,
+            "budget_mode": "current_nav_fraction",
+            "min_order_notional_cny": 2250,
+            "exit_policy": "rank3_pullback_rank1_quick_fail_guard",
+            "conditional_aggressive_overlay": {
+                "scale": 14 / 11,
+                "aggressive_signal_day_count": 26,
+                "rule": (
+                    "Rank1 benchmark_return_20d >= 0, return_20d_percentile >= 0.98, "
+                    "industry_return_20d_excess <= 0.35, distance_from_20d_high >= -0.08"
+                ),
+            },
+        },
+        "reason_counts": {
+            "below_min_order_notional": 263,
+            "insufficient_cash": 18,
+            "missing_entry_bar": 3,
+            "missing_entry_bar_near_signal": 18,
+            "price_too_high_for_slot": 31,
+            "single_symbol_concentration_cap": 5,
         },
         "decision_samples": [],
     }

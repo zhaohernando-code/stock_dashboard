@@ -11,6 +11,7 @@ from ashare_evidence.models import MarketBar, ShortpickCandidate, ShortpickExper
 from ashare_evidence.rolling_tranche_account_replay import project_shortpick_v3_initial_entry_orders
 from ashare_evidence.rolling_tranche_execution_contract import build_shortpick_v3_rolling_tranche_execution_contract
 from ashare_evidence.shortpick_strategy_lab_read_model import (
+    CONDITIONAL_AGGRESSIVE_CONTROL_ID,
     CONTROL_CONFIG_ID,
     INITIAL_CASH_CNY,
     MAIN_CONFIG_ID,
@@ -30,7 +31,11 @@ def test_historical_replay_is_static_full_history_metrics() -> None:
     assert payload["summary"]["main_total_return"] == 3.119168564999999
     assert payload["summary"]["main_negative_month_count"] == 4
     assert payload["selected_configs"][0]["config_id"] == MAIN_CONFIG_ID
-    assert payload["baseline_configs"][0]["config_id"] == CONTROL_CONFIG_ID
+    assert payload["summary"]["baseline_config_count"] == 2
+    assert payload["baseline_configs"][0]["config_id"] == CONDITIONAL_AGGRESSIVE_CONTROL_ID
+    assert payload["baseline_configs"][0]["summary"]["total_return"] > payload["summary"]["main_total_return"]
+    assert payload["baseline_configs"][0]["summary"]["max_drawdown"] > payload["summary"]["main_max_drawdown"]
+    assert payload["baseline_configs"][1]["config_id"] == CONTROL_CONFIG_ID
     assert payload["metric_groups"]
     assert payload["leakage_audit"]["read_model_policy"] == "static_metrics_only_no_market_scan_no_dynamic_replay"
 
