@@ -14,7 +14,7 @@ import {
   Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { ReloadOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
+import { ReloadOutlined } from "@ant-design/icons";
 import { init } from "echarts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
@@ -402,7 +402,7 @@ function PlannedOrdersCard({
           pagination={false}
         />
       ) : (
-        <Empty description={emptyDescription || "日刷尚未写入明日计划单；这里不会用历史回放收益或旧策略结果补齐。"} />
+        <Empty description={emptyDescription || "暂无明日计划单"} />
       )}
     </Card>
   );
@@ -459,8 +459,6 @@ function ShortpickStrategyLabPaperTab({
     "数据缺口",
     numberField(display?.coverage, "source_gap_count") ?? numberField(tracking?.summary, "display_source_gap_count") ?? 0,
   );
-  const pageStatus = display?.status_label || readableStatusLabel(tracking?.status);
-  const pageSubtitle = display?.subtitle || tracking?.data_disclaimer || "暂无纸面追踪展示数据。";
   return (
     <div className="panel-stack shortpick-strategy-lab-tab-body">
       <Card
@@ -472,12 +470,6 @@ function ShortpickStrategyLabPaperTab({
           <Skeleton active paragraph={{ rows: 4 }} />
         ) : (
           <>
-            <Alert
-              showIcon
-              type={tracking?.status === "blocked" ? "warning" : tracking?.status === "contract_ready" ? "info" : "success"}
-              message={pageStatus}
-              description={pageSubtitle}
-            />
             <div className="metric-strip shortpick-strategy-lab-metrics">
               {summaryCards.map((item) => (
                 <div className="metric-strip-item" key={item.label}>
@@ -498,7 +490,7 @@ function ShortpickStrategyLabPaperTab({
       <PlannedOrdersCard
         orders={plannedOrders}
         loading={loading && !tracking}
-        emptyDescription={latestTrade?.summary || display?.subtitle}
+        emptyDescription={latestTrade?.summary || undefined}
       />
 
       <Card
@@ -1037,14 +1029,6 @@ export function ShortpickStrategyLabView() {
             <Tag color="red">不延迟买入</Tag>
           </Space>
         </div>
-        <Alert
-          className="sub-alert"
-          showIcon
-          icon={<SafetyCertificateOutlined />}
-          type="info"
-          message="只读研究口径"
-          description="页面只读取策略实验只读接口；历史回放不触发全量重算，纸面追踪不从历史回放补齐交易行。"
-        />
       </Card>
 
       {error ? <Alert type="error" showIcon message={error} /> : null}
