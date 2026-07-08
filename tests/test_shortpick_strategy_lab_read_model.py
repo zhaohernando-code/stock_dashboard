@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from ashare_evidence.db import init_database, session_scope
@@ -91,9 +91,76 @@ def _load_refresh_state_script() -> object:
     return module
 
 
-def test_refresh_state_does_not_use_legacy_candidates_as_v3_plan(tmp_path, monkeypatch) -> None:
+def _seed_projection_market_data(database_url: str) -> None:
+    symbols = [
+        ("000300.SH", "沪深300", "benchmark", 100.0, 0.05),
+        ("600030.SH", "中信证券", "证券", 18.0, 0.12),
+        ("600028.SH", "中国石化", "石油加工", 6.0, 0.04),
+        ("601628.SH", "中国人寿", "保险", 28.0, 0.10),
+        ("000001.SZ", "平安银行", "银行", 10.0, 0.03),
+    ]
+    start_day = date(2026, 3, 21)
+    with session_scope(database_url) as session:
+        stocks: list[Stock] = []
+        for symbol, name, industry, _, _ in symbols:
+            ticker, _, exchange = symbol.partition(".")
+            stock = Stock(
+                symbol=symbol,
+                ticker=ticker,
+                exchange=exchange,
+                name=name,
+                provider_symbol=ticker,
+                status="active",
+                profile_payload={"industry": industry},
+                **build_lineage(
+                    {"symbol": symbol},
+                    source_uri=f"test://stock/{symbol}",
+                    license_tag="test",
+                    usage_scope="test",
+                    redistribution_scope="none",
+                ),
+            )
+            session.add(stock)
+            stocks.append(stock)
+        session.flush()
+        for stock, (_, _, _, base_price, slope) in zip(stocks, symbols, strict=True):
+            for index in range(110):
+                observed_day = start_day + timedelta(days=index)
+                close_price = base_price + index * slope
+                volume = 2_000_000 + index * 10_000
+                session.add(
+                    MarketBar(
+                        bar_key=f"bar-{stock.ticker}-{observed_day.isoformat()}",
+                        stock_id=stock.id,
+                        timeframe="1d",
+                        observed_at=datetime(observed_day.year, observed_day.month, observed_day.day, 15, 0, tzinfo=UTC),
+                        open_price=close_price * 0.99,
+                        high_price=close_price * 1.02,
+                        low_price=close_price * 0.98,
+                        close_price=close_price,
+                        volume=volume,
+                        amount=close_price * volume,
+                        turnover_rate=0.8 + index / 1000,
+                        total_mv=20_000_000_000 + index * 10_000_000,
+                        circ_mv=15_000_000_000 + index * 8_000_000,
+                        pe_ttm=10.0 + index / 100,
+                        pb=1.0 + index / 1000,
+                        raw_payload={},
+                        **build_lineage(
+                            {"symbol": stock.symbol, "date": observed_day.isoformat()},
+                            source_uri=f"test://bar/{stock.symbol}/{observed_day.isoformat()}",
+                            license_tag="test",
+                            usage_scope="test",
+                            redistribution_scope="none",
+                        ),
+                    )
+                )
+
+
+def test_refresh_state_builds_v3_source_instead_of_accepting_missing_source(tmp_path, monkeypatch) -> None:
     database_url = f"sqlite:///{tmp_path / 'ashare.db'}"
     init_database(database_url)
+    _seed_projection_market_data(database_url)
     with session_scope(database_url) as session:
         run = ShortpickExperimentRun(
             run_key="shortpick:test",
@@ -132,7 +199,9 @@ def test_refresh_state_does_not_use_legacy_candidates_as_v3_plan(tmp_path, monke
 
     monkeypatch.setenv("ASHARE_DATABASE_URL", database_url)
     state_path = tmp_path / "paper-state.json"
+    candidate_run_path = tmp_path / "v3-candidate-run-source.json"
     monkeypatch.setenv("ASHARE_SHORTPICK_STRATEGY_LAB_PAPER_STATE", str(state_path))
+    monkeypatch.setenv("ASHARE_SHORTPICK_STRATEGY_LAB_V3_CANDIDATE_RUN_SOURCE", str(candidate_run_path))
     state_path.write_text(
         json.dumps(
             {
@@ -147,15 +216,21 @@ def test_refresh_state_does_not_use_legacy_candidates_as_v3_plan(tmp_path, monke
     module = _load_refresh_state_script()
 
     assert module.main() == 0
+    assert candidate_run_path.exists()
+    candidate_run = json.loads(candidate_run_path.read_text(encoding="utf-8"))
+    assert candidate_run["artifact_type"] == "shortpick_strategy_lab_v3_candidate_run_source"
+    assert candidate_run["model_spec_id"] == "selected_exhaustion_date_scaled_v3_top3_20d_v1"
+    assert candidate_run["prediction_row_count"] > 0
     payload = json.loads(state_path.read_text(encoding="utf-8"))
-    assert payload["planned_orders"] == []
-    assert payload["plan_generation_status"]["status"] == "blocked_missing_v3_candidate_run_source"
+    assert all(row.get("symbol") != "SHOULD_CLEAR" for row in payload["planned_orders"])
+    assert payload["plan_generation_status"]["status"].startswith("ready")
+    assert payload["plan_generation_status"]["signal_date"] == "2026-07-08"
     read_model = build_shortpick_strategy_lab_paper_tracking_read_model(
         paper_state_path=state_path,
         today=date(2026, 7, 8),
     )
-    assert read_model["status"] == "blocked"
-    assert "不会用旧短投/市场因子候选冒充" in read_model["current_message"]
+    assert read_model["status"] == "active"
+    assert read_model["current_status"] in {"awaiting_first_forward_fill", "awaiting_v3_plan"}
 
 
 def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_path, monkeypatch) -> None:

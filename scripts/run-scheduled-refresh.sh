@@ -26,6 +26,9 @@ source "$ARTIFACT_ROOT_HELPER"
 
 export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 export ASHARE_DATABASE_URL="${ASHARE_DATABASE_URL:-sqlite:///$REPO_ROOT/data/ashare_dashboard.db}"
+if [[ -z "${ASHARE_SHORTPICK_STRATEGY_LAB_V3_SOURCE_DATABASE_URL:-}" && -s "$REPO_ROOT/data/ashare_hot.db" ]]; then
+  export ASHARE_SHORTPICK_STRATEGY_LAB_V3_SOURCE_DATABASE_URL="sqlite:///$REPO_ROOT/data/ashare_hot.db"
+fi
 ashare_resolve_local_artifact_root "$REPO_ROOT"
 
 TIMEZONE="${ASHARE_REFRESH_TIMEZONE:-Asia/Shanghai}"
@@ -41,6 +44,7 @@ SHORTPICK_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_TIMEOUT_SECONDS:-7200}"
 SHORTPICK_INTRADAY_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_INTRADAY_TIMEOUT_SECONDS:-600}"
 SHORTPICK_VALIDATION_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_VALIDATION_TIMEOUT_SECONDS:-600}"
 SHORTPICK_COMBINED_LEDGER_REFRESH_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_COMBINED_LEDGER_REFRESH_TIMEOUT_SECONDS:-900}"
+SHORTPICK_STRATEGY_LAB_V3_SOURCE_REFRESH_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_STRATEGY_LAB_V3_SOURCE_REFRESH_TIMEOUT_SECONDS:-900}"
 SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS="${ASHARE_SHORTPICK_V2_PAPER_CACHE_PREWARM_TIMEOUT_SECONDS:-180}"
 SHORTPICK_VALIDATE_RECENT_DAYS="${ASHARE_SHORTPICK_VALIDATE_RECENT_DAYS:-30}"
 SHORTPICK_VALIDATE_RECENT_LIMIT="${ASHARE_SHORTPICK_VALIDATE_RECENT_LIMIT:-20}"
@@ -112,8 +116,16 @@ refresh_shortpick_v1_control_combined_ledger() {
   bash "$REPO_ROOT/scripts/refresh-shortpick-v1-control-combined-ledger.sh"
 }
 
+refresh_shortpick_strategy_lab_v3_candidate_run_source() {
+  PYTHONPATH="$REPO_ROOT/src" "$PYTHON_BIN" \
+    "$REPO_ROOT/scripts/build-shortpick-strategy-lab-v3-candidate-run-source.py" \
+    --output "$REPO_ROOT/data/shortpick-strategy-lab-v3-candidate-run-source.json"
+}
+
 refresh_shortpick_strategy_lab_paper_state() {
-  PYTHONPATH="$REPO_ROOT/src" "$PYTHON_BIN" "$REPO_ROOT/scripts/refresh-shortpick-strategy-lab-paper-state.py"
+  ASHARE_SHORTPICK_STRATEGY_LAB_V3_CANDIDATE_RUN_SOURCE="$REPO_ROOT/data/shortpick-strategy-lab-v3-candidate-run-source.json" \
+    ASHARE_SHORTPICK_STRATEGY_LAB_V3_SOURCE_DATABASE_URL="${ASHARE_SHORTPICK_STRATEGY_LAB_V3_SOURCE_DATABASE_URL:-}" \
+    PYTHONPATH="$REPO_ROOT/src" "$PYTHON_BIN" "$REPO_ROOT/scripts/refresh-shortpick-strategy-lab-paper-state.py"
 }
 
 wait_for_database_writable() {
@@ -179,8 +191,13 @@ PY
   if ! run_with_timeout "$SHORTPICK_COMBINED_LEDGER_REFRESH_TIMEOUT_SECONDS" refresh_shortpick_v1_control_combined_ledger; then
     echo "Shortpick v1 control combined-ledger refresh failed; keeping previous artifact rows." >&2
   fi
+  if ! run_with_timeout "$SHORTPICK_STRATEGY_LAB_V3_SOURCE_REFRESH_TIMEOUT_SECONDS" refresh_shortpick_strategy_lab_v3_candidate_run_source; then
+    echo "Shortpick strategy lab v3 candidate-run source refresh failed." >&2
+    return 1
+  fi
   if ! run_with_timeout "$SHORTPICK_COMBINED_LEDGER_REFRESH_TIMEOUT_SECONDS" refresh_shortpick_strategy_lab_paper_state; then
-    echo "Shortpick strategy lab paper state refresh failed; keeping previous state." >&2
+    echo "Shortpick strategy lab paper state refresh failed." >&2
+    return 1
   fi
   if ! run_frontend_projection_refresh; then
     echo "Frontend projection refresh failed; keeping previous projection rows." >&2

@@ -21,6 +21,11 @@ from ashare_evidence.shortpick_strategy_lab_read_model import (
     TRACKING_START_DATE,
     next_calendar_day,
 )
+from ashare_evidence.shortpick_strategy_lab_v3_projection import (
+    build_latest_v3_candidate_run_source,
+    default_v3_candidate_run_source_path,
+    write_latest_v3_candidate_run_source,
+)
 
 MAIN_TRANCHE_COUNT = 14
 CONTROL_TRANCHE_COUNT = 15
@@ -32,6 +37,7 @@ MAIN_STRATEGY_LABEL = "主策略：14 tranche 分层退出"
 CONTROL_STRATEGY_LABEL = "对照组：15 tranche 低集中复投"
 V3_MODEL_SPEC_ID = "selected_exhaustion_date_scaled_v3_top3_20d_v1"
 V3_PLAN_SOURCE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_V3_CANDIDATE_RUN_SOURCE"
+V3_SOURCE_DATABASE_URL_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_V3_SOURCE_DATABASE_URL"
 EXTERNAL_PLAN_SOURCE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_PLAN_SOURCE"
 ALLOWED_EXTERNAL_PLAN_SOURCES = {
     "external_v3_selected_top_k_plan",
@@ -58,6 +64,16 @@ def _load_json(path: Path) -> dict[str, Any] | None:
     except (OSError, json.JSONDecodeError):
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def _v3_source_database_url() -> str | None:
+    configured = os.getenv(V3_SOURCE_DATABASE_URL_ENV)
+    if configured:
+        return configured
+    hot_db = _repo_root() / "data" / "ashare_hot.db"
+    if hot_db.exists() and hot_db.stat().st_size > 0:
+        return f"sqlite:///{hot_db}"
+    return os.getenv("ASHARE_DATABASE_URL")
 
 
 def _external_plan_source_orders() -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
@@ -161,25 +177,23 @@ def _selected_pick_plan_row(
 
 
 def _load_v3_candidate_run_source() -> tuple[dict[str, Any] | None, dict[str, Any]]:
-    source = os.getenv(V3_PLAN_SOURCE_ENV)
-    if not source:
-        return None, {
-            "status": "blocked_missing_v3_candidate_run_source",
-            "source_env": V3_PLAN_SOURCE_ENV,
-            "message": "未提供 v3 selected_top_k candidate-run 源；不会用旧短投/市场因子候选冒充 v3 计划单。",
-        }
-    payload = _load_json(Path(source))
+    source_path = Path(os.getenv(V3_PLAN_SOURCE_ENV) or default_v3_candidate_run_source_path(_repo_root()))
+    if not source_path.exists():
+        with session_scope(_v3_source_database_url()) as session:
+            generated = build_latest_v3_candidate_run_source(session)
+        write_latest_v3_candidate_run_source(generated, source_path)
+    payload = _load_json(source_path)
     if payload is None:
         return None, {
             "status": "blocked_invalid_v3_candidate_run_source",
             "source_env": V3_PLAN_SOURCE_ENV,
-            "path": source,
+            "path": str(source_path),
             "message": "v3 candidate-run 源不存在或不是有效 JSON。",
         }
     return payload, {
         "status": "ready",
         "source_env": V3_PLAN_SOURCE_ENV,
-        "path": source,
+        "path": str(source_path),
         "artifact_id": payload.get("artifact_id"),
     }
 
@@ -329,12 +343,32 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             "message": "candidate-run 中没有 v3 selected_exhaustion trial。",
         }
     signal_date, picks = _latest_selected_top_k_picks(trial)
-    if signal_date is None or not picks:
+    if signal_date is None:
+        signal_date = str(candidate_run.get("signal_date") or "")
+    if signal_date is None or not signal_date:
         return [], {
             **source_status,
             "status": "blocked_empty_selected_top_k",
             "model_spec_id": V3_MODEL_SPEC_ID,
-            "message": "candidate-run 中没有 selected_top_k_picks_by_date。",
+            "message": "candidate-run 中没有 signal_date 或 selected_top_k_picks_by_date。",
+        }
+    if not picks:
+        return [], {
+            **source_status,
+            "status": "ready_no_executable_orders",
+            "model_spec_id": V3_MODEL_SPEC_ID,
+            "signal_date": signal_date,
+            "selected_top_k": int(_safe_float(trial.get("selected_top_k")) or 0),
+            "selected_pick_count": 0,
+            "diagnostics": [
+                {
+                    "action": "no_order",
+                    "reason": "model_selected_cash_or_no_selected_top_k",
+                    "signal_block_reasons": trial.get("signal_block_reasons") or candidate_run.get("signal_block_reasons") or [],
+                    "strategy_id": MAIN_CONFIG_ID,
+                }
+            ],
+            "message": "v3 candidate-run 已生成；模型当天选择现金或没有可执行 selected_top_k，纸面追踪不会降级使用旧候选。",
         }
     with session_scope() as session:
         main_orders, main_diagnostics = _build_strategy_orders(

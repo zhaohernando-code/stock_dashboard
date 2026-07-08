@@ -74,9 +74,13 @@ def test_shortpick_lab_is_part_of_postmarket_daily_cycle() -> None:
     assert '--run-date "$target_date"' in script
     assert "run_shortpick_daily_cycle" in script
     assert "run_frontend_projection_refresh" in script
+    assert "refresh_shortpick_strategy_lab_v3_candidate_run_source" in script
     assert "refresh_shortpick_strategy_lab_paper_state" in script
+    assert "build-shortpick-strategy-lab-v3-candidate-run-source.py" in script
     assert "refresh-shortpick-strategy-lab-paper-state.py" in script
-    assert "Shortpick strategy lab paper state refresh failed; keeping previous state." in script
+    assert "Shortpick strategy lab v3 candidate-run source refresh failed." in script
+    assert "Shortpick strategy lab paper state refresh failed." in script
+    assert "Shortpick strategy lab paper state refresh failed; keeping previous state." not in script
     assert "keeping previous projection rows" in script
     assert "prewarm_shortpick_v2_paper_cache" not in script
     assert "prewarm-shortpick-v2-paper-cache.sh" not in script

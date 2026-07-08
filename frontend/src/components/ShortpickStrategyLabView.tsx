@@ -336,9 +336,11 @@ function plannedOrderText(order: Record<string, unknown>, key: string): string {
 function PlannedOrdersCard({
   orders,
   loading,
+  emptyDescription,
 }: {
   orders: Record<string, unknown>[];
   loading: boolean;
+  emptyDescription?: string;
 }) {
   const columns: ColumnsType<Record<string, unknown>> = [
     {
@@ -400,7 +402,7 @@ function PlannedOrdersCard({
           pagination={false}
         />
       ) : (
-        <Empty description="日刷尚未写入明日计划单；这里不会用历史回放收益或旧策略结果补齐。" />
+        <Empty description={emptyDescription || "日刷尚未写入明日计划单；这里不会用历史回放收益或旧策略结果补齐。"} />
       )}
     </Card>
   );
@@ -493,7 +495,11 @@ function ShortpickStrategyLabPaperTab({
         )}
       </Card>
 
-      <PlannedOrdersCard orders={plannedOrders} loading={loading && !tracking} />
+      <PlannedOrdersCard
+        orders={plannedOrders}
+        loading={loading && !tracking}
+        emptyDescription={latestTrade?.summary || display?.subtitle}
+      />
 
       <Card
         className="panel-card"
