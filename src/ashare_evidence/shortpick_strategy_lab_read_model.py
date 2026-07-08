@@ -369,12 +369,12 @@ def _paper_display(
         "status_label": (
             "纸面追踪运行中"
             if records
-            else "等待真实前向记录"
+            else "纸面追踪"
             if plan_ready
             else "v3 计划源未就绪"
         ),
         "subtitle": (
-            "从今日起只记录真实前向纸面交易；收益曲线和回撤图在产生实际成交后开始显示。"
+            ""
             if plan_ready
             else str(plan_generation_status.get("message") or "缺少 v3 selected_top_k 计划源。")
         ),
@@ -444,7 +444,7 @@ def _latest_trade_display(
                 or "还没有持久化的 v3 计划单；下一次日刷会和试验田 v1 同步写入。"
             ),
             "items": [],
-            "note": "这里不会用历史回放、v1/v2 或旧短投候选临时补齐。",
+            "note": "",
         }
     stock_text = f"{latest_order.get('name') or ''} · {latest_order.get('symbol') or ''}".strip(" ·")
     shares = int(float(latest_order.get("shares") or 0))
