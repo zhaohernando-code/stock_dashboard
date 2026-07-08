@@ -154,8 +154,8 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             "historical_replay_rows_allowed": False,
             "initial_record_count": 0,
         },
-        "selected_configs": [_main_config_readout()],
-        "baseline_configs": [_control_config_readout()],
+        "selected_configs": [_paper_main_config_readout()],
+        "baseline_configs": [_paper_control_config_readout()],
         "paper_governance": {
             "status": "active_forward_observation",
             "primary_config_id": MAIN_CONFIG_ID,
@@ -263,6 +263,44 @@ def _control_config_readout() -> dict[str, Any]:
     }
 
 
+def _paper_main_config_readout() -> dict[str, Any]:
+    readout = _main_config_readout()
+    return {
+        **readout,
+        "reason": "前向纸面追踪从 20 万本金重新开始；历史回放收益只作为历史页静态指标，不计入这里。",
+        "summary": {
+            "initial_cash_cny": INITIAL_CASH_CNY,
+            "current_nav_cny": INITIAL_CASH_CNY,
+            "paper_total_return": None,
+            "max_drawdown": None,
+            "record_count": 0,
+            "planned_order_count": None,
+            "forward_status": "awaiting_first_forward_fill",
+        },
+        "reason_counts": {},
+        "decision_samples": [],
+    }
+
+
+def _paper_control_config_readout() -> dict[str, Any]:
+    readout = _control_config_readout()
+    return {
+        **readout,
+        "reason": "低集中度对照组同样只做从今日开始的真实前向观察，不继承历史回放收益。",
+        "summary": {
+            "initial_cash_cny": INITIAL_CASH_CNY,
+            "current_nav_cny": INITIAL_CASH_CNY,
+            "paper_total_return": None,
+            "max_drawdown": None,
+            "record_count": 0,
+            "planned_order_count": None,
+            "forward_status": "awaiting_first_forward_fill",
+        },
+        "reason_counts": {},
+        "decision_samples": [],
+    }
+
+
 def _historical_metric_groups() -> list[dict[str, Any]]:
     return [
         {
@@ -344,6 +382,9 @@ def _paper_display(
             "historical_replay_row_count": 0,
         },
         "summary_cards": [
+            {"label": "初始本金", "value": f"{INITIAL_CASH_CNY}"},
+            {"label": "当前账户净值", "value": f"{INITIAL_CASH_CNY}"},
+            {"label": "纸面收益", "value": "等待首笔成交"},
             {"label": "真实前向记录", "value": str(summary.get("record_count") or 0)},
             {"label": "明日计划单", "value": str(summary.get("planned_order_count") or 0)},
             {"label": "追踪起点", "value": tracking_start},

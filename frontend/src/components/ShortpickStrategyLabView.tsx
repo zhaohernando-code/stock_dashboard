@@ -218,7 +218,7 @@ function ConfigSummaryTable({
       key: "config",
         render: (_, item) => (
           <Space direction="vertical" size={0}>
-          <Text strong>{item.label || configReadableLabel(item.config_id)}</Text>
+          <Text strong>{item.label || "未命名策略"}</Text>
           <Space wrap size={4}>
             <Tag color={configRoleColor(item.role)}>{configRoleLabel(item.role)}</Tag>
             <Tag color={statusColor(item.gate_status)}>{readableStatusLabel(item.gate_status) || "未过闸"}</Tag>
@@ -274,6 +274,138 @@ function ConfigSummaryTable({
   );
 }
 
+function PaperForwardStrategyTable({
+  rows,
+  loading,
+}: {
+  rows: ShortpickStrategyLabConfigReadout[];
+  loading: boolean;
+}) {
+  const columns: ColumnsType<ShortpickStrategyLabConfigReadout> = [
+    {
+      title: "策略",
+      key: "config",
+      render: (_, item) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{item.label || configReadableLabel(item.config_id)}</Text>
+          <Space wrap size={4}>
+            <Tag color={configRoleColor(item.role)}>{configRoleLabel(item.role)}</Tag>
+            <Tag color="blue">从 20 万重新开始</Tag>
+          </Space>
+        </Space>
+      ),
+    },
+    {
+      title: "前向账户",
+      key: "forward-account",
+      render: (_, item) => (
+        <Space direction="vertical" size={0}>
+          <Text>当前净值 {formatNumber(numberField(item.summary, "current_nav_cny"))} 元</Text>
+          <Text type="secondary">纸面收益 {formatPercent(numberField(item.summary, "paper_total_return"))}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: "状态",
+      key: "forward-status",
+      render: (_, item) => (
+        <Space direction="vertical" size={0}>
+          <Text>{readableStatusLabel(stringField(item.summary, "forward_status")) || "等待首笔成交"}</Text>
+          <Text type="secondary">历史回放收益不计入纸面追踪。</Text>
+        </Space>
+      ),
+    },
+  ];
+  return (
+    <Table
+      className="shortpick-strategy-lab-config-table"
+      rowKey={(item, index) => `paper-forward-config-${configRoleLabel(item.role)}-${index ?? 0}`}
+      size="small"
+      loading={loading}
+      pagination={false}
+      columns={columns}
+      dataSource={rows}
+    />
+  );
+}
+
+function plannedOrderText(order: Record<string, unknown>, key: string): string {
+  return displayValue(order[key], "");
+}
+
+function PlannedOrdersCard({
+  orders,
+  loading,
+}: {
+  orders: Record<string, unknown>[];
+  loading: boolean;
+}) {
+  const columns: ColumnsType<Record<string, unknown>> = [
+    {
+      title: "策略",
+      key: "strategy",
+      render: (_, item) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{plannedOrderText(item, "strategy_label") || "未命名策略"}</Text>
+          <Text type="secondary">信号日 {plannedOrderText(item, "signal_date") || "待生成"}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: "明日买入",
+      key: "buy",
+      render: (_, item) => {
+        const stock = `${plannedOrderText(item, "name")} · ${plannedOrderText(item, "symbol")}`.replace(/^ · | · $/g, "");
+        return (
+          <Space direction="vertical" size={0}>
+            <Text strong>{stock || "暂无标的"}</Text>
+            <Text>
+              {plannedOrderText(item, "planned_entry_date") || "待定"}
+              {" · "}
+              {plannedOrderText(item, "entry_timing") || "次日收盘"}
+              {" · 买 "}
+              {plannedOrderText(item, "shares") || "0"}
+              {" 股"}
+            </Text>
+          </Space>
+        );
+      },
+    },
+    {
+      title: "预计占用",
+      key: "notional",
+      render: (_, item) => (
+        <Space direction="vertical" size={0}>
+          <Text>{displayValue(item["estimated_notional_cny"])} 元</Text>
+          <Text type="secondary">估算价 {displayValue(item["estimated_entry_price_cny"])} 元</Text>
+        </Space>
+      ),
+    },
+    {
+      title: "说明",
+      key: "note",
+      render: (_, item) => <Text type="secondary">{plannedOrderText(item, "note") || "按资金池约束生成。"}</Text>,
+    },
+  ];
+  return (
+    <Card className="panel-card" title="明日计划单">
+      {loading ? (
+        <Skeleton active paragraph={{ rows: 3 }} />
+      ) : orders.length ? (
+        <Table
+          rowKey={(item, index) => `planned-order-${plannedOrderText(item, "strategy_id")}-${plannedOrderText(item, "symbol")}-${index ?? 0}`}
+          size="small"
+          columns={columns}
+          dataSource={orders}
+          pagination={false}
+        />
+      ) : (
+        <Empty description="日刷尚未写入明日计划单；这里不会用历史回放收益或旧策略结果补齐。" />
+      )}
+    </Card>
+  );
+}
+
 function ShortpickStrategyLabPaperTab({
   tracking,
   loading,
@@ -288,6 +420,7 @@ function ShortpickStrategyLabPaperTab({
   const strategyExplanation = display?.strategy_explanation;
   const charts = display?.charts ?? [];
   const accountCurves = display?.account_curves ?? [];
+  const plannedOrders = display?.planned_orders ?? [];
   const table = display?.table;
   const tableRows = table?.rows ?? [];
   const [tableSearch, setTableSearch] = useState("");
@@ -360,6 +493,8 @@ function ShortpickStrategyLabPaperTab({
         )}
       </Card>
 
+      <PlannedOrdersCard orders={plannedOrders} loading={loading && !tracking} />
+
       <Card
         className="panel-card"
         title={latestTrade?.title || "最新模拟交易"}
@@ -402,7 +537,7 @@ function ShortpickStrategyLabPaperTab({
         {loading && !tracking ? (
           <Skeleton active paragraph={{ rows: 4 }} />
         ) : strategyRows.length ? (
-          <ConfigSummaryTable rows={strategyRows} loading={loading} />
+          <PaperForwardStrategyTable rows={strategyRows} loading={loading} />
         ) : (
           <Empty description="暂无可展示的策略观察组。" />
         )}
@@ -412,8 +547,8 @@ function ShortpickStrategyLabPaperTab({
 
       <div className="shortpick-strategy-lab-chart-grid">
         {charts.length ? charts.map((chart) => <PaperDisplayChartCard key={chart.title || chart.kind} chart={chart} />) : (
-          <Card className="panel-card" title="图表">
-            <Empty description="暂无可展示的图表数据。" />
+          <Card className="panel-card" title="交易统计图表">
+            <Empty description="首笔前向成交后显示交易动作、持仓和退出统计。" />
           </Card>
         )}
       </div>
@@ -591,9 +726,43 @@ function PaperReturnCharts({
 
   if (!visibleCurves.length) {
     return (
-      <Card className="panel-card" title="账户净值走势">
-        <Empty description="当前筛选下还没有账户净值曲线。" />
-      </Card>
+      <div className="shortpick-paper-effect-panel">
+        <div className="shortpick-paper-effect-head">
+          <Space direction="vertical" size={2}>
+            <Text strong>账户净值走势</Text>
+            <Text type="secondary">从 20 万本金开始，产生真实前向成交后显示折线和回撤。</Text>
+          </Space>
+          <Space wrap className="shortpick-paper-effect-summary-tags">
+            <Tag color="blue">初始本金 200,000 元</Tag>
+            <Tag color="green">纸面收益待生成</Tag>
+            <Tag color="red">回撤待生成</Tag>
+          </Space>
+        </div>
+        <div className="shortpick-strategy-lab-return-chart-grid">
+          <div className="shortpick-paper-effect-chart-block">
+            <div className="shortpick-paper-effect-chart-head">
+              <Space direction="vertical" size={0} className="shortpick-paper-effect-chart-title">
+                <Text strong>账户累计收益</Text>
+                <Text type="secondary">第一笔买入成交后开始绘制。</Text>
+              </Space>
+            </div>
+            <div className="shortpick-paper-effect-chart shortpick-paper-effect-chart-placeholder">
+              <Empty description="等待前向成交数据。" />
+            </div>
+          </div>
+          <div className="shortpick-paper-effect-chart-block">
+            <div className="shortpick-paper-effect-chart-head">
+              <Space direction="vertical" size={0} className="shortpick-paper-effect-chart-title">
+                <Text strong>账户最大回撤对比</Text>
+                <Text type="secondary">账户净值产生波动后开始统计。</Text>
+              </Space>
+            </div>
+            <div className="shortpick-paper-effect-chart shortpick-paper-effect-chart-placeholder">
+              <Empty description="等待回撤数据。" />
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 

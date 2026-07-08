@@ -966,6 +966,12 @@ body[data-theme="dark"] {
   flex: 1 1 auto;
 }
 
+.shortpick-paper-effect-chart-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .shortpick-strategy-lab-return-chart-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
