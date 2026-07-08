@@ -185,6 +185,74 @@ def build_shortpick_v3_rolling_account_replay_artifact(
     }
 
 
+def project_shortpick_v3_initial_entry_orders(
+    *,
+    config: dict[str, Any],
+    picks: list[dict[str, Any]],
+    signal_day: date,
+    planned_entry_day: date,
+    estimated_close_by_symbol: dict[str, float],
+    selected_top_k: int,
+    initial_cash_cny: float = DEFAULT_INITIAL_CASH_CNY,
+    buy_cost_bps: float = DEFAULT_BUY_COST_BPS,
+    board_lot_size: int = DEFAULT_BOARD_LOT_SIZE,
+    max_single_symbol_cost_basis_pct: float = DEFAULT_MAX_SINGLE_SYMBOL_COST_BASIS_PCT,
+    min_order_notional_cny: float = DEFAULT_MIN_ORDER_NOTIONAL_CNY,
+) -> list[dict[str, Any]]:
+    """Project first forward entry orders with the same buy semantics as account replay."""
+
+    budget_mode = str(config.get("budget_mode") or "fixed_initial_cash_fraction")
+    per_signal_budget = float(config["per_signal_target_budget_cny"])
+    if budget_mode == "current_nav_fraction":
+        per_signal_budget = min(
+            initial_cash_cny / max(float(config["target_active_tranche_count"]), 1.0),
+            initial_cash_cny * DEFAULT_MAX_SINGLE_SIGNAL_DEPLOYMENT_PCT,
+        )
+    bars_by_symbol = {
+        symbol: [_Bar(day=planned_entry_day, close=float(close))]
+        for symbol, close in estimated_close_by_symbol.items()
+        if close and close > 0
+    }
+    requests = [
+        {
+            "pick": pick,
+            "signal_day": signal_day,
+            "entry_index": 0,
+            "planned_exit_day": OPEN_ENDED_EXIT_DAY,
+        }
+        for pick in picks
+        if str(pick.get("symbol") or "") in bars_by_symbol
+    ]
+    rows, _cash, _positions = _process_entry_buys(
+        planned_entry_day,
+        cash=float(initial_cash_cny),
+        open_positions=[],
+        requests=requests,
+        rank_allocation_mode=str(config.get("rank_allocation_mode") or "model_rank_weight_with_board_lot_skip"),
+        bars_by_symbol=bars_by_symbol,
+        selected_top_k=selected_top_k,
+        per_signal_budget=per_signal_budget,
+        board_lot_size=board_lot_size,
+        buy_cost_rate=buy_cost_bps / 10000.0,
+        initial_cash_cny=initial_cash_cny,
+        max_single_symbol_cost_basis_pct=max_single_symbol_cost_basis_pct,
+        min_order_notional_cny=_safe_float(config.get("min_order_notional_cny"), min_order_notional_cny),
+    )
+    symbols_with_price = set(bars_by_symbol)
+    missing_price_rows = [
+        _skip(
+            signal_day,
+            str(pick.get("symbol") or ""),
+            str(pick.get("stock_name") or pick.get("name") or pick.get("symbol") or ""),
+            int(float(pick.get("rank") or 0)),
+            "missing_latest_close_price",
+        )
+        for pick in picks
+        if str(pick.get("symbol") or "") not in symbols_with_price
+    ]
+    return [*rows, *missing_price_rows]
+
+
 def _simulate_config(
     config: dict[str, Any],
     *,

@@ -3,8 +3,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import UTC, datetime
-from math import floor
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +11,8 @@ from sqlalchemy import select
 
 from ashare_evidence.db import session_scope
 from ashare_evidence.models import MarketBar, Stock
+from ashare_evidence.rolling_tranche_account_replay import project_shortpick_v3_initial_entry_orders
+from ashare_evidence.rolling_tranche_execution_contract import build_shortpick_v3_rolling_tranche_execution_contract
 from ashare_evidence.shortpick_strategy_lab_read_model import (
     CONTROL_CONFIG_ID,
     INITIAL_CASH_CNY,
@@ -19,7 +20,6 @@ from ashare_evidence.shortpick_strategy_lab_read_model import (
     PAPER_STATE_ENV,
     PAPER_STATE_SCHEMA_VERSION,
     TRACKING_START_DATE,
-    next_calendar_day,
 )
 from ashare_evidence.shortpick_strategy_lab_v3_projection import (
     build_latest_v3_candidate_run_source,
@@ -31,8 +31,6 @@ MAIN_TRANCHE_COUNT = 14
 CONTROL_TRANCHE_COUNT = 15
 MAIN_MIN_ORDER_NOTIONAL_CNY = 2250
 CONTROL_MIN_ORDER_NOTIONAL_CNY = 1000
-BOARD_LOT_SIZE = 100
-MAX_SINGLE_SIGNAL_DEPLOYMENT_PCT = 0.25
 MAIN_STRATEGY_LABEL = "主策略：14 tranche 分层退出"
 CONTROL_STRATEGY_LABEL = "对照组：15 tranche 低集中复投"
 V3_MODEL_SPEC_ID = "selected_exhaustion_date_scaled_v3_top3_20d_v1"
@@ -143,22 +141,29 @@ def _latest_close_price(session: Any, symbol: str) -> float | None:
     return float(bar.close_price) if bar is not None and bar.close_price > 0 else None
 
 
+def _next_business_day(value: date) -> date:
+    next_day = value + timedelta(days=1)
+    while next_day.weekday() >= 5:
+        next_day += timedelta(days=1)
+    return next_day
+
+
 def _selected_pick_plan_row(
+    order: dict[str, Any],
     pick: dict[str, Any],
     *,
-    signal_date: str,
-    price: float,
-    shares: int,
-    target_notional: float,
     note: str,
     strategy_id: str,
     strategy_label: str,
 ) -> dict[str, Any]:
+    shares = int(_safe_float(order.get("shares")) or 0)
+    price = _safe_float(order.get("price")) or 0.0
+    target_notional = _safe_float(order.get("target_notional_cny")) or 0.0
     return {
         "strategy_id": strategy_id,
         "strategy_label": strategy_label,
-        "signal_date": signal_date,
-        "planned_entry_date": next_calendar_day(datetime.fromisoformat(signal_date).date()) if signal_date else "",
+        "signal_date": str(order.get("signal_day") or ""),
+        "planned_entry_date": str(order.get("trade_day") or ""),
         "symbol": str(pick.get("symbol") or ""),
         "name": str(pick.get("stock_name") or pick.get("name") or pick.get("symbol") or ""),
         "rank": int(_safe_float(pick.get("rank")) or 0),
@@ -174,6 +179,14 @@ def _selected_pick_plan_row(
         "model_spec_id": V3_MODEL_SPEC_ID,
         "note": note,
     }
+
+
+def _rolling_config_by_id(config_id: str) -> dict[str, Any]:
+    contract = build_shortpick_v3_rolling_tranche_execution_contract()
+    for config in contract["candidate_configurations"]:
+        if config.get("config_id") == config_id:
+            return dict(config)
+    raise RuntimeError(f"missing rolling tranche config: {config_id}")
 
 
 def _load_v3_candidate_run_source() -> tuple[dict[str, Any] | None, dict[str, Any]]:
@@ -230,98 +243,60 @@ def _build_strategy_orders(
     strategy_id: str,
     strategy_label: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    slot_budget = INITIAL_CASH_CNY / tranche_count
-    per_signal_budget = min(slot_budget, INITIAL_CASH_CNY * MAX_SINGLE_SIGNAL_DEPLOYMENT_PCT)
     selected_top_k = max(len(picks), 1)
+    signal_day = datetime.fromisoformat(signal_date).date()
+    planned_entry_day = _next_business_day(signal_day) if signal_date else signal_day
+    config = {
+        **_rolling_config_by_id(strategy_id),
+        "target_active_tranche_count": tranche_count,
+        "min_order_notional_cny": min_order_notional,
+    }
+    estimated_close_by_symbol: dict[str, float] = {}
+    picks_by_symbol = {str(pick.get("symbol") or ""): pick for pick in picks}
+    for pick in picks:
+        symbol = str(pick.get("symbol") or "")
+        price = _latest_close_price(session, symbol)
+        if price is not None:
+            estimated_close_by_symbol[symbol] = price
+    projected_orders = project_shortpick_v3_initial_entry_orders(
+        config=config,
+        picks=picks,
+        signal_day=signal_day,
+        planned_entry_day=planned_entry_day,
+        estimated_close_by_symbol=estimated_close_by_symbol,
+        selected_top_k=selected_top_k,
+        initial_cash_cny=INITIAL_CASH_CNY,
+    )
     orders: list[dict[str, Any]] = []
     diagnostics: list[dict[str, Any]] = []
-    for pick in sorted(picks, key=lambda row: int(_safe_float(row.get("rank")) or 999)):
-        symbol = str(pick.get("symbol") or "")
-        rank = int(_safe_float(pick.get("rank")) or 0)
-        portfolio_weight = _safe_float(pick.get("portfolio_weight")) or 0.0
-        rank_weight_multiplier = _safe_float(pick.get("rank_weight_multiplier")) or 0.0
-        target_notional = per_signal_budget * portfolio_weight * rank_weight_multiplier / selected_top_k
-        if target_notional <= 0:
-            diagnostics.append(
-                {
-                    "action": "no_order",
-                    "reason": "zero_target_allocation",
-                    "strategy_id": strategy_id,
-                    "symbol": symbol,
-                    "name": str(pick.get("stock_name") or symbol),
-                    "rank": rank,
-                    "target_notional_cny": round(target_notional, 2),
-                }
-            )
-            continue
-        if target_notional < min_order_notional:
-            diagnostics.append(
-                {
-                    "action": "skip",
-                    "reason": "below_min_order_notional",
-                    "strategy_id": strategy_id,
-                    "symbol": symbol,
-                    "name": str(pick.get("stock_name") or symbol),
-                    "rank": rank,
-                    "target_notional_cny": round(target_notional, 2),
-                }
-            )
-            continue
-        price = _latest_close_price(session, symbol)
-        if price is None:
-            diagnostics.append(
-                {
-                    "action": "skip",
-                    "reason": "missing_latest_close_price",
-                    "strategy_id": strategy_id,
-                    "symbol": symbol,
-                    "name": str(pick.get("stock_name") or symbol),
-                    "rank": rank,
-                    "target_notional_cny": round(target_notional, 2),
-                }
-            )
-            continue
-        one_lot_notional = price * BOARD_LOT_SIZE
-        if one_lot_notional > target_notional:
-            diagnostics.append(
-                {
-                    "action": "skip",
-                    "reason": "price_too_high_for_slot",
-                    "strategy_id": strategy_id,
-                    "symbol": symbol,
-                    "name": str(pick.get("stock_name") or symbol),
-                    "rank": rank,
-                    "target_notional_cny": round(target_notional, 2),
-                    "one_lot_notional_cny": round(one_lot_notional, 2),
-                }
-            )
-            continue
-        shares = int(floor(target_notional / one_lot_notional) * BOARD_LOT_SIZE)
-        if shares < BOARD_LOT_SIZE or shares * price < min_order_notional:
-            diagnostics.append(
-                {
-                    "action": "skip",
-                    "reason": "board_lot_rounding_below_min_order",
-                    "strategy_id": strategy_id,
-                    "symbol": symbol,
-                    "name": str(pick.get("stock_name") or symbol),
-                    "rank": rank,
-                    "target_notional_cny": round(target_notional, 2),
-                }
-            )
+    for row in projected_orders:
+        symbol = str(row.get("symbol") or "")
+        pick = picks_by_symbol.get(symbol, {})
+        if row.get("action") != "buy":
+            diagnostic = {
+                "action": row.get("action"),
+                "reason": row.get("reason"),
+                "strategy_id": strategy_id,
+                "symbol": symbol,
+                "name": str(pick.get("stock_name") or pick.get("name") or symbol),
+                "rank": int(_safe_float(row.get("rank")) or _safe_float(pick.get("rank")) or 0),
+                "target_notional_cny": round(_safe_float(row.get("target_notional_cny")) or 0.0, 2),
+            }
+            if row.get("reason") == "price_too_high_for_slot" and symbol in estimated_close_by_symbol:
+                diagnostic["one_lot_notional_cny"] = round(estimated_close_by_symbol[symbol] * 100, 2)
+            diagnostics.append(diagnostic)
             continue
         note = (
-            f"按 v3 selected_top_k 的 Rank 权重生成；单 tranche 预算约 {slot_budget:.0f} 元，"
-            f"该 Rank 目标金额约 {target_notional:.2f} 元；按最新收盘价 {price:.2f} 元估算，"
-            f"买入 {shares} 股，预计占用 {shares * price:.2f} 元。"
+            "按 v3 selected_top_k 与 rolling tranche 回放同一买入内核生成；"
+            f"该 Rank 目标金额约 {(_safe_float(row.get('target_notional_cny')) or 0.0):.2f} 元；"
+            f"按最新收盘价 {(_safe_float(row.get('price')) or 0.0):.2f} 元估算，"
+            f"买入 {int(_safe_float(row.get('shares')) or 0)} 股，"
+            f"预计占用 {((_safe_float(row.get('shares')) or 0.0) * (_safe_float(row.get('price')) or 0.0)):.2f} 元。"
         )
         orders.append(
             _selected_pick_plan_row(
+                row,
                 pick,
-                signal_date=signal_date,
-                price=price,
-                shares=shares,
-                target_notional=target_notional,
                 note=note,
                 strategy_id=strategy_id,
                 strategy_label=strategy_label,

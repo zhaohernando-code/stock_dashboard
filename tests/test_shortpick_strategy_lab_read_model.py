@@ -8,6 +8,8 @@ from pathlib import Path
 from ashare_evidence.db import init_database, session_scope
 from ashare_evidence.lineage import build_lineage
 from ashare_evidence.models import MarketBar, ShortpickCandidate, ShortpickExperimentRun, Stock
+from ashare_evidence.rolling_tranche_account_replay import project_shortpick_v3_initial_entry_orders
+from ashare_evidence.rolling_tranche_execution_contract import build_shortpick_v3_rolling_tranche_execution_contract
 from ashare_evidence.shortpick_strategy_lab_read_model import (
     CONTROL_CONFIG_ID,
     INITIAL_CASH_CNY,
@@ -81,6 +83,37 @@ def test_paper_tracking_renders_mock_next_order_without_forward_records(tmp_path
     assert "北方华创" in latest_trade["summary"]
     assert "买 100 股" in latest_trade["summary"]
     assert "次日收盘" in latest_trade["summary"]
+
+
+def test_paper_tracking_distinguishes_ready_no_executable_orders(tmp_path) -> None:
+    state_path = tmp_path / "shortpick-strategy-lab-paper-state.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "schema_version": PAPER_STATE_SCHEMA_VERSION,
+                "tracking_start_date": "2026-07-08",
+                "records": [],
+                "planned_orders": [],
+                "plan_generation_status": {
+                    "status": "ready_no_executable_orders",
+                    "signal_date": "2026-07-08",
+                    "message": "模型当天选择现金。",
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    payload = build_shortpick_strategy_lab_paper_tracking_read_model(
+        paper_state_path=state_path,
+        today=date(2026, 7, 8),
+    )
+
+    assert payload["status"] == "active"
+    assert payload["current_status"] == "model_cash_or_no_executable_order"
+    assert payload["current_message"] == "模型当天选择现金。"
+    assert payload["summary"]["planned_order_count"] == 0
 
 
 def _load_refresh_state_script() -> object:
@@ -233,7 +266,11 @@ def test_refresh_state_builds_v3_source_instead_of_accepting_missing_source(tmp_
     assert read_model["status"] == "active"
     assert read_model["summary"]["latest_plan_signal_date"] == "2026-07-08"
     assert read_model["paper_display"]["latest_trade"]["tag"] in {"模型现金", "待执行"}
-    assert read_model["current_status"] in {"awaiting_first_forward_fill", "awaiting_v3_plan"}
+    assert read_model["current_status"] in {
+        "awaiting_first_forward_fill",
+        "awaiting_v3_plan",
+        "model_cash_or_no_executable_order",
+    }
 
 
 def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_path, monkeypatch) -> None:
@@ -370,6 +407,7 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
     state_path = tmp_path / "paper-state.json"
     monkeypatch.setenv("ASHARE_SHORTPICK_STRATEGY_LAB_PAPER_STATE", str(state_path))
     module = _load_refresh_state_script()
+    assert module._next_business_day(date(2026, 7, 10)) == date(2026, 7, 13)
 
     assert module.main() == 0
     payload = json.loads(state_path.read_text(encoding="utf-8"))
@@ -380,6 +418,24 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
     assert [order["symbol"] for order in orders] == ["600030.SH", "600030.SH"]
     assert [order["shares"] for order in orders] == [100, 100]
     assert all(order["plan_source"] == "selected_top_k_candidate_run_rolling_tranche_engine" for order in orders)
+    contract = build_shortpick_v3_rolling_tranche_execution_contract()
+    main_config = next(config for config in contract["candidate_configurations"] if config["config_id"] == MAIN_CONFIG_ID)
+    projected_rows = project_shortpick_v3_initial_entry_orders(
+        config=main_config,
+        picks=json.loads(candidate_run_path.read_text(encoding="utf-8"))["trial_diagnostics"][0][
+            "selected_top_k_picks_by_date"
+        ],
+        signal_day=date(2026, 7, 8),
+        planned_entry_day=date(2026, 7, 9),
+        estimated_close_by_symbol={"002371.SZ": 802.32, "600030.SH": 28.0, "600028.SH": 6.2},
+        selected_top_k=3,
+        initial_cash_cny=INITIAL_CASH_CNY,
+    )
+    projected_main_buy = next(row for row in projected_rows if row["action"] == "buy")
+    assert orders[0]["symbol"] == projected_main_buy["symbol"]
+    assert orders[0]["shares"] == projected_main_buy["shares"]
+    assert orders[0]["estimated_entry_price_cny"] == projected_main_buy["price"]
+    assert orders[0]["target_notional_cny"] == round(projected_main_buy["target_notional_cny"], 2)
     diagnostics = payload["plan_generation_status"]["diagnostics"]
     assert any(row["symbol"] == "002371.SZ" and row["reason"] == "price_too_high_for_slot" for row in diagnostics)
     assert any(row["symbol"] == "600028.SH" and row["reason"] == "zero_target_allocation" for row in diagnostics)

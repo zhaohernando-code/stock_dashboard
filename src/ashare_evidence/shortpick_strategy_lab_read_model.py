@@ -120,6 +120,7 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
     latest_plan_signal_date = _latest_value(planned_orders, "signal_date") or plan_generation_status.get("signal_date")
     plan_status_code = str(plan_generation_status.get("status") or "unknown")
     plan_ready = plan_status_code.startswith("ready")
+    no_order_ready = plan_status_code == "ready_no_executable_orders"
     summary = {
         "record_count": len(records),
         "buy_count": sum(1 for row in records if str(row.get("action") or "") == "buy"),
@@ -141,13 +142,15 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             if planned_orders
             else "blocked_missing_v3_plan_source"
             if not plan_ready
+            else "model_cash_or_no_executable_order"
+            if no_order_ready
             else "awaiting_v3_plan"
         ),
         "current_message": (
             "已生成明日计划单，等待真实纸面成交记录。"
             if planned_orders
             else str(plan_generation_status.get("message") or "v3 计划源未就绪。")
-            if not plan_ready
+            if not plan_ready or no_order_ready
             else "纸面追踪已从今日起启用，等待下一次日刷写入明日计划单。"
         ),
         "claim_ceiling": CLAIM_CEILING,
