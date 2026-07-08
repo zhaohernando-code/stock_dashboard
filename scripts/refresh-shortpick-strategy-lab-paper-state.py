@@ -8,10 +8,10 @@ from math import floor
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from ashare_evidence.db import session_scope
-from ashare_evidence.models import MarketBar, ShortpickCandidate, ShortpickExperimentRun, Stock
+from ashare_evidence.models import MarketBar, Stock
 from ashare_evidence.shortpick_strategy_lab_read_model import (
     CONTROL_CONFIG_ID,
     INITIAL_CASH_CNY,
@@ -28,11 +28,14 @@ MAIN_MIN_ORDER_NOTIONAL_CNY = 2250
 CONTROL_MIN_ORDER_NOTIONAL_CNY = 1000
 BOARD_LOT_SIZE = 100
 MAX_SINGLE_SIGNAL_DEPLOYMENT_PCT = 0.25
-AFFORDABLE_CONTROL_ROLES = {
-    "market_factor_control_repeated_exposure_low_turnover_uptrend",
-    "market_factor_control_drawdown_reversal_low_turnover_uptrend",
-    "market_factor_control_same_symbol_cooldown_low_turnover_uptrend",
-    "frozen_paper_primary",
+MAIN_STRATEGY_LABEL = "主策略：14 tranche 分层退出"
+CONTROL_STRATEGY_LABEL = "对照组：15 tranche 低集中复投"
+V3_MODEL_SPEC_ID = "selected_exhaustion_date_scaled_v3_top3_20d_v1"
+V3_PLAN_SOURCE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_V3_CANDIDATE_RUN_SOURCE"
+EXTERNAL_PLAN_SOURCE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_PLAN_SOURCE"
+ALLOWED_EXTERNAL_PLAN_SOURCES = {
+    "external_v3_selected_top_k_plan",
+    "selected_top_k_candidate_run_rolling_tranche_engine",
 }
 
 
@@ -57,15 +60,51 @@ def _load_json(path: Path) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
-def _plan_source_orders() -> list[dict[str, Any]]:
-    source = os.getenv("ASHARE_SHORTPICK_STRATEGY_LAB_PLAN_SOURCE")
+def _external_plan_source_orders() -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    source = os.getenv(EXTERNAL_PLAN_SOURCE_ENV)
     if not source:
-        return []
+        return [], None
     payload = _load_json(Path(source))
+    if payload is None:
+        return [], {
+            "status": "blocked_invalid_external_v3_plan_source",
+            "source_env": EXTERNAL_PLAN_SOURCE_ENV,
+            "path": source,
+            "message": "显式计划源不存在或不是有效 JSON；不会降级使用旧候选源。",
+        }
     rows = (payload or {}).get("planned_orders") or []
     if not isinstance(rows, list):
-        return []
-    return [row for row in rows if isinstance(row, dict)]
+        return [], {
+            "status": "blocked_invalid_external_v3_plan_source",
+            "source_env": EXTERNAL_PLAN_SOURCE_ENV,
+            "path": source,
+            "message": "显式计划源缺少 planned_orders 数组；不会降级使用旧候选源。",
+        }
+    orders = [
+        row
+        for row in rows
+        if isinstance(row, dict)
+        and row.get("model_spec_id") == V3_MODEL_SPEC_ID
+        and row.get("plan_source") in ALLOWED_EXTERNAL_PLAN_SOURCES
+        and row.get("strategy_id") in {MAIN_CONFIG_ID, CONTROL_CONFIG_ID}
+        and str(row.get("symbol") or "")
+        and int(_safe_float(row.get("shares")) or 0) > 0
+    ]
+    if not orders:
+        return [], {
+            "status": "blocked_no_valid_external_v3_plan_orders",
+            "source_env": EXTERNAL_PLAN_SOURCE_ENV,
+            "path": source,
+            "model_spec_id": V3_MODEL_SPEC_ID,
+            "message": "显式计划源没有符合 v3 selected_top_k/rolling tranche 合同的有效订单；不会用旧计划冒充 v3 前向。",
+        }
+    return orders, {
+        "status": "ready_external_plan_source",
+        "source_env": EXTERNAL_PLAN_SOURCE_ENV,
+        "path": source,
+        "model_spec_id": V3_MODEL_SPEC_ID,
+        "message": "计划单来自显式提供且通过 v3 合同校验的计划源。",
+    }
 
 
 def _safe_float(value: Any) -> float | None:
@@ -88,172 +127,264 @@ def _latest_close_price(session: Any, symbol: str) -> float | None:
     return float(bar.close_price) if bar is not None and bar.close_price > 0 else None
 
 
-def _candidate_plan_row(
-    candidate: ShortpickCandidate,
+def _selected_pick_plan_row(
+    pick: dict[str, Any],
     *,
+    signal_date: str,
     price: float,
     shares: int,
+    target_notional: float,
     note: str,
     strategy_id: str,
     strategy_label: str,
 ) -> dict[str, Any]:
-    payload = candidate.candidate_payload or {}
-    overlay = payload.get("market_factor_overlay") if isinstance(payload.get("market_factor_overlay"), dict) else {}
-    signal_date = str(overlay.get("latest_trade_day") or "")
     return {
         "strategy_id": strategy_id,
         "strategy_label": strategy_label,
         "signal_date": signal_date,
         "planned_entry_date": next_calendar_day(datetime.fromisoformat(signal_date).date()) if signal_date else "",
-        "symbol": candidate.symbol,
-        "name": candidate.name,
+        "symbol": str(pick.get("symbol") or ""),
+        "name": str(pick.get("stock_name") or pick.get("name") or pick.get("symbol") or ""),
+        "rank": int(_safe_float(pick.get("rank")) or 0),
         "shares": shares,
         "entry_timing": "次日收盘",
         "estimated_entry_price_cny": price,
         "estimated_notional_cny": round(shares * price, 2),
-        "source_candidate_id": candidate.id,
-        "source_rank": overlay.get("source_rank"),
-        "model_score": overlay.get("score"),
-        "plan_source": "latest_shortpick_market_factor_candidates_v3_projection",
+        "target_notional_cny": round(target_notional, 2),
+        "portfolio_weight": pick.get("portfolio_weight"),
+        "rank_weight_multiplier": pick.get("rank_weight_multiplier"),
+        "model_score": pick.get("score"),
+        "plan_source": "selected_top_k_candidate_run_rolling_tranche_engine",
+        "model_spec_id": V3_MODEL_SPEC_ID,
         "note": note,
     }
 
 
-def _latest_candidate_rows(session: Any) -> list[ShortpickCandidate]:
-    latest_run_date = session.scalar(select(func.max(ShortpickExperimentRun.run_date)))
-    if latest_run_date is None:
-        return []
-    latest_run = session.scalar(
-        select(ShortpickExperimentRun)
-        .where(ShortpickExperimentRun.run_date == latest_run_date, ShortpickExperimentRun.status == "completed")
-        .order_by(ShortpickExperimentRun.id.desc())
-        .limit(1)
-    )
-    if latest_run is None:
-        return []
-    return list(
-        session.scalars(
-            select(ShortpickCandidate)
-            .where(ShortpickCandidate.run_id == latest_run.id)
-            .order_by(ShortpickCandidate.id.asc())
-        ).all()
-    )
+def _load_v3_candidate_run_source() -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    source = os.getenv(V3_PLAN_SOURCE_ENV)
+    if not source:
+        return None, {
+            "status": "blocked_missing_v3_candidate_run_source",
+            "source_env": V3_PLAN_SOURCE_ENV,
+            "message": "未提供 v3 selected_top_k candidate-run 源；不会用旧短投/市场因子候选冒充 v3 计划单。",
+        }
+    payload = _load_json(Path(source))
+    if payload is None:
+        return None, {
+            "status": "blocked_invalid_v3_candidate_run_source",
+            "source_env": V3_PLAN_SOURCE_ENV,
+            "path": source,
+            "message": "v3 candidate-run 源不存在或不是有效 JSON。",
+        }
+    return payload, {
+        "status": "ready",
+        "source_env": V3_PLAN_SOURCE_ENV,
+        "path": source,
+        "artifact_id": payload.get("artifact_id"),
+    }
 
 
-def _candidate_sort_key(candidate: ShortpickCandidate) -> tuple[float, float, int]:
-    payload = candidate.candidate_payload or {}
-    overlay = payload.get("market_factor_overlay") if isinstance(payload.get("market_factor_overlay"), dict) else {}
-    score = _safe_float(overlay.get("score")) or 0.0
-    source_rank = _safe_float(overlay.get("source_rank")) or 999.0
-    return (-score, source_rank, candidate.id)
-
-
-def _select_affordable_candidate(
-    session: Any,
-    candidates: list[ShortpickCandidate],
-    *,
-    tranche_count: int,
-    min_order_notional: float,
-    excluded_symbols: set[str] | None = None,
-) -> tuple[ShortpickCandidate, int, str] | None:
-    excluded = excluded_symbols or set()
-    slot_budget = INITIAL_CASH_CNY / tranche_count
-    max_notional = INITIAL_CASH_CNY * MAX_SINGLE_SIGNAL_DEPLOYMENT_PCT
-    for candidate in sorted(candidates, key=_candidate_sort_key):
-        if candidate.symbol in excluded:
+def _selected_v3_trial(candidate_run: dict[str, Any]) -> dict[str, Any] | None:
+    diagnostics = candidate_run.get("trial_diagnostics")
+    if not isinstance(diagnostics, list):
+        return None
+    for trial in diagnostics:
+        if not isinstance(trial, dict):
             continue
-        payload = candidate.candidate_payload or {}
-        overlay = payload.get("market_factor_overlay") if isinstance(payload.get("market_factor_overlay"), dict) else {}
-        if overlay.get("random_control_hash"):
-            continue
-        tracking_role = str(payload.get("tracking_role") or "")
-        if tracking_role not in AFFORDABLE_CONTROL_ROLES:
-            continue
-        price = _latest_close_price(session, candidate.symbol)
-        if price is None:
-            continue
-        one_lot_notional = price * BOARD_LOT_SIZE
-        if one_lot_notional > min(slot_budget, max_notional):
-            continue
-        shares = int(floor(slot_budget / one_lot_notional) * BOARD_LOT_SIZE)
-        if shares < BOARD_LOT_SIZE or shares * price < min_order_notional:
-            continue
-        note = (
-            f"单 tranche 预算约 {slot_budget:.0f} 元；按最新收盘价 {price:.2f} 元估算，"
-            f"买入 {shares} 股，预计占用 {shares * price:.2f} 元。"
-        )
-        return candidate, shares, note
+        if str(trial.get("model_spec_id") or "") == V3_MODEL_SPEC_ID:
+            return trial
     return None
 
 
-def _model_generated_orders() -> list[dict[str, Any]]:
-    try:
-        with session_scope() as session:
-            candidates = _latest_candidate_rows(session)
-            main_plan = _select_affordable_candidate(
-                session,
-                candidates,
-                tranche_count=MAIN_TRANCHE_COUNT,
-                min_order_notional=MAIN_MIN_ORDER_NOTIONAL_CNY,
+def _latest_selected_top_k_picks(trial: dict[str, Any]) -> tuple[str | None, list[dict[str, Any]]]:
+    picks = [row for row in trial.get("selected_top_k_picks_by_date") or [] if isinstance(row, dict)]
+    if not picks:
+        return None, []
+    latest_date = max(str(row.get("as_of_date") or "") for row in picks)
+    if not latest_date:
+        return None, []
+    return latest_date, [row for row in picks if str(row.get("as_of_date") or "") == latest_date]
+
+
+def _build_strategy_orders(
+    *,
+    session: Any,
+    picks: list[dict[str, Any]],
+    signal_date: str,
+    tranche_count: int,
+    min_order_notional: float,
+    strategy_id: str,
+    strategy_label: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    slot_budget = INITIAL_CASH_CNY / tranche_count
+    per_signal_budget = min(slot_budget, INITIAL_CASH_CNY * MAX_SINGLE_SIGNAL_DEPLOYMENT_PCT)
+    selected_top_k = max(len(picks), 1)
+    orders: list[dict[str, Any]] = []
+    diagnostics: list[dict[str, Any]] = []
+    for pick in sorted(picks, key=lambda row: int(_safe_float(row.get("rank")) or 999)):
+        symbol = str(pick.get("symbol") or "")
+        rank = int(_safe_float(pick.get("rank")) or 0)
+        portfolio_weight = _safe_float(pick.get("portfolio_weight")) or 0.0
+        rank_weight_multiplier = _safe_float(pick.get("rank_weight_multiplier")) or 0.0
+        target_notional = per_signal_budget * portfolio_weight * rank_weight_multiplier / selected_top_k
+        if target_notional <= 0:
+            diagnostics.append(
+                {
+                    "action": "no_order",
+                    "reason": "zero_target_allocation",
+                    "strategy_id": strategy_id,
+                    "symbol": symbol,
+                    "name": str(pick.get("stock_name") or symbol),
+                    "rank": rank,
+                    "target_notional_cny": round(target_notional, 2),
+                }
             )
-            main_candidate = main_plan[0] if main_plan is not None else None
-            control_plan = _select_affordable_candidate(
-                session,
-                candidates,
-                tranche_count=CONTROL_TRANCHE_COUNT,
-                min_order_notional=CONTROL_MIN_ORDER_NOTIONAL_CNY,
-                excluded_symbols={main_candidate.symbol} if main_candidate is not None else set(),
+            continue
+        if target_notional < min_order_notional:
+            diagnostics.append(
+                {
+                    "action": "skip",
+                    "reason": "below_min_order_notional",
+                    "strategy_id": strategy_id,
+                    "symbol": symbol,
+                    "name": str(pick.get("stock_name") or symbol),
+                    "rank": rank,
+                    "target_notional_cny": round(target_notional, 2),
+                }
             )
-            orders: list[dict[str, Any]] = []
-            if main_plan is not None:
-                main, shares, note = main_plan
-                price = _latest_close_price(session, main.symbol)
-                if price is not None:
-                    orders.append(
-                        _candidate_plan_row(
-                            main,
-                            price=price,
-                            shares=shares,
-                            note=note,
-                            strategy_id=MAIN_CONFIG_ID,
-                            strategy_label="主策略：14 tranche 分层退出",
-                        )
-                    )
-            if control_plan is not None:
-                control, shares, note = control_plan
-                price = _latest_close_price(session, control.symbol)
-                if price is not None:
-                    orders.append(
-                        _candidate_plan_row(
-                            control,
-                            price=price,
-                            shares=shares,
-                            note=note,
-                            strategy_id=CONTROL_CONFIG_ID,
-                            strategy_label="对照组：15 tranche 低集中复投",
-                        )
-                    )
-            return orders
-    except Exception:
-        return []
+            continue
+        price = _latest_close_price(session, symbol)
+        if price is None:
+            diagnostics.append(
+                {
+                    "action": "skip",
+                    "reason": "missing_latest_close_price",
+                    "strategy_id": strategy_id,
+                    "symbol": symbol,
+                    "name": str(pick.get("stock_name") or symbol),
+                    "rank": rank,
+                    "target_notional_cny": round(target_notional, 2),
+                }
+            )
+            continue
+        one_lot_notional = price * BOARD_LOT_SIZE
+        if one_lot_notional > target_notional:
+            diagnostics.append(
+                {
+                    "action": "skip",
+                    "reason": "price_too_high_for_slot",
+                    "strategy_id": strategy_id,
+                    "symbol": symbol,
+                    "name": str(pick.get("stock_name") or symbol),
+                    "rank": rank,
+                    "target_notional_cny": round(target_notional, 2),
+                    "one_lot_notional_cny": round(one_lot_notional, 2),
+                }
+            )
+            continue
+        shares = int(floor(target_notional / one_lot_notional) * BOARD_LOT_SIZE)
+        if shares < BOARD_LOT_SIZE or shares * price < min_order_notional:
+            diagnostics.append(
+                {
+                    "action": "skip",
+                    "reason": "board_lot_rounding_below_min_order",
+                    "strategy_id": strategy_id,
+                    "symbol": symbol,
+                    "name": str(pick.get("stock_name") or symbol),
+                    "rank": rank,
+                    "target_notional_cny": round(target_notional, 2),
+                }
+            )
+            continue
+        note = (
+            f"按 v3 selected_top_k 的 Rank 权重生成；单 tranche 预算约 {slot_budget:.0f} 元，"
+            f"该 Rank 目标金额约 {target_notional:.2f} 元；按最新收盘价 {price:.2f} 元估算，"
+            f"买入 {shares} 股，预计占用 {shares * price:.2f} 元。"
+        )
+        orders.append(
+            _selected_pick_plan_row(
+                pick,
+                signal_date=signal_date,
+                price=price,
+                shares=shares,
+                target_notional=target_notional,
+                note=note,
+                strategy_id=strategy_id,
+                strategy_label=strategy_label,
+            )
+        )
+    return orders, diagnostics
+
+
+def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    candidate_run, source_status = _load_v3_candidate_run_source()
+    if candidate_run is None:
+        return [], source_status
+    trial = _selected_v3_trial(candidate_run)
+    if trial is None:
+        return [], {
+            **source_status,
+            "status": "blocked_missing_selected_v3_trial",
+            "model_spec_id": V3_MODEL_SPEC_ID,
+            "message": "candidate-run 中没有 v3 selected_exhaustion trial。",
+        }
+    signal_date, picks = _latest_selected_top_k_picks(trial)
+    if signal_date is None or not picks:
+        return [], {
+            **source_status,
+            "status": "blocked_empty_selected_top_k",
+            "model_spec_id": V3_MODEL_SPEC_ID,
+            "message": "candidate-run 中没有 selected_top_k_picks_by_date。",
+        }
+    with session_scope() as session:
+        main_orders, main_diagnostics = _build_strategy_orders(
+            session=session,
+            picks=picks,
+            signal_date=signal_date,
+            tranche_count=MAIN_TRANCHE_COUNT,
+            min_order_notional=MAIN_MIN_ORDER_NOTIONAL_CNY,
+            strategy_id=MAIN_CONFIG_ID,
+            strategy_label=MAIN_STRATEGY_LABEL,
+        )
+        control_orders, control_diagnostics = _build_strategy_orders(
+            session=session,
+            picks=picks,
+            signal_date=signal_date,
+            tranche_count=CONTROL_TRANCHE_COUNT,
+            min_order_notional=CONTROL_MIN_ORDER_NOTIONAL_CNY,
+            strategy_id=CONTROL_CONFIG_ID,
+            strategy_label=CONTROL_STRATEGY_LABEL,
+        )
+    return [*main_orders, *control_orders], {
+        **source_status,
+        "status": "ready" if main_orders or control_orders else "ready_no_executable_orders",
+        "model_spec_id": V3_MODEL_SPEC_ID,
+        "signal_date": signal_date,
+        "selected_top_k": int(_safe_float(trial.get("selected_top_k")) or len(picks)),
+        "selected_pick_count": len(picks),
+        "diagnostics": [*main_diagnostics, *control_diagnostics],
+        "message": "计划单由 v3 selected_top_k candidate-run 按 rolling tranche 订单语义生成。",
+    }
 
 
 def main() -> int:
     path = _state_path()
     existing = _load_json(path) or {}
     records = existing.get("records") if isinstance(existing.get("records"), list) else []
-    existing_orders = existing.get("planned_orders") if isinstance(existing.get("planned_orders"), list) else []
-    planned_orders = (
-        _plan_source_orders()
-        or _model_generated_orders()
-        or [row for row in existing_orders if isinstance(row, dict)]
-    )
+    plan_status: dict[str, Any] = {}
+    sourced_orders, source_status = _external_plan_source_orders()
+    if source_status is not None:
+        planned_orders = sourced_orders
+        plan_status = source_status
+    else:
+        planned_orders, plan_status = _v3_model_generated_plan()
     payload = {
         "schema_version": PAPER_STATE_SCHEMA_VERSION,
         "generated_at": datetime.now(UTC).isoformat(),
         "tracking_start_date": str(existing.get("tracking_start_date") or TRACKING_START_DATE),
         "records": [row for row in records if isinstance(row, dict)],
         "planned_orders": planned_orders,
+        "plan_generation_status": plan_status,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_name(f".{path.name}.tmp")

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import importlib.util
+import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -40,6 +40,10 @@ def test_paper_tracking_renders_mock_next_order_without_forward_records(tmp_path
                 "schema_version": PAPER_STATE_SCHEMA_VERSION,
                 "tracking_start_date": "2026-07-08",
                 "records": [],
+                "plan_generation_status": {
+                    "status": "ready",
+                    "message": "test v3 selected_top_k source",
+                },
                 "planned_orders": [
                     {
                         "strategy_id": MAIN_CONFIG_ID,
@@ -78,62 +82,140 @@ def test_paper_tracking_renders_mock_next_order_without_forward_records(tmp_path
     assert "次日收盘" in latest_trade["summary"]
 
 
-def test_refresh_state_generates_affordable_forward_plan_from_latest_candidates(tmp_path, monkeypatch) -> None:
+def _load_refresh_state_script() -> object:
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "refresh-shortpick-strategy-lab-paper-state.py"
+    spec = importlib.util.spec_from_file_location("refresh_shortpick_strategy_lab_paper_state", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_refresh_state_does_not_use_legacy_candidates_as_v3_plan(tmp_path, monkeypatch) -> None:
     database_url = f"sqlite:///{tmp_path / 'ashare.db'}"
     init_database(database_url)
     with session_scope(database_url) as session:
-        expensive = Stock(
-            symbol="002371.SZ",
-            ticker="002371",
-            exchange="SZ",
-            name="北方华创",
-            provider_symbol="002371",
-            status="active",
-            profile_payload={},
-            **build_lineage(
-                {"symbol": "002371.SZ"},
-                source_uri="test://stock/002371",
-                license_tag="test",
-                usage_scope="test",
-                redistribution_scope="none",
-            ),
+        run = ShortpickExperimentRun(
+            run_key="shortpick:test",
+            run_date=date(2026, 7, 8),
+            prompt_version="test",
+            information_mode="native_web_open_discovery",
+            status="completed",
+            trigger_source="test",
+            started_at=datetime(2026, 7, 8, tzinfo=UTC),
+            completed_at=datetime(2026, 7, 8, 1, tzinfo=UTC),
+            model_config={},
+            summary_payload={},
         )
-        affordable = Stock(
-            symbol="603259.SH",
-            ticker="603259",
-            exchange="SH",
-            name="药明康德",
-            provider_symbol="603259",
-            status="active",
-            profile_payload={},
-            **build_lineage(
-                {"symbol": "603259.SH"},
-                source_uri="test://stock/603259",
-                license_tag="test",
-                usage_scope="test",
-                redistribution_scope="none",
-            ),
+        session.add(run)
+        session.flush()
+        session.add(
+            ShortpickCandidate(
+                run_id=run.id,
+                candidate_key="candidate:legacy",
+                symbol="603259.SH",
+                name="药明康德",
+                research_priority="market_factor",
+                parse_status="parsed",
+                is_system_external=True,
+                candidate_payload={
+                    "candidate_origin": "market_factor_overlay",
+                    "tracking_role": "market_factor_control_repeated_exposure_low_turnover_uptrend",
+                    "market_factor_overlay": {
+                        "latest_trade_day": "2026-07-08",
+                        "score": 1.03,
+                        "source_rank": 2,
+                    },
+                },
+            )
         )
-        control = Stock(
-            symbol="600030.SH",
-            ticker="600030",
-            exchange="SH",
-            name="中信证券",
-            provider_symbol="600030",
-            status="active",
-            profile_payload={},
-            **build_lineage(
-                {"symbol": "600030.SH"},
-                source_uri="test://stock/600030",
-                license_tag="test",
-                usage_scope="test",
-                redistribution_scope="none",
+
+    monkeypatch.setenv("ASHARE_DATABASE_URL", database_url)
+    state_path = tmp_path / "paper-state.json"
+    monkeypatch.setenv("ASHARE_SHORTPICK_STRATEGY_LAB_PAPER_STATE", str(state_path))
+    state_path.write_text(
+        json.dumps(
+            {
+                "schema_version": PAPER_STATE_SCHEMA_VERSION,
+                "tracking_start_date": "2026-07-08",
+                "records": [],
+                "planned_orders": [{"strategy_id": MAIN_CONFIG_ID, "symbol": "SHOULD_CLEAR"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    module = _load_refresh_state_script()
+
+    assert module.main() == 0
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    assert payload["planned_orders"] == []
+    assert payload["plan_generation_status"]["status"] == "blocked_missing_v3_candidate_run_source"
+    read_model = build_shortpick_strategy_lab_paper_tracking_read_model(
+        paper_state_path=state_path,
+        today=date(2026, 7, 8),
+    )
+    assert read_model["status"] == "blocked"
+    assert "不会用旧短投/市场因子候选冒充" in read_model["current_message"]
+
+
+def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_path, monkeypatch) -> None:
+    database_url = f"sqlite:///{tmp_path / 'ashare.db'}"
+    init_database(database_url)
+    with session_scope(database_url) as session:
+        stocks = [
+            Stock(
+                symbol="002371.SZ",
+                ticker="002371",
+                exchange="SZ",
+                name="北方华创",
+                provider_symbol="002371",
+                status="active",
+                profile_payload={},
+                **build_lineage(
+                    {"symbol": "002371.SZ"},
+                    source_uri="test://stock/002371",
+                    license_tag="test",
+                    usage_scope="test",
+                    redistribution_scope="none",
+                ),
             ),
-        )
-        session.add_all([expensive, affordable, control])
+            Stock(
+                symbol="600030.SH",
+                ticker="600030",
+                exchange="SH",
+                name="中信证券",
+                provider_symbol="600030",
+                status="active",
+                profile_payload={},
+                **build_lineage(
+                    {"symbol": "600030.SH"},
+                    source_uri="test://stock/600030",
+                    license_tag="test",
+                    usage_scope="test",
+                    redistribution_scope="none",
+                ),
+            ),
+            Stock(
+                symbol="600028.SH",
+                ticker="600028",
+                exchange="SH",
+                name="中国石化",
+                provider_symbol="600028",
+                status="active",
+                profile_payload={},
+                **build_lineage(
+                    {"symbol": "600028.SH"},
+                    source_uri="test://stock/600028",
+                    license_tag="test",
+                    usage_scope="test",
+                    redistribution_scope="none",
+                ),
+            ),
+        ]
+        session.add_all(stocks)
         session.flush()
         observed_at = datetime(2026, 7, 8, 15, 0, tzinfo=UTC)
-        for stock, close_price in ((expensive, 802.32), (affordable, 115.4), (control, 28.0)):
+        for stock, close_price in ((stocks[0], 802.32), (stocks[1], 28.0), (stocks[2], 6.2)):
             session.add(
                 MarketBar(
                     bar_key=f"bar-{stock.ticker}-20260708",
@@ -156,65 +238,70 @@ def test_refresh_state_generates_affordable_forward_plan_from_latest_candidates(
                     ),
                 )
             )
-        run = ShortpickExperimentRun(
-            run_key="shortpick:test",
-            run_date=date(2026, 7, 8),
-            prompt_version="test",
-            information_mode="native_web_open_discovery",
-            status="completed",
-            trigger_source="test",
-            started_at=datetime(2026, 7, 8, tzinfo=UTC),
-            completed_at=datetime(2026, 7, 8, 1, tzinfo=UTC),
-            model_config={},
-            summary_payload={},
-        )
-        session.add(run)
-        session.flush()
-        for index, (stock, score, source_rank, role) in enumerate(
-            (
-                (expensive, 1.15, 1, "market_factor_control_same_symbol_cooldown_low_turnover_uptrend"),
-                (affordable, 1.03, 2, "market_factor_control_repeated_exposure_low_turnover_uptrend"),
-                (control, 0.84, 5, "market_factor_control_drawdown_reversal_low_turnover_uptrend"),
-            ),
-            start=1,
-        ):
-            session.add(
-                ShortpickCandidate(
-                    run_id=run.id,
-                    candidate_key=f"candidate:{index}",
-                    symbol=stock.symbol,
-                    name=stock.name,
-                    research_priority="market_factor",
-                    parse_status="parsed",
-                    is_system_external=True,
-                    candidate_payload={
-                        "candidate_origin": "market_factor_overlay",
-                        "tracking_role": role,
-                        "market_factor_overlay": {
-                            "latest_trade_day": "2026-07-08",
-                            "score": score,
-                            "source_rank": source_rank,
-                            "tracking_role": role,
-                        },
-                    },
-                )
-            )
+    candidate_run_path = tmp_path / "v3-candidate-run.json"
+    candidate_run_path.write_text(
+        json.dumps(
+            {
+                "artifact_id": "walk-forward-model-candidate-run-test",
+                "trial_diagnostics": [
+                    {
+                        "model_spec_id": "selected_exhaustion_date_scaled_v3_top3_20d_v1",
+                        "selected_top_k": 3,
+                        "selected_top_k_picks_by_date": [
+                            {
+                                "as_of_date": "2026-07-08",
+                                "symbol": "002371.SZ",
+                                "stock_name": "北方华创",
+                                "rank": 1,
+                                "portfolio_weight": 1.0,
+                                "rank_weight_multiplier": 2.73,
+                                "score": 3.9,
+                                "target_horizon_days": 20,
+                            },
+                            {
+                                "as_of_date": "2026-07-08",
+                                "symbol": "600030.SH",
+                                "stock_name": "中信证券",
+                                "rank": 2,
+                                "portfolio_weight": 1.0,
+                                "rank_weight_multiplier": 1.0,
+                                "score": 3.2,
+                                "target_horizon_days": 20,
+                            },
+                            {
+                                "as_of_date": "2026-07-08",
+                                "symbol": "600028.SH",
+                                "stock_name": "中国石化",
+                                "rank": 3,
+                                "portfolio_weight": 1.0,
+                                "rank_weight_multiplier": 0.0,
+                                "score": 3.1,
+                                "target_horizon_days": 20,
+                            },
+                        ],
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
 
     monkeypatch.setenv("ASHARE_DATABASE_URL", database_url)
+    monkeypatch.setenv("ASHARE_SHORTPICK_STRATEGY_LAB_V3_CANDIDATE_RUN_SOURCE", str(candidate_run_path))
     state_path = tmp_path / "paper-state.json"
     monkeypatch.setenv("ASHARE_SHORTPICK_STRATEGY_LAB_PAPER_STATE", str(state_path))
-    script_path = Path(__file__).resolve().parents[1] / "scripts" / "refresh-shortpick-strategy-lab-paper-state.py"
-    spec = importlib.util.spec_from_file_location("refresh_shortpick_strategy_lab_paper_state", script_path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = _load_refresh_state_script()
 
     assert module.main() == 0
     payload = json.loads(state_path.read_text(encoding="utf-8"))
+    assert payload["plan_generation_status"]["status"] == "ready"
+    assert payload["plan_generation_status"]["signal_date"] == "2026-07-08"
     orders = payload["planned_orders"]
     assert [order["strategy_id"] for order in orders] == [MAIN_CONFIG_ID, CONTROL_CONFIG_ID]
-    assert orders[0]["symbol"] == "603259.SH"
-    assert orders[0]["shares"] == 100
-    assert orders[0]["planned_entry_date"] == "2026-07-09"
-    assert orders[1]["symbol"] == "600030.SH"
-    assert orders[1]["shares"] == 400
+    assert [order["symbol"] for order in orders] == ["600030.SH", "600030.SH"]
+    assert [order["shares"] for order in orders] == [100, 100]
+    assert all(order["plan_source"] == "selected_top_k_candidate_run_rolling_tranche_engine" for order in orders)
+    diagnostics = payload["plan_generation_status"]["diagnostics"]
+    assert any(row["symbol"] == "002371.SZ" and row["reason"] == "price_too_high_for_slot" for row in diagnostics)
+    assert any(row["symbol"] == "600028.SH" and row["reason"] == "zero_target_allocation" for row in diagnostics)

@@ -110,8 +110,16 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
     state = _read_paper_state(state_path)
     records = _records_from_state(state) if include_records else []
     planned_orders = _planned_orders_from_state(state)
+    plan_generation_status = (state or {}).get("plan_generation_status") if isinstance((state or {}), dict) else None
+    if not isinstance(plan_generation_status, dict):
+        plan_generation_status = {
+            "status": "unknown",
+            "message": "尚未写入 v3 计划源状态。",
+        }
     tracking_start = str((state or {}).get("tracking_start_date") or TRACKING_START_DATE)
     latest_plan_signal_date = _latest_value(planned_orders, "signal_date")
+    plan_status_code = str(plan_generation_status.get("status") or "unknown")
+    plan_ready = plan_status_code.startswith("ready")
     summary = {
         "record_count": len(records),
         "buy_count": sum(1 for row in records if str(row.get("action") or "") == "buy"),
@@ -120,15 +128,26 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
         "tracking_start_date": tracking_start,
         "latest_plan_signal_date": latest_plan_signal_date,
         "initial_cash_cny": INITIAL_CASH_CNY,
+        "plan_generation_status": plan_status_code,
     }
     return {
         "generated_at": _now_iso(),
         "schema_version": STRATEGY_LAB_SCHEMA_VERSION,
-        "status": "active",
-        "current_status": "awaiting_first_forward_fill" if not records else "active",
+        "status": "active" if plan_ready else "blocked",
+        "current_status": (
+            "active"
+            if records
+            else "awaiting_first_forward_fill"
+            if planned_orders
+            else "blocked_missing_v3_plan_source"
+            if not plan_ready
+            else "awaiting_v3_plan"
+        ),
         "current_message": (
             "已生成明日计划单，等待真实纸面成交记录。"
             if planned_orders
+            else str(plan_generation_status.get("message") or "v3 计划源未就绪。")
+            if not plan_ready
             else "纸面追踪已从今日起启用，等待下一次日刷写入明日计划单。"
         ),
         "claim_ceiling": CLAIM_CEILING,
@@ -167,6 +186,7 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             records=records,
             planned_orders=planned_orders,
             tracking_start=tracking_start,
+            plan_generation_status=plan_generation_status,
         ),
         "records": records,
         "summary": summary,
@@ -339,13 +359,26 @@ def _paper_display(
     records: list[dict[str, Any]],
     planned_orders: list[dict[str, Any]],
     tracking_start: str,
+    plan_generation_status: dict[str, Any],
 ) -> dict[str, Any]:
     latest_order = planned_orders[0] if planned_orders else None
+    plan_status_code = str(plan_generation_status.get("status") or "unknown")
+    plan_ready = plan_status_code.startswith("ready")
     return {
         "title": "v3 模型纸面追踪",
-        "status_label": "等待真实前向记录" if not records else "纸面追踪运行中",
-        "subtitle": "从今日起只记录真实前向纸面交易；收益曲线和回撤图在产生实际成交后开始显示。",
-        "latest_trade": _latest_trade_display(latest_order, planned_orders),
+        "status_label": (
+            "纸面追踪运行中"
+            if records
+            else "等待真实前向记录"
+            if plan_ready
+            else "v3 计划源未就绪"
+        ),
+        "subtitle": (
+            "从今日起只记录真实前向纸面交易；收益曲线和回撤图在产生实际成交后开始显示。"
+            if plan_ready
+            else str(plan_generation_status.get("message") or "缺少 v3 selected_top_k 计划源。")
+        ),
+        "latest_trade": _latest_trade_display(latest_order, planned_orders, plan_generation_status),
         "strategy_explanation": {
             "title": "策略说明",
             "items": [
@@ -373,6 +406,7 @@ def _paper_display(
         },
         "account_curves": [],
         "planned_orders": planned_orders,
+        "plan_generation_status": plan_generation_status,
         "coverage": {
             "coverage_start": tracking_start,
             "coverage_end": tracking_start,
@@ -387,6 +421,7 @@ def _paper_display(
             {"label": "纸面收益", "value": "等待首笔成交"},
             {"label": "真实前向记录", "value": str(summary.get("record_count") or 0)},
             {"label": "明日计划单", "value": str(summary.get("planned_order_count") or 0)},
+            {"label": "计划源状态", "value": "v3 ready" if plan_ready else "阻塞"},
             {"label": "追踪起点", "value": tracking_start},
             {"label": "最新信号日", "value": str(summary.get("latest_plan_signal_date") or "等待日刷")},
         ],
@@ -396,14 +431,18 @@ def _paper_display(
 def _latest_trade_display(
     latest_order: dict[str, Any] | None,
     planned_orders: list[dict[str, Any]],
+    plan_generation_status: dict[str, Any],
 ) -> dict[str, Any]:
     if latest_order is None:
         return {
             "title": "明日计划买入",
-            "tag": "等待日刷",
-            "summary": "还没有持久化的 v3 计划单；下一次日刷会和试验田 v1 同步写入。",
+            "tag": "计划源阻塞" if not str(plan_generation_status.get("status") or "").startswith("ready") else "等待日刷",
+            "summary": str(
+                plan_generation_status.get("message")
+                or "还没有持久化的 v3 计划单；下一次日刷会和试验田 v1 同步写入。"
+            ),
             "items": [],
-            "note": "这里不会用历史回放或 v1 旧结果临时补齐。",
+            "note": "这里不会用历史回放、v1/v2 或旧短投候选临时补齐。",
         }
     stock_text = f"{latest_order.get('name') or ''} · {latest_order.get('symbol') or ''}".strip(" ·")
     shares = int(float(latest_order.get("shares") or 0))

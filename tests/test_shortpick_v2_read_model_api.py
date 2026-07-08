@@ -1436,8 +1436,11 @@ def test_shortpick_v2_read_api_routes_return_v2_payloads(tmp_path: Path, monkeyp
     assert replay_response.json()["status"] == "ready"
     assert replay_response.json()["selected_configs"][0]["config_id"] == MAIN_CONFIG_ID
     assert paper_response.status_code == 200
-    assert paper_response.json()["status"] == "active"
+    assert paper_response.json()["status"] == "blocked"
+    assert paper_response.json()["current_status"] == "blocked_missing_v3_plan_source"
     assert paper_response.json()["summary"]["record_count"] == 0
+    assert paper_response.json()["summary"]["planned_order_count"] == 0
+    assert paper_response.json()["summary"]["plan_generation_status"] == "unknown"
     assert paper_response.json()["paper_display"]["table"]["rows"] == []
     assert paper_response.json()["paper_display"]["coverage"]["historical_replay_row_count"] == 0
 
@@ -1488,8 +1491,10 @@ def test_shortpick_v2_read_api_preserves_h10_paper_governance_projection(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "active"
+    assert body["status"] == "blocked"
+    assert body["current_status"] == "blocked_missing_v3_plan_source"
     assert body["summary"]["record_count"] == 0
+    assert body["summary"]["planned_order_count"] == 0
     assert body["records"] == []
     assert body["paper_display"]["table"]["rows"] == []
     assert body["paper_governance"]["primary_config_id"] == MAIN_CONFIG_ID
