@@ -230,6 +230,8 @@ def test_refresh_state_builds_v3_source_instead_of_accepting_missing_source(tmp_
         today=date(2026, 7, 8),
     )
     assert read_model["status"] == "active"
+    assert read_model["summary"]["latest_plan_signal_date"] == "2026-07-08"
+    assert read_model["paper_display"]["latest_trade"]["tag"] in {"模型现金", "待执行"}
     assert read_model["current_status"] in {"awaiting_first_forward_fill", "awaiting_v3_plan"}
 
 

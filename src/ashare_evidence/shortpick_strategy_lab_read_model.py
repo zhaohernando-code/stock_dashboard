@@ -117,7 +117,7 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             "message": "尚未写入 v3 计划源状态。",
         }
     tracking_start = str((state or {}).get("tracking_start_date") or TRACKING_START_DATE)
-    latest_plan_signal_date = _latest_value(planned_orders, "signal_date")
+    latest_plan_signal_date = _latest_value(planned_orders, "signal_date") or plan_generation_status.get("signal_date")
     plan_status_code = str(plan_generation_status.get("status") or "unknown")
     plan_ready = plan_status_code.startswith("ready")
     summary = {
@@ -434,9 +434,11 @@ def _latest_trade_display(
     plan_generation_status: dict[str, Any],
 ) -> dict[str, Any]:
     if latest_order is None:
+        plan_status = str(plan_generation_status.get("status") or "")
+        no_order_ready = plan_status == "ready_no_executable_orders"
         return {
             "title": "明日计划买入",
-            "tag": "计划源阻塞" if not str(plan_generation_status.get("status") or "").startswith("ready") else "等待日刷",
+            "tag": "模型现金" if no_order_ready else "计划源阻塞" if not plan_status.startswith("ready") else "等待日刷",
             "summary": str(
                 plan_generation_status.get("message")
                 or "还没有持久化的 v3 计划单；下一次日刷会和试验田 v1 同步写入。"
