@@ -376,6 +376,15 @@ def _rolling_configurations(
             "exit_policy": "rank3_entry_pullback_late_trend_loss_guard",
         },
         {
+            "config_id": "daily_15_tranche_rank_weighted_compound_min1000_layered_rank1_quickfail_rank3_pullback_exit_v1",
+            "signal_cadence_trade_days": 1,
+            "target_active_tranche_count": 15,
+            "rank_allocation_mode": "model_rank_weight_with_board_lot_skip",
+            "budget_mode": "current_nav_fraction",
+            "min_order_notional_cny": 1_000.0,
+            "exit_policy": "rank3_pullback_rank1_quick_fail_guard",
+        },
+        {
             "config_id": "daily_15_tranche_rank_weighted_compound_min1000_rank23_strong_benchmark_pullback_exit_v1",
             "signal_cadence_trade_days": 1,
             "target_active_tranche_count": 15,

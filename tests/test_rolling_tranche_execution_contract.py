@@ -48,6 +48,12 @@ def test_shortpick_v3_rolling_contract_bounds_single_signal_budget() -> None:
         == "current_nav_fraction"
     )
     assert configs["daily_15_tranche_rank_weighted_compound_min1000_v1"]["min_order_notional_cny"] == 1_000.0
+    assert (
+        configs["daily_15_tranche_rank_weighted_compound_min1000_layered_rank1_quickfail_rank3_pullback_exit_v1"][
+            "exit_policy"
+        ]
+        == "rank3_pullback_rank1_quick_fail_guard"
+    )
     upstream_meta = configs[
         "daily_14_tranche_upstream_meta_signal_quality_min2250_weak100_strong165_lead135_low090_v1"
     ]

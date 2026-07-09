@@ -379,14 +379,83 @@ matrix：
 
 审计状态：4 个 trial 均为 `passed_same_window_metrics_ready`。
 
+## 劣化归因与增量优化
+
+在完整历史逐订单回放基础上，本轮继续拆解 trial-003 的劣化来源，并尝试只接受“收益、回撤、
+负月份、跳过率不劣化”的优化。
+
+### 劣化来源
+
+trial-003 原最佳配置为
+`daily_15_tranche_rank_weighted_compound_min1000_rank3_pullback_late_trend_loss_guard_v1`。
+主要劣化点如下：
+
+1. 负收益月份集中在 `2023-10`、`2023-12`、`2025-01`、`2025-10`，共 4 个。
+2. 最大亏损单主要来自 Rank1 机械 20 日持有：例如 `603039.SH 泛微网络`、`000697.SZ 炼石航空`、
+   `002101.SZ 广东鸿图`、`002357.SZ 富临运业`、`605077.SH 华康股份`。
+3. 这些坏单的常见入场特征是：`return_20d_percentile` 与 `return_5d_percentile` 很高，
+   `industry_return_20d_excess` 较强，成交额放大，但已经跌离 20 日高点。也就是“强势末端
+   + 行业拥挤 + 回撤后继续满权重”。
+4. 直接对这类 strong-tail 入场做降权能把负月份从 4 降到 3，但总收益会明显下降，因此不能作为
+   不劣化优化。
+5. 正贡献段主要来自 Rank1/Rank2 行业领导者，尤其是 `industry_return_20d_excess >= 0.35` 的
+   候选；单独小幅增配 Rank1 行业领导者可以小幅增收，但幅度不足。
+
+### 已验证但未接受的方向
+
+| 方向 | 结果 | 结论 |
+|---|---|---|
+| strong-tail 降权 | 负月份可从 4 降到 3，但收益从 303.69% 降到约 293% 或更低 | 稳定性方向成立，但收益劣化，不接受 |
+| 行业领导者增配 + strong-tail 轻度降权 | 收益最高约 318.34%，负月份 3，但最大回撤劣化到约 -7.37% | 有研究价值，但不满足回撤不劣化 |
+| 13 tranche 加大投入 | 收益最高约 334.53%，接近前端最佳，但回撤、单票暴露、跳过率变差 | 证明 15 tranche 偏保守，但风险副作用过大 |
+| 13 tranche + 单票成本上限 | 压低集中度后收益明显回落，不能保留 13 tranche 的优势 | 不接受 |
+
+### 接受的增量优化
+
+本轮发现一个严格不劣化的小优化：给 `15 tranche + min1000` 增加与主线一致的
+`Rank1 quick-fail + Rank3 pullback late guard` 退出策略。
+
+新增配置：
+
+`daily_15_tranche_rank_weighted_compound_min1000_layered_rank1_quickfail_rank3_pullback_exit_v1`
+
+4 个 trial 的完整历史结果：
+
+| trial | 原最佳总收益 | 新配置总收益 | 原最大回撤 | 新最大回撤 | 负收益月份 | 订单跳过率 | 信号跳过率 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 000 | 295.72% | 301.02% | -7.34% | -7.14% | 4 | 20.12% | 19.57% |
+| 001 | 303.56% | 305.12% | -7.23% | -7.12% | 4 | 19.92% | 19.37% |
+| 002 | 299.30% | 301.06% | -7.34% | -7.14% | 4 | 20.02% | 19.57% |
+| 003 | 303.69% | 305.14% | -7.23% | -7.14% | 4 | 19.81% | 19.37% |
+
+解释：
+
+- 这是一个小幅但真实的无副作用增量：收益和回撤同时改善，跳过率只小幅变化，负月份不变。
+- 它没有达到“10% 明显突破”，也没有超过前端当前最佳 `336.32%` 总收益和 3 个负月份。
+- 因此它应进入候选回放合同，作为后续探索基线的一部分，但不能被包装成新主策略。
+
+新增逐订单回放产物：
+
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/shortpick_v3_account_replays/shortpick-v3-full-history-upstream-capacity-cluster-trial-000-account-replay-with-15tranche-quickfail-20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/shortpick_v3_account_replays/shortpick-v3-full-history-upstream-capacity-cluster-trial-001-account-replay-with-15tranche-quickfail-20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/shortpick_v3_account_replays/shortpick-v3-full-history-upstream-capacity-cluster-trial-002-account-replay-with-15tranche-quickfail-20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/shortpick_v3_account_replays/shortpick-v3-full-history-upstream-capacity-cluster-trial-003-account-replay-with-15tranche-quickfail-20260709.json`
+
+同窗口审计产物：
+
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/fair_comparison_readiness/shortpick-v3-full-history-upstream-capacity-cluster-trial-000-with-15tranche-quickfail-fair-comparison-readiness-20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/fair_comparison_readiness/shortpick-v3-full-history-upstream-capacity-cluster-trial-001-with-15tranche-quickfail-fair-comparison-readiness-20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/fair_comparison_readiness/shortpick-v3-full-history-upstream-capacity-cluster-trial-002-with-15tranche-quickfail-fair-comparison-readiness-20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/fair_comparison_readiness/shortpick-v3-full-history-upstream-capacity-cluster-trial-003-with-15tranche-quickfail-fair-comparison-readiness-20260709.json`
+
 ## 当前结论
 
 本次补正后，前序上游探索已经有了可比较的完整历史逐订单账户结果。结论变为：
 
 1. 之前 `100%` 左右收益确实是比较口径错误，不代表上游方向真实退化到只能赚 100%。
-2. capacity-cluster 上游候选在完整历史逐订单回放中能达到约 `304%` 总收益，已经回到前端策略组同量级。
-3. 它仍不能晋级为新主策略：前端当前最佳为 `336.32%` 总收益、`69.21%` 年化、`-6.92%` 最大回撤、`3` 个负收益月份；本候选最佳 trial-003 为 `303.69%`、`64.58%`、`-7.23%`、`4` 个负收益月份。
-4. 本候选的优势是跳过率明显更低：订单跳过率约 `19.61%`，优于前端 6 条中的最优 `21.77%`；信号跳过率约 `19.18%`，优于前端最优 `21.61%`。但收益和稳定性没有全面超过当前前端最佳。
+2. capacity-cluster 上游候选在完整历史逐订单回放中能达到约 `305%` 总收益，已经回到前端策略组同量级。
+3. 它仍不能晋级为新主策略：前端当前最佳为 `336.32%` 总收益、`69.21%` 年化、`-6.92%` 最大回撤、`3` 个负收益月份；本候选最佳 trial-003 新配置为 `305.14%`、`64.79%`、`-7.14%`、`4` 个负收益月份。
+4. 本候选的优势是跳过率明显更低：最佳 trial 的订单跳过率约 `19.81%`，优于前端 6 条中的最优 `21.77%`；信号跳过率约 `19.37%`，优于前端最优 `21.61%`。但收益和稳定性没有全面超过当前前端最佳。
 5. 因此它是有意义的完整历史对照候选或进一步优化基线，不是可直接替换前端主策略的完成态。
 
 完成状态：
@@ -399,6 +468,7 @@ matrix：
 - [x] 已修正公平比较门禁：信号日差异是诊断项，不是同窗口阻断项。
 - [x] 已完成 capacity-cluster 候选 4 个 trial 的完整历史逐订单回放。
 - [x] 已完成 4 个 trial 的同窗口公平审计，状态均通过。
+- [x] 已新增 15 tranche quick-fail 分层退出候选配置，并完成 4 个 trial 的完整历史回放。
 - [x] 未把该候选包装成上线主策略；原因是核心收益/回撤/负月仍未超过前端当前最佳。
 
 ## 下一步方向
