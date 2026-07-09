@@ -18,6 +18,7 @@ from ashare_evidence.shortpick_strategy_lab_read_model import (
     CONTROL_CONFIG_ID,
     INITIAL_CASH_CNY,
     MAIN_CONFIG_ID,
+    META_SIGNAL_QUALITY_CONTROL_ID,
     PAPER_STATE_ENV,
     PAPER_STATE_SCHEMA_VERSION,
     THREE_PART_STABILITY_CONTROL_ID,
@@ -37,6 +38,7 @@ MAIN_STRATEGY_LABEL = "主策略：14 tranche 分层退出"
 CONTROL_STRATEGY_LABEL = "对照组：15 tranche 低集中复投"
 CONDITIONAL_AGGRESSIVE_STRATEGY_LABEL = "对照组：条件化攻击模式"
 THREE_PART_STABILITY_STRATEGY_LABEL = "对照组：三段稳定性控制"
+META_SIGNAL_QUALITY_STRATEGY_LABEL = "对照组：元信号质量分层"
 V3_MODEL_SPEC_ID = "selected_exhaustion_date_scaled_v3_top3_20d_v1"
 V3_PLAN_SOURCE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_V3_CANDIDATE_RUN_SOURCE"
 V3_SOURCE_DATABASE_URL_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_V3_SOURCE_DATABASE_URL"
@@ -105,7 +107,13 @@ def _external_plan_source_orders() -> tuple[list[dict[str, Any]], dict[str, Any]
         and row.get("model_spec_id") == V3_MODEL_SPEC_ID
         and row.get("plan_source") in ALLOWED_EXTERNAL_PLAN_SOURCES
         and row.get("strategy_id")
-        in {MAIN_CONFIG_ID, CONTROL_CONFIG_ID, CONDITIONAL_AGGRESSIVE_CONTROL_ID, THREE_PART_STABILITY_CONTROL_ID}
+        in {
+            MAIN_CONFIG_ID,
+            CONTROL_CONFIG_ID,
+            CONDITIONAL_AGGRESSIVE_CONTROL_ID,
+            THREE_PART_STABILITY_CONTROL_ID,
+            META_SIGNAL_QUALITY_CONTROL_ID,
+        }
         and str(row.get("symbol") or "")
         and int(_safe_float(row.get("shares")) or 0) > 0
     ]
@@ -304,12 +312,55 @@ def _three_part_stability_scale(picks: list[dict[str, Any]], config: dict[str, A
     return scale, True, "；".join(reasons) + "。"
 
 
+def _meta_signal_quality_scale(picks: list[dict[str, Any]], config: dict[str, Any]) -> tuple[float, bool, str]:
+    overlay = config.get("meta_signal_quality_overlay")
+    if not isinstance(overlay, dict):
+        return 1.0, False, ""
+    rank_pick = next((pick for pick in picks if int(_safe_float(pick.get("rank")) or 0) == 1), None)
+    if rank_pick is None:
+        return 1.0, False, "未找到 Rank1，元信号质量分层未启用。"
+    values = _pick_feature_values(rank_pick)
+    benchmark_return_20d = _safe_float(values.get("benchmark_return_20d"))
+    industry_return_20d_excess = _safe_float(values.get("industry_return_20d_excess"))
+
+    scale = 1.0
+    reasons: list[str] = []
+    leadership_active = (
+        benchmark_return_20d is not None
+        and industry_return_20d_excess is not None
+        and benchmark_return_20d
+        >= (_safe_float(overlay.get("industry_leadership_benchmark_return_20d_min")) or 0.05)
+        and industry_return_20d_excess
+        >= (_safe_float(overlay.get("industry_leadership_industry_return_20d_excess_min")) or 0.35)
+    )
+    if leadership_active:
+        leadership_scale = _safe_float(overlay.get("industry_leadership_scale")) or 1.0
+        scale *= leadership_scale
+        reasons.append(f"行业领导力段按 {leadership_scale:.2f} 倍加权")
+
+    low_quality_active = (
+        benchmark_return_20d is not None
+        and industry_return_20d_excess is not None
+        and benchmark_return_20d <= (_safe_float(overlay.get("low_quality_benchmark_return_20d_max")) or 0.08)
+        and industry_return_20d_excess <= (_safe_float(overlay.get("low_quality_industry_return_20d_excess_max")) or 0.20)
+    )
+    if low_quality_active:
+        low_quality_scale = _safe_float(overlay.get("low_quality_scale")) or 1.0
+        scale *= low_quality_scale
+        reasons.append(f"低质量信号段按 {low_quality_scale:.2f} 倍降权")
+
+    if not reasons:
+        return 1.0, False, "元信号质量分层未触发，按基础权重生成。"
+    return scale, True, "；".join(reasons) + "。"
+
+
 def _strategy_portfolio_weight_scale(picks: list[dict[str, Any]], config: dict[str, Any]) -> tuple[float, bool, str]:
     conditional_scale, conditional_active, conditional_note = _conditional_aggressive_scale(picks, config)
     stability_scale, stability_active, stability_note = _three_part_stability_scale(picks, config)
-    scale = conditional_scale * stability_scale
-    notes = [note for note in (conditional_note, stability_note) if note]
-    return scale, conditional_active or stability_active, "".join(notes)
+    meta_scale, meta_active, meta_note = _meta_signal_quality_scale(picks, config)
+    scale = conditional_scale * stability_scale * meta_scale
+    notes = [note for note in (conditional_note, stability_note, meta_note) if note]
+    return scale, conditional_active or stability_active or meta_active, "".join(notes)
 
 
 def _load_v3_candidate_run_source() -> tuple[dict[str, Any] | None, dict[str, Any]]:
@@ -503,6 +554,15 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             strategy_id=THREE_PART_STABILITY_CONTROL_ID,
             strategy_label=THREE_PART_STABILITY_STRATEGY_LABEL,
         )
+        meta_orders, meta_diagnostics = _build_strategy_orders(
+            session=session,
+            picks=picks,
+            signal_date=signal_date,
+            tranche_count=MAIN_TRANCHE_COUNT,
+            min_order_notional=1000.0,
+            strategy_id=META_SIGNAL_QUALITY_CONTROL_ID,
+            strategy_label=META_SIGNAL_QUALITY_STRATEGY_LABEL,
+        )
         control_orders, control_diagnostics = _build_strategy_orders(
             session=session,
             picks=picks,
@@ -512,16 +572,22 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             strategy_id=CONTROL_CONFIG_ID,
             strategy_label=CONTROL_STRATEGY_LABEL,
         )
-    return [*main_orders, *stability_orders, *conditional_orders, *control_orders], {
+    return [*main_orders, *meta_orders, *stability_orders, *conditional_orders, *control_orders], {
         **source_status,
         "status": "ready"
-        if main_orders or stability_orders or conditional_orders or control_orders
+        if main_orders or meta_orders or stability_orders or conditional_orders or control_orders
         else "ready_no_executable_orders",
         "model_spec_id": V3_MODEL_SPEC_ID,
         "signal_date": signal_date,
         "selected_top_k": int(_safe_float(trial.get("selected_top_k")) or len(picks)),
         "selected_pick_count": len(picks),
-        "diagnostics": [*main_diagnostics, *stability_diagnostics, *conditional_diagnostics, *control_diagnostics],
+        "diagnostics": [
+            *main_diagnostics,
+            *meta_diagnostics,
+            *stability_diagnostics,
+            *conditional_diagnostics,
+            *control_diagnostics,
+        ],
         "message": "计划单由 v3 selected_top_k candidate-run 按 rolling tranche 订单语义生成。",
     }
 

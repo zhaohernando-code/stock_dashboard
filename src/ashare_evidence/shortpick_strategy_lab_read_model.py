@@ -20,6 +20,10 @@ CONDITIONAL_AGGRESSIVE_CONTROL_ID = (
     "daily_14_tranche_conditional_aggressive_ret20_98_benchmark_nonweak_industry35_dist8_scale14_11_v1"
 )
 THREE_PART_STABILITY_CONTROL_ID = "daily_14_tranche_three_part_stability_control_min1000_weak085_strong160_cap28_v1"
+META_SIGNAL_QUALITY_CONTROL_ID = (
+    "daily_14_tranche_meta_signal_quality_industry_leadership_min1000_"
+    "weak092_strong165_lead135_low090_cap28_v1"
+)
 PAPER_STATE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_PAPER_STATE"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -61,6 +65,11 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
                 "path": "/tmp/stock_dashboard_v3_goal10_three_part_stability_control_formal_replay_20260709.json",
                 "artifact_type": "shortpick_v3_goal10_three_part_stability_control_formal_replay",
             },
+            "meta_signal_quality_control_replay": {
+                "status": "persisted_static_metrics",
+                "path": "/tmp/stock_dashboard_v3_goal10_meta_signal_quality_formal_replay_20260709.json",
+                "artifact_type": "shortpick_v3_goal10_meta_signal_quality_formal_replay",
+            },
         },
         "data_scope": {
             "signal_date_from": "2023-09-07",
@@ -81,7 +90,7 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
         },
         "summary": {
             "selected_config_count": 1,
-            "baseline_config_count": 3,
+            "baseline_config_count": 4,
             "signal_day_count": 509,
             "coverage_status": "static_full_history_ready",
             "initial_cash_cny": INITIAL_CASH_CNY,
@@ -95,6 +104,7 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
         },
         "selected_configs": [_main_config_readout()],
         "baseline_configs": [
+            _meta_signal_quality_control_readout(),
             _three_part_stability_control_readout(),
             _conditional_aggressive_control_readout(),
             _control_config_readout(),
@@ -196,6 +206,7 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
         },
         "selected_configs": [_paper_main_config_readout()],
         "baseline_configs": [
+            _paper_meta_signal_quality_control_readout(),
             _paper_three_part_stability_control_readout(),
             _paper_conditional_aggressive_control_readout(),
             _paper_control_config_readout(),
@@ -203,7 +214,12 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
         "paper_governance": {
             "status": "active_forward_observation",
             "primary_config_id": MAIN_CONFIG_ID,
-            "control_config_ids": [THREE_PART_STABILITY_CONTROL_ID, CONDITIONAL_AGGRESSIVE_CONTROL_ID, CONTROL_CONFIG_ID],
+            "control_config_ids": [
+                META_SIGNAL_QUALITY_CONTROL_ID,
+                THREE_PART_STABILITY_CONTROL_ID,
+                CONDITIONAL_AGGRESSIVE_CONTROL_ID,
+                CONTROL_CONFIG_ID,
+            ],
             "daily_sync_policy": "same_scheduled_refresh_window_as_shortpick_v1",
         },
         "paper_display": _paper_display(
@@ -430,6 +446,85 @@ def _three_part_stability_control_readout() -> dict[str, Any]:
     }
 
 
+def _meta_signal_quality_control_readout() -> dict[str, Any]:
+    return {
+        "config_id": META_SIGNAL_QUALITY_CONTROL_ID,
+        "label": "候选对照：元信号质量分层",
+        "role": "meta_signal_quality_control_candidate",
+        "selection_rank": 2,
+        "gate_status": "candidate_control",
+        "reason": (
+            "在三段稳定性控制基础上，引入入场前元信号质量分层：强行业领导力且基准强时加权，"
+            "行业领导力弱且基准不强时轻降权；在不劣化收益、回撤、最差月、跳过率和集中度的前提下，"
+            "负月份从 4 个降至 3 个。"
+        ),
+        "summary": {
+            "total_return": 3.2283272599999995,
+            "annualized_return": 0.6732701332016364,
+            "max_drawdown": -0.07279871301766871,
+            "negative_month_count": 3,
+            "worst_monthly_return": -0.015466628621165768,
+            "skipped_order_rate": 0.2302839116719243,
+            "skipped_signal_rate": 0.21611001964636542,
+            "buy_order_count": 732,
+            "sell_order_count": 712,
+            "final_nav_cny": 845665.4519999998,
+            "mean_invested_ratio": 0.6415002584714182,
+            "p95_invested_ratio": 0.9529346262868691,
+            "max_single_symbol_exposure_pct": 0.2521478386902156,
+            "max_position_count": 36,
+            "turnover": 87.19843104,
+        },
+        "selection_summary": {
+            "tranche_count": 14,
+            "budget_mode": "current_nav_fraction",
+            "min_order_notional_cny": 1000,
+            "max_single_symbol_cost_basis_pct": 0.28,
+            "exit_policy": "rank3_pullback_rank1_quick_fail_guard",
+            "three_part_stability_overlay": {
+                "weak_scale": 0.92,
+                "weak_rule": "Rank1 benchmark_return_20d < -0.02",
+                "strong_scale": 1.65,
+                "strong_rule": (
+                    "Rank1 benchmark_return_20d >= 0, return_20d_percentile >= 0.98, "
+                    "industry_return_20d_excess <= 0.50, distance_from_20d_high >= -0.08"
+                ),
+                "weak_signal_day_count": 137,
+                "strong_signal_day_count": 41,
+            },
+            "meta_signal_quality_overlay": {
+                "industry_leadership_scale": 1.35,
+                "industry_leadership_rule": (
+                    "Rank1 industry_return_20d_excess >= 0.35 and benchmark_return_20d >= 0.05"
+                ),
+                "low_quality_scale": 0.90,
+                "low_quality_rule": "Rank1 industry_return_20d_excess <= 0.20 and benchmark_return_20d <= 0.08",
+                "industry_leadership_signal_day_count": 14,
+                "low_quality_signal_day_count": 339,
+            },
+        },
+        "goal10_improvements": {
+            "total_return_rel": 0.013059115444748137,
+            "annualized_return_rel": 0.00883853503163401,
+            "drawdown_reduction_rel": 0.03754950921202083,
+            "negative_month_delta": 1,
+            "worst_monthly_return_delta": 0.002256010144964904,
+            "skip_order_reduction_rel": 0.0045454545454545175,
+            "skip_signal_reduction_rel": 0.02654867256637173,
+            "exposure_reduction_rel": 0.03396316324646279,
+        },
+        "reason_counts": {
+            "below_min_order_notional": 72,
+            "insufficient_cash": 17,
+            "missing_entry_bar": 3,
+            "missing_entry_bar_near_signal": 18,
+            "price_too_high_for_slot": 94,
+            "single_symbol_concentration_cap": 15,
+        },
+        "decision_samples": [],
+    }
+
+
 def _paper_main_config_readout() -> dict[str, Any]:
     readout = _main_config_readout()
     return {
@@ -492,6 +587,25 @@ def _paper_three_part_stability_control_readout() -> dict[str, Any]:
     return {
         **readout,
         "reason": "三段稳定性控制同样只做从今日开始的真实前向观察；历史回放收益只在历史页展示。",
+        "summary": {
+            "initial_cash_cny": INITIAL_CASH_CNY,
+            "current_nav_cny": INITIAL_CASH_CNY,
+            "paper_total_return": None,
+            "max_drawdown": None,
+            "record_count": 0,
+            "planned_order_count": None,
+            "forward_status": "awaiting_first_forward_fill",
+        },
+        "reason_counts": {},
+        "decision_samples": [],
+    }
+
+
+def _paper_meta_signal_quality_control_readout() -> dict[str, Any]:
+    readout = _meta_signal_quality_control_readout()
+    return {
+        **readout,
+        "reason": "元信号质量分层候选同样只做从今日开始的真实前向观察；历史回放收益只在历史页展示。",
         "summary": {
             "initial_cash_cny": INITIAL_CASH_CNY,
             "current_nav_cny": INITIAL_CASH_CNY,
