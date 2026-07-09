@@ -66,6 +66,8 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("从今日起真实前向", component_source)
         self.assertIn("最新来源信号日", component_source)
         self.assertIn("数据缺口", component_source)
+        self.assertIn("...(tracking?.selected_configs ?? [])", component_source)
+        self.assertIn("...(tracking?.baseline_configs ?? [])", component_source)
 
         paper_tab_source = component_source[
             component_source.index("function ShortpickStrategyLabPaperTab"):

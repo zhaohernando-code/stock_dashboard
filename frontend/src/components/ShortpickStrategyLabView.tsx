@@ -429,7 +429,10 @@ function ShortpickStrategyLabPaperTab({
   const [strategyFilter, setStrategyFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
   const [exitFilter, setExitFilter] = useState("");
-  const strategyRows = tracking?.selected_configs ?? [];
+  const strategyRows = [
+    ...(tracking?.selected_configs ?? []),
+    ...(tracking?.baseline_configs ?? []),
+  ];
   const strategyOptions = useMemo(() => uniquePaperOptions(tableRows, "strategy_text"), [tableRows]);
   const actionOptions = useMemo(() => uniquePaperOptions(tableRows, "action_text"), [tableRows]);
   const exitOptions = useMemo(() => uniquePaperOptions(tableRows, "exit_state_text"), [tableRows]);
