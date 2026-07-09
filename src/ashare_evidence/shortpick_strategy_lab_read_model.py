@@ -19,6 +19,7 @@ CONTROL_CONFIG_ID = "daily_15_tranche_rank_weighted_compound_min1000_v1"
 CONDITIONAL_AGGRESSIVE_CONTROL_ID = (
     "daily_14_tranche_conditional_aggressive_ret20_98_benchmark_nonweak_industry35_dist8_scale14_11_v1"
 )
+THREE_PART_STABILITY_CONTROL_ID = "daily_14_tranche_three_part_stability_control_min1000_weak085_strong160_cap28_v1"
 PAPER_STATE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_PAPER_STATE"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -55,6 +56,11 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
                 "path": "/tmp/stock_dashboard_v3_conditional_aggressive_control_formal_replay_20260709.json",
                 "artifact_type": "shortpick_v3_rolling_tranche_account_replay",
             },
+            "three_part_stability_control_replay": {
+                "status": "persisted_static_metrics",
+                "path": "/tmp/stock_dashboard_v3_goal10_three_part_stability_control_formal_replay_20260709.json",
+                "artifact_type": "shortpick_v3_goal10_three_part_stability_control_formal_replay",
+            },
         },
         "data_scope": {
             "signal_date_from": "2023-09-07",
@@ -75,7 +81,7 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
         },
         "summary": {
             "selected_config_count": 1,
-            "baseline_config_count": 2,
+            "baseline_config_count": 3,
             "signal_day_count": 509,
             "coverage_status": "static_full_history_ready",
             "initial_cash_cny": INITIAL_CASH_CNY,
@@ -88,7 +94,11 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
             "main_final_nav_cny": 823833.7129999999,
         },
         "selected_configs": [_main_config_readout()],
-        "baseline_configs": [_conditional_aggressive_control_readout(), _control_config_readout()],
+        "baseline_configs": [
+            _three_part_stability_control_readout(),
+            _conditional_aggressive_control_readout(),
+            _control_config_readout(),
+        ],
         "holdout_configs": [],
         "rejected_configs": [],
         "metric_groups": _historical_metric_groups(),
@@ -185,11 +195,15 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             "initial_record_count": 0,
         },
         "selected_configs": [_paper_main_config_readout()],
-        "baseline_configs": [_paper_conditional_aggressive_control_readout(), _paper_control_config_readout()],
+        "baseline_configs": [
+            _paper_three_part_stability_control_readout(),
+            _paper_conditional_aggressive_control_readout(),
+            _paper_control_config_readout(),
+        ],
         "paper_governance": {
             "status": "active_forward_observation",
             "primary_config_id": MAIN_CONFIG_ID,
-            "control_config_ids": [CONDITIONAL_AGGRESSIVE_CONTROL_ID, CONTROL_CONFIG_ID],
+            "control_config_ids": [THREE_PART_STABILITY_CONTROL_ID, CONDITIONAL_AGGRESSIVE_CONTROL_ID, CONTROL_CONFIG_ID],
             "daily_sync_policy": "same_scheduled_refresh_window_as_shortpick_v1",
         },
         "paper_display": _paper_display(
@@ -350,6 +364,72 @@ def _conditional_aggressive_control_readout() -> dict[str, Any]:
     }
 
 
+def _three_part_stability_control_readout() -> dict[str, Any]:
+    return {
+        "config_id": THREE_PART_STABILITY_CONTROL_ID,
+        "label": "候选对照：三段稳定性控制",
+        "role": "execution_stability_control_candidate",
+        "selection_rank": 2,
+        "gate_status": "candidate_control",
+        "reason": (
+            "在 1000 元最小下单额基础上，弱基准日降权、强 Rank1 信号日加权，并把单票成本上限收紧到 28%；"
+            "在不劣化收益、回撤、负月份、跳过率和集中度的前提下，订单跳过率改善超过 10%。"
+        ),
+        "summary": {
+            "total_return": 3.1867116250000036,
+            "annualized_return": 0.6673715464095795,
+            "max_drawdown": -0.07563891723725635,
+            "negative_month_count": 4,
+            "worst_monthly_return": -0.01772263876613067,
+            "skipped_order_rate": 0.231335436382755,
+            "skipped_signal_rate": 0.2220039292730845,
+            "buy_order_count": 731,
+            "sell_order_count": 711,
+            "final_nav_cny": 837342.3250000007,
+            "mean_invested_ratio": 0.6546080867280545,
+            "p95_invested_ratio": 0.965997547364644,
+            "max_single_symbol_exposure_pct": 0.2610126540697801,
+            "max_position_count": 35,
+            "turnover": 87.70856572500001,
+        },
+        "selection_summary": {
+            "tranche_count": 14,
+            "budget_mode": "current_nav_fraction",
+            "min_order_notional_cny": 1000,
+            "max_single_symbol_cost_basis_pct": 0.28,
+            "exit_policy": "rank3_pullback_rank1_quick_fail_guard",
+            "three_part_stability_overlay": {
+                "weak_scale": 0.85,
+                "weak_rule": "Rank1 benchmark_return_20d < -0.02",
+                "strong_scale": 1.60,
+                "strong_rule": (
+                    "Rank1 benchmark_return_20d >= 0, return_20d_percentile >= 0.98, "
+                    "industry_return_20d_excess <= 0.50, distance_from_20d_high >= -0.08"
+                ),
+                "weak_signal_day_count": 137,
+                "strong_signal_day_count": 41,
+            },
+        },
+        "goal10_improvements": {
+            "total_return_rel": 0.021654187195235597,
+            "annualized_return_rel": 0.014678512148711631,
+            "drawdown_reduction_rel": 0.02516246887095624,
+            "skip_order_reduction_rel": 0.3432835820895522,
+            "skip_signal_reduction_rel": 0.09599999999999996,
+            "exposure_reduction_rel": 0.024710223544245173,
+        },
+        "reason_counts": {
+            "below_min_order_notional": 71,
+            "insufficient_cash": 20,
+            "missing_entry_bar": 3,
+            "missing_entry_bar_near_signal": 18,
+            "price_too_high_for_slot": 93,
+            "single_symbol_concentration_cap": 15,
+        },
+        "decision_samples": [],
+    }
+
+
 def _paper_main_config_readout() -> dict[str, Any]:
     readout = _main_config_readout()
     return {
@@ -393,6 +473,25 @@ def _paper_conditional_aggressive_control_readout() -> dict[str, Any]:
     return {
         **readout,
         "reason": "条件化攻击对照组同样只做从今日开始的真实前向观察；历史回放收益只在历史页展示。",
+        "summary": {
+            "initial_cash_cny": INITIAL_CASH_CNY,
+            "current_nav_cny": INITIAL_CASH_CNY,
+            "paper_total_return": None,
+            "max_drawdown": None,
+            "record_count": 0,
+            "planned_order_count": None,
+            "forward_status": "awaiting_first_forward_fill",
+        },
+        "reason_counts": {},
+        "decision_samples": [],
+    }
+
+
+def _paper_three_part_stability_control_readout() -> dict[str, Any]:
+    readout = _three_part_stability_control_readout()
+    return {
+        **readout,
+        "reason": "三段稳定性控制同样只做从今日开始的真实前向观察；历史回放收益只在历史页展示。",
         "summary": {
             "initial_cash_cny": INITIAL_CASH_CNY,
             "current_nav_cny": INITIAL_CASH_CNY,
@@ -472,7 +571,7 @@ def _paper_display(
                 {"label": "卖出规则", "value": "基础为 20 日退出；Rank1 快速冲高失败和 Rank3 入场回撤后期亏损会提前退出。"},
                 {
                     "label": "对照组",
-                    "value": "条件化攻击模式和 15 tranche 低集中度复投，分别观察更高置信信号加仓与更分散资金路径。",
+                    "value": "三段稳定性控制、条件化攻击模式和 15 tranche 低集中度复投，分别观察执行稳定、更高置信信号加仓与更分散资金路径。",
                 },
             ],
         },
@@ -622,8 +721,9 @@ def _planned_orders_from_state(state: dict[str, Any] | None) -> list[dict[str, A
     normalized = [row for row in rows if isinstance(row, dict)]
     strategy_order = {
         MAIN_CONFIG_ID: 0,
-        CONDITIONAL_AGGRESSIVE_CONTROL_ID: 1,
-        CONTROL_CONFIG_ID: 2,
+        THREE_PART_STABILITY_CONTROL_ID: 1,
+        CONDITIONAL_AGGRESSIVE_CONTROL_ID: 2,
+        CONTROL_CONFIG_ID: 3,
     }
     return sorted(
         normalized,

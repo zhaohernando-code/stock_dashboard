@@ -16,6 +16,7 @@ from ashare_evidence.shortpick_strategy_lab_read_model import (
     INITIAL_CASH_CNY,
     MAIN_CONFIG_ID,
     PAPER_STATE_SCHEMA_VERSION,
+    THREE_PART_STABILITY_CONTROL_ID,
     build_shortpick_strategy_lab_historical_replay_read_model,
     build_shortpick_strategy_lab_paper_tracking_read_model,
 )
@@ -31,11 +32,13 @@ def test_historical_replay_is_static_full_history_metrics() -> None:
     assert payload["summary"]["main_total_return"] == 3.119168564999999
     assert payload["summary"]["main_negative_month_count"] == 4
     assert payload["selected_configs"][0]["config_id"] == MAIN_CONFIG_ID
-    assert payload["summary"]["baseline_config_count"] == 2
-    assert payload["baseline_configs"][0]["config_id"] == CONDITIONAL_AGGRESSIVE_CONTROL_ID
+    assert payload["summary"]["baseline_config_count"] == 3
+    assert payload["baseline_configs"][0]["config_id"] == THREE_PART_STABILITY_CONTROL_ID
+    assert payload["baseline_configs"][0]["goal10_improvements"]["skip_order_reduction_rel"] > 0.10
     assert payload["baseline_configs"][0]["summary"]["total_return"] > payload["summary"]["main_total_return"]
     assert payload["baseline_configs"][0]["summary"]["max_drawdown"] > payload["summary"]["main_max_drawdown"]
-    assert payload["baseline_configs"][1]["config_id"] == CONTROL_CONFIG_ID
+    assert payload["baseline_configs"][1]["config_id"] == CONDITIONAL_AGGRESSIVE_CONTROL_ID
+    assert payload["baseline_configs"][2]["config_id"] == CONTROL_CONFIG_ID
     assert payload["metric_groups"]
     assert payload["leakage_audit"]["read_model_policy"] == "static_metrics_only_no_market_scan_no_dynamic_replay"
 
@@ -81,10 +84,12 @@ def test_paper_tracking_renders_mock_next_order_without_forward_records(tmp_path
     assert payload["selected_configs"][0]["summary"]["paper_total_return"] is None
     assert payload["selected_configs"][0]["summary"]["current_nav_cny"] == INITIAL_CASH_CNY
     assert [row["config_id"] for row in payload["baseline_configs"]] == [
+        THREE_PART_STABILITY_CONTROL_ID,
         CONDITIONAL_AGGRESSIVE_CONTROL_ID,
         CONTROL_CONFIG_ID,
     ]
     assert payload["paper_governance"]["control_config_ids"] == [
+        THREE_PART_STABILITY_CONTROL_ID,
         CONDITIONAL_AGGRESSIVE_CONTROL_ID,
         CONTROL_CONFIG_ID,
     ]
@@ -435,13 +440,16 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
     orders = payload["planned_orders"]
     assert [order["strategy_id"] for order in orders] == [
         MAIN_CONFIG_ID,
+        THREE_PART_STABILITY_CONTROL_ID,
         CONDITIONAL_AGGRESSIVE_CONTROL_ID,
         CONTROL_CONFIG_ID,
     ]
-    assert [order["symbol"] for order in orders] == ["600030.SH", "600030.SH", "600030.SH"]
-    assert [order["shares"] for order in orders] == [100, 200, 100]
+    assert [order["symbol"] for order in orders] == ["600030.SH", "600030.SH", "600030.SH", "600030.SH"]
+    assert [order["shares"] for order in orders] == [100, 200, 200, 100]
     assert orders[1]["conditional_aggressive_overlay_active"] is True
-    assert orders[1]["conditional_aggressive_weight_scale"] == 14 / 11
+    assert orders[1]["conditional_aggressive_weight_scale"] == 1.6
+    assert orders[2]["conditional_aggressive_overlay_active"] is True
+    assert orders[2]["conditional_aggressive_weight_scale"] == 14 / 11
     assert all(order["plan_source"] == "selected_top_k_candidate_run_rolling_tranche_engine" for order in orders)
     contract = build_shortpick_v3_rolling_tranche_execution_contract()
     main_config = next(config for config in contract["candidate_configurations"] if config["config_id"] == MAIN_CONFIG_ID)
