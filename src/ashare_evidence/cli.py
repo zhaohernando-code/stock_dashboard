@@ -164,6 +164,11 @@ from ashare_evidence.shortpick_replay import (
 )
 from ashare_evidence.shortpick_strategy_backtest_runner import run_shortpick_historical_backtest_requests
 from ashare_evidence.shortpick_strategy_governance import build_shortpick_credible_control_comparison_line_plan
+from ashare_evidence.shortpick_strategy_lab_comparison_contract import (
+    build_shortpick_strategy_lab_fair_comparison_readiness,
+    load_candidate_replay_artifact,
+    write_shortpick_strategy_lab_fair_comparison_readiness,
+)
 from ashare_evidence.shortpick_strategy_replay_runner import run_shortpick_retrospective_forward_replay_requests
 from ashare_evidence.shortpick_strategy_retirement_writer import (
     load_shortpick_strategy_retirement_inputs,
@@ -392,6 +397,7 @@ NO_DB_COMMANDS = {
     "research-top-candidate-objective-calibration-proxy",
     "research-artifact-retention-audit",
     "research-model-preflight-compact",
+    "shortpick-strategy-lab-comparison-readiness",
     "shortpick-model-feature-diagnostics-run",
     "shortpick-governance-credible-control-plan",
     "shortpick-v2-h10-artifact-validate",
@@ -866,6 +872,13 @@ def build_parser() -> argparse.ArgumentParser:
     model_feature_rebuild.add_argument("--validation-run-id", required=True)
     model_feature_rebuild.add_argument("--input-snapshot-artifact", required=True)
     model_feature_rebuild.add_argument("--artifact-root", required=True)
+
+    shortpick_strategy_lab_comparison = subparsers.add_parser(
+        "shortpick-strategy-lab-comparison-readiness",
+        help="Audit whether a Short Pick v3 candidate replay is comparable with the frontend full-history baselines.",
+    )
+    shortpick_strategy_lab_comparison.add_argument("--candidate-replay-artifact", default=None)
+    shortpick_strategy_lab_comparison.add_argument("--output-json", default=None)
 
     retention_audit = subparsers.add_parser(
         "research-artifact-retention-audit",
@@ -2479,6 +2492,16 @@ def main(argv: list[str] | None = None) -> int:
             )
         _print_json(payload)
         return 0
+
+    if args.command == "shortpick-strategy-lab-comparison-readiness":
+        candidate_replay_artifact = load_candidate_replay_artifact(args.candidate_replay_artifact)
+        payload = build_shortpick_strategy_lab_fair_comparison_readiness(
+            candidate_replay_artifact=candidate_replay_artifact,
+        )
+        if args.output_json:
+            write_shortpick_strategy_lab_fair_comparison_readiness(payload, output_path=args.output_json)
+        _print_json(payload)
+        return 0 if str(payload.get("status") or "").startswith("passed") else 1
 
     if args.command == "research-artifact-retention-audit":
         payload = audit_research_artifact_retention(
