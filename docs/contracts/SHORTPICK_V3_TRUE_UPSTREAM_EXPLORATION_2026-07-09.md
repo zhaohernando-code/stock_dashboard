@@ -479,3 +479,84 @@ trial-003 原最佳配置为
 2. 继续验证 `强基准 + Rank1 已回撤 + 5日强势 + 高换手` 的窄门控，但必须在完整历史逐订单回放上验证，不能再用局部窗口代理结论。
 3. 继续测试“Rank1 风险触发后重排给 Rank2/Rank3”的上游方案，目标是保留收益并消除回撤副作用。
 4. 继续做上游学习式重排时，必须把“20 万账户一手可买性/价格过高/最小下单额”作为候选生成或排序的一等约束，不能只看 label 代理收益。
+
+## 自驱动上游探索 Goal 结果
+
+本轮 goal 的验收条件：
+
+- 比较口径必须是 `2023-09-07 ~ 2026-06-26` 完整历史逐订单账户回放。
+- 基线使用当前 capacity-cluster trial-003 + `15 tranche + min1000 + Rank1 quick-fail + Rank3 pullback`
+  候选：总收益 `305.14%`，年化 `64.79%`，最大回撤 `-7.14%`，负收益月份 `4`，
+  订单跳过率 `19.81%`，信号跳过率 `19.37%`，最大单票暴露 `25.32%`。
+- 候选必须不劣化核心指标，并且至少一个关键指标改善 `>= 10%`，或负收益月份减少 1 个。
+
+### 探索方向与结论
+
+| 方向 | 最好结果 | 是否通过 | 结论 |
+|---|---|---|---|
+| Rank1 强势末端重排 | 总收益 `307.37%`，回撤 `-7.10%`，跳过率小幅改善 | 否 | 严格不劣化，但收益只提升约 `0.73%`，没有达到 10% |
+| 新注册 `shallow_drawdown_lowvol` 上游 spec | 最好总收益约 `266.49%`，最大回撤约 `-8.21%`，负收益月份 `5` | 否 | 没有命中关键坏单，且收益/回撤/负月份全面劣化 |
+| “伪板块领导力”强势末端门控 | 严格不劣化最好为总收益 `311.18%`，跳过率约 `19.15%` | 否 | 收益提升约 `1.98%`，跳过率改善约 `3.33%`，仍未达到 10% 或减少负月 |
+| PIT 同日候选替换 | 最高小幅增收，但负月份增至 `6`、跳过率和回撤劣化 | 否 | 替换看似更健康的候选会破坏原模型捕捉赢家的结构 |
+| 20 万账户一手可买性替换 | 订单跳过率最多改善约 `25.87%` | 否 | 跳过率突破成立，但总收益下降约 `2.13%`，回撤和单票暴露劣化 |
+
+### 可保留信号
+
+本轮最有价值但未通过晋级的信号是：
+
+`强势末端 + 行业超额不足 + Rank2 晋级`
+
+触发条件：
+
+- Rank1 `return_5d_percentile >= 0.94`
+- Rank1 `return_20d_percentile >= 0.94`
+- Rank1 `amount_10d_vs_20d_percentile >= 0.94`
+- Rank1 `distance_from_20d_high <= -0.025`
+- Rank1 `industry_return_20d_excess <= 0.22`
+- `-0.005 <= benchmark_return_20d <= 0.06`
+- Rank1 `avg_amount_20d >= 50,000,000`
+- 动作：Rank1 置零并把 Rank2 提升为 Rank1
+
+完整历史回放结果：
+
+| 指标 | 基线 | 该信号 |
+|---|---:|---:|
+| 总收益 | `305.14%` | `311.18%` |
+| 年化收益 | `64.79%` | `65.67%` |
+| 最大回撤 | `-7.14%` | `-7.14%` |
+| 负收益月份 | `4` | `4` |
+| 最差月收益 | `-1.73%` | `-1.73%` |
+| 订单跳过率 | `19.81%` | `19.15%` |
+| 信号跳过率 | `19.37%` | `18.98%` |
+| 最大单票暴露 | `25.32%` | `25.32%` |
+
+解释：
+
+- 这是本轮唯一“严格不劣化”的较清晰上游信号。
+- 它仍不能晋级，因为没有达到 `>= 10%` 的明确突破，也没有把负收益月份从 `4` 降到 `3`。
+- 它可以作为下一轮搜索的局部特征，而不是直接进入前端对照组。
+
+### 运行时产物治理
+
+保留的小型摘要产物：
+
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/full_upstream_rebuild_logs/self_driven_upstream_rank1_tail_focused_scan_20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/full_upstream_rebuild_logs/self_driven_upstream_shallow_drawdown_lowvol_account_scan_20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/full_upstream_rebuild_logs/self_driven_upstream_pseudo_leadership_tail_scan_20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/full_upstream_rebuild_logs/self_driven_upstream_pit_replacement_scan_20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/full_upstream_rebuild_logs/self_driven_upstream_affordable_replacement_scan_20260709.json`
+
+已清理：
+
+- 失败的 `shallow_drawdown_lowvol` 完整 candidate-run 源，约 `31MB`，不保留以避免数据膨胀。
+- 第一次误连 worktree 小数据库产生的异常扫描日志。
+
+### 本轮 Goal 结论
+
+本轮没有找到满足“核心指标不劣化 + 10% 明显突破/负月减少”的可晋级上游策略。
+但完成了有效的搜索空间排除：
+
+1. 单纯 Rank1 强势末端重排只能带来小幅收益改善，不能解决负收益月份。
+2. 更换成 `shallow_drawdown_lowvol` 类上游 spec 会显著丢失赢家，不能继续。
+3. PIT 同日候选替换和一手可买性替换虽然方向合理，但会把低跳过率换成收益/回撤劣化；
+   后续如果继续做，必须把“替代候选未来收益结构”转化成不使用 forward label 的稳定特征，而不是简单替换。
