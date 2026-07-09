@@ -13,8 +13,8 @@
 - 初始资金：`200,000 CNY`
 - 约束：20 万资金池、复投、100 股整手、逐订单账户回放
 
-而新一轮真上游探索虽然已经补齐完整候选池，但正式 walk-forward candidate-run 受训练窗口和
-forward label 可用性限制，当前账户回放窗口是：
+而新一轮真上游探索最初虽然已经补齐完整候选池，但正式 walk-forward candidate-run 受训练窗口和
+forward label 可用性限制，账户回放窗口曾只有：
 
 - 窗口：`2025-07-03 ~ 2026-06-05`
 - 信号日：`176`
@@ -22,15 +22,23 @@ forward label 可用性限制，当前账户回放窗口是：
 所以“100% 左右收益”和前端“300%+ 收益”不是同一比较口径。前者只能说明较短可评估窗口内的方向，
 不能作为替换前端 6 条完整历史策略的证据。
 
+2026-07-09 已补充 `shortpick-model-deterministic-full-history-select`，对确定性上游候选从 PIT
+feature matrix 直接生成完整历史 selected TopK 源，不再被 forward label 或 walk-forward split 截短。
+这类候选随后必须再跑 `shortpick-v3-rolling-account-replay-build` 生成逐订单账户回放。
+
 ## 强制规则
 
 任何新模型、上游候选、卖出策略或资金分配策略，要声称“优于当前前端 v3 策略组”，必须同时满足：
 
-1. `signal_date_from`、`signal_date_to`、`signal_day_count` 与前端完整历史基准完全一致；或给前端 6 条基准补同一候选窗口的逐订单回放。
+1. `signal_date_from`、`signal_date_to` 与前端完整历史基准完全一致；或给前端 6 条基准补同一候选窗口的逐订单回放。
 2. 使用同一账户合同：20 万初始资金、当前 NAV 复投、100 股整手、逐订单成交、同一费用和同一入场/退出可执行性约束。
 3. 至少输出以下指标：总收益、年化收益、最大回撤、负收益月份、最差月收益、订单跳过率、信号跳过率、买入订单数、最终净值、平均投入比例、最大单票暴露。
 4. 总收益不能跨窗口比较；年化收益可以作为探索线索，但不能单独作为上线或替换证据。
 5. CLI 审计状态不是 `passed_same_window_metrics_ready` 时，只能标记为方向性研究，不能进入前端策略组。
+
+说明：`signal_day_count`、`selected_pick_count`、`market_symbol_count` 是诊断指标，不再作为同窗口
+阻断项。不同上游模型天然可能在同一日期范围内选择更多/更少可交易日，这应通过跳过率、订单数、
+收益、回撤等指标评价，而不是阻止比较。
 
 ## 可执行门禁
 
@@ -52,6 +60,9 @@ PYTHONPATH=src python3 -m ashare_evidence.cli shortpick-strategy-lab-comparison-
 - [x] 已新增 CLI：`shortpick-strategy-lab-comparison-readiness`。
 - [x] 已新增测试覆盖短窗口阻塞和同窗口通过。
 - [x] 已明确当前 `2025-07-03 ~ 2026-06-05` 的真上游结果不能直接与前端 `2023-09-07 ~ 2026-06-26` 的 300%+ 完整历史收益比较。
+- [x] 已修正门禁：同窗口强制项为起止日期；信号日数为诊断项。
+- [x] 已支持从逐订单回放 `leaderboard + results[].summary` 读取候选完整指标。
+- [x] 已用完整历史候选回放产物验证门禁可通过。
 
 ## 后续探索的退出路径
 
@@ -61,3 +72,10 @@ PYTHONPATH=src python3 -m ashare_evidence.cli shortpick-strategy-lab-comparison-
 2. 对前端 6 条已上线策略补 `2025-07-03 ~ 2026-06-05` 同窗口逐订单账本，再在短窗口内比较。
 
 没有完成其中之一前，任何“收益 100% vs 300%”的结论都应视为比较口径错误。
+
+截至 2026-07-09，本轮 capacity-cluster 候选已完成第一条路径：
+
+- 完整候选源：`walk-forward-model-candidate-run-84adc785808483d3.json`
+- 完整历史逐订单回放：`shortpick-v3-full-history-upstream-capacity-cluster-trial-000/001/002/003-account-replay-20260709.json`
+- 同窗口审计：`shortpick-v3-full-history-upstream-capacity-cluster-trial-000/001/002/003-fair-comparison-readiness-20260709.json`
+- 审计状态：4 个 trial 均为 `passed_same_window_metrics_ready`

@@ -3209,86 +3209,105 @@ def _top_k_picks_by_date(
         if not active_rows:
             continue
         ordered = sorted(active_rows, key=lambda row: _safe_float(row.get("score")), reverse=True)
-        selected_rows = _select_top_k_rows(
-            ordered,
-            top_k=top_k,
-            selection_policy=selection_policy,
-            params=params,
+        picks.extend(
+            _top_k_picks_from_ordered_rows(
+                as_of_date=as_of_date,
+                ordered=ordered,
+                top_k=top_k,
+                selection_policy=selection_policy,
+                params=params,
+            )
         )
-        exposure_context = _selected_exposure_context(
-            selected_rows,
-            ordered_rows=ordered,
-            selection_policy=selection_policy,
-            params=params,
+    return picks
+
+
+def _top_k_picks_from_ordered_rows(
+    *,
+    as_of_date: str,
+    ordered: list[dict[str, Any]],
+    top_k: int,
+    selection_policy: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    selected_rows = _select_top_k_rows(
+        ordered,
+        top_k=top_k,
+        selection_policy=selection_policy,
+        params=params,
+    )
+    exposure_context = _selected_exposure_context(
+        selected_rows,
+        ordered_rows=ordered,
+        selection_policy=selection_policy,
+        params=params,
+    )
+    rank_multipliers = exposure_context["rank_multipliers"]
+    signal_scale = exposure_context["signal_scale"]
+    signal_scale_reasons = exposure_context["signal_scale_reasons"]
+    rank_position_scales = exposure_context["rank_position_scales"]
+    date_position_scale = exposure_context["date_position_scale"]
+    date_exposure_scale_reasons = exposure_context["date_exposure_scale_reasons"]
+    picks: list[dict[str, Any]] = []
+    for rank, picked in enumerate(selected_rows, start=1):
+        rank_multiplier = rank_multipliers[rank - 1] if rank - 1 < len(rank_multipliers) else 1.0
+        rank_position_scale, rank_position_scale_reasons = (
+            rank_position_scales[rank - 1] if rank - 1 < len(rank_position_scales) else (1.0, [])
         )
-        rank_multipliers = exposure_context["rank_multipliers"]
-        signal_scale = exposure_context["signal_scale"]
-        signal_scale_reasons = exposure_context["signal_scale_reasons"]
-        rank_position_scales = exposure_context["rank_position_scales"]
-        date_position_scale = exposure_context["date_position_scale"]
-        date_exposure_scale_reasons = exposure_context["date_exposure_scale_reasons"]
-        for rank, picked in enumerate(selected_rows, start=1):
-            rank_multiplier = rank_multipliers[rank - 1] if rank - 1 < len(rank_multipliers) else 1.0
-            rank_position_scale, rank_position_scale_reasons = (
-                rank_position_scales[rank - 1] if rank - 1 < len(rank_position_scales) else (1.0, [])
-            )
-            rank_feature_values = (
-                picked.get("rank_weight_feature_values") if isinstance(picked.get("rank_weight_feature_values"), dict) else {}
-            )
-            picks.append(
-                {
-                    "symbol": picked.get("symbol"),
-                    "stock_name": picked.get("stock_name"),
-                    "board": picked.get("board"),
-                    "industry_code": picked.get("industry_code"),
-                    "industry_name": picked.get("industry_name"),
-                    "as_of_date": as_of_date,
-                    "month": as_of_date[:7],
-                    "rank": rank,
-                    "net_excess_return": _safe_float(picked.get("target_label")),
-                    "weighted_net_excess_return": _safe_float(picked.get("target_label"))
-                    * _safe_float(picked.get("portfolio_weight"), 1.0)
-                    * rank_multiplier
-                    * signal_scale
-                    * rank_position_scale
-                    * date_position_scale,
-                    "portfolio_weight": _safe_float(picked.get("portfolio_weight"), 1.0)
-                    * signal_scale
-                    * rank_position_scale
-                    * date_position_scale,
-                    "rank_weight_multiplier": rank_multiplier,
-                    "rank_position_scale": rank_position_scale,
-                    "rank_position_scale_reasons": rank_position_scale_reasons,
-                    "slot_replacement_source_symbol": picked.get("slot_replacement_source_symbol"),
-                    "slot_replacement_source_score": picked.get("slot_replacement_source_score"),
-                    "slot_replacement_reason": picked.get("slot_replacement_reason"),
-                    "signal_position_scale": signal_scale,
-                    "signal_position_scale_reasons": signal_scale_reasons,
-                    "base_gross_exposure": exposure_context["base_gross_exposure"],
-                    "date_exposure_scale": exposure_context["date_exposure_scale"],
-                    "date_exposure_scale_reasons": date_exposure_scale_reasons,
-                    "date_exposure_floor": exposure_context["date_exposure_floor"],
-                    "date_position_scale": exposure_context["date_position_scale"],
-                    "date_position_scale_reasons": exposure_context["date_position_scale_reasons"],
-                    "avg_amount_20d": _safe_float(rank_feature_values.get("avg_amount_20d")),
-                    "amount_10d_vs_20d_percentile": _safe_float(
-                        rank_feature_values.get("amount_10d_vs_20d_percentile")
-                    ),
-                    "amount_vs_20d_avg_percentile": _safe_float(
-                        rank_feature_values.get("amount_vs_20d_avg_percentile")
-                    ),
-                    "benchmark_return_20d": _safe_float(rank_feature_values.get("benchmark_return_20d")),
-                    "distance_from_20d_high": _safe_float(rank_feature_values.get("distance_from_20d_high")),
-                    "industry_return_20d_excess": _safe_float(
-                        rank_feature_values.get("industry_return_20d_excess")
-                    ),
-                    "return_20d_percentile": _safe_float(rank_feature_values.get("return_20d_percentile")),
-                    "return_5d_percentile": _safe_float(rank_feature_values.get("return_5d_percentile")),
-                    "turnover_rate_percentile": _safe_float(rank_feature_values.get("turnover_rate_percentile")),
-                    "target_horizon_days": int(_safe_float(picked.get("target_horizon_days"), 0.0)),
-                    "score": _safe_float(picked.get("score")),
-                }
-            )
+        rank_feature_values = (
+            picked.get("rank_weight_feature_values") if isinstance(picked.get("rank_weight_feature_values"), dict) else {}
+        )
+        picks.append(
+            {
+                "symbol": picked.get("symbol"),
+                "stock_name": picked.get("stock_name"),
+                "board": picked.get("board"),
+                "industry_code": picked.get("industry_code"),
+                "industry_name": picked.get("industry_name"),
+                "as_of_date": as_of_date,
+                "month": as_of_date[:7],
+                "rank": rank,
+                "net_excess_return": _safe_float(picked.get("target_label")),
+                "weighted_net_excess_return": _safe_float(picked.get("target_label"))
+                * _safe_float(picked.get("portfolio_weight"), 1.0)
+                * rank_multiplier
+                * signal_scale
+                * rank_position_scale
+                * date_position_scale,
+                "portfolio_weight": _safe_float(picked.get("portfolio_weight"), 1.0)
+                * signal_scale
+                * rank_position_scale
+                * date_position_scale,
+                "rank_weight_multiplier": rank_multiplier,
+                "rank_position_scale": rank_position_scale,
+                "rank_position_scale_reasons": rank_position_scale_reasons,
+                "slot_replacement_source_symbol": picked.get("slot_replacement_source_symbol"),
+                "slot_replacement_source_score": picked.get("slot_replacement_source_score"),
+                "slot_replacement_reason": picked.get("slot_replacement_reason"),
+                "signal_position_scale": signal_scale,
+                "signal_position_scale_reasons": signal_scale_reasons,
+                "base_gross_exposure": exposure_context["base_gross_exposure"],
+                "date_exposure_scale": exposure_context["date_exposure_scale"],
+                "date_exposure_scale_reasons": date_exposure_scale_reasons,
+                "date_exposure_floor": exposure_context["date_exposure_floor"],
+                "date_position_scale": exposure_context["date_position_scale"],
+                "date_position_scale_reasons": exposure_context["date_position_scale_reasons"],
+                "avg_amount_20d": _safe_float(rank_feature_values.get("avg_amount_20d")),
+                "amount_10d_vs_20d_percentile": _safe_float(
+                    rank_feature_values.get("amount_10d_vs_20d_percentile")
+                ),
+                "amount_vs_20d_avg_percentile": _safe_float(
+                    rank_feature_values.get("amount_vs_20d_avg_percentile")
+                ),
+                "benchmark_return_20d": _safe_float(rank_feature_values.get("benchmark_return_20d")),
+                "distance_from_20d_high": _safe_float(rank_feature_values.get("distance_from_20d_high")),
+                "industry_return_20d_excess": _safe_float(rank_feature_values.get("industry_return_20d_excess")),
+                "return_20d_percentile": _safe_float(rank_feature_values.get("return_20d_percentile")),
+                "return_5d_percentile": _safe_float(rank_feature_values.get("return_5d_percentile")),
+                "turnover_rate_percentile": _safe_float(rank_feature_values.get("turnover_rate_percentile")),
+                "target_horizon_days": int(_safe_float(picked.get("target_horizon_days"), 0.0)),
+                "score": _safe_float(picked.get("score")),
+            }
+        )
     return picks
 
 
@@ -4580,6 +4599,264 @@ def build_streamed_walk_forward_model_candidate_run_artifact(
         "prediction_rows": prediction_rows,
         "run_content_digest": content_digest,
     }
+
+
+def build_deterministic_full_history_model_candidate_run_artifact(
+    *,
+    validation_run_id: str,
+    feature_matrix_artifact: str | Path,
+    model_spec_registry: dict[str, Any],
+    selected_model_spec_ids: list[str],
+) -> dict[str, Any]:
+    """Build a full-history deterministic selection source without forward-label gating.
+
+    This is intentionally limited to deterministic score-only specs. It exists for
+    account replay over the full feature window, where selection itself must not be
+    truncated by walk-forward train/test splits or forward-label readiness.
+    """
+
+    feature_metadata = _load_artifact_metadata_without_rows(feature_matrix_artifact)
+    specs = list(model_spec_registry.get("model_specs") or [])
+    selected = set(selected_model_spec_ids)
+    known = {str(spec.get("model_spec_id")) for spec in specs}
+    unknown = sorted(selected - known)
+    if unknown:
+        raise ValueError(f"unregistered model specs requested: {', '.join(unknown)}")
+    unsupported = [
+        str(spec.get("model_spec_id") or "")
+        for spec in specs
+        if str(spec.get("model_spec_id") or "") in selected
+        and str(spec.get("model_type") or "") not in _deterministic_score_only_model_types()
+    ]
+    if unsupported:
+        raise ValueError(
+            "full-history deterministic selection only supports deterministic score-only specs: "
+            + ", ".join(sorted(unsupported))
+        )
+
+    trial_specs: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
+    fitted_models: dict[str, dict[str, Any]] = {}
+    trial_states: dict[str, dict[str, Any]] = {}
+    for spec in specs:
+        spec_id = str(spec.get("model_spec_id") or "")
+        if spec_id not in selected:
+            continue
+        horizon_days = int(spec.get("prediction_horizon_days") or 10)
+        selected_top_k = max(1, int(_safe_float((spec.get("selection_policy") or {}).get("top_k"), 5.0)))
+        for trial_index, params in enumerate(_grid_trials(spec.get("hyperparameter_grid") or {})):
+            trial_id = f"{spec_id}:trial-{trial_index:03d}"
+            trial_specs[trial_id] = (spec, params)
+            fitted_models[trial_id] = _fit_model([], model_spec=spec, params=params)
+            trial_states[trial_id] = _empty_stream_trial_state(
+                spec_id=spec_id,
+                trial_id=trial_id,
+                selected_top_k=selected_top_k,
+                horizon_days=horizon_days,
+            )
+
+    row_count = 0
+    selected_date_count_by_trial: dict[str, set[str]] = {trial_id: set() for trial_id in trial_states}
+    current_date: str | None = None
+    current_predictions_by_trial: dict[str, list[dict[str, Any]]] = {trial_id: [] for trial_id in trial_states}
+
+    def _flush_current_date() -> None:
+        for trial_id, predictions in current_predictions_by_trial.items():
+            if not predictions:
+                continue
+            spec, params = trial_specs[trial_id]
+            before = len(trial_states[trial_id]["selected_top_k_picks_by_date"])
+            _consume_full_history_selection_date(
+                state=trial_states[trial_id],
+                predictions=predictions,
+                selection_policy=spec.get("selection_policy") or {},
+                params=params,
+            )
+            after = len(trial_states[trial_id]["selected_top_k_picks_by_date"])
+            if after > before:
+                selected_date_count_by_trial[trial_id].add(str(predictions[0].get("as_of_date") or ""))
+            predictions.clear()
+
+    for feature_row in _iter_artifact_rows(feature_matrix_artifact):
+        as_of_date = str(feature_row.get("as_of_date") or "")
+        if current_date is None:
+            current_date = as_of_date
+        elif as_of_date != current_date:
+            _flush_current_date()
+            current_date = as_of_date
+        row_count += 1
+        feature_values = _model_feature_values(feature_row)
+        joined = {
+            "universe_row_id": str(feature_row.get("universe_row_id") or ""),
+            "symbol": feature_row.get("symbol"),
+            "stock_name": feature_row.get("stock_name"),
+            "board": feature_row.get("board"),
+            "industry_code": feature_row.get("industry_code"),
+            "industry_name": feature_row.get("industry_name"),
+            "as_of_date": as_of_date,
+            "feature_row": feature_row,
+            "feature_values_flat": feature_values,
+            "label_status": "not_required_for_full_history_selection",
+            "target_label": None,
+            "target_labels_by_horizon": {},
+            "target_total_return": None,
+            "target_total_returns_by_horizon": {},
+        }
+        for trial_id, (spec, params) in trial_specs.items():
+            horizon_days = int(spec.get("prediction_horizon_days") or 10)
+            prediction = _make_prediction_from_joined_row(
+                joined=joined,
+                spec=spec,
+                params=params,
+                trial_id=trial_id,
+                split_id="full-history-deterministic-selection",
+                fitted_model_digest="deterministic-score-only-no-fit",
+                fitted_model=fitted_models[trial_id],
+                horizon_days=horizon_days,
+            )
+            current_predictions_by_trial[trial_id].append(prediction)
+            _add_prediction_sample(trial_states[trial_id]["sample"], prediction)
+            trial_states[trial_id]["prediction_count"] += 1
+    _flush_current_date()
+
+    trial_summaries: list[dict[str, Any]] = []
+    trial_diagnostics: list[dict[str, Any]] = []
+    prediction_rows: list[dict[str, Any]] = []
+    total_prediction_row_count = 0
+    for trial_id, state in trial_states.items():
+        spec, params = trial_specs[trial_id]
+        selected_picks = state["selected_top_k_picks_by_date"]
+        metrics = {
+            "prediction_count": state["prediction_count"],
+            "selected_top_k": state["selected_top_k"],
+            "selected_pick_count": len(selected_picks),
+            "selected_signal_day_count": len(selected_date_count_by_trial[trial_id]),
+            "label_evaluation_status": "not_required_for_full_history_selection",
+        }
+        trial_summaries.append(
+            {
+                "trial_id": trial_id,
+                "model_spec_id": state["model_spec_id"],
+                "selection_policy": spec.get("selection_policy") or {},
+                "params": params,
+                "metrics": metrics,
+                "fit_summaries": [],
+                "gate_status": "blocked",
+                "blocking_gate_ids": ["account_replay_pending", "fair_comparison_pending"],
+            }
+        )
+        trial_diagnostics.append(
+            {
+                "trial_id": trial_id,
+                "model_spec_id": state["model_spec_id"],
+                "target_horizon_days": state["horizon_days"],
+                "split_rank_ics": [],
+                "date_rank_ics": [],
+                "top_picks_by_date": state["top_picks_by_date"],
+                "top_5_picks_by_date": state["top_5_picks_by_date"],
+                "top_5_returns_by_date": [],
+                "selected_top_k": state["selected_top_k"],
+                "selected_top_k_picks_by_date": selected_picks,
+                "selected_top_k_returns_by_date": [],
+                "selected_top_k_industry_exposure_by_month": _industry_exposure_by_month(selected_picks),
+            }
+        )
+        sample_rows = _finalize_prediction_sample(state["sample"])
+        prediction_rows.extend(sample_rows)
+        total_prediction_row_count += int(state["prediction_count"])
+
+    content_digest = _stable_digest(
+        {
+            "feature_matrix": feature_metadata.get("artifact_id"),
+            "registry": model_spec_registry.get("artifact_id"),
+            "source_data_time_range": feature_metadata.get("source_data_time_range"),
+            "trial_summaries": trial_summaries,
+            "trial_diagnostics": trial_diagnostics,
+            "prediction_row_count": total_prediction_row_count,
+            "mode": "full_history_deterministic_selection",
+        }
+    )
+    return {
+        "artifact_type": "walk_forward_model_candidate_run",
+        "schema_version": MODEL_CANDIDATE_RUN_SCHEMA_VERSION,
+        "artifact_id": f"walk-forward-model-candidate-run-{content_digest[:16]}",
+        "validation_run_id": validation_run_id,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "source_db_snapshot_id": feature_metadata.get("source_db_snapshot_id"),
+        "source_data_time_range": feature_metadata.get("source_data_time_range"),
+        "feature_version": feature_metadata.get("feature_version"),
+        "label_version": "not_required_for_full_history_deterministic_selection",
+        "code_version": "unresolved_local_checkout",
+        "config_version": "shortpick_model_candidate_runner:v1:full_history_deterministic_selection",
+        "validation_protocol": {
+            "runner_policy": "registered_deterministic_model_specs_only",
+            "primary_row_source": "streamed_pit_feature_matrix_without_forward_label_filter",
+            "evaluation_row_policy": "all_feature_rows_selection_no_forward_label_required",
+            "production_effect": "forbidden",
+            "stream_replay": True,
+            "walk_forward_split_gating": False,
+        },
+        "gate_readout": {
+            "gate_status": "blocked",
+            "promotion_status": "blocked_from_production",
+            "claim_ceiling": "candidate_run_only",
+            "blocking_gate_ids": ["account_replay_pending", "fair_comparison_pending"],
+        },
+        "claim_ceiling": "candidate_run_only",
+        "promotion_status": "blocked_from_production",
+        "storage_boundary": "research_validation_artifact_store_only",
+        "source_feature_matrix_id": feature_metadata.get("artifact_id"),
+        "source_label_matrix_id": None,
+        "source_model_spec_registry_id": model_spec_registry.get("artifact_id"),
+        "split_count": 1,
+        "trial_count": len(trial_summaries),
+        "joined_row_count": row_count,
+        "evaluable_row_count": row_count,
+        "prediction_row_count": total_prediction_row_count,
+        "stored_prediction_row_count": len(prediction_rows),
+        "prediction_rows_truncated": total_prediction_row_count > len(prediction_rows),
+        "prediction_storage_policy": {
+            "mode": "bounded_inline_sample_with_full_trial_diagnostics_full_history_selection",
+            "max_stored_predictions_per_trial": MAX_STORED_PREDICTIONS_PER_TRIAL,
+        },
+        "splits": [
+            {
+                "split_id": "full-history-deterministic-selection",
+                "status": "ready",
+                "train_dates": [],
+                "test_dates": [],
+                "purge_days": 0,
+                "embargo_days": 0,
+            }
+        ],
+        "trial_summaries": trial_summaries,
+        "trial_diagnostics": trial_diagnostics,
+        "prediction_rows": prediction_rows,
+        "run_content_digest": content_digest,
+    }
+
+
+def _consume_full_history_selection_date(
+    *,
+    state: dict[str, Any],
+    predictions: list[dict[str, Any]],
+    selection_policy: dict[str, Any],
+    params: dict[str, Any],
+) -> None:
+    active_rows = [row for row in predictions if row.get("selection_allowed", True)]
+    if not active_rows:
+        return
+    ordered = sorted(active_rows, key=lambda row: _safe_float(row.get("score")), reverse=True)
+    selected_top_k = int(state["selected_top_k"])
+    as_of_date = str(predictions[0].get("as_of_date") or "")
+    state["selected_top_k_picks_by_date"].extend(
+        _top_k_picks_from_ordered_rows(
+            as_of_date=as_of_date,
+            ordered=ordered,
+            top_k=selected_top_k,
+            selection_policy=selection_policy,
+            params=params,
+        )
+    )
 
 
 def build_walk_forward_model_candidate_run_artifact(

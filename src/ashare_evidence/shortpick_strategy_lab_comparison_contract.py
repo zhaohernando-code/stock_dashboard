@@ -25,7 +25,8 @@ REQUIRED_FULL_HISTORY_METRICS = (
     "mean_invested_ratio",
     "max_single_symbol_exposure_pct",
 )
-STRICT_WINDOW_KEYS = ("signal_date_from", "signal_date_to", "signal_day_count")
+STRICT_WINDOW_KEYS = ("signal_date_from", "signal_date_to")
+DIAGNOSTIC_SCOPE_KEYS = ("signal_day_count", "selected_pick_count", "market_symbol_count")
 
 
 def build_shortpick_strategy_lab_fair_comparison_readiness(
@@ -86,6 +87,7 @@ def build_shortpick_strategy_lab_fair_comparison_readiness(
             "annualized_return_cross_window_promotion_allowed": False,
             "frontend_replacement_claim_allowed": status.startswith("passed"),
             "same_window_required_keys": list(STRICT_WINDOW_KEYS),
+            "diagnostic_scope_keys": list(DIAGNOSTIC_SCOPE_KEYS),
             "required_metrics": list(REQUIRED_FULL_HISTORY_METRICS),
         },
         "account_contract": {
@@ -214,7 +216,12 @@ def _metric_best(summaries: list[dict[str, Any]], key: str, *, higher_is_better:
 def _candidate_artifact_id(candidate_replay_artifact: dict[str, Any] | None) -> str | None:
     if not isinstance(candidate_replay_artifact, dict):
         return None
-    return candidate_replay_artifact.get("artifact_id") or candidate_replay_artifact.get("replay_id")
+    return (
+        candidate_replay_artifact.get("artifact_id")
+        or candidate_replay_artifact.get("replay_id")
+        or candidate_replay_artifact.get("source_candidate_run_id")
+        or candidate_replay_artifact.get("trial_id")
+    )
 
 
 def _candidate_summary(candidate_replay_artifact: dict[str, Any] | None) -> dict[str, Any]:
@@ -230,6 +237,18 @@ def _candidate_summary(candidate_replay_artifact: dict[str, Any] | None) -> dict
         if isinstance(first, dict) and isinstance(first.get("summary"), dict):
             summary = first["summary"]
             return {metric: summary.get(metric) for metric in REQUIRED_FULL_HISTORY_METRICS if metric in summary}
+    leaderboard = candidate_replay_artifact.get("leaderboard")
+    results = candidate_replay_artifact.get("results")
+    if isinstance(leaderboard, list) and leaderboard and isinstance(results, list):
+        top_config_id = leaderboard[0].get("config_id") if isinstance(leaderboard[0], dict) else None
+        for result in results:
+            if not isinstance(result, dict) or result.get("config_id") != top_config_id:
+                continue
+            summary = result.get("summary")
+            if isinstance(summary, dict):
+                return {metric: summary.get(metric) for metric in REQUIRED_FULL_HISTORY_METRICS if metric in summary}
+    if isinstance(leaderboard, list) and leaderboard and isinstance(leaderboard[0], dict):
+        return {metric: leaderboard[0].get(metric) for metric in REQUIRED_FULL_HISTORY_METRICS if metric in leaderboard[0]}
     return {}
 
 

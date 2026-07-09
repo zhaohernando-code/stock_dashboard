@@ -23,6 +23,7 @@ from ashare_evidence.model_candidate_runner import (
     _top_k_returns_by_date,
     _uses_defensive_branch,
     _weighted_return,
+    build_deterministic_full_history_model_candidate_run_artifact,
     build_streamed_walk_forward_model_candidate_run_artifact,
     build_walk_forward_model_candidate_run_artifact,
     write_walk_forward_model_candidate_run_artifact,
@@ -177,6 +178,109 @@ class ModelCandidateWorkbenchTests(unittest.TestCase):
                 test_window_dates=2,
                 selected_model_spec_ids=["not-registered"],
             )
+
+    def test_deterministic_full_history_selector_does_not_require_labels(self) -> None:
+        feature_path = Path(self.temp_dir.name) / "full-history-features.json"
+        rows = []
+        for as_of_date in ["2026-01-01", "2026-01-02"]:
+            for index, symbol in enumerate(["600001.SH", "600002.SH", "600003.SH"], start=1):
+                rows.append(
+                    {
+                        "universe_row_id": f"{as_of_date}:{symbol}",
+                        "as_of_date": as_of_date,
+                        "symbol": symbol,
+                        "stock_name": f"测试{index}",
+                        "board": "main_board",
+                        "industry_name": "制造业",
+                        "feature_values": {
+                            "price_momentum": {
+                                "return_3d": 0.01 * index,
+                                "return_5d": 0.02 * index,
+                                "return_10d": 0.03 * index,
+                                "return_20d": 0.04 * index,
+                                "return_40d": 0.05 * index,
+                                "benchmark_return_20d": 0.01,
+                            },
+                            "reversal_overheat": {
+                                "return_1d": 0.001,
+                                "distance_from_20d_high": -0.01,
+                                "distance_from_40d_high": -0.01,
+                            },
+                            "volatility_risk": {
+                                "volatility_10d": 0.01,
+                                "volatility_20d": 0.02,
+                                "max_drawdown_20d": -0.01,
+                                "max_drawdown_40d": -0.02,
+                            },
+                            "liquidity": {
+                                "avg_amount_10d": 20_000_000.0,
+                                "avg_amount_20d": 20_000_000.0,
+                                "avg_volume_20d": 2_000_000.0,
+                                "turnover_rate": 1.0,
+                                "zero_volume_count_20d": 0,
+                            },
+                            "valuation_capacity": {"total_mv": 1.0, "circ_mv": 1.0, "pe_ttm": 10.0, "pb": 1.0},
+                            "crowding": {"amount_vs_20d_avg": 1.0, "symbol_recent_exposure_count": 0},
+                            "regime": {
+                                "benchmark_return_10d": 0.01,
+                                "benchmark_return_20d": 0.01,
+                                "benchmark_volatility_20d": 0.02,
+                            },
+                            "cross_sectional": {
+                                "return_5d_percentile": index / 3,
+                                "return_20d_percentile": index / 3,
+                                "turnover_rate_percentile": 0.2,
+                                "volatility_20d_percentile": 0.2,
+                                "amount_vs_20d_avg_percentile": 0.5,
+                                "total_mv_percentile": 0.5,
+                                "circ_mv_percentile": 0.5,
+                                "pe_ttm_percentile": 0.5,
+                                "pb_percentile": 0.5,
+                                "low_turnover_percentile": 0.8,
+                                "low_volatility_percentile": 0.8,
+                                "small_total_mv_percentile": 0.5,
+                                "small_circ_mv_percentile": 0.5,
+                                "industry_return_5d_excess": 0.0,
+                                "industry_return_20d_excess": 0.0,
+                                "amount_10d_vs_20d": 0.0,
+                                "amount_10d_vs_20d_percentile": 0.5,
+                                "volatility_10d_vs_20d": 0.0,
+                            },
+                            "execution": {"limit_state": "normal", "suspension_or_stale_proxy": False},
+                        },
+                    }
+                )
+        feature_path.write_text(
+            json.dumps(
+                {
+                    "artifact_type": "pit_feature_matrix",
+                    "artifact_id": "pit-feature-matrix-unit",
+                    "source_input_snapshot_id": "input-unit",
+                    "source_data_time_range": {"as_of_start": "2026-01-01", "as_of_end": "2026-01-02"},
+                    "feature_version": "unit",
+                    "rows": rows,
+                }
+            ),
+            encoding="utf-8",
+        )
+        registry = build_model_spec_registry_artifact(
+            validation_run_id="unit-run",
+            source_input_snapshot_id="input-unit",
+        )
+
+        run = build_deterministic_full_history_model_candidate_run_artifact(
+            validation_run_id="unit-run",
+            feature_matrix_artifact=feature_path,
+            model_spec_registry=registry,
+            selected_model_spec_ids=["baseline_momentum_10d_turnover_cooldown_v1"],
+        )
+
+        diagnostic = run["trial_diagnostics"][0]
+        self.assertEqual(run["validation_protocol"]["evaluation_row_policy"], "all_feature_rows_selection_no_forward_label_required")
+        self.assertEqual(diagnostic["selected_top_k"], 5)
+        self.assertEqual(len(diagnostic["selected_top_k_picks_by_date"]), 6)
+        self.assertEqual(run["trial_summaries"][0]["metrics"]["selected_signal_day_count"], 2)
+        self.assertEqual(run["label_version"], "not_required_for_full_history_deterministic_selection")
 
     def test_streamed_candidate_runner_fits_regularized_linear_model(self) -> None:
         feature_path = Path(self.temp_dir.name) / "stream-linear-features.json"

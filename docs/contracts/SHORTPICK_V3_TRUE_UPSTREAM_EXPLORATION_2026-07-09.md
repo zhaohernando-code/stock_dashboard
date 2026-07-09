@@ -174,7 +174,12 @@
 - 它仍不能晋级：负收益月份没有减少到 `0`，总收益提升只有约 `2.4%`，没有达到 10% 明显优势；订单跳过率也更差。
 - 这给下一轮提供了更明确的搜索边界：收益型门控和回撤型门控是同一信号族的两个端点，下一步应寻找二者的组合或学习式门控，而不是继续扩大无解释参数网格。
 
-## 完整池子建立与收益型复验
+## 旧版完整池子尝试（已被后续补正）
+
+本节保留为问题来源记录。后续复查发现这里使用的 `pit-feature-matrix-3119cfbf6cc3a06b`
+元数据窗口虽然写着 `2023-09-07 ~ 2026-06-26`，但实际行只覆盖 `2025-04-03 ~ 2026-06-26`。
+因此本节中的 `106.13%`、`111.15%`、`112.89%` 只能解释当时为什么出现比较口径错误，
+不能作为完整历史结论。正式完整历史逐订单回放见下一节“候选完整历史逐订单回放补正”。
 
 用户指出公平比较前必须先建立完整池子后，本轮补建并持久化了
 `2023-09-07 ~ 2026-06-26` 的 selected_top_k 之前研究池子。产物均写入运行时 artifact
@@ -295,57 +300,112 @@ walk-forward 可评估信号期回放”，不能包装成完整三年账户收�
 
 这个变体的收益更强、跳过率更好，但最大回撤和单票暴露有副作用，所以也不能判定为严格通过。
 
+## 候选完整历史逐订单回放补正
+
+用户指出上一版没有真正落实“候选完整历史逐订单回放”。问题根因是：先前的正式
+walk-forward candidate-run 仍受训练窗口和 forward label ready 约束，导致账户回放只覆盖
+`2025-07-03 ~ 2026-06-05` 的 176 个信号日。这个结果不能让前序上游探索和前端 6 条完整历史
+策略公平比较。
+
+本次补正新增了确定性上游候选完整历史选择流程：
+
+- CLI：`shortpick-model-deterministic-full-history-select`
+- 作用：从 PIT feature matrix 直接按已注册确定性 model spec 生成完整历史 selected TopK 源；
+  不使用 forward label 做选股，不受 walk-forward split 截短。
+- 配套回放 CLI：`shortpick-v3-rolling-account-replay-build`
+- 公平门禁修正：`signal_date_from`、`signal_date_to` 是强制同窗口项；
+  `signal_day_count`、`selected_pick_count` 是诊断项，因为不同上游模型在同一日期范围内可以有不同可交易日数。
+
+### 完整历史输入产物
+
+之前提到的 `pit-feature-matrix-3119cfbf6cc3a06b` 元数据窗口看似完整，但实际行只覆盖
+`2025-04-03 ~ 2026-06-26`，不能作为三年完整候选池。已改用运行时数据库重建完整 PIT feature
+matrix：
+
+| 产物 | artifact id | 实际覆盖 |
+|---|---|---:|
+| input snapshot | `model-exploration-input-snapshot-26e409cb12f68441` | `2023-09-07 ~ 2026-06-26` |
+| PIT feature matrix | `pit-feature-matrix-9e2854ba4a2cd78e` | 1,990,456 行、675 个交易日 |
+
+完整特征矩阵路径：
+
+`/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/pit_feature_matrices/pit-feature-matrix-9e2854ba4a2cd78e.json`
+
+### 完整历史候选源
+
+复验的上游候选仍是前序探索中最值得保留的 capacity-cluster/收益型方向：
+
+`weak_defensive_grind_tail_cash_congested_low_liquidity_top3_20d_gross_exposure_rank1_liquidity_replacement_neutral_chop_segment_risk_defensive_crowding_weak_overheated_underfilled_capacity_cluster_candidate_replacement_v1`
+
+完整历史候选源：
+
+`/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/walk_forward_model_candidate_runs/walk-forward-model-candidate-run-84adc785808483d3.json`
+
+候选源覆盖：
+
+| 指标 | 数值 |
+|---|---:|
+| 特征行数 | 1,990,456 |
+| trial 数 | 4 |
+| 每个 trial 入选信号日 | 511 |
+| 每个 trial selected picks | 1,533 |
+| label 依赖 | 不需要 |
+
+### 逐订单账户回放结果
+
+账户合同：20 万初始资金、当前 NAV 复投、100 股整手、逐订单成交、同一入场/退出可执行性约束。
+4 个 trial 均完成 `2023-09-07 ~ 2026-06-26` 完整历史逐订单回放，并通过同窗口审计。
+
+| trial | 总收益 | 年化收益 | 最大回撤 | 负收益月份 | 最差月收益 | 订单跳过率 | 信号跳过率 | 买入订单 | 最终净值 | 平均投入 | 最大单票暴露 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 000 | 295.72% | 63.41% | -7.34% | 4 | -1.73% | 19.92% | 19.37% | 772 | 791,443.21 | 65.42% | 25.32% |
+| 001 | 303.56% | 64.56% | -7.23% | 4 | -1.73% | 19.71% | 19.18% | 774 | 807,120.73 | 65.78% | 25.32% |
+| 002 | 299.30% | 63.94% | -7.34% | 4 | -1.73% | 20.02% | 19.57% | 771 | 798,607.76 | 65.71% | 25.32% |
+| 003 | 303.69% | 64.58% | -7.23% | 4 | -1.73% | 19.61% | 19.18% | 775 | 807,382.02 | 65.90% | 25.32% |
+
+逐订单回放产物：
+
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/shortpick_v3_account_replays/shortpick-v3-full-history-upstream-capacity-cluster-trial-000-account-replay-20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/shortpick_v3_account_replays/shortpick-v3-full-history-upstream-capacity-cluster-trial-001-account-replay-20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/shortpick_v3_account_replays/shortpick-v3-full-history-upstream-capacity-cluster-trial-002-account-replay-20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/shortpick_v3_account_replays/shortpick-v3-full-history-upstream-capacity-cluster-trial-003-account-replay-20260709.json`
+
+同窗口审计产物：
+
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/fair_comparison_readiness/shortpick-v3-full-history-upstream-capacity-cluster-trial-000-fair-comparison-readiness-20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/fair_comparison_readiness/shortpick-v3-full-history-upstream-capacity-cluster-trial-001-fair-comparison-readiness-20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/fair_comparison_readiness/shortpick-v3-full-history-upstream-capacity-cluster-trial-002-fair-comparison-readiness-20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/fair_comparison_readiness/shortpick-v3-full-history-upstream-capacity-cluster-trial-003-fair-comparison-readiness-20260709.json`
+
+审计状态：4 个 trial 均为 `passed_same_window_metrics_ready`。
+
 ## 当前结论
 
-本轮没有找到可晋级的新上游候选。
+本次补正后，前序上游探索已经有了可比较的完整历史逐订单账户结果。结论变为：
 
-### 比较口径修正
+1. 之前 `100%` 左右收益确实是比较口径错误，不代表上游方向真实退化到只能赚 100%。
+2. capacity-cluster 上游候选在完整历史逐订单回放中能达到约 `304%` 总收益，已经回到前端策略组同量级。
+3. 它仍不能晋级为新主策略：前端当前最佳为 `336.32%` 总收益、`69.21%` 年化、`-6.92%` 最大回撤、`3` 个负收益月份；本候选最佳 trial-003 为 `303.69%`、`64.58%`、`-7.23%`、`4` 个负收益月份。
+4. 本候选的优势是跳过率明显更低：订单跳过率约 `19.61%`，优于前端 6 条中的最优 `21.77%`；信号跳过率约 `19.18%`，优于前端最优 `21.61%`。但收益和稳定性没有全面超过当前前端最佳。
+5. 因此它是有意义的完整历史对照候选或进一步优化基线，不是可直接替换前端主策略的完成态。
 
-新增硬合同：`docs/contracts/SHORTPICK_V3_FAIR_COMPARISON_CONTRACT_2026-07-09.md`。
-
-本轮补齐了 `2023-09-07 ~ 2026-06-26` 的完整候选池，但正式 walk-forward candidate-run 的
-账户可评估窗口仍是 `2025-07-03 ~ 2026-06-05`。因此：
-
-- `106.13%`、`111.15%`、`112.89%` 这些收益只能代表完整候选池基础上的较短 walk-forward 可评估窗口。
-- 前端 6 条策略的 `300%+` 收益来自 `2023-09-07 ~ 2026-06-26` 的 509 个信号日完整历史静态账户回放。
-- 两者不能按总收益直接比较；年化收益只能作为探索线索，不能作为上线或替换证据。
-- 后续任何候选要声称优于前端 v3 策略组，必须先通过
-  `shortpick-strategy-lab-comparison-readiness` 同窗口门禁。
-
-当前门禁状态：`blocked`，原因是候选回放窗口和前端完整历史窗口不一致。
-
-但“没有晋级”不再等于“没有方向”。当前最明确的方向是：在正式上游 candidate-run 的基础上，
-把“强势末端 Rank1 风险”从粗空仓规则收窄成 Rank1 权重门控或 Rank2/Rank3 重排，并继续把
-20 万账户可买性作为上游排序的一等约束。
-
-仍未晋级的原因不是验收标准被降低，而是三点：
-
-1. 虽然完整上游池子已经补齐，但 walk-forward 可评估账户信号期仍短于前端 6 条策略的完整历史窗口，
-   不能做三年级别晋级宣称。
-2. 原收益型粗空仓门控在完整池子复验中明显劣化，说明局部窗口过拟合。
-3. 收益型窄门控和重排变体已经出现稳定性突破，但仍有单票暴露、信号跳过率或最大回撤副作用，不能包装成完成。
-
-因此：
+完成状态：
 
 - [x] 已明确前端 6 条策略的逐项最优硬门槛。
-- [x] 已确认 selected_top_k 之前完整候选池曾缺少持久可用副本。
-- [x] 已补建并持久保存 `2023-09-07 ~ 2026-06-26` 的 input snapshot、PIT feature matrix 和 executable label matrix。
-- [x] 已在持久可用的局部矩阵上执行真上游重排扫描。
-- [x] 已补跑项目内正式上游 capacity-cluster candidate-run，而不是只依赖手写公式。
-- [x] 已定位上游局部劣化的主要原因：小资金可买性错位和 Rank1 强势末端入场风险。
-- [x] 已发现一个局部有效但尚未晋级的强势末端入场门控方向。
-- [x] 已在完整池子可评估信号期复验原收益型粗门控，并确认其劣化。
-- [x] 已在完整池子可评估信号期深挖收益型窄门控和重排变体，确认方向有效但有副作用。
-- [x] 已补充公平比较门禁，阻止较短 walk-forward 窗口结果与前端完整历史 300%+ 结果直接比较。
-- [x] 未发现完整历史可晋级候选。
-- [x] 未修改前端策略组，未把局部结果包装成上线候选。
+- [x] 已确认旧完整池子产物实际行覆盖不足，不能支持完整历史结论。
+- [x] 已重建并验证 `2023-09-07 ~ 2026-06-26` 的完整 PIT feature matrix。
+- [x] 已新增确定性上游候选完整历史选股源生成能力。
+- [x] 已新增 candidate-run 到逐订单账户回放 CLI。
+- [x] 已修正公平比较门禁：信号日差异是诊断项，不是同窗口阻断项。
+- [x] 已完成 capacity-cluster 候选 4 个 trial 的完整历史逐订单回放。
+- [x] 已完成 4 个 trial 的同窗口公平审计，状态均通过。
+- [x] 未把该候选包装成上线主策略；原因是核心收益/回撤/负月仍未超过前端当前最佳。
 
-## 下一步阻塞点
+## 下一步方向
 
-继续真正上游探索前，必须先完成数据治理：
+继续真正上游探索时，应该以这次完整历史逐订单回放作为新基线，而不是再用短窗口结果：
 
-1. 生成一个 compact top-candidate inventory：按日期保留 selected_top_k 之前每个上游公式的 topN 候选和必要特征，避免再次依赖 5G+ 大 JSON。
-2. 给完整候选池 artifact 增加存在性/覆盖范围检查，历史静态指标引用的 artifact 路径不能指向会被清理的临时目录。
-3. 继续验证 `强基准 + Rank1 已回撤 + 5日强势 + 高换手` 的窄门控，但必须同时约束最大单票暴露和信号跳过率。
-4. 继续测试“Rank1 风险触发后重排给 Rank2/Rank3”的上游方案，目标是保留收益突破，同时消除回撤和单票暴露副作用。
-5. 继续做上游学习式重排时，必须把“20 万账户一手可买性/价格过高/最小下单额”作为候选生成或排序的一等约束，不能只看 label 代理收益。
+1. 保留 capacity-cluster 的低跳过率优势，优先寻找能减少负收益月份到 `<= 3` 且不降低收益的 Rank1 强势末端风险处理。
+2. 继续验证 `强基准 + Rank1 已回撤 + 5日强势 + 高换手` 的窄门控，但必须在完整历史逐订单回放上验证，不能再用局部窗口代理结论。
+3. 继续测试“Rank1 风险触发后重排给 Rank2/Rank3”的上游方案，目标是保留收益并消除回撤副作用。
+4. 继续做上游学习式重排时，必须把“20 万账户一手可买性/价格过高/最小下单额”作为候选生成或排序的一等约束，不能只看 label 代理收益。

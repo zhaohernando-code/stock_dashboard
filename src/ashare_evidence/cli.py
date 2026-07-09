@@ -6,7 +6,7 @@ import os
 import socket
 import urllib.request
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -66,8 +66,11 @@ from ashare_evidence.model_exploration_snapshot import (
     rebuild_pit_feature_matrix_from_input_snapshot,
 )
 from ashare_evidence.model_candidate_runner import (
+    _load_artifact_metadata_without_rows,
+    build_deterministic_full_history_model_candidate_run_artifact,
     build_streamed_score_rank_probe_artifact,
     build_streamed_top_candidate_inventory_artifact,
+    write_walk_forward_model_candidate_run_artifact,
 )
 from ashare_evidence.model_comparison_report import (
     build_model_comparison_report_artifact,
@@ -79,6 +82,7 @@ from ashare_evidence.model_governance_gate import (
     build_model_governance_and_projection_artifacts,
     write_model_governance_and_projection_artifacts,
 )
+from ashare_evidence.model_spec_registry import build_model_spec_registry_artifact
 from ashare_evidence.exposure_floor_overlay_governance import (
     build_exposure_floor_overlay_governance_summary,
     build_staggered_exposure_combo_governance_summary,
@@ -125,6 +129,10 @@ from ashare_evidence.research_artifact_store import (
 )
 from ashare_evidence.research_artifact_retention import audit_research_artifact_retention
 from ashare_evidence.research_model_preflight_compaction import compact_model_preflight_root
+from ashare_evidence.rolling_tranche_account_replay import (
+    build_shortpick_v3_rolling_account_replay_artifact,
+    load_daily_close_bars_for_symbols,
+)
 from ashare_evidence.services import get_latest_recommendation_summary, get_recommendation_trace
 from ashare_evidence.shortpick_combined_ledger_writer import (
     load_shortpick_combined_ledger_inputs,
@@ -397,6 +405,7 @@ NO_DB_COMMANDS = {
     "research-top-candidate-objective-calibration-proxy",
     "research-artifact-retention-audit",
     "research-model-preflight-compact",
+    "shortpick-model-deterministic-full-history-select",
     "shortpick-strategy-lab-comparison-readiness",
     "shortpick-model-feature-diagnostics-run",
     "shortpick-governance-credible-control-plan",
@@ -872,6 +881,26 @@ def build_parser() -> argparse.ArgumentParser:
     model_feature_rebuild.add_argument("--validation-run-id", required=True)
     model_feature_rebuild.add_argument("--input-snapshot-artifact", required=True)
     model_feature_rebuild.add_argument("--artifact-root", required=True)
+
+    deterministic_full_history_select = subparsers.add_parser(
+        "shortpick-model-deterministic-full-history-select",
+        help="Build full-history selected TopK picks from deterministic registered specs without forward-label gating.",
+    )
+    deterministic_full_history_select.add_argument("--validation-run-id", required=True)
+    deterministic_full_history_select.add_argument("--feature-matrix-artifact", required=True)
+    deterministic_full_history_select.add_argument("--model-spec-id", action="append", required=True)
+    deterministic_full_history_select.add_argument("--artifact-root", required=True)
+
+    rolling_account_replay = subparsers.add_parser(
+        "shortpick-v3-rolling-account-replay-build",
+        help="Build a Short Pick v3 rolling tranche order-level account replay from a candidate-run artifact.",
+    )
+    rolling_account_replay.add_argument("--database-url", default=None)
+    rolling_account_replay.add_argument("--candidate-run-artifact", required=True)
+    rolling_account_replay.add_argument("--trial-id", required=True)
+    rolling_account_replay.add_argument("--output-json", required=True)
+    rolling_account_replay.add_argument("--initial-cash-cny", type=float, default=200_000.0)
+    rolling_account_replay.add_argument("--min-order-notional-cny", type=float, default=2_250.0)
 
     shortpick_strategy_lab_comparison = subparsers.add_parser(
         "shortpick-strategy-lab-comparison-readiness",
@@ -2491,6 +2520,86 @@ def main(argv: list[str] | None = None) -> int:
                 artifact_root=args.artifact_root,
             )
         _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-model-deterministic-full-history-select":
+        feature_metadata = _load_artifact_metadata_without_rows(args.feature_matrix_artifact)
+        registry = build_model_spec_registry_artifact(
+            validation_run_id=args.validation_run_id,
+            source_input_snapshot_id=str(feature_metadata.get("source_input_snapshot_id") or ""),
+        )
+        payload = build_deterministic_full_history_model_candidate_run_artifact(
+            validation_run_id=args.validation_run_id,
+            feature_matrix_artifact=args.feature_matrix_artifact,
+            model_spec_registry=registry,
+            selected_model_spec_ids=args.model_spec_id,
+        )
+        path = write_walk_forward_model_candidate_run_artifact(payload, artifact_root=args.artifact_root)
+        _print_json(
+            {
+                "status": "completed",
+                "workflow": "shortpick_model_deterministic_full_history_select",
+                "artifact_id": payload.get("artifact_id"),
+                "path": str(path),
+                "source_feature_matrix_id": payload.get("source_feature_matrix_id"),
+                "source_data_time_range": payload.get("source_data_time_range"),
+                "trial_count": payload.get("trial_count"),
+                "trial_summaries": payload.get("trial_summaries"),
+            }
+        )
+        return 0
+
+    if args.command == "shortpick-v3-rolling-account-replay-build":
+        candidate_run = json.loads(Path(args.candidate_run_artifact).read_text(encoding="utf-8"))
+        trial = next(
+            (
+                row
+                for row in candidate_run.get("trial_diagnostics") or []
+                if str(row.get("trial_id") or "") == str(args.trial_id)
+            ),
+            None,
+        )
+        if not isinstance(trial, dict):
+            raise ValueError(f"trial_id not found in candidate run: {args.trial_id}")
+        selected_picks = [
+            row
+            for row in trial.get("selected_top_k_picks_by_date") or []
+            if isinstance(row, dict) and row.get("symbol") and row.get("as_of_date")
+        ]
+        if not selected_picks:
+            raise ValueError(f"trial has no selected picks for rolling replay: {args.trial_id}")
+        symbols = {str(row["symbol"]) for row in selected_picks}
+        signal_days = [date.fromisoformat(str(row["as_of_date"])) for row in selected_picks]
+        start_day = min(signal_days)
+        end_day = max(signal_days) + timedelta(days=120)
+        with session_scope(args.database_url) as session:
+            market_bars = load_daily_close_bars_for_symbols(
+                session,
+                symbols=symbols,
+                start_day=start_day,
+                end_day=end_day,
+            )
+        payload = build_shortpick_v3_rolling_account_replay_artifact(
+            candidate_run=candidate_run,
+            trial_id=args.trial_id,
+            market_bars_by_symbol=market_bars,
+            initial_cash_cny=args.initial_cash_cny,
+            min_order_notional_cny=args.min_order_notional_cny,
+        )
+        output_path = Path(args.output_json)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
+        _print_json(
+            {
+                "status": "completed",
+                "workflow": "shortpick_v3_rolling_account_replay_build",
+                "path": str(output_path),
+                "source_candidate_run_id": payload.get("source_candidate_run_id"),
+                "trial_id": payload.get("trial_id"),
+                "data_scope": payload.get("data_scope"),
+                "leaderboard": payload.get("leaderboard"),
+            }
+        )
         return 0
 
     if args.command == "shortpick-strategy-lab-comparison-readiness":
