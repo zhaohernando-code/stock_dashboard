@@ -551,7 +551,7 @@ trial-003 原最佳配置为
 - 失败的 `shallow_drawdown_lowvol` 完整 candidate-run 源，约 `31MB`，不保留以避免数据膨胀。
 - 第一次误连 worktree 小数据库产生的异常扫描日志。
 
-### 本轮 Goal 结论
+### 第一轮递归探索结论
 
 本轮没有找到满足“核心指标不劣化 + 10% 明显突破/负月减少”的可晋级上游策略。
 但完成了有效的搜索空间排除：
@@ -560,3 +560,126 @@ trial-003 原最佳配置为
 2. 更换成 `shallow_drawdown_lowvol` 类上游 spec 会显著丢失赢家，不能继续。
 3. PIT 同日候选替换和一手可买性替换虽然方向合理，但会把低跳过率换成收益/回撤劣化；
    后续如果继续做，必须把“替代候选未来收益结构”转化成不使用 forward label 的稳定特征，而不是简单替换。
+
+## 递归式 Goal 续跑记录
+
+用户纠正：goal 不能定义为“只进行一轮”。本节把探索状态改为递归式：
+
+- goal 只有在找到满足验收条件的候选时才可完成。
+- 每轮失败必须先写清劣化原因，再派生下一轮假设。
+- 不允许把“一轮搜索空间无突破”包装成完成。
+- 验收条件保持不变：核心指标不劣化，且至少一个关键指标改善 `>= 10%`，或负收益月份减少 1 个。
+
+### 续跑基线
+
+仍使用完整历史逐订单同口径基线：
+
+| 指标 | 基线 |
+|---|---:|
+| 总收益 | `305.14%` |
+| 年化收益 | `64.79%` |
+| 最大回撤 | `-7.14%` |
+| 负收益月份 | `4` |
+| 最差月收益 | `-1.73%` |
+| 订单跳过率 | `19.81%` |
+| 信号跳过率 | `19.37%` |
+| 最大单票暴露 | `25.32%` |
+
+### 负月份归因
+
+新增归因产物：
+
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/full_upstream_rebuild_logs/self_driven_upstream_negative_month_attribution_20260709.json`
+
+结论：
+
+1. 四个负月份为 `2023-10`、`2023-12`、`2025-01`、`2025-10`。
+2. 亏损主要集中在 Rank1，不是 Rank2/Rank3 拖累；`2025-10` 中 Rank1 月内贡献约 `-7731 CNY`，Rank2/Rank3 合计为正。
+3. `2025-10` 主要是高 5 日/20 日动量、高成交额放大、已跌离 20 日高点的强势末端。
+4. `2023-10` 的坏单更接近“20 日极强但 5 日已经转弱、成交额极端放大、基准弱到中性”的 stale high20 fading。
+5. `2023-12` 同时存在低动量银行/港口弱势延续，以及少量强势股回撤；简单弱市空仓会明显误伤赢家。
+
+### 第二轮：负月份 Rank1 规则
+
+新增扫描产物：
+
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/full_upstream_rebuild_logs/self_driven_upstream_negative_month_focused_rank1_rules_scan_20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/full_upstream_rebuild_logs/self_driven_upstream_boost_tail_quickfail_scan_20260709.json`
+- `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/full_upstream_rebuild_logs/self_driven_upstream_early_negative_month_rules_scan_20260709.json`
+
+结果摘要：
+
+| 方向 | 最好结果 | 是否通过 | 劣化原因 |
+|---|---|---|---|
+| 负月 Rank1 重排/降权 | 可把负月降到 `3`，或把最大回撤压到约 `-6.3%` | 否 | 收益下降，或最大单票暴露上升 |
+| 行业领导者增配 + 强势末端轻降权 | 严格不劣化最好：总收益 `311.31%`、回撤 `-7.14%`、跳过率/暴露不劣化 | 否 | 收益只提升约 `2.02%`，负月份仍为 `4` |
+| stale high20 fading 专项 | 最差月可从 `-1.73%` 改善到约 `-0.85% ~ -1.0%` | 否 | 暴露上升到约 `25.5%+`，不能通过不劣化约束 |
+| 弱基准低动量专项 | 有小幅严格不劣化：总收益约 `308.72%`、回撤 `-7.11%`、暴露略降 | 否 | 改善不足 10%，负月仍为 `4` |
+
+第二轮递归结论：
+
+- “只处理 Rank1 风险”方向成立，但容易少赚趋势赢家。
+- “把预算转给 Rank2/Rank3”会把局部集中度抬高。
+- 可保留信号是 stale high20 fading，但必须和暴露约束联动，不能单独晋级。
+
+### 第三轮：正式注册上游 Spec
+
+为避免继续手写局部规则，本轮生成并回放了两个正式注册的完整历史 candidate-run。
+
+`exhaustion_aware_medium_industry_pullback_v3_top3_20d_v1`：
+
+- candidate-run：`walk-forward-model-candidate-run-ab133d29042d1719`
+- trial 数：`8`
+- 完整源生成后已删除大文件，仅保留摘要。
+- 摘要产物：`/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/full_upstream_rebuild_logs/self_driven_upstream_exhaustion_aware_account_scan_20260709.json`
+
+最好 trial：
+
+| 指标 | 结果 |
+|---|---:|
+| 总收益 | `297.26%` |
+| 年化收益 | `63.64%` |
+| 最大回撤 | `-6.56%` |
+| 负收益月份 | `5` |
+| 订单跳过率 | `19.78%` |
+| 信号跳过率 | `23.45%` |
+
+结论：回撤改善明显，但收益、负月份和信号跳过率劣化；不能晋级。
+
+`selected_exhaustion_date_scaled_v3_top3_20d_v1`：
+
+- candidate-run：`walk-forward-model-candidate-run-5f47e2b5eb6d78f1`
+- trial 数：`4`
+- 完整源生成后已删除大文件，仅保留摘要。
+- 摘要产物：`/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/full_upstream_rebuild_logs/self_driven_upstream_selected_exhaustion_account_scan_20260709.json`
+
+最好 trial：
+
+| 指标 | 结果 |
+|---|---:|
+| 总收益 | `296.56%` |
+| 年化收益 | `63.54%` |
+| 最大回撤 | `-7.73%` |
+| 负收益月份 | `5` |
+| 订单跳过率 | `21.41%` |
+| 信号跳过率 | `21.72%` |
+
+结论：保留原 ranking 的窄日期缩放仍然丢收益并增加负月份，不能晋级。
+
+### 当前递归状态
+
+截至本节，仍未找到满足晋级标准的上游策略，goal 状态应保持 `active`，不能标记完成。
+
+已排除方向：
+
+1. 单纯 Rank1 强势末端重排。
+2. 宽泛候选替换或一手可买性替换。
+3. 负月份 Rank1 局部降权作为单独策略。
+4. `exhaustion_aware_medium_industry_pullback` 正式上游 spec。
+5. `selected_exhaustion_date_scaled` 正式上游 spec。
+
+下一轮递归方向：
+
+1. 围绕 `stale high20 fading` 做暴露约束联动，而不是单独空仓或替换。
+2. 尝试更上游的 scoring 结构：在打分阶段惩罚“20 日极强但 5 日衰减 + 成交额极端放大”，避免进入 Rank1 后再修补。
+3. 如果继续生成正式 spec，优先选择 trial 数可控、完整历史 candidate-run 可删除的候选，并保留小型摘要。
