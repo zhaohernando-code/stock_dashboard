@@ -129,7 +129,7 @@ def test_publish_restarts_runtime_launchagents_without_unload_load_race() -> Non
     assert 'kill_stale_runtime_processes "$display_name" "$process_pattern"' in script
     assert 'pgrep -f "$process_pattern"' in script
     assert 'uvicorn ashare_evidence.api:app .*--port 8000|start-local-backend.sh' in script
-    assert 'serve-frontend-dist.mjs .*--port 5173|start-local-frontend.sh' in script
+    assert 'serve-frontend-dist.mjs .*--port 5174|start-local-frontend.sh' in script
     assert 'launchctl unload "$plist_path"' not in script
     assert 'launchctl load "$plist_path"' not in script
     assert script.index('launchctl bootout "gui/$(id -u)" "$plist_path"') < script.index(

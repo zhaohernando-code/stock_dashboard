@@ -5,7 +5,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNTIME_ROOT="${ASHARE_RUNTIME_ROOT:-$HOME/codex/runtime/projects/ashare-dashboard}"
 BACKEND_URL="${ASHARE_LOCAL_BACKEND_URL:-http://127.0.0.1:8000/health}"
-FRONTEND_URL="${ASHARE_LOCAL_FRONTEND_URL:-http://127.0.0.1:5173/}"
+FRONTEND_URL="${ASHARE_LOCAL_FRONTEND_URL:-http://127.0.0.1:5174/}"
 LOCAL_API_BASE_URL="${ASHARE_LOCAL_API_BASE_URL:-http://127.0.0.1:8000/}"
 CANONICAL_BASE_URL="${ASHARE_CANONICAL_BASE_URL:-https://hernando-zhao.cn/projects/ashare-dashboard/}"
 BACKEND_ENV_FILE="${ASHARE_LOCAL_BACKEND_ENV_FILE:-$HOME/.config/codex/ashare-dashboard.backend.env}"
@@ -370,7 +370,7 @@ BACKEND_PLIST="$HOME/Library/LaunchAgents/com.codex.ashare-dashboard.backend.pli
 FRONTEND_PLIST="$HOME/Library/LaunchAgents/com.codex.ashare-dashboard.frontend.plist"
 
 restart_agent "$BACKEND_PLIST" 8000 "backend" "uvicorn ashare_evidence.api:app .*--port 8000|start-local-backend.sh"
-restart_agent "$FRONTEND_PLIST" 5173 "frontend" "serve-frontend-dist.mjs .*--port 5173|start-local-frontend.sh"
+restart_agent "$FRONTEND_PLIST" 5174 "frontend" "serve-frontend-dist.mjs .*--port 5174|start-local-frontend.sh"
 
 wait_for_health() {
   local url="$1"

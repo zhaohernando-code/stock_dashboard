@@ -3,7 +3,7 @@
 set -euo pipefail
 
 API_BASE_URL="${ASHARE_LOCAL_API_BASE_URL:-http://127.0.0.1:8000}"
-FRONTEND_URL="${ASHARE_LOCAL_FRONTEND_URL:-http://127.0.0.1:5173/}"
+FRONTEND_URL="${ASHARE_LOCAL_FRONTEND_URL:-http://127.0.0.1:5174/}"
 SAMPLE_SYMBOL="${ASHARE_RELEASE_OPERATIONS_SAMPLE_SYMBOL:-${ASHARE_OPERATIONS_PREWARM_SAMPLE_SYMBOL:-600519.SH}}"
 MAX_API_SECONDS="${ASHARE_OPERATIONS_PERF_MAX_API_SECONDS:-5}"
 MAX_PAGE_SECONDS="${ASHARE_OPERATIONS_PERF_MAX_PAGE_SECONDS:-2}"
@@ -21,7 +21,7 @@ Usage: scripts/verify-operations-performance.sh [options]
 Options:
   --self-test                 Run deterministic parser/budget/commit checks without network calls.
   --api-base-url URL          Local API base URL. Default: http://127.0.0.1:8000
-  --frontend-url URL          Served frontend URL. Default: http://127.0.0.1:5173/
+  --frontend-url URL          Served frontend URL. Default: http://127.0.0.1:5174/
   --sample-symbol SYMBOL      Operations sample symbol. Default: 600519.SH
   --max-api-seconds VALUE     Budget for each operations API endpoint. Default: 5
   --max-page-seconds VALUE    Budget for the frontend page shell. Default: 2

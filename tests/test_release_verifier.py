@@ -445,7 +445,7 @@ class ReleaseVerifierTests(unittest.TestCase):
             released_at="2026-04-26T12:30:00+00:00",
             repo_root=Path("/repo"),
             runtime_root=Path("/runtime"),
-            local_frontend_url="http://127.0.0.1:5173/",
+            local_frontend_url="http://127.0.0.1:5174/",
             local_api_base_url="http://127.0.0.1:8000/",
             canonical_base_url="https://hernando-zhao.cn/projects/ashare-dashboard/",
             artifact_root=Path("/repo/output/releases/20260426T123000Z-abcdef123456"),

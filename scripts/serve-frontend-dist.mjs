@@ -12,7 +12,7 @@ function argValue(name, fallback) {
 
 const root = path.resolve(argValue("--root", path.join(process.cwd(), "dist")));
 const host = argValue("--host", "127.0.0.1");
-const port = Number(argValue("--port", "5173"));
+const port = Number(argValue("--port", "5174"));
 const mimeTypes = new Map([
   [".css", "text/css; charset=utf-8"],
   [".html", "text/html; charset=utf-8"],

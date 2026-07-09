@@ -7,7 +7,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNTIME_ROOT="${HOME}/codex/runtime/projects/ashare-dashboard"
 BACKEND_URL="${BACKEND_URL:-http://127.0.0.1:8000}"
-FRONTEND_URL="${FRONTEND_URL:-http://127.0.0.1:5173}"
+FRONTEND_URL="${FRONTEND_URL:-http://127.0.0.1:5174}"
 BACKEND_ENV_FILE="${ASHARE_LOCAL_BACKEND_ENV_FILE:-$HOME/.config/codex/ashare-dashboard.backend.env}"
 MAX_RETRIES=3
 PASS=0

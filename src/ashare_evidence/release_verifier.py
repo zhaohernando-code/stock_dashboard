@@ -953,7 +953,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--runtime-root", required=True)
     parser.add_argument(
         "--local-frontend-url",
-        default=os.getenv("ASHARE_LOCAL_FRONTEND_URL", "http://127.0.0.1:5173/"),
+        default=os.getenv("ASHARE_LOCAL_FRONTEND_URL", "http://127.0.0.1:5174/"),
     )
     parser.add_argument(
         "--local-api-base-url",
