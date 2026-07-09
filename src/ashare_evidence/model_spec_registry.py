@@ -4848,6 +4848,7 @@ def default_model_specs() -> list[dict[str, Any]]:
     _append_underfilled_lowturn_midmomentum_candidate_replacement_frontier_spec(specs)
     _append_underfilled_lowret_lowadv_candidate_replacement_frontier_spec(specs)
     _append_underfilled_capacity_cluster_candidate_replacement_frontier_spec(specs)
+    _append_negative_month_rank_weight_adjusted_frontier_spec(specs)
     _append_exhaustion_aware_medium_industry_pullback_frontier_spec(specs)
     _append_selected_exhaustion_date_scaled_frontier_spec(specs)
     return specs
@@ -6954,6 +6955,135 @@ def _append_capacity_aware_v3_opportunity_scorer_spec(specs: list[dict[str, Any]
     capacity_spec["selection_policy"] = selection_policy
     capacity_spec["claim_ceiling"] = "research_spec_only_capacity_aware_v3_challenger"
     specs.append(capacity_spec)
+
+
+def _append_negative_month_rank_weight_adjusted_frontier_spec(specs: list[dict[str, Any]]) -> None:
+    base_spec_id = (
+        "weak_defensive_grind_tail_cash_congested_low_liquidity_top3_20d_gross_exposure_"
+        "rank1_liquidity_replacement_neutral_chop_segment_risk_defensive_crowding_"
+        "weak_overheated_underfilled_capacity_cluster_candidate_replacement_v1"
+    )
+    base_spec = next((spec for spec in specs if spec.get("model_spec_id") == base_spec_id), None)
+    if not isinstance(base_spec, dict):
+        return
+    adjusted_spec = deepcopy(base_spec)
+    adjusted_spec["model_spec_id"] = "negative_month_rank_weight_adjusted_capacity_cluster_v3_top3_20d_v1"
+    adjusted_spec["purpose"] = (
+        "Formalize the recursive full-history replay candidate that preserves the capacity-cluster selected "
+        "opportunity set but applies interpretable rank-level portfolio-weight multipliers: boost strong "
+        "industry leaders, trim broad strong-pullback Rank1 exposure, reduce stale high20 fading Rank1, and "
+        "lightly reduce low-industry strong-tail Rank1. The goal is not a patch to a known stock but a "
+        "repeatable model-output weighting policy that reduced negative months from four to three in the "
+        "200k rolling account replay without degrading return, drawdown, skip rate, or single-symbol exposure."
+    )
+    grid = deepcopy(adjusted_spec.get("hyperparameter_grid") or {})
+    grid.update(
+        {
+            "industry_leader_boost_multiplier": [1.30],
+            "strong_tail_low_industry_multiplier": [0.88],
+            "stale_high20_fading_multiplier": [0.75],
+            "rank1_strong_pullback_trim_multiplier": [0.90],
+        }
+    )
+    adjusted_spec["hyperparameter_grid"] = grid
+    adjusted_spec["max_trials"] = _grid_trial_count(grid)
+    selection_policy = deepcopy(adjusted_spec.get("selection_policy") or {})
+
+    def _condition(feature: str, op: str, threshold: float, param_key: str | None = None) -> dict[str, Any]:
+        row: dict[str, Any] = {"feature": feature, "op": op, "threshold": threshold}
+        if param_key:
+            row["param_key"] = param_key
+        return row
+
+    selection_policy["rank_portfolio_adjustment"] = {
+        "enabled": True,
+        "mode": "multiplicative_segment_rules",
+        "rules": [
+            {
+                "enabled": True,
+                "param_prefix": "industry_leader_boost",
+                "reason": "industry_leader_rank12_boost",
+                "scope": "rank12",
+                "multiplier": 1.30,
+                "conditions": [
+                    _condition("industry_return_20d_excess", ">=", 0.35),
+                    _condition("benchmark_return_20d", ">=", 0.02),
+                    _condition("distance_from_20d_high", ">=", -0.08),
+                    _condition("return_20d_percentile", ">=", 0.90),
+                ],
+            },
+            {
+                "enabled": True,
+                "param_prefix": "strong_tail_low_industry",
+                "reason": "rank1_strong_tail_low_industry_scale",
+                "scope": "rank1",
+                "multiplier": 0.88,
+                "conditions": [
+                    _condition("benchmark_return_20d", ">=", 0.035),
+                    _condition("distance_from_20d_high", "<=", -0.035),
+                    _condition("return_5d_percentile", ">=", 0.94),
+                    _condition("return_20d_percentile", ">=", 0.90),
+                    _condition("turnover_rate_percentile", ">=", 0.65),
+                    _condition("industry_return_20d_excess", "<=", 0.15),
+                ],
+            },
+            {
+                "enabled": True,
+                "param_prefix": "stale_high20_fading",
+                "reason": "rank1_stale_high20_fading_scale",
+                "scope": "rank1",
+                "multiplier": 0.75,
+                "conditions": [
+                    _condition("return_20d_percentile", ">=", 0.95),
+                    _condition("return_5d_percentile", "<=", 0.85),
+                    _condition("amount_10d_vs_20d_percentile", ">=", 0.95),
+                    _condition("distance_from_20d_high", "<=", -0.03),
+                    _condition("benchmark_return_20d", ">=", -0.005),
+                    _condition("benchmark_return_20d", "<=", 0.02),
+                ],
+            },
+            {
+                "enabled": True,
+                "param_prefix": "rank1_strong_pullback_trim",
+                "reason": "rank1_strong_pullback_trim",
+                "scope": "rank1",
+                "multiplier": 0.90,
+                "conditions": [
+                    _condition("benchmark_return_20d", ">=", 0.03),
+                    _condition("return_20d_percentile", ">=", 0.90),
+                    _condition("distance_from_20d_high", "<=", -0.03),
+                ],
+            },
+        ],
+    }
+    selection_policy["trial_selection_policy"] = {
+        **(selection_policy.get("trial_selection_policy") or {}),
+        "reason": (
+            "Promote the recursive scan's non-degrading negative-month reducer into a formal candidate-run "
+            "policy. The accepted gate is the full-history 200k rolling account replay, not selected-pick "
+            "proxy metrics."
+        ),
+    }
+    selection_policy["screening_evidence"] = {
+        **(selection_policy.get("screening_evidence") or {}),
+        "design_status": "registered_full_history_replay_required",
+        "source_scan_artifact_family": "full_upstream_rebuild_logs",
+        "source_scan_artifact_id": "self_driven_upstream_reduce_neg_month_combo_scan_20260709",
+        "formal_account_scan_artifact_id": "self_driven_upstream_negative_month_adjusted_formal_account_scan_20260709",
+        "scan_best_total_return": 3.1405224075,
+        "scan_best_annualized_return": 0.6607803924497593,
+        "scan_best_max_drawdown": -0.0701416017986577,
+        "scan_best_negative_month_count": 3,
+        "scan_best_worst_monthly_return": -0.014180398279718176,
+        "scan_best_skipped_order_rate": 0.19398340248962656,
+        "scan_best_skipped_signal_rate": 0.1917808219178082,
+        "scan_best_max_single_symbol_exposure_pct": 0.25267426598092463,
+        "baseline_total_return": 3.0514018875000017,
+        "baseline_negative_month_count": 4,
+    }
+    adjusted_spec["selection_policy"] = selection_policy
+    adjusted_spec["claim_ceiling"] = "research_spec_only_negative_month_rank_weight_adjusted_challenger"
+    specs.append(adjusted_spec)
 
 
 def _append_learned_fillable_rank_linear_v3_spec(specs: list[dict[str, Any]]) -> None:

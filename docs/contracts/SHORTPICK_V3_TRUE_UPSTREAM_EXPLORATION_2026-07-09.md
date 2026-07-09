@@ -683,3 +683,108 @@ trial-003 原最佳配置为
 1. 围绕 `stale high20 fading` 做暴露约束联动，而不是单独空仓或替换。
 2. 尝试更上游的 scoring 结构：在打分阶段惩罚“20 日极强但 5 日衰减 + 成交额极端放大”，避免进入 Rank1 后再修补。
 3. 如果继续生成正式 spec，优先选择 trial 数可控、完整历史 candidate-run 可删除的候选，并保留小型摘要。
+
+### 第四轮：stale high20 scoring 惩罚失败
+
+按第三轮归因，先尝试把 `stale high20 fading` 从入选后的降权/空仓前移到 scoring 阶段：
+
+- hard penalty candidate-run：`walk-forward-model-candidate-run-c5062b7af3816c5e`
+- soft penalty candidate-run：`walk-forward-model-candidate-run-b8b549864608c9ab`
+- 摘要产物：
+  - `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/full_upstream_rebuild_logs/self_driven_upstream_stale_high20_penalty_account_scan_20260709.json`
+  - `/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/full_upstream_rebuild_logs/self_driven_upstream_stale_high20_soft_penalty_account_scan_20260709.json`
+
+结论：失败，不保留为注册候选。
+
+失败原因：
+
+1. scoring 阶段直接惩罚会改变 selected_top_k 的候选构成，替换进来的“看起来更稳”的票没有原 Rank1/Rank2 的赢家厚度。
+2. hard penalty 会明显丢收益；soft penalty 虽然减轻了收益损失，但仍无法同时满足收益、负月份、暴露不劣化。
+3. 这说明问题不只是“把某类候选踢出去”，而是需要在保留 capacity-cluster 捕捉赢家能力的前提下，动态调整 Rank 组合权重。
+
+治理状态：
+
+- [x] 两个失败 candidate-run 大文件已删除，只保留小型摘要。
+- [x] 未把失败 spec 留在 `model_spec_registry.py`。
+
+### 第五轮：Rank 组合权重调整通过
+
+第四轮失败后，方向从“重排/替换候选”切换为“保留 capacity-cluster 上游入选结构，但让模型输出带 Rank 级组合权重调整”。
+
+正式注册候选：
+
+`negative_month_rank_weight_adjusted_capacity_cluster_v3_top3_20d_v1`
+
+它不是回归 v1 的单一来源规则，也不是根据某只强势股补丁；它仍基于完整 PIT 特征矩阵和 capacity-cluster 上游候选，只在模型输出层加入可解释的 Rank 级动态乘数：
+
+| 规则 | 作用范围 | 动作 |
+|---|---|---|
+| 行业领导者 Rank1/Rank2 增配 | Rank1/Rank2 | 强行业超额、基准为正、未明显跌离 20 日高点时乘以 `1.30` |
+| Rank1 低行业强势末端轻降权 | Rank1 | 5 日/20 日强势但行业超额不足、已跌离 20 日高点时乘以 `0.88` |
+| Rank1 stale high20 fading 降权 | Rank1 | 20 日极强、5 日衰减、成交额极端放大、弱到中性基准时乘以 `0.75` |
+| Rank1 强势回撤轻修剪 | Rank1 | 强基准 + 高 20 日动量 + 跌离 20 日高点时乘以 `0.90` |
+
+代码落地：
+
+- `model_candidate_runner.py` 新增 `rank_portfolio_adjustment` 执行逻辑。
+- `model_spec_registry.py` 新增 `negative_month_rank_weight_adjusted_capacity_cluster_v3_top3_20d_v1`。
+- 该策略在 candidate-run 中直接写出 `rank_portfolio_adjustment_multiplier` 和 `rank_portfolio_adjustment_reasons`，后续可追溯每笔权重调整原因。
+
+正式完整历史候选源：
+
+- candidate-run：`walk-forward-model-candidate-run-0d6333a65ae410f0`
+- 路径：`/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/walk_forward_model_candidate_runs/walk-forward-model-candidate-run-0d6333a65ae410f0.json`
+- 窗口：`2023-09-07 ~ 2026-06-26`
+- trial 数：`4`
+- 每个 trial 入选信号日：`511`
+- 每个 trial selected picks：`1533`
+
+完整历史逐订单回放摘要：
+
+- 摘要产物：`/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/full_upstream_rebuild_logs/self_driven_upstream_negative_month_adjusted_formal_account_scan_20260709.json`
+- 账户合同：20 万初始资金、当前 NAV 复投、100 股整手、15 tranche、`min1000`、Rank1 quick-fail + Rank3 pullback late guard。
+- 基线：capacity-cluster trial-003 + 同一账户合同。
+
+| 指标 | 基线 | 最佳通过 trial-000 | 改善 |
+|---|---:|---:|---:|
+| 总收益 | `305.14%` | `314.11%` | `+2.94%` |
+| 年化收益 | `64.79%` | `66.09%` | `+2.00%` |
+| 最大回撤 | `-7.14%` | `-7.01%` | `+1.77%` |
+| 负收益月份 | `4` | `3` | 减少 `1` 个 |
+| 最差月收益 | `-1.73%` | `-1.42%` | `+17.85%` |
+| 订单跳过率 | `19.81%` | `19.50%` | `+1.57%` |
+| 信号跳过率 | `19.37%` | `19.18%` | `+1.01%` |
+| 最大单票暴露 | `25.32%` | `25.28%` | `+0.15%` |
+| 买入订单 | `773` | `776` | `+3` |
+| 最终净值 | `810,280.38` | `828,212.20` | `+17,931.82` |
+
+4 个 trial 全部严格不劣化，并且全部把负收益月份从 `4` 降到 `3`：
+
+| trial | 总收益 | 年化收益 | 最大回撤 | 负收益月份 | 最差月收益 | 订单跳过率 | 信号跳过率 | 最大单票暴露 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 000 | `314.11%` | `66.09%` | `-7.01%` | `3` | `-1.42%` | `19.50%` | `19.18%` | `25.28%` |
+| 001 | `314.05%` | `66.08%` | `-7.01%` | `3` | `-1.42%` | `19.50%` | `19.18%` | `25.28%` |
+| 002 | `309.01%` | `65.35%` | `-7.12%` | `3` | `-1.42%` | `19.19%` | `18.98%` | `25.27%` |
+| 003 | `314.05%` | `66.08%` | `-7.01%` | `3` | `-1.42%` | `19.40%` | `19.18%` | `25.27%` |
+
+剩余负收益月份：
+
+| 月份 | 月收益 |
+|---|---:|
+| `2023-10` | `-1.42%` |
+| `2023-12` | `-0.74%` |
+| `2025-01` | `-0.85%` |
+
+递归式 goal 判定：
+
+- [x] 完整历史逐订单同口径验证完成。
+- [x] 不靠放松资金、成本、手数、最小下单额或缩短窗口通过。
+- [x] 核心指标全部不劣化：收益、年化、最大回撤、负月份、最差月、跳过率、单票暴露均优于基线。
+- [x] 满足突破条件：负收益月份减少 1 个；同时最差月改善超过 10%。
+- [x] 失败方向已经记录并清理，避免把未通过策略混入后续候选。
+
+当前完成状态：
+
+- [x] 递归探索已找到一个满足验收条件的正式上游模型输出权重候选。
+- [x] 该候选可作为下一步前端对照组/候选策略接入的对象。
+- [ ] 尚未替换线上主策略；是否晋级主策略仍需要结合前端已上线 6 条策略的整体排序和产品取舍单独决策。

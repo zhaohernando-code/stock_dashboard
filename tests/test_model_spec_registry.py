@@ -125,6 +125,7 @@ class ModelSpecRegistryTests(unittest.TestCase):
                     "rank1_liquidity_replacement_neutral_chop_segment_risk_defensive_crowding_"
                     "weak_overheated_underfilled_capacity_cluster_candidate_replacement_v1"
                 ),
+                "negative_month_rank_weight_adjusted_capacity_cluster_v3_top3_20d_v1",
                 "exhaustion_aware_medium_industry_pullback_v3_top3_20d_v1",
                 "selected_exhaustion_date_scaled_v3_top3_20d_v1",
             ],

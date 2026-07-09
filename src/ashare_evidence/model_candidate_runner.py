@@ -1802,6 +1802,57 @@ def _rank_position_scales_for_rows(
     ]
 
 
+def _rank_portfolio_adjustment_multiplier(
+    row: dict[str, Any],
+    *,
+    rank: int,
+    selection_policy: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+) -> tuple[float, list[str]]:
+    policy = selection_policy or {}
+    adjustment = policy.get("rank_portfolio_adjustment") if isinstance(policy, dict) else None
+    if not isinstance(adjustment, dict) or not adjustment.get("enabled"):
+        return 1.0, []
+    if str(adjustment.get("mode") or "") != "multiplicative_segment_rules":
+        return 1.0, []
+    rules = adjustment.get("rules")
+    if not isinstance(rules, list):
+        return 1.0, []
+    trial_params = params or {}
+    values = _rank_signal_feature_values(row)
+    multiplier = 1.0
+    reasons: list[str] = []
+    for rule in rules:
+        if not isinstance(rule, dict) or not _rank_segment_rule_matches(
+            row,
+            rank=rank,
+            values=values,
+            rule=rule,
+            trial_params=trial_params,
+        ):
+            continue
+        prefix = str(rule.get("param_prefix") or "")
+        raw_multiplier = _safe_float(
+            trial_params.get(f"{prefix}_multiplier"),
+            _safe_float(rule.get("multiplier"), 1.0),
+        )
+        multiplier *= min(max(raw_multiplier, 0.0), 2.0)
+        reasons.append(str(rule.get("reason") or "rank_portfolio_adjustment_multiplier"))
+    return multiplier, reasons
+
+
+def _rank_portfolio_adjustment_multipliers_for_rows(
+    rows: list[dict[str, Any]],
+    *,
+    selection_policy: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+) -> list[tuple[float, list[str]]]:
+    return [
+        _rank_portfolio_adjustment_multiplier(row, rank=index + 1, selection_policy=selection_policy, params=params)
+        for index, row in enumerate(rows)
+    ]
+
+
 def _date_exposure_scale(
     gross_exposure: float,
     *,
@@ -1911,6 +1962,7 @@ def _selected_exposure_context(
         return {
             "rank_multipliers": [],
             "rank_position_scales": [],
+            "rank_portfolio_adjustment_multipliers": [],
             "signal_scale": 1.0,
             "signal_scale_reasons": [],
             "base_gross_exposure": 0.0,
@@ -1933,6 +1985,11 @@ def _selected_exposure_context(
         params=trial_params,
     )
     rank_position_scales = _rank_position_scales_for_rows(
+        selected_rows,
+        selection_policy=policy,
+        params=trial_params,
+    )
+    rank_portfolio_adjustments = _rank_portfolio_adjustment_multipliers_for_rows(
         selected_rows,
         selection_policy=policy,
         params=trial_params,
@@ -1961,6 +2018,7 @@ def _selected_exposure_context(
     return {
         "rank_multipliers": rank_multipliers,
         "rank_position_scales": rank_position_scales,
+        "rank_portfolio_adjustment_multipliers": rank_portfolio_adjustments,
         "signal_scale": signal_scale,
         "signal_scale_reasons": signal_scale_reasons,
         "base_gross_exposure": base_gross_exposure,
@@ -2944,11 +3002,17 @@ def _weighted_return(
     policy = selection_policy or {}
     trial_params = params or {}
     rank_scales = _rank_position_scales_for_rows(rows, selection_policy=policy, params=trial_params)
+    rank_adjustments = _rank_portfolio_adjustment_multipliers_for_rows(
+        rows,
+        selection_policy=policy,
+        params=trial_params,
+    )
     return mean(
         _safe_float(row.get("target_label"))
         * _safe_float(row.get("portfolio_weight"), 1.0)
         * multiplier
         * (rank_scales[index][0] if index < len(rank_scales) else 1.0)
+        * (rank_adjustments[index][0] if index < len(rank_adjustments) else 1.0)
         for index, (row, multiplier) in enumerate(
             zip(
                 rows,
@@ -2970,11 +3034,17 @@ def _weighted_total_return(
     policy = selection_policy or {}
     trial_params = params or {}
     rank_scales = _rank_position_scales_for_rows(rows, selection_policy=policy, params=trial_params)
+    rank_adjustments = _rank_portfolio_adjustment_multipliers_for_rows(
+        rows,
+        selection_policy=policy,
+        params=trial_params,
+    )
     return mean(
         _safe_float(row.get("target_total_return"), _safe_float(row.get("target_label")))
         * _safe_float(row.get("portfolio_weight"), 1.0)
         * multiplier
         * (rank_scales[index][0] if index < len(rank_scales) else 1.0)
+        * (rank_adjustments[index][0] if index < len(rank_adjustments) else 1.0)
         for index, (row, multiplier) in enumerate(
             zip(
                 rows,
@@ -3245,6 +3315,7 @@ def _top_k_picks_from_ordered_rows(
     signal_scale = exposure_context["signal_scale"]
     signal_scale_reasons = exposure_context["signal_scale_reasons"]
     rank_position_scales = exposure_context["rank_position_scales"]
+    rank_portfolio_adjustments = exposure_context["rank_portfolio_adjustment_multipliers"]
     date_position_scale = exposure_context["date_position_scale"]
     date_exposure_scale_reasons = exposure_context["date_exposure_scale_reasons"]
     picks: list[dict[str, Any]] = []
@@ -3252,6 +3323,11 @@ def _top_k_picks_from_ordered_rows(
         rank_multiplier = rank_multipliers[rank - 1] if rank - 1 < len(rank_multipliers) else 1.0
         rank_position_scale, rank_position_scale_reasons = (
             rank_position_scales[rank - 1] if rank - 1 < len(rank_position_scales) else (1.0, [])
+        )
+        rank_adjustment_multiplier, rank_adjustment_reasons = (
+            rank_portfolio_adjustments[rank - 1]
+            if rank - 1 < len(rank_portfolio_adjustments)
+            else (1.0, [])
         )
         rank_feature_values = (
             picked.get("rank_weight_feature_values") if isinstance(picked.get("rank_weight_feature_values"), dict) else {}
@@ -3272,14 +3348,18 @@ def _top_k_picks_from_ordered_rows(
                 * rank_multiplier
                 * signal_scale
                 * rank_position_scale
+                * rank_adjustment_multiplier
                 * date_position_scale,
                 "portfolio_weight": _safe_float(picked.get("portfolio_weight"), 1.0)
                 * signal_scale
                 * rank_position_scale
+                * rank_adjustment_multiplier
                 * date_position_scale,
                 "rank_weight_multiplier": rank_multiplier,
                 "rank_position_scale": rank_position_scale,
                 "rank_position_scale_reasons": rank_position_scale_reasons,
+                "rank_portfolio_adjustment_multiplier": rank_adjustment_multiplier,
+                "rank_portfolio_adjustment_reasons": rank_adjustment_reasons,
                 "slot_replacement_source_symbol": picked.get("slot_replacement_source_symbol"),
                 "slot_replacement_source_score": picked.get("slot_replacement_source_score"),
                 "slot_replacement_reason": picked.get("slot_replacement_reason"),
