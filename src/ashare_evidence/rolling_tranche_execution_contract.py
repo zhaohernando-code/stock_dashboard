@@ -274,6 +274,36 @@ def _rolling_configurations(
             },
         },
         {
+            "config_id": (
+                "daily_14_tranche_upstream_meta_signal_quality_min2250_"
+                "weak100_strong165_lead135_low090_v1"
+            ),
+            "signal_cadence_trade_days": 1,
+            "target_active_tranche_count": 14,
+            "rank_allocation_mode": "model_rank_weight_with_board_lot_skip",
+            "budget_mode": "current_nav_fraction",
+            "min_order_notional_cny": 2_250.0,
+            "exit_policy": "rank3_pullback_rank1_quick_fail_guard",
+            "three_part_stability_overlay": {
+                "weak_scale": 1.00,
+                "weak_benchmark_return_20d_lt": -0.02,
+                "weak_return_20d_percentile_lt": 1.01,
+                "strong_scale": 1.65,
+                "strong_benchmark_return_20d_min": 0.0,
+                "strong_return_20d_percentile_min": 0.98,
+                "strong_industry_return_20d_excess_max": 0.50,
+                "strong_distance_from_20d_high_min": -0.08,
+            },
+            "meta_signal_quality_overlay": {
+                "industry_leadership_scale": 1.35,
+                "industry_leadership_industry_return_20d_excess_min": 0.35,
+                "industry_leadership_benchmark_return_20d_min": 0.05,
+                "low_quality_scale": 0.90,
+                "low_quality_industry_return_20d_excess_max": 0.20,
+                "low_quality_benchmark_return_20d_max": 0.08,
+            },
+        },
+        {
             "config_id": "daily_14_tranche_rank_weighted_compound_min2500_rank23_strong_benchmark_pullback_exit_v1",
             "signal_cadence_trade_days": 1,
             "target_active_tranche_count": 14,

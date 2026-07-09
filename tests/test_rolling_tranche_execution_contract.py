@@ -48,6 +48,17 @@ def test_shortpick_v3_rolling_contract_bounds_single_signal_budget() -> None:
         == "current_nav_fraction"
     )
     assert configs["daily_15_tranche_rank_weighted_compound_min1000_v1"]["min_order_notional_cny"] == 1_000.0
+    upstream_meta = configs[
+        "daily_14_tranche_upstream_meta_signal_quality_min2250_weak100_strong165_lead135_low090_v1"
+    ]
+    assert upstream_meta["budget_mode"] == "current_nav_fraction"
+    assert upstream_meta["target_active_tranche_count"] == 14
+    assert upstream_meta["min_order_notional_cny"] == 2_250.0
+    assert upstream_meta["exit_policy"] == "rank3_pullback_rank1_quick_fail_guard"
+    assert upstream_meta["three_part_stability_overlay"]["weak_scale"] == 1.0
+    assert upstream_meta["three_part_stability_overlay"]["strong_scale"] == 1.65
+    assert upstream_meta["meta_signal_quality_overlay"]["industry_leadership_scale"] == 1.35
+    assert upstream_meta["meta_signal_quality_overlay"]["low_quality_scale"] == 0.90
     assert configs["two_day_10_tranche_rank_weighted_v1"]["per_signal_target_budget_cny"] == 20_000.0
     assert configs["two_day_10_tranche_rank_weighted_offset1_v1"]["per_signal_target_budget_cny"] == 20_000.0
     assert configs["two_day_10_tranche_rank_weighted_offset1_v1"]["signal_cadence_offset_trade_days"] == 1

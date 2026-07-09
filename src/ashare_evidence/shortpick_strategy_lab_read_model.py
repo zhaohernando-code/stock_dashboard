@@ -24,6 +24,10 @@ META_SIGNAL_QUALITY_CONTROL_ID = (
     "daily_14_tranche_meta_signal_quality_industry_leadership_min1000_"
     "weak092_strong165_lead135_low090_cap28_v1"
 )
+UPSTREAM_META_STABILITY_CONTROL_ID = (
+    "daily_14_tranche_upstream_meta_signal_quality_min2250_"
+    "weak100_strong165_lead135_low090_v1"
+)
 PAPER_STATE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_PAPER_STATE"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -70,6 +74,11 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
                 "path": "/tmp/stock_dashboard_v3_goal10_meta_signal_quality_formal_replay_20260709.json",
                 "artifact_type": "shortpick_v3_goal10_meta_signal_quality_formal_replay",
             },
+            "upstream_meta_stability_control_replay": {
+                "status": "persisted_static_metrics",
+                "path": "/tmp/stock_dashboard_v3_upstream_meta_w100_s165_l090_v1_formal_replay_20260709.json",
+                "artifact_type": "shortpick_v3_upstream_meta_w100_s165_l090_v1_formal_replay",
+            },
         },
         "data_scope": {
             "signal_date_from": "2023-09-07",
@@ -90,7 +99,7 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
         },
         "summary": {
             "selected_config_count": 1,
-            "baseline_config_count": 4,
+            "baseline_config_count": 5,
             "signal_day_count": 509,
             "coverage_status": "static_full_history_ready",
             "initial_cash_cny": INITIAL_CASH_CNY,
@@ -104,6 +113,7 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
         },
         "selected_configs": [_main_config_readout()],
         "baseline_configs": [
+            _upstream_meta_stability_control_readout(),
             _meta_signal_quality_control_readout(),
             _three_part_stability_control_readout(),
             _conditional_aggressive_control_readout(),
@@ -206,6 +216,7 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
         },
         "selected_configs": [_paper_main_config_readout()],
         "baseline_configs": [
+            _paper_upstream_meta_stability_control_readout(),
             _paper_meta_signal_quality_control_readout(),
             _paper_three_part_stability_control_readout(),
             _paper_conditional_aggressive_control_readout(),
@@ -215,6 +226,7 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             "status": "active_forward_observation",
             "primary_config_id": MAIN_CONFIG_ID,
             "control_config_ids": [
+                UPSTREAM_META_STABILITY_CONTROL_ID,
                 META_SIGNAL_QUALITY_CONTROL_ID,
                 THREE_PART_STABILITY_CONTROL_ID,
                 CONDITIONAL_AGGRESSIVE_CONTROL_ID,
@@ -525,6 +537,86 @@ def _meta_signal_quality_control_readout() -> dict[str, Any]:
     }
 
 
+def _upstream_meta_stability_control_readout() -> dict[str, Any]:
+    return {
+        "config_id": UPSTREAM_META_STABILITY_CONTROL_ID,
+        "label": "候选对照：上游元信号稳健缩放",
+        "role": "upstream_meta_signal_candidate",
+        "selection_rank": 2,
+        "gate_status": "candidate_control",
+        "reason": (
+            "保持 20 万资金池、14 tranche、2250 元最小下单额和分层退出不变，只在上游信号日根据 Rank1 "
+            "元信号质量缩放 selected_top_k 权重；完整历史回放里收益不劣化，最大回撤相对改善超过 10%，"
+            "负收益月份从 4 个降至 3 个。"
+        ),
+        "summary": {
+            "total_return": 3.363194749999999,
+            "annualized_return": 0.6921335365550461,
+            "max_drawdown": -0.06920044470651798,
+            "negative_month_count": 3,
+            "worst_monthly_return": -0.014710185838297973,
+            "skipped_order_rate": 0.3470031545741325,
+            "skipped_signal_rate": 0.2455795677799607,
+            "buy_order_count": 621,
+            "sell_order_count": 602,
+            "final_nav_cny": 872638.9499999998,
+            "mean_invested_ratio": 0.6529829795470149,
+            "p95_invested_ratio": 0.9672444902038784,
+            "max_single_symbol_exposure_pct": 0.2518627580294479,
+            "max_position_count": 36,
+            "turnover": 90.51497414999999,
+        },
+        "selection_summary": {
+            "tranche_count": 14,
+            "budget_mode": "current_nav_fraction",
+            "min_order_notional_cny": 2250,
+            "max_single_symbol_cost_basis_pct": 0.35,
+            "exit_policy": "rank3_pullback_rank1_quick_fail_guard",
+            "upstream_weight_scaling": {
+                "family": "rank1_signal_day_portfolio_weight_scaling",
+                "mutated_signal_day_count": 389,
+                "mutated_pick_count": 1167,
+                "weak_scale": 1.00,
+                "weak_rule": "Rank1 benchmark_return_20d < -0.02",
+                "strong_scale": 1.65,
+                "strong_rule": (
+                    "Rank1 benchmark_return_20d >= 0, return_20d_percentile >= 0.98, "
+                    "industry_return_20d_excess <= 0.50, distance_from_20d_high >= -0.08"
+                ),
+                "industry_leadership_scale": 1.35,
+                "industry_leadership_rule": (
+                    "Rank1 industry_return_20d_excess >= 0.35 and benchmark_return_20d >= 0.05"
+                ),
+                "low_quality_scale": 0.90,
+                "low_quality_rule": "Rank1 industry_return_20d_excess <= 0.20 and benchmark_return_20d <= 0.08",
+                "weak_signal_day_count": 137,
+                "strong_signal_day_count": 41,
+                "industry_leadership_signal_day_count": 14,
+                "low_quality_signal_day_count": 339,
+            },
+        },
+        "goal10_improvements": {
+            "total_return_rel": 0.07823436916433535,
+            "annualized_return_rel": 0.05232689475329918,
+            "drawdown_reduction_rel": 0.10814177232158328,
+            "negative_month_delta": 1,
+            "worst_monthly_return_delta": 0.0030919466412347996,
+            "skip_order_reduction_rel": 0.014925373134328266,
+            "skip_signal_reduction_rel": 0.0,
+            "exposure_reduction_rel": 0.058899370792957643,
+        },
+        "reason_counts": {
+            "below_min_order_notional": 248,
+            "insufficient_cash": 21,
+            "missing_entry_bar": 3,
+            "missing_entry_bar_near_signal": 18,
+            "price_too_high_for_slot": 33,
+            "single_symbol_concentration_cap": 7,
+        },
+        "decision_samples": [],
+    }
+
+
 def _paper_main_config_readout() -> dict[str, Any]:
     readout = _main_config_readout()
     return {
@@ -606,6 +698,25 @@ def _paper_meta_signal_quality_control_readout() -> dict[str, Any]:
     return {
         **readout,
         "reason": "元信号质量分层候选同样只做从今日开始的真实前向观察；历史回放收益只在历史页展示。",
+        "summary": {
+            "initial_cash_cny": INITIAL_CASH_CNY,
+            "current_nav_cny": INITIAL_CASH_CNY,
+            "paper_total_return": None,
+            "max_drawdown": None,
+            "record_count": 0,
+            "planned_order_count": None,
+            "forward_status": "awaiting_first_forward_fill",
+        },
+        "reason_counts": {},
+        "decision_samples": [],
+    }
+
+
+def _paper_upstream_meta_stability_control_readout() -> dict[str, Any]:
+    readout = _upstream_meta_stability_control_readout()
+    return {
+        **readout,
+        "reason": "上游元信号稳健缩放候选同样只做从今日开始的真实前向观察；历史回放收益只在历史页展示。",
         "summary": {
             "initial_cash_cny": INITIAL_CASH_CNY,
             "current_nav_cny": INITIAL_CASH_CNY,
@@ -835,9 +946,11 @@ def _planned_orders_from_state(state: dict[str, Any] | None) -> list[dict[str, A
     normalized = [row for row in rows if isinstance(row, dict)]
     strategy_order = {
         MAIN_CONFIG_ID: 0,
-        THREE_PART_STABILITY_CONTROL_ID: 1,
-        CONDITIONAL_AGGRESSIVE_CONTROL_ID: 2,
-        CONTROL_CONFIG_ID: 3,
+        UPSTREAM_META_STABILITY_CONTROL_ID: 1,
+        META_SIGNAL_QUALITY_CONTROL_ID: 2,
+        THREE_PART_STABILITY_CONTROL_ID: 3,
+        CONDITIONAL_AGGRESSIVE_CONTROL_ID: 4,
+        CONTROL_CONFIG_ID: 5,
     }
     return sorted(
         normalized,

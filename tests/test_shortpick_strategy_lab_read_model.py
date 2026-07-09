@@ -10,6 +10,7 @@ from ashare_evidence.lineage import build_lineage
 from ashare_evidence.models import MarketBar, ShortpickCandidate, ShortpickExperimentRun, Stock
 from ashare_evidence.rolling_tranche_account_replay import project_shortpick_v3_initial_entry_orders
 from ashare_evidence.rolling_tranche_execution_contract import build_shortpick_v3_rolling_tranche_execution_contract
+from ashare_evidence.schemas.shortpick import ShortpickStrategyLabHistoricalReplayResponse
 from ashare_evidence.shortpick_strategy_lab_read_model import (
     CONDITIONAL_AGGRESSIVE_CONTROL_ID,
     CONTROL_CONFIG_ID,
@@ -18,6 +19,7 @@ from ashare_evidence.shortpick_strategy_lab_read_model import (
     META_SIGNAL_QUALITY_CONTROL_ID,
     PAPER_STATE_SCHEMA_VERSION,
     THREE_PART_STABILITY_CONTROL_ID,
+    UPSTREAM_META_STABILITY_CONTROL_ID,
     build_shortpick_strategy_lab_historical_replay_read_model,
     build_shortpick_strategy_lab_paper_tracking_read_model,
 )
@@ -33,17 +35,31 @@ def test_historical_replay_is_static_full_history_metrics() -> None:
     assert payload["summary"]["main_total_return"] == 3.119168564999999
     assert payload["summary"]["main_negative_month_count"] == 4
     assert payload["selected_configs"][0]["config_id"] == MAIN_CONFIG_ID
-    assert payload["summary"]["baseline_config_count"] == 4
-    assert payload["baseline_configs"][0]["config_id"] == META_SIGNAL_QUALITY_CONTROL_ID
+    assert payload["summary"]["baseline_config_count"] == 5
+    assert payload["baseline_configs"][0]["config_id"] == UPSTREAM_META_STABILITY_CONTROL_ID
+    assert payload["baseline_configs"][0]["goal10_improvements"]["drawdown_reduction_rel"] > 0.10
     assert payload["baseline_configs"][0]["goal10_improvements"]["negative_month_delta"] == 1
     assert payload["baseline_configs"][0]["summary"]["total_return"] > payload["summary"]["main_total_return"]
     assert payload["baseline_configs"][0]["summary"]["max_drawdown"] > payload["summary"]["main_max_drawdown"]
-    assert payload["baseline_configs"][1]["config_id"] == THREE_PART_STABILITY_CONTROL_ID
-    assert payload["baseline_configs"][1]["goal10_improvements"]["skip_order_reduction_rel"] > 0.10
-    assert payload["baseline_configs"][2]["config_id"] == CONDITIONAL_AGGRESSIVE_CONTROL_ID
-    assert payload["baseline_configs"][3]["config_id"] == CONTROL_CONFIG_ID
+    assert payload["baseline_configs"][1]["config_id"] == META_SIGNAL_QUALITY_CONTROL_ID
+    assert payload["baseline_configs"][1]["goal10_improvements"]["negative_month_delta"] == 1
+    assert payload["baseline_configs"][2]["config_id"] == THREE_PART_STABILITY_CONTROL_ID
+    assert payload["baseline_configs"][2]["goal10_improvements"]["skip_order_reduction_rel"] > 0.10
+    assert payload["baseline_configs"][3]["config_id"] == CONDITIONAL_AGGRESSIVE_CONTROL_ID
+    assert payload["baseline_configs"][4]["config_id"] == CONTROL_CONFIG_ID
     assert payload["metric_groups"]
     assert payload["leakage_audit"]["read_model_policy"] == "static_metrics_only_no_market_scan_no_dynamic_replay"
+
+
+def test_historical_replay_response_schema_keeps_breakthrough_metrics() -> None:
+    payload = build_shortpick_strategy_lab_historical_replay_read_model()
+
+    response_payload = ShortpickStrategyLabHistoricalReplayResponse.model_validate(payload).model_dump(mode="json")
+
+    first_control = response_payload["baseline_configs"][0]
+    assert first_control["config_id"] == UPSTREAM_META_STABILITY_CONTROL_ID
+    assert first_control["goal10_improvements"]["drawdown_reduction_rel"] > 0.10
+    assert first_control["goal10_improvements"]["negative_month_delta"] == 1
 
 
 def test_paper_tracking_renders_mock_next_order_without_forward_records(tmp_path) -> None:
@@ -87,12 +103,14 @@ def test_paper_tracking_renders_mock_next_order_without_forward_records(tmp_path
     assert payload["selected_configs"][0]["summary"]["paper_total_return"] is None
     assert payload["selected_configs"][0]["summary"]["current_nav_cny"] == INITIAL_CASH_CNY
     assert [row["config_id"] for row in payload["baseline_configs"]] == [
+        UPSTREAM_META_STABILITY_CONTROL_ID,
         META_SIGNAL_QUALITY_CONTROL_ID,
         THREE_PART_STABILITY_CONTROL_ID,
         CONDITIONAL_AGGRESSIVE_CONTROL_ID,
         CONTROL_CONFIG_ID,
     ]
     assert payload["paper_governance"]["control_config_ids"] == [
+        UPSTREAM_META_STABILITY_CONTROL_ID,
         META_SIGNAL_QUALITY_CONTROL_ID,
         THREE_PART_STABILITY_CONTROL_ID,
         CONDITIONAL_AGGRESSIVE_CONTROL_ID,
@@ -445,6 +463,7 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
     orders = payload["planned_orders"]
     assert [order["strategy_id"] for order in orders] == [
         MAIN_CONFIG_ID,
+        UPSTREAM_META_STABILITY_CONTROL_ID,
         META_SIGNAL_QUALITY_CONTROL_ID,
         THREE_PART_STABILITY_CONTROL_ID,
         CONDITIONAL_AGGRESSIVE_CONTROL_ID,
@@ -456,14 +475,17 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
         "600030.SH",
         "600030.SH",
         "600030.SH",
+        "600030.SH",
     ]
-    assert [order["shares"] for order in orders] == [100, 200, 200, 200, 100]
+    assert [order["shares"] for order in orders] == [100, 200, 200, 200, 200, 100]
     assert orders[1]["conditional_aggressive_overlay_active"] is True
     assert orders[1]["conditional_aggressive_weight_scale"] == 1.65 * 0.9
     assert orders[2]["conditional_aggressive_overlay_active"] is True
-    assert orders[2]["conditional_aggressive_weight_scale"] == 1.6
+    assert orders[2]["conditional_aggressive_weight_scale"] == 1.65 * 0.9
     assert orders[3]["conditional_aggressive_overlay_active"] is True
-    assert orders[3]["conditional_aggressive_weight_scale"] == 14 / 11
+    assert orders[3]["conditional_aggressive_weight_scale"] == 1.6
+    assert orders[4]["conditional_aggressive_overlay_active"] is True
+    assert orders[4]["conditional_aggressive_weight_scale"] == 14 / 11
     assert all(order["plan_source"] == "selected_top_k_candidate_run_rolling_tranche_engine" for order in orders)
     contract = build_shortpick_v3_rolling_tranche_execution_contract()
     main_config = next(config for config in contract["candidate_configurations"] if config["config_id"] == MAIN_CONFIG_ID)

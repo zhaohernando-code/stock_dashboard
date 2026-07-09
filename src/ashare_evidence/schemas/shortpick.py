@@ -371,6 +371,7 @@ class ShortpickStrategyLabConfigReadout(BaseModel):
     reason: str | None = None
     summary: dict[str, Any] = Field(default_factory=dict)
     selection_summary: dict[str, Any] = Field(default_factory=dict)
+    goal10_improvements: dict[str, Any] = Field(default_factory=dict)
     reason_counts: dict[str, int] = Field(default_factory=dict)
     decision_samples: list[dict[str, Any]] = Field(default_factory=list)
 

@@ -23,6 +23,7 @@ from ashare_evidence.shortpick_strategy_lab_read_model import (
     PAPER_STATE_SCHEMA_VERSION,
     THREE_PART_STABILITY_CONTROL_ID,
     TRACKING_START_DATE,
+    UPSTREAM_META_STABILITY_CONTROL_ID,
 )
 from ashare_evidence.shortpick_strategy_lab_v3_projection import (
     build_latest_v3_candidate_run_source,
@@ -39,6 +40,7 @@ CONTROL_STRATEGY_LABEL = "对照组：15 tranche 低集中复投"
 CONDITIONAL_AGGRESSIVE_STRATEGY_LABEL = "对照组：条件化攻击模式"
 THREE_PART_STABILITY_STRATEGY_LABEL = "对照组：三段稳定性控制"
 META_SIGNAL_QUALITY_STRATEGY_LABEL = "对照组：元信号质量分层"
+UPSTREAM_META_STABILITY_STRATEGY_LABEL = "对照组：上游元信号稳健缩放"
 V3_MODEL_SPEC_ID = "selected_exhaustion_date_scaled_v3_top3_20d_v1"
 V3_PLAN_SOURCE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_V3_CANDIDATE_RUN_SOURCE"
 V3_SOURCE_DATABASE_URL_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_V3_SOURCE_DATABASE_URL"
@@ -113,6 +115,7 @@ def _external_plan_source_orders() -> tuple[list[dict[str, Any]], dict[str, Any]
             CONDITIONAL_AGGRESSIVE_CONTROL_ID,
             THREE_PART_STABILITY_CONTROL_ID,
             META_SIGNAL_QUALITY_CONTROL_ID,
+            UPSTREAM_META_STABILITY_CONTROL_ID,
         }
         and str(row.get("symbol") or "")
         and int(_safe_float(row.get("shares")) or 0) > 0
@@ -563,6 +566,15 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             strategy_id=META_SIGNAL_QUALITY_CONTROL_ID,
             strategy_label=META_SIGNAL_QUALITY_STRATEGY_LABEL,
         )
+        upstream_meta_orders, upstream_meta_diagnostics = _build_strategy_orders(
+            session=session,
+            picks=picks,
+            signal_date=signal_date,
+            tranche_count=MAIN_TRANCHE_COUNT,
+            min_order_notional=MAIN_MIN_ORDER_NOTIONAL_CNY,
+            strategy_id=UPSTREAM_META_STABILITY_CONTROL_ID,
+            strategy_label=UPSTREAM_META_STABILITY_STRATEGY_LABEL,
+        )
         control_orders, control_diagnostics = _build_strategy_orders(
             session=session,
             picks=picks,
@@ -572,10 +584,17 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             strategy_id=CONTROL_CONFIG_ID,
             strategy_label=CONTROL_STRATEGY_LABEL,
         )
-    return [*main_orders, *meta_orders, *stability_orders, *conditional_orders, *control_orders], {
+    return [
+        *main_orders,
+        *upstream_meta_orders,
+        *meta_orders,
+        *stability_orders,
+        *conditional_orders,
+        *control_orders,
+    ], {
         **source_status,
         "status": "ready"
-        if main_orders or meta_orders or stability_orders or conditional_orders or control_orders
+        if main_orders or upstream_meta_orders or meta_orders or stability_orders or conditional_orders or control_orders
         else "ready_no_executable_orders",
         "model_spec_id": V3_MODEL_SPEC_ID,
         "signal_date": signal_date,
@@ -583,6 +602,7 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
         "selected_pick_count": len(picks),
         "diagnostics": [
             *main_diagnostics,
+            *upstream_meta_diagnostics,
             *meta_diagnostics,
             *stability_diagnostics,
             *conditional_diagnostics,
