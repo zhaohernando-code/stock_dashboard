@@ -80,6 +80,14 @@ def test_paper_tracking_renders_mock_next_order_without_forward_records(tmp_path
     assert payload["summary"]["planned_order_count"] == 1
     assert payload["selected_configs"][0]["summary"]["paper_total_return"] is None
     assert payload["selected_configs"][0]["summary"]["current_nav_cny"] == INITIAL_CASH_CNY
+    assert [row["config_id"] for row in payload["baseline_configs"]] == [
+        CONDITIONAL_AGGRESSIVE_CONTROL_ID,
+        CONTROL_CONFIG_ID,
+    ]
+    assert payload["paper_governance"]["control_config_ids"] == [
+        CONDITIONAL_AGGRESSIVE_CONTROL_ID,
+        CONTROL_CONFIG_ID,
+    ]
     assert payload["paper_display"]["account_curves"] == []
     assert payload["paper_display"]["charts"] == []
     assert payload["paper_display"]["table"]["rows"] == []
@@ -377,6 +385,12 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
                                 "rank_weight_multiplier": 2.73,
                                 "score": 3.9,
                                 "target_horizon_days": 20,
+                                "rank_weight_feature_values": {
+                                    "benchmark_return_20d": 0.01,
+                                    "return_20d_percentile": 0.99,
+                                    "industry_return_20d_excess": 0.20,
+                                    "distance_from_20d_high": -0.03,
+                                },
                             },
                             {
                                 "as_of_date": "2026-07-08",
@@ -419,9 +433,15 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
     assert payload["plan_generation_status"]["status"] == "ready"
     assert payload["plan_generation_status"]["signal_date"] == "2026-07-08"
     orders = payload["planned_orders"]
-    assert [order["strategy_id"] for order in orders] == [MAIN_CONFIG_ID, CONTROL_CONFIG_ID]
-    assert [order["symbol"] for order in orders] == ["600030.SH", "600030.SH"]
-    assert [order["shares"] for order in orders] == [100, 100]
+    assert [order["strategy_id"] for order in orders] == [
+        MAIN_CONFIG_ID,
+        CONDITIONAL_AGGRESSIVE_CONTROL_ID,
+        CONTROL_CONFIG_ID,
+    ]
+    assert [order["symbol"] for order in orders] == ["600030.SH", "600030.SH", "600030.SH"]
+    assert [order["shares"] for order in orders] == [100, 200, 100]
+    assert orders[1]["conditional_aggressive_overlay_active"] is True
+    assert orders[1]["conditional_aggressive_weight_scale"] == 14 / 11
     assert all(order["plan_source"] == "selected_top_k_candidate_run_rolling_tranche_engine" for order in orders)
     contract = build_shortpick_v3_rolling_tranche_execution_contract()
     main_config = next(config for config in contract["candidate_configurations"] if config["config_id"] == MAIN_CONFIG_ID)

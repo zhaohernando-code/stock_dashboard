@@ -204,6 +204,25 @@ def _rolling_configurations(
             "exit_policy": "rank3_pullback_rank1_quick_fail_guard",
         },
         {
+            "config_id": (
+                "daily_14_tranche_conditional_aggressive_ret20_98_benchmark_nonweak_industry35_dist8_scale14_11_v1"
+            ),
+            "signal_cadence_trade_days": 1,
+            "target_active_tranche_count": 14,
+            "rank_allocation_mode": "model_rank_weight_with_board_lot_skip",
+            "budget_mode": "current_nav_fraction",
+            "min_order_notional_cny": 2_250.0,
+            "exit_policy": "rank3_pullback_rank1_quick_fail_guard",
+            "conditional_aggressive_overlay": {
+                "scale": 14 / 11,
+                "rank": 1,
+                "min_benchmark_return_20d": 0.0,
+                "min_return_20d_percentile": 0.98,
+                "max_industry_return_20d_excess": 0.35,
+                "min_distance_from_20d_high": -0.08,
+            },
+        },
+        {
             "config_id": "daily_14_tranche_rank_weighted_compound_min2500_rank23_strong_benchmark_pullback_exit_v1",
             "signal_cadence_trade_days": 1,
             "target_active_tranche_count": 14,

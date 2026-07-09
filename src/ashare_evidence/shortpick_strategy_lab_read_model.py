@@ -185,11 +185,11 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             "initial_record_count": 0,
         },
         "selected_configs": [_paper_main_config_readout()],
-        "baseline_configs": [_paper_control_config_readout()],
+        "baseline_configs": [_paper_conditional_aggressive_control_readout(), _paper_control_config_readout()],
         "paper_governance": {
             "status": "active_forward_observation",
             "primary_config_id": MAIN_CONFIG_ID,
-            "control_config_ids": [CONTROL_CONFIG_ID],
+            "control_config_ids": [CONDITIONAL_AGGRESSIVE_CONTROL_ID, CONTROL_CONFIG_ID],
             "daily_sync_policy": "same_scheduled_refresh_window_as_shortpick_v1",
         },
         "paper_display": _paper_display(
@@ -388,6 +388,25 @@ def _paper_control_config_readout() -> dict[str, Any]:
     }
 
 
+def _paper_conditional_aggressive_control_readout() -> dict[str, Any]:
+    readout = _conditional_aggressive_control_readout()
+    return {
+        **readout,
+        "reason": "条件化攻击对照组同样只做从今日开始的真实前向观察；历史回放收益只在历史页展示。",
+        "summary": {
+            "initial_cash_cny": INITIAL_CASH_CNY,
+            "current_nav_cny": INITIAL_CASH_CNY,
+            "paper_total_return": None,
+            "max_drawdown": None,
+            "record_count": 0,
+            "planned_order_count": None,
+            "forward_status": "awaiting_first_forward_fill",
+        },
+        "reason_counts": {},
+        "decision_samples": [],
+    }
+
+
 def _historical_metric_groups() -> list[dict[str, Any]]:
     return [
         {
@@ -451,7 +470,10 @@ def _paper_display(
             "items": [
                 {"label": "主策略", "value": "14 tranche 复投，按模型 Rank 权重下单，叠加分层退出。"},
                 {"label": "卖出规则", "value": "基础为 20 日退出；Rank1 快速冲高失败和 Rank3 入场回撤后期亏损会提前退出。"},
-                {"label": "对照组", "value": "15 tranche 低集中度复投，用来观察更分散的资金路径。"},
+                {
+                    "label": "对照组",
+                    "value": "条件化攻击模式和 15 tranche 低集中度复投，分别观察更高置信信号加仓与更分散资金路径。",
+                },
             ],
         },
         "charts": [],
@@ -598,10 +620,15 @@ def _planned_orders_from_state(state: dict[str, Any] | None) -> list[dict[str, A
     if not isinstance(rows, list):
         return []
     normalized = [row for row in rows if isinstance(row, dict)]
+    strategy_order = {
+        MAIN_CONFIG_ID: 0,
+        CONDITIONAL_AGGRESSIVE_CONTROL_ID: 1,
+        CONTROL_CONFIG_ID: 2,
+    }
     return sorted(
         normalized,
         key=lambda row: (
-            0 if str(row.get("strategy_id") or "") == MAIN_CONFIG_ID else 1,
+            strategy_order.get(str(row.get("strategy_id") or ""), 99),
             str(row.get("planned_entry_date") or ""),
             str(row.get("strategy_label") or ""),
         ),
