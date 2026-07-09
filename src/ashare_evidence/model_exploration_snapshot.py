@@ -983,6 +983,149 @@ def rebuild_executable_label_matrix_from_input_snapshot(
     }
 
 
+def build_model_exploration_input_snapshot_only(
+    session: Session,
+    *,
+    validation_run_id: str,
+    as_of_start: date,
+    as_of_end: date,
+    artifact_root: str | Path,
+    benchmark_symbol: str = DEFAULT_BENCHMARK_SYMBOL,
+    horizons: tuple[int, ...] = DEFAULT_HORIZONS,
+    entry_price_source: str = ENTRY_PRICE_SOURCE_NEXT_CLOSE,
+) -> dict[str, Any]:
+    if entry_price_source not in ENTRY_PRICE_SOURCES:
+        raise ValueError(f"unsupported entry_price_source: {entry_price_source}")
+    if as_of_end < as_of_start:
+        raise ValueError("as_of_end must be on or after as_of_start")
+    benchmark = session.scalar(select(Stock).where(Stock.symbol == benchmark_symbol).limit(1))
+    if benchmark is None:
+        raise ValueError(f"benchmark stock not found: {benchmark_symbol}")
+    benchmark_days = [
+        _observed_day(value)
+        for value in session.scalars(
+            select(MarketBar.observed_at)
+            .where(
+                MarketBar.stock_id == benchmark.id,
+                MarketBar.timeframe == "1d",
+                MarketBar.observed_at >= datetime.combine(as_of_start, datetime.min.time(), tzinfo=UTC),
+                MarketBar.observed_at <= datetime.combine(as_of_end, datetime.max.time(), tzinfo=UTC),
+            )
+            .order_by(MarketBar.observed_at.asc(), MarketBar.id.asc())
+        )
+    ]
+    ordered_days = sorted(set(benchmark_days))
+    stocks_by_symbol, bars_by_symbol = _bars_by_stock(
+        session,
+        start_day=as_of_start - timedelta(days=90),
+        end_day=as_of_end + timedelta(days=max(horizons) * 3 + 10),
+    )
+    eligible_symbols: list[str] = []
+    stock_metadata: list[dict[str, Any]] = []
+    for symbol, stock in sorted(stocks_by_symbol.items()):
+        eligible, reasons = _account_eligibility(stock)
+        if eligible and bars_by_symbol.get(symbol):
+            eligible_symbols.append(symbol)
+        stock_metadata.append(
+            {
+                "symbol": symbol,
+                "stock_id": stock.id,
+                "stock_name": stock.name,
+                "board": _board(stock),
+                "status": stock.status,
+                "eligible_for_account_profile": eligible,
+                "eligibility_reasons": reasons,
+                "bar_count": len(bars_by_symbol.get(symbol, [])),
+            }
+        )
+    source_digest = _stable_digest(
+        {
+            "validation_run_id": validation_run_id,
+            "benchmark_symbol": benchmark_symbol,
+            "eligible_symbols": eligible_symbols,
+            "as_of_dates": [day.isoformat() for day in ordered_days],
+            "horizons": horizons,
+            "stock_metadata": stock_metadata,
+            "input_snapshot_only": True,
+        }
+    )
+    artifact_id = f"model-exploration-input-snapshot-{source_digest[:16]}"
+    ref_digest = _stable_digest({"source_input_snapshot_id": artifact_id, "as_of_dates": len(ordered_days)})
+    entry_trade_day_offset = 1 if entry_price_source == ENTRY_PRICE_SOURCE_NEXT_CLOSE else 0
+    generated_at = datetime.now(UTC).isoformat()
+    payload = {
+        "validation_run_id": validation_run_id,
+        "generated_at": generated_at,
+        "source_db_snapshot_id": source_digest[:16],
+        "source_data_time_range": {
+            "as_of_start": ordered_days[0].isoformat() if ordered_days else as_of_start.isoformat(),
+            "as_of_end": ordered_days[-1].isoformat() if ordered_days else as_of_end.isoformat(),
+        },
+        "code_version": "unresolved_local_checkout",
+        "config_version": MODEL_EXPLORATION_PROTOCOL_VERSION,
+        "storage_boundary": "research_validation_artifact_store_only",
+        "promotion_status": "blocked_from_production",
+        "artifact_type": "model_exploration_input_snapshot",
+        "schema_version": "model_exploration_input_snapshot.v1",
+        "artifact_id": artifact_id,
+        "feature_version": MODEL_EXPLORATION_FEATURE_VERSION,
+        "label_version": MODEL_EXPLORATION_LABEL_VERSION,
+        "validation_protocol": {
+            "protocol_version": MODEL_EXPLORATION_PROTOCOL_VERSION,
+            "primary_row_source": "objective_universe_x_as_of_date",
+            "forbidden_primary_sources": [
+                "recommendation_rows",
+                "active_watchlist",
+                "factor_observation_rows",
+                "recommendation_payload.factor_breakdown",
+                "post_hoc_winner_identity",
+            ],
+            "benchmark_symbol": benchmark_symbol,
+            "horizons": list(horizons),
+            "entry_price_source": entry_price_source,
+            "entry_trade_day_offset": entry_trade_day_offset,
+        },
+        "gate_readout": {
+            "gate_status": "research_input_ready"
+            if len(eligible_symbols) >= 200 and len(ordered_days) >= 60
+            else "blocked",
+            "promotion_status": "blocked_from_production",
+            "claim_ceiling": "model_research_input_only",
+            "blocking_gate_ids": [
+                *([] if len(eligible_symbols) >= 200 else ["insufficient_unique_symbols_for_model_claims"]),
+                *([] if len(ordered_days) >= 60 else ["insufficient_as_of_dates_for_model_claims"]),
+            ],
+            "thresholds": {
+                "minimum_unique_symbols_for_claims": 200,
+                "minimum_as_of_dates_for_claims": 60,
+                "minimum_total_rows_for_claims": "deferred_to_streaming_matrix_rebuild",
+            },
+        },
+        "claim_ceiling": "data_coverage_blocked"
+        if len(eligible_symbols) < 200 or len(ordered_days) < 60
+        else "model_research_input_only",
+        "stock_metadata": stock_metadata,
+        "eligible_symbol_count": len(eligible_symbols),
+        "as_of_date_count": len(ordered_days),
+        "universe_row_count": 0,
+        "benchmark_symbol": benchmark_symbol,
+        "artifact_refs": {
+            "universe_date_matrix": f"universe-date-matrix-{ref_digest[:16]}",
+            "pit_feature_matrix": f"pit-feature-matrix-{ref_digest[:16]}",
+            "executable_label_matrix": f"executable-label-matrix-{ref_digest[:16]}",
+        },
+        "build_mode": "input_snapshot_only_streaming_matrix_rebuild_required",
+    }
+    target = artifact_path("model_exploration_input_snapshot", artifact_id, root=Path(artifact_root))
+    _ensure_artifact_write_allowed(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8",
+    )
+    return {**payload, "path": str(target)}
+
+
 def build_model_exploration_p1_artifacts(
     session: Session,
     *,

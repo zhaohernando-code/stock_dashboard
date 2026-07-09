@@ -61,6 +61,7 @@ from ashare_evidence.frontend_projections import refresh_frontend_projections
 from ashare_evidence.improvement_suggestions import run_improvement_suggestion_review
 from ashare_evidence.intraday_market import sync_intraday_market
 from ashare_evidence.model_exploration_snapshot import (
+    build_model_exploration_input_snapshot_only,
     rebuild_executable_label_matrix_from_input_snapshot,
     rebuild_pit_feature_matrix_from_input_snapshot,
 )
@@ -826,6 +827,22 @@ def build_parser() -> argparse.ArgumentParser:
     model_governance_refresh.add_argument("--model-spec-registry-artifact", required=True)
     model_governance_refresh.add_argument("--artifact-root", required=True)
     model_governance_refresh.add_argument("--no-write-artifacts", action="store_true")
+
+    model_input_snapshot_build = subparsers.add_parser(
+        "shortpick-model-input-snapshot-build",
+        help="Build only the model exploration input snapshot for later streaming feature/label rebuild.",
+    )
+    model_input_snapshot_build.add_argument("--database-url", default=None)
+    model_input_snapshot_build.add_argument("--validation-run-id", required=True)
+    model_input_snapshot_build.add_argument("--as-of-start", required=True)
+    model_input_snapshot_build.add_argument("--as-of-end", required=True)
+    model_input_snapshot_build.add_argument("--benchmark-symbol", default="000300.SH")
+    model_input_snapshot_build.add_argument(
+        "--entry-price-source",
+        choices=["next_close", "same_day_close_research_proxy"],
+        default="next_close",
+    )
+    model_input_snapshot_build.add_argument("--artifact-root", required=True)
 
     model_label_rebuild = subparsers.add_parser(
         "shortpick-model-label-rebuild",
@@ -2421,6 +2438,20 @@ def main(argv: list[str] | None = None) -> int:
             "claim_ceiling": "diagnostic_research_only",
             "written_paths": {key: str(path) for key, path in written_paths.items()},
         }
+        _print_json(payload)
+        return 0
+
+    if args.command == "shortpick-model-input-snapshot-build":
+        with session_scope(args.database_url) as session:
+            payload = build_model_exploration_input_snapshot_only(
+                session,
+                validation_run_id=args.validation_run_id,
+                as_of_start=date.fromisoformat(args.as_of_start),
+                as_of_end=date.fromisoformat(args.as_of_end),
+                artifact_root=args.artifact_root,
+                benchmark_symbol=args.benchmark_symbol,
+                entry_price_source=args.entry_price_source,
+            )
         _print_json(payload)
         return 0
 

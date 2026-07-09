@@ -135,6 +135,37 @@ class ModelExplorationWorkflowTests(unittest.TestCase):
         self.assertEqual(payload["runtime_db_write_policy"], "read_only_input_no_business_table_writes")
         self.assertEqual(payload["promotion_status"], "blocked_from_production")
 
+    def test_cli_builds_input_snapshot_only_for_streaming_matrix_rebuild(self) -> None:
+        stdout = io.StringIO()
+        artifact_root = Path(self.temp_dir.name) / "input-snapshot-only-artifacts"
+
+        with redirect_stdout(stdout):
+            exit_code = main(
+                [
+                    "shortpick-model-input-snapshot-build",
+                    "--database-url",
+                    self.database_url,
+                    "--validation-run-id",
+                    "workflow-input-snapshot-only-unit",
+                    "--as-of-start",
+                    "2026-01-01",
+                    "--as-of-end",
+                    "2026-01-20",
+                    "--artifact-root",
+                    str(artifact_root),
+                ]
+            )
+        payload = json.loads(stdout.getvalue())
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(payload["artifact_type"], "model_exploration_input_snapshot")
+        self.assertEqual(payload["build_mode"], "input_snapshot_only_streaming_matrix_rebuild_required")
+        self.assertEqual(payload["storage_boundary"], "research_validation_artifact_store_only")
+        self.assertEqual(payload["universe_row_count"], 0)
+        self.assertEqual(payload["eligible_symbol_count"], 2)
+        self.assertEqual(payload["as_of_date_count"], 20)
+        self.assertTrue(Path(payload["path"]).exists())
+
     def test_workflow_can_reuse_existing_matrix_artifacts(self) -> None:
         artifact_root = Path(self.temp_dir.name) / "reuse-artifacts"
         with session_scope(self.database_url) as session:
