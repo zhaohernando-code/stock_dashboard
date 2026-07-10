@@ -36,11 +36,11 @@ ensure_frontend_dependencies() {
   npm --prefix "$FRONTEND_DIR" ci
 }
 
-ensure_frontend_dependencies
 cd "$FRONTEND_DIR"
 
 BOOT_BUILD="${ASHARE_FRONTEND_BOOT_BUILD:-auto}"
 if [[ "$BOOT_BUILD" == "1" || "$BOOT_BUILD" == "true" || ! -f "$FRONTEND_DIR/dist/index.html" ]]; then
+  ensure_frontend_dependencies
   npm run build
 else
   echo "[frontend] Reusing existing dist; set ASHARE_FRONTEND_BOOT_BUILD=1 to force a boot-time rebuild"

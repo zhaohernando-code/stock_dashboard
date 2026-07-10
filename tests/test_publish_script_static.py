@@ -91,6 +91,13 @@ def test_local_frontend_static_server_does_not_require_node_sqlite() -> None:
     assert "node:sqlite" not in script
 
 
+def test_local_frontend_reuses_dist_without_installing_build_dependencies() -> None:
+    script = (REPO_ROOT / "scripts" / "start-local-frontend.sh").read_text(encoding="utf-8")
+
+    assert "\nensure_frontend_dependencies\n" not in script
+    assert "then\n  ensure_frontend_dependencies\n  npm run build" in script
+
+
 def test_publish_build_uses_same_frontend_env_as_runtime() -> None:
     script = SCRIPT_PATH.read_text(encoding="utf-8")
 
