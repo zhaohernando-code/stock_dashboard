@@ -28,6 +28,10 @@ UPSTREAM_META_STABILITY_CONTROL_ID = (
     "daily_14_tranche_upstream_meta_signal_quality_min2250_"
     "weak100_strong165_lead135_low090_v1"
 )
+NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID = "negative_month_rank_weight_adjusted_capacity_cluster_v3_top3_20d_v1"
+NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID = (
+    "daily_15_tranche_rank_weighted_compound_min1000_layered_rank1_quickfail_rank3_pullback_exit_v1"
+)
 PAPER_STATE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_PAPER_STATE"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -79,6 +83,11 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
                 "path": "/tmp/stock_dashboard_v3_upstream_meta_w100_s165_l090_v1_formal_replay_20260709.json",
                 "artifact_type": "shortpick_v3_upstream_meta_w100_s165_l090_v1_formal_replay",
             },
+            "negative_month_rank_adjusted_control_replay": {
+                "status": "persisted_static_metrics",
+                "artifact_id": "self_driven_upstream_negative_month_adjusted_formal_account_scan_20260709",
+                "artifact_type": "shortpick_v3_full_history_order_level_account_scan",
+            },
         },
         "data_scope": {
             "signal_date_from": "2023-09-07",
@@ -99,7 +108,7 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
         },
         "summary": {
             "selected_config_count": 1,
-            "baseline_config_count": 5,
+            "baseline_config_count": 6,
             "signal_day_count": 509,
             "coverage_status": "static_full_history_ready",
             "initial_cash_cny": INITIAL_CASH_CNY,
@@ -114,6 +123,7 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
         "selected_configs": [_main_config_readout()],
         "baseline_configs": [
             _upstream_meta_stability_control_readout(),
+            _negative_month_rank_adjusted_control_readout(),
             _meta_signal_quality_control_readout(),
             _three_part_stability_control_readout(),
             _conditional_aggressive_control_readout(),
@@ -217,6 +227,7 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
         "selected_configs": [_paper_main_config_readout()],
         "baseline_configs": [
             _paper_upstream_meta_stability_control_readout(),
+            _paper_negative_month_rank_adjusted_control_readout(),
             _paper_meta_signal_quality_control_readout(),
             _paper_three_part_stability_control_readout(),
             _paper_conditional_aggressive_control_readout(),
@@ -227,6 +238,7 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             "primary_config_id": MAIN_CONFIG_ID,
             "control_config_ids": [
                 UPSTREAM_META_STABILITY_CONTROL_ID,
+                NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
                 META_SIGNAL_QUALITY_CONTROL_ID,
                 THREE_PART_STABILITY_CONTROL_ID,
                 CONDITIONAL_AGGRESSIVE_CONTROL_ID,
@@ -617,6 +629,64 @@ def _upstream_meta_stability_control_readout() -> dict[str, Any]:
     }
 
 
+def _negative_month_rank_adjusted_control_readout() -> dict[str, Any]:
+    return {
+        "config_id": NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
+        "model_spec_id": NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
+        "label": "候选对照：递归上游 Rank 权重调整",
+        "role": "recursive_upstream_rank_weight_candidate",
+        "selection_rank": 2,
+        "gate_status": "candidate_control",
+        "reason": (
+            "递归式上游探索候选：保留 capacity-cluster 入选结构，但在模型输出层对 Rank1/Rank2 做可解释的"
+            "动态组合权重调整；完整历史逐订单回放中收益、回撤、跳过率和单票暴露均不劣化，负收益月份从 4 个降至 3 个。"
+        ),
+        "summary": {
+            "total_return": 3.1410609749999994,
+            "annualized_return": 0.6608575171773754,
+            "max_drawdown": -0.07012803058821693,
+            "negative_month_count": 3,
+            "worst_monthly_return": -0.014180398279718176,
+            "skipped_order_rate": 0.1950207468879668,
+            "skipped_signal_rate": 0.1917808219178082,
+            "buy_order_count": 776,
+            "sell_order_count": None,
+            "final_nav_cny": 828212.195,
+            "mean_invested_ratio": None,
+            "p95_invested_ratio": None,
+            "max_single_symbol_exposure_pct": 0.25278436325160336,
+            "max_position_count": None,
+            "turnover": None,
+        },
+        "selection_summary": {
+            "model_spec_id": NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
+            "tranche_count": 15,
+            "budget_mode": "current_nav_fraction",
+            "min_order_notional_cny": 1000,
+            "exit_policy": "rank3_pullback_rank1_quick_fail_guard",
+            "rank_portfolio_adjustment": {
+                "industry_leader_rank12_boost": 1.30,
+                "rank1_strong_tail_low_industry_scale": 0.88,
+                "rank1_stale_high20_fading_scale": 0.75,
+                "rank1_strong_pullback_trim": 0.90,
+            },
+        },
+        "goal10_improvements": {
+            "total_return_rel": 0.029382916707000818,
+            "annualized_return_rel": 0.019954982682119354,
+            "drawdown_reduction_rel": 0.017716621018800005,
+            "negative_month_delta": 1,
+            "worst_monthly_return_delta": 0.003080949822942935,
+            "worst_monthly_return_rel": 0.1784883662978767,
+            "skip_order_reduction_rel": 0.015706806282722457,
+            "skip_signal_reduction_rel": 0.010101010101010102,
+            "exposure_reduction_rel": 0.0014580780762137376,
+        },
+        "reason_counts": {},
+        "decision_samples": [],
+    }
+
+
 def _paper_main_config_readout() -> dict[str, Any]:
     readout = _main_config_readout()
     return {
@@ -717,6 +787,25 @@ def _paper_upstream_meta_stability_control_readout() -> dict[str, Any]:
     return {
         **readout,
         "reason": "上游元信号稳健缩放候选同样只做从今日开始的真实前向观察；历史回放收益只在历史页展示。",
+        "summary": {
+            "initial_cash_cny": INITIAL_CASH_CNY,
+            "current_nav_cny": INITIAL_CASH_CNY,
+            "paper_total_return": None,
+            "max_drawdown": None,
+            "record_count": 0,
+            "planned_order_count": None,
+            "forward_status": "awaiting_first_forward_fill",
+        },
+        "reason_counts": {},
+        "decision_samples": [],
+    }
+
+
+def _paper_negative_month_rank_adjusted_control_readout() -> dict[str, Any]:
+    readout = _negative_month_rank_adjusted_control_readout()
+    return {
+        **readout,
+        "reason": "递归上游 Rank 权重调整候选同样只做从今日开始的真实前向观察；历史回放收益只在历史页展示。",
         "summary": {
             "initial_cash_cny": INITIAL_CASH_CNY,
             "current_nav_cny": INITIAL_CASH_CNY,
@@ -947,10 +1036,11 @@ def _planned_orders_from_state(state: dict[str, Any] | None) -> list[dict[str, A
     strategy_order = {
         MAIN_CONFIG_ID: 0,
         UPSTREAM_META_STABILITY_CONTROL_ID: 1,
-        META_SIGNAL_QUALITY_CONTROL_ID: 2,
-        THREE_PART_STABILITY_CONTROL_ID: 3,
-        CONDITIONAL_AGGRESSIVE_CONTROL_ID: 4,
-        CONTROL_CONFIG_ID: 5,
+        NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID: 2,
+        META_SIGNAL_QUALITY_CONTROL_ID: 3,
+        THREE_PART_STABILITY_CONTROL_ID: 4,
+        CONDITIONAL_AGGRESSIVE_CONTROL_ID: 5,
+        CONTROL_CONFIG_ID: 6,
     }
     return sorted(
         normalized,

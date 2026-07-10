@@ -17,6 +17,8 @@ from ashare_evidence.shortpick_strategy_lab_read_model import (
     INITIAL_CASH_CNY,
     MAIN_CONFIG_ID,
     META_SIGNAL_QUALITY_CONTROL_ID,
+    NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
+    NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
     PAPER_STATE_SCHEMA_VERSION,
     THREE_PART_STABILITY_CONTROL_ID,
     UPSTREAM_META_STABILITY_CONTROL_ID,
@@ -35,18 +37,22 @@ def test_historical_replay_is_static_full_history_metrics() -> None:
     assert payload["summary"]["main_total_return"] == 3.119168564999999
     assert payload["summary"]["main_negative_month_count"] == 4
     assert payload["selected_configs"][0]["config_id"] == MAIN_CONFIG_ID
-    assert payload["summary"]["baseline_config_count"] == 5
+    assert payload["summary"]["baseline_config_count"] == 6
     assert payload["baseline_configs"][0]["config_id"] == UPSTREAM_META_STABILITY_CONTROL_ID
     assert payload["baseline_configs"][0]["goal10_improvements"]["drawdown_reduction_rel"] > 0.10
     assert payload["baseline_configs"][0]["goal10_improvements"]["negative_month_delta"] == 1
     assert payload["baseline_configs"][0]["summary"]["total_return"] > payload["summary"]["main_total_return"]
     assert payload["baseline_configs"][0]["summary"]["max_drawdown"] > payload["summary"]["main_max_drawdown"]
-    assert payload["baseline_configs"][1]["config_id"] == META_SIGNAL_QUALITY_CONTROL_ID
+    assert payload["baseline_configs"][1]["config_id"] == NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID
+    assert payload["baseline_configs"][1]["model_spec_id"] == NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID
     assert payload["baseline_configs"][1]["goal10_improvements"]["negative_month_delta"] == 1
-    assert payload["baseline_configs"][2]["config_id"] == THREE_PART_STABILITY_CONTROL_ID
-    assert payload["baseline_configs"][2]["goal10_improvements"]["skip_order_reduction_rel"] > 0.10
-    assert payload["baseline_configs"][3]["config_id"] == CONDITIONAL_AGGRESSIVE_CONTROL_ID
-    assert payload["baseline_configs"][4]["config_id"] == CONTROL_CONFIG_ID
+    assert payload["baseline_configs"][1]["summary"]["skipped_order_rate"] < 0.20
+    assert payload["baseline_configs"][2]["config_id"] == META_SIGNAL_QUALITY_CONTROL_ID
+    assert payload["baseline_configs"][2]["goal10_improvements"]["negative_month_delta"] == 1
+    assert payload["baseline_configs"][3]["config_id"] == THREE_PART_STABILITY_CONTROL_ID
+    assert payload["baseline_configs"][3]["goal10_improvements"]["skip_order_reduction_rel"] > 0.10
+    assert payload["baseline_configs"][4]["config_id"] == CONDITIONAL_AGGRESSIVE_CONTROL_ID
+    assert payload["baseline_configs"][5]["config_id"] == CONTROL_CONFIG_ID
     assert payload["metric_groups"]
     assert payload["leakage_audit"]["read_model_policy"] == "static_metrics_only_no_market_scan_no_dynamic_replay"
 
@@ -104,6 +110,7 @@ def test_paper_tracking_renders_mock_next_order_without_forward_records(tmp_path
     assert payload["selected_configs"][0]["summary"]["current_nav_cny"] == INITIAL_CASH_CNY
     assert [row["config_id"] for row in payload["baseline_configs"]] == [
         UPSTREAM_META_STABILITY_CONTROL_ID,
+        NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
         META_SIGNAL_QUALITY_CONTROL_ID,
         THREE_PART_STABILITY_CONTROL_ID,
         CONDITIONAL_AGGRESSIVE_CONTROL_ID,
@@ -111,6 +118,7 @@ def test_paper_tracking_renders_mock_next_order_without_forward_records(tmp_path
     ]
     assert payload["paper_governance"]["control_config_ids"] == [
         UPSTREAM_META_STABILITY_CONTROL_ID,
+        NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
         META_SIGNAL_QUALITY_CONTROL_ID,
         THREE_PART_STABILITY_CONTROL_ID,
         CONDITIONAL_AGGRESSIVE_CONTROL_ID,
@@ -295,6 +303,7 @@ def test_refresh_state_builds_v3_source_instead_of_accepting_missing_source(tmp_
     candidate_run = json.loads(candidate_run_path.read_text(encoding="utf-8"))
     assert candidate_run["artifact_type"] == "shortpick_strategy_lab_v3_candidate_run_source"
     assert candidate_run["model_spec_id"] == "selected_exhaustion_date_scaled_v3_top3_20d_v1"
+    assert NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID in candidate_run["model_spec_ids"]
     assert candidate_run["prediction_row_count"] > 0
     payload = json.loads(state_path.read_text(encoding="utf-8"))
     assert all(row.get("symbol") != "SHOULD_CLEAR" for row in payload["planned_orders"])
@@ -441,7 +450,45 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
                                 "target_horizon_days": 20,
                             },
                         ],
-                    }
+                    },
+                    {
+                        "model_spec_id": NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
+                        "selected_top_k": 3,
+                        "selected_top_k_picks_by_date": [
+                            {
+                                "as_of_date": "2026-07-08",
+                                "symbol": "002371.SZ",
+                                "stock_name": "北方华创",
+                                "rank": 1,
+                                "portfolio_weight": 1.0,
+                                "rank_weight_multiplier": 2.73,
+                                "rank_portfolio_adjustment_multiplier": 0.9,
+                                "score": 3.9,
+                                "target_horizon_days": 20,
+                            },
+                            {
+                                "as_of_date": "2026-07-08",
+                                "symbol": "600030.SH",
+                                "stock_name": "中信证券",
+                                "rank": 2,
+                                "portfolio_weight": 1.0,
+                                "rank_weight_multiplier": 1.0,
+                                "rank_portfolio_adjustment_multiplier": 1.3,
+                                "score": 3.2,
+                                "target_horizon_days": 20,
+                            },
+                            {
+                                "as_of_date": "2026-07-08",
+                                "symbol": "600028.SH",
+                                "stock_name": "中国石化",
+                                "rank": 3,
+                                "portfolio_weight": 1.0,
+                                "rank_weight_multiplier": 0.0,
+                                "score": 3.1,
+                                "target_horizon_days": 20,
+                            },
+                        ],
+                    },
                 ],
             },
             ensure_ascii=False,
@@ -464,6 +511,7 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
     assert [order["strategy_id"] for order in orders] == [
         MAIN_CONFIG_ID,
         UPSTREAM_META_STABILITY_CONTROL_ID,
+        NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
         META_SIGNAL_QUALITY_CONTROL_ID,
         THREE_PART_STABILITY_CONTROL_ID,
         CONDITIONAL_AGGRESSIVE_CONTROL_ID,
@@ -476,16 +524,20 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
         "600030.SH",
         "600030.SH",
         "600030.SH",
+        "600030.SH",
     ]
-    assert [order["shares"] for order in orders] == [100, 200, 200, 200, 200, 100]
+    assert [order["shares"] for order in orders] == [100, 200, 100, 200, 200, 200, 100]
     assert orders[1]["conditional_aggressive_overlay_active"] is True
     assert orders[1]["conditional_aggressive_weight_scale"] == 1.65 * 0.9
-    assert orders[2]["conditional_aggressive_overlay_active"] is True
-    assert orders[2]["conditional_aggressive_weight_scale"] == 1.65 * 0.9
+    assert orders[2]["model_spec_id"] == NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID
+    assert orders[2]["conditional_aggressive_overlay_active"] is False
+    assert orders[2]["conditional_aggressive_weight_scale"] == 1.0
     assert orders[3]["conditional_aggressive_overlay_active"] is True
-    assert orders[3]["conditional_aggressive_weight_scale"] == 1.6
+    assert orders[3]["conditional_aggressive_weight_scale"] == 1.65 * 0.9
     assert orders[4]["conditional_aggressive_overlay_active"] is True
-    assert orders[4]["conditional_aggressive_weight_scale"] == 14 / 11
+    assert orders[4]["conditional_aggressive_weight_scale"] == 1.6
+    assert orders[5]["conditional_aggressive_overlay_active"] is True
+    assert orders[5]["conditional_aggressive_weight_scale"] == 14 / 11
     assert all(order["plan_source"] == "selected_top_k_candidate_run_rolling_tranche_engine" for order in orders)
     contract = build_shortpick_v3_rolling_tranche_execution_contract()
     main_config = next(config for config in contract["candidate_configurations"] if config["config_id"] == MAIN_CONFIG_ID)

@@ -19,6 +19,8 @@ from ashare_evidence.shortpick_strategy_lab_read_model import (
     INITIAL_CASH_CNY,
     MAIN_CONFIG_ID,
     META_SIGNAL_QUALITY_CONTROL_ID,
+    NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
+    NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
     PAPER_STATE_ENV,
     PAPER_STATE_SCHEMA_VERSION,
     THREE_PART_STABILITY_CONTROL_ID,
@@ -41,13 +43,24 @@ CONDITIONAL_AGGRESSIVE_STRATEGY_LABEL = "对照组：条件化攻击模式"
 THREE_PART_STABILITY_STRATEGY_LABEL = "对照组：三段稳定性控制"
 META_SIGNAL_QUALITY_STRATEGY_LABEL = "对照组：元信号质量分层"
 UPSTREAM_META_STABILITY_STRATEGY_LABEL = "对照组：上游元信号稳健缩放"
+NEGATIVE_MONTH_RANK_ADJUSTED_STRATEGY_LABEL = "对照组：递归上游 Rank 权重调整"
 V3_MODEL_SPEC_ID = "selected_exhaustion_date_scaled_v3_top3_20d_v1"
+REQUIRED_V3_MODEL_SPEC_IDS = (V3_MODEL_SPEC_ID, NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID)
 V3_PLAN_SOURCE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_V3_CANDIDATE_RUN_SOURCE"
 V3_SOURCE_DATABASE_URL_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_V3_SOURCE_DATABASE_URL"
 EXTERNAL_PLAN_SOURCE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_PLAN_SOURCE"
 ALLOWED_EXTERNAL_PLAN_SOURCES = {
     "external_v3_selected_top_k_plan",
     "selected_top_k_candidate_run_rolling_tranche_engine",
+}
+STRATEGY_MODEL_SPEC_IDS = {
+    MAIN_CONFIG_ID: V3_MODEL_SPEC_ID,
+    UPSTREAM_META_STABILITY_CONTROL_ID: V3_MODEL_SPEC_ID,
+    META_SIGNAL_QUALITY_CONTROL_ID: V3_MODEL_SPEC_ID,
+    THREE_PART_STABILITY_CONTROL_ID: V3_MODEL_SPEC_ID,
+    CONDITIONAL_AGGRESSIVE_CONTROL_ID: V3_MODEL_SPEC_ID,
+    CONTROL_CONFIG_ID: V3_MODEL_SPEC_ID,
+    NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID: NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
 }
 
 
@@ -106,17 +119,10 @@ def _external_plan_source_orders() -> tuple[list[dict[str, Any]], dict[str, Any]
         row
         for row in rows
         if isinstance(row, dict)
-        and row.get("model_spec_id") == V3_MODEL_SPEC_ID
+        and row.get("model_spec_id") == STRATEGY_MODEL_SPEC_IDS.get(str(row.get("strategy_id") or ""))
         and row.get("plan_source") in ALLOWED_EXTERNAL_PLAN_SOURCES
         and row.get("strategy_id")
-        in {
-            MAIN_CONFIG_ID,
-            CONTROL_CONFIG_ID,
-            CONDITIONAL_AGGRESSIVE_CONTROL_ID,
-            THREE_PART_STABILITY_CONTROL_ID,
-            META_SIGNAL_QUALITY_CONTROL_ID,
-            UPSTREAM_META_STABILITY_CONTROL_ID,
-        }
+        in STRATEGY_MODEL_SPEC_IDS
         and str(row.get("symbol") or "")
         and int(_safe_float(row.get("shares")) or 0) > 0
     ]
@@ -171,6 +177,7 @@ def _selected_pick_plan_row(
     note: str,
     strategy_id: str,
     strategy_label: str,
+    model_spec_id: str,
 ) -> dict[str, Any]:
     shares = int(_safe_float(order.get("shares")) or 0)
     price = _safe_float(order.get("price")) or 0.0
@@ -190,9 +197,11 @@ def _selected_pick_plan_row(
         "target_notional_cny": round(target_notional, 2),
         "portfolio_weight": pick.get("portfolio_weight"),
         "rank_weight_multiplier": pick.get("rank_weight_multiplier"),
+        "rank_portfolio_adjustment_multiplier": pick.get("rank_portfolio_adjustment_multiplier"),
+        "rank_portfolio_adjustment_reasons": pick.get("rank_portfolio_adjustment_reasons"),
         "model_score": pick.get("score"),
         "plan_source": "selected_top_k_candidate_run_rolling_tranche_engine",
-        "model_spec_id": V3_MODEL_SPEC_ID,
+        "model_spec_id": model_spec_id,
         "note": note,
     }
 
@@ -368,11 +377,12 @@ def _strategy_portfolio_weight_scale(picks: list[dict[str, Any]], config: dict[s
 
 def _load_v3_candidate_run_source() -> tuple[dict[str, Any] | None, dict[str, Any]]:
     source_path = Path(os.getenv(V3_PLAN_SOURCE_ENV) or default_v3_candidate_run_source_path(_repo_root()))
-    if not source_path.exists():
-        with session_scope(_v3_source_database_url()) as session:
-            generated = build_latest_v3_candidate_run_source(session)
-        write_latest_v3_candidate_run_source(generated, source_path)
     payload = _load_json(source_path)
+    if payload is None or not _candidate_run_has_required_model_specs(payload):
+        with session_scope(_v3_source_database_url()) as session:
+            generated = build_latest_v3_candidate_run_source(session, model_spec_ids=REQUIRED_V3_MODEL_SPEC_IDS)
+        write_latest_v3_candidate_run_source(generated, source_path)
+        payload = _load_json(source_path)
     if payload is None:
         return None, {
             "status": "blocked_invalid_v3_candidate_run_source",
@@ -388,14 +398,26 @@ def _load_v3_candidate_run_source() -> tuple[dict[str, Any] | None, dict[str, An
     }
 
 
-def _selected_v3_trial(candidate_run: dict[str, Any]) -> dict[str, Any] | None:
+def _candidate_run_has_required_model_specs(candidate_run: dict[str, Any]) -> bool:
+    diagnostics = candidate_run.get("trial_diagnostics")
+    if not isinstance(diagnostics, list):
+        return False
+    present = {
+        str(trial.get("model_spec_id") or "")
+        for trial in diagnostics
+        if isinstance(trial, dict)
+    }
+    return set(REQUIRED_V3_MODEL_SPEC_IDS).issubset(present)
+
+
+def _selected_v3_trial(candidate_run: dict[str, Any], *, model_spec_id: str) -> dict[str, Any] | None:
     diagnostics = candidate_run.get("trial_diagnostics")
     if not isinstance(diagnostics, list):
         return None
     for trial in diagnostics:
         if not isinstance(trial, dict):
             continue
-        if str(trial.get("model_spec_id") or "") == V3_MODEL_SPEC_ID:
+        if str(trial.get("model_spec_id") or "") == model_spec_id:
             return trial
     return None
 
@@ -419,6 +441,7 @@ def _build_strategy_orders(
     min_order_notional: float,
     strategy_id: str,
     strategy_label: str,
+    model_spec_id: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     selected_top_k = max(len(picks), 1)
     signal_day = datetime.fromisoformat(signal_date).date()
@@ -482,6 +505,7 @@ def _build_strategy_orders(
                 note=note,
                 strategy_id=strategy_id,
                 strategy_label=strategy_label,
+                model_spec_id=model_spec_id,
             )
         )
         orders[-1]["conditional_aggressive_overlay_active"] = overlay_active
@@ -493,13 +517,21 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
     candidate_run, source_status = _load_v3_candidate_run_source()
     if candidate_run is None:
         return [], source_status
-    trial = _selected_v3_trial(candidate_run)
+    trial = _selected_v3_trial(candidate_run, model_spec_id=V3_MODEL_SPEC_ID)
     if trial is None:
         return [], {
             **source_status,
             "status": "blocked_missing_selected_v3_trial",
             "model_spec_id": V3_MODEL_SPEC_ID,
             "message": "candidate-run 中没有 v3 selected_exhaustion trial。",
+        }
+    rank_adjusted_trial = _selected_v3_trial(candidate_run, model_spec_id=NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID)
+    if rank_adjusted_trial is None:
+        return [], {
+            **source_status,
+            "status": "blocked_missing_negative_month_rank_adjusted_trial",
+            "model_spec_id": NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
+            "message": "candidate-run 中没有递归上游 Rank 权重调整 trial；不会用旧 v3 源冒充新候选。",
         }
     signal_date, picks = _latest_selected_top_k_picks(trial)
     if signal_date is None:
@@ -511,23 +543,38 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             "model_spec_id": V3_MODEL_SPEC_ID,
             "message": "candidate-run 中没有 signal_date 或 selected_top_k_picks_by_date。",
         }
+    rank_adjusted_signal_date, rank_adjusted_picks = _latest_selected_top_k_picks(rank_adjusted_trial)
+    if rank_adjusted_signal_date is None:
+        rank_adjusted_signal_date = str(candidate_run.get("signal_date") or signal_date)
     if not picks:
-        return [], {
+        if not rank_adjusted_picks:
+            return [], {
+                **source_status,
+                "status": "ready_no_executable_orders",
+                "model_spec_id": V3_MODEL_SPEC_ID,
+                "model_spec_ids": list(REQUIRED_V3_MODEL_SPEC_IDS),
+                "signal_date": signal_date,
+                "selected_top_k": int(_safe_float(trial.get("selected_top_k")) or 0),
+                "selected_pick_count": 0,
+                "selected_pick_count_by_model_spec": {
+                    V3_MODEL_SPEC_ID: 0,
+                    NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID: 0,
+                },
+                "diagnostics": [
+                    {
+                        "action": "no_order",
+                        "reason": "model_selected_cash_or_no_selected_top_k",
+                        "signal_block_reasons": (
+                            trial.get("signal_block_reasons") or candidate_run.get("signal_block_reasons") or []
+                        ),
+                        "strategy_id": MAIN_CONFIG_ID,
+                    }
+                ],
+                "message": "v3 candidate-run 已生成；模型当天选择现金或没有可执行 selected_top_k，纸面追踪不会降级使用旧候选。",
+            }
+        source_status = {
             **source_status,
-            "status": "ready_no_executable_orders",
-            "model_spec_id": V3_MODEL_SPEC_ID,
-            "signal_date": signal_date,
-            "selected_top_k": int(_safe_float(trial.get("selected_top_k")) or 0),
-            "selected_pick_count": 0,
-            "diagnostics": [
-                {
-                    "action": "no_order",
-                    "reason": "model_selected_cash_or_no_selected_top_k",
-                    "signal_block_reasons": trial.get("signal_block_reasons") or candidate_run.get("signal_block_reasons") or [],
-                    "strategy_id": MAIN_CONFIG_ID,
-                }
-            ],
-            "message": "v3 candidate-run 已生成；模型当天选择现金或没有可执行 selected_top_k，纸面追踪不会降级使用旧候选。",
+            "primary_model_status": "ready_no_selected_top_k",
         }
     with session_scope() as session:
         main_orders, main_diagnostics = _build_strategy_orders(
@@ -538,6 +585,7 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             min_order_notional=MAIN_MIN_ORDER_NOTIONAL_CNY,
             strategy_id=MAIN_CONFIG_ID,
             strategy_label=MAIN_STRATEGY_LABEL,
+            model_spec_id=V3_MODEL_SPEC_ID,
         )
         conditional_orders, conditional_diagnostics = _build_strategy_orders(
             session=session,
@@ -547,6 +595,7 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             min_order_notional=MAIN_MIN_ORDER_NOTIONAL_CNY,
             strategy_id=CONDITIONAL_AGGRESSIVE_CONTROL_ID,
             strategy_label=CONDITIONAL_AGGRESSIVE_STRATEGY_LABEL,
+            model_spec_id=V3_MODEL_SPEC_ID,
         )
         stability_orders, stability_diagnostics = _build_strategy_orders(
             session=session,
@@ -556,6 +605,7 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             min_order_notional=1000.0,
             strategy_id=THREE_PART_STABILITY_CONTROL_ID,
             strategy_label=THREE_PART_STABILITY_STRATEGY_LABEL,
+            model_spec_id=V3_MODEL_SPEC_ID,
         )
         meta_orders, meta_diagnostics = _build_strategy_orders(
             session=session,
@@ -565,6 +615,7 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             min_order_notional=1000.0,
             strategy_id=META_SIGNAL_QUALITY_CONTROL_ID,
             strategy_label=META_SIGNAL_QUALITY_STRATEGY_LABEL,
+            model_spec_id=V3_MODEL_SPEC_ID,
         )
         upstream_meta_orders, upstream_meta_diagnostics = _build_strategy_orders(
             session=session,
@@ -574,6 +625,17 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             min_order_notional=MAIN_MIN_ORDER_NOTIONAL_CNY,
             strategy_id=UPSTREAM_META_STABILITY_CONTROL_ID,
             strategy_label=UPSTREAM_META_STABILITY_STRATEGY_LABEL,
+            model_spec_id=V3_MODEL_SPEC_ID,
+        )
+        rank_adjusted_orders, rank_adjusted_diagnostics = _build_strategy_orders(
+            session=session,
+            picks=rank_adjusted_picks,
+            signal_date=rank_adjusted_signal_date,
+            tranche_count=CONTROL_TRANCHE_COUNT,
+            min_order_notional=CONTROL_MIN_ORDER_NOTIONAL_CNY,
+            strategy_id=NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
+            strategy_label=NEGATIVE_MONTH_RANK_ADJUSTED_STRATEGY_LABEL,
+            model_spec_id=NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
         )
         control_orders, control_diagnostics = _build_strategy_orders(
             session=session,
@@ -583,10 +645,12 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             min_order_notional=CONTROL_MIN_ORDER_NOTIONAL_CNY,
             strategy_id=CONTROL_CONFIG_ID,
             strategy_label=CONTROL_STRATEGY_LABEL,
+            model_spec_id=V3_MODEL_SPEC_ID,
         )
     return [
         *main_orders,
         *upstream_meta_orders,
+        *rank_adjusted_orders,
         *meta_orders,
         *stability_orders,
         *conditional_orders,
@@ -594,15 +658,27 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
     ], {
         **source_status,
         "status": "ready"
-        if main_orders or upstream_meta_orders or meta_orders or stability_orders or conditional_orders or control_orders
+        if main_orders
+        or upstream_meta_orders
+        or rank_adjusted_orders
+        or meta_orders
+        or stability_orders
+        or conditional_orders
+        or control_orders
         else "ready_no_executable_orders",
         "model_spec_id": V3_MODEL_SPEC_ID,
+        "model_spec_ids": list(REQUIRED_V3_MODEL_SPEC_IDS),
         "signal_date": signal_date,
         "selected_top_k": int(_safe_float(trial.get("selected_top_k")) or len(picks)),
         "selected_pick_count": len(picks),
+        "selected_pick_count_by_model_spec": {
+            V3_MODEL_SPEC_ID: len(picks),
+            NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID: len(rank_adjusted_picks),
+        },
         "diagnostics": [
             *main_diagnostics,
             *upstream_meta_diagnostics,
+            *rank_adjusted_diagnostics,
             *meta_diagnostics,
             *stability_diagnostics,
             *conditional_diagnostics,

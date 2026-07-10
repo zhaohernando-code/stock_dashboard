@@ -55,6 +55,7 @@ function stringField(source: Record<string, unknown> | undefined, key: string): 
 function configRoleLabel(role?: string | null): string {
   if (role === "primary_forward_observation") return "主策略";
   if (role === "lower_concentration_control") return "低集中对照";
+  if (role === "recursive_upstream_rank_weight_candidate") return "递归上游候选";
   if (role === "phase6_forward_observation_candidate") return "前向观察候选";
   if (role === "primary_future_observation_candidate") return "冻结主策略";
   if (role === "capital_shadow_future_observation_candidate") return "资金影子对照";
@@ -72,6 +73,7 @@ function configRoleLabel(role?: string | null): string {
 function configRoleColor(role?: string | null): string {
   if (role === "primary_forward_observation") return "green";
   if (role === "lower_concentration_control") return "blue";
+  if (role === "recursive_upstream_rank_weight_candidate") return "purple";
   if (role === "phase6_forward_observation_candidate") return "green";
   if (role === "primary_future_observation_candidate") return "green";
   if (role === "capital_shadow_future_observation_candidate") return "blue";

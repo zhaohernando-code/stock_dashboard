@@ -46,6 +46,8 @@ def main() -> int:
                 "artifact_id": payload.get("artifact_id"),
                 "signal_date": payload.get("signal_date"),
                 "selected_pick_count": payload.get("selected_pick_count"),
+                "model_spec_ids": payload.get("model_spec_ids"),
+                "selected_pick_count_by_model_spec": payload.get("selected_pick_count_by_model_spec"),
             },
             ensure_ascii=False,
         )
