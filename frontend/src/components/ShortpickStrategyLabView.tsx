@@ -356,10 +356,11 @@ function PlannedOrdersCard({
       ),
     },
     {
-      title: "明日买入",
+      title: "计划动作",
       key: "buy",
       render: (_, item) => {
         const stock = `${plannedOrderText(item, "name")} · ${plannedOrderText(item, "symbol")}`.replace(/^ · | · $/g, "");
+        const action = plannedOrderText(item, "action") === "sell" ? "卖" : "买";
         return (
           <Space direction="vertical" size={0}>
             <Text strong>{stock || "暂无标的"}</Text>
@@ -367,7 +368,7 @@ function PlannedOrdersCard({
               {plannedOrderText(item, "planned_entry_date") || "待定"}
               {" · "}
               {plannedOrderText(item, "entry_timing") || "次日收盘"}
-              {" · 买 "}
+              {` · ${action} `}
               {plannedOrderText(item, "shares") || "0"}
               {" 股"}
             </Text>
@@ -392,7 +393,7 @@ function PlannedOrdersCard({
     },
   ];
   return (
-    <Card className="panel-card" title="明日计划单">
+    <Card className="panel-card" title="下一交易日计划单">
       {loading ? (
         <Skeleton active paragraph={{ rows: 3 }} />
       ) : orders.length ? (

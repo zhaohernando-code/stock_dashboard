@@ -158,6 +158,7 @@ payload["StartCalendarInterval"] = sorted(
     intervals,
     key=lambda item: (int(item.get("Hour", 0)), int(item.get("Minute", 0))),
 )
+payload["StartInterval"] = 300
 # RunAtLoad must stay false: launchctl bootstrap (below, and any reload during
 # governance work) would otherwise fire a full ~50min phase5-daily-refresh on
 # every publish/reload. The StartCalendarInterval/StartInterval ticks plus the

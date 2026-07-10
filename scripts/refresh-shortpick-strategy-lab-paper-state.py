@@ -23,6 +23,7 @@ from ashare_evidence.shortpick_strategy_lab_read_model import (
     NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
     PAPER_STATE_ENV,
     PAPER_STATE_SCHEMA_VERSION,
+    QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
     THREE_PART_STABILITY_CONTROL_ID,
     TRACKING_START_DATE,
     UPSTREAM_META_STABILITY_CONTROL_ID,
@@ -44,6 +45,7 @@ THREE_PART_STABILITY_STRATEGY_LABEL = "对照组：三段稳定性控制"
 META_SIGNAL_QUALITY_STRATEGY_LABEL = "对照组：元信号质量分层"
 UPSTREAM_META_STABILITY_STRATEGY_LABEL = "对照组：上游元信号稳健缩放"
 NEGATIVE_MONTH_RANK_ADJUSTED_STRATEGY_LABEL = "对照组：递归上游 Rank 权重调整"
+QUALITY_REPLACEMENT_REBALANCE_STRATEGY_LABEL = "候选对照：高质量可买替补 + 25% 暴露再平衡"
 V3_MODEL_SPEC_ID = "selected_exhaustion_date_scaled_v3_top3_20d_v1"
 REQUIRED_V3_MODEL_SPEC_IDS = (V3_MODEL_SPEC_ID, NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID)
 V3_PLAN_SOURCE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_V3_CANDIDATE_RUN_SOURCE"
@@ -61,6 +63,7 @@ STRATEGY_MODEL_SPEC_IDS = {
     CONDITIONAL_AGGRESSIVE_CONTROL_ID: V3_MODEL_SPEC_ID,
     CONTROL_CONFIG_ID: V3_MODEL_SPEC_ID,
     NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID: NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
+    QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID: NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
 }
 
 
@@ -183,6 +186,7 @@ def _selected_pick_plan_row(
     price = _safe_float(order.get("price")) or 0.0
     target_notional = _safe_float(order.get("target_notional_cny")) or 0.0
     return {
+        "action": "buy",
         "strategy_id": strategy_id,
         "strategy_label": strategy_label,
         "signal_date": str(order.get("signal_day") or ""),
@@ -366,13 +370,40 @@ def _meta_signal_quality_scale(picks: list[dict[str, Any]], config: dict[str, An
     return scale, True, "；".join(reasons) + "。"
 
 
+def _rank1_quality_scale(picks: list[dict[str, Any]], config: dict[str, Any]) -> tuple[float, bool, str]:
+    overlay = config.get("rank1_quality_overlay")
+    if not isinstance(overlay, dict):
+        return 1.0, False, ""
+    rank_pick = next((pick for pick in picks if int(_safe_float(pick.get("rank")) or 0) == 1), None)
+    if rank_pick is None:
+        return 1.0, False, "未找到 Rank1，高质量强信号覆盖未启用。"
+    values = _pick_feature_values(rank_pick)
+    checks = (
+        (_safe_float(values.get("return_20d_percentile")) or 0.0)
+        >= (_safe_float(overlay.get("strong_return_20d_percentile_min")) or 0.95),
+        (_safe_float(values.get("return_5d_percentile")) or 0.0)
+        >= (_safe_float(overlay.get("strong_return_5d_percentile_min")) or 0.93),
+        (_safe_float(values.get("benchmark_return_20d")) or 0.0)
+        >= (_safe_float(overlay.get("strong_benchmark_return_20d_min")) or 0.0),
+        (_safe_float(values.get("industry_return_20d_excess")) or 0.0)
+        <= (_safe_float(overlay.get("strong_industry_return_20d_excess_max")) or 0.50),
+        (_safe_float(values.get("distance_from_20d_high")) or 0.0)
+        >= (_safe_float(overlay.get("strong_distance_from_20d_high_min")) or -0.08),
+    )
+    if not all(checks):
+        return 1.0, False, "Rank1 未满足高质量强信号条件，按基础权重生成。"
+    scale = _safe_float(overlay.get("strong_scale")) or 1.0
+    return scale, True, f"Rank1 满足高质量强信号条件，组合权重按 {scale:.2f} 倍生成。"
+
+
 def _strategy_portfolio_weight_scale(picks: list[dict[str, Any]], config: dict[str, Any]) -> tuple[float, bool, str]:
     conditional_scale, conditional_active, conditional_note = _conditional_aggressive_scale(picks, config)
     stability_scale, stability_active, stability_note = _three_part_stability_scale(picks, config)
     meta_scale, meta_active, meta_note = _meta_signal_quality_scale(picks, config)
-    scale = conditional_scale * stability_scale * meta_scale
-    notes = [note for note in (conditional_note, stability_note, meta_note) if note]
-    return scale, conditional_active or stability_active or meta_active, "".join(notes)
+    quality_scale, quality_active, quality_note = _rank1_quality_scale(picks, config)
+    scale = conditional_scale * stability_scale * meta_scale * quality_scale
+    notes = [note for note in (conditional_note, stability_note, meta_note, quality_note) if note]
+    return scale, conditional_active or stability_active or meta_active or quality_active, "".join(notes)
 
 
 def _load_v3_candidate_run_source() -> tuple[dict[str, Any] | None, dict[str, Any]]:
@@ -407,7 +438,18 @@ def _candidate_run_has_required_model_specs(candidate_run: dict[str, Any]) -> bo
         for trial in diagnostics
         if isinstance(trial, dict)
     }
-    return set(REQUIRED_V3_MODEL_SPEC_IDS).issubset(present)
+    if not set(REQUIRED_V3_MODEL_SPEC_IDS).issubset(present):
+        return False
+    rank_adjusted = next(
+        (
+            trial
+            for trial in diagnostics
+            if isinstance(trial, dict)
+            and str(trial.get("model_spec_id") or "") == NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID
+        ),
+        None,
+    )
+    return isinstance(rank_adjusted, dict) and isinstance(rank_adjusted.get("ranked_candidate_inventory_by_date"), list)
 
 
 def _selected_v3_trial(candidate_run: dict[str, Any], *, model_spec_id: str) -> dict[str, Any] | None:
@@ -432,6 +474,197 @@ def _latest_selected_top_k_picks(trial: dict[str, Any]) -> tuple[str | None, lis
     return latest_date, [row for row in picks if str(row.get("as_of_date") or "") == latest_date]
 
 
+def _latest_ranked_candidate_inventory(trial: dict[str, Any]) -> tuple[str | None, list[dict[str, Any]]]:
+    rows = [row for row in trial.get("ranked_candidate_inventory_by_date") or [] if isinstance(row, dict)]
+    if not rows:
+        return None, []
+    latest_date = max(str(row.get("as_of_date") or "") for row in rows)
+    return latest_date, sorted(
+        [row for row in rows if str(row.get("as_of_date") or "") == latest_date],
+        key=lambda row: int(_safe_float(row.get("rank")) or 999),
+    )
+
+
+def _affordable_replacement_order(
+    *,
+    skipped_row: dict[str, Any],
+    original_pick: dict[str, Any],
+    inventory: list[dict[str, Any]],
+    estimated_close_by_symbol: dict[str, float],
+    selected_symbols: set[str],
+    config: dict[str, Any],
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    policy = config.get("affordable_replacement_policy")
+    if not isinstance(policy, dict) or skipped_row.get("reason") != policy.get("trigger_reason"):
+        return None, []
+    target_notional = _safe_float(skipped_row.get("target_notional_cny")) or 0.0
+    original_score = _safe_float(original_pick.get("score")) or 0.0
+    rank_min = int(_safe_float(policy.get("inventory_rank_min")) or 4)
+    rank_max = int(_safe_float(policy.get("inventory_rank_max")) or 5)
+    max_score_gap = _safe_float(policy.get("max_score_gap")) or 0.10
+    min_fill_ratio = _safe_float(policy.get("min_fill_ratio")) or 0.75
+    min_notional = _safe_float(policy.get("min_order_notional_cny")) or 250.0
+    board_lot_size = int(_safe_float(policy.get("board_lot_size")) or 100)
+    buy_cost_rate = 20.0 / 10_000.0
+    rejections: list[dict[str, Any]] = []
+    for candidate in inventory:
+        inventory_rank = int(_safe_float(candidate.get("rank")) or 0)
+        if inventory_rank < rank_min or inventory_rank > rank_max:
+            continue
+        symbol = str(candidate.get("symbol") or "")
+        reason: str | None = None
+        price = estimated_close_by_symbol.get(symbol)
+        if candidate.get("selection_allowed") is False:
+            reason = "inventory_selection_not_allowed"
+        elif symbol in selected_symbols:
+            reason = "duplicate_selected_on_signal"
+        elif (_safe_float(candidate.get("score")) or 0.0) < original_score - max_score_gap:
+            reason = "replacement_score_gap_above_max"
+        elif price is None:
+            reason = "missing_latest_close_price"
+        else:
+            one_lot_cash = price * board_lot_size * (1.0 + buy_cost_rate)
+            lot_count = int(target_notional // one_lot_cash)
+            cash_spent = lot_count * one_lot_cash
+            fill_ratio = cash_spent / target_notional if target_notional else 0.0
+            if one_lot_cash > target_notional:
+                reason = "one_lot_exceeds_original_rank_budget_including_fee"
+            elif cash_spent < min_notional:
+                reason = "replacement_notional_below_minimum"
+            elif fill_ratio < min_fill_ratio:
+                reason = "replacement_fill_ratio_below_min"
+            else:
+                replacement_pick = {
+                    **candidate,
+                    "rank": int(_safe_float(original_pick.get("rank")) or 0),
+                    "replacement_inventory_rank": inventory_rank,
+                    "replacement_original_symbol": str(original_pick.get("symbol") or ""),
+                }
+                return {
+                    "action": "buy",
+                    "reason": "bought_affordable_rank4_5_replacement",
+                    "signal_day": skipped_row.get("signal_day"),
+                    "trade_day": skipped_row.get("trade_day"),
+                    "symbol": symbol,
+                    "rank": replacement_pick["rank"],
+                    "shares": lot_count * board_lot_size,
+                    "price": price,
+                    "target_notional_cny": target_notional,
+                    "replacement_pick": replacement_pick,
+                    "replacement_fill_ratio": fill_ratio,
+                    "replacement_inventory_rank": inventory_rank,
+                }, rejections
+        rejections.append({"symbol": symbol, "inventory_rank": inventory_rank, "reason": reason})
+    return None, rejections
+
+
+def _market_exposure_rebalance_orders(
+    *,
+    session: Any,
+    account_state: dict[str, Any] | None,
+    planned_buys: list[dict[str, Any]],
+    strategy_id: str,
+    strategy_label: str,
+    signal_date: str,
+    planned_trade_date: str,
+    config: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    policy = config.get("market_value_concentration_rebalance")
+    if not isinstance(policy, dict):
+        return [], []
+    state = account_state if isinstance(account_state, dict) else {}
+    cash = _safe_float(state.get("cash_cny"))
+    if cash is None:
+        cash = INITIAL_CASH_CNY
+    positions: dict[str, dict[str, Any]] = {}
+    for row in state.get("positions") or []:
+        if not isinstance(row, dict):
+            continue
+        symbol = str(row.get("symbol") or "")
+        shares = int(_safe_float(row.get("shares")) or 0)
+        if symbol and shares > 0:
+            positions[symbol] = {**row, "shares": shares}
+    buy_cost_rate = 20.0 / 10_000.0
+    for order in planned_buys:
+        if order.get("action") != "buy":
+            continue
+        symbol = str(order.get("symbol") or "")
+        shares = int(_safe_float(order.get("shares")) or 0)
+        price = _safe_float(order.get("estimated_entry_price_cny")) or 0.0
+        if not symbol or shares <= 0 or price <= 0:
+            continue
+        current = positions.setdefault(symbol, {"symbol": symbol, "name": order.get("name"), "shares": 0})
+        current["shares"] = int(current["shares"]) + shares
+        cash -= shares * price * (1.0 + buy_cost_rate)
+    prices = {
+        symbol: _latest_close_price(session, symbol)
+        for symbol in positions
+    }
+    values = {
+        symbol: row["shares"] * float(prices[symbol])
+        for symbol, row in positions.items()
+        if prices.get(symbol) is not None
+    }
+    nav = cash + sum(values.values())
+    threshold = _safe_float(policy.get("threshold")) or 0.25
+    board_lot_size = int(_safe_float(policy.get("board_lot_size")) or 100)
+    sell_cost_rate = (_safe_float(policy.get("sell_cost_bps")) or 25.0) / 10_000.0
+    orders: list[dict[str, Any]] = []
+    diagnostics: list[dict[str, Any]] = []
+    for symbol in sorted(values, key=values.get, reverse=True):
+        price = float(prices[symbol] or 0.0)
+        shares = int(positions[symbol]["shares"])
+        exposure_before = values[symbol] / nav if nav > 0 else 0.0
+        if exposure_before <= threshold:
+            continue
+        sell_shares = 0
+        post_value = values[symbol]
+        post_nav = nav
+        while sell_shares + board_lot_size <= shares and post_nav > 0 and post_value / post_nav > threshold:
+            sell_shares += board_lot_size
+            post_value -= board_lot_size * price
+            post_nav -= board_lot_size * price * sell_cost_rate
+        if sell_shares <= 0:
+            continue
+        exposure_after = post_value / post_nav if post_nav > 0 else 0.0
+        orders.append(
+            {
+                "action": "sell",
+                "strategy_id": strategy_id,
+                "strategy_label": strategy_label,
+                "signal_date": signal_date,
+                "planned_entry_date": planned_trade_date,
+                "symbol": symbol,
+                "name": str(positions[symbol].get("name") or symbol),
+                "shares": sell_shares,
+                "entry_timing": "计划买入完成后的当日收盘再平衡",
+                "estimated_entry_price_cny": price,
+                "estimated_notional_cny": round(sell_shares * price, 2),
+                "plan_source": "market_value_concentration_rebalance",
+                "model_spec_id": NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
+                "reason": "market_value_concentration_rebalance",
+                "exposure_before": exposure_before,
+                "exposure_after": exposure_after,
+                "threshold": threshold,
+                "note": f"按收盘市值将 {symbol} 的单票暴露从 {exposure_before:.2%} 降至 {exposure_after:.2%}。",
+            }
+        )
+        diagnostics.append(
+            {
+                "action": "sell",
+                "reason": "market_value_concentration_rebalance",
+                "strategy_id": strategy_id,
+                "symbol": symbol,
+                "shares": sell_shares,
+                "exposure_before": exposure_before,
+                "exposure_after": exposure_after,
+            }
+        )
+        nav = post_nav
+        values[symbol] = post_value
+    return orders, diagnostics
+
+
 def _build_strategy_orders(
     *,
     session: Any,
@@ -442,6 +675,8 @@ def _build_strategy_orders(
     strategy_id: str,
     strategy_label: str,
     model_spec_id: str,
+    replacement_inventory: list[dict[str, Any]] | None = None,
+    account_state: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     selected_top_k = max(len(picks), 1)
     signal_day = datetime.fromisoformat(signal_date).date()
@@ -455,8 +690,10 @@ def _build_strategy_orders(
     executable_picks = _apply_portfolio_weight_scale(picks, portfolio_weight_scale)
     estimated_close_by_symbol: dict[str, float] = {}
     picks_by_symbol = {str(pick.get("symbol") or ""): pick for pick in executable_picks}
-    for pick in executable_picks:
+    for pick in [*executable_picks, *(replacement_inventory or [])]:
         symbol = str(pick.get("symbol") or "")
+        if symbol in estimated_close_by_symbol:
+            continue
         price = _latest_close_price(session, symbol)
         if price is not None:
             estimated_close_by_symbol[symbol] = price
@@ -472,10 +709,61 @@ def _build_strategy_orders(
     )
     orders: list[dict[str, Any]] = []
     diagnostics: list[dict[str, Any]] = []
+    held_symbols = {
+        str(row.get("symbol") or "")
+        for row in (account_state or {}).get("positions", [])
+        if isinstance(row, dict) and int(_safe_float(row.get("shares")) or 0) > 0
+    }
+    selected_symbols = set(picks_by_symbol) | held_symbols
     for row in projected_orders:
         symbol = str(row.get("symbol") or "")
         pick = picks_by_symbol.get(symbol, {})
         if row.get("action") != "buy":
+            replacement, replacement_rejections = _affordable_replacement_order(
+                skipped_row=row,
+                original_pick=pick,
+                inventory=replacement_inventory or [],
+                estimated_close_by_symbol=estimated_close_by_symbol,
+                selected_symbols=selected_symbols,
+                config=config,
+            )
+            if replacement is not None:
+                replacement_pick = replacement.pop("replacement_pick")
+                replacement_note = (
+                    f"原 Rank{int(_safe_float(pick.get('rank')) or 0)} 股票 {symbol} 一手超过目标预算；"
+                    f"按同日 PIT Top20 库存、分差不超过 0.10、库存 Rank4-5、填充率不低于 75% 的规则，"
+                    f"替换为 {replacement_pick.get('stock_name') or replacement_pick.get('symbol')}，"
+                    f"买入 {int(_safe_float(replacement.get('shares')) or 0)} 股。"
+                )
+                order = _selected_pick_plan_row(
+                    replacement,
+                    replacement_pick,
+                    note=replacement_note,
+                    strategy_id=strategy_id,
+                    strategy_label=strategy_label,
+                    model_spec_id=model_spec_id,
+                )
+                order.update(
+                    {
+                        "replacement_original_symbol": symbol,
+                        "replacement_inventory_rank": replacement.get("replacement_inventory_rank"),
+                        "replacement_fill_ratio": replacement.get("replacement_fill_ratio"),
+                        "affordable_replacement_active": True,
+                    }
+                )
+                orders.append(order)
+                diagnostics.append(
+                    {
+                        "action": "replace",
+                        "reason": replacement.get("reason"),
+                        "strategy_id": strategy_id,
+                        "original_symbol": symbol,
+                        "symbol": replacement.get("symbol"),
+                        "replacement_inventory_rank": replacement.get("replacement_inventory_rank"),
+                        "candidate_rejections": replacement_rejections,
+                    }
+                )
+                continue
             diagnostic = {
                 "action": row.get("action"),
                 "reason": row.get("reason"),
@@ -488,6 +776,8 @@ def _build_strategy_orders(
             if row.get("reason") == "price_too_high_for_slot" and symbol in estimated_close_by_symbol:
                 diagnostic["one_lot_notional_cny"] = round(estimated_close_by_symbol[symbol] * 100, 2)
             diagnostics.append(diagnostic)
+            if replacement_rejections:
+                diagnostic["replacement_rejections"] = replacement_rejections
             continue
         note = (
             "按 v3 selected_top_k 与 rolling tranche 回放同一买入内核生成；"
@@ -513,7 +803,10 @@ def _build_strategy_orders(
     return orders, diagnostics
 
 
-def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def _v3_model_generated_plan(
+    *,
+    account_states: dict[str, Any] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     candidate_run, source_status = _load_v3_candidate_run_source()
     if candidate_run is None:
         return [], source_status
@@ -544,8 +837,11 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             "message": "candidate-run 中没有 signal_date 或 selected_top_k_picks_by_date。",
         }
     rank_adjusted_signal_date, rank_adjusted_picks = _latest_selected_top_k_picks(rank_adjusted_trial)
+    inventory_signal_date, rank_adjusted_inventory = _latest_ranked_candidate_inventory(rank_adjusted_trial)
     if rank_adjusted_signal_date is None:
         rank_adjusted_signal_date = str(candidate_run.get("signal_date") or signal_date)
+    if inventory_signal_date != rank_adjusted_signal_date:
+        rank_adjusted_inventory = []
     if not picks:
         if not rank_adjusted_picks:
             return [], {
@@ -637,6 +933,34 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             strategy_label=NEGATIVE_MONTH_RANK_ADJUSTED_STRATEGY_LABEL,
             model_spec_id=NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
         )
+        quality_orders, quality_diagnostics = _build_strategy_orders(
+            session=session,
+            picks=rank_adjusted_picks,
+            signal_date=rank_adjusted_signal_date,
+            tranche_count=CONTROL_TRANCHE_COUNT,
+            min_order_notional=250.0,
+            strategy_id=QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
+            strategy_label=QUALITY_REPLACEMENT_REBALANCE_STRATEGY_LABEL,
+            model_spec_id=NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
+            replacement_inventory=rank_adjusted_inventory,
+            account_state=(account_states or {}).get(QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID),
+        )
+        quality_config = _rolling_config_by_id(QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID)
+        quality_trade_date = (
+            str(quality_orders[0].get("planned_entry_date") or "")
+            if quality_orders
+            else _next_business_day(date.fromisoformat(rank_adjusted_signal_date)).isoformat()
+        )
+        quality_rebalance_orders, quality_rebalance_diagnostics = _market_exposure_rebalance_orders(
+            session=session,
+            account_state=(account_states or {}).get(QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID),
+            planned_buys=quality_orders,
+            strategy_id=QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
+            strategy_label=QUALITY_REPLACEMENT_REBALANCE_STRATEGY_LABEL,
+            signal_date=rank_adjusted_signal_date,
+            planned_trade_date=quality_trade_date,
+            config=quality_config,
+        )
         control_orders, control_diagnostics = _build_strategy_orders(
             session=session,
             picks=picks,
@@ -649,6 +973,8 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
         )
     return [
         *main_orders,
+        *quality_orders,
+        *quality_rebalance_orders,
         *upstream_meta_orders,
         *rank_adjusted_orders,
         *meta_orders,
@@ -659,6 +985,8 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
         **source_status,
         "status": "ready"
         if main_orders
+        or quality_orders
+        or quality_rebalance_orders
         or upstream_meta_orders
         or rank_adjusted_orders
         or meta_orders
@@ -675,8 +1003,13 @@ def _v3_model_generated_plan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             V3_MODEL_SPEC_ID: len(picks),
             NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID: len(rank_adjusted_picks),
         },
+        "ranked_candidate_inventory_count_by_model_spec": {
+            NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID: len(rank_adjusted_inventory),
+        },
         "diagnostics": [
             *main_diagnostics,
+            *quality_diagnostics,
+            *quality_rebalance_diagnostics,
             *upstream_meta_diagnostics,
             *rank_adjusted_diagnostics,
             *meta_diagnostics,
@@ -692,18 +1025,20 @@ def main() -> int:
     path = _state_path()
     existing = _load_json(path) or {}
     records = existing.get("records") if isinstance(existing.get("records"), list) else []
+    account_states = existing.get("account_states") if isinstance(existing.get("account_states"), dict) else {}
     plan_status: dict[str, Any] = {}
     sourced_orders, source_status = _external_plan_source_orders()
     if source_status is not None:
         planned_orders = sourced_orders
         plan_status = source_status
     else:
-        planned_orders, plan_status = _v3_model_generated_plan()
+        planned_orders, plan_status = _v3_model_generated_plan(account_states=account_states)
     payload = {
         "schema_version": PAPER_STATE_SCHEMA_VERSION,
         "generated_at": datetime.now(UTC).isoformat(),
         "tracking_start_date": str(existing.get("tracking_start_date") or TRACKING_START_DATE),
         "records": [row for row in records if isinstance(row, dict)],
+        "account_states": account_states,
         "planned_orders": planned_orders,
         "plan_generation_status": plan_status,
     }

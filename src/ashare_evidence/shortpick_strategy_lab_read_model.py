@@ -32,6 +32,10 @@ NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID = "negative_month_rank_weight_adjuste
 NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID = (
     "daily_15_tranche_rank_weighted_compound_min1000_layered_rank1_quickfail_rank3_pullback_exit_v1"
 )
+QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID = (
+    "daily_15_tranche_rank_adjusted_r5_093_strong154_replacement_"
+    "top5_gap010_fill075_market_cap25_v1"
+)
 PAPER_STATE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_PAPER_STATE"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -88,6 +92,11 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
                 "artifact_id": "self_driven_upstream_negative_month_adjusted_formal_account_scan_20260709",
                 "artifact_type": "shortpick_v3_full_history_order_level_account_scan",
             },
+            "quality_replacement_rebalance_control_replay": {
+                "status": "persisted_static_metrics",
+                "path": "docs/contracts/SHORTPICK_V3_R14_QUALITY_REPLACEMENT_REBALANCE_2026-07-10.json",
+                "artifact_type": "shortpick_v3_full_history_order_level_account_replay",
+            },
         },
         "data_scope": {
             "signal_date_from": "2023-09-07",
@@ -108,7 +117,7 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
         },
         "summary": {
             "selected_config_count": 1,
-            "baseline_config_count": 6,
+            "baseline_config_count": 7,
             "signal_day_count": 509,
             "coverage_status": "static_full_history_ready",
             "initial_cash_cny": INITIAL_CASH_CNY,
@@ -122,6 +131,7 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
         },
         "selected_configs": [_main_config_readout()],
         "baseline_configs": [
+            _quality_replacement_rebalance_control_readout(),
             _upstream_meta_stability_control_readout(),
             _negative_month_rank_adjusted_control_readout(),
             _meta_signal_quality_control_readout(),
@@ -226,6 +236,7 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
         },
         "selected_configs": [_paper_main_config_readout()],
         "baseline_configs": [
+            _paper_quality_replacement_rebalance_control_readout(),
             _paper_upstream_meta_stability_control_readout(),
             _paper_negative_month_rank_adjusted_control_readout(),
             _paper_meta_signal_quality_control_readout(),
@@ -237,6 +248,7 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             "status": "active_forward_observation",
             "primary_config_id": MAIN_CONFIG_ID,
             "control_config_ids": [
+                QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
                 UPSTREAM_META_STABILITY_CONTROL_ID,
                 NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
                 META_SIGNAL_QUALITY_CONTROL_ID,
@@ -549,6 +561,90 @@ def _meta_signal_quality_control_readout() -> dict[str, Any]:
     }
 
 
+def _quality_replacement_rebalance_control_readout() -> dict[str, Any]:
+    return {
+        "config_id": QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
+        "model_spec_id": NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
+        "label": "候选对照：高质量可买替补 + 25% 暴露再平衡",
+        "role": "quality_replacement_rebalance_candidate",
+        "selection_rank": 1,
+        "gate_status": "candidate_control",
+        "reason": (
+            "完整历史逐订单回放严格超过前端全部策略逐指标最优值；负收益月份从最优 3 个降至 2 个，"
+            "订单跳过率和信号跳过率分别相对改善 20.21% 与 31.63%。"
+        ),
+        "summary": {
+            "total_return": 3.4176736350000008,
+            "annualized_return": 0.6996469611916643,
+            "max_drawdown": -0.06796905647829043,
+            "negative_month_count": 2,
+            "worst_monthly_return": -0.014130266706049999,
+            "skipped_order_rate": 0.15560165975103735,
+            "skipped_signal_rate": 0.13111545988258316,
+            "buy_order_count": 814,
+            "sell_order_count": 790,
+            "final_nav_cny": 883534.7270000002,
+            "mean_invested_ratio": 0.6909971507926389,
+            "p95_invested_ratio": 0.9872182920144233,
+            "max_single_symbol_exposure_pct": 0.24953416606359471,
+            "max_position_count": 37,
+            "turnover": 99.425354415,
+        },
+        "selection_summary": {
+            "signal_date_from": "2023-09-07",
+            "signal_date_to": "2026-06-26",
+            "signal_day_count": 511,
+            "selected_pick_count": 1533,
+            "tranche_count": 15,
+            "budget_mode": "current_nav_fraction",
+            "min_order_notional_cny": 250,
+            "max_single_symbol_cost_basis_pct": 0.35,
+            "exit_policy": "rank3_pullback_rank1_quick_fail_guard",
+            "rank1_quality_overlay": {
+                "return_20d_percentile_min": 0.95,
+                "return_5d_percentile_min": 0.93,
+                "benchmark_return_20d_min": 0.0,
+                "industry_return_20d_excess_max": 0.50,
+                "distance_from_20d_high_min": -0.08,
+                "strong_scale": 1.54,
+            },
+            "affordable_replacement": {
+                "source": "same_day_pit_top20_inventory",
+                "inventory_rank_range": [4, 5],
+                "max_score_gap": 0.10,
+                "min_fill_ratio": 0.75,
+                "accepted_replacement_count": 53,
+            },
+            "market_value_rebalance": {
+                "threshold": 0.25,
+                "timing": "scheduled_exits_then_entries_then_close_mark_then_trim",
+                "rebalance_sell_order_count": 2,
+                "post_executable_order_breach_day_count": 0,
+            },
+        },
+        "goal10_improvements": {
+            "total_return_rel": 0.016198551986917133,
+            "annualized_return_rel": 0.010855455255086665,
+            "drawdown_reduction_rel": 0.017794513220975926,
+            "negative_month_delta": 1,
+            "worst_monthly_return_rel": 0.0035352726121860136,
+            "skip_order_reduction_rel": 0.20212765957446807,
+            "skip_signal_reduction_rel": 0.3163265306122449,
+            "exposure_reduction_rel": 0.009245479498723404,
+            "final_nav_rel": 0.01248600810220579,
+        },
+        "reason_counts": {
+            "below_min_order_notional": 13,
+            "insufficient_cash": 39,
+            "missing_entry_bar": 3,
+            "missing_entry_bar_near_signal": 18,
+            "price_too_high_for_slot": 59,
+            "single_symbol_concentration_cap": 18,
+        },
+        "decision_samples": [],
+    }
+
+
 def _upstream_meta_stability_control_readout() -> dict[str, Any]:
     return {
         "config_id": UPSTREAM_META_STABILITY_CONTROL_ID,
@@ -692,6 +788,25 @@ def _paper_main_config_readout() -> dict[str, Any]:
     return {
         **readout,
         "reason": "前向纸面追踪从 20 万本金重新开始；历史回放收益只作为历史页静态指标，不计入这里。",
+        "summary": {
+            "initial_cash_cny": INITIAL_CASH_CNY,
+            "current_nav_cny": INITIAL_CASH_CNY,
+            "paper_total_return": None,
+            "max_drawdown": None,
+            "record_count": 0,
+            "planned_order_count": None,
+            "forward_status": "awaiting_first_forward_fill",
+        },
+        "reason_counts": {},
+        "decision_samples": [],
+    }
+
+
+def _paper_quality_replacement_rebalance_control_readout() -> dict[str, Any]:
+    readout = _quality_replacement_rebalance_control_readout()
+    return {
+        **readout,
+        "reason": "高质量可买替补与 25% 暴露再平衡按历史回放同一规则从 20 万本金开始前向观察。",
         "summary": {
             "initial_cash_cny": INITIAL_CASH_CNY,
             "current_nav_cny": INITIAL_CASH_CNY,
@@ -885,7 +1000,10 @@ def _paper_display(
                 {"label": "卖出规则", "value": "基础为 20 日退出；Rank1 快速冲高失败和 Rank3 入场回撤后期亏损会提前退出。"},
                 {
                     "label": "对照组",
-                    "value": "三段稳定性控制、条件化攻击模式和 15 tranche 低集中度复投，分别观察执行稳定、更高置信信号加仓与更分散资金路径。",
+                    "value": (
+                        "包含高质量可买替补与 25% 暴露再平衡、递归上游 Rank 调整、"
+                        "元信号缩放及低集中度复投等方向性对照。"
+                    ),
                 },
             ],
         },
@@ -939,7 +1057,7 @@ def _latest_trade_display(
         plan_status = str(plan_generation_status.get("status") or "")
         no_order_ready = plan_status == "ready_no_executable_orders"
         return {
-            "title": "明日计划买入",
+            "title": "下一交易日计划",
             "tag": "模型现金" if no_order_ready else "计划源阻塞" if not plan_status.startswith("ready") else "等待日刷",
             "summary": str(
                 plan_generation_status.get("message")
@@ -951,11 +1069,12 @@ def _latest_trade_display(
     stock_text = f"{latest_order.get('name') or ''} · {latest_order.get('symbol') or ''}".strip(" ·")
     shares = int(float(latest_order.get("shares") or 0))
     entry_timing = str(latest_order.get("entry_timing") or "次日收盘")
-    summary = f"{stock_text}，买 {shares} 股，{entry_timing}。"
+    action = "卖" if latest_order.get("action") == "sell" else "买"
+    summary = f"{stock_text}，{action} {shares} 股，{entry_timing}。"
     if len(planned_orders) > 1:
         summary = f"{summary} 另有 {len(planned_orders) - 1} 条对照组计划单。"
     return {
-        "title": "明日计划买入",
+        "title": "下一交易日计划",
         "tag": "待执行",
         "summary": summary,
         "items": [
@@ -1035,12 +1154,13 @@ def _planned_orders_from_state(state: dict[str, Any] | None) -> list[dict[str, A
     normalized = [row for row in rows if isinstance(row, dict)]
     strategy_order = {
         MAIN_CONFIG_ID: 0,
-        UPSTREAM_META_STABILITY_CONTROL_ID: 1,
-        NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID: 2,
-        META_SIGNAL_QUALITY_CONTROL_ID: 3,
-        THREE_PART_STABILITY_CONTROL_ID: 4,
-        CONDITIONAL_AGGRESSIVE_CONTROL_ID: 5,
-        CONTROL_CONFIG_ID: 6,
+        QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID: 1,
+        UPSTREAM_META_STABILITY_CONTROL_ID: 2,
+        NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID: 3,
+        META_SIGNAL_QUALITY_CONTROL_ID: 4,
+        THREE_PART_STABILITY_CONTROL_ID: 5,
+        CONDITIONAL_AGGRESSIVE_CONTROL_ID: 6,
+        CONTROL_CONFIG_ID: 7,
     }
     return sorted(
         normalized,

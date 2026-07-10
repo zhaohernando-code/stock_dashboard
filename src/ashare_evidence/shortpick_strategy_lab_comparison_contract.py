@@ -12,6 +12,7 @@ from ashare_evidence.shortpick_strategy_lab_read_model import (
 )
 
 COMPARISON_CONTRACT_VERSION = "shortpick_strategy_lab_fair_comparison_contract.v1"
+FRONTIER_ADVANTAGE_THRESHOLD = 0.10
 REQUIRED_FULL_HISTORY_METRICS = (
     "total_return",
     "annualized_return",
@@ -25,6 +26,17 @@ REQUIRED_FULL_HISTORY_METRICS = (
     "mean_invested_ratio",
     "max_single_symbol_exposure_pct",
 )
+FRONTIER_METRIC_DIRECTIONS = {
+    "total_return": "higher",
+    "annualized_return": "higher",
+    "max_drawdown": "higher",
+    "negative_month_count": "lower",
+    "worst_monthly_return": "higher",
+    "skipped_order_rate": "lower",
+    "skipped_signal_rate": "lower",
+    "max_single_symbol_exposure_pct": "lower",
+    "final_nav_cny": "higher",
+}
 STRICT_WINDOW_KEYS = ("signal_date_from", "signal_date_to")
 DIAGNOSTIC_SCOPE_KEYS = ("signal_day_count", "selected_pick_count", "market_symbol_count")
 
@@ -33,6 +45,7 @@ def build_shortpick_strategy_lab_fair_comparison_readiness(
     *,
     candidate_replay_artifact: dict[str, Any] | None = None,
     baseline_read_model: dict[str, Any] | None = None,
+    require_frontier_acceptance: bool = False,
 ) -> dict[str, Any]:
     """Build a deterministic audit that blocks cross-window promotion claims.
 
@@ -49,7 +62,16 @@ def build_shortpick_strategy_lab_fair_comparison_readiness(
     blocking_reasons = [row["reason"] for row in window_checks if row["status"] == "blocked"]
     candidate_artifact_id = _candidate_artifact_id(candidate_replay_artifact)
     candidate_summary = _candidate_summary(candidate_replay_artifact)
-    status = "passed_same_window_metrics_ready" if not blocking_reasons else "blocked"
+    frontier_acceptance = _frontier_acceptance(candidate_summary, baseline_configs)
+    if require_frontier_acceptance:
+        blocking_reasons.extend(frontier_acceptance["blocking_reasons"])
+    status = (
+        "passed_frontier_acceptance"
+        if require_frontier_acceptance and not blocking_reasons
+        else "passed_same_window_metrics_ready"
+        if not blocking_reasons
+        else "blocked"
+    )
     claim_ceiling = (
         "same_window_research_comparison_allowed"
         if status.startswith("passed")
@@ -65,6 +87,7 @@ def build_shortpick_strategy_lab_fair_comparison_readiness(
                 "candidate_scope": candidate_scope,
                 "candidate_artifact_id": candidate_artifact_id,
                 "blocking_reasons": blocking_reasons,
+                "require_frontier_acceptance": require_frontier_acceptance,
             }
         ),
         "status": status,
@@ -81,11 +104,16 @@ def build_shortpick_strategy_lab_fair_comparison_readiness(
             "data_scope": candidate_scope,
             "summary": candidate_summary,
         },
+        "frontier_acceptance": frontier_acceptance,
         "comparison_rules": {
             "total_return_cross_window_comparison_allowed": False,
             "annualized_return_cross_window_screening_allowed": True,
             "annualized_return_cross_window_promotion_allowed": False,
             "frontend_replacement_claim_allowed": status.startswith("passed"),
+            "frontier_acceptance_required": require_frontier_acceptance,
+            "frontier_control_admission_allowed": frontier_acceptance["status"] == "passed",
+            "advantage_threshold": FRONTIER_ADVANTAGE_THRESHOLD,
+            "negative_month_breakthrough_delta": 1,
             "same_window_required_keys": list(STRICT_WINDOW_KEYS),
             "diagnostic_scope_keys": list(DIAGNOSTIC_SCOPE_KEYS),
             "required_metrics": list(REQUIRED_FULL_HISTORY_METRICS),
@@ -206,6 +234,70 @@ def _best_metric_floor(configs: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _frontier_acceptance(candidate_summary: dict[str, Any], configs: list[dict[str, Any]]) -> dict[str, Any]:
+    summaries = [row.get("summary") or {} for row in configs]
+    checks: list[dict[str, Any]] = []
+    breakthroughs: list[dict[str, Any]] = []
+    blocking_reasons: list[str] = []
+    for metric, direction in FRONTIER_METRIC_DIRECTIONS.items():
+        best_value = _metric_best(summaries, metric, higher_is_better=direction == "higher")
+        candidate_value = candidate_summary.get(metric)
+        if not isinstance(candidate_value, int | float) or not isinstance(best_value, int | float):
+            passed = False
+            reason = f"candidate_missing_frontier_metric:{metric}"
+        else:
+            passed = candidate_value >= best_value if direction == "higher" else candidate_value <= best_value
+            reason = None if passed else f"candidate_degrades_frontier_metric:{metric}"
+        check = {
+            "metric": metric,
+            "direction": direction,
+            "frontier_value": best_value,
+            "candidate_value": candidate_value,
+            "status": "passed" if passed else "blocked",
+            "reason": reason,
+        }
+        checks.append(check)
+        if reason:
+            blocking_reasons.append(reason)
+        if passed and isinstance(candidate_value, int | float) and isinstance(best_value, int | float):
+            improvement = _relative_improvement(metric, float(candidate_value), float(best_value), direction=direction)
+            if improvement >= FRONTIER_ADVANTAGE_THRESHOLD or (
+                metric == "negative_month_count" and candidate_value <= best_value - 1
+            ):
+                breakthroughs.append(
+                    {
+                        "metric": metric,
+                        "frontier_value": best_value,
+                        "candidate_value": candidate_value,
+                        "relative_improvement": improvement,
+                        "negative_month_delta": best_value - candidate_value
+                        if metric == "negative_month_count"
+                        else None,
+                    }
+                )
+    if not breakthroughs:
+        blocking_reasons.append("candidate_has_no_10pct_or_negative_month_breakthrough")
+    return {
+        "status": "passed" if not blocking_reasons else "blocked",
+        "frontier_config_count": len(configs),
+        "all_frontier_metrics_non_degraded": all(row["status"] == "passed" for row in checks),
+        "has_required_breakthrough": bool(breakthroughs),
+        "checks": checks,
+        "breakthroughs": breakthroughs,
+        "blocking_reasons": blocking_reasons,
+    }
+
+
+def _relative_improvement(metric: str, candidate: float, frontier: float, *, direction: str) -> float:
+    if metric == "negative_month_count":
+        return (frontier - candidate) / frontier if frontier > 0 else 0.0
+    if direction == "lower":
+        return (frontier - candidate) / abs(frontier) if frontier else 0.0
+    if metric in {"max_drawdown", "worst_monthly_return"} and frontier < 0:
+        return (abs(frontier) - abs(candidate)) / abs(frontier)
+    return (candidate - frontier) / abs(frontier) if frontier else 0.0
+
+
 def _metric_best(summaries: list[dict[str, Any]], key: str, *, higher_is_better: bool) -> Any:
     values = [row.get(key) for row in summaries if isinstance(row.get(key), int | float)]
     if not values:
@@ -258,11 +350,11 @@ def _required_next_artifacts(blocking_reasons: list[str]) -> list[dict[str, str]
     return [
         {
             "artifact": "candidate_full_history_order_level_account_replay",
-            "purpose": "把新上游候选跑到前端完整历史窗口后，再与 6 条前端基准比较。",
+            "purpose": "把新上游候选跑到前端完整历史窗口后，再与前端策略全集比较。",
         },
         {
-            "artifact": "frontend_six_baselines_same_window_order_level_account_replays",
-            "purpose": "如果候选只能产生较短信号期，则必须给前端 6 条策略补同窗口逐订单账本。",
+            "artifact": "frontend_strategy_set_same_window_order_level_account_replays",
+            "purpose": "如果候选只能产生较短信号期，则必须给前端策略全集补同窗口逐订单账本。",
         },
         {
             "artifact": "fair_comparison_readiness_passed_payload",

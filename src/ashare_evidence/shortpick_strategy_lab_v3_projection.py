@@ -31,6 +31,7 @@ NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID = "negative_month_rank_weight_adjuste
 DEFAULT_V3_MODEL_SPEC_IDS = (V3_MODEL_SPEC_ID, NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID)
 DEFAULT_BENCHMARK_SYMBOL = "000300.SH"
 DEFAULT_V3_CANDIDATE_RUN_SOURCE_NAME = "shortpick-strategy-lab-v3-candidate-run-source.json"
+FORWARD_REPLACEMENT_INVENTORY_TOP_K = 20
 
 
 def default_v3_candidate_run_source_path(repo_root: Path) -> Path:
@@ -100,6 +101,7 @@ def build_latest_v3_candidate_run_source(
     selection_allowed_row_count_by_model_spec: dict[str, int] = {}
     signal_block_reasons_by_model_spec: dict[str, list[str]] = {}
     selected_top_k_picks_for_digest: dict[str, list[dict[str, Any]]] = {}
+    replacement_inventory_for_digest: dict[str, list[dict[str, Any]]] = {}
     for current_model_spec_id in requested_model_spec_ids:
         spec = _model_spec_by_id(registry, current_model_spec_id)
         params = _grid_trials(spec.get("hyperparameter_grid") or {})[0]
@@ -134,6 +136,12 @@ def build_latest_v3_candidate_run_source(
             selection_policy=selection_policy,
             params=params,
         )
+        replacement_inventory = _top_k_picks_by_date(
+            predictions,
+            top_k=FORWARD_REPLACEMENT_INVENTORY_TOP_K,
+            selection_policy=selection_policy,
+            params=params,
+        )
         signal_block_reasons = _signal_block_reasons(
             predictions,
             selection_policy=selection_policy,
@@ -146,6 +154,7 @@ def build_latest_v3_candidate_run_source(
         )
         signal_block_reasons_by_model_spec[current_model_spec_id] = signal_block_reasons
         selected_top_k_picks_for_digest[current_model_spec_id] = picks
+        replacement_inventory_for_digest[current_model_spec_id] = replacement_inventory
         trial_summaries.append(
             {
                 "trial_id": f"{current_model_spec_id}:trial-000",
@@ -167,6 +176,8 @@ def build_latest_v3_candidate_run_source(
                 "target_horizon_days": horizon_days,
                 "selected_top_k": selected_top_k,
                 "selected_top_k_picks_by_date": picks,
+                "ranked_candidate_inventory_by_date": replacement_inventory,
+                "ranked_candidate_inventory_top_k": FORWARD_REPLACEMENT_INVENTORY_TOP_K,
                 "selected_top_k_returns_by_date": [],
                 "signal_block_reasons": signal_block_reasons,
                 "projection_note": "Forward projection uses PIT features only; no forward returns are present.",
@@ -178,6 +189,7 @@ def build_latest_v3_candidate_run_source(
             "signal_date": signal_date.isoformat(),
             "source_feature_matrix": matrix_artifacts["pit_feature_matrix"].get("artifact_id"),
             "selected_top_k_picks_by_model_spec": selected_top_k_picks_for_digest,
+            "ranked_candidate_inventory_by_model_spec": replacement_inventory_for_digest,
         }
     )
     generated_at = datetime.now(UTC).isoformat()

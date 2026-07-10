@@ -908,6 +908,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     shortpick_strategy_lab_comparison.add_argument("--candidate-replay-artifact", default=None)
     shortpick_strategy_lab_comparison.add_argument("--output-json", default=None)
+    shortpick_strategy_lab_comparison.add_argument("--require-frontier-acceptance", action="store_true")
 
     retention_audit = subparsers.add_parser(
         "research-artifact-retention-audit",
@@ -2606,6 +2607,7 @@ def main(argv: list[str] | None = None) -> int:
         candidate_replay_artifact = load_candidate_replay_artifact(args.candidate_replay_artifact)
         payload = build_shortpick_strategy_lab_fair_comparison_readiness(
             candidate_replay_artifact=candidate_replay_artifact,
+            require_frontier_acceptance=args.require_frontier_acceptance,
         )
         if args.output_json:
             write_shortpick_strategy_lab_fair_comparison_readiness(payload, output_path=args.output_json)

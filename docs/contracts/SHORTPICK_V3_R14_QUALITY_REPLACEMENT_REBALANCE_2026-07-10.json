@@ -1,0 +1,99 @@
+{
+  "artifact_id": "shortpick-v3-r14-quality-replacement-rebalance-20260710",
+  "artifact_type": "shortpick_v3_full_history_order_level_account_replay",
+  "status": "passed_frontier_acceptance",
+  "generated_at": "2026-07-10T06:57:58.796693+00:00",
+  "data_scope": {
+    "signal_date_from": "2023-09-07",
+    "signal_date_to": "2026-06-26",
+    "signal_day_count": 511,
+    "selected_pick_count": 1533,
+    "initial_cash_cny": 200000.0
+  },
+  "strategy": {
+    "model_spec_id": "negative_month_rank_weight_adjusted_capacity_cluster_v3_top3_20d_v1",
+    "tranche_count": 15,
+    "budget_mode": "current_nav_fraction",
+    "min_order_notional_cny": 250.0,
+    "exit_policy": "rank3_pullback_rank1_quick_fail_guard",
+    "rank1_quality_overlay": {
+      "return_20d_percentile_min": 0.95,
+      "return_5d_percentile_min": 0.93,
+      "benchmark_return_20d_min": 0.0,
+      "industry_return_20d_excess_max": 0.5,
+      "distance_from_20d_high_min": -0.08,
+      "strong_scale": 1.54,
+      "other_scales": 1.0
+    },
+    "affordable_replacement": {
+      "trigger": "price_too_high_for_slot",
+      "source": "same_day_pit_top20_inventory",
+      "inventory_rank_min": 4,
+      "inventory_rank_max": 5,
+      "max_score_gap": 0.1,
+      "min_fill_ratio": 0.75,
+      "accepted_replacement_count": 53
+    },
+    "market_value_rebalance": {
+      "threshold": 0.25,
+      "scope": "all_positions",
+      "event_order": "scheduled exits -> scheduled entries -> close mark -> concentration trim",
+      "sell_cost_bps": 25.0,
+      "board_lot_size": 100,
+      "rebalance_sell_order_count": 2,
+      "post_executable_order_breach_day_count": 0
+    }
+  },
+  "summary": {
+    "final_nav_cny": 883534.7270000002,
+    "total_return": 3.4176736350000008,
+    "annualized_return": 0.6996469611916643,
+    "max_drawdown": -0.06796905647829043,
+    "negative_month_count": 2,
+    "worst_monthly_return": -0.014130266706049999,
+    "skipped_order_rate": 0.15560165975103735,
+    "skipped_signal_rate": 0.13111545988258316,
+    "buy_order_count": 814,
+    "sell_order_count": 790,
+    "max_single_symbol_exposure_pct": 0.24953416606359471,
+    "mean_invested_ratio": 0.6909971507926389,
+    "p95_invested_ratio": 0.9872182920144233,
+    "max_position_count": 37,
+    "turnover": 99.425354415
+  },
+  "frontier_acceptance": {
+    "all_nine_metrics_non_degraded": true,
+    "breakthroughs": {
+      "negative_month_count_reduction": 1,
+      "negative_month_count_relative_improvement": 0.3333333333333333,
+      "skipped_order_rate_relative_improvement": 0.20212765957446807,
+      "skipped_signal_rate_relative_improvement": 0.3163265306122449
+    }
+  },
+  "chronological_thirds": [
+    {
+      "window": "2023-09..2024-07",
+      "return": 0.287748065,
+      "start_nav_cny": 200000.0,
+      "end_nav_cny": 257549.613
+    },
+    {
+      "window": "2024-08..2025-06",
+      "return": 0.794276456552,
+      "start_nav_cny": 257549.613,
+      "end_nav_cny": 462115.207
+    },
+    {
+      "window": "2025-07..2026-06",
+      "return": 0.911936057538,
+      "start_nav_cny": 462115.207,
+      "end_nav_cny": 883534.727
+    }
+  ],
+  "leakage_audit": {
+    "status": "passed",
+    "future_labels_used_for_selection": false,
+    "symbol_or_date_hardcoding": false,
+    "comparison_gate": "dynamic best metric frontier across all seven pre-admission frontend strategies"
+  }
+}

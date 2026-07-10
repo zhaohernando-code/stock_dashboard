@@ -114,6 +114,63 @@ class ShortpickStrategyLabComparisonContractTests(unittest.TestCase):
         self.assertEqual(payload["candidate_reference"]["summary"]["total_return"], 3.5)
         self.assertEqual(payload["candidate_reference"]["summary"]["buy_order_count"], 700)
 
+    def test_frontier_acceptance_uses_best_value_across_all_frontend_strategies(self) -> None:
+        payload = build_shortpick_strategy_lab_fair_comparison_readiness(
+            candidate_replay_artifact={
+                "artifact_id": "candidate-full-window",
+                "data_scope": {
+                    "signal_date_from": "2023-09-07",
+                    "signal_date_to": "2026-06-26",
+                },
+                "summary": {
+                    "total_return": 3.70,
+                    "annualized_return": 0.75,
+                    "max_drawdown": -0.06,
+                    "negative_month_count": 2,
+                    "worst_monthly_return": -0.012,
+                    "skipped_order_rate": 0.14,
+                    "skipped_signal_rate": 0.11,
+                    "final_nav_cny": 940000,
+                    "max_single_symbol_exposure_pct": 0.22,
+                },
+            },
+            require_frontier_acceptance=True,
+        )
+
+        self.assertEqual(payload["status"], "passed_frontier_acceptance")
+        self.assertEqual(payload["frontier_acceptance"]["frontier_config_count"], 8)
+        self.assertTrue(payload["frontier_acceptance"]["all_frontier_metrics_non_degraded"])
+        self.assertTrue(payload["frontier_acceptance"]["has_required_breakthrough"])
+        self.assertTrue(payload["comparison_rules"]["frontier_control_admission_allowed"])
+
+    def test_frontier_acceptance_blocks_candidate_that_only_beats_one_strategy(self) -> None:
+        payload = build_shortpick_strategy_lab_fair_comparison_readiness(
+            candidate_replay_artifact={
+                "artifact_id": "candidate-full-window",
+                "data_scope": {
+                    "signal_date_from": "2023-09-07",
+                    "signal_date_to": "2026-06-26",
+                },
+                "summary": {
+                    "total_return": 3.20,
+                    "annualized_return": 0.67,
+                    "max_drawdown": -0.07,
+                    "negative_month_count": 3,
+                    "worst_monthly_return": -0.014,
+                    "skipped_order_rate": 0.20,
+                    "skipped_signal_rate": 0.19,
+                    "final_nav_cny": 840000,
+                    "max_single_symbol_exposure_pct": 0.252,
+                },
+            },
+            require_frontier_acceptance=True,
+        )
+
+        self.assertEqual(payload["status"], "blocked")
+        self.assertIn("candidate_degrades_frontier_metric:total_return", payload["blocking_reasons"])
+        self.assertIn("candidate_degrades_frontier_metric:skipped_order_rate", payload["blocking_reasons"])
+        self.assertFalse(payload["comparison_rules"]["frontier_control_admission_allowed"])
+
     def test_cli_returns_non_zero_for_window_mismatch_and_can_write_audit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             artifact_path = Path(temp_dir) / "candidate.json"

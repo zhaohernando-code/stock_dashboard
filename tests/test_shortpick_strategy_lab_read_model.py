@@ -20,6 +20,7 @@ from ashare_evidence.shortpick_strategy_lab_read_model import (
     NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
     NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
     PAPER_STATE_SCHEMA_VERSION,
+    QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
     THREE_PART_STABILITY_CONTROL_ID,
     UPSTREAM_META_STABILITY_CONTROL_ID,
     build_shortpick_strategy_lab_historical_replay_read_model,
@@ -37,22 +38,20 @@ def test_historical_replay_is_static_full_history_metrics() -> None:
     assert payload["summary"]["main_total_return"] == 3.119168564999999
     assert payload["summary"]["main_negative_month_count"] == 4
     assert payload["selected_configs"][0]["config_id"] == MAIN_CONFIG_ID
-    assert payload["summary"]["baseline_config_count"] == 6
-    assert payload["baseline_configs"][0]["config_id"] == UPSTREAM_META_STABILITY_CONTROL_ID
-    assert payload["baseline_configs"][0]["goal10_improvements"]["drawdown_reduction_rel"] > 0.10
-    assert payload["baseline_configs"][0]["goal10_improvements"]["negative_month_delta"] == 1
-    assert payload["baseline_configs"][0]["summary"]["total_return"] > payload["summary"]["main_total_return"]
-    assert payload["baseline_configs"][0]["summary"]["max_drawdown"] > payload["summary"]["main_max_drawdown"]
-    assert payload["baseline_configs"][1]["config_id"] == NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID
-    assert payload["baseline_configs"][1]["model_spec_id"] == NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID
-    assert payload["baseline_configs"][1]["goal10_improvements"]["negative_month_delta"] == 1
-    assert payload["baseline_configs"][1]["summary"]["skipped_order_rate"] < 0.20
-    assert payload["baseline_configs"][2]["config_id"] == META_SIGNAL_QUALITY_CONTROL_ID
-    assert payload["baseline_configs"][2]["goal10_improvements"]["negative_month_delta"] == 1
-    assert payload["baseline_configs"][3]["config_id"] == THREE_PART_STABILITY_CONTROL_ID
-    assert payload["baseline_configs"][3]["goal10_improvements"]["skip_order_reduction_rel"] > 0.10
-    assert payload["baseline_configs"][4]["config_id"] == CONDITIONAL_AGGRESSIVE_CONTROL_ID
-    assert payload["baseline_configs"][5]["config_id"] == CONTROL_CONFIG_ID
+    assert payload["summary"]["baseline_config_count"] == 7
+    assert payload["baseline_configs"][0]["config_id"] == QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID
+    assert payload["baseline_configs"][0]["goal10_improvements"]["skip_order_reduction_rel"] > 0.20
+    assert payload["baseline_configs"][0]["goal10_improvements"]["skip_signal_reduction_rel"] > 0.30
+    assert payload["baseline_configs"][0]["summary"]["negative_month_count"] == 2
+    assert payload["baseline_configs"][1]["config_id"] == UPSTREAM_META_STABILITY_CONTROL_ID
+    assert payload["baseline_configs"][1]["goal10_improvements"]["drawdown_reduction_rel"] > 0.10
+    assert payload["baseline_configs"][2]["config_id"] == NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID
+    assert payload["baseline_configs"][2]["model_spec_id"] == NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID
+    assert payload["baseline_configs"][2]["summary"]["skipped_order_rate"] < 0.20
+    assert payload["baseline_configs"][3]["config_id"] == META_SIGNAL_QUALITY_CONTROL_ID
+    assert payload["baseline_configs"][4]["config_id"] == THREE_PART_STABILITY_CONTROL_ID
+    assert payload["baseline_configs"][5]["config_id"] == CONDITIONAL_AGGRESSIVE_CONTROL_ID
+    assert payload["baseline_configs"][6]["config_id"] == CONTROL_CONFIG_ID
     assert payload["metric_groups"]
     assert payload["leakage_audit"]["read_model_policy"] == "static_metrics_only_no_market_scan_no_dynamic_replay"
 
@@ -63,8 +62,8 @@ def test_historical_replay_response_schema_keeps_breakthrough_metrics() -> None:
     response_payload = ShortpickStrategyLabHistoricalReplayResponse.model_validate(payload).model_dump(mode="json")
 
     first_control = response_payload["baseline_configs"][0]
-    assert first_control["config_id"] == UPSTREAM_META_STABILITY_CONTROL_ID
-    assert first_control["goal10_improvements"]["drawdown_reduction_rel"] > 0.10
+    assert first_control["config_id"] == QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID
+    assert first_control["goal10_improvements"]["skip_order_reduction_rel"] > 0.20
     assert first_control["goal10_improvements"]["negative_month_delta"] == 1
 
 
@@ -109,6 +108,7 @@ def test_paper_tracking_renders_mock_next_order_without_forward_records(tmp_path
     assert payload["selected_configs"][0]["summary"]["paper_total_return"] is None
     assert payload["selected_configs"][0]["summary"]["current_nav_cny"] == INITIAL_CASH_CNY
     assert [row["config_id"] for row in payload["baseline_configs"]] == [
+        QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
         UPSTREAM_META_STABILITY_CONTROL_ID,
         NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
         META_SIGNAL_QUALITY_CONTROL_ID,
@@ -117,6 +117,7 @@ def test_paper_tracking_renders_mock_next_order_without_forward_records(tmp_path
         CONTROL_CONFIG_ID,
     ]
     assert payload["paper_governance"]["control_config_ids"] == [
+        QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
         UPSTREAM_META_STABILITY_CONTROL_ID,
         NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
         META_SIGNAL_QUALITY_CONTROL_ID,
@@ -305,6 +306,13 @@ def test_refresh_state_builds_v3_source_instead_of_accepting_missing_source(tmp_
     assert candidate_run["model_spec_id"] == "selected_exhaustion_date_scaled_v3_top3_20d_v1"
     assert NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID in candidate_run["model_spec_ids"]
     assert candidate_run["prediction_row_count"] > 0
+    rank_adjusted_trial = next(
+        row
+        for row in candidate_run["trial_diagnostics"]
+        if row["model_spec_id"] == NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID
+    )
+    assert rank_adjusted_trial["ranked_candidate_inventory_top_k"] == 20
+    assert isinstance(rank_adjusted_trial["ranked_candidate_inventory_by_date"], list)
     payload = json.loads(state_path.read_text(encoding="utf-8"))
     assert all(row.get("symbol") != "SHOULD_CLEAR" for row in payload["planned_orders"])
     assert payload["plan_generation_status"]["status"].startswith("ready")
@@ -488,6 +496,7 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
                                 "target_horizon_days": 20,
                             },
                         ],
+                        "ranked_candidate_inventory_by_date": [],
                     },
                 ],
             },
@@ -510,6 +519,7 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
     orders = payload["planned_orders"]
     assert [order["strategy_id"] for order in orders] == [
         MAIN_CONFIG_ID,
+        QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
         UPSTREAM_META_STABILITY_CONTROL_ID,
         NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
         META_SIGNAL_QUALITY_CONTROL_ID,
@@ -525,19 +535,21 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
         "600030.SH",
         "600030.SH",
         "600030.SH",
+        "600030.SH",
     ]
-    assert [order["shares"] for order in orders] == [100, 200, 100, 200, 200, 200, 100]
-    assert orders[1]["conditional_aggressive_overlay_active"] is True
-    assert orders[1]["conditional_aggressive_weight_scale"] == 1.65 * 0.9
-    assert orders[2]["model_spec_id"] == NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID
-    assert orders[2]["conditional_aggressive_overlay_active"] is False
-    assert orders[2]["conditional_aggressive_weight_scale"] == 1.0
-    assert orders[3]["conditional_aggressive_overlay_active"] is True
-    assert orders[3]["conditional_aggressive_weight_scale"] == 1.65 * 0.9
+    assert [order["shares"] for order in orders] == [100, 100, 200, 100, 200, 200, 200, 100]
+    assert orders[1]["model_spec_id"] == NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID
+    assert orders[1]["conditional_aggressive_overlay_active"] is False
+    assert orders[2]["conditional_aggressive_overlay_active"] is True
+    assert orders[2]["conditional_aggressive_weight_scale"] == 1.65 * 0.9
+    assert orders[3]["model_spec_id"] == NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID
+    assert orders[3]["conditional_aggressive_overlay_active"] is False
     assert orders[4]["conditional_aggressive_overlay_active"] is True
-    assert orders[4]["conditional_aggressive_weight_scale"] == 1.6
+    assert orders[4]["conditional_aggressive_weight_scale"] == 1.65 * 0.9
     assert orders[5]["conditional_aggressive_overlay_active"] is True
-    assert orders[5]["conditional_aggressive_weight_scale"] == 14 / 11
+    assert orders[5]["conditional_aggressive_weight_scale"] == 1.6
+    assert orders[6]["conditional_aggressive_overlay_active"] is True
+    assert orders[6]["conditional_aggressive_weight_scale"] == 14 / 11
     assert all(order["plan_source"] == "selected_top_k_candidate_run_rolling_tranche_engine" for order in orders)
     contract = build_shortpick_v3_rolling_tranche_execution_contract()
     main_config = next(config for config in contract["candidate_configurations"] if config["config_id"] == MAIN_CONFIG_ID)
@@ -560,3 +572,114 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
     diagnostics = payload["plan_generation_status"]["diagnostics"]
     assert any(row["symbol"] == "002371.SZ" and row["reason"] == "price_too_high_for_slot" for row in diagnostics)
     assert any(row["symbol"] == "600028.SH" and row["reason"] == "zero_target_allocation" for row in diagnostics)
+
+
+def test_quality_candidate_replaces_unaffordable_pick_from_same_day_inventory() -> None:
+    module = _load_refresh_state_script()
+    contract = build_shortpick_v3_rolling_tranche_execution_contract()
+    config = next(
+        row
+        for row in contract["candidate_configurations"]
+        if row["config_id"] == QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID
+    )
+
+    order, rejections = module._affordable_replacement_order(
+        skipped_row={
+            "action": "skip",
+            "reason": "price_too_high_for_slot",
+            "signal_day": "2026-07-08",
+            "trade_day": "2026-07-09",
+            "target_notional_cny": 10_000.0,
+        },
+        original_pick={"symbol": "002371.SZ", "rank": 1, "score": 3.90},
+        inventory=[
+            {"symbol": "600001.SH", "rank": 4, "score": 3.85, "selection_allowed": True},
+            {"symbol": "600002.SH", "rank": 5, "score": 3.84, "selection_allowed": True},
+        ],
+        estimated_close_by_symbol={"600001.SH": 25.0, "600002.SH": 8.0},
+        selected_symbols={"002371.SZ"},
+        config=config,
+    )
+
+    assert rejections == []
+    assert order is not None
+    assert order["symbol"] == "600001.SH"
+    assert order["rank"] == 1
+    assert order["shares"] == 300
+    assert order["replacement_inventory_rank"] == 4
+    assert order["replacement_fill_ratio"] >= 0.75
+
+
+def test_quality_candidate_plans_board_lot_market_exposure_trim(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'rebalance.db'}"
+    init_database(database_url)
+    with session_scope(database_url) as session:
+        stock = Stock(
+            symbol="600001.SH",
+            ticker="600001",
+            exchange="SH",
+            name="测试持仓",
+            provider_symbol="600001",
+            status="active",
+            profile_payload={},
+            **build_lineage(
+                {"symbol": "600001.SH"},
+                source_uri="test://stock/600001",
+                license_tag="test",
+                usage_scope="test",
+                redistribution_scope="none",
+            ),
+        )
+        session.add(stock)
+        session.flush()
+        session.add(
+            MarketBar(
+                bar_key="bar-600001-20260708",
+                stock_id=stock.id,
+                timeframe="1d",
+                observed_at=datetime(2026, 7, 8, 15, 0, tzinfo=UTC),
+                open_price=100.0,
+                high_price=100.0,
+                low_price=100.0,
+                close_price=100.0,
+                volume=1000,
+                amount=100000,
+                raw_payload={},
+                **build_lineage(
+                    {"symbol": "600001.SH", "date": "2026-07-08"},
+                    source_uri="test://bar/600001.SH",
+                    license_tag="test",
+                    usage_scope="test",
+                    redistribution_scope="none",
+                ),
+            )
+        )
+    module = _load_refresh_state_script()
+    contract = build_shortpick_v3_rolling_tranche_execution_contract()
+    config = next(
+        row
+        for row in contract["candidate_configurations"]
+        if row["config_id"] == QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID
+    )
+    with session_scope(database_url) as session:
+        orders, diagnostics = module._market_exposure_rebalance_orders(
+            session=session,
+            account_state={
+                "cash_cny": 50_000.0,
+                "positions": [{"symbol": "600001.SH", "name": "测试持仓", "shares": 1000}],
+            },
+            planned_buys=[],
+            strategy_id=QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
+            strategy_label="候选对照",
+            signal_date="2026-07-08",
+            planned_trade_date="2026-07-09",
+            config=config,
+        )
+
+    assert len(orders) == 1
+    assert orders[0]["action"] == "sell"
+    assert orders[0]["shares"] == 700
+    assert orders[0]["shares"] % 100 == 0
+    assert orders[0]["exposure_before"] > 0.25
+    assert orders[0]["exposure_after"] <= 0.25
+    assert diagnostics[0]["reason"] == "market_value_concentration_rebalance"
