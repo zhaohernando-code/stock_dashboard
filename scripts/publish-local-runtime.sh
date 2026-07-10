@@ -19,6 +19,7 @@ VERIFY_MODE="${ASHARE_PUBLISH_VERIFY_MODE:-canonical}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 RELEASE_OPERATIONS_SAMPLE_SYMBOL="${ASHARE_RELEASE_OPERATIONS_SAMPLE_SYMBOL:-${ASHARE_OPERATIONS_PREWARM_SAMPLE_SYMBOL:-600519.SH}}"
 RELEASE_OPERATIONS_WARMUP_TIMEOUT_SECONDS="${ASHARE_RELEASE_OPERATIONS_WARMUP_TIMEOUT_SECONDS:-90}"
+RELEASE_TIMEOUT_SECONDS="${ASHARE_RELEASE_TIMEOUT_SECONDS:-60}"
 FRONTEND_DIR="$REPO_ROOT/frontend"
 
 if [[ -f "$FRONTEND_ENV_FILE" ]]; then
@@ -392,6 +393,13 @@ wait_for_health "$BACKEND_URL"
 echo "[publish] Waiting for frontend health"
 wait_for_health "$FRONTEND_URL"
 
+PROJECT_TUNNEL_LABEL="com.codex.project-tunnel.ashare-dashboard"
+if launchctl print "gui/$(id -u)/$PROJECT_TUNNEL_LABEL" >/dev/null 2>&1; then
+  echo "[publish] Rebinding project tunnel after local service restart"
+  launchctl kickstart -k "gui/$(id -u)/$PROJECT_TUNNEL_LABEL"
+  sleep 5
+fi
+
 repo_index_html="$REPO_ROOT/frontend/dist/index.html"
 runtime_index_html="$RUNTIME_ROOT/frontend/dist/index.html"
 
@@ -450,6 +458,7 @@ if [[ "$VERIFY_MODE" == "canonical" ]]; then
       --local-api-base-url "$LOCAL_API_BASE_URL" \
       --canonical-base-url "$CANONICAL_BASE_URL" \
       --expected-commit-sha "$COMMIT_SHA" \
+      --timeout-seconds "$RELEASE_TIMEOUT_SECONDS" \
       --release-output-root "$RUNTIME_ROOT/output/releases" \
       --operations-sample-symbol "$RELEASE_OPERATIONS_SAMPLE_SYMBOL" \
       --operations-warmup-timeout-seconds "$RELEASE_OPERATIONS_WARMUP_TIMEOUT_SECONDS" \
