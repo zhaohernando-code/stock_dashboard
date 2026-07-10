@@ -12,39 +12,35 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from ashare_evidence.benchmark import sync_benchmark_index_bars
-from ashare_evidence.capacity_opportunity_set_discovery import (
-    build_capacity_opportunity_set_discovery,
-    write_capacity_opportunity_set_discovery,
-)
-from ashare_evidence.capacity_opportunity_feature_gap import (
-    build_capacity_opportunity_feature_gap_probe,
-    write_capacity_opportunity_feature_gap_probe,
+from ashare_evidence.capacity_liquid_winner_feature_audit import (
+    build_capacity_liquid_winner_feature_audit,
+    write_capacity_liquid_winner_feature_audit,
 )
 from ashare_evidence.capacity_opportunity_archetype_sample import (
     build_capacity_opportunity_archetype_sample_preflight,
     write_capacity_opportunity_archetype_sample_preflight,
 )
+from ashare_evidence.capacity_opportunity_feature_gap import (
+    build_capacity_opportunity_feature_gap_probe,
+    write_capacity_opportunity_feature_gap_probe,
+)
 from ashare_evidence.capacity_opportunity_learned_sample import (
     build_capacity_opportunity_learned_sample_preflight,
     write_capacity_opportunity_learned_sample_preflight,
 )
-from ashare_evidence.capacity_underfilled_fallback_preflight import (
-    build_capacity_underfilled_fallback_preflight,
-    write_capacity_underfilled_fallback_preflight,
-)
-from ashare_evidence.capacity_liquid_winner_feature_audit import (
-    build_capacity_liquid_winner_feature_audit,
-    write_capacity_liquid_winner_feature_audit,
+from ashare_evidence.capacity_opportunity_set_discovery import (
+    build_capacity_opportunity_set_discovery,
+    write_capacity_opportunity_set_discovery,
 )
 from ashare_evidence.capacity_staggered_entry_proxy import (
-    SUPPORTED_EXPOSURE_OVERLAY_MODES,
     SUPPORTED_EXIT_POLICIES,
+    SUPPORTED_EXPOSURE_OVERLAY_MODES,
     build_capacity_staggered_entry_proxy,
     write_capacity_staggered_entry_proxy,
 )
-from ashare_evidence.pit_source_readiness_audit import (
-    audit_pit_source_readiness,
-    write_pit_source_readiness_audit,
+from ashare_evidence.capacity_underfilled_fallback_preflight import (
+    build_capacity_underfilled_fallback_preflight,
+    write_capacity_underfilled_fallback_preflight,
 )
 from ashare_evidence.cli_autonomous_flow import (
     add_autonomous_flow_parsers,
@@ -55,16 +51,17 @@ from ashare_evidence.cli_governance import add_governance_parsers, handle_govern
 from ashare_evidence.cli_research import add_research_parsers, handle_factor_observation, handle_weight_sweep
 from ashare_evidence.dashboard import get_glossary_entries, get_stock_dashboard, list_candidate_recommendations
 from ashare_evidence.db import init_database, preflight_database_writable, session_scope
+from ashare_evidence.exposure_floor_overlay_governance import (
+    build_exposure_floor_overlay_governance_summary,
+    build_staggered_exposure_combo_governance_summary,
+    write_exposure_floor_overlay_governance_summary,
+    write_staggered_exposure_combo_governance_summary,
+)
 from ashare_evidence.feature_v3_capacity_triage import build_feature_v3_capacity_triage
 from ashare_evidence.feature_v3_source_coverage import audit_feature_v3_source_coverage
 from ashare_evidence.frontend_projections import refresh_frontend_projections
 from ashare_evidence.improvement_suggestions import run_improvement_suggestion_review
 from ashare_evidence.intraday_market import sync_intraday_market
-from ashare_evidence.model_exploration_snapshot import (
-    build_model_exploration_input_snapshot_only,
-    rebuild_executable_label_matrix_from_input_snapshot,
-    rebuild_pit_feature_matrix_from_input_snapshot,
-)
 from ashare_evidence.model_candidate_runner import (
     _load_artifact_metadata_without_rows,
     build_deterministic_full_history_model_candidate_run_artifact,
@@ -76,6 +73,11 @@ from ashare_evidence.model_comparison_report import (
     build_model_comparison_report_artifact,
     write_model_comparison_report_artifact,
 )
+from ashare_evidence.model_exploration_snapshot import (
+    build_model_exploration_input_snapshot_only,
+    rebuild_executable_label_matrix_from_input_snapshot,
+    rebuild_pit_feature_matrix_from_input_snapshot,
+)
 from ashare_evidence.model_exploration_workflow import run_shortpick_model_exploration_workbench
 from ashare_evidence.model_feature_diagnostics import run_model_feature_diagnostics
 from ashare_evidence.model_governance_gate import (
@@ -83,19 +85,13 @@ from ashare_evidence.model_governance_gate import (
     write_model_governance_and_projection_artifacts,
 )
 from ashare_evidence.model_spec_registry import build_model_spec_registry_artifact
-from ashare_evidence.exposure_floor_overlay_governance import (
-    build_exposure_floor_overlay_governance_summary,
-    build_staggered_exposure_combo_governance_summary,
-    write_exposure_floor_overlay_governance_summary,
-    write_staggered_exposure_combo_governance_summary,
-)
+from ashare_evidence.operations import build_operations_dashboard
 from ashare_evidence.order_level_capacity_proxy import (
-    build_capacity_soft_rerank_proxy,
     build_capacity_contract_tier_scan,
+    build_capacity_soft_rerank_proxy,
     build_exposure_floor_stability_proxy,
     build_order_level_capacity_proxy,
 )
-from ashare_evidence.operations import build_operations_dashboard
 from ashare_evidence.phase2 import rebuild_phase2_research_state
 from ashare_evidence.phase2.holding_policy_experiments import (
     build_phase5_holding_policy_experiment,
@@ -110,12 +106,17 @@ from ashare_evidence.phase2.producer_contract_study import (
     build_phase5_producer_contract_study,
     build_phase5_producer_contract_study_artifact,
 )
+from ashare_evidence.pit_source_readiness_audit import (
+    audit_pit_source_readiness,
+    write_pit_source_readiness_audit,
+)
 from ashare_evidence.policy_config_loader import (
     activate_policy_config_version,
     build_policy_governance_summary,
     create_policy_config_version,
     list_policy_config_versions,
 )
+from ashare_evidence.research_artifact_retention import audit_research_artifact_retention
 from ashare_evidence.research_artifact_store import (
     artifact_root_from_database_url,
     read_phase5_holding_policy_experiment_artifact_if_exists,
@@ -127,11 +128,15 @@ from ashare_evidence.research_artifact_store import (
     write_phase5_horizon_study_artifact,
     write_phase5_producer_contract_study_artifact,
 )
-from ashare_evidence.research_artifact_retention import audit_research_artifact_retention
 from ashare_evidence.research_model_preflight_compaction import compact_model_preflight_root
 from ashare_evidence.rolling_tranche_account_replay import (
     build_shortpick_v3_rolling_account_replay_artifact,
     load_daily_close_bars_for_symbols,
+)
+from ashare_evidence.runtime_storage_governance import (
+    archive_runtime_storage_candidates,
+    audit_runtime_storage,
+    load_runtime_storage_policy,
 )
 from ashare_evidence.services import get_latest_recommendation_summary, get_recommendation_trace
 from ashare_evidence.shortpick_combined_ledger_writer import (
@@ -405,6 +410,8 @@ NO_DB_COMMANDS = {
     "research-top-candidate-objective-calibration-proxy",
     "research-artifact-retention-audit",
     "research-model-preflight-compact",
+    "runtime-storage-governance-archive",
+    "runtime-storage-governance-audit",
     "shortpick-model-deterministic-full-history-select",
     "shortpick-strategy-lab-comparison-readiness",
     "shortpick-model-feature-diagnostics-run",
@@ -928,6 +935,24 @@ def build_parser() -> argparse.ArgumentParser:
     preflight_compaction.add_argument("--preflight-root", required=True)
     preflight_compaction.add_argument("--output-json", required=True)
     preflight_compaction.add_argument("--delete-source-root", action="store_true")
+
+    runtime_storage_audit = subparsers.add_parser(
+        "runtime-storage-governance-audit",
+        help="Audit the real runtime research store against pinned reusable and archive lifecycle policy.",
+    )
+    runtime_storage_audit.add_argument("--artifact-root", required=True)
+    runtime_storage_audit.add_argument("--policy-json", required=True)
+    runtime_storage_audit.add_argument("--output-json", default=None)
+
+    runtime_storage_archive = subparsers.add_parser(
+        "runtime-storage-governance-archive",
+        help="Compress unpinned derived research payloads into a verified single-threaded cold archive.",
+    )
+    runtime_storage_archive.add_argument("--artifact-root", required=True)
+    runtime_storage_archive.add_argument("--policy-json", required=True)
+    runtime_storage_archive.add_argument("--archive-root", required=True)
+    runtime_storage_archive.add_argument("--compression-level", type=int, default=1)
+    runtime_storage_archive.add_argument("--apply", action="store_true")
 
     feature_v3_coverage = subparsers.add_parser(
         "research-feature-v3-source-coverage-audit",
@@ -2634,6 +2659,32 @@ def main(argv: list[str] | None = None) -> int:
         )
         _print_json(payload)
         return 0
+
+    if args.command == "runtime-storage-governance-audit":
+        policy = load_runtime_storage_policy(args.policy_json)
+        payload = audit_runtime_storage(artifact_root=args.artifact_root, policy=policy)
+        if args.output_json:
+            output_path = Path(args.output_json)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        _print_json(payload)
+        return 0 if payload["gate_status"] == "passed" else 1
+
+    if args.command == "runtime-storage-governance-archive":
+        policy = load_runtime_storage_policy(args.policy_json)
+        payload = archive_runtime_storage_candidates(
+            artifact_root=args.artifact_root,
+            policy=policy,
+            archive_root=args.archive_root,
+            apply=args.apply,
+            compression_level=args.compression_level,
+        )
+        _print_json(payload)
+        post_audit = payload.get("post_archive_audit") or {}
+        return 0 if not args.apply or post_audit.get("gate_status") == "passed" else 1
 
     if args.command == "research-feature-v3-source-coverage-audit":
         observed_start = date.fromisoformat(args.observed_start) if args.observed_start else None

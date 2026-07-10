@@ -864,6 +864,10 @@ def rebuild_pit_feature_matrix_from_input_snapshot(
         "label_version": "not_applicable_feature_matrix",
         "source_input_snapshot_id": input_snapshot.get("artifact_id"),
         "source_universe_date_matrix_id": artifact_refs.get("universe_date_matrix"),
+        "source_universe_date_matrix_materialization": (input_snapshot.get("artifact_ref_materialization") or {}).get(
+            "universe_date_matrix",
+            "materialized_artifact_required",
+        ),
         "validation_protocol": input_snapshot.get("validation_protocol"),
         "gate_readout": _feature_gate_readout_from_counts(row_count=row_count),
         "claim_ceiling": "feature_matrix_only",
@@ -951,6 +955,10 @@ def rebuild_executable_label_matrix_from_input_snapshot(
         "label_version": MODEL_EXPLORATION_LABEL_VERSION,
         "source_input_snapshot_id": input_snapshot.get("artifact_id"),
         "source_universe_date_matrix_id": artifact_refs.get("universe_date_matrix"),
+        "source_universe_date_matrix_materialization": (input_snapshot.get("artifact_ref_materialization") or {}).get(
+            "universe_date_matrix",
+            "materialized_artifact_required",
+        ),
         "validation_protocol": protocol,
         "gate_readout": _label_gate_readout_from_counts(row_count=row_count, ready_count=ready_count),
         "claim_ceiling": "label_matrix_only",
@@ -1113,6 +1121,11 @@ def build_model_exploration_input_snapshot_only(
             "universe_date_matrix": f"universe-date-matrix-{ref_digest[:16]}",
             "pit_feature_matrix": f"pit-feature-matrix-{ref_digest[:16]}",
             "executable_label_matrix": f"executable-label-matrix-{ref_digest[:16]}",
+        },
+        "artifact_ref_materialization": {
+            "universe_date_matrix": "logical_only_not_materialized_by_streaming_rebuild",
+            "pit_feature_matrix": "materialized_by_separate_streaming_rebuild",
+            "executable_label_matrix": "materialized_by_separate_streaming_rebuild",
         },
         "build_mode": "input_snapshot_only_streaming_matrix_rebuild_required",
     }

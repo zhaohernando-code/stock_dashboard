@@ -1,0 +1,56 @@
+{
+  "archive_unpinned_folders": [
+    "research_validation/pit_feature_matrices",
+    "research_validation/executable_label_matrices",
+    "research_validation/universe_date_matrices",
+    "research_validation/walk_forward_model_candidate_runs",
+    "research_validation/shortpick_v3_account_replays"
+  ],
+  "canonical_feature_lineage": {
+    "artifact_id": "pit-feature-matrix-9e2854ba4a2cd78e",
+    "feature_matrix_relative_path": "research_validation/pit_feature_matrices/pit-feature-matrix-9e2854ba4a2cd78e.json",
+    "historical_code_version_unresolved": true,
+    "logical_universe_reference_id": "universe-date-matrix-8a8408ca4048dc45",
+    "rebuild_recipe": {
+      "command": "shortpick-model-feature-rebuild",
+      "input_snapshot_artifact_id": "model-exploration-input-snapshot-26e409cb12f68441",
+      "notes": "The frozen matrix remains reusable as the canonical full-history input. Exact historical source code cannot be claimed because the original artifact recorded unresolved_local_checkout.",
+      "validation_run_id": "full-upstream-feature-20260709"
+    },
+    "row_content_digest": "9e2854ba4a2cd78e71d9cb9ab57f1542c62f588d8ce2a334f027b0fe9479075b",
+    "source_input_snapshot_id": "model-exploration-input-snapshot-26e409cb12f68441",
+    "universe_reference_materialization": "logical_only_not_materialized_by_streaming_rebuild"
+  },
+  "max_compact_evidence_bytes": 268435456,
+  "max_online_research_bytes": 7516192768,
+  "pinned_artifacts": [
+    {
+      "artifact_id": "pit-feature-matrix-9e2854ba4a2cd78e",
+      "reason": "Canonical 2023-09-07 through 2026-06-26 full-history v3 PIT feature matrix.",
+      "relative_path": "research_validation/pit_feature_matrices/pit-feature-matrix-9e2854ba4a2cd78e.json",
+      "required": true,
+      "role": "canonical_reusable_feature_matrix"
+    },
+    {
+      "artifact_id": "walk-forward-model-candidate-run-84adc785808483d3",
+      "reason": "Canonical complete-history capacity-cluster baseline source retained for fair comparison.",
+      "relative_path": "research_validation/walk_forward_model_candidate_runs/walk-forward-model-candidate-run-84adc785808483d3.json",
+      "required": true,
+      "role": "canonical_complete_history_baseline_source"
+    },
+    {
+      "artifact_id": "walk-forward-model-candidate-run-0d6333a65ae410f0",
+      "reason": "Current complete-history upstream source used by the accepted strategy frontier and paper refresh.",
+      "relative_path": "research_validation/walk_forward_model_candidate_runs/walk-forward-model-candidate-run-0d6333a65ae410f0.json",
+      "required": true,
+      "role": "current_complete_history_candidate_source"
+    }
+  ],
+  "required_files": [
+    {
+      "reason": "Compact source universe and stock metadata needed to rebuild the canonical matrix.",
+      "relative_path": "research_validation/model_exploration_input_snapshots/model-exploration-input-snapshot-26e409cb12f68441.json"
+    }
+  ],
+  "schema_version": "runtime_storage_governance.v1"
+}

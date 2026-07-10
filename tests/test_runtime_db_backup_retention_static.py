@@ -19,8 +19,14 @@ def test_runtime_db_backup_retention_keeps_current_db_out_of_scope() -> None:
     assert "ashare_dashboard.db" not in script.replace("ashare_dashboard.db.bak-*", "")
     assert "ASHARE_DB_BACKUP_KEEP_RECENT" in script
     assert "ASHARE_DB_BACKUP_MIN_AGE_DAYS" in script
+    assert "ASHARE_DB_BACKUP_MAX_UNCOMPRESSED_AGE_DAYS" in script
     assert "ASHARE_DB_BACKUP_ARCHIVE_RETENTION_DAYS" in script
+    assert "ASHARE_DB_BACKUP_GZIP_LEVEL" in script
+    assert 'gzip -"$GZIP_LEVEL" -c "$path"' in script
+    assert 'gzip -t "$temp_archive"' in script
+    assert 'touch -r "$path" "$archive_path"' not in script
+    assert 'if [[ "$DRY_RUN" == "1" ]]' in script
     assert "ASHARE_DB_BACKUP_PRUNE_DRY_RUN" in script
     assert "lsof \"$path\"" in script
-    assert "gzip -c \"$path\"" in script
+    assert 'gzip -"$GZIP_LEVEL" -c "$path"' in script
     assert "$HOME/Library/Logs/codex-archive/ashare-dashboard-db-backups" in script

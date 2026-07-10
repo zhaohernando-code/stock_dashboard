@@ -169,3 +169,22 @@ def test_publish_marks_latest_successful_only_after_final_verification() -> None
     assert script.index('echo "[publish] VERIFICATION PASSED"') < script.index(marker_write)
     assert script.index('echo "[publish] Running deploy verification..."') < script.index(manifest_copy)
     assert script.index(manifest_copy) < script.index(marker_write)
+
+
+def test_publish_prunes_reconstructible_runtime_output_before_success_marker() -> None:
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    marker_write = 'printf \'%s\\n\' "$COMMIT_SHA" > "$RUNTIME_ROOT/output/releases/latest-successful.commit"'
+    prune_call = 'ASHARE_RUNTIME_ROOT="$RUNTIME_ROOT" bash "$RUNTIME_ROOT/scripts/prune-runtime-output.sh"'
+    assert prune_call in script
+    assert script.index(prune_call) < script.index(marker_write)
+
+
+def test_publish_enforces_runtime_storage_lifecycle_before_success_marker() -> None:
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    marker_write = 'printf \'%s\\n\' "$COMMIT_SHA" > "$RUNTIME_ROOT/output/releases/latest-successful.commit"'
+    assert 'bash "$RUNTIME_ROOT/scripts/prune-runtime-db-backups.sh"' in script
+    assert "runtime-storage-governance-audit" in script
+    assert "SHORTPICK_V3_RUNTIME_STORAGE_POLICY_2026-07-10.json" in script
+    assert script.index("runtime-storage-governance-audit") < script.index(marker_write)

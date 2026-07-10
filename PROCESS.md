@@ -140,6 +140,9 @@
 - **打断重型 slot 的重试退避要 ≥ 任务时长**：被 kill 的长任务若退避窗口短于其运行时间，会在上次影响未沉淀时重试叠加。`SLOT_RETRY_INTERVAL_SECONDS` 等退避默认值应 ≥ 对应超时上限。
 - **盘后验证窗口数据要在同步层一并到位**：触发场景——shortpick 验证算超额收益需个股+基准两条 K 线都到目标交易日。原则——`--analysis-only` 日刷也必须同步基准指数（不要只在 ops 刷新里同步），否则个股到最新日、基准滞后一天，5d/10d 退出永远卡在 `pending_benchmark_data`/`pending_forward_window`。配套——验证补算要做成有界循环（`max_iter` + 已处理去重 + 「本轮无新 completed 即停」），数据到位的 pending 一次补齐，真缺数据的不死循环、不反复拉。
 - **手动 kill 重型验证后要 checkpoint WAL**：WAL 模式下被中断的大批量写会留下几百 MB 未 checkpoint 的 `-wal`，使后续读（如纸面追踪 ledger）变慢甚至像卡死。中断后跑一次 `PRAGMA wal_checkpoint(TRUNCATE)`，必要时重启 backend 清掉退化状态。排查"endpoint 卡死"时先分清是 ledger 计算慢（独立跑 0.6s 即排除）、auth 依赖、还是 WAL 膨胀。
+- **研究大载荷必须区分在线钉住与冷归档**：完整矩阵和当前候选源可以因复用价值常驻，但必须在运行时存储政策中逐个钉住；同目录的旧矩阵、旧标签、旧 candidate-run 和完整账户回放不能因“以后可能有用”无限堆积。统一执行真实目录生命周期门禁，未钉住载荷先生成 SHA-256、单线程压缩并校验，写恢复元数据后再移出在线目录。
+- **逻辑 artifact 引用必须声明是否物化**：流式重建可能只需要 input snapshot 而不生成独立 universe matrix。此时必须记录 `logical_only_not_materialized_by_streaming_rebuild`，不能留下一个看似缺失文件的裸 artifact id；历史 `code_version=unresolved_local_checkout` 只能诚实降级为冻结输入可复用，禁止补写虚假的提交版本。
+- **发布成功标记前必须完成存储治理**：发布流程应先归档过期数据库备份、执行真实研究目录生命周期审计、轮转发布快照和可重建运行时缓存，最后才更新 `latest-successful`。治理失败不能留下一个看似成功的发布标记。
 
 ## 已归档流水来源
 

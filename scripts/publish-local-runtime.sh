@@ -21,6 +21,7 @@ RELEASE_OPERATIONS_SAMPLE_SYMBOL="${ASHARE_RELEASE_OPERATIONS_SAMPLE_SYMBOL:-${A
 RELEASE_OPERATIONS_WARMUP_TIMEOUT_SECONDS="${ASHARE_RELEASE_OPERATIONS_WARMUP_TIMEOUT_SECONDS:-90}"
 RELEASE_TIMEOUT_SECONDS="${ASHARE_RELEASE_TIMEOUT_SECONDS:-60}"
 FRONTEND_DIR="$REPO_ROOT/frontend"
+RUNTIME_STORAGE_POLICY_RELATIVE="docs/contracts/SHORTPICK_V3_RUNTIME_STORAGE_POLICY_2026-07-10.json"
 
 if [[ -f "$FRONTEND_ENV_FILE" ]]; then
   set -a
@@ -526,6 +527,14 @@ else
   echo "[publish] Data refresh completed"
 fi
 
+echo "[publish] Pruning expired runtime DB backups"
+ASHARE_RUNTIME_ROOT="$RUNTIME_ROOT" bash "$RUNTIME_ROOT/scripts/prune-runtime-db-backups.sh"
+
+echo "[publish] Auditing runtime research storage lifecycle"
+PYTHONPATH="$RUNTIME_ROOT/src" "$PYTHON_BIN" -m ashare_evidence.cli runtime-storage-governance-audit \
+  --artifact-root "$RUNTIME_ROOT/data/artifacts" \
+  --policy-json "$RUNTIME_ROOT/$RUNTIME_STORAGE_POLICY_RELATIVE"
+
 echo "[publish] Runtime frontend matches repo build"
 echo "[publish] Backend healthy at $BACKEND_URL"
 echo "[publish] Frontend healthy at $FRONTEND_URL"
@@ -540,6 +549,9 @@ else
     echo "[publish] VERIFICATION FAILED — check output above"
     exit 1
 fi
+
+echo "[publish] Pruning reconstructible runtime output"
+ASHARE_RUNTIME_ROOT="$RUNTIME_ROOT" bash "$RUNTIME_ROOT/scripts/prune-runtime-output.sh"
 
 cp "$MANIFEST_PATH" "$RUNTIME_ROOT/output/releases/latest-successful.json"
 printf '%s\n' "$COMMIT_SHA" > "$RUNTIME_ROOT/output/releases/latest-successful.commit"

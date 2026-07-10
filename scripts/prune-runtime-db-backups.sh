@@ -8,7 +8,9 @@ DATA_DIR="${ASHARE_RUNTIME_DATA_DIR:-$RUNTIME_ROOT/data}"
 ARCHIVE_ROOT="${ASHARE_DB_BACKUP_ARCHIVE_ROOT:-$HOME/Library/Logs/codex-archive/ashare-dashboard-db-backups}"
 KEEP_RECENT="${ASHARE_DB_BACKUP_KEEP_RECENT:-2}"
 MIN_AGE_DAYS="${ASHARE_DB_BACKUP_MIN_AGE_DAYS:-1}"
+MAX_UNCOMPRESSED_AGE_DAYS="${ASHARE_DB_BACKUP_MAX_UNCOMPRESSED_AGE_DAYS:-14}"
 ARCHIVE_RETENTION_DAYS="${ASHARE_DB_BACKUP_ARCHIVE_RETENTION_DAYS:-30}"
+GZIP_LEVEL="${ASHARE_DB_BACKUP_GZIP_LEVEL:-1}"
 DRY_RUN="${ASHARE_DB_BACKUP_PRUNE_DRY_RUN:-0}"
 
 if [[ ! -d "$DATA_DIR" ]]; then
@@ -16,8 +18,10 @@ if [[ ! -d "$DATA_DIR" ]]; then
   exit 0
 fi
 
-if ! [[ "$KEEP_RECENT" =~ ^[0-9]+$ && "$MIN_AGE_DAYS" =~ ^[0-9]+$ && "$ARCHIVE_RETENTION_DAYS" =~ ^[0-9]+$ ]]; then
-  echo "Retention settings must be non-negative integers." >&2
+if ! [[ "$KEEP_RECENT" =~ ^[0-9]+$ && "$MIN_AGE_DAYS" =~ ^[0-9]+$ \
+  && "$MAX_UNCOMPRESSED_AGE_DAYS" =~ ^[0-9]+$ && "$ARCHIVE_RETENTION_DAYS" =~ ^[0-9]+$ \
+  && "$GZIP_LEVEL" =~ ^[1-9]$ ]]; then
+  echo "Retention day/count settings must be non-negative integers and gzip level must be 1-9." >&2
   exit 2
 fi
 
@@ -25,6 +29,7 @@ mkdir -p "$ARCHIVE_ROOT"
 
 now_epoch="$(date '+%s')"
 min_age_seconds=$((MIN_AGE_DAYS * 86400))
+max_uncompressed_age_seconds=$((MAX_UNCOMPRESSED_AGE_DAYS * 86400))
 
 file_mtime_epoch() {
   local path="$1"
@@ -49,7 +54,11 @@ archive_backup() {
   local archive_path="$ARCHIVE_ROOT/$archive_name"
 
   if [[ -e "$archive_path" ]]; then
-    echo "Archive already exists, removing source: $path -> $archive_path"
+    if ! gzip -t "$archive_path"; then
+      echo "Existing archive failed gzip integrity validation: $archive_path" >&2
+      return 1
+    fi
+    echo "Verified archive already exists, removing source: $path -> $archive_path"
     if [[ "$DRY_RUN" != "1" ]]; then
       rm -f "$path"
     fi
@@ -58,8 +67,11 @@ archive_backup() {
 
   echo "Archiving runtime DB backup: $path -> $archive_path"
   if [[ "$DRY_RUN" != "1" ]]; then
-    gzip -c "$path" > "$archive_path"
-    touch -r "$path" "$archive_path"
+    local temp_archive="${archive_path}.tmp"
+    rm -f "$temp_archive"
+    gzip -"$GZIP_LEVEL" -c "$path" > "$temp_archive"
+    gzip -t "$temp_archive"
+    mv "$temp_archive" "$archive_path"
     rm -f "$path"
   fi
 }
@@ -88,13 +100,13 @@ else
   index=0
   for path in "${newest_first[@]}"; do
     index=$((index + 1))
-    if (( index <= KEEP_RECENT )); then
+    mtime="$(file_mtime_epoch "$path")"
+    age_seconds=$((now_epoch - mtime))
+    if (( index <= KEEP_RECENT && age_seconds <= max_uncompressed_age_seconds )); then
       echo "Keeping recent runtime DB backup: $path"
       continue
     fi
 
-    mtime="$(file_mtime_epoch "$path")"
-    age_seconds=$((now_epoch - mtime))
     if (( age_seconds < min_age_seconds )); then
       echo "Keeping young runtime DB backup: $path"
       continue
@@ -110,5 +122,9 @@ else
 fi
 
 if (( ARCHIVE_RETENTION_DAYS > 0 )); then
-  find "$ARCHIVE_ROOT" -type f -name '*.gz' -mtime +"$ARCHIVE_RETENTION_DAYS" -print -delete
+  if [[ "$DRY_RUN" == "1" ]]; then
+    find "$ARCHIVE_ROOT" -type f -name '*.gz' -mtime +"$ARCHIVE_RETENTION_DAYS" -print
+  else
+    find "$ARCHIVE_ROOT" -type f -name '*.gz' -mtime +"$ARCHIVE_RETENTION_DAYS" -print -delete
+  fi
 fi

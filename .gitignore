@@ -29,6 +29,7 @@ data/artifacts/autonomous_flow/
 data/runtime-artifacts/
 artifacts/
 output/playwright/
+output/chrome-acceptance-profile/
 output/external-reviews/
 output/shortpick-*.json
 output/shortpick-*.jsonl
