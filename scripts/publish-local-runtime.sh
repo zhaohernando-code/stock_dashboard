@@ -420,8 +420,26 @@ if [[ "$repo_assets" != "$served_assets" ]]; then
   exit 1
 fi
 
+wait_for_canonical_route() {
+  local deadline=$((SECONDS + 60))
+  local status_code
+  while (( SECONDS < deadline )); do
+    status_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$CANONICAL_BASE_URL" 2>/dev/null || true)"
+    case "$status_code" in
+      2??|3??|401|403)
+        return 0
+        ;;
+    esac
+    sleep 2
+  done
+  echo "Canonical route did not become ready within 60s: $CANONICAL_BASE_URL" >&2
+  return 1
+}
+
 mkdir -p "$RUNTIME_ROOT/output/releases"
 if [[ "$VERIFY_MODE" == "canonical" ]]; then
+  echo "[publish] Waiting for canonical route"
+  wait_for_canonical_route
   echo "[publish] Verifying repo/runtime/canonical parity"
   MANIFEST_PATH="$(
     cd "$REPO_ROOT"
