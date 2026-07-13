@@ -105,6 +105,7 @@ function readableStatusLabel(value?: string | null): string {
   if (value === "contract_ready") return "已满足展示合同";
   if (value === "ready") return "已就绪";
   if (value === "active") return "跟踪中";
+  if (value === "tracking_active") return "纸面追踪中";
   if (value === "awaiting_first_forward_fill") return "等待首笔前向成交";
   if (value === "active_control") return "对照观察中";
   if (value === "static_full_history_ready") return "静态历史指标已就绪";
