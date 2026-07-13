@@ -1186,6 +1186,18 @@ body[data-theme="dark"] {
   min-width: 760px;
 }
 
+.shortpick-strategy-lab-history-comparison-table .ant-table-cell {
+  font-variant-numeric: tabular-nums;
+}
+
+.shortpick-strategy-lab-history-comparison-table .ant-table-thead > tr:first-child > th {
+  text-align: center;
+}
+
+.shortpick-strategy-lab-history-comparison-table .ant-table-tbody > tr:first-child > td {
+  background: color-mix(in srgb, var(--brand) 7%, transparent);
+}
+
 .suggestion-stat-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

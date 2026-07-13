@@ -55,6 +55,11 @@ function stringField(source: Record<string, unknown> | undefined, key: string): 
 function configRoleLabel(role?: string | null): string {
   if (role === "primary_forward_observation") return "主策略";
   if (role === "lower_concentration_control") return "低集中对照";
+  if (role === "quality_replacement_rebalance_candidate") return "质量替补对照";
+  if (role === "upstream_meta_signal_candidate") return "上游元信号对照";
+  if (role === "conditional_aggressive_control_candidate") return "条件增强对照";
+  if (role === "execution_stability_control_candidate") return "执行稳定对照";
+  if (role === "meta_signal_quality_control_candidate") return "元信号质量对照";
   if (role === "recursive_upstream_rank_weight_candidate") return "递归上游候选";
   if (role === "phase6_forward_observation_candidate") return "前向观察候选";
   if (role === "primary_future_observation_candidate") return "冻结主策略";
@@ -108,6 +113,7 @@ function readableStatusLabel(value?: string | null): string {
   if (value === "tracking_active") return "纸面追踪中";
   if (value === "awaiting_first_forward_fill") return "等待首笔前向成交";
   if (value === "active_control") return "对照观察中";
+  if (value === "candidate_control") return "候选对照";
   if (value === "static_full_history_ready") return "静态历史指标已就绪";
   if (value === "passed") return "已通过";
   if (value === "failed") return "未通过";
@@ -122,6 +128,25 @@ function readableStatusLabel(value?: string | null): string {
   if (value === "legacy_reference") return "旧结果参照";
   if (value === "forward_observation_ready_with_open_risks") return "可前向观察，仍有开放风险";
   return value ? "未命名状态" : "暂无状态";
+}
+
+function exitPolicyLabel(value: string): string {
+  if (value === "rank3_pullback_rank1_quick_fail_guard") return "分层动态退出";
+  if (value === "mechanical_horizon") return "固定持有期退出";
+  return value ? "已配置退出规则" : "--";
+}
+
+function budgetModeLabel(value: string): string {
+  if (value === "current_nav_fraction") return "按当前净值复投";
+  return value ? "已配置资金规则" : "--";
+}
+
+function currencyText(value: number | null): string {
+  return value === null ? "--" : `${formatNumber(value)} 元`;
+}
+
+function metricText(value: number | null, formatter: (metric: number | null) => string = formatNumber) {
+  return <Text className={`value-${valueTone(value)}`}>{formatter(value)}</Text>;
 }
 
 function reasonLabel(value?: string | null): string {
@@ -273,6 +298,203 @@ function ConfigSummaryTable({
       pagination={false}
       columns={columns}
       dataSource={rows}
+    />
+  );
+}
+
+function HistoricalStrategyComparisonTable({
+  rows,
+  loading,
+}: {
+  rows: ShortpickStrategyLabConfigReadout[];
+  loading: boolean;
+}) {
+  const columns: ColumnsType<ShortpickStrategyLabConfigReadout> = [
+    {
+      title: "策略",
+      key: "strategy",
+      fixed: "left",
+      width: 290,
+      render: (_, item) => (
+        <Space direction="vertical" size={2}>
+          <Text strong>{item.label || "未命名策略"}</Text>
+          <Space wrap size={4}>
+            <Tag color={configRoleColor(item.role)}>{configRoleLabel(item.role)}</Tag>
+            <Tag color={statusColor(item.gate_status)}>
+              {readableStatusLabel(item.gate_status) || "未过闸"}
+            </Tag>
+          </Space>
+        </Space>
+      ),
+    },
+    {
+      title: "盈利能力",
+      children: [
+        {
+          title: "累计收益",
+          key: "total_return",
+          width: 110,
+          align: "right",
+          render: (_, item) => metricText(numberField(item.summary, "total_return"), formatPercent),
+        },
+        {
+          title: "年化收益",
+          key: "annualized_return",
+          width: 110,
+          align: "right",
+          render: (_, item) => metricText(numberField(item.summary, "annualized_return"), formatPercent),
+        },
+        {
+          title: "期末净值",
+          key: "final_nav_cny",
+          width: 135,
+          align: "right",
+          render: (_, item) => currencyText(numberField(item.summary, "final_nav_cny")),
+        },
+      ],
+    },
+    {
+      title: "稳定性",
+      children: [
+        {
+          title: "最大回撤",
+          key: "max_drawdown",
+          width: 105,
+          align: "right",
+          render: (_, item) => metricText(numberField(item.summary, "max_drawdown"), formatPercent),
+        },
+        {
+          title: "负收益月份",
+          key: "negative_month_count",
+          width: 105,
+          align: "right",
+          render: (_, item) => formatNumber(numberField(item.summary, "negative_month_count")),
+        },
+        {
+          title: "最差月收益",
+          key: "worst_monthly_return",
+          width: 115,
+          align: "right",
+          render: (_, item) => metricText(numberField(item.summary, "worst_monthly_return"), formatPercent),
+        },
+      ],
+    },
+    {
+      title: "执行效率",
+      children: [
+        {
+          title: "买入次数",
+          key: "buy_order_count",
+          width: 95,
+          align: "right",
+          render: (_, item) => formatNumber(numberField(item.summary, "buy_order_count")),
+        },
+        {
+          title: "卖出次数",
+          key: "sell_order_count",
+          width: 95,
+          align: "right",
+          render: (_, item) => formatNumber(numberField(item.summary, "sell_order_count")),
+        },
+        {
+          title: "订单跳过率",
+          key: "skipped_order_rate",
+          width: 115,
+          align: "right",
+          render: (_, item) => formatPercent(numberField(item.summary, "skipped_order_rate")),
+        },
+        {
+          title: "信号跳过率",
+          key: "skipped_signal_rate",
+          width: 115,
+          align: "right",
+          render: (_, item) => formatPercent(numberField(item.summary, "skipped_signal_rate")),
+        },
+        {
+          title: "换手倍数",
+          key: "turnover",
+          width: 100,
+          align: "right",
+          render: (_, item) => formatNumber(numberField(item.summary, "turnover")),
+        },
+      ],
+    },
+    {
+      title: "资金与暴露",
+      children: [
+        {
+          title: "平均资金使用率",
+          key: "mean_invested_ratio",
+          width: 135,
+          align: "right",
+          render: (_, item) => formatPercent(numberField(item.summary, "mean_invested_ratio")),
+        },
+        {
+          title: "95分位资金使用率",
+          key: "p95_invested_ratio",
+          width: 150,
+          align: "right",
+          render: (_, item) => formatPercent(numberField(item.summary, "p95_invested_ratio")),
+        },
+        {
+          title: "最大单票暴露",
+          key: "max_single_symbol_exposure_pct",
+          width: 125,
+          align: "right",
+          render: (_, item) => formatPercent(numberField(item.summary, "max_single_symbol_exposure_pct")),
+        },
+        {
+          title: "最大持仓数",
+          key: "max_position_count",
+          width: 105,
+          align: "right",
+          render: (_, item) => formatNumber(numberField(item.summary, "max_position_count")),
+        },
+      ],
+    },
+    {
+      title: "执行规则",
+      children: [
+        {
+          title: "资金分批数",
+          key: "tranche_count",
+          width: 105,
+          align: "right",
+          render: (_, item) => formatNumber(numberField(item.selection_summary, "tranche_count")),
+        },
+        {
+          title: "最小下单额",
+          key: "min_order_notional_cny",
+          width: 120,
+          align: "right",
+          render: (_, item) => currencyText(numberField(item.selection_summary, "min_order_notional_cny")),
+        },
+        {
+          title: "资金方式",
+          key: "budget_mode",
+          width: 135,
+          render: (_, item) => budgetModeLabel(stringField(item.selection_summary, "budget_mode")),
+        },
+        {
+          title: "卖出方式",
+          key: "exit_policy",
+          width: 145,
+          render: (_, item) => exitPolicyLabel(stringField(item.selection_summary, "exit_policy")),
+        },
+      ],
+    },
+  ];
+  return (
+    <Table
+      className="shortpick-strategy-lab-history-comparison-table"
+      rowKey={(item) => item.config_id}
+      size="small"
+      loading={loading}
+      pagination={false}
+      columns={columns}
+      dataSource={rows}
+      scroll={{ x: 2310 }}
+      sticky
     />
   );
 }
@@ -942,8 +1164,16 @@ function ShortpickStrategyLabReplayTab({
         </div>
       ) : null}
 
-      <Card className="panel-card" title={selectedRows.length ? "推广配置与基线" : "合格配置与基线"}>
-        <ConfigSummaryTable rows={[...selectedRows, ...baselineRows]} loading={loading} />
+      <Card
+        className="panel-card"
+        title="完整历史策略指标对比"
+        extra={(
+          <Text type="secondary">
+            {displayValue(replay?.data_scope?.signal_date_from)} 至 {displayValue(replay?.data_scope?.signal_date_to)}
+          </Text>
+        )}
+      >
+        <HistoricalStrategyComparisonTable rows={[...selectedRows, ...baselineRows]} loading={loading} />
       </Card>
 
       <Card className="panel-card" title="留出与未采用配置统计">

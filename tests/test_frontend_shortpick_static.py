@@ -100,6 +100,30 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         ]
         self.assertIn("历史回放核心读数", replay_tab_source)
         self.assertIn("metric_groups", replay_tab_source)
+        self.assertIn("完整历史策略指标对比", replay_tab_source)
+        self.assertIn("HistoricalStrategyComparisonTable", component_source)
+        for comparison_metric in (
+            "total_return",
+            "annualized_return",
+            "final_nav_cny",
+            "max_drawdown",
+            "negative_month_count",
+            "worst_monthly_return",
+            "buy_order_count",
+            "sell_order_count",
+            "skipped_order_rate",
+            "skipped_signal_rate",
+            "turnover",
+            "mean_invested_ratio",
+            "p95_invested_ratio",
+            "max_single_symbol_exposure_pct",
+            "max_position_count",
+            "tranche_count",
+            "min_order_notional_cny",
+            "budget_mode",
+            "exit_policy",
+        ):
+            self.assertIn(comparison_metric, component_source)
         self.assertNotIn("decision_samples", replay_tab_source)
         self.assertNotIn("sampleColumns", replay_tab_source)
         self.assertNotIn("decision-sample", replay_tab_source)
