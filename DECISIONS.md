@@ -1,5 +1,9 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-07-13T09:30:00+08:00] v3 paper strategies use one synchronized account window:
+
+所有进入前端的 v3 策略统一从 2026-07-08、20 万元独立纸面账户起算。日刷必须按信号日保存 candidate source 和计划批次，不能再用“最新计划”覆盖未结算历史。2026-07-08/09 的补齐来源必须标记为 `synchronized_start_backfill`，后续日刷实时保存的来源标记为 `daily_forward_capture`；两者都不能继承历史回放收益。交易明细、现金、持仓、净值曲线和回撤必须来自同一份纸面账本。执行合同见 `docs/contracts/SHORTPICK_V3_PAPER_LEDGER_CONTRACT_2026-07-13.md`。
+
 [2026-07-04T01:15:00+08:00] Short Pick model exploration must let evidence seed strategies before more formula design:
 
 当前目标不是继续手写一个更复杂的固定公式，而是让模型探索机制先从历史矩阵中发现可验证的特征方向，再把通过基础信号检查的方向注册成候选模型 spec 进入 walk-forward 门禁。`model_feature_diagnostic_report` 因此作为 `research_validation/*` artifact 家族加入：它只读取已有 PIT feature matrix 和 executable label matrix，不写业务库、不更新 policy config、不暴露到 dashboard。

@@ -168,6 +168,8 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
     state = _read_paper_state(state_path)
     records = _records_from_state(state) if include_records else []
     planned_orders = _planned_orders_from_state(state)
+    account_states = (state or {}).get("account_states") if isinstance((state or {}).get("account_states"), dict) else {}
+    source_coverage = (state or {}).get("source_coverage") if isinstance((state or {}).get("source_coverage"), dict) else {}
     plan_generation_status = (state or {}).get("plan_generation_status") if isinstance((state or {}), dict) else None
     if not isinstance(plan_generation_status, dict):
         plan_generation_status = {
@@ -205,7 +207,9 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             else "awaiting_v3_plan"
         ),
         "current_message": (
-            "已生成明日计划单，等待真实纸面成交记录。"
+            "纸面账户已有成交，并已生成下一交易日计划单。"
+            if records and planned_orders
+            else "已生成明日计划单，等待纸面成交记录。"
             if planned_orders
             else str(plan_generation_status.get("message") or "v3 计划源未就绪。")
             if not plan_ready or no_order_ready
@@ -213,9 +217,9 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
         ),
         "claim_ceiling": CLAIM_CEILING,
         "evidence_basis": EVIDENCE_BASIS_PAPER,
-        "ui_language": "纸面追踪从今日起只展示真实前向记录；不会用历史回放补齐交易明细或收益曲线。",
+        "ui_language": "所有 v3 策略统一从 2026-07-08 起算；历史回放收益不会写入纸面账户。",
         "data_disclaimer": "纸面追踪是研究观察，不构成投资建议或生产交易自动化。",
-        "source_contract_ref": "docs/contracts/SHORTPICK_V3_ROLLING_TRANCHE_EXECUTION_CONTRACT_2026-07-08.md",
+        "source_contract_ref": "docs/contracts/SHORTPICK_V3_PAPER_LEDGER_CONTRACT_2026-07-13.md",
         "source_artifacts": {
             "paper_state": {
                 "path": str(state_path),
@@ -225,7 +229,7 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
         },
         "tracking_window": {
             "start_date": tracking_start,
-            "start_policy": "forward_only_zero_initial_rows",
+            "start_policy": "common_window_2026_07_08_with_labeled_synchronized_backfill",
             "today": today.isoformat(),
         },
         "account_contract": _account_contract(),
@@ -234,15 +238,20 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             "historical_replay_rows_allowed": False,
             "initial_record_count": 0,
         },
-        "selected_configs": [_paper_main_config_readout()],
+        "selected_configs": [
+            _paper_config_with_account_state(_paper_main_config_readout(), account_states, records, planned_orders)
+        ],
         "baseline_configs": [
-            _paper_quality_replacement_rebalance_control_readout(),
-            _paper_upstream_meta_stability_control_readout(),
-            _paper_negative_month_rank_adjusted_control_readout(),
-            _paper_meta_signal_quality_control_readout(),
-            _paper_three_part_stability_control_readout(),
-            _paper_conditional_aggressive_control_readout(),
-            _paper_control_config_readout(),
+            _paper_config_with_account_state(readout, account_states, records, planned_orders)
+            for readout in (
+                _paper_quality_replacement_rebalance_control_readout(),
+                _paper_upstream_meta_stability_control_readout(),
+                _paper_negative_month_rank_adjusted_control_readout(),
+                _paper_meta_signal_quality_control_readout(),
+                _paper_three_part_stability_control_readout(),
+                _paper_conditional_aggressive_control_readout(),
+                _paper_control_config_readout(),
+            )
         ],
         "paper_governance": {
             "status": "active_forward_observation",
@@ -264,6 +273,8 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             planned_orders=planned_orders,
             tracking_start=tracking_start,
             plan_generation_status=plan_generation_status,
+            account_states=account_states,
+            source_coverage=source_coverage,
         ),
         "records": records,
         "summary": summary,
@@ -935,6 +946,39 @@ def _paper_negative_month_rank_adjusted_control_readout() -> dict[str, Any]:
     }
 
 
+def _paper_config_with_account_state(
+    readout: dict[str, Any],
+    account_states: dict[str, Any],
+    records: list[dict[str, Any]],
+    planned_orders: list[dict[str, Any]],
+) -> dict[str, Any]:
+    config_id = str(readout.get("config_id") or "")
+    state = account_states.get(config_id) if isinstance(account_states.get(config_id), dict) else {}
+    nav_rows = [row for row in state.get("nav_points") or [] if isinstance(row, dict)]
+    peak_nav = float(INITIAL_CASH_CNY)
+    max_drawdown = 0.0
+    for row in nav_rows:
+        nav = float(row.get("nav_cny") or INITIAL_CASH_CNY)
+        peak_nav = max(peak_nav, nav)
+        max_drawdown = min(max_drawdown, nav / peak_nav - 1.0 if peak_nav else 0.0)
+    latest_nav = float(state.get("latest_nav_cny") or INITIAL_CASH_CNY)
+    record_count = sum(1 for row in records if row.get("strategy_id") == config_id)
+    planned_order_count = sum(1 for row in planned_orders if row.get("strategy_id") == config_id)
+    return {
+        **readout,
+        "summary": {
+            **(readout.get("summary") or {}),
+            "initial_cash_cny": INITIAL_CASH_CNY,
+            "current_nav_cny": latest_nav,
+            "paper_total_return": latest_nav / INITIAL_CASH_CNY - 1.0 if record_count else None,
+            "max_drawdown": max_drawdown if record_count else None,
+            "record_count": record_count,
+            "planned_order_count": planned_order_count,
+            "forward_status": "tracking_active" if record_count else "awaiting_first_forward_fill",
+        },
+    }
+
+
 def _historical_metric_groups() -> list[dict[str, Any]]:
     return [
         {
@@ -974,10 +1018,17 @@ def _paper_display(
     planned_orders: list[dict[str, Any]],
     tracking_start: str,
     plan_generation_status: dict[str, Any],
+    account_states: dict[str, Any],
+    source_coverage: dict[str, Any],
 ) -> dict[str, Any]:
     latest_order = planned_orders[0] if planned_orders else None
     plan_status_code = str(plan_generation_status.get("status") or "unknown")
     plan_ready = plan_status_code.startswith("ready")
+    account_curves = _paper_account_curves(account_states, records)
+    main_account = account_states.get(MAIN_CONFIG_ID) if isinstance(account_states.get(MAIN_CONFIG_ID), dict) else {}
+    main_nav = float(main_account.get("latest_nav_cny") or INITIAL_CASH_CNY)
+    main_record_count = sum(1 for row in records if row.get("strategy_id") == MAIN_CONFIG_ID)
+    latest_record_date = max((str(row.get("trade_date") or "") for row in records), default="")
     return {
         "title": "v3 模型纸面追踪",
         "status_label": (
@@ -1022,30 +1073,87 @@ def _paper_display(
                 {"key": "note", "label": "说明"},
             ],
             "rows": [_paper_record_display_row(record) for record in records],
-            "empty_text": "纸面追踪从今日开始，尚无真实成交记录。",
+            "empty_text": "统一纸面追踪窗口尚无成交记录。",
         },
-        "account_curves": [],
+        "account_curves": account_curves,
         "planned_orders": planned_orders,
         "plan_generation_status": plan_generation_status,
         "coverage": {
             "coverage_start": tracking_start,
-            "coverage_end": tracking_start,
+            "coverage_end": latest_record_date or str(source_coverage.get("end_date") or tracking_start),
             "latest_source_signal_date": summary.get("latest_plan_signal_date"),
-            "true_forward_record_count": summary.get("record_count"),
+            "paper_record_count": summary.get("record_count"),
+            "true_forward_record_count": sum(
+                1 for row in records if row.get("evidence_basis") == "daily_forward_capture"
+            ),
+            "synchronized_backfill_record_count": sum(
+                1 for row in records if row.get("evidence_basis") == "synchronized_start_backfill"
+            ),
             "planned_order_count": summary.get("planned_order_count"),
             "historical_replay_row_count": 0,
+            "strategy_count": len(account_states),
+            "common_start_enforced": bool(source_coverage.get("common_start_enforced")),
+            "source_gap_count": 0,
         },
         "summary_cards": [
             {"label": "初始本金", "value": f"{INITIAL_CASH_CNY}"},
-            {"label": "当前账户净值", "value": f"{INITIAL_CASH_CNY}"},
-            {"label": "纸面收益", "value": "等待首笔成交"},
-            {"label": "真实前向记录", "value": str(summary.get("record_count") or 0)},
+            {"label": "主策略当前净值", "value": f"{main_nav:.2f}"},
+            {
+                "label": "主策略纸面收益",
+                "value": f"{main_nav / INITIAL_CASH_CNY - 1.0:+.2%}" if main_record_count else "等待首笔成交",
+            },
+            {"label": "纸面成交记录", "value": str(summary.get("record_count") or 0)},
             {"label": "明日计划单", "value": str(summary.get("planned_order_count") or 0)},
             {"label": "计划源状态", "value": "v3 ready" if plan_ready else "阻塞"},
             {"label": "追踪起点", "value": tracking_start},
             {"label": "最新信号日", "value": str(summary.get("latest_plan_signal_date") or "等待日刷")},
         ],
     }
+
+
+def _paper_account_curves(account_states: dict[str, Any], records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    sell_counts: dict[str, int] = {}
+    for record in records:
+        if record.get("action") == "sell":
+            strategy_id = str(record.get("strategy_id") or "")
+            sell_counts[strategy_id] = sell_counts.get(strategy_id, 0) + 1
+    curves: list[dict[str, Any]] = []
+    for strategy_id, state in account_states.items():
+        if not isinstance(state, dict):
+            continue
+        points: list[dict[str, Any]] = []
+        peak_nav = float(INITIAL_CASH_CNY)
+        max_drawdown = 0.0
+        for row in state.get("nav_points") or []:
+            if not isinstance(row, dict):
+                continue
+            nav = float(row.get("nav_cny") or INITIAL_CASH_CNY)
+            peak_nav = max(peak_nav, nav)
+            drawdown = nav / peak_nav - 1.0 if peak_nav else 0.0
+            max_drawdown = min(max_drawdown, drawdown)
+            points.append(
+                {
+                    "date": row.get("date"),
+                    "nav_cny": nav,
+                    "account_return": nav / INITIAL_CASH_CNY - 1.0,
+                    "drawdown": drawdown,
+                }
+            )
+        latest_nav = float(state.get("latest_nav_cny") or INITIAL_CASH_CNY)
+        curves.append(
+            {
+                "strategy": str(state.get("strategy_label") or strategy_id),
+                "strategy_id": strategy_id,
+                "initial_cash": INITIAL_CASH_CNY,
+                "latest_nav": latest_nav,
+                "latest_return": latest_nav / INITIAL_CASH_CNY - 1.0,
+                "max_drawdown": max_drawdown,
+                "point_count": len(points),
+                "completed_trade_count": sell_counts.get(strategy_id, 0),
+                "points": points,
+            }
+        )
+    return curves
 
 
 def _latest_trade_display(

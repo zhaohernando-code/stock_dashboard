@@ -485,7 +485,7 @@ function ShortpickStrategyLabPaperTab({
               ))}
             </div>
             <Space wrap className="inline-tags">
-              <Tag color="blue">从今日起真实前向</Tag>
+              <Tag color="blue">统一从 2026-07-08 起算</Tag>
               <Tag color="red">不允许延迟买入</Tag>
               <Tag color="green">研究观察，不构成建议</Tag>
             </Space>

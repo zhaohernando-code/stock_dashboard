@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
 from ashare_evidence.db import init_database, session_scope
@@ -572,6 +572,149 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
     diagnostics = payload["plan_generation_status"]["diagnostics"]
     assert any(row["symbol"] == "002371.SZ" and row["reason"] == "price_too_high_for_slot" for row in diagnostics)
     assert any(row["symbol"] == "600028.SH" and row["reason"] == "zero_target_allocation" for row in diagnostics)
+
+
+def test_forward_ledger_fills_all_strategies_from_common_start(tmp_path, monkeypatch) -> None:
+    database_url = f"sqlite:///{tmp_path / 'paper-ledger.db'}"
+    init_database(database_url)
+    with session_scope(database_url) as session:
+        stock = Stock(
+            symbol="600030.SH",
+            ticker="600030",
+            exchange="SH",
+            name="中信证券",
+            provider_symbol="600030",
+            status="active",
+            profile_payload={},
+            **build_lineage(
+                {"symbol": "600030.SH"},
+                source_uri="test://stock/600030",
+                license_tag="test",
+                usage_scope="test",
+                redistribution_scope="none",
+            ),
+        )
+        session.add(stock)
+        session.flush()
+        for observed_day, close_price in ((date(2026, 7, 8), 10.0), (date(2026, 7, 9), 11.0)):
+            session.add(
+                MarketBar(
+                    bar_key=f"bar-600030-{observed_day.isoformat()}",
+                    stock_id=stock.id,
+                    timeframe="1d",
+                    observed_at=datetime.combine(observed_day, time(15, 0), tzinfo=UTC),
+                    open_price=close_price,
+                    high_price=close_price,
+                    low_price=close_price,
+                    close_price=close_price,
+                    volume=1_000_000,
+                    amount=close_price * 1_000_000,
+                    raw_payload={},
+                    **build_lineage(
+                        {"symbol": stock.symbol, "date": observed_day.isoformat()},
+                        source_uri=f"test://bar/{observed_day.isoformat()}",
+                        license_tag="test",
+                        usage_scope="test",
+                        redistribution_scope="none",
+                    ),
+                )
+            )
+
+    def source_for(signal_day: date, capture_mode: str) -> dict[str, object]:
+        pick = {
+            "as_of_date": signal_day.isoformat(),
+            "symbol": "600030.SH",
+            "stock_name": "中信证券",
+            "rank": 1,
+            "portfolio_weight": 1.0,
+            "rank_weight_multiplier": 1.0,
+            "rank_portfolio_adjustment_multiplier": 1.0,
+            "score": 3.5,
+            "target_horizon_days": 20,
+            "rank_weight_feature_values": {
+                "benchmark_return_20d": 0.01,
+                "return_20d_percentile": 0.90,
+                "industry_return_20d_excess": 0.10,
+                "distance_from_20d_high": -0.01,
+            },
+        }
+        return {
+            "artifact_id": f"candidate-{signal_day.isoformat()}",
+            "signal_date": signal_day.isoformat(),
+            "paper_source_capture_mode": capture_mode,
+            "trial_diagnostics": [
+                {
+                    "model_spec_id": "selected_exhaustion_date_scaled_v3_top3_20d_v1",
+                    "selected_top_k": 3,
+                    "selected_top_k_picks_by_date": [pick],
+                },
+                {
+                    "model_spec_id": NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
+                    "selected_top_k": 3,
+                    "selected_top_k_picks_by_date": [pick],
+                    "ranked_candidate_inventory_by_date": [],
+                },
+            ],
+        }
+
+    monkeypatch.setenv("ASHARE_DATABASE_URL", database_url)
+    monkeypatch.setenv("ASHARE_SHORTPICK_STRATEGY_LAB_V3_SOURCE_DATABASE_URL", database_url)
+    module = _load_refresh_state_script()
+    monkeypatch.setattr(
+        module,
+        "_market_days",
+        lambda _session, *, start_day, end_day: [
+            day for day in (date(2026, 7, 8), date(2026, 7, 9)) if start_day <= day <= end_day
+        ],
+    )
+
+    records, account_states, pending, status, history, events = module._rebuild_forward_paper_ledger(
+        [
+            source_for(date(2026, 7, 8), "synchronized_start_backfill"),
+            source_for(date(2026, 7, 9), "daily_forward_capture"),
+        ]
+    )
+
+    buys = [row for row in records if row["action"] == "buy"]
+    assert len(account_states) == 8
+    assert {row["strategy_id"] for row in buys} == set(account_states)
+    assert {row["signal_date"] for row in buys} == {"2026-07-08"}
+    assert all(state["cash_cny"] < INITIAL_CASH_CNY for state in account_states.values())
+    assert all(state["positions"] for state in account_states.values())
+    assert {row["signal_date"] for row in pending} == {"2026-07-09"}, json.dumps(
+        {"status": status, "history": history, "events": events}, ensure_ascii=False
+    )
+    assert status["daily_source_date_from"] == "2026-07-08"
+    assert status["daily_source_date_to"] == "2026-07-09"
+
+    state_path = tmp_path / "rebuilt-paper-state.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "schema_version": PAPER_STATE_SCHEMA_VERSION,
+                "tracking_start_date": "2026-07-08",
+                "records": records,
+                "account_states": account_states,
+                "planned_orders": pending,
+                "plan_generation_status": status,
+                "source_coverage": {
+                    "start_date": "2026-07-08",
+                    "end_date": "2026-07-09",
+                    "strategy_count": 8,
+                    "common_start_enforced": True,
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    read_model = build_shortpick_strategy_lab_paper_tracking_read_model(
+        paper_state_path=state_path,
+        today=date(2026, 7, 9),
+    )
+    assert len(read_model["paper_display"]["table"]["rows"]) == len(buys)
+    assert len(read_model["paper_display"]["account_curves"]) == 8
+    assert read_model["paper_display"]["coverage"]["common_start_enforced"] is True
 
 
 def test_quality_candidate_replaces_unaffordable_pick_from_same_day_inventory() -> None:

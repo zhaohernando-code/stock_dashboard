@@ -63,7 +63,7 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("PaperDisplayChartCard", component_source)
         self.assertIn("paperDisplayTableColumns", component_source)
         self.assertIn('title={table?.title || "模拟交易明细"}', component_source)
-        self.assertIn("从今日起真实前向", component_source)
+        self.assertIn("统一从 2026-07-08 起算", component_source)
         self.assertIn("最新来源信号日", component_source)
         self.assertIn("数据缺口", component_source)
         self.assertIn("...(tracking?.selected_configs ?? [])", component_source)

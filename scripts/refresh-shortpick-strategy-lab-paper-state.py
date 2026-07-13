@@ -7,7 +7,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ashare_evidence.db import session_scope
 from ashare_evidence.models import MarketBar, Stock
@@ -50,7 +50,10 @@ V3_MODEL_SPEC_ID = "selected_exhaustion_date_scaled_v3_top3_20d_v1"
 REQUIRED_V3_MODEL_SPEC_IDS = (V3_MODEL_SPEC_ID, NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID)
 V3_PLAN_SOURCE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_V3_CANDIDATE_RUN_SOURCE"
 V3_SOURCE_DATABASE_URL_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_V3_SOURCE_DATABASE_URL"
+V3_DAILY_SOURCE_DIR_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_V3_DAILY_SOURCE_DIR"
 EXTERNAL_PLAN_SOURCE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_PLAN_SOURCE"
+BUY_COST_RATE = 20.0 / 10_000.0
+SELL_COST_RATE = 25.0 / 10_000.0
 ALLOWED_EXTERNAL_PLAN_SOURCES = {
     "external_v3_selected_top_k_plan",
     "selected_top_k_candidate_run_rolling_tranche_engine",
@@ -64,6 +67,16 @@ STRATEGY_MODEL_SPEC_IDS = {
     CONTROL_CONFIG_ID: V3_MODEL_SPEC_ID,
     NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID: NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
     QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID: NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
+}
+STRATEGY_LABELS = {
+    MAIN_CONFIG_ID: MAIN_STRATEGY_LABEL,
+    QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID: QUALITY_REPLACEMENT_REBALANCE_STRATEGY_LABEL,
+    UPSTREAM_META_STABILITY_CONTROL_ID: UPSTREAM_META_STABILITY_STRATEGY_LABEL,
+    NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID: NEGATIVE_MONTH_RANK_ADJUSTED_STRATEGY_LABEL,
+    META_SIGNAL_QUALITY_CONTROL_ID: META_SIGNAL_QUALITY_STRATEGY_LABEL,
+    THREE_PART_STABILITY_CONTROL_ID: THREE_PART_STABILITY_STRATEGY_LABEL,
+    CONDITIONAL_AGGRESSIVE_CONTROL_ID: CONDITIONAL_AGGRESSIVE_STRATEGY_LABEL,
+    CONTROL_CONFIG_ID: CONTROL_STRATEGY_LABEL,
 }
 
 
@@ -96,6 +109,359 @@ def _v3_source_database_url() -> str | None:
     if hot_db.exists() and hot_db.stat().st_size > 0:
         return f"sqlite:///{hot_db}"
     return os.getenv("ASHARE_DATABASE_URL")
+
+
+def _daily_source_dir() -> Path:
+    configured = os.getenv(V3_DAILY_SOURCE_DIR_ENV)
+    if configured:
+        return Path(configured)
+    configured_state = os.getenv(PAPER_STATE_ENV)
+    if configured_state:
+        return Path(configured_state).parent / "shortpick-strategy-lab-v3-candidate-run-sources"
+    return _repo_root() / "data" / "shortpick-strategy-lab-v3-candidate-run-sources"
+
+
+def _daily_source_path(signal_day: date) -> Path:
+    return _daily_source_dir() / f"{signal_day.isoformat()}.json"
+
+
+def _candidate_source_signal_day(payload: dict[str, Any]) -> date:
+    configured = str(payload.get("signal_date") or "")
+    if configured:
+        return date.fromisoformat(configured)
+    candidate_dates = [
+        str(row.get("as_of_date") or "")
+        for trial in payload.get("trial_diagnostics") or []
+        if isinstance(trial, dict)
+        for row in trial.get("selected_top_k_picks_by_date") or []
+        if isinstance(row, dict) and row.get("as_of_date")
+    ]
+    if not candidate_dates:
+        raise ValueError("candidate source has no signal_date or selected pick dates")
+    return date.fromisoformat(max(candidate_dates))
+
+
+def _write_daily_source(payload: dict[str, Any], *, capture_mode: str) -> Path:
+    signal_day = _candidate_source_signal_day(payload)
+    archived = {
+        **payload,
+        "signal_date": signal_day.isoformat(),
+        "paper_source_capture_mode": capture_mode,
+        "paper_source_captured_at": datetime.now(UTC).isoformat(),
+    }
+    return write_latest_v3_candidate_run_source(archived, _daily_source_path(signal_day))
+
+
+def _market_days(session: Any, *, start_day: date, end_day: date) -> list[date]:
+    rows = session.execute(
+        select(func.date(MarketBar.observed_at), func.count())
+        .where(
+            MarketBar.timeframe == "1d",
+            func.date(MarketBar.observed_at) >= start_day.isoformat(),
+            func.date(MarketBar.observed_at) <= end_day.isoformat(),
+        )
+        .group_by(func.date(MarketBar.observed_at))
+        .having(func.count() >= 200)
+        .order_by(func.date(MarketBar.observed_at).asc())
+    ).all()
+    return [date.fromisoformat(str(row[0])) for row in rows]
+
+
+def _ensure_daily_candidate_sources(latest_source: dict[str, Any]) -> list[dict[str, Any]]:
+    latest_signal_day = _candidate_source_signal_day(latest_source)
+    tracking_start_day = date.fromisoformat(TRACKING_START_DATE)
+    sources: list[dict[str, Any]] = []
+    with session_scope(_v3_source_database_url()) as session:
+        days = _market_days(session, start_day=tracking_start_day, end_day=latest_signal_day)
+        if latest_signal_day not in days:
+            days.append(latest_signal_day)
+        for signal_day in sorted(set(days)):
+            path = _daily_source_path(signal_day)
+            payload = _load_json(path)
+            if payload is None:
+                if signal_day == latest_signal_day:
+                    payload = latest_source
+                    capture_mode = "daily_forward_capture"
+                else:
+                    payload = build_latest_v3_candidate_run_source(
+                        session,
+                        as_of_date=signal_day,
+                        validation_run_id=f"shortpick-strategy-lab-v3-synchronized-{signal_day.isoformat()}",
+                    )
+                    capture_mode = "synchronized_start_backfill"
+                _write_daily_source(payload, capture_mode=capture_mode)
+                payload = _load_json(path) or payload
+            sources.append(payload)
+    return sorted(sources, key=lambda row: str(row.get("signal_date") or ""))
+
+
+def _empty_account_state(strategy_id: str) -> dict[str, Any]:
+    return {
+        "strategy_id": strategy_id,
+        "strategy_label": STRATEGY_LABELS[strategy_id],
+        "tracking_start_date": TRACKING_START_DATE,
+        "cash_cny": float(INITIAL_CASH_CNY),
+        "latest_nav_cny": float(INITIAL_CASH_CNY),
+        "positions": [],
+        "nav_points": [],
+    }
+
+
+def _initial_account_states() -> dict[str, dict[str, Any]]:
+    return {strategy_id: _empty_account_state(strategy_id) for strategy_id in STRATEGY_LABELS}
+
+
+def _close_prices_on_day(session: Any, *, day: date, symbols: set[str]) -> dict[str, float]:
+    if not symbols:
+        return {}
+    rows = session.execute(
+        select(Stock.symbol, MarketBar.close_price)
+        .join(MarketBar, MarketBar.stock_id == Stock.id)
+        .where(
+            Stock.symbol.in_(symbols),
+            MarketBar.timeframe == "1d",
+            func.date(MarketBar.observed_at) == day.isoformat(),
+        )
+        .order_by(MarketBar.id.asc())
+    ).all()
+    return {str(symbol): float(close_price) for symbol, close_price in rows if close_price and close_price > 0}
+
+
+def _position_exit_reason(position: dict[str, Any], *, current_day: date, price: float, exit_policy: str) -> str | None:
+    entry_price = _safe_float(position.get("entry_price_cny")) or 0.0
+    peak_price = _safe_float(position.get("peak_price_cny")) or entry_price
+    position_return = price / entry_price - 1.0 if entry_price else 0.0
+    peak_return = peak_price / entry_price - 1.0 if entry_price else 0.0
+    drawdown_from_peak = price / peak_price - 1.0 if peak_price else 0.0
+    entry_day = date.fromisoformat(str(position["entry_date"]))
+    holding_calendar_days = (current_day - entry_day).days
+    if int(position.get("trading_days_held") or 0) >= int(position.get("target_horizon_days") or 20):
+        return "mechanical_horizon"
+    if current_day <= entry_day:
+        return None
+    if exit_policy == "rank3_pullback_rank1_quick_fail_guard":
+        distance_from_20d_high = _safe_float((position.get("entry_features") or {}).get("distance_from_20d_high"))
+        rank = int(position.get("rank") or 0)
+        if rank == 1 and holding_calendar_days <= 8 and peak_return >= 0.06 and position_return <= -0.02:
+            return "dynamic_rank1_quick_spike_failed"
+        if (
+            rank >= 3
+            and distance_from_20d_high is not None
+            and distance_from_20d_high <= -0.01
+            and holding_calendar_days >= 10
+            and position_return <= -0.08
+            and drawdown_from_peak <= -0.10
+        ):
+            return "dynamic_rank3_entry_pullback_late_trend_loss_guard"
+    return None
+
+
+def _record_row(
+    *,
+    order: dict[str, Any],
+    action: str,
+    trade_day: date,
+    shares: int,
+    price: float,
+    cash_after: float,
+    note: str,
+    return_value: float | None = None,
+) -> dict[str, Any]:
+    strategy_id = str(order.get("strategy_id") or "")
+    signal_date = str(order.get("signal_date") or "")
+    symbol = str(order.get("symbol") or "")
+    return {
+        "row_key": f"{strategy_id}:{signal_date}:{trade_day.isoformat()}:{action}:{symbol}:{shares}",
+        "action": action,
+        "action_label": "买入" if action == "buy" else "卖出",
+        "strategy_id": strategy_id,
+        "strategy_label": str(order.get("strategy_label") or STRATEGY_LABELS.get(strategy_id) or strategy_id),
+        "signal_date": signal_date,
+        "trade_date": trade_day.isoformat(),
+        "symbol": symbol,
+        "name": str(order.get("name") or symbol),
+        "rank": order.get("rank"),
+        "shares": shares,
+        "price_cny": round(price, 4),
+        "quantity_text": f"{shares} 股",
+        "cash_after_cny": round(cash_after, 2),
+        "cash_after_text": f"{cash_after:,.2f} 元",
+        "exit_state_text": "持仓中" if action == "buy" else "已退出",
+        "return": return_value,
+        "return_text": "未退出" if return_value is None else f"{return_value:+.2%}",
+        "note": note,
+        "evidence_basis": str(order.get("paper_source_capture_mode") or "daily_forward_capture"),
+    }
+
+
+def _settle_account_day(
+    *,
+    session: Any,
+    current_day: date,
+    account_states: dict[str, dict[str, Any]],
+    pending_orders: list[dict[str, Any]],
+    records: list[dict[str, Any]],
+    execution_events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    due_orders = [row for row in pending_orders if str(row.get("planned_entry_date") or "") == current_day.isoformat()]
+    remaining_orders = [row for row in pending_orders if row not in due_orders]
+    symbols = {
+        str(row.get("symbol") or "")
+        for row in due_orders
+        if row.get("symbol")
+    }
+    for state in account_states.values():
+        symbols.update(str(row.get("symbol") or "") for row in state["positions"] if row.get("symbol"))
+    close_by_symbol = _close_prices_on_day(session, day=current_day, symbols=symbols)
+
+    for strategy_id, state in account_states.items():
+        config = _rolling_config_by_id(strategy_id)
+        exit_policy = str(config.get("exit_policy") or "mechanical_horizon")
+        still_open: list[dict[str, Any]] = []
+        for position in state["positions"]:
+            price = close_by_symbol.get(str(position.get("symbol") or ""))
+            if price is None:
+                still_open.append(position)
+                continue
+            if current_day > date.fromisoformat(str(position["entry_date"])):
+                position["trading_days_held"] = int(position.get("trading_days_held") or 0) + 1
+            position["last_price_cny"] = price
+            position["peak_price_cny"] = max(_safe_float(position.get("peak_price_cny")) or price, price)
+            reason = _position_exit_reason(position, current_day=current_day, price=price, exit_policy=exit_policy)
+            if reason is None:
+                still_open.append(position)
+                continue
+            proceeds = int(position["shares"]) * price * (1.0 - SELL_COST_RATE)
+            state["cash_cny"] += proceeds
+            cost_basis = _safe_float(position.get("cost_basis_cny")) or 0.0
+            position_return = proceeds / cost_basis - 1.0 if cost_basis else 0.0
+            records.append(
+                _record_row(
+                    order={**position, "strategy_id": strategy_id, "strategy_label": state["strategy_label"]},
+                    action="sell",
+                    trade_day=current_day,
+                    shares=int(position["shares"]),
+                    price=price,
+                    cash_after=state["cash_cny"],
+                    note=f"按 {reason} 退出。",
+                    return_value=position_return,
+                )
+            )
+        state["positions"] = still_open
+
+    for order in sorted(due_orders, key=lambda row: 0 if row.get("action") == "buy" else 1):
+        strategy_id = str(order.get("strategy_id") or "")
+        state = account_states.get(strategy_id)
+        if state is None:
+            continue
+        price = close_by_symbol.get(str(order.get("symbol") or ""))
+        if price is None:
+            remaining_orders.append(order)
+            continue
+        requested_shares = int(_safe_float(order.get("shares")) or 0)
+        if order.get("action") == "sell":
+            shares_left = requested_shares
+            next_positions: list[dict[str, Any]] = []
+            for position in state["positions"]:
+                if shares_left <= 0 or position.get("symbol") != order.get("symbol"):
+                    next_positions.append(position)
+                    continue
+                sold = min(int(position["shares"]), shares_left)
+                proceeds = sold * price * (1.0 - SELL_COST_RATE)
+                state["cash_cny"] += proceeds
+                shares_left -= sold
+                if sold < int(position["shares"]):
+                    position["shares"] = int(position["shares"]) - sold
+                    next_positions.append(position)
+                records.append(
+                    _record_row(
+                        order=order,
+                        action="sell",
+                        trade_day=current_day,
+                        shares=sold,
+                        price=price,
+                        cash_after=state["cash_cny"],
+                        note="按单票市值暴露再平衡计划卖出。",
+                    )
+                )
+            state["positions"] = next_positions
+            continue
+        affordable_shares = int(state["cash_cny"] // (price * (1.0 + BUY_COST_RATE)) // 100 * 100)
+        shares = min(requested_shares, affordable_shares)
+        max_symbol_cost = INITIAL_CASH_CNY * (_safe_float(_rolling_config_by_id(strategy_id).get("max_single_symbol_cost_basis_pct")) or 0.35)
+        existing_cost = sum(
+            _safe_float(position.get("cost_basis_cny")) or 0.0
+            for position in state["positions"]
+            if position.get("symbol") == order.get("symbol")
+        )
+        concentration_shares = int(max((max_symbol_cost - existing_cost), 0.0) // (price * (1.0 + BUY_COST_RATE)) // 100 * 100)
+        shares = min(shares, concentration_shares)
+        if shares <= 0:
+            execution_events.append(
+                {
+                    "action": "skip_fill",
+                    "reason": "insufficient_cash_or_concentration_cap_at_actual_close",
+                    "strategy_id": strategy_id,
+                    "signal_date": order.get("signal_date"),
+                    "trade_date": current_day.isoformat(),
+                    "symbol": order.get("symbol"),
+                }
+            )
+            continue
+        cash_spent = shares * price * (1.0 + BUY_COST_RATE)
+        state["cash_cny"] -= cash_spent
+        position = {
+            "position_id": f"{strategy_id}:{order.get('signal_date')}:{order.get('symbol')}:{current_day.isoformat()}",
+            "strategy_id": strategy_id,
+            "strategy_label": state["strategy_label"],
+            "signal_date": str(order.get("signal_date") or ""),
+            "entry_date": current_day.isoformat(),
+            "symbol": str(order.get("symbol") or ""),
+            "name": str(order.get("name") or order.get("symbol") or ""),
+            "rank": int(_safe_float(order.get("rank")) or 0),
+            "shares": shares,
+            "entry_price_cny": price,
+            "cost_basis_cny": cash_spent,
+            "target_notional_cny": _safe_float(order.get("target_notional_cny")) or shares * price,
+            "target_horizon_days": int(_safe_float(order.get("target_horizon_days")) or 20),
+            "trading_days_held": 0,
+            "last_price_cny": price,
+            "peak_price_cny": price,
+            "entry_features": dict(order.get("entry_features") or {}),
+            "paper_source_capture_mode": order.get("paper_source_capture_mode"),
+        }
+        state["positions"].append(position)
+        fill_note = f"按冻结计划于 {current_day.isoformat()} 收盘价 {price:.2f} 元成交。"
+        if shares != requested_shares:
+            fill_note += f" 受实际现金或集中度约束，计划 {requested_shares} 股，实际 {shares} 股。"
+        records.append(
+            _record_row(
+                order=order,
+                action="buy",
+                trade_day=current_day,
+                shares=shares,
+                price=price,
+                cash_after=state["cash_cny"],
+                note=fill_note,
+            )
+        )
+
+    for state in account_states.values():
+        invested_value = sum(
+            int(position["shares"])
+            * (close_by_symbol.get(str(position.get("symbol") or "")) or _safe_float(position.get("last_price_cny")) or 0.0)
+            for position in state["positions"]
+        )
+        state["latest_nav_cny"] = state["cash_cny"] + invested_value
+        state["nav_points"].append(
+            {
+                "date": current_day.isoformat(),
+                "cash_cny": round(state["cash_cny"], 2),
+                "invested_value_cny": round(invested_value, 2),
+                "nav_cny": round(state["latest_nav_cny"], 2),
+            }
+        )
+    return remaining_orders
 
 
 def _external_plan_source_orders() -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
@@ -153,16 +519,14 @@ def _safe_float(value: Any) -> float | None:
         return None
 
 
-def _latest_close_price(session: Any, symbol: str) -> float | None:
+def _latest_close_price(session: Any, symbol: str, *, as_of_date: date | None = None) -> float | None:
     stock = session.scalar(select(Stock).where(Stock.symbol == symbol))
     if stock is None:
         return None
-    bar = session.scalar(
-        select(MarketBar)
-        .where(MarketBar.stock_id == stock.id, MarketBar.timeframe == "1d")
-        .order_by(MarketBar.observed_at.desc(), MarketBar.id.desc())
-        .limit(1)
-    )
+    query = select(MarketBar).where(MarketBar.stock_id == stock.id, MarketBar.timeframe == "1d")
+    if as_of_date is not None:
+        query = query.where(func.date(MarketBar.observed_at) <= as_of_date.isoformat())
+    bar = session.scalar(query.order_by(MarketBar.observed_at.desc(), MarketBar.id.desc()).limit(1))
     return float(bar.close_price) if bar is not None and bar.close_price > 0 else None
 
 
@@ -204,6 +568,8 @@ def _selected_pick_plan_row(
         "rank_portfolio_adjustment_multiplier": pick.get("rank_portfolio_adjustment_multiplier"),
         "rank_portfolio_adjustment_reasons": pick.get("rank_portfolio_adjustment_reasons"),
         "model_score": pick.get("score"),
+        "target_horizon_days": int(_safe_float(pick.get("target_horizon_days")) or 20),
+        "entry_features": dict(pick),
         "plan_source": "selected_top_k_candidate_run_rolling_tranche_engine",
         "model_spec_id": model_spec_id,
         "note": note,
@@ -694,7 +1060,7 @@ def _build_strategy_orders(
         symbol = str(pick.get("symbol") or "")
         if symbol in estimated_close_by_symbol:
             continue
-        price = _latest_close_price(session, symbol)
+        price = _latest_close_price(session, symbol, as_of_date=signal_day)
         if price is not None:
             estimated_close_by_symbol[symbol] = price
     projected_orders = project_shortpick_v3_initial_entry_orders(
@@ -706,6 +1072,7 @@ def _build_strategy_orders(
         selected_top_k=selected_top_k,
         initial_cash_cny=INITIAL_CASH_CNY,
         max_single_symbol_cost_basis_pct=_safe_float(config.get("max_single_symbol_cost_basis_pct")) or 0.35,
+        account_state=account_state,
     )
     orders: list[dict[str, Any]] = []
     diagnostics: list[dict[str, Any]] = []
@@ -806,8 +1173,17 @@ def _build_strategy_orders(
 def _v3_model_generated_plan(
     *,
     account_states: dict[str, Any] | None = None,
+    candidate_run: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    candidate_run, source_status = _load_v3_candidate_run_source()
+    if candidate_run is None:
+        candidate_run, source_status = _load_v3_candidate_run_source()
+    else:
+        source_status = {
+            "status": "ready_daily_candidate_source",
+            "artifact_id": candidate_run.get("artifact_id"),
+            "signal_date": candidate_run.get("signal_date"),
+            "paper_source_capture_mode": candidate_run.get("paper_source_capture_mode"),
+        }
     if candidate_run is None:
         return [], source_status
     trial = _selected_v3_trial(candidate_run, model_spec_id=V3_MODEL_SPEC_ID)
@@ -882,6 +1258,7 @@ def _v3_model_generated_plan(
             strategy_id=MAIN_CONFIG_ID,
             strategy_label=MAIN_STRATEGY_LABEL,
             model_spec_id=V3_MODEL_SPEC_ID,
+            account_state=(account_states or {}).get(MAIN_CONFIG_ID),
         )
         conditional_orders, conditional_diagnostics = _build_strategy_orders(
             session=session,
@@ -892,6 +1269,7 @@ def _v3_model_generated_plan(
             strategy_id=CONDITIONAL_AGGRESSIVE_CONTROL_ID,
             strategy_label=CONDITIONAL_AGGRESSIVE_STRATEGY_LABEL,
             model_spec_id=V3_MODEL_SPEC_ID,
+            account_state=(account_states or {}).get(CONDITIONAL_AGGRESSIVE_CONTROL_ID),
         )
         stability_orders, stability_diagnostics = _build_strategy_orders(
             session=session,
@@ -902,6 +1280,7 @@ def _v3_model_generated_plan(
             strategy_id=THREE_PART_STABILITY_CONTROL_ID,
             strategy_label=THREE_PART_STABILITY_STRATEGY_LABEL,
             model_spec_id=V3_MODEL_SPEC_ID,
+            account_state=(account_states or {}).get(THREE_PART_STABILITY_CONTROL_ID),
         )
         meta_orders, meta_diagnostics = _build_strategy_orders(
             session=session,
@@ -912,6 +1291,7 @@ def _v3_model_generated_plan(
             strategy_id=META_SIGNAL_QUALITY_CONTROL_ID,
             strategy_label=META_SIGNAL_QUALITY_STRATEGY_LABEL,
             model_spec_id=V3_MODEL_SPEC_ID,
+            account_state=(account_states or {}).get(META_SIGNAL_QUALITY_CONTROL_ID),
         )
         upstream_meta_orders, upstream_meta_diagnostics = _build_strategy_orders(
             session=session,
@@ -922,6 +1302,7 @@ def _v3_model_generated_plan(
             strategy_id=UPSTREAM_META_STABILITY_CONTROL_ID,
             strategy_label=UPSTREAM_META_STABILITY_STRATEGY_LABEL,
             model_spec_id=V3_MODEL_SPEC_ID,
+            account_state=(account_states or {}).get(UPSTREAM_META_STABILITY_CONTROL_ID),
         )
         rank_adjusted_orders, rank_adjusted_diagnostics = _build_strategy_orders(
             session=session,
@@ -932,6 +1313,7 @@ def _v3_model_generated_plan(
             strategy_id=NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
             strategy_label=NEGATIVE_MONTH_RANK_ADJUSTED_STRATEGY_LABEL,
             model_spec_id=NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
+            account_state=(account_states or {}).get(NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID),
         )
         quality_orders, quality_diagnostics = _build_strategy_orders(
             session=session,
@@ -970,8 +1352,9 @@ def _v3_model_generated_plan(
             strategy_id=CONTROL_CONFIG_ID,
             strategy_label=CONTROL_STRATEGY_LABEL,
             model_spec_id=V3_MODEL_SPEC_ID,
+            account_state=(account_states or {}).get(CONTROL_CONFIG_ID),
         )
-    return [
+    planned_orders = [
         *main_orders,
         *quality_orders,
         *quality_rebalance_orders,
@@ -981,7 +1364,12 @@ def _v3_model_generated_plan(
         *stability_orders,
         *conditional_orders,
         *control_orders,
-    ], {
+    ]
+    capture_mode = str(candidate_run.get("paper_source_capture_mode") or "daily_forward_capture")
+    for order in planned_orders:
+        order["paper_source_capture_mode"] = capture_mode
+        order["source_candidate_artifact_id"] = candidate_run.get("artifact_id")
+    return planned_orders, {
         **source_status,
         "status": "ready"
         if main_orders
@@ -1021,32 +1409,149 @@ def _v3_model_generated_plan(
     }
 
 
+def _rebuild_forward_paper_ledger(
+    sources: list[dict[str, Any]],
+) -> tuple[
+    list[dict[str, Any]],
+    dict[str, dict[str, Any]],
+    list[dict[str, Any]],
+    dict[str, Any],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
+    account_states = _initial_account_states()
+    records: list[dict[str, Any]] = []
+    pending_orders: list[dict[str, Any]] = []
+    plan_history: list[dict[str, Any]] = []
+    execution_events: list[dict[str, Any]] = []
+    latest_plan_status: dict[str, Any] = {"status": "ready_no_executable_orders"}
+    if not sources:
+        return records, account_states, pending_orders, latest_plan_status, plan_history, execution_events
+
+    tracking_start_day = date.fromisoformat(TRACKING_START_DATE)
+    latest_source_day = max(date.fromisoformat(str(source["signal_date"])) for source in sources)
+    with session_scope(_v3_source_database_url()) as session:
+        market_days = _market_days(session, start_day=tracking_start_day, end_day=latest_source_day)
+        market_day_index = 0
+        for source in sources:
+            signal_day = date.fromisoformat(str(source["signal_date"]))
+            while market_day_index < len(market_days) and market_days[market_day_index] <= signal_day:
+                pending_orders = _settle_account_day(
+                    session=session,
+                    current_day=market_days[market_day_index],
+                    account_states=account_states,
+                    pending_orders=pending_orders,
+                    records=records,
+                    execution_events=execution_events,
+                )
+                market_day_index += 1
+            planned_orders, latest_plan_status = _v3_model_generated_plan(
+                account_states=account_states,
+                candidate_run=source,
+            )
+            pending_orders.extend(planned_orders)
+            plan_history.append(
+                {
+                    "signal_date": signal_day.isoformat(),
+                    "source_artifact_id": source.get("artifact_id"),
+                    "source_capture_mode": source.get("paper_source_capture_mode"),
+                    "planned_order_count": len(planned_orders),
+                    "planned_orders": planned_orders,
+                }
+            )
+        while market_day_index < len(market_days):
+            pending_orders = _settle_account_day(
+                session=session,
+                current_day=market_days[market_day_index],
+                account_states=account_states,
+                pending_orders=pending_orders,
+                records=records,
+                execution_events=execution_events,
+            )
+            market_day_index += 1
+
+    strategy_order = {strategy_id: index for index, strategy_id in enumerate(STRATEGY_LABELS)}
+    for ledger_sequence, record in enumerate(records):
+        record["ledger_sequence"] = ledger_sequence
+    records.sort(
+        key=lambda row: (
+            str(row.get("trade_date") or ""),
+            strategy_order.get(str(row.get("strategy_id") or ""), 99),
+            int(row.get("ledger_sequence") or 0),
+        )
+    )
+    latest_plan_status = {
+        **latest_plan_status,
+        "tracking_start_date": TRACKING_START_DATE,
+        "daily_source_count": len(sources),
+        "daily_source_date_from": str(sources[0].get("signal_date") or ""),
+        "daily_source_date_to": str(sources[-1].get("signal_date") or ""),
+        "synchronized_backfill_source_count": sum(
+            1 for source in sources if source.get("paper_source_capture_mode") == "synchronized_start_backfill"
+        ),
+    }
+    return records, account_states, pending_orders, latest_plan_status, plan_history, execution_events
+
+
 def main() -> int:
     path = _state_path()
-    existing = _load_json(path) or {}
-    records = existing.get("records") if isinstance(existing.get("records"), list) else []
-    account_states = existing.get("account_states") if isinstance(existing.get("account_states"), dict) else {}
-    plan_status: dict[str, Any] = {}
     sourced_orders, source_status = _external_plan_source_orders()
     if source_status is not None:
+        existing = _load_json(path) or {}
+        records = existing.get("records") if isinstance(existing.get("records"), list) else []
+        account_states = existing.get("account_states") if isinstance(existing.get("account_states"), dict) else {}
         planned_orders = sourced_orders
         plan_status = source_status
+        plan_history = existing.get("plan_history") if isinstance(existing.get("plan_history"), list) else []
+        execution_events = (
+            existing.get("execution_events") if isinstance(existing.get("execution_events"), list) else []
+        )
+        source_coverage = existing.get("source_coverage") if isinstance(existing.get("source_coverage"), dict) else {}
     else:
-        planned_orders, plan_status = _v3_model_generated_plan(account_states=account_states)
+        latest_source, latest_source_status = _load_v3_candidate_run_source()
+        if latest_source is None:
+            raise RuntimeError(str(latest_source_status.get("message") or "v3 candidate-run source unavailable"))
+        daily_sources = _ensure_daily_candidate_sources(latest_source)
+        records, account_states, planned_orders, plan_status, plan_history, execution_events = (
+            _rebuild_forward_paper_ledger(daily_sources)
+        )
+        source_coverage = {
+            "start_date": daily_sources[0].get("signal_date") if daily_sources else TRACKING_START_DATE,
+            "end_date": daily_sources[-1].get("signal_date") if daily_sources else TRACKING_START_DATE,
+            "source_count": len(daily_sources),
+            "strategy_count": len(account_states),
+            "common_start_enforced": True,
+        }
     payload = {
         "schema_version": PAPER_STATE_SCHEMA_VERSION,
         "generated_at": datetime.now(UTC).isoformat(),
-        "tracking_start_date": str(existing.get("tracking_start_date") or TRACKING_START_DATE),
+        "tracking_start_date": TRACKING_START_DATE,
         "records": [row for row in records if isinstance(row, dict)],
         "account_states": account_states,
         "planned_orders": planned_orders,
         "plan_generation_status": plan_status,
+        "plan_history": plan_history,
+        "execution_events": execution_events,
+        "source_coverage": source_coverage,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_name(f".{path.name}.tmp")
     tmp_path.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8")
     tmp_path.replace(path)
-    print(json.dumps({"status": "ok", "path": str(path), "planned_order_count": len(planned_orders)}, ensure_ascii=False))
+    print(
+        json.dumps(
+            {
+                "status": "ok",
+                "path": str(path),
+                "record_count": len(records),
+                "planned_order_count": len(planned_orders),
+                "strategy_count": len(account_states),
+                "coverage_start": source_coverage.get("start_date"),
+                "coverage_end": source_coverage.get("end_date"),
+            },
+            ensure_ascii=False,
+        )
+    )
     return 0
 
 

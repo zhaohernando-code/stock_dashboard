@@ -198,15 +198,17 @@ def project_shortpick_v3_initial_entry_orders(
     board_lot_size: int = DEFAULT_BOARD_LOT_SIZE,
     max_single_symbol_cost_basis_pct: float = DEFAULT_MAX_SINGLE_SYMBOL_COST_BASIS_PCT,
     min_order_notional_cny: float = DEFAULT_MIN_ORDER_NOTIONAL_CNY,
+    account_state: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Project first forward entry orders with the same buy semantics as account replay."""
+    """Project frozen forward orders with the same sizing and account constraints as replay."""
 
     budget_mode = str(config.get("budget_mode") or "fixed_initial_cash_fraction")
     per_signal_budget = float(config["per_signal_target_budget_cny"])
+    current_nav_cny = _safe_float((account_state or {}).get("latest_nav_cny"), initial_cash_cny)
     if budget_mode == "current_nav_fraction":
         per_signal_budget = min(
-            initial_cash_cny / max(float(config["target_active_tranche_count"]), 1.0),
-            initial_cash_cny * DEFAULT_MAX_SINGLE_SIGNAL_DEPLOYMENT_PCT,
+            current_nav_cny / max(float(config["target_active_tranche_count"]), 1.0),
+            current_nav_cny * DEFAULT_MAX_SINGLE_SIGNAL_DEPLOYMENT_PCT,
         )
     bars_by_symbol = {
         symbol: [_Bar(day=planned_entry_day, close=float(close))]
@@ -223,10 +225,11 @@ def project_shortpick_v3_initial_entry_orders(
         for pick in picks
         if str(pick.get("symbol") or "") in bars_by_symbol
     ]
+    existing_positions = _positions_from_account_state(account_state)
     rows, _cash, _positions = _process_entry_buys(
         planned_entry_day,
-        cash=float(initial_cash_cny),
-        open_positions=[],
+        cash=_safe_float((account_state or {}).get("cash_cny"), initial_cash_cny),
+        open_positions=existing_positions,
         requests=requests,
         rank_allocation_mode=str(config.get("rank_allocation_mode") or "model_rank_weight_with_board_lot_skip"),
         bars_by_symbol=bars_by_symbol,
@@ -251,6 +254,34 @@ def project_shortpick_v3_initial_entry_orders(
         if str(pick.get("symbol") or "") not in symbols_with_price
     ]
     return [*rows, *missing_price_rows]
+
+
+def _positions_from_account_state(account_state: dict[str, Any] | None) -> list[_Position]:
+    positions: list[_Position] = []
+    for row in (account_state or {}).get("positions") or []:
+        if not isinstance(row, dict):
+            continue
+        try:
+            positions.append(
+                _Position(
+                    signal_day=_parse_day(row["signal_date"]),
+                    entry_day=_parse_day(row["entry_date"]),
+                    planned_exit_day=OPEN_ENDED_EXIT_DAY,
+                    symbol=str(row["symbol"]),
+                    stock_name=str(row.get("name") or row["symbol"]),
+                    rank=int(float(row.get("rank") or 0)),
+                    shares=int(float(row.get("shares") or 0)),
+                    entry_price=_safe_float(row.get("entry_price_cny")),
+                    cost_basis=_safe_float(row.get("cost_basis_cny")),
+                    target_notional=_safe_float(row.get("target_notional_cny")),
+                    last_price=_safe_float(row.get("last_price_cny"), _safe_float(row.get("entry_price_cny"))),
+                    peak_price=_safe_float(row.get("peak_price_cny"), _safe_float(row.get("entry_price_cny"))),
+                    entry_features=dict(row.get("entry_features") or {}),
+                )
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+    return [position for position in positions if position.shares > 0]
 
 
 def _simulate_config(
