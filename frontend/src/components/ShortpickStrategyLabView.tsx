@@ -210,7 +210,7 @@ function chartPercent(value: number, maxValue: number): number {
 
 function paperRowSearchText(row: ShortpickStrategyLabPaperDisplayTableRow): string {
   return [
-    row.signal_date_text,
+    row.trade_date_text,
     row.tracking_tag,
     row.strategy_text,
     row.action_text,
@@ -1057,7 +1057,7 @@ function paperDisplayTableColumns(
   sourceColumns: ShortpickStrategyLabPaperDisplayTableColumn[],
 ): ColumnsType<ShortpickStrategyLabPaperDisplayTableRow> {
   const fallbackColumns: ShortpickStrategyLabPaperDisplayTableColumn[] = [
-    { key: "signal_date_text", label: "信号日" },
+    { key: "trade_date_text", label: "交易日" },
     { key: "tracking_tag", label: "记录类型" },
     { key: "strategy_text", label: "策略" },
     { key: "action_text", label: "动作" },

@@ -712,7 +712,10 @@ def test_forward_ledger_fills_all_strategies_from_common_start(tmp_path, monkeyp
         paper_state_path=state_path,
         today=date(2026, 7, 9),
     )
-    assert len(read_model["paper_display"]["table"]["rows"]) == len(buys)
+    paper_table = read_model["paper_display"]["table"]
+    assert paper_table["columns"][0] == {"key": "trade_date_text", "label": "交易日"}
+    assert len(paper_table["rows"]) == len(buys)
+    assert {row["trade_date_text"] for row in paper_table["rows"]} == {"2026-07-09"}
     assert len(read_model["paper_display"]["account_curves"]) == 8
     assert read_model["paper_display"]["coverage"]["common_start_enforced"] is True
 

@@ -654,6 +654,8 @@ export interface ShortpickStrategyLabPaperDisplayTableRow {
   row_key?: string;
   signal_date?: string;
   signal_date_text?: string;
+  trade_date?: string;
+  trade_date_text?: string;
   tracking_tag?: string;
   tracking_tag_tone?: string;
   strategy_text?: string;

@@ -1062,7 +1062,7 @@ def _paper_display(
         "table": {
             "title": "交易明细",
             "columns": [
-                {"key": "signal_date_text", "label": "信号日"},
+                {"key": "trade_date_text", "label": "交易日"},
                 {"key": "strategy_text", "label": "策略"},
                 {"key": "action_text", "label": "动作"},
                 {"key": "stock_text", "label": "标的"},
@@ -1201,7 +1201,7 @@ def _paper_record_display_row(record: dict[str, Any]) -> dict[str, Any]:
     stock_text = f"{record.get('name') or ''} · {record.get('symbol') or ''}".strip(" ·")
     return {
         "row_key": str(record.get("row_key") or record.get("id") or ""),
-        "signal_date_text": record.get("signal_date"),
+        "trade_date_text": record.get("trade_date"),
         "strategy_text": record.get("strategy_label"),
         "action_text": record.get("action_label") or record.get("action"),
         "stock_text": stock_text,
