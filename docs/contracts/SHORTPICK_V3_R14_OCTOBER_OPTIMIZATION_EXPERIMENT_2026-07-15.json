@@ -1,0 +1,850 @@
+{
+  "accepted_candidate_ids": [],
+  "artifact_type": "shortpick_v3_r14_october_optimization_experiment",
+  "bar_reconstruction_validation": {
+    "max_overlap_return_error": 0.0,
+    "missing_anchor_symbols": [],
+    "overlap_return_check_count": 110220,
+    "passed": true,
+    "reconstructed_symbol_count": 1837,
+    "requested_symbol_count": 1837
+  },
+  "baseline_reproduction": {
+    "checks": {
+      "annualized_return": {
+        "absolute_delta": -0.013373757705226419,
+        "expected": 0.6996469611916643,
+        "observed": 0.6862732034864378,
+        "passed": false
+      },
+      "buy_order_count": {
+        "absolute_delta": 4.0,
+        "expected": 814.0,
+        "observed": 818.0,
+        "passed": false
+      },
+      "final_nav_cny": {
+        "absolute_delta": -19334.029499999597,
+        "expected": 883534.7270000002,
+        "observed": 864200.6975000006,
+        "passed": false
+      },
+      "max_drawdown": {
+        "absolute_delta": -0.0008821647026724388,
+        "expected": -0.06796905647829043,
+        "observed": -0.06885122118096287,
+        "passed": false
+      },
+      "max_single_symbol_exposure_pct": {
+        "absolute_delta": 1.1102230246251565e-16,
+        "expected": 0.24953416606359471,
+        "observed": 0.24953416606359483,
+        "passed": true
+      },
+      "negative_month_count": {
+        "absolute_delta": 0.0,
+        "expected": 2.0,
+        "observed": 2.0,
+        "passed": true
+      },
+      "sell_order_count": {
+        "absolute_delta": 3.0,
+        "expected": 790.0,
+        "observed": 793.0,
+        "passed": false
+      },
+      "skipped_order_rate": {
+        "absolute_delta": -0.004149377593361009,
+        "expected": 0.15560165975103735,
+        "observed": 0.15145228215767634,
+        "passed": false
+      },
+      "skipped_signal_rate": {
+        "absolute_delta": 0.003913894324853229,
+        "expected": 0.13111545988258316,
+        "observed": 0.1350293542074364,
+        "passed": false
+      },
+      "total_return": {
+        "absolute_delta": -0.09667014749999758,
+        "expected": 3.4176736350000008,
+        "observed": 3.321003487500003,
+        "passed": false
+      },
+      "worst_monthly_return": {
+        "absolute_delta": 0.0,
+        "expected": -0.014130266706049999,
+        "observed": -0.014130266706049999,
+        "passed": true
+      }
+    },
+    "passed": false
+  },
+  "blocking_gate_ids": [],
+  "claim_ceiling": "historical_account_replay_research_only",
+  "decision": "retain_r14_no_candidate_cleared_replacement_gate",
+  "feature_row_count": 1990456,
+  "inventory_row_count": 10220,
+  "inventory_symbol_count": 1837,
+  "multiple_testing_policy": {
+    "date_or_symbol_hardcoding": false,
+    "families": [
+      "short_market_momentum_confirmation",
+      "weak_benchmark_defensive_scaling"
+    ],
+    "promotion_rule": "all_nine_metrics_non_degraded_and_one_10pct_breakthrough_or_one_fewer_negative_month",
+    "variant_count": 7
+  },
+  "promotion_blocking_gate_ids": [
+    "r14_contract_reproduction_mismatch"
+  ],
+  "schema_version": "shortpick_v3_r14_october_optimization_experiment.v1",
+  "selection_validation": {
+    "expected_count": 1533,
+    "mismatch_count": 0,
+    "mismatch_samples": [],
+    "observed_count": 1533,
+    "passed": true
+  },
+  "signal_date_count": 511,
+  "source_artifacts": {
+    "candidate_run": "data/artifacts/research_validation/walk_forward_model_candidate_runs/walk-forward-model-candidate-run-0d6333a65ae410f0.json",
+    "candidate_run_artifact_id": "walk-forward-model-candidate-run-0d6333a65ae410f0",
+    "feature_matrix": "data/artifacts/research_validation/pit_feature_matrices/pit-feature-matrix-9e2854ba4a2cd78e.json",
+    "feature_matrix_artifact_id": "pit-feature-matrix-9e2854ba4a2cd78e",
+    "hot_database": "data/ashare_hot.db",
+    "r14_contract": "docs/contracts/SHORTPICK_V3_R14_QUALITY_REPLACEMENT_REBALANCE_2026-07-10.json"
+  },
+  "status": "completed_research_only_reproduction_gap",
+  "trial_id": "negative_month_rank_weight_adjusted_capacity_cluster_v3_top3_20d_v1:trial-000",
+  "variants": [
+    {
+      "config_id": "daily_15_tranche_rank_adjusted_r5_093_strong154_replacement_top5_gap010_fill075_market_cap25_v1",
+      "directional_vs_reconstructed_baseline": {
+        "all_nine_metrics_non_degraded": true,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": true,
+          "final_nav_cny": true,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": true,
+          "total_return": true,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": 0.0,
+          "final_nav_cny": 0.0,
+          "max_drawdown": 0.0,
+          "max_single_symbol_exposure_pct": 0.0,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.0,
+          "skipped_signal_rate": 0.0,
+          "total_return": 0.0,
+          "worst_monthly_return": 0.0
+        }
+      },
+      "frontier_acceptance": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.01911500863585221,
+          "final_nav_cny": -0.021882591492071134,
+          "max_drawdown": -0.012978916412562023,
+          "max_single_symbol_exposure_pct": -4.449182419141e-16,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.026666666666666748,
+          "skipped_signal_rate": -0.029850746268656716,
+          "total_return": -0.028285365375444214,
+          "worst_monthly_return": 0.0
+        }
+      },
+      "negative_months": [
+        {
+          "ending_nav_cny": 197810.9585,
+          "month": "2023-10",
+          "return": -0.014130266706049999
+        },
+        {
+          "ending_nav_cny": 198337.13900000005,
+          "month": "2023-12",
+          "return": -0.007935209761868123
+        }
+      ],
+      "october_2025_return": 0.013196827733815475,
+      "rebalance_sell_count": 2,
+      "replacement_buy_count": 58,
+      "strong_benchmark_return_10d_min": null,
+      "summary": {
+        "annualized_return": 0.6862732034864378,
+        "final_nav_cny": 864200.6975000006,
+        "max_drawdown": -0.06885122118096287,
+        "max_single_symbol_exposure_pct": 0.24953416606359483,
+        "negative_month_count": 2,
+        "skipped_order_rate": 0.15145228215767634,
+        "skipped_signal_rate": 0.1350293542074364,
+        "total_return": 3.321003487500003,
+        "worst_monthly_return": -0.014130266706049999
+      }
+    },
+    {
+      "config_id": "r14_strong_benchmark10_ge_m0p01_research_v1",
+      "directional_vs_reconstructed_baseline": {
+        "all_nine_metrics_non_degraded": true,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": true,
+          "final_nav_cny": true,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": true,
+          "total_return": true,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": 0.0,
+          "final_nav_cny": 0.0,
+          "max_drawdown": 0.0,
+          "max_single_symbol_exposure_pct": 0.0,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.0,
+          "skipped_signal_rate": 0.0,
+          "total_return": 0.0,
+          "worst_monthly_return": 0.0
+        }
+      },
+      "frontier_acceptance": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.01911500863585221,
+          "final_nav_cny": -0.021882591492071134,
+          "max_drawdown": -0.012978916412562023,
+          "max_single_symbol_exposure_pct": -4.449182419141e-16,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.026666666666666748,
+          "skipped_signal_rate": -0.029850746268656716,
+          "total_return": -0.028285365375444214,
+          "worst_monthly_return": 0.0
+        }
+      },
+      "negative_months": [
+        {
+          "ending_nav_cny": 197810.9585,
+          "month": "2023-10",
+          "return": -0.014130266706049999
+        },
+        {
+          "ending_nav_cny": 198337.13900000005,
+          "month": "2023-12",
+          "return": -0.007935209761868123
+        }
+      ],
+      "october_2025_return": 0.013196827733815475,
+      "rebalance_sell_count": 2,
+      "replacement_buy_count": 58,
+      "strong_benchmark_return_10d_min": -0.01,
+      "summary": {
+        "annualized_return": 0.6862732034864378,
+        "final_nav_cny": 864200.6975000006,
+        "max_drawdown": -0.06885122118096287,
+        "max_single_symbol_exposure_pct": 0.24953416606359483,
+        "negative_month_count": 2,
+        "skipped_order_rate": 0.15145228215767634,
+        "skipped_signal_rate": 0.1350293542074364,
+        "total_return": 3.321003487500003,
+        "worst_monthly_return": -0.014130266706049999
+      }
+    },
+    {
+      "config_id": "r14_strong_benchmark10_ge_0p0_research_v1",
+      "directional_vs_reconstructed_baseline": {
+        "all_nine_metrics_non_degraded": true,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": true,
+          "final_nav_cny": true,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": true,
+          "total_return": true,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": 0.0,
+          "final_nav_cny": 0.0,
+          "max_drawdown": 0.0,
+          "max_single_symbol_exposure_pct": 0.0,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.0,
+          "skipped_signal_rate": 0.0,
+          "total_return": 0.0,
+          "worst_monthly_return": 0.0
+        }
+      },
+      "frontier_acceptance": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.01911500863585221,
+          "final_nav_cny": -0.021882591492071134,
+          "max_drawdown": -0.012978916412562023,
+          "max_single_symbol_exposure_pct": -4.449182419141e-16,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.026666666666666748,
+          "skipped_signal_rate": -0.029850746268656716,
+          "total_return": -0.028285365375444214,
+          "worst_monthly_return": 0.0
+        }
+      },
+      "negative_months": [
+        {
+          "ending_nav_cny": 197810.9585,
+          "month": "2023-10",
+          "return": -0.014130266706049999
+        },
+        {
+          "ending_nav_cny": 198337.13900000005,
+          "month": "2023-12",
+          "return": -0.007935209761868123
+        }
+      ],
+      "october_2025_return": 0.013196827733815475,
+      "rebalance_sell_count": 2,
+      "replacement_buy_count": 58,
+      "strong_benchmark_return_10d_min": 0.0,
+      "summary": {
+        "annualized_return": 0.6862732034864378,
+        "final_nav_cny": 864200.6975000006,
+        "max_drawdown": -0.06885122118096287,
+        "max_single_symbol_exposure_pct": 0.24953416606359483,
+        "negative_month_count": 2,
+        "skipped_order_rate": 0.15145228215767634,
+        "skipped_signal_rate": 0.1350293542074364,
+        "total_return": 3.321003487500003,
+        "worst_monthly_return": -0.014130266706049999
+      }
+    },
+    {
+      "config_id": "r14_strong_benchmark10_ge_0p01_research_v1",
+      "directional_vs_reconstructed_baseline": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": true,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": false,
+          "negative_month_count": false,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": -3,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.024402859390756145,
+          "final_nav_cny": -0.027567955069835625,
+          "max_drawdown": -0.05062103925821918,
+          "max_single_symbol_exposure_pct": -0.00013152757028442094,
+          "negative_month_count": -1.5,
+          "skipped_order_rate": 0.14383561643835602,
+          "skipped_signal_rate": -0.08695652173913043,
+          "total_return": -0.035869046945709845,
+          "worst_monthly_return": 0.0
+        }
+      },
+      "frontier_acceptance": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": true,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": false,
+          "negative_month_count": false,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": -3,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.043051407158614566,
+          "final_nav_cny": -0.04884728826284178,
+          "max_drawdown": -0.06425696190803065,
+          "max_single_symbol_exposure_pct": -0.0001315275702848659,
+          "negative_month_count": -1.5,
+          "skipped_order_rate": 0.1666666666666666,
+          "skipped_signal_rate": -0.11940298507462686,
+          "total_return": -0.0631398432226257,
+          "worst_monthly_return": 0.0
+        }
+      },
+      "negative_months": [
+        {
+          "ending_nav_cny": 197810.9585,
+          "month": "2023-10",
+          "return": -0.014130266706049999
+        },
+        {
+          "ending_nav_cny": 198647.62350000005,
+          "month": "2023-12",
+          "return": -0.007457091810540328
+        },
+        {
+          "ending_nav_cny": 404409.7089999999,
+          "month": "2025-01",
+          "return": -0.00890318100277887
+        },
+        {
+          "ending_nav_cny": 407238.20749999984,
+          "month": "2025-03",
+          "return": -0.0008678888242623639
+        },
+        {
+          "ending_nav_cny": 531893.5314999998,
+          "month": "2025-11",
+          "return": -0.00040805327897786015
+        }
+      ],
+      "october_2025_return": 0.005667947984369093,
+      "rebalance_sell_count": 3,
+      "replacement_buy_count": 57,
+      "strong_benchmark_return_10d_min": 0.01,
+      "summary": {
+        "annualized_return": 0.6695261749981145,
+        "final_nav_cny": 840376.4515,
+        "max_drawdown": -0.07233654155134073,
+        "max_single_symbol_exposure_pct": 0.24956698668616012,
+        "negative_month_count": 5,
+        "skipped_order_rate": 0.12966804979253113,
+        "skipped_signal_rate": 0.14677103718199608,
+        "total_return": 3.2018822574999994,
+        "worst_monthly_return": -0.014130266706049999
+      }
+    },
+    {
+      "config_id": "r14_strong_benchmark10_ge_0p02_research_v1",
+      "directional_vs_reconstructed_baseline": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": true,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": false,
+          "negative_month_count": false,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": -3,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.024402859390756145,
+          "final_nav_cny": -0.027567955069835625,
+          "max_drawdown": -0.05062103925821918,
+          "max_single_symbol_exposure_pct": -0.00013152757028442094,
+          "negative_month_count": -1.5,
+          "skipped_order_rate": 0.14383561643835602,
+          "skipped_signal_rate": -0.08695652173913043,
+          "total_return": -0.035869046945709845,
+          "worst_monthly_return": 0.0
+        }
+      },
+      "frontier_acceptance": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": true,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": false,
+          "negative_month_count": false,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": -3,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.043051407158614566,
+          "final_nav_cny": -0.04884728826284178,
+          "max_drawdown": -0.06425696190803065,
+          "max_single_symbol_exposure_pct": -0.0001315275702848659,
+          "negative_month_count": -1.5,
+          "skipped_order_rate": 0.1666666666666666,
+          "skipped_signal_rate": -0.11940298507462686,
+          "total_return": -0.0631398432226257,
+          "worst_monthly_return": 0.0
+        }
+      },
+      "negative_months": [
+        {
+          "ending_nav_cny": 197810.9585,
+          "month": "2023-10",
+          "return": -0.014130266706049999
+        },
+        {
+          "ending_nav_cny": 198647.62350000005,
+          "month": "2023-12",
+          "return": -0.007457091810540328
+        },
+        {
+          "ending_nav_cny": 404409.7089999999,
+          "month": "2025-01",
+          "return": -0.00890318100277887
+        },
+        {
+          "ending_nav_cny": 407238.20749999984,
+          "month": "2025-03",
+          "return": -0.0008678888242623639
+        },
+        {
+          "ending_nav_cny": 531893.5314999998,
+          "month": "2025-11",
+          "return": -0.00040805327897786015
+        }
+      ],
+      "october_2025_return": 0.005667947984369093,
+      "rebalance_sell_count": 3,
+      "replacement_buy_count": 57,
+      "strong_benchmark_return_10d_min": 0.02,
+      "summary": {
+        "annualized_return": 0.6695261749981145,
+        "final_nav_cny": 840376.4515,
+        "max_drawdown": -0.07233654155134073,
+        "max_single_symbol_exposure_pct": 0.24956698668616012,
+        "negative_month_count": 5,
+        "skipped_order_rate": 0.12966804979253113,
+        "skipped_signal_rate": 0.14677103718199608,
+        "total_return": 3.2018822574999994,
+        "worst_monthly_return": -0.014130266706049999
+      }
+    },
+    {
+      "config_id": "r14_weak_benchmark20_lt_m0p02_scale_0p9_research_v1",
+      "directional_vs_reconstructed_baseline": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": false,
+          "negative_month_count": false,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": true,
+          "total_return": false,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": -1,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.015459114081408251,
+          "final_nav_cny": -0.017521691481856297,
+          "max_drawdown": 0.026256345547327788,
+          "max_single_symbol_exposure_pct": -0.0006887448495858134,
+          "negative_month_count": -0.5,
+          "skipped_order_rate": 0.034246575342465634,
+          "skipped_signal_rate": 0.043478260869565216,
+          "total_return": -0.022797714692252346,
+          "worst_monthly_return": 0.07054747312645811
+        }
+      },
+      "frontier_acceptance": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": false,
+          "negative_month_count": false,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": true,
+          "total_return": false,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": -1,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.03427862161809172,
+          "final_nav_cny": -0.03902086295697987,
+          "max_drawdown": 0.013618208048923877,
+          "max_single_symbol_exposure_pct": -0.0006887448495862587,
+          "negative_month_count": -0.5,
+          "skipped_order_rate": 0.05999999999999996,
+          "skipped_signal_rate": 0.014925373134328358,
+          "total_return": -0.05043823837790107,
+          "worst_monthly_return": 0.07054747312645811
+        }
+      },
+      "negative_months": [
+        {
+          "ending_nav_cny": 197951.35099999997,
+          "month": "2023-10",
+          "return": -0.01313341209533525
+        },
+        {
+          "ending_nav_cny": 198181.33000000002,
+          "month": "2023-12",
+          "return": -0.007695562681220514
+        },
+        {
+          "ending_nav_cny": 404314.2345000001,
+          "month": "2025-01",
+          "return": -8.111843837477206e-05
+        }
+      ],
+      "october_2025_return": 0.014647228053926709,
+      "rebalance_sell_count": 0,
+      "replacement_buy_count": 63,
+      "strong_benchmark_return_10d_min": null,
+      "summary": {
+        "annualized_return": 0.6756640277427275,
+        "final_nav_cny": 849058.4395000006,
+        "max_drawdown": -0.06704343972628002,
+        "max_single_symbol_exposure_pct": 0.24970603143526682,
+        "negative_month_count": 3,
+        "skipped_order_rate": 0.1462655601659751,
+        "skipped_signal_rate": 0.12915851272015655,
+        "total_return": 3.245292197500003,
+        "worst_monthly_return": -0.01313341209533525
+      }
+    },
+    {
+      "config_id": "r14_weak_benchmark20_lt_m0p02_scale_0p8_research_v1",
+      "directional_vs_reconstructed_baseline": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": false,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": true,
+          "total_return": false,
+          "worst_monthly_return": false
+        },
+        "negative_month_reduction": -1,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.05575836407001722,
+          "final_nav_cny": -0.06226641641885545,
+          "max_drawdown": 0.018208867508124622,
+          "max_single_symbol_exposure_pct": 0.02880692440773156,
+          "negative_month_count": -0.5,
+          "skipped_order_rate": 0.06849315068493145,
+          "skipped_signal_rate": 0.0,
+          "total_return": -0.08101569405533529,
+          "worst_monthly_return": -0.03285936260981631
+        }
+      },
+      "frontier_acceptance": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": false,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": false
+        },
+        "negative_month_reduction": -1,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.07380755109515005,
+          "final_nav_cny": -0.08278645735675758,
+          "max_drawdown": 0.005466282464917965,
+          "max_single_symbol_exposure_pct": 0.02880692440773113,
+          "negative_month_count": -0.5,
+          "skipped_order_rate": 0.09333333333333335,
+          "skipped_signal_rate": -0.029850746268656716,
+          "total_return": -0.10700950092327914,
+          "worst_monthly_return": -0.03285936260981631
+        }
+      },
+      "negative_months": [
+        {
+          "ending_nav_cny": 197651.90999999997,
+          "month": "2023-10",
+          "return": -0.01459457826351751
+        },
+        {
+          "ending_nav_cny": 197845.8835,
+          "month": "2023-12",
+          "return": -0.007673459423185425
+        },
+        {
+          "ending_nav_cny": 390131.33149999985,
+          "month": "2025-01",
+          "return": -0.011453086357065989
+        }
+      ],
+      "october_2025_return": 0.013759007643139975,
+      "rebalance_sell_count": 0,
+      "replacement_buy_count": 65,
+      "strong_benchmark_return_10d_min": null,
+      "summary": {
+        "annualized_return": 0.648007732354944,
+        "final_nav_cny": 810390.0170000002,
+        "max_drawdown": -0.06759751841670614,
+        "max_single_symbol_exposure_pct": 0.24234585420465451,
+        "negative_month_count": 3,
+        "skipped_order_rate": 0.14107883817427386,
+        "skipped_signal_rate": 0.1350293542074364,
+        "total_return": 3.0519500850000014,
+        "worst_monthly_return": -0.01459457826351751
+      }
+    },
+    {
+      "config_id": "r14_weak_benchmark20_lt_0p0_scale_0p9_research_v1",
+      "directional_vs_reconstructed_baseline": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": true,
+          "total_return": false,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.03182577500711214,
+          "final_nav_cny": -0.035855562359112476,
+          "max_drawdown": 0.02125699960254599,
+          "max_single_symbol_exposure_pct": 0.0001606786694966031,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.034246575342465634,
+          "skipped_signal_rate": 0.0,
+          "total_return": -0.046652167208842334,
+          "worst_monthly_return": 0.05223417267926316
+        }
+      },
+      "frontier_acceptance": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.05033243367886071,
+          "final_nav_cny": -0.05695354122736067,
+          "max_drawdown": 0.008553976011007276,
+          "max_single_symbol_exposure_pct": 0.00016067866949615826,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.05999999999999996,
+          "skipped_signal_rate": -0.029850746268656716,
+          "total_return": -0.07361795898922813,
+          "worst_monthly_return": 0.05223417267926316
+        }
+      },
+      "negative_months": [
+        {
+          "ending_nav_cny": 197906.375,
+          "month": "2023-10",
+          "return": -0.01339218391492214
+        },
+        {
+          "ending_nav_cny": 198138.1105,
+          "month": "2023-12",
+          "return": -0.00734836741629652
+        }
+      ],
+      "october_2025_return": 0.012871024112595553,
+      "rebalance_sell_count": 2,
+      "replacement_buy_count": 58,
+      "strong_benchmark_return_10d_min": null,
+      "summary": {
+        "annualized_return": 0.6644320269188684,
+        "final_nav_cny": 833214.2955000008,
+        "max_drawdown": -0.06738765079968434,
+        "max_single_symbol_exposure_pct": 0.24949407124579778,
+        "negative_month_count": 2,
+        "skipped_order_rate": 0.1462655601659751,
+        "skipped_signal_rate": 0.1350293542074364,
+        "total_return": 3.1660714775000045,
+        "worst_monthly_return": -0.01339218391492214
+      }
+    }
+  ]
+}

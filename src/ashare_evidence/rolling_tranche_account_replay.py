@@ -92,6 +92,8 @@ def build_shortpick_v3_rolling_account_replay_artifact(
     sell_cost_bps: float = DEFAULT_SELL_COST_BPS,
     min_order_notional_cny: float = DEFAULT_MIN_ORDER_NOTIONAL_CNY,
     max_entry_lag_days: int = DEFAULT_MAX_ENTRY_LAG_DAYS,
+    candidate_inventory_rows: list[dict[str, Any]] | None = None,
+    candidate_configurations: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     trial = _trial_diagnostic(candidate_run, trial_id=trial_id)
     selected_picks = [
@@ -110,10 +112,16 @@ def build_shortpick_v3_rolling_account_replay_artifact(
     picks_by_day: dict[date, list[dict[str, Any]]] = defaultdict(list)
     for row in selected_picks:
         picks_by_day[_parse_day(row["as_of_date"])].append(row)
+    inventory_by_day: dict[date, list[dict[str, Any]]] = defaultdict(list)
+    for row in candidate_inventory_rows or []:
+        if isinstance(row, dict) and row.get("as_of_date"):
+            inventory_by_day[_parse_day(row["as_of_date"])].append(row)
+    configurations = candidate_configurations or contract["candidate_configurations"]
     results = [
         _simulate_config(
             config,
             picks_by_day=picks_by_day,
+            inventory_by_day=inventory_by_day,
             signal_days=signal_days,
             bars_by_symbol=bars,
             selected_top_k=selected_top_k,
@@ -125,7 +133,7 @@ def build_shortpick_v3_rolling_account_replay_artifact(
             min_order_notional_cny=min_order_notional_cny,
             max_entry_lag_days=max_entry_lag_days,
         )
-        for config in contract["candidate_configurations"]
+        for config in configurations
     ]
     return {
         "artifact_type": "shortpick_v3_rolling_account_replay",
@@ -288,6 +296,7 @@ def _simulate_config(
     config: dict[str, Any],
     *,
     picks_by_day: dict[date, list[dict[str, Any]]],
+    inventory_by_day: dict[date, list[dict[str, Any]]],
     signal_days: list[date],
     bars_by_symbol: dict[str, list[_Bar]],
     selected_top_k: int,
@@ -302,9 +311,10 @@ def _simulate_config(
     cadence = int(config["signal_cadence_trade_days"])
     cadence_offset = int(config.get("signal_cadence_offset_trade_days") or 0) % max(cadence, 1)
     accepted_signals = [day for index, day in enumerate(signal_days) if index % cadence == cadence_offset]
+    executable_picks_by_day = _apply_rank1_quality_overlay(picks_by_day, config=config)
     entry_requests_by_day, pre_loop_skips = _entry_requests_by_day(
         accepted_signals,
-        picks_by_day=picks_by_day,
+        picks_by_day=executable_picks_by_day,
         bars_by_symbol=bars_by_symbol,
         max_entry_lag_days=max_entry_lag_days,
     )
@@ -359,9 +369,19 @@ def _simulate_config(
                 initial_cash_cny=initial_cash_cny,
                 max_single_symbol_cost_basis_pct=max_single_symbol_cost_basis_pct,
                 min_order_notional_cny=config_min_order_notional_cny,
+                affordable_replacement_policy=config.get("affordable_replacement_policy"),
+                inventory_by_day=inventory_by_day,
             )
             order_rows.extend(buys)
             reason_counts.update(row["reason"] for row in buys if row["action"] == "skip")
+        cash, rebalance_sells, open_positions = _process_market_value_concentration_rebalance(
+            current_day,
+            cash=cash,
+            open_positions=open_positions,
+            bars_by_symbol=bars_by_symbol,
+            policy=config.get("market_value_concentration_rebalance"),
+        )
+        order_rows.extend(rebalance_sells)
         nav_rows.append(_nav_row(current_day, cash=cash, open_positions=open_positions, bars_by_symbol=bars_by_symbol))
 
     summary = _summary(
@@ -445,6 +465,8 @@ def _process_entry_buys(
     initial_cash_cny: float,
     max_single_symbol_cost_basis_pct: float,
     min_order_notional_cny: float,
+    affordable_replacement_policy: Any = None,
+    inventory_by_day: dict[date, list[dict[str, Any]]] | None = None,
 ) -> tuple[list[dict[str, Any]], float, list[_Position]]:
     rows: list[dict[str, Any]] = []
     positions = list(open_positions)
@@ -535,8 +557,177 @@ def _process_entry_buys(
             max_single_symbol_cost_basis_pct=max_single_symbol_cost_basis_pct,
             min_order_notional_cny=min_order_notional_cny,
         )
+        if (
+            not _bought
+            and len(buy_rows) == 1
+            and buy_rows[0].get("reason") == "price_too_high_for_slot"
+            and isinstance(affordable_replacement_policy, dict)
+        ):
+            replacement_request = _affordable_replacement_request(
+                request,
+                trade_day=trade_day,
+                target_notional=target_notional,
+                positions=positions,
+                signal_requests=ordered_requests,
+                inventory_by_day=inventory_by_day or {},
+                bars_by_symbol=bars_by_symbol,
+                policy=affordable_replacement_policy,
+                board_lot_size=board_lot_size,
+                buy_cost_rate=buy_cost_rate,
+                min_order_notional_cny=min_order_notional_cny,
+            )
+            if replacement_request is not None:
+                replacement_rows, cash, positions, replacement_bought = _try_buy_request(
+                    replacement_request,
+                    cash=cash,
+                    positions=positions,
+                    symbol_cost_basis=symbol_cost_basis,
+                    bars_by_symbol=bars_by_symbol,
+                    target_notional=target_notional,
+                    board_lot_size=board_lot_size,
+                    buy_cost_rate=buy_cost_rate,
+                    initial_cash_cny=initial_cash_cny,
+                    max_single_symbol_cost_basis_pct=max_single_symbol_cost_basis_pct,
+                    min_order_notional_cny=min_order_notional_cny,
+                )
+                if replacement_bought:
+                    replacement_rows[0].update(
+                        {
+                            "reason": "bought_affordable_rank4_5_replacement",
+                            "replacement_original_symbol": str(pick.get("symbol") or ""),
+                            "replacement_inventory_rank": int(
+                                float((replacement_request["pick"] or {}).get("replacement_inventory_rank") or 0)
+                            ),
+                        }
+                    )
+                    rows.extend(replacement_rows)
+                    continue
         rows.extend(buy_rows)
     return rows, cash, positions
+
+
+def _apply_rank1_quality_overlay(
+    picks_by_day: dict[date, list[dict[str, Any]]],
+    *,
+    config: dict[str, Any],
+) -> dict[date, list[dict[str, Any]]]:
+    overlay = config.get("rank1_quality_overlay")
+    if not isinstance(overlay, dict):
+        return {day: [dict(row) for row in rows] for day, rows in picks_by_day.items()}
+    result: dict[date, list[dict[str, Any]]] = {}
+    for signal_day, rows in picks_by_day.items():
+        rank1 = next((row for row in rows if int(_safe_float(row.get("rank"))) == 1), None)
+        scale = _rank1_quality_scale(rank1, overlay=overlay) if rank1 is not None else 1.0
+        result[signal_day] = [
+            {
+                **row,
+                "portfolio_weight": _safe_float(row.get("portfolio_weight"), 1.0) * scale,
+                "rank1_quality_overlay_scale": scale,
+            }
+            for row in rows
+        ]
+    return result
+
+
+def _rank1_quality_scale(rank1: dict[str, Any], *, overlay: dict[str, Any]) -> float:
+    weak_benchmark_return_20d_lt = overlay.get("weak_benchmark_return_20d_lt")
+    if (
+        weak_benchmark_return_20d_lt is not None
+        and _feature_value(rank1, "benchmark_return_20d") < _safe_float(weak_benchmark_return_20d_lt)
+    ):
+        return _safe_float(overlay.get("weak_scale"), 1.0)
+    checks = (
+        _feature_value(rank1, "return_20d_percentile")
+        >= _safe_float(overlay.get("strong_return_20d_percentile_min"), 0.95),
+        _feature_value(rank1, "return_5d_percentile")
+        >= _safe_float(overlay.get("strong_return_5d_percentile_min"), 0.93),
+        _feature_value(rank1, "benchmark_return_20d")
+        >= _safe_float(overlay.get("strong_benchmark_return_20d_min"), 0.0),
+        _feature_value(rank1, "industry_return_20d_excess")
+        <= _safe_float(overlay.get("strong_industry_return_20d_excess_max"), 0.50),
+        _feature_value(rank1, "distance_from_20d_high")
+        >= _safe_float(overlay.get("strong_distance_from_20d_high_min"), -0.08),
+    )
+    benchmark_return_10d_min = overlay.get("strong_benchmark_return_10d_min")
+    if benchmark_return_10d_min is not None:
+        checks = (
+            *checks,
+            _feature_value(rank1, "benchmark_return_10d") >= _safe_float(benchmark_return_10d_min),
+        )
+    return _safe_float(overlay.get("strong_scale"), 1.0) if all(checks) else 1.0
+
+
+def _feature_value(row: dict[str, Any], key: str) -> float:
+    nested = row.get("rank_weight_feature_values")
+    if isinstance(nested, dict) and nested.get(key) is not None:
+        return _safe_float(nested.get(key))
+    return _safe_float(row.get(key))
+
+
+def _affordable_replacement_request(
+    original_request: dict[str, Any],
+    *,
+    trade_day: date,
+    target_notional: float,
+    positions: list[_Position],
+    signal_requests: list[dict[str, Any]],
+    inventory_by_day: dict[date, list[dict[str, Any]]],
+    bars_by_symbol: dict[str, list[_Bar]],
+    policy: dict[str, Any],
+    board_lot_size: int,
+    buy_cost_rate: float,
+    min_order_notional_cny: float,
+) -> dict[str, Any] | None:
+    original_pick = original_request["pick"]
+    signal_day = original_request["signal_day"]
+    original_score = _safe_float(original_pick.get("score"))
+    rank_min = int(_safe_float(policy.get("inventory_rank_min"), 4.0))
+    rank_max = int(_safe_float(policy.get("inventory_rank_max"), 5.0))
+    max_score_gap = _safe_float(policy.get("max_score_gap"), 0.10)
+    min_fill_ratio = _safe_float(policy.get("min_fill_ratio"), 0.75)
+    policy_min_notional = _safe_float(policy.get("min_order_notional_cny"), min_order_notional_cny)
+    excluded_symbols = {position.symbol for position in positions}
+    excluded_symbols.update(str((request.get("pick") or {}).get("symbol") or "") for request in signal_requests)
+    candidates = sorted(
+        inventory_by_day.get(signal_day, []),
+        key=lambda row: int(_safe_float(row.get("rank"), 999.0)),
+    )
+    for candidate in candidates:
+        inventory_rank = int(_safe_float(candidate.get("rank")))
+        symbol = str(candidate.get("symbol") or "")
+        if not rank_min <= inventory_rank <= rank_max or not symbol or symbol in excluded_symbols:
+            continue
+        if candidate.get("selection_allowed") is False:
+            continue
+        if _safe_float(candidate.get("score")) < original_score - max_score_gap:
+            continue
+        bars = bars_by_symbol.get(symbol) or []
+        entry_index = next((index for index, bar in enumerate(bars) if bar.day == trade_day), None)
+        if entry_index is None:
+            continue
+        one_lot_cash = bars[entry_index].close * board_lot_size * (1.0 + buy_cost_rate)
+        lot_count = int(target_notional // one_lot_cash) if one_lot_cash > 0 else 0
+        cash_spent = lot_count * one_lot_cash
+        fill_ratio = cash_spent / target_notional if target_notional else 0.0
+        if one_lot_cash > target_notional or cash_spent < policy_min_notional or fill_ratio < min_fill_ratio:
+            continue
+        horizon = int(_safe_float(original_pick.get("target_horizon_days"), 20.0))
+        exit_index = entry_index + horizon
+        replacement_pick = {
+            **candidate,
+            "rank": int(_safe_float(original_pick.get("rank"))),
+            "replacement_inventory_rank": inventory_rank,
+            "replacement_original_symbol": str(original_pick.get("symbol") or ""),
+            "target_horizon_days": horizon,
+        }
+        return {
+            "pick": replacement_pick,
+            "signal_day": signal_day,
+            "entry_index": entry_index,
+            "exit_index": exit_index if exit_index < len(bars) else None,
+            "planned_exit_day": bars[exit_index].day if exit_index < len(bars) else None,
+        }
+    return None
 
 
 def _no_order(request: dict[str, Any], trade_day: date, reason: str, target_notional: float) -> dict[str, Any]:
@@ -634,6 +825,88 @@ def _try_buy_request(
         updated_positions,
         True,
     )
+
+
+def _process_market_value_concentration_rebalance(
+    current_day: date,
+    *,
+    cash: float,
+    open_positions: list[_Position],
+    bars_by_symbol: dict[str, list[_Bar]],
+    policy: Any,
+) -> tuple[float, list[dict[str, Any]], list[_Position]]:
+    if not isinstance(policy, dict) or not open_positions:
+        return cash, [], open_positions
+    threshold = _safe_float(policy.get("threshold"), 0.25)
+    board_lot_size = int(_safe_float(policy.get("board_lot_size"), 100.0))
+    sell_cost_rate = _safe_float(policy.get("sell_cost_bps"), 25.0) / 10_000.0
+    positions = list(open_positions)
+    values_by_symbol: Counter[str] = Counter()
+    prices: dict[str, float] = {}
+    for position in positions:
+        price = _price_on_day(bars_by_symbol.get(position.symbol) or [], current_day)
+        if price is not None:
+            position.last_price = price
+        prices[position.symbol] = position.last_price
+        values_by_symbol[position.symbol] += position.shares * position.last_price
+    nav = cash + sum(values_by_symbol.values())
+    rows: list[dict[str, Any]] = []
+    for symbol in sorted(values_by_symbol, key=values_by_symbol.get, reverse=True):
+        price = prices[symbol]
+        symbol_positions = [position for position in positions if position.symbol == symbol]
+        available_shares = sum(position.shares for position in symbol_positions)
+        post_value = values_by_symbol[symbol]
+        post_nav = nav
+        sell_shares = 0
+        while (
+            sell_shares + board_lot_size <= available_shares
+            and post_nav > 0
+            and post_value / post_nav > threshold
+        ):
+            sell_shares += board_lot_size
+            post_value -= board_lot_size * price
+            post_nav -= board_lot_size * price * sell_cost_rate
+        if sell_shares <= 0:
+            continue
+        remaining_to_sell = sell_shares
+        removed_cost_basis = 0.0
+        for position in sorted(symbol_positions, key=lambda row: (row.entry_day, row.signal_day)):
+            if remaining_to_sell <= 0:
+                break
+            position_sell_shares = min(position.shares, remaining_to_sell)
+            cost_basis_per_share = position.cost_basis / position.shares if position.shares else 0.0
+            removed_cost_basis += position_sell_shares * cost_basis_per_share
+            position.shares -= position_sell_shares
+            position.cost_basis -= position_sell_shares * cost_basis_per_share
+            remaining_to_sell -= position_sell_shares
+        positions = [position for position in positions if position.shares > 0]
+        proceeds = sell_shares * price * (1.0 - sell_cost_rate)
+        cash += proceeds
+        nav = post_nav
+        values_by_symbol[symbol] = post_value
+        rows.append(
+            {
+                "action": "sell",
+                "reason": "market_value_concentration_rebalance",
+                "signal_day": current_day.isoformat(),
+                "trade_day": current_day.isoformat(),
+                "symbol": symbol,
+                "stock_name": symbol_positions[0].stock_name,
+                "rank": 0,
+                "shares": sell_shares,
+                "price": price,
+                "cost_basis_cny": removed_cost_basis,
+                "proceeds_cny": proceeds,
+                "pnl_cny": proceeds - removed_cost_basis,
+                "return": proceeds / removed_cost_basis - 1.0 if removed_cost_basis else 0.0,
+                "cash_after_cny": cash,
+                "exposure_before": (post_value + sell_shares * price) / (post_nav + sell_shares * price * sell_cost_rate)
+                if post_nav > 0
+                else 0.0,
+                "exposure_after": post_value / post_nav if post_nav > 0 else 0.0,
+            }
+        )
+    return cash, rows, positions
 
 
 def _process_sells(

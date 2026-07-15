@@ -449,6 +449,172 @@ def test_rolling_account_replay_layered_guard_applies_quick_fail_only_to_rank1()
     assert sells[1]["reason"] == "mechanical_horizon"
 
 
+def test_r14_replay_applies_rank1_quality_scale_to_the_signal_budget() -> None:
+    candidate_run = {
+        "artifact_id": "candidate-run",
+        "trial_diagnostics": [
+            {
+                "trial_id": "trial-1",
+                "model_spec_id": "negative-month-rank-adjusted",
+                "selected_top_k": 1,
+                "selected_top_k_picks_by_date": [
+                    {
+                        **_pick("2026-01-02", "AAA", rank=1, multiplier=1.0, horizon=5),
+                        "return_20d_percentile": 0.99,
+                        "return_5d_percentile": 0.99,
+                        "industry_return_20d_excess": 0.2,
+                    }
+                ],
+            }
+        ],
+    }
+    bars = {"AAA": [{"day": f"2026-01-{day:02d}", "close": 10.0} for day in range(2, 15)]}
+    plain = _research_config("plain")
+    scaled = {
+        **_research_config("scaled"),
+        "rank1_quality_overlay": {
+            "strong_return_20d_percentile_min": 0.95,
+            "strong_return_5d_percentile_min": 0.93,
+            "strong_benchmark_return_20d_min": 0.0,
+            "strong_industry_return_20d_excess_max": 0.5,
+            "strong_distance_from_20d_high_min": -0.08,
+            "strong_scale": 1.5,
+        },
+    }
+    weak_scaled = {
+        **_research_config("weak-scaled"),
+        "rank1_quality_overlay": {
+            **scaled["rank1_quality_overlay"],
+            "weak_benchmark_return_20d_lt": 0.01,
+            "weak_scale": 0.8,
+        },
+    }
+
+    artifact = build_shortpick_v3_rolling_account_replay_artifact(
+        candidate_run=candidate_run,
+        trial_id="trial-1",
+        market_bars_by_symbol=bars,
+        buy_cost_bps=0,
+        sell_cost_bps=0,
+        candidate_configurations=[plain, scaled, weak_scaled],
+    )
+
+    plain_buy = artifact["results"][0]["order_ledger"][0]
+    scaled_buy = artifact["results"][1]["order_ledger"][0]
+    weak_scaled_buy = artifact["results"][2]["order_ledger"][0]
+    assert scaled_buy["target_notional_cny"] == plain_buy["target_notional_cny"] * 1.5
+    assert weak_scaled_buy["target_notional_cny"] == plain_buy["target_notional_cny"] * 0.8
+
+
+def test_r14_replay_replaces_an_unaffordable_slot_from_rank4_inventory() -> None:
+    candidate_run = {
+        "artifact_id": "candidate-run",
+        "trial_diagnostics": [
+            {
+                "trial_id": "trial-1",
+                "model_spec_id": "negative-month-rank-adjusted",
+                "selected_top_k": 1,
+                "selected_top_k_picks_by_date": [
+                    {**_pick("2026-01-02", "AAA", rank=1, multiplier=1.0), "score": 3.0}
+                ],
+            }
+        ],
+    }
+    bars = {
+        "AAA": [{"day": f"2026-01-{day:02d}", "close": 200.0} for day in range(2, 15)],
+        "BBB": [{"day": f"2026-01-{day:02d}", "close": 100.0} for day in range(2, 15)],
+    }
+    config = {
+        **_research_config("replacement"),
+        "affordable_replacement_policy": {
+            "trigger_reason": "price_too_high_for_slot",
+            "inventory_rank_min": 4,
+            "inventory_rank_max": 5,
+            "max_score_gap": 0.1,
+            "min_fill_ratio": 0.75,
+            "min_order_notional_cny": 250.0,
+            "board_lot_size": 100,
+        },
+    }
+
+    artifact = build_shortpick_v3_rolling_account_replay_artifact(
+        candidate_run=candidate_run,
+        trial_id="trial-1",
+        market_bars_by_symbol=bars,
+        buy_cost_bps=0,
+        sell_cost_bps=0,
+        candidate_inventory_rows=[
+            {"as_of_date": "2026-01-02", "rank": 4, "symbol": "BBB", "stock_name": "BBB", "score": 2.95}
+        ],
+        candidate_configurations=[config],
+    )
+
+    result = artifact["results"][0]
+    buy = next(row for row in result["order_ledger"] if row["action"] == "buy")
+    assert buy["symbol"] == "BBB"
+    assert buy["reason"] == "bought_affordable_rank4_5_replacement"
+    assert buy["replacement_original_symbol"] == "AAA"
+    assert result["summary"]["skip_order_count"] == 0
+
+
+def test_r14_replay_trims_market_value_exposure_after_entries() -> None:
+    signal_days = [f"2026-01-{day:02d}" for day in range(2, 7)]
+    candidate_run = {
+        "artifact_id": "candidate-run",
+        "trial_diagnostics": [
+            {
+                "trial_id": "trial-1",
+                "model_spec_id": "negative-month-rank-adjusted",
+                "selected_top_k": 1,
+                "selected_top_k_picks_by_date": [
+                    _pick(signal_day, "AAA", rank=1, multiplier=1.0, horizon=20) for signal_day in signal_days
+                ],
+            }
+        ],
+    }
+    bars = {"AAA": [{"day": f"2026-01-{day:02d}", "close": 10.0} for day in range(2, 31)]}
+    config = {
+        **_research_config("rebalance"),
+        "max_single_symbol_cost_basis_pct": 1.0,
+        "market_value_concentration_rebalance": {
+            "threshold": 0.25,
+            "sell_cost_bps": 0.0,
+            "board_lot_size": 100,
+        },
+    }
+
+    artifact = build_shortpick_v3_rolling_account_replay_artifact(
+        candidate_run=candidate_run,
+        trial_id="trial-1",
+        market_bars_by_symbol=bars,
+        buy_cost_bps=0,
+        sell_cost_bps=0,
+        candidate_configurations=[config],
+    )
+
+    result = artifact["results"][0]
+    rebalance_sells = [
+        row for row in result["order_ledger"] if row.get("reason") == "market_value_concentration_rebalance"
+    ]
+    assert rebalance_sells
+    assert result["summary"]["max_single_symbol_exposure_pct"] <= 0.25
+
+
+def _research_config(config_id: str) -> dict[str, object]:
+    return {
+        "config_id": config_id,
+        "signal_cadence_trade_days": 1,
+        "target_active_tranche_count": 15,
+        "rank_allocation_mode": "model_rank_weight_with_board_lot_skip",
+        "budget_mode": "current_nav_fraction",
+        "min_order_notional_cny": 250.0,
+        "max_single_symbol_cost_basis_pct": 0.35,
+        "exit_policy": "rank3_pullback_rank1_quick_fail_guard",
+        "per_signal_target_budget_cny": 200_000 / 15,
+        "per_signal_target_budget_pct": 1 / 15,
+    }
+
+
 def _pick(
     as_of_date: str,
     symbol: str,
