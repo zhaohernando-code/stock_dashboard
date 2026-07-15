@@ -417,6 +417,7 @@ class ShortpickStrategyLabPaperTrackingResponse(BaseModel):
     selected_configs: list[ShortpickStrategyLabConfigReadout] = Field(default_factory=list)
     baseline_configs: list[ShortpickStrategyLabConfigReadout] = Field(default_factory=list)
     paper_governance: dict[str, Any] = Field(default_factory=dict)
+    rank5_forward_observation: dict[str, Any] = Field(default_factory=dict)
     paper_display: dict[str, Any] = Field(default_factory=dict)
     records: list[dict[str, Any]] = Field(default_factory=list)
     summary: dict[str, Any] = Field(default_factory=dict)

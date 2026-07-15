@@ -1,0 +1,70 @@
+{
+  "artifact_type": "shortpick_v3_rank5_forward_observation_contract",
+  "schema_version": "shortpick_v3_rank5_forward_observation_contract.v1",
+  "artifact_id": "shortpick-v3-rank5-forward-observation-v1",
+  "status": "frozen_before_eligible_forward_outcome_observation",
+  "frozen_at": "2026-07-15T19:30:00+08:00",
+  "decision_scope": "when_rank5_quality_research_may_reopen_without_changing_active_r14",
+  "observation_start_signal_date": "2026-07-15",
+  "cohort_contract": {
+    "strategy_id": "daily_15_tranche_rank_adjusted_r5_093_strong154_replacement_top5_gap010_fill075_market_cap25_v1",
+    "trigger": "an_original_selected_pick_is_skipped_for_price_too_high_for_slot",
+    "unit": "each_same_signal_day_inventory_rank5_candidate_independently_evaluated_against_the_active_base_score_selection_affordability_and_fill_rules",
+    "rank4_precedence": "rank5_shadow_observation_is_retained_even_when_an_earlier_rank4_candidate_is_selected",
+    "evidence_inclusion": [
+      "signal_date_on_or_after_2026_07_15",
+      "paper_source_capture_mode_equals_daily_forward_capture",
+      "shadow_base_eligible_is_true",
+      "all_five_path_features_have_exactly_20_signal_day_or_earlier_return_observations"
+    ],
+    "evidence_exclusion": [
+      "synchronized_start_backfill",
+      "retrospective_reconstruction_without_a_captured_daily_source",
+      "base_score_or_affordability_rejection",
+      "missing_or_incomplete_path_features"
+    ]
+  },
+  "outcome_contract": {
+    "entry": "first_valid_candidate_close_after_signal_day",
+    "exit": "twentieth_subsequent_valid_candidate_close_after_entry",
+    "benchmark_symbol": "000300.SH",
+    "benchmark_alignment": "benchmark_closes_on_the_candidate_entry_and_exit_dates",
+    "primary_shadow_outcomes": [
+      "candidate_return_20d",
+      "benchmark_return_20d",
+      "candidate_excess_return_20d"
+    ],
+    "pending_behavior": "future_outcome_fields_remain_null_until_the_full_20_return_window_is_available",
+    "actual_execution_link": "selected_rank5_observation_key_is_carried_through_plan_buy_position_and_sell_records"
+  },
+  "research_reopen_gate": {
+    "minimum_matured_shadow_observations": 80,
+    "minimum_distinct_signal_months": 6,
+    "minimum_elapsed_calendar_days": 120,
+    "missing_observation_key_count": 0,
+    "duplicate_observation_key_count": 0,
+    "missing_path_feature_count": 0,
+    "premature_future_outcome_count": 0,
+    "effect": "allows_one_new_preregistered_analysis_only_and_does_not_activate_or_add_a_strategy"
+  },
+  "promotion_evidence_floor": {
+    "minimum_actual_executed_and_closed_rank5_replacements": 20,
+    "minimum_elapsed_calendar_days": 365,
+    "minimum_distinct_signal_months": 12,
+    "additional_required_gates": [
+      "research_reopen_gate_passed",
+      "historical_double_baseline_nine_metric_gate",
+      "same_point_in_time_feature_builder_in_forward_execution",
+      "one_in_one_out_replacement_of_r14"
+    ]
+  },
+  "anti_tuning_rules": {
+    "active_rank5_quality_policy_during_collection": null,
+    "threshold_changes_during_window": "forbidden",
+    "early_stop_on_favorable_results": "forbidden",
+    "late_extension_on_unfavorable_results": "forbidden",
+    "current_candidate_family_reference": "docs/contracts/SHORTPICK_V3_R14_RANK5_PATH_QUALITY_DESIGN_2026-07-15.json",
+    "next_analysis_requirement": "freeze_a_separate_evaluation_design_before_reading_matured_forward_outcomes"
+  },
+  "claim_ceiling": "forward_paper_observation_readiness_only_not_investment_advice"
+}

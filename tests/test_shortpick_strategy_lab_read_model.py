@@ -160,6 +160,53 @@ def test_paper_tracking_distinguishes_ready_no_executable_orders(tmp_path) -> No
     assert payload["summary"]["planned_order_count"] == 0
 
 
+def test_paper_tracking_projects_rank5_observation_progress_and_bounds_summary_rows(tmp_path) -> None:
+    state_path = tmp_path / "shortpick-strategy-lab-paper-state.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "schema_version": PAPER_STATE_SCHEMA_VERSION,
+                "tracking_start_date": "2026-07-08",
+                "records": [],
+                "planned_orders": [],
+                "plan_generation_status": {"status": "ready_no_executable_orders"},
+                "rank5_forward_observation": {
+                    "artifact_id": "shortpick-v3-rank5-forward-observation-v1",
+                    "status": "collecting_forward_observations",
+                    "contract_ref": "docs/contracts/SHORTPICK_V3_RANK5_FORWARD_OBSERVATION_CONTRACT_2026-07-15.json",
+                    "active_rank5_quality_policy": None,
+                    "progress": {
+                        "matured_shadow_observation_count": 7,
+                        "pending_shadow_observation_count": 3,
+                        "research_reopen_ready": False,
+                        "data_quality_passed": True,
+                    },
+                    "rows": [{"observation_key": "rank5-forward-test"}],
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    full = build_shortpick_strategy_lab_paper_tracking_read_model(
+        paper_state_path=state_path,
+        today=date(2026, 7, 15),
+    )
+    summary = build_shortpick_strategy_lab_paper_tracking_read_model(
+        include_records=False,
+        paper_state_path=state_path,
+        today=date(2026, 7, 15),
+    )
+
+    assert full["rank5_forward_observation"]["rows"] == [{"observation_key": "rank5-forward-test"}]
+    assert summary["rank5_forward_observation"]["rows"] == []
+    assert summary["summary"]["rank5_forward_matured_count"] == 7
+    assert summary["summary"]["rank5_forward_pending_count"] == 3
+    assert summary["paper_governance"]["active_rank5_quality_policy"] is None
+    assert summary["leakage_audit"]["synchronized_backfill_eligible_for_rank5_evidence"] is False
+
+
 def _load_refresh_state_script() -> object:
     script_path = Path(__file__).resolve().parents[1] / "scripts" / "refresh-shortpick-strategy-lab-paper-state.py"
     spec = importlib.util.spec_from_file_location("refresh_shortpick_strategy_lab_paper_state", script_path)
@@ -645,7 +692,7 @@ def test_forward_ledger_fills_active_strategies_from_common_start(tmp_path, monk
         ],
     )
 
-    records, account_states, pending, status, history, events = module._rebuild_forward_paper_ledger(
+    records, account_states, pending, status, history, events, rank5_observation = module._rebuild_forward_paper_ledger(
         [
             source_for(date(2026, 7, 8), "synchronized_start_backfill"),
             source_for(date(2026, 7, 9), "daily_forward_capture"),
@@ -663,6 +710,7 @@ def test_forward_ledger_fills_active_strategies_from_common_start(tmp_path, monk
     )
     assert status["daily_source_date_from"] == "2026-07-08"
     assert status["daily_source_date_to"] == "2026-07-09"
+    assert rank5_observation["progress"]["captured_observation_count"] == 0
 
     state_path = tmp_path / "rebuilt-paper-state.json"
     state_path.write_text(
@@ -706,7 +754,7 @@ def test_quality_candidate_replaces_unaffordable_pick_from_same_day_inventory() 
         if row["config_id"] == QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID
     )
 
-    order, rejections = module._affordable_replacement_order(
+    order, rejections, rank5_observations = module._affordable_replacement_order(
         skipped_row={
             "action": "skip",
             "reason": "price_too_high_for_slot",
@@ -717,11 +765,23 @@ def test_quality_candidate_replaces_unaffordable_pick_from_same_day_inventory() 
         original_pick={"symbol": "002371.SZ", "rank": 1, "score": 3.90},
         inventory=[
             {"symbol": "600001.SH", "rank": 4, "score": 3.85, "selection_allowed": True},
-            {"symbol": "600002.SH", "rank": 5, "score": 3.84, "selection_allowed": True},
+            {
+                "symbol": "600002.SH",
+                "rank": 5,
+                "score": 3.84,
+                "selection_allowed": True,
+                "path_feature_observation_count": 20,
+                "path_realized_volatility_20d": 0.02,
+                "path_downside_semivolatility_20d": 0.01,
+                "path_max_drawdown_20d": -0.05,
+                "path_up_day_ratio_20d": 0.55,
+                "path_trend_efficiency_20d": 0.20,
+            },
         ],
         estimated_close_by_symbol={"600001.SH": 25.0, "600002.SH": 8.0},
         selected_symbols={"002371.SZ"},
         config=config,
+        strategy_id=QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
     )
 
     assert rejections == []
@@ -731,6 +791,155 @@ def test_quality_candidate_replaces_unaffordable_pick_from_same_day_inventory() 
     assert order["shares"] == 300
     assert order["replacement_inventory_rank"] == 4
     assert order["replacement_fill_ratio"] >= 0.75
+    assert len(rank5_observations) == 1
+    assert rank5_observations[0]["shadow_base_eligible"] is True
+    assert rank5_observations[0]["selected_by_current_r14"] is False
+    assert rank5_observations[0]["selection_decision"] == "shadow_base_eligible_not_selected"
+
+
+def test_forward_plan_captures_point_in_time_rank5_observation_and_links_selected_order(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'rank5-forward.db'}"
+    init_database(database_url)
+    with session_scope(database_url) as session:
+        original = Stock(
+            symbol="002371.SZ",
+            ticker="002371",
+            exchange="SZ",
+            name="高价原始标的",
+            provider_symbol="002371",
+            status="active",
+            profile_payload={},
+            **build_lineage(
+                {"symbol": "002371.SZ"},
+                source_uri="test://stock/002371",
+                license_tag="test",
+                usage_scope="test",
+                redistribution_scope="none",
+            ),
+        )
+        rank5 = Stock(
+            symbol="600005.SH",
+            ticker="600005",
+            exchange="SH",
+            name="Rank5影子标的",
+            provider_symbol="600005",
+            status="active",
+            profile_payload={},
+            **build_lineage(
+                {"symbol": "600005.SH"},
+                source_uri="test://stock/600005",
+                license_tag="test",
+                usage_scope="test",
+                redistribution_scope="none",
+            ),
+        )
+        session.add_all([original, rank5])
+        session.flush()
+        for index in range(21):
+            observed_day = date(2026, 6, 25) + timedelta(days=index)
+            for stock, close_price in ((original, 800.0), (rank5, 8.0 + index * 0.01)):
+                session.add(
+                    MarketBar(
+                        bar_key=f"rank5-forward-{stock.ticker}-{observed_day.isoformat()}",
+                        stock_id=stock.id,
+                        timeframe="1d",
+                        observed_at=datetime.combine(observed_day, time(15, 0), tzinfo=UTC),
+                        open_price=close_price,
+                        high_price=close_price,
+                        low_price=close_price,
+                        close_price=close_price,
+                        volume=1_000_000,
+                        amount=10_000_000,
+                        raw_payload={},
+                        **build_lineage(
+                            {"symbol": stock.symbol, "date": observed_day.isoformat()},
+                            source_uri=f"test://bar/{stock.symbol}/{observed_day.isoformat()}",
+                            license_tag="test",
+                            usage_scope="test",
+                            redistribution_scope="none",
+                        ),
+                    )
+                )
+
+    candidate_run = {
+        "artifact_id": "rank5-forward-candidate-2026-07-15",
+        "signal_date": "2026-07-15",
+        "paper_source_capture_mode": "daily_forward_capture",
+        "trial_diagnostics": [
+            {
+                "model_spec_id": "selected_exhaustion_date_scaled_v3_top3_20d_v1",
+                "selected_top_k": 1,
+                "selected_top_k_picks_by_date": [
+                    {
+                        "as_of_date": "2026-07-15",
+                        "symbol": "002371.SZ",
+                        "stock_name": "高价原始标的",
+                        "rank": 1,
+                        "portfolio_weight": 1.0,
+                        "rank_weight_multiplier": 1.0,
+                        "score": 3.90,
+                        "target_horizon_days": 20,
+                    }
+                ],
+            },
+            {
+                "model_spec_id": NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
+                "selected_top_k": 1,
+                "selected_top_k_picks_by_date": [
+                    {
+                        "as_of_date": "2026-07-15",
+                        "symbol": "002371.SZ",
+                        "stock_name": "高价原始标的",
+                        "rank": 1,
+                        "portfolio_weight": 1.0,
+                        "rank_weight_multiplier": 1.0,
+                        "rank_portfolio_adjustment_multiplier": 1.0,
+                        "score": 3.90,
+                        "target_horizon_days": 20,
+                    }
+                ],
+                "ranked_candidate_inventory_by_date": [
+                    {
+                        "as_of_date": "2026-07-15",
+                        "symbol": "600005.SH",
+                        "stock_name": "Rank5影子标的",
+                        "rank": 5,
+                        "score": 3.84,
+                        "selection_allowed": True,
+                    }
+                ],
+            },
+        ],
+    }
+    monkeypatch.setenv("ASHARE_DATABASE_URL", database_url)
+    module = _load_refresh_state_script()
+
+    orders, status = module._v3_model_generated_plan(
+        account_states=module._initial_account_states(),
+        candidate_run=candidate_run,
+    )
+
+    replacement = next(
+        order
+        for order in orders
+        if order["strategy_id"] == QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID
+        and order.get("replacement_inventory_rank") == 5
+    )
+    observations = [
+        observation
+        for diagnostic in status["diagnostics"]
+        for observation in diagnostic.get("rank5_forward_observations") or []
+    ]
+    assert len(observations) == 1
+    assert observations[0]["path_feature_complete"] is True
+    assert observations[0]["path_feature_observation_count"] == 20
+    assert observations[0]["selected_by_current_r14"] is True
+    assert observations[0]["paper_source_capture_mode"] == "daily_forward_capture"
+    assert replacement["rank5_forward_observation_key"] == observations[0]["observation_key"]
+    assert replacement["paper_source_capture_mode"] == "daily_forward_capture"
 
 
 def test_forward_replacement_applies_optional_rank5_quality_filter() -> None:
@@ -745,7 +954,7 @@ def test_forward_replacement_applies_optional_rank5_quality_filter() -> None:
         "min_return_20d_percentile": 0.5
     }
 
-    order, rejections = module._affordable_replacement_order(
+    order, rejections, rank5_observations = module._affordable_replacement_order(
         skipped_row={
             "action": "skip",
             "reason": "price_too_high_for_slot",
@@ -766,6 +975,7 @@ def test_forward_replacement_applies_optional_rank5_quality_filter() -> None:
         estimated_close_by_symbol={"600002.SH": 8.0},
         selected_symbols={"002371.SZ"},
         config=config,
+        strategy_id=QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
     )
 
     assert order is None
@@ -776,6 +986,8 @@ def test_forward_replacement_applies_optional_rank5_quality_filter() -> None:
             "reason": "rank5_quality_return20_below_min",
         }
     ]
+    assert rank5_observations[0]["shadow_base_eligible"] is True
+    assert rank5_observations[0]["selection_decision"] == "shadow_base_eligible_not_selected"
 
 
 def test_quality_candidate_plans_board_lot_market_exposure_trim(tmp_path) -> None:

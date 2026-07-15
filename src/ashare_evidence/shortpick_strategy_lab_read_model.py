@@ -6,6 +6,8 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from ashare_evidence.rank5_forward_observation import build_rank5_forward_observation_artifact
+
 STRATEGY_LAB_SCHEMA_VERSION = "shortpick_strategy_lab.v1"
 PAPER_STATE_SCHEMA_VERSION = "shortpick_strategy_lab_paper_state.v1"
 CLAIM_CEILING = "paper_observation_only"
@@ -187,6 +189,14 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
         if strategy_id in ACTIVE_STRATEGY_CONFIG_IDS and isinstance(account_state, dict)
     }
     source_coverage = (state or {}).get("source_coverage") if isinstance((state or {}).get("source_coverage"), dict) else {}
+    rank5_forward_observation = _rank5_forward_observation_from_state(
+        state,
+        include_rows=include_records,
+        as_of_day=today,
+    )
+    rank5_forward_progress = rank5_forward_observation.get("progress")
+    if not isinstance(rank5_forward_progress, dict):
+        rank5_forward_progress = {}
     plan_generation_status = (state or {}).get("plan_generation_status") if isinstance((state or {}), dict) else None
     if not isinstance(plan_generation_status, dict):
         plan_generation_status = {
@@ -207,6 +217,9 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
         "latest_plan_signal_date": latest_plan_signal_date,
         "initial_cash_cny": INITIAL_CASH_CNY,
         "plan_generation_status": plan_status_code,
+        "rank5_forward_matured_count": rank5_forward_progress.get("matured_shadow_observation_count", 0),
+        "rank5_forward_pending_count": rank5_forward_progress.get("pending_shadow_observation_count", 0),
+        "rank5_research_reopen_ready": rank5_forward_progress.get("research_reopen_ready", False),
     }
     return {
         "generated_at": _now_iso(),
@@ -273,7 +286,11 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
                 UPSTREAM_META_STABILITY_CONTROL_ID,
             ],
             "daily_sync_policy": "same_scheduled_refresh_window_as_shortpick_v1",
+            "rank5_forward_observation_contract": rank5_forward_observation.get("contract_ref"),
+            "rank5_forward_observation_status": rank5_forward_observation.get("status"),
+            "active_rank5_quality_policy": None,
         },
+        "rank5_forward_observation": rank5_forward_observation,
         "paper_display": _paper_display(
             summary=summary,
             records=records,
@@ -288,6 +305,8 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
         "leakage_audit": {
             "status": "passed",
             "read_model_policy": "forward_paper_state_only_no_v2_replay_cache_no_dynamic_backtest",
+            "rank5_forward_outcome_policy": "outcomes_remain_null_until_fixed_20d_window_matures",
+            "synchronized_backfill_eligible_for_rank5_evidence": False,
         },
         "research_labeling": _research_labeling(EVIDENCE_BASIS_PAPER),
         "strategy_governance": _strategy_governance(),
@@ -1294,6 +1313,26 @@ def _records_from_state(state: dict[str, Any] | None) -> list[dict[str, Any]]:
         for row in rows
         if isinstance(row, dict) and str(row.get("strategy_id") or "") in ACTIVE_STRATEGY_CONFIG_IDS
     ]
+
+
+def _rank5_forward_observation_from_state(
+    state: dict[str, Any] | None,
+    *,
+    include_rows: bool,
+    as_of_day: date,
+) -> dict[str, Any]:
+    raw = (state or {}).get("rank5_forward_observation")
+    if not isinstance(raw, dict):
+        raw = build_rank5_forward_observation_artifact(
+            [],
+            market_bars_by_symbol={},
+            paper_records=[],
+            as_of_day=as_of_day,
+        )
+    projection = dict(raw)
+    rows = projection.get("rows")
+    projection["rows"] = list(rows) if include_rows and isinstance(rows, list) else []
+    return projection
 
 
 def _strategy_governance() -> dict[str, Any]:

@@ -75,6 +75,9 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("activeStrategyRows", component_source)
         self.assertIn("活跃策略已收敛为 3 个角色", component_source)
         self.assertIn("其余策略仅保留历史归档，不再生成新计划单", component_source)
+        self.assertIn("Rank5 固定前瞻观察窗", component_source)
+        self.assertIn("只观察，不改变当前 R14 计划单", component_source)
+        self.assertIn("个后续交易日成熟前收益保持为空", component_source)
         active_ids_source = component_source.split("const ACTIVE_STRATEGY_CONFIG_IDS = [", 1)[1].split(
             "] as const;", 1
         )[0]

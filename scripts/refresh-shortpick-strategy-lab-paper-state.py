@@ -11,7 +11,15 @@ from sqlalchemy import func, select
 
 from ashare_evidence.db import session_scope
 from ashare_evidence.models import MarketBar, Stock
+from ashare_evidence.rank5_forward_observation import (
+    RANK5_FORWARD_BENCHMARK_SYMBOL,
+    RANK5_FORWARD_OBSERVATION_START_DATE,
+    build_rank5_forward_observation_artifact,
+    build_rank5_shadow_observation,
+)
+from ashare_evidence.rank5_path_quality import enrich_inventory_with_path_quality_features
 from ashare_evidence.rolling_tranche_account_replay import (
+    load_daily_close_bars_for_symbols,
     project_shortpick_v3_initial_entry_orders,
     rank5_replacement_quality_rejection_reason,
 )
@@ -274,6 +282,10 @@ def _record_row(
         "return_text": "未退出" if return_value is None else f"{return_value:+.2%}",
         "note": note,
         "evidence_basis": str(order.get("paper_source_capture_mode") or "daily_forward_capture"),
+        "replacement_inventory_rank": order.get("replacement_inventory_rank"),
+        "replacement_original_symbol": order.get("replacement_original_symbol"),
+        "affordable_replacement_active": order.get("affordable_replacement_active") is True,
+        "rank5_forward_observation_key": order.get("rank5_forward_observation_key"),
     }
 
 
@@ -412,6 +424,10 @@ def _settle_account_day(
             "peak_price_cny": price,
             "entry_features": dict(order.get("entry_features") or {}),
             "paper_source_capture_mode": order.get("paper_source_capture_mode"),
+            "replacement_inventory_rank": order.get("replacement_inventory_rank"),
+            "replacement_original_symbol": order.get("replacement_original_symbol"),
+            "affordable_replacement_active": order.get("affordable_replacement_active") is True,
+            "rank5_forward_observation_key": order.get("rank5_forward_observation_key"),
         }
         state["positions"].append(position)
         fill_note = f"按冻结计划于 {current_day.isoformat()} 收盘价 {price:.2f} 元成交。"
@@ -842,10 +858,11 @@ def _affordable_replacement_order(
     estimated_close_by_symbol: dict[str, float],
     selected_symbols: set[str],
     config: dict[str, Any],
-) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    strategy_id: str,
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]], list[dict[str, Any]]]:
     policy = config.get("affordable_replacement_policy")
     if not isinstance(policy, dict) or skipped_row.get("reason") != policy.get("trigger_reason"):
-        return None, []
+        return None, [], []
     target_notional = _safe_float(skipped_row.get("target_notional_cny")) or 0.0
     original_score = _safe_float(original_pick.get("score")) or 0.0
     rank_min = int(_safe_float(policy.get("inventory_rank_min")) or 4)
@@ -855,63 +872,153 @@ def _affordable_replacement_order(
     min_notional = _safe_float(policy.get("min_order_notional_cny")) or 250.0
     board_lot_size = int(_safe_float(policy.get("board_lot_size")) or 100)
     buy_cost_rate = 20.0 / 10_000.0
+    rank5_observations: list[dict[str, Any]] = []
+    for inventory_sequence, candidate in enumerate(inventory, start=1):
+        if int(_safe_float(candidate.get("rank")) or 0) != 5:
+            continue
+        base_reason, _ = _replacement_base_rejection_reason(
+            candidate=candidate,
+            original_score=original_score,
+            target_notional=target_notional,
+            estimated_close_by_symbol=estimated_close_by_symbol,
+            selected_symbols=selected_symbols,
+            max_score_gap=max_score_gap,
+            min_fill_ratio=min_fill_ratio,
+            min_notional=min_notional,
+            board_lot_size=board_lot_size,
+            buy_cost_rate=buy_cost_rate,
+        )
+        rank5_observations.append(
+            build_rank5_shadow_observation(
+                strategy_id=strategy_id,
+                signal_date=str(skipped_row.get("signal_day") or ""),
+                planned_trade_date=str(skipped_row.get("trade_day") or ""),
+                original_pick=original_pick,
+                candidate=candidate,
+                inventory_sequence=inventory_sequence,
+                shadow_base_eligible=base_reason is None,
+                base_eligibility_reason=base_reason,
+            )
+        )
     rejections: list[dict[str, Any]] = []
     for candidate in inventory:
         inventory_rank = int(_safe_float(candidate.get("rank")) or 0)
         if inventory_rank < rank_min or inventory_rank > rank_max:
             continue
         symbol = str(candidate.get("symbol") or "")
-        reason: str | None = None
-        price = estimated_close_by_symbol.get(symbol)
-        if candidate.get("selection_allowed") is False:
-            reason = "inventory_selection_not_allowed"
-        elif symbol in selected_symbols:
-            reason = "duplicate_selected_on_signal"
-        elif (_safe_float(candidate.get("score")) or 0.0) < original_score - max_score_gap:
-            reason = "replacement_score_gap_above_max"
-        elif quality_reason := rank5_replacement_quality_rejection_reason(
-            candidate,
-            inventory_rank=inventory_rank,
+        reason, sizing = _replacement_base_rejection_reason(
+            candidate=candidate,
             original_score=original_score,
-            policy=policy.get("rank5_quality_policy"),
-        ):
-            reason = quality_reason
-        elif price is None:
-            reason = "missing_latest_close_price"
-        else:
-            one_lot_cash = price * board_lot_size * (1.0 + buy_cost_rate)
-            lot_count = int(target_notional // one_lot_cash)
-            cash_spent = lot_count * one_lot_cash
-            fill_ratio = cash_spent / target_notional if target_notional else 0.0
-            if one_lot_cash > target_notional:
-                reason = "one_lot_exceeds_original_rank_budget_including_fee"
-            elif cash_spent < min_notional:
-                reason = "replacement_notional_below_minimum"
-            elif fill_ratio < min_fill_ratio:
-                reason = "replacement_fill_ratio_below_min"
-            else:
-                replacement_pick = {
-                    **candidate,
-                    "rank": int(_safe_float(original_pick.get("rank")) or 0),
-                    "replacement_inventory_rank": inventory_rank,
-                    "replacement_original_symbol": str(original_pick.get("symbol") or ""),
-                }
-                return {
-                    "action": "buy",
-                    "reason": "bought_affordable_rank4_5_replacement",
-                    "signal_day": skipped_row.get("signal_day"),
-                    "trade_day": skipped_row.get("trade_day"),
-                    "symbol": symbol,
-                    "rank": replacement_pick["rank"],
-                    "shares": lot_count * board_lot_size,
-                    "price": price,
-                    "target_notional_cny": target_notional,
-                    "replacement_pick": replacement_pick,
-                    "replacement_fill_ratio": fill_ratio,
-                    "replacement_inventory_rank": inventory_rank,
-                }, rejections
+            target_notional=target_notional,
+            estimated_close_by_symbol=estimated_close_by_symbol,
+            selected_symbols=selected_symbols,
+            max_score_gap=max_score_gap,
+            min_fill_ratio=min_fill_ratio,
+            min_notional=min_notional,
+            board_lot_size=board_lot_size,
+            buy_cost_rate=buy_cost_rate,
+        )
+        if reason not in {
+            "inventory_selection_not_allowed",
+            "duplicate_selected_on_signal",
+            "replacement_score_gap_above_max",
+        }:
+            quality_reason = rank5_replacement_quality_rejection_reason(
+                candidate,
+                inventory_rank=inventory_rank,
+                original_score=original_score,
+                policy=policy.get("rank5_quality_policy"),
+            )
+            if quality_reason:
+                reason = quality_reason
+        if reason is None:
+            price = float(sizing["price"])
+            lot_count = int(sizing["lot_count"])
+            fill_ratio = float(sizing["fill_ratio"])
+            selected_observation = next(
+                (
+                    observation
+                    for observation in rank5_observations
+                    if observation.get("candidate_symbol") == symbol
+                ),
+                None,
+            )
+            if selected_observation is not None:
+                selected_observation["selected_by_current_r14"] = True
+                selected_observation["selection_decision"] = "selected_by_current_r14"
+            for observation in rank5_observations:
+                if observation.get("shadow_base_eligible") is True and observation is not selected_observation:
+                    observation["selection_decision"] = "shadow_base_eligible_not_selected"
+            replacement_pick = {
+                **candidate,
+                "rank": int(_safe_float(original_pick.get("rank")) or 0),
+                "replacement_inventory_rank": inventory_rank,
+                "replacement_original_symbol": str(original_pick.get("symbol") or ""),
+            }
+            return {
+                "action": "buy",
+                "reason": "bought_affordable_rank4_5_replacement",
+                "signal_day": skipped_row.get("signal_day"),
+                "trade_day": skipped_row.get("trade_day"),
+                "symbol": symbol,
+                "rank": replacement_pick["rank"],
+                "shares": lot_count * board_lot_size,
+                "price": price,
+                "target_notional_cny": target_notional,
+                "replacement_pick": replacement_pick,
+                "replacement_fill_ratio": fill_ratio,
+                "replacement_inventory_rank": inventory_rank,
+                "rank5_forward_observation_key": (
+                    selected_observation.get("observation_key") if selected_observation is not None else None
+                ),
+            }, rejections, rank5_observations
         rejections.append({"symbol": symbol, "inventory_rank": inventory_rank, "reason": reason})
-    return None, rejections
+    for observation in rank5_observations:
+        if observation.get("shadow_base_eligible") is True:
+            observation["selection_decision"] = "shadow_base_eligible_not_selected"
+    return None, rejections, rank5_observations
+
+
+def _replacement_base_rejection_reason(
+    *,
+    candidate: dict[str, Any],
+    original_score: float,
+    target_notional: float,
+    estimated_close_by_symbol: dict[str, float],
+    selected_symbols: set[str],
+    max_score_gap: float,
+    min_fill_ratio: float,
+    min_notional: float,
+    board_lot_size: int,
+    buy_cost_rate: float,
+) -> tuple[str | None, dict[str, float | int]]:
+    symbol = str(candidate.get("symbol") or "")
+    price = estimated_close_by_symbol.get(symbol)
+    if candidate.get("selection_allowed") is False:
+        return "inventory_selection_not_allowed", {}
+    if symbol in selected_symbols:
+        return "duplicate_selected_on_signal", {}
+    if (_safe_float(candidate.get("score")) or 0.0) < original_score - max_score_gap:
+        return "replacement_score_gap_above_max", {}
+    if price is None:
+        return "missing_latest_close_price", {}
+    one_lot_cash = price * board_lot_size * (1.0 + buy_cost_rate)
+    lot_count = int(target_notional // one_lot_cash)
+    cash_spent = lot_count * one_lot_cash
+    fill_ratio = cash_spent / target_notional if target_notional else 0.0
+    sizing: dict[str, float | int] = {
+        "price": price,
+        "lot_count": lot_count,
+        "cash_spent": cash_spent,
+        "fill_ratio": fill_ratio,
+    }
+    if one_lot_cash > target_notional:
+        return "one_lot_exceeds_original_rank_budget_including_fee", sizing
+    if cash_spent < min_notional:
+        return "replacement_notional_below_minimum", sizing
+    if fill_ratio < min_fill_ratio:
+        return "replacement_fill_ratio_below_min", sizing
+    return None, sizing
 
 
 def _market_exposure_rebalance_orders(
@@ -1076,13 +1183,14 @@ def _build_strategy_orders(
         symbol = str(row.get("symbol") or "")
         pick = picks_by_symbol.get(symbol, {})
         if row.get("action") != "buy":
-            replacement, replacement_rejections = _affordable_replacement_order(
+            replacement, replacement_rejections, rank5_forward_observations = _affordable_replacement_order(
                 skipped_row=row,
                 original_pick=pick,
                 inventory=replacement_inventory or [],
                 estimated_close_by_symbol=estimated_close_by_symbol,
                 selected_symbols=selected_symbols,
                 config=config,
+                strategy_id=strategy_id,
             )
             if replacement is not None:
                 replacement_pick = replacement.pop("replacement_pick")
@@ -1106,6 +1214,7 @@ def _build_strategy_orders(
                         "replacement_inventory_rank": replacement.get("replacement_inventory_rank"),
                         "replacement_fill_ratio": replacement.get("replacement_fill_ratio"),
                         "affordable_replacement_active": True,
+                        "rank5_forward_observation_key": replacement.get("rank5_forward_observation_key"),
                     }
                 )
                 orders.append(order)
@@ -1118,6 +1227,7 @@ def _build_strategy_orders(
                         "symbol": replacement.get("symbol"),
                         "replacement_inventory_rank": replacement.get("replacement_inventory_rank"),
                         "candidate_rejections": replacement_rejections,
+                        "rank5_forward_observations": rank5_forward_observations,
                     }
                 )
                 continue
@@ -1135,6 +1245,8 @@ def _build_strategy_orders(
             diagnostics.append(diagnostic)
             if replacement_rejections:
                 diagnostic["replacement_rejections"] = replacement_rejections
+            if rank5_forward_observations:
+                diagnostic["rank5_forward_observations"] = rank5_forward_observations
             continue
         note = (
             "按 v3 selected_top_k 与 rolling tranche 回放同一买入内核生成；"
@@ -1239,6 +1351,22 @@ def _v3_model_generated_plan(
             "primary_model_status": "ready_no_selected_top_k",
         }
     with session_scope() as session:
+        rank5_symbols = {
+            str(row.get("symbol") or "")
+            for row in rank_adjusted_inventory
+            if int(_safe_float(row.get("rank")) or 0) == 5 and row.get("symbol")
+        }
+        inventory_signal_day = date.fromisoformat(rank_adjusted_signal_date)
+        rank5_history = load_daily_close_bars_for_symbols(
+            session,
+            symbols=rank5_symbols,
+            start_day=inventory_signal_day - timedelta(days=90),
+            end_day=inventory_signal_day,
+        )
+        rank_adjusted_inventory = enrich_inventory_with_path_quality_features(
+            rank_adjusted_inventory,
+            market_bars_by_symbol=rank5_history,
+        )
         main_orders, main_diagnostics = _build_strategy_orders(
             session=session,
             picks=picks,
@@ -1299,6 +1427,20 @@ def _v3_model_generated_plan(
     for order in planned_orders:
         order["paper_source_capture_mode"] = capture_mode
         order["source_candidate_artifact_id"] = candidate_run.get("artifact_id")
+    diagnostics = [
+        *main_diagnostics,
+        *quality_diagnostics,
+        *quality_rebalance_diagnostics,
+        *upstream_meta_diagnostics,
+    ]
+    for diagnostic in diagnostics:
+        observations = diagnostic.get("rank5_forward_observations")
+        if not isinstance(observations, list):
+            continue
+        for observation in observations:
+            if isinstance(observation, dict):
+                observation["paper_source_capture_mode"] = capture_mode
+                observation["source_candidate_artifact_id"] = candidate_run.get("artifact_id")
     return planned_orders, {
         **source_status,
         "status": "ready"
@@ -1319,12 +1461,7 @@ def _v3_model_generated_plan(
         "ranked_candidate_inventory_count_by_model_spec": {
             NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID: len(rank_adjusted_inventory),
         },
-        "diagnostics": [
-            *main_diagnostics,
-            *quality_diagnostics,
-            *quality_rebalance_diagnostics,
-            *upstream_meta_diagnostics,
-        ],
+        "diagnostics": diagnostics,
         "message": "计划单仅为三条活跃策略由 v3 selected_top_k candidate-run 按 rolling tranche 订单语义生成。",
     }
 
@@ -1338,15 +1475,31 @@ def _rebuild_forward_paper_ledger(
     dict[str, Any],
     list[dict[str, Any]],
     list[dict[str, Any]],
+    dict[str, Any],
 ]:
     account_states = _initial_account_states()
     records: list[dict[str, Any]] = []
     pending_orders: list[dict[str, Any]] = []
     plan_history: list[dict[str, Any]] = []
     execution_events: list[dict[str, Any]] = []
+    rank5_forward_observations: list[dict[str, Any]] = []
     latest_plan_status: dict[str, Any] = {"status": "ready_no_executable_orders"}
     if not sources:
-        return records, account_states, pending_orders, latest_plan_status, plan_history, execution_events
+        empty_observation = build_rank5_forward_observation_artifact(
+            [],
+            market_bars_by_symbol={},
+            paper_records=[],
+            as_of_day=date.fromisoformat(TRACKING_START_DATE),
+        )
+        return (
+            records,
+            account_states,
+            pending_orders,
+            latest_plan_status,
+            plan_history,
+            execution_events,
+            empty_observation,
+        )
 
     tracking_start_day = date.fromisoformat(TRACKING_START_DATE)
     latest_source_day = max(date.fromisoformat(str(source["signal_date"])) for source in sources)
@@ -1369,6 +1522,14 @@ def _rebuild_forward_paper_ledger(
                 account_states=account_states,
                 candidate_run=source,
             )
+            for diagnostic in latest_plan_status.get("diagnostics") or []:
+                if not isinstance(diagnostic, dict):
+                    continue
+                rank5_forward_observations.extend(
+                    row
+                    for row in diagnostic.get("rank5_forward_observations") or []
+                    if isinstance(row, dict)
+                )
             pending_orders.extend(planned_orders)
             plan_history.append(
                 {
@@ -1389,6 +1550,24 @@ def _rebuild_forward_paper_ledger(
                 execution_events=execution_events,
             )
             market_day_index += 1
+        observation_symbols = {
+            str(row.get("candidate_symbol") or "")
+            for row in rank5_forward_observations
+            if row.get("candidate_symbol")
+        }
+        observation_symbols.add(RANK5_FORWARD_BENCHMARK_SYMBOL)
+        observation_bars = load_daily_close_bars_for_symbols(
+            session,
+            symbols=observation_symbols,
+            start_day=RANK5_FORWARD_OBSERVATION_START_DATE,
+            end_day=latest_source_day,
+        )
+        rank5_forward_observation = build_rank5_forward_observation_artifact(
+            rank5_forward_observations,
+            market_bars_by_symbol=observation_bars,
+            paper_records=records,
+            as_of_day=latest_source_day,
+        )
 
     strategy_order = {strategy_id: index for index, strategy_id in enumerate(STRATEGY_LABELS)}
     for ledger_sequence, record in enumerate(records):
@@ -1410,7 +1589,15 @@ def _rebuild_forward_paper_ledger(
             1 for source in sources if source.get("paper_source_capture_mode") == "synchronized_start_backfill"
         ),
     }
-    return records, account_states, pending_orders, latest_plan_status, plan_history, execution_events
+    return (
+        records,
+        account_states,
+        pending_orders,
+        latest_plan_status,
+        plan_history,
+        execution_events,
+        rank5_forward_observation,
+    )
 
 
 def main() -> int:
@@ -1439,13 +1626,31 @@ def main() -> int:
         execution_events = (
             existing.get("execution_events") if isinstance(existing.get("execution_events"), list) else []
         )
+        rank5_forward_observation = (
+            existing.get("rank5_forward_observation")
+            if isinstance(existing.get("rank5_forward_observation"), dict)
+            else build_rank5_forward_observation_artifact(
+                [],
+                market_bars_by_symbol={},
+                paper_records=records,
+                as_of_day=date.today(),
+            )
+        )
         source_coverage = existing.get("source_coverage") if isinstance(existing.get("source_coverage"), dict) else {}
     else:
         latest_source, latest_source_status = _load_v3_candidate_run_source()
         if latest_source is None:
             raise RuntimeError(str(latest_source_status.get("message") or "v3 candidate-run source unavailable"))
         daily_sources = _ensure_daily_candidate_sources(latest_source)
-        records, account_states, planned_orders, plan_status, plan_history, execution_events = (
+        (
+            records,
+            account_states,
+            planned_orders,
+            plan_status,
+            plan_history,
+            execution_events,
+            rank5_forward_observation,
+        ) = (
             _rebuild_forward_paper_ledger(daily_sources)
         )
         source_coverage = {
@@ -1466,6 +1671,7 @@ def main() -> int:
         "plan_history": plan_history,
         "execution_events": execution_events,
         "source_coverage": source_coverage,
+        "rank5_forward_observation": rank5_forward_observation,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_name(f".{path.name}.tmp")
@@ -1479,6 +1685,9 @@ def main() -> int:
                 "record_count": len(records),
                 "planned_order_count": len(planned_orders),
                 "strategy_count": len(account_states),
+                "rank5_forward_matured_count": (
+                    (rank5_forward_observation.get("progress") or {}).get("matured_shadow_observation_count", 0)
+                ),
                 "coverage_start": source_coverage.get("start_date"),
                 "coverage_end": source_coverage.get("end_date"),
             },

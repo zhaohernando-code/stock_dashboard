@@ -714,6 +714,17 @@ export interface ShortpickStrategyLabPaperDisplay {
   summary_cards?: ShortpickStrategyLabPaperDisplayTextItem[];
 }
 
+export interface ShortpickStrategyLabRank5ForwardObservation {
+  artifact_id?: string;
+  status?: string;
+  claim_ceiling?: string;
+  contract_ref?: string;
+  observation_start_signal_date?: string;
+  active_rank5_quality_policy?: null;
+  progress?: Record<string, unknown>;
+  rows?: Record<string, unknown>[];
+}
+
 export interface ShortpickStrategyLabPaperTrackingResponse {
   generated_at: string;
   status: string;
@@ -731,6 +742,7 @@ export interface ShortpickStrategyLabPaperTrackingResponse {
   selected_configs: ShortpickStrategyLabConfigReadout[];
   baseline_configs: ShortpickStrategyLabConfigReadout[];
   paper_governance: Record<string, unknown>;
+  rank5_forward_observation?: ShortpickStrategyLabRank5ForwardObservation;
   strategy_governance?: Record<string, unknown>;
   paper_display?: ShortpickStrategyLabPaperDisplay;
   records: Record<string, unknown>[];
