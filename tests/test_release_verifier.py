@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import json
 import tempfile
 import unittest
@@ -13,6 +14,7 @@ from ashare_evidence.release_verifier import (
     ReleaseVerificationError,
     _api_payload_pair_for_fingerprint,
     _record_api_fingerprint,
+    _request_bytes,
     _request_text,
     audit_user_visible_operations_text,
     build_release_manifest,
@@ -26,11 +28,12 @@ from ashare_evidence.release_verifier import (
 
 
 class ReleaseVerifierTests(unittest.TestCase):
-    def test_extract_asset_references_parses_index_assets(self) -> None:
+    def test_extract_asset_references_parses_entry_and_vendor_assets(self) -> None:
         html = """
         <html>
           <head>
             <link rel="stylesheet" href="/projects/ashare-dashboard/assets/index-abc123.css" />
+            <link rel="modulepreload" href="/projects/ashare-dashboard/assets/vendor-antd-abc123.js" />
             <script type="module" src="/projects/ashare-dashboard/assets/index-def456.js"></script>
             <script type="module" src="/projects/ashare-dashboard/assets/index-def456.js"></script>
           </head>
@@ -47,11 +50,48 @@ class ReleaseVerifierTests(unittest.TestCase):
                     "ref": "/projects/ashare-dashboard/assets/index-abc123.css",
                 },
                 {
+                    "name": "assets/vendor-antd-abc123.js",
+                    "ref": "/projects/ashare-dashboard/assets/vendor-antd-abc123.js",
+                },
+                {
                     "name": "assets/index-def456.js",
                     "ref": "/projects/ashare-dashboard/assets/index-def456.js",
                 },
             ],
         )
+
+    def test_request_bytes_decompresses_gzip_for_asset_hashing(self) -> None:
+        expected = b"console.log('dashboard ready')"
+
+        class Response:
+            headers = {"content-encoding": "gzip"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return None
+
+            def read(self):
+                return gzip.compress(expected)
+
+        class Opener:
+            def open(self, request, timeout):
+                self.request = request
+                self.timeout = timeout
+                return Response()
+
+        opener = Opener()
+        payload = _request_bytes(
+            opener,
+            "https://example.test/assets/index.js",
+            timeout=20,
+            headers={"Accept-Encoding": "gzip"},
+        )
+
+        self.assertEqual(payload, expected)
+        self.assertEqual(opener.request.get_header("Accept-encoding"), "gzip")
+        self.assertEqual(opener.timeout, 20)
 
     def test_normalize_payload_for_fingerprint_ignores_runtime_noise(self) -> None:
         left = {

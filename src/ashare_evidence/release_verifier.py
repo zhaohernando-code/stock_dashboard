@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import os
@@ -22,10 +23,10 @@ except Exception:  # pragma: no cover - optional dependency fallback
 
 
 ASSET_REF_PATTERN = re.compile(
-    r"""(?:src|href)=["']([^"']*assets/index-[^"'?#\s]+\.(?:js|css)(?:\?[^"']*)?)["']""",
+    r"""(?:src|href)=["']([^"']*assets/[^/"'?#\s]+\.(?:js|css)(?:\?[^"']*)?)["']""",
     re.IGNORECASE,
 )
-ASSET_NAME_PATTERN = re.compile(r"assets/index-[^\"'?#\s]+\.(?:js|css)", re.IGNORECASE)
+ASSET_NAME_PATTERN = re.compile(r"assets/[^/\"'?#\s]+\.(?:js|css)", re.IGNORECASE)
 REQUIRED_TRACK_TERMS = ("用户轨道", "模型轨道")
 BANNED_USER_VISIBLE_TERMS = (
     "运营复盘口径仍在迁移",
@@ -170,7 +171,10 @@ def _request_bytes(
     req = request.Request(url, data=body, headers=headers or {}, method=method)
     try:
         with opener.open(req, timeout=timeout) as response:
-            return _read_response_bytes(response)
+            payload = _read_response_bytes(response)
+            if str(response.headers.get("content-encoding") or "").lower() == "gzip":
+                return gzip.decompress(payload)
+            return payload
     except error.HTTPError as exc:
         detail = _decode_body(exc.read(), exc.headers.get("content-type"))
         raise ReleaseVerificationError(f"{method} {url} failed: {exc.code} {detail}".strip()) from exc
@@ -277,7 +281,9 @@ def _asset_hashes_from_served_html(
     for asset in assets:
         asset_url = parse.urljoin(page_url, asset["ref"])
         asset_urls[asset["name"]] = asset_url
-        hashes[asset["name"]] = sha256_bytes(_request_bytes(opener, asset_url, timeout=timeout))
+        hashes[asset["name"]] = sha256_bytes(
+            _request_bytes(opener, asset_url, timeout=timeout, headers={"Accept-Encoding": "gzip"})
+        )
     return hashes, asset_urls
 
 

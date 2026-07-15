@@ -82,7 +82,9 @@ def test_local_frontend_uses_managed_static_dist_server() -> None:
     assert "vite preview" not in script
     assert "createServer" in server
     assert 'path.join(root, "index.html")' in server
-    assert '"Content-Length": String(body.length)' in server
+    assert '"Content-Length": String(servedBody.length)' in server
+    assert 'headers["Content-Encoding"] = "gzip"' in server
+    assert '"Vary": "Accept-Encoding"' in server
 
 
 def test_local_frontend_static_server_does_not_require_node_sqlite() -> None:

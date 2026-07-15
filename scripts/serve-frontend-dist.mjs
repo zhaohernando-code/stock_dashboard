@@ -3,6 +3,7 @@
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
 
 function argValue(name, fallback) {
   const index = process.argv.indexOf(name);
@@ -56,12 +57,21 @@ const server = createServer(async (request, response) => {
     }
     const filePath = resolved.filePath;
     const body = await readFile(filePath);
-    response.writeHead(200, {
+    const contentType = mimeTypes.get(path.extname(filePath)) ?? "application/octet-stream";
+    const acceptsGzip = /(?:^|,)\s*gzip\s*(?:,|$)/i.test(String(request.headers["accept-encoding"] ?? ""));
+    const compressible = /^(?:text\/|application\/(?:javascript|json))/.test(contentType);
+    const servedBody = acceptsGzip && compressible && body.length >= 1024 ? gzipSync(body) : body;
+    const headers = {
       "Cache-Control": path.basename(filePath) === "index.html" ? "no-cache" : "public, max-age=31536000, immutable",
-      "Content-Length": String(body.length),
-      "Content-Type": mimeTypes.get(path.extname(filePath)) ?? "application/octet-stream",
+      "Content-Length": String(servedBody.length),
+      "Content-Type": contentType,
+      "Vary": "Accept-Encoding",
+    };
+    if (servedBody !== body) headers["Content-Encoding"] = "gzip";
+    response.writeHead(200, {
+      ...headers,
     });
-    response.end(request.method === "HEAD" ? undefined : body);
+    response.end(request.method === "HEAD" ? undefined : servedBody);
   } catch (error) {
     console.error(error);
     response.writeHead(500);
