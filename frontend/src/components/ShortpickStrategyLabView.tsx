@@ -34,6 +34,25 @@ import { readRouteParam, writeWorkbenchRoute } from "../utils/route";
 const { Paragraph, Text, Title } = Typography;
 type ShortpickStrategyLabTab = "paper-tracking" | "historical-replay";
 const SHORTPICK_STRATEGY_LAB_TABS = new Set<ShortpickStrategyLabTab>(["paper-tracking", "historical-replay"]);
+const ACTIVE_STRATEGY_CONFIG_IDS = [
+  "daily_15_tranche_rank_adjusted_r5_093_strong154_replacement_top5_gap010_fill075_market_cap25_v1",
+  "daily_14_tranche_upstream_meta_signal_quality_min2250_weak100_strong165_lead135_low090_v1",
+  "daily_14_tranche_rank_weighted_compound_min2250_layered_rank1_quickfail_rank3_pullback_exit_v1",
+] as const;
+const ACTIVE_STRATEGY_CONFIG_ID_SET = new Set<string>(ACTIVE_STRATEGY_CONFIG_IDS);
+const ACTIVE_STRATEGY_LABEL_FRAGMENTS = ["高质量可买替补", "上游元信号稳健缩放", "主策略"];
+
+function activeStrategyRows(rows: ShortpickStrategyLabConfigReadout[]): ShortpickStrategyLabConfigReadout[] {
+  const order = new Map<string, number>(ACTIVE_STRATEGY_CONFIG_IDS.map((configId, index) => [configId, index]));
+  return rows
+    .filter((row) => ACTIVE_STRATEGY_CONFIG_ID_SET.has(row.config_id))
+    .sort((left, right) => (order.get(left.config_id) ?? 99) - (order.get(right.config_id) ?? 99));
+}
+
+function hasActiveStrategyLabel(value: unknown): boolean {
+  const label = typeof value === "string" ? value : "";
+  return ACTIVE_STRATEGY_LABEL_FRAGMENTS.some((fragment) => label.includes(fragment));
+}
 
 function initialShortpickStrategyLabTab(): ShortpickStrategyLabTab {
   const rawTab = readRouteParam("shortpickStrategyLabTab");
@@ -53,10 +72,10 @@ function stringField(source: Record<string, unknown> | undefined, key: string): 
 }
 
 function configRoleLabel(role?: string | null): string {
-  if (role === "primary_forward_observation") return "主策略";
+  if (role === "primary_forward_observation") return "现行前向基线";
   if (role === "lower_concentration_control") return "低集中对照";
-  if (role === "quality_replacement_rebalance_candidate") return "质量替补对照";
-  if (role === "upstream_meta_signal_candidate") return "上游元信号对照";
+  if (role === "quality_replacement_rebalance_candidate") return "R14 优化前沿";
+  if (role === "upstream_meta_signal_candidate") return "独立模型对照";
   if (role === "conditional_aggressive_control_candidate") return "条件增强对照";
   if (role === "execution_stability_control_candidate") return "执行稳定对照";
   if (role === "meta_signal_quality_control_candidate") return "元信号质量对照";
@@ -647,18 +666,29 @@ function ShortpickStrategyLabPaperTab({
   const latestTrade = display?.latest_trade;
   const strategyExplanation = display?.strategy_explanation;
   const charts = display?.charts ?? [];
-  const accountCurves = display?.account_curves ?? [];
-  const plannedOrders = display?.planned_orders ?? [];
+  const accountCurves = (display?.account_curves ?? []).filter((curve) => (
+    curve.strategy_id
+      ? ACTIVE_STRATEGY_CONFIG_ID_SET.has(curve.strategy_id)
+      : hasActiveStrategyLabel(curve.strategy)
+  ));
+  const plannedOrders = (display?.planned_orders ?? []).filter((order) => (
+    ACTIVE_STRATEGY_CONFIG_ID_SET.has(stringField(order, "strategy_id"))
+  ));
   const table = display?.table;
-  const tableRows = table?.rows ?? [];
+  const tableRows = (table?.rows ?? []).filter((row) => {
+    const strategyId = stringField(row, "strategy_id");
+    return strategyId
+      ? ACTIVE_STRATEGY_CONFIG_ID_SET.has(strategyId)
+      : hasActiveStrategyLabel(row.strategy_text);
+  });
   const [tableSearch, setTableSearch] = useState("");
   const [strategyFilter, setStrategyFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
   const [exitFilter, setExitFilter] = useState("");
-  const strategyRows = [
+  const strategyRows = activeStrategyRows([
     ...(tracking?.selected_configs ?? []),
     ...(tracking?.baseline_configs ?? []),
-  ];
+  ]);
   const strategyOptions = useMemo(() => uniquePaperOptions(tableRows, "strategy_text"), [tableRows]);
   const actionOptions = useMemo(() => uniquePaperOptions(tableRows, "action_text"), [tableRows]);
   const exitOptions = useMemo(() => uniquePaperOptions(tableRows, "exit_state_text"), [tableRows]);
@@ -715,6 +745,13 @@ function ShortpickStrategyLabPaperTab({
           </>
         )}
       </Card>
+
+      <Alert
+        showIcon
+        type="info"
+        message="活跃策略已收敛为 3 个角色"
+        description="R14 优化前沿 · 上游元信号独立模型对照 · 现行 14 tranche 前向基线；其余策略仅保留历史归档，不再生成新计划单。"
+      />
 
       <PlannedOrdersCard
         orders={plannedOrders}
@@ -1100,8 +1137,10 @@ function ShortpickStrategyLabReplayTab({
   loading: boolean;
   onReload: () => void;
 }) {
-  const selectedRows = replay?.selected_configs ?? [];
-  const baselineRows = replay?.baseline_configs ?? [];
+  const comparisonRows = activeStrategyRows([
+    ...(replay?.selected_configs ?? []),
+    ...(replay?.baseline_configs ?? []),
+  ]);
   const holdoutRows = replay?.holdout_configs ?? [];
   const rejectedRows = replay?.rejected_configs ?? [];
   return (
@@ -1147,6 +1186,13 @@ function ShortpickStrategyLabReplayTab({
         )}
       </Card>
 
+      <Alert
+        showIcon
+        type="info"
+        message="当前只保留 3 个活跃角色"
+        description="R14 是后续优化基线，上游元信号保留为独立模型族对照，现行 14 tranche 仅作为前向基线；5 条被支配或重复策略已归档。"
+      />
+
       {replay?.metric_groups?.length ? (
         <div className="shortpick-strategy-lab-chart-grid">
           {replay.metric_groups.map((group) => (
@@ -1173,7 +1219,7 @@ function ShortpickStrategyLabReplayTab({
           </Text>
         )}
       >
-        <HistoricalStrategyComparisonTable rows={[...selectedRows, ...baselineRows]} loading={loading} />
+        <HistoricalStrategyComparisonTable rows={comparisonRows} loading={loading} />
       </Card>
 
       <Card className="panel-card" title="留出与未采用配置统计">

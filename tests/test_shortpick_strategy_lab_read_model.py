@@ -12,16 +12,13 @@ from ashare_evidence.rolling_tranche_account_replay import project_shortpick_v3_
 from ashare_evidence.rolling_tranche_execution_contract import build_shortpick_v3_rolling_tranche_execution_contract
 from ashare_evidence.schemas.shortpick import ShortpickStrategyLabHistoricalReplayResponse
 from ashare_evidence.shortpick_strategy_lab_read_model import (
-    CONDITIONAL_AGGRESSIVE_CONTROL_ID,
-    CONTROL_CONFIG_ID,
+    ACTIVE_STRATEGY_CONFIG_IDS,
+    ARCHIVED_STRATEGY_CONFIG_IDS,
     INITIAL_CASH_CNY,
     MAIN_CONFIG_ID,
-    META_SIGNAL_QUALITY_CONTROL_ID,
-    NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
     NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
     PAPER_STATE_SCHEMA_VERSION,
     QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
-    THREE_PART_STABILITY_CONTROL_ID,
     UPSTREAM_META_STABILITY_CONTROL_ID,
     build_shortpick_strategy_lab_historical_replay_read_model,
     build_shortpick_strategy_lab_paper_tracking_read_model,
@@ -38,20 +35,18 @@ def test_historical_replay_is_static_full_history_metrics() -> None:
     assert payload["summary"]["main_total_return"] == 3.119168564999999
     assert payload["summary"]["main_negative_month_count"] == 4
     assert payload["selected_configs"][0]["config_id"] == MAIN_CONFIG_ID
-    assert payload["summary"]["baseline_config_count"] == 7
+    assert payload["summary"]["baseline_config_count"] == 2
+    assert payload["summary"]["active_config_count"] == 3
+    assert payload["summary"]["archived_config_count"] == 5
     assert payload["baseline_configs"][0]["config_id"] == QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID
     assert payload["baseline_configs"][0]["goal10_improvements"]["skip_order_reduction_rel"] > 0.20
     assert payload["baseline_configs"][0]["goal10_improvements"]["skip_signal_reduction_rel"] > 0.30
     assert payload["baseline_configs"][0]["summary"]["negative_month_count"] == 2
     assert payload["baseline_configs"][1]["config_id"] == UPSTREAM_META_STABILITY_CONTROL_ID
     assert payload["baseline_configs"][1]["goal10_improvements"]["drawdown_reduction_rel"] > 0.10
-    assert payload["baseline_configs"][2]["config_id"] == NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID
-    assert payload["baseline_configs"][2]["model_spec_id"] == NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID
-    assert payload["baseline_configs"][2]["summary"]["skipped_order_rate"] < 0.20
-    assert payload["baseline_configs"][3]["config_id"] == META_SIGNAL_QUALITY_CONTROL_ID
-    assert payload["baseline_configs"][4]["config_id"] == THREE_PART_STABILITY_CONTROL_ID
-    assert payload["baseline_configs"][5]["config_id"] == CONDITIONAL_AGGRESSIVE_CONTROL_ID
-    assert payload["baseline_configs"][6]["config_id"] == CONTROL_CONFIG_ID
+    assert payload["strategy_governance"]["active_config_ids"] == list(ACTIVE_STRATEGY_CONFIG_IDS)
+    assert payload["strategy_governance"]["archived_config_ids"] == list(ARCHIVED_STRATEGY_CONFIG_IDS)
+    assert payload["strategy_governance"]["archived_history_preserved"] is True
     assert payload["metric_groups"]
     assert payload["leakage_audit"]["read_model_policy"] == "static_metrics_only_no_market_scan_no_dynamic_replay"
 
@@ -90,7 +85,15 @@ def test_paper_tracking_renders_mock_next_order_without_forward_records(tmp_path
                         "shares": 100,
                         "entry_timing": "次日收盘",
                         "estimated_notional_cny": 12750.0,
-                    }
+                    },
+                    {
+                        "strategy_id": ARCHIVED_STRATEGY_CONFIG_IDS[0],
+                        "strategy_label": "已归档策略",
+                        "signal_date": "2026-07-08",
+                        "planned_entry_date": "2026-07-09",
+                        "symbol": "600000.SH",
+                        "shares": 100,
+                    },
                 ],
             },
             ensure_ascii=False,
@@ -110,21 +113,12 @@ def test_paper_tracking_renders_mock_next_order_without_forward_records(tmp_path
     assert [row["config_id"] for row in payload["baseline_configs"]] == [
         QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
         UPSTREAM_META_STABILITY_CONTROL_ID,
-        NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
-        META_SIGNAL_QUALITY_CONTROL_ID,
-        THREE_PART_STABILITY_CONTROL_ID,
-        CONDITIONAL_AGGRESSIVE_CONTROL_ID,
-        CONTROL_CONFIG_ID,
     ]
     assert payload["paper_governance"]["control_config_ids"] == [
         QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
         UPSTREAM_META_STABILITY_CONTROL_ID,
-        NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
-        META_SIGNAL_QUALITY_CONTROL_ID,
-        THREE_PART_STABILITY_CONTROL_ID,
-        CONDITIONAL_AGGRESSIVE_CONTROL_ID,
-        CONTROL_CONFIG_ID,
     ]
+    assert payload["strategy_governance"]["active_config_ids"] == list(ACTIVE_STRATEGY_CONFIG_IDS)
     assert payload["paper_display"]["account_curves"] == []
     assert payload["paper_display"]["charts"] == []
     assert payload["paper_display"]["table"]["rows"] == []
@@ -510,6 +504,7 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
     state_path = tmp_path / "paper-state.json"
     monkeypatch.setenv("ASHARE_SHORTPICK_STRATEGY_LAB_PAPER_STATE", str(state_path))
     module = _load_refresh_state_script()
+    assert set(module.STRATEGY_LABELS) == set(ACTIVE_STRATEGY_CONFIG_IDS)
     assert module._next_business_day(date(2026, 7, 10)) == date(2026, 7, 13)
 
     assert module.main() == 0
@@ -521,35 +516,17 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
         MAIN_CONFIG_ID,
         QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
         UPSTREAM_META_STABILITY_CONTROL_ID,
-        NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
-        META_SIGNAL_QUALITY_CONTROL_ID,
-        THREE_PART_STABILITY_CONTROL_ID,
-        CONDITIONAL_AGGRESSIVE_CONTROL_ID,
-        CONTROL_CONFIG_ID,
     ]
     assert [order["symbol"] for order in orders] == [
         "600030.SH",
         "600030.SH",
         "600030.SH",
-        "600030.SH",
-        "600030.SH",
-        "600030.SH",
-        "600030.SH",
-        "600030.SH",
     ]
-    assert [order["shares"] for order in orders] == [100, 100, 200, 100, 200, 200, 200, 100]
+    assert [order["shares"] for order in orders] == [100, 100, 200]
     assert orders[1]["model_spec_id"] == NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID
     assert orders[1]["conditional_aggressive_overlay_active"] is False
     assert orders[2]["conditional_aggressive_overlay_active"] is True
     assert orders[2]["conditional_aggressive_weight_scale"] == 1.65 * 0.9
-    assert orders[3]["model_spec_id"] == NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID
-    assert orders[3]["conditional_aggressive_overlay_active"] is False
-    assert orders[4]["conditional_aggressive_overlay_active"] is True
-    assert orders[4]["conditional_aggressive_weight_scale"] == 1.65 * 0.9
-    assert orders[5]["conditional_aggressive_overlay_active"] is True
-    assert orders[5]["conditional_aggressive_weight_scale"] == 1.6
-    assert orders[6]["conditional_aggressive_overlay_active"] is True
-    assert orders[6]["conditional_aggressive_weight_scale"] == 14 / 11
     assert all(order["plan_source"] == "selected_top_k_candidate_run_rolling_tranche_engine" for order in orders)
     contract = build_shortpick_v3_rolling_tranche_execution_contract()
     main_config = next(config for config in contract["candidate_configurations"] if config["config_id"] == MAIN_CONFIG_ID)
@@ -574,7 +551,7 @@ def test_refresh_state_generates_plan_from_v3_selected_top_k_candidate_run(tmp_p
     assert any(row["symbol"] == "600028.SH" and row["reason"] == "zero_target_allocation" for row in diagnostics)
 
 
-def test_forward_ledger_fills_all_strategies_from_common_start(tmp_path, monkeypatch) -> None:
+def test_forward_ledger_fills_active_strategies_from_common_start(tmp_path, monkeypatch) -> None:
     database_url = f"sqlite:///{tmp_path / 'paper-ledger.db'}"
     init_database(database_url)
     with session_scope(database_url) as session:
@@ -676,7 +653,7 @@ def test_forward_ledger_fills_all_strategies_from_common_start(tmp_path, monkeyp
     )
 
     buys = [row for row in records if row["action"] == "buy"]
-    assert len(account_states) == 8
+    assert len(account_states) == 3
     assert {row["strategy_id"] for row in buys} == set(account_states)
     assert {row["signal_date"] for row in buys} == {"2026-07-08"}
     assert all(state["cash_cny"] < INITIAL_CASH_CNY for state in account_states.values())
@@ -700,7 +677,7 @@ def test_forward_ledger_fills_all_strategies_from_common_start(tmp_path, monkeyp
                 "source_coverage": {
                     "start_date": "2026-07-08",
                     "end_date": "2026-07-09",
-                    "strategy_count": 8,
+                    "strategy_count": 3,
                     "common_start_enforced": True,
                 },
             },
@@ -716,7 +693,7 @@ def test_forward_ledger_fills_all_strategies_from_common_start(tmp_path, monkeyp
     assert paper_table["columns"][0] == {"key": "trade_date_text", "label": "交易日"}
     assert len(paper_table["rows"]) == len(buys)
     assert {row["trade_date_text"] for row in paper_table["rows"]} == {"2026-07-09"}
-    assert len(read_model["paper_display"]["account_curves"]) == 8
+    assert len(read_model["paper_display"]["account_curves"]) == 3
     assert read_model["paper_display"]["coverage"]["common_start_enforced"] is True
 
 

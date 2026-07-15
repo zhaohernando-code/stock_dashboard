@@ -2,6 +2,8 @@ import re
 import unittest
 from pathlib import Path
 
+from ashare_evidence.shortpick_strategy_lab_read_model import ACTIVE_STRATEGY_CONFIG_IDS
+
 
 class FrontendShortpickStaticTests(unittest.TestCase):
     def test_shortpick_strategy_lab_replaces_v2_surface(self) -> None:
@@ -69,6 +71,14 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("数据缺口", component_source)
         self.assertIn("...(tracking?.selected_configs ?? [])", component_source)
         self.assertIn("...(tracking?.baseline_configs ?? [])", component_source)
+        self.assertIn("const ACTIVE_STRATEGY_CONFIG_IDS = [", component_source)
+        self.assertIn("activeStrategyRows", component_source)
+        self.assertIn("活跃策略已收敛为 3 个角色", component_source)
+        self.assertIn("其余策略仅保留历史归档，不再生成新计划单", component_source)
+        active_ids_source = component_source.split("const ACTIVE_STRATEGY_CONFIG_IDS = [", 1)[1].split(
+            "] as const;", 1
+        )[0]
+        self.assertEqual(set(re.findall(r'"([^"]+)"', active_ids_source)), set(ACTIVE_STRATEGY_CONFIG_IDS))
 
         paper_tab_source = component_source[
             component_source.index("function ShortpickStrategyLabPaperTab"):

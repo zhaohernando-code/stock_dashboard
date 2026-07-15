@@ -36,6 +36,18 @@ QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID = (
     "daily_15_tranche_rank_adjusted_r5_093_strong154_replacement_"
     "top5_gap010_fill075_market_cap25_v1"
 )
+ACTIVE_STRATEGY_CONFIG_IDS = (
+    QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
+    UPSTREAM_META_STABILITY_CONTROL_ID,
+    MAIN_CONFIG_ID,
+)
+ARCHIVED_STRATEGY_CONFIG_IDS = (
+    NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
+    META_SIGNAL_QUALITY_CONTROL_ID,
+    THREE_PART_STABILITY_CONTROL_ID,
+    CONDITIONAL_AGGRESSIVE_CONTROL_ID,
+    CONTROL_CONFIG_ID,
+)
 PAPER_STATE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_PAPER_STATE"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -117,7 +129,9 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
         },
         "summary": {
             "selected_config_count": 1,
-            "baseline_config_count": 7,
+            "baseline_config_count": 2,
+            "active_config_count": len(ACTIVE_STRATEGY_CONFIG_IDS),
+            "archived_config_count": len(ARCHIVED_STRATEGY_CONFIG_IDS),
             "signal_day_count": 509,
             "coverage_status": "static_full_history_ready",
             "initial_cash_cny": INITIAL_CASH_CNY,
@@ -133,11 +147,6 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
         "baseline_configs": [
             _quality_replacement_rebalance_control_readout(),
             _upstream_meta_stability_control_readout(),
-            _negative_month_rank_adjusted_control_readout(),
-            _meta_signal_quality_control_readout(),
-            _three_part_stability_control_readout(),
-            _conditional_aggressive_control_readout(),
-            _control_config_readout(),
         ],
         "holdout_configs": [],
         "rejected_configs": [],
@@ -147,6 +156,7 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
             "read_model_policy": "static_metrics_only_no_market_scan_no_dynamic_replay",
         },
         "research_labeling": _research_labeling(EVIDENCE_BASIS_HISTORY),
+        "strategy_governance": _strategy_governance(),
         "event_refs": ["shortpick_strategy_lab.static_historical_replay.v1"],
     }
 
@@ -168,7 +178,14 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
     state = _read_paper_state(state_path)
     records = _records_from_state(state) if include_records else []
     planned_orders = _planned_orders_from_state(state)
-    account_states = (state or {}).get("account_states") if isinstance((state or {}).get("account_states"), dict) else {}
+    raw_account_states = (
+        (state or {}).get("account_states") if isinstance((state or {}).get("account_states"), dict) else {}
+    )
+    account_states = {
+        strategy_id: account_state
+        for strategy_id, account_state in raw_account_states.items()
+        if strategy_id in ACTIVE_STRATEGY_CONFIG_IDS and isinstance(account_state, dict)
+    }
     source_coverage = (state or {}).get("source_coverage") if isinstance((state or {}).get("source_coverage"), dict) else {}
     plan_generation_status = (state or {}).get("plan_generation_status") if isinstance((state or {}), dict) else None
     if not isinstance(plan_generation_status, dict):
@@ -246,11 +263,6 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             for readout in (
                 _paper_quality_replacement_rebalance_control_readout(),
                 _paper_upstream_meta_stability_control_readout(),
-                _paper_negative_month_rank_adjusted_control_readout(),
-                _paper_meta_signal_quality_control_readout(),
-                _paper_three_part_stability_control_readout(),
-                _paper_conditional_aggressive_control_readout(),
-                _paper_control_config_readout(),
             )
         ],
         "paper_governance": {
@@ -259,11 +271,6 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             "control_config_ids": [
                 QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
                 UPSTREAM_META_STABILITY_CONTROL_ID,
-                NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
-                META_SIGNAL_QUALITY_CONTROL_ID,
-                THREE_PART_STABILITY_CONTROL_ID,
-                CONDITIONAL_AGGRESSIVE_CONTROL_ID,
-                CONTROL_CONFIG_ID,
             ],
             "daily_sync_policy": "same_scheduled_refresh_window_as_shortpick_v1",
         },
@@ -283,6 +290,7 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             "read_model_policy": "forward_paper_state_only_no_v2_replay_cache_no_dynamic_backtest",
         },
         "research_labeling": _research_labeling(EVIDENCE_BASIS_PAPER),
+        "strategy_governance": _strategy_governance(),
         "event_refs": ["shortpick_strategy_lab.forward_paper_tracking.v1"],
     }
 
@@ -292,9 +300,9 @@ def _main_config_readout() -> dict[str, Any]:
         "config_id": MAIN_CONFIG_ID,
         "label": "主策略：14 tranche 复投 + 分层退出",
         "role": "primary_forward_observation",
-        "selection_rank": 1,
+        "selection_rank": 3,
         "gate_status": "active",
-        "reason": "完整历史收益最高，回撤和负月份未劣化；覆盖 Rank1 快速冲高失败与 Rank3 回撤后期亏损保护。",
+        "reason": "现行前向运行基线，用于衡量 R14 优化前沿和上游元信号对照；不再作为新增规则的优化候选。",
         "summary": {
             "total_return": 3.119168564999999,
             "annualized_return": 0.6577172359709627,
@@ -798,7 +806,7 @@ def _paper_main_config_readout() -> dict[str, Any]:
     readout = _main_config_readout()
     return {
         **readout,
-        "reason": "前向纸面追踪从 20 万本金重新开始；历史回放收益只作为历史页静态指标，不计入这里。",
+        "reason": "现行 14 tranche 前向基线从 20 万本金重新开始；历史回放收益不计入纸面账户。",
         "summary": {
             "initial_cash_cny": INITIAL_CASH_CNY,
             "current_nav_cny": INITIAL_CASH_CNY,
@@ -1052,8 +1060,7 @@ def _paper_display(
                 {
                     "label": "对照组",
                     "value": (
-                        "包含高质量可买替补与 25% 暴露再平衡、递归上游 Rank 调整、"
-                        "元信号缩放及低集中度复投等方向性对照。"
+                        "只保留 R14 高质量可买替补与 25% 暴露再平衡优化前沿，以及上游元信号独立对照。"
                     ),
                 },
             ],
@@ -1091,7 +1098,7 @@ def _paper_display(
             ),
             "planned_order_count": summary.get("planned_order_count"),
             "historical_replay_row_count": 0,
-            "strategy_count": len(account_states),
+            "strategy_count": len(ACTIVE_STRATEGY_CONFIG_IDS),
             "common_start_enforced": bool(source_coverage.get("common_start_enforced")),
             "source_gap_count": 0,
         },
@@ -1119,7 +1126,7 @@ def _paper_account_curves(account_states: dict[str, Any], records: list[dict[str
             sell_counts[strategy_id] = sell_counts.get(strategy_id, 0) + 1
     curves: list[dict[str, Any]] = []
     for strategy_id, state in account_states.items():
-        if not isinstance(state, dict):
+        if strategy_id not in ACTIVE_STRATEGY_CONFIG_IDS or not isinstance(state, dict):
             continue
         points: list[dict[str, Any]] = []
         peak_nav = float(INITIAL_CASH_CNY)
@@ -1201,6 +1208,7 @@ def _paper_record_display_row(record: dict[str, Any]) -> dict[str, Any]:
     stock_text = f"{record.get('name') or ''} · {record.get('symbol') or ''}".strip(" ·")
     return {
         "row_key": str(record.get("row_key") or record.get("id") or ""),
+        "strategy_id": record.get("strategy_id"),
         "trade_date_text": record.get("trade_date"),
         "strategy_text": record.get("strategy_label"),
         "action_text": record.get("action_label") or record.get("action"),
@@ -1259,16 +1267,13 @@ def _planned_orders_from_state(state: dict[str, Any] | None) -> list[dict[str, A
     rows = (state or {}).get("planned_orders") or []
     if not isinstance(rows, list):
         return []
-    normalized = [row for row in rows if isinstance(row, dict)]
+    normalized = [
+        row
+        for row in rows
+        if isinstance(row, dict) and str(row.get("strategy_id") or "") in ACTIVE_STRATEGY_CONFIG_IDS
+    ]
     strategy_order = {
-        MAIN_CONFIG_ID: 0,
-        QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID: 1,
-        UPSTREAM_META_STABILITY_CONTROL_ID: 2,
-        NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID: 3,
-        META_SIGNAL_QUALITY_CONTROL_ID: 4,
-        THREE_PART_STABILITY_CONTROL_ID: 5,
-        CONDITIONAL_AGGRESSIVE_CONTROL_ID: 6,
-        CONTROL_CONFIG_ID: 7,
+        strategy_id: index for index, strategy_id in enumerate(ACTIVE_STRATEGY_CONFIG_IDS)
     }
     return sorted(
         normalized,
@@ -1284,7 +1289,28 @@ def _records_from_state(state: dict[str, Any] | None) -> list[dict[str, Any]]:
     rows = (state or {}).get("records") or []
     if not isinstance(rows, list):
         return []
-    return [row for row in rows if isinstance(row, dict)]
+    return [
+        row
+        for row in rows
+        if isinstance(row, dict) and str(row.get("strategy_id") or "") in ACTIVE_STRATEGY_CONFIG_IDS
+    ]
+
+
+def _strategy_governance() -> dict[str, Any]:
+    return {
+        "policy": "converged_three_role_set",
+        "contract_ref": "docs/contracts/SHORTPICK_V3_ACTIVE_STRATEGY_SET_2026-07-15.md",
+        "active_config_ids": list(ACTIVE_STRATEGY_CONFIG_IDS),
+        "active_roles": {
+            QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID: "optimization_frontier",
+            UPSTREAM_META_STABILITY_CONTROL_ID: "independent_model_family_control",
+            MAIN_CONFIG_ID: "current_forward_baseline",
+        },
+        "optimization_baseline_config_id": QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
+        "archived_config_ids": list(ARCHIVED_STRATEGY_CONFIG_IDS),
+        "archived_history_preserved": True,
+        "new_candidate_policy": "must_displace_an_existing_active_role_instead_of_expanding_the_active_set",
+    }
 
 
 def _latest_value(rows: list[dict[str, Any]], key: str) -> str | None:

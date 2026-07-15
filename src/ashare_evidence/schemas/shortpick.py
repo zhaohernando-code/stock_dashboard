@@ -395,6 +395,7 @@ class ShortpickStrategyLabHistoricalReplayResponse(BaseModel):
     metric_groups: list[dict[str, Any]] = Field(default_factory=list)
     leakage_audit: dict[str, Any] = Field(default_factory=dict)
     research_labeling: dict[str, Any] = Field(default_factory=dict)
+    strategy_governance: dict[str, Any] = Field(default_factory=dict)
     event_refs: list[str] = Field(default_factory=list)
 
 
@@ -421,4 +422,5 @@ class ShortpickStrategyLabPaperTrackingResponse(BaseModel):
     summary: dict[str, Any] = Field(default_factory=dict)
     leakage_audit: dict[str, Any] = Field(default_factory=dict)
     research_labeling: dict[str, Any] = Field(default_factory=dict)
+    strategy_governance: dict[str, Any] = Field(default_factory=dict)
     event_refs: list[str] = Field(default_factory=list)

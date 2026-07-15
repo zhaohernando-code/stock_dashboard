@@ -612,6 +612,7 @@ export interface ShortpickStrategyLabHistoricalReplayResponse {
   }>;
   leakage_audit: Record<string, unknown>;
   research_labeling: Record<string, unknown>;
+  strategy_governance?: Record<string, unknown>;
   event_refs: string[];
 }
 
@@ -689,6 +690,7 @@ export interface ShortpickStrategyLabPaperDisplayAccountPoint {
 
 export interface ShortpickStrategyLabPaperDisplayAccountCurve {
   strategy: string;
+  strategy_id?: string;
   initial_cash?: number;
   latest_nav?: number;
   latest_return?: number;
@@ -729,6 +731,7 @@ export interface ShortpickStrategyLabPaperTrackingResponse {
   selected_configs: ShortpickStrategyLabConfigReadout[];
   baseline_configs: ShortpickStrategyLabConfigReadout[];
   paper_governance: Record<string, unknown>;
+  strategy_governance?: Record<string, unknown>;
   paper_display?: ShortpickStrategyLabPaperDisplay;
   records: Record<string, unknown>[];
   summary: Record<string, unknown>;

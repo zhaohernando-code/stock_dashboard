@@ -1,5 +1,15 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-07-15T00:00:00+08:00] v3 active strategies converge to three non-expanding roles:
+
+v3 前端与纸面日刷的活跃策略集合固定收敛为 3 条：R14 高质量替补与 25% 暴露再平衡作为唯一优化前沿，上游元信号稳健缩放作为独立模型族对照，现行 14 tranche 分层退出作为前向运行基线。递归 Rank 调整、元信号质量分层、三段稳定性、条件化攻击和 15 tranche 低集中度共 5 条迁入归档，不再生成新计划单，也不进入活跃历史对比；原有合同、静态回放指标和既有纸面历史保留。
+
+执行约定
+- 活跃集合上限保持 3 个角色；新候选必须明确替换其中一个角色，不能通过追加第四条来进入持续展示与前向追踪。
+- 后续优化统一以 R14 为历史前沿；只击败现行 14 tranche 或某个已归档弱策略，不构成新增活跃候选的理由。
+- 前后端都必须按同一活跃 ID 集合过滤；日刷账户、计划单、API read model 和前端表格任何一层都不得重新扩张出归档策略。
+- 详细集合与恢复条件见 `docs/contracts/SHORTPICK_V3_ACTIVE_STRATEGY_SET_2026-07-15.md`。
+
 [2026-07-13T09:30:00+08:00] v3 paper strategies use one synchronized account window:
 
 所有进入前端的 v3 策略统一从 2026-07-08、20 万元独立纸面账户起算。日刷必须按信号日保存 candidate source 和计划批次，不能再用“最新计划”覆盖未结算历史。2026-07-08/09 的补齐来源必须标记为 `synchronized_start_backfill`，后续日刷实时保存的来源标记为 `daily_forward_capture`；两者都不能继承历史回放收益。交易明细、现金、持仓、净值曲线和回撤必须来自同一份纸面账本。执行合同见 `docs/contracts/SHORTPICK_V3_PAPER_LEDGER_CONTRACT_2026-07-13.md`。

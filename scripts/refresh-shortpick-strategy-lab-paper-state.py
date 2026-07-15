@@ -14,17 +14,12 @@ from ashare_evidence.models import MarketBar, Stock
 from ashare_evidence.rolling_tranche_account_replay import project_shortpick_v3_initial_entry_orders
 from ashare_evidence.rolling_tranche_execution_contract import build_shortpick_v3_rolling_tranche_execution_contract
 from ashare_evidence.shortpick_strategy_lab_read_model import (
-    CONDITIONAL_AGGRESSIVE_CONTROL_ID,
-    CONTROL_CONFIG_ID,
     INITIAL_CASH_CNY,
     MAIN_CONFIG_ID,
-    META_SIGNAL_QUALITY_CONTROL_ID,
-    NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
     NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
     PAPER_STATE_ENV,
     PAPER_STATE_SCHEMA_VERSION,
     QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
-    THREE_PART_STABILITY_CONTROL_ID,
     TRACKING_START_DATE,
     UPSTREAM_META_STABILITY_CONTROL_ID,
 )
@@ -39,12 +34,7 @@ CONTROL_TRANCHE_COUNT = 15
 MAIN_MIN_ORDER_NOTIONAL_CNY = 2250
 CONTROL_MIN_ORDER_NOTIONAL_CNY = 1000
 MAIN_STRATEGY_LABEL = "主策略：14 tranche 分层退出"
-CONTROL_STRATEGY_LABEL = "对照组：15 tranche 低集中复投"
-CONDITIONAL_AGGRESSIVE_STRATEGY_LABEL = "对照组：条件化攻击模式"
-THREE_PART_STABILITY_STRATEGY_LABEL = "对照组：三段稳定性控制"
-META_SIGNAL_QUALITY_STRATEGY_LABEL = "对照组：元信号质量分层"
 UPSTREAM_META_STABILITY_STRATEGY_LABEL = "对照组：上游元信号稳健缩放"
-NEGATIVE_MONTH_RANK_ADJUSTED_STRATEGY_LABEL = "对照组：递归上游 Rank 权重调整"
 QUALITY_REPLACEMENT_REBALANCE_STRATEGY_LABEL = "候选对照：高质量可买替补 + 25% 暴露再平衡"
 V3_MODEL_SPEC_ID = "selected_exhaustion_date_scaled_v3_top3_20d_v1"
 REQUIRED_V3_MODEL_SPEC_IDS = (V3_MODEL_SPEC_ID, NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID)
@@ -61,22 +51,12 @@ ALLOWED_EXTERNAL_PLAN_SOURCES = {
 STRATEGY_MODEL_SPEC_IDS = {
     MAIN_CONFIG_ID: V3_MODEL_SPEC_ID,
     UPSTREAM_META_STABILITY_CONTROL_ID: V3_MODEL_SPEC_ID,
-    META_SIGNAL_QUALITY_CONTROL_ID: V3_MODEL_SPEC_ID,
-    THREE_PART_STABILITY_CONTROL_ID: V3_MODEL_SPEC_ID,
-    CONDITIONAL_AGGRESSIVE_CONTROL_ID: V3_MODEL_SPEC_ID,
-    CONTROL_CONFIG_ID: V3_MODEL_SPEC_ID,
-    NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID: NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
     QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID: NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
 }
 STRATEGY_LABELS = {
     MAIN_CONFIG_ID: MAIN_STRATEGY_LABEL,
     QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID: QUALITY_REPLACEMENT_REBALANCE_STRATEGY_LABEL,
     UPSTREAM_META_STABILITY_CONTROL_ID: UPSTREAM_META_STABILITY_STRATEGY_LABEL,
-    NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID: NEGATIVE_MONTH_RANK_ADJUSTED_STRATEGY_LABEL,
-    META_SIGNAL_QUALITY_CONTROL_ID: META_SIGNAL_QUALITY_STRATEGY_LABEL,
-    THREE_PART_STABILITY_CONTROL_ID: THREE_PART_STABILITY_STRATEGY_LABEL,
-    CONDITIONAL_AGGRESSIVE_CONTROL_ID: CONDITIONAL_AGGRESSIVE_STRATEGY_LABEL,
-    CONTROL_CONFIG_ID: CONTROL_STRATEGY_LABEL,
 }
 
 
@@ -1260,39 +1240,6 @@ def _v3_model_generated_plan(
             model_spec_id=V3_MODEL_SPEC_ID,
             account_state=(account_states or {}).get(MAIN_CONFIG_ID),
         )
-        conditional_orders, conditional_diagnostics = _build_strategy_orders(
-            session=session,
-            picks=picks,
-            signal_date=signal_date,
-            tranche_count=MAIN_TRANCHE_COUNT,
-            min_order_notional=MAIN_MIN_ORDER_NOTIONAL_CNY,
-            strategy_id=CONDITIONAL_AGGRESSIVE_CONTROL_ID,
-            strategy_label=CONDITIONAL_AGGRESSIVE_STRATEGY_LABEL,
-            model_spec_id=V3_MODEL_SPEC_ID,
-            account_state=(account_states or {}).get(CONDITIONAL_AGGRESSIVE_CONTROL_ID),
-        )
-        stability_orders, stability_diagnostics = _build_strategy_orders(
-            session=session,
-            picks=picks,
-            signal_date=signal_date,
-            tranche_count=MAIN_TRANCHE_COUNT,
-            min_order_notional=1000.0,
-            strategy_id=THREE_PART_STABILITY_CONTROL_ID,
-            strategy_label=THREE_PART_STABILITY_STRATEGY_LABEL,
-            model_spec_id=V3_MODEL_SPEC_ID,
-            account_state=(account_states or {}).get(THREE_PART_STABILITY_CONTROL_ID),
-        )
-        meta_orders, meta_diagnostics = _build_strategy_orders(
-            session=session,
-            picks=picks,
-            signal_date=signal_date,
-            tranche_count=MAIN_TRANCHE_COUNT,
-            min_order_notional=1000.0,
-            strategy_id=META_SIGNAL_QUALITY_CONTROL_ID,
-            strategy_label=META_SIGNAL_QUALITY_STRATEGY_LABEL,
-            model_spec_id=V3_MODEL_SPEC_ID,
-            account_state=(account_states or {}).get(META_SIGNAL_QUALITY_CONTROL_ID),
-        )
         upstream_meta_orders, upstream_meta_diagnostics = _build_strategy_orders(
             session=session,
             picks=picks,
@@ -1303,17 +1250,6 @@ def _v3_model_generated_plan(
             strategy_label=UPSTREAM_META_STABILITY_STRATEGY_LABEL,
             model_spec_id=V3_MODEL_SPEC_ID,
             account_state=(account_states or {}).get(UPSTREAM_META_STABILITY_CONTROL_ID),
-        )
-        rank_adjusted_orders, rank_adjusted_diagnostics = _build_strategy_orders(
-            session=session,
-            picks=rank_adjusted_picks,
-            signal_date=rank_adjusted_signal_date,
-            tranche_count=CONTROL_TRANCHE_COUNT,
-            min_order_notional=CONTROL_MIN_ORDER_NOTIONAL_CNY,
-            strategy_id=NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
-            strategy_label=NEGATIVE_MONTH_RANK_ADJUSTED_STRATEGY_LABEL,
-            model_spec_id=NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
-            account_state=(account_states or {}).get(NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID),
         )
         quality_orders, quality_diagnostics = _build_strategy_orders(
             session=session,
@@ -1343,27 +1279,11 @@ def _v3_model_generated_plan(
             planned_trade_date=quality_trade_date,
             config=quality_config,
         )
-        control_orders, control_diagnostics = _build_strategy_orders(
-            session=session,
-            picks=picks,
-            signal_date=signal_date,
-            tranche_count=CONTROL_TRANCHE_COUNT,
-            min_order_notional=CONTROL_MIN_ORDER_NOTIONAL_CNY,
-            strategy_id=CONTROL_CONFIG_ID,
-            strategy_label=CONTROL_STRATEGY_LABEL,
-            model_spec_id=V3_MODEL_SPEC_ID,
-            account_state=(account_states or {}).get(CONTROL_CONFIG_ID),
-        )
     planned_orders = [
         *main_orders,
         *quality_orders,
         *quality_rebalance_orders,
         *upstream_meta_orders,
-        *rank_adjusted_orders,
-        *meta_orders,
-        *stability_orders,
-        *conditional_orders,
-        *control_orders,
     ]
     capture_mode = str(candidate_run.get("paper_source_capture_mode") or "daily_forward_capture")
     for order in planned_orders:
@@ -1376,11 +1296,6 @@ def _v3_model_generated_plan(
         or quality_orders
         or quality_rebalance_orders
         or upstream_meta_orders
-        or rank_adjusted_orders
-        or meta_orders
-        or stability_orders
-        or conditional_orders
-        or control_orders
         else "ready_no_executable_orders",
         "model_spec_id": V3_MODEL_SPEC_ID,
         "model_spec_ids": list(REQUIRED_V3_MODEL_SPEC_IDS),
@@ -1399,13 +1314,8 @@ def _v3_model_generated_plan(
             *quality_diagnostics,
             *quality_rebalance_diagnostics,
             *upstream_meta_diagnostics,
-            *rank_adjusted_diagnostics,
-            *meta_diagnostics,
-            *stability_diagnostics,
-            *conditional_diagnostics,
-            *control_diagnostics,
         ],
-        "message": "计划单由 v3 selected_top_k candidate-run 按 rolling tranche 订单语义生成。",
+        "message": "计划单仅为三条活跃策略由 v3 selected_top_k candidate-run 按 rolling tranche 订单语义生成。",
     }
 
 
@@ -1498,8 +1408,21 @@ def main() -> int:
     sourced_orders, source_status = _external_plan_source_orders()
     if source_status is not None:
         existing = _load_json(path) or {}
-        records = existing.get("records") if isinstance(existing.get("records"), list) else []
-        account_states = existing.get("account_states") if isinstance(existing.get("account_states"), dict) else {}
+        existing_records = existing.get("records") if isinstance(existing.get("records"), list) else []
+        records = [
+            row
+            for row in existing_records
+            if isinstance(row, dict) and str(row.get("strategy_id") or "") in STRATEGY_LABELS
+        ]
+        existing_account_states = (
+            existing.get("account_states") if isinstance(existing.get("account_states"), dict) else {}
+        )
+        account_states = {
+            strategy_id: existing_account_states.get(strategy_id)
+            if isinstance(existing_account_states.get(strategy_id), dict)
+            else _empty_account_state(strategy_id)
+            for strategy_id in STRATEGY_LABELS
+        }
         planned_orders = sourced_orders
         plan_status = source_status
         plan_history = existing.get("plan_history") if isinstance(existing.get("plan_history"), list) else []

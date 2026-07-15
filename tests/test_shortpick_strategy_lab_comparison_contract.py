@@ -114,7 +114,7 @@ class ShortpickStrategyLabComparisonContractTests(unittest.TestCase):
         self.assertEqual(payload["candidate_reference"]["summary"]["total_return"], 3.5)
         self.assertEqual(payload["candidate_reference"]["summary"]["buy_order_count"], 700)
 
-    def test_frontier_acceptance_uses_best_value_across_all_frontend_strategies(self) -> None:
+    def test_frontier_acceptance_uses_best_value_across_all_active_frontend_strategies(self) -> None:
         payload = build_shortpick_strategy_lab_fair_comparison_readiness(
             candidate_replay_artifact={
                 "artifact_id": "candidate-full-window",
@@ -138,7 +138,7 @@ class ShortpickStrategyLabComparisonContractTests(unittest.TestCase):
         )
 
         self.assertEqual(payload["status"], "passed_frontier_acceptance")
-        self.assertEqual(payload["frontier_acceptance"]["frontier_config_count"], 8)
+        self.assertEqual(payload["frontier_acceptance"]["frontier_config_count"], 3)
         self.assertTrue(payload["frontier_acceptance"]["all_frontier_metrics_non_degraded"])
         self.assertTrue(payload["frontier_acceptance"]["has_required_breakthrough"])
         self.assertTrue(payload["comparison_rules"]["frontier_control_admission_allowed"])
