@@ -24,6 +24,15 @@ DEFAULT_BUY_COST_BPS = 20.0
 DEFAULT_SELL_COST_BPS = 25.0
 DEFAULT_MAX_ENTRY_LAG_DAYS = 7
 OPEN_ENDED_EXIT_DAY = date.max
+RANK5_REPLACEMENT_QUALITY_KEYS = frozenset(
+    {
+        "max_score_gap",
+        "min_avg_amount_20d",
+        "min_return_20d_percentile",
+        "min_return_5d_percentile",
+        "min_distance_from_20d_high",
+    }
+)
 
 
 @dataclass
@@ -672,6 +681,58 @@ def _feature_value(row: dict[str, Any], key: str) -> float:
     return _safe_float(row.get(key))
 
 
+def rank5_replacement_quality_rejection_reason(
+    candidate: dict[str, Any],
+    *,
+    inventory_rank: int,
+    original_score: float,
+    policy: Any,
+) -> str | None:
+    """Return a fail-closed rejection reason using signal-day-only Rank5 fields."""
+
+    if inventory_rank != 5 or not isinstance(policy, dict):
+        return None
+    unsupported_keys = sorted(set(policy) - RANK5_REPLACEMENT_QUALITY_KEYS)
+    if unsupported_keys:
+        raise ValueError(f"unsupported Rank5 replacement quality keys: {unsupported_keys}")
+    checks = (
+        ("max_score_gap", "score", "rank5_quality_score_gap_above_max", "max"),
+        ("min_avg_amount_20d", "avg_amount_20d", "rank5_quality_avg_amount_below_min", "min"),
+        (
+            "min_return_20d_percentile",
+            "return_20d_percentile",
+            "rank5_quality_return20_below_min",
+            "min",
+        ),
+        (
+            "min_return_5d_percentile",
+            "return_5d_percentile",
+            "rank5_quality_return5_below_min",
+            "min",
+        ),
+        (
+            "min_distance_from_20d_high",
+            "distance_from_20d_high",
+            "rank5_quality_distance_high_below_min",
+            "min",
+        ),
+    )
+    for policy_key, feature_key, reason, comparison in checks:
+        if policy_key not in policy:
+            continue
+        raw_value = candidate.get(feature_key)
+        if raw_value is None:
+            return f"rank5_quality_missing_{feature_key}"
+        observed = _safe_float(raw_value)
+        threshold = _safe_float(policy[policy_key])
+        if comparison == "max":
+            if observed < original_score - threshold:
+                return reason
+        elif observed < threshold:
+            return reason
+    return None
+
+
 def _affordable_replacement_request(
     original_request: dict[str, Any],
     *,
@@ -708,6 +769,13 @@ def _affordable_replacement_request(
         if candidate.get("selection_allowed") is False:
             continue
         if _safe_float(candidate.get("score")) < original_score - max_score_gap:
+            continue
+        if rank5_replacement_quality_rejection_reason(
+            candidate,
+            inventory_rank=inventory_rank,
+            original_score=original_score,
+            policy=policy.get("rank5_quality_policy"),
+        ):
             continue
         bars = bars_by_symbol.get(symbol) or []
         entry_index = next((index for index, bar in enumerate(bars) if bar.day == trade_day), None)

@@ -557,6 +557,67 @@ def test_r14_replay_replaces_an_unaffordable_slot_from_rank4_inventory() -> None
     assert result["summary"]["skip_order_count"] == 0
 
 
+def test_rank5_replacement_quality_filter_is_fail_closed_and_does_not_filter_rank4() -> None:
+    candidate_run = {
+        "artifact_id": "candidate-run",
+        "trial_diagnostics": [
+            {
+                "trial_id": "trial-1",
+                "model_spec_id": "negative-month-rank-adjusted",
+                "selected_top_k": 1,
+                "selected_top_k_picks_by_date": [
+                    {**_pick("2026-01-02", "AAA", rank=1, multiplier=1.0), "score": 3.0}
+                ],
+            }
+        ],
+    }
+    bars = {
+        "AAA": [{"day": f"2026-01-{day:02d}", "close": 200.0} for day in range(2, 15)],
+        "R4": [{"day": f"2026-01-{day:02d}", "close": 100.0} for day in range(2, 15)],
+        "R5": [{"day": f"2026-01-{day:02d}", "close": 100.0} for day in range(2, 15)],
+    }
+    config = {
+        **_research_config("replacement-quality"),
+        "affordable_replacement_policy": {
+            "trigger_reason": "price_too_high_for_slot",
+            "inventory_rank_min": 4,
+            "inventory_rank_max": 5,
+            "max_score_gap": 0.1,
+            "min_fill_ratio": 0.75,
+            "min_order_notional_cny": 250.0,
+            "board_lot_size": 100,
+            "rank5_quality_policy": {"min_avg_amount_20d": 50_000_000.0},
+        },
+    }
+
+    rank5_only = build_shortpick_v3_rolling_account_replay_artifact(
+        candidate_run=candidate_run,
+        trial_id="trial-1",
+        market_bars_by_symbol=bars,
+        buy_cost_bps=0,
+        sell_cost_bps=0,
+        candidate_inventory_rows=[
+            {"as_of_date": "2026-01-02", "rank": 5, "symbol": "R5", "score": 2.95}
+        ],
+        candidate_configurations=[config],
+    )
+    assert not [row for row in rank5_only["results"][0]["order_ledger"] if row["action"] == "buy"]
+
+    rank4_available = build_shortpick_v3_rolling_account_replay_artifact(
+        candidate_run=candidate_run,
+        trial_id="trial-1",
+        market_bars_by_symbol=bars,
+        buy_cost_bps=0,
+        sell_cost_bps=0,
+        candidate_inventory_rows=[
+            {"as_of_date": "2026-01-02", "rank": 4, "symbol": "R4", "score": 2.95}
+        ],
+        candidate_configurations=[config],
+    )
+    buy = next(row for row in rank4_available["results"][0]["order_ledger"] if row["action"] == "buy")
+    assert buy["symbol"] == "R4"
+
+
 def test_r14_replay_trims_market_value_exposure_after_entries() -> None:
     signal_days = [f"2026-01-{day:02d}" for day in range(2, 7)]
     candidate_run = {

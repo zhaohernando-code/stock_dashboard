@@ -1,0 +1,86 @@
+{
+  "artifact_type": "shortpick_v3_r14_rank5_replacement_quality_design",
+  "schema_version": "shortpick_v3_r14_rank5_replacement_quality_design.v1",
+  "status": "frozen_before_candidate_outcome_evaluation",
+  "decision_scope": "replace_r14_one_for_one_or_retain_r14",
+  "source_execution_snapshot": {
+    "artifact_id": "shortpick-v3-execution-snapshot-067c5b83e085f95f",
+    "relative_runtime_path": "research_validation/rolling_account_execution_snapshots/shortpick-v3-execution-snapshot-067c5b83e085f95f.json.gz",
+    "required_exact_replay": true
+  },
+  "research_hypothesis": "Rank5 is an economically weaker replacement segment, but a signal-day-only quality floor may preserve its execution coverage while removing its weakest entries.",
+  "feature_availability_contract": {
+    "allowed_grain": "same_signal_day_candidate_inventory_row",
+    "allowed_fields": [
+      "score",
+      "avg_amount_20d",
+      "return_20d_percentile",
+      "return_5d_percentile",
+      "distance_from_20d_high"
+    ],
+    "forbidden_fields": [
+      "net_excess_return",
+      "weighted_net_excess_return",
+      "future_price",
+      "future_return",
+      "symbol_identity",
+      "outcome_selected_threshold"
+    ],
+    "missing_feature_behavior": "reject_rank5_candidate_fail_closed"
+  },
+  "candidate_variants": [
+    {
+      "config_id": "r14_rank5_score_gap005_research_v1",
+      "rank5_quality_policy": {
+        "max_score_gap": 0.05
+      },
+      "rationale": "Require Rank5 to remain within five score basis points of the unaffordable original pick."
+    },
+    {
+      "config_id": "r14_rank5_avg_amount_50m_research_v1",
+      "rank5_quality_policy": {
+        "min_avg_amount_20d": 50000000.0
+      },
+      "rationale": "Use a round capacity floor rather than an outcome-fitted liquidity threshold."
+    },
+    {
+      "config_id": "r14_rank5_return20_p50_research_v1",
+      "rank5_quality_policy": {
+        "min_return_20d_percentile": 0.5
+      },
+      "rationale": "Require at least median cross-sectional 20-day momentum."
+    },
+    {
+      "config_id": "r14_rank5_return5_p50_research_v1",
+      "rank5_quality_policy": {
+        "min_return_5d_percentile": 0.5
+      },
+      "rationale": "Require at least median cross-sectional near-term momentum."
+    },
+    {
+      "config_id": "r14_rank5_distance_high_m10_research_v1",
+      "rank5_quality_policy": {
+        "min_distance_from_20d_high": -0.1
+      },
+      "rationale": "Avoid replacements already more than ten percent below their 20-day high."
+    },
+    {
+      "config_id": "r14_rank5_balanced_quality_research_v1",
+      "rank5_quality_policy": {
+        "min_avg_amount_20d": 50000000.0,
+        "min_distance_from_20d_high": -0.12,
+        "min_return_20d_percentile": 0.5
+      },
+      "rationale": "One predeclared conjunction balancing capacity, medium-term momentum, and drawdown distance."
+    }
+  ],
+  "multiple_testing_policy": {
+    "family_count": 1,
+    "variant_count": 6,
+    "date_or_symbol_hardcoding": false,
+    "threshold_selection": "round_domain_thresholds_frozen_before_outcome_evaluation",
+    "promotion_rule": "exact_snapshot_replay_and_all_nine_metrics_non_degraded_vs_both_reproducible_baseline_and_frozen_r14_contract_and_one_10pct_breakthrough_or_one_fewer_negative_month",
+    "active_strategy_cardinality_rule": "one_in_one_out_no_fourth_active_role"
+  },
+  "claim_ceiling": "deterministic_historical_account_replay_research_only"
+}

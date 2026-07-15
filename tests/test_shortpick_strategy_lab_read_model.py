@@ -733,6 +733,51 @@ def test_quality_candidate_replaces_unaffordable_pick_from_same_day_inventory() 
     assert order["replacement_fill_ratio"] >= 0.75
 
 
+def test_forward_replacement_applies_optional_rank5_quality_filter() -> None:
+    module = _load_refresh_state_script()
+    contract = build_shortpick_v3_rolling_tranche_execution_contract()
+    config = next(
+        row
+        for row in contract["candidate_configurations"]
+        if row["config_id"] == QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID
+    )
+    config["affordable_replacement_policy"]["rank5_quality_policy"] = {
+        "min_return_20d_percentile": 0.5
+    }
+
+    order, rejections = module._affordable_replacement_order(
+        skipped_row={
+            "action": "skip",
+            "reason": "price_too_high_for_slot",
+            "signal_day": "2026-07-08",
+            "trade_day": "2026-07-09",
+            "target_notional_cny": 10_000.0,
+        },
+        original_pick={"symbol": "002371.SZ", "rank": 1, "score": 3.90},
+        inventory=[
+            {
+                "symbol": "600002.SH",
+                "rank": 5,
+                "score": 3.84,
+                "return_20d_percentile": 0.3,
+                "selection_allowed": True,
+            }
+        ],
+        estimated_close_by_symbol={"600002.SH": 8.0},
+        selected_symbols={"002371.SZ"},
+        config=config,
+    )
+
+    assert order is None
+    assert rejections == [
+        {
+            "symbol": "600002.SH",
+            "inventory_rank": 5,
+            "reason": "rank5_quality_return20_below_min",
+        }
+    ]
+
+
 def test_quality_candidate_plans_board_lot_market_exposure_trim(tmp_path) -> None:
     database_url = f"sqlite:///{tmp_path / 'rebalance.db'}"
     init_database(database_url)

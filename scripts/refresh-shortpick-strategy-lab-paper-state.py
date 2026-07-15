@@ -11,7 +11,10 @@ from sqlalchemy import func, select
 
 from ashare_evidence.db import session_scope
 from ashare_evidence.models import MarketBar, Stock
-from ashare_evidence.rolling_tranche_account_replay import project_shortpick_v3_initial_entry_orders
+from ashare_evidence.rolling_tranche_account_replay import (
+    project_shortpick_v3_initial_entry_orders,
+    rank5_replacement_quality_rejection_reason,
+)
 from ashare_evidence.rolling_tranche_execution_contract import build_shortpick_v3_rolling_tranche_execution_contract
 from ashare_evidence.shortpick_strategy_lab_read_model import (
     INITIAL_CASH_CNY,
@@ -866,6 +869,13 @@ def _affordable_replacement_order(
             reason = "duplicate_selected_on_signal"
         elif (_safe_float(candidate.get("score")) or 0.0) < original_score - max_score_gap:
             reason = "replacement_score_gap_above_max"
+        elif quality_reason := rank5_replacement_quality_rejection_reason(
+            candidate,
+            inventory_rank=inventory_rank,
+            original_score=original_score,
+            policy=policy.get("rank5_quality_policy"),
+        ):
+            reason = quality_reason
         elif price is None:
             reason = "missing_latest_close_price"
         else:
