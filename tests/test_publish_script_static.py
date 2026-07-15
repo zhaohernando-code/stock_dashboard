@@ -92,6 +92,14 @@ def test_local_frontend_static_server_does_not_require_node_sqlite() -> None:
     assert "node:sqlite" not in script
 
 
+def test_frontend_build_splits_large_vendor_packages_from_entry_bundle() -> None:
+    vite_config = (REPO_ROOT / "frontend" / "vite.config.ts").read_text(encoding="utf-8")
+
+    assert '"vendor-react": ["react", "react-dom"]' in vite_config
+    assert '"vendor-antd": ["antd", "@ant-design/icons"]' in vite_config
+    assert '"vendor-echarts": ["echarts"]' in vite_config
+
+
 def test_local_frontend_reuses_dist_without_installing_build_dependencies() -> None:
     script = (REPO_ROOT / "scripts" / "start-local-frontend.sh").read_text(encoding="utf-8")
 
