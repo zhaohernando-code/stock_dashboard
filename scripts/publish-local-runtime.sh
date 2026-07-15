@@ -396,9 +396,9 @@ wait_for_health "$FRONTEND_URL"
 
 PROJECT_TUNNEL_LABEL="com.codex.project-tunnel.ashare-dashboard"
 if launchctl print "gui/$(id -u)/$PROJECT_TUNNEL_LABEL" >/dev/null 2>&1; then
-  echo "[publish] Rebinding project tunnel after local service restart"
-  launchctl kickstart -k "gui/$(id -u)/$PROJECT_TUNNEL_LABEL"
-  sleep 5
+  echo "[publish] Preserving project tunnel across same-port service restart"
+else
+  echo "[publish] Project tunnel is not loaded; canonical verification will remain fail-closed" >&2
 fi
 
 repo_index_html="$REPO_ROOT/frontend/dist/index.html"

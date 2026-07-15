@@ -158,6 +158,14 @@ def test_publish_restarts_runtime_launchagents_without_unload_load_race() -> Non
     )
 
 
+def test_publish_preserves_healthy_project_tunnel_across_same_port_restart() -> None:
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert "[publish] Preserving project tunnel across same-port service restart" in script
+    assert 'kickstart -k "gui/$(id -u)/$PROJECT_TUNNEL_LABEL"' not in script
+    assert "canonical verification will remain fail-closed" in script
+
+
 def test_publish_forces_scheduled_refresh_runatload_false() -> None:
     # RunAtLoad=true would fire a full ~50min phase5-daily-refresh on every
     # publish/reload (launchctl bootstrap), which holds the DB lock and times
