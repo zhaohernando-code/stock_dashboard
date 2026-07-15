@@ -5,7 +5,7 @@
 | 项目 | 状态 | 结果 |
 |---|---|---|
 | 真实研究目录生命周期门禁 | completed | 在线研究目录门禁 `passed` |
-| 当前 v3 可复用核心固定 | completed | 完整特征矩阵 1 份、完整候选源 2 份 |
+| 当前 v3 可复用核心固定 | completed | 完整特征矩阵 1 份、完整候选源 2 份、R14 确定性执行快照 1 份 |
 | 旧研究载荷冷归档 | completed | 64 文件，16,387,148,025 字节压缩为 1,773,438,982 字节 |
 | 旧数据库备份归档 | completed | 2 份 SQLite `quick_check=ok`，压缩归档约 1.5 GiB |
 | 冷热拆分遗留库归档 | completed | 历史主键缺失 0；五张研究表行数一致；压缩归档约 442 MiB |
@@ -18,8 +18,8 @@
 
 - 在线运行目录：`33.456 GiB -> 10.211 GiB`，减少 `23.245 GiB`。
 - 当前在线研究制品：`6,025,913,243` 字节。
-- 当前钉住制品：`6,009,232,311` 字节。
-- 当前小型治理证据：`16,680,932` 字节。
+- 当前钉住制品：完整特征矩阵、两个候选源及 R14 确定性执行快照；精确字节数以自动门禁输出为准。
+- 当前小型治理证据：保持在 `256 MiB` 门禁内；精确字节数以自动门禁输出为准。
 - 当前待归档大载荷：`0`。
 - 冷归档保留了完整源文件 SHA-256、压缩文件完整性测试和逐文件恢复元数据。
 
@@ -31,6 +31,7 @@
 | 在线 API 数据库 | `data/ashare_hot.db` | 主库可用于重建 | 运行进程打开时禁止迁移 |
 | 完整历史 v3 特征 | `pit-feature-matrix-9e2854ba4a2cd78e` | 对应冷归档旧版本 | 只能由策略政策显式替换 |
 | 完整历史候选源 | `84adc785808483d3`、`0d6333a65ae410f0` | 冷归档旧 candidate-run | 非钉住完整载荷必须归档 |
+| R14 确定性执行基线 | `shortpick-v3-execution-snapshot-067c5b83e085f95f` | 对应实验合同与分析 notebook | 摘要不一致时 fail closed；钉住文件不得归档 |
 | 前端静态历史指标 | `docs/contracts/SHORTPICK_V3_R14_QUALITY_REPLACEMENT_REBALANCE_2026-07-10.json` 等合同 | 完整候选源和账户回放 | 前端不得请求时重算 |
 | 被拒绝研究证据 | 在线小型 comparison/governance/diagnostic 报告 | 冷归档完整载荷 | 小型证据总量上限 256 MiB |
 | 临时探索 | `/private/tmp/shortpick_*` | 提炼后的合同或冷归档 | 不作为权威来源；轮次结束后提炼再过期 |
@@ -59,7 +60,7 @@ PYTHONPATH=src python3 -m ashare_evidence.cli runtime-storage-governance-audit \
 
 门禁要求：
 
-- 当前完整矩阵、两个候选源和 input snapshot 必须存在；
+- 当前完整矩阵、两个候选源、R14 执行快照和 input snapshot 必须存在；
 - 在线研究制品总量不超过 7 GiB；
 - 小型治理证据不超过 256 MiB；
 - 大载荷目录中不得存在未钉住文件；

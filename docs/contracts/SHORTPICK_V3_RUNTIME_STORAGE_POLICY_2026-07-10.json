@@ -4,7 +4,8 @@
     "research_validation/executable_label_matrices",
     "research_validation/universe_date_matrices",
     "research_validation/walk_forward_model_candidate_runs",
-    "research_validation/shortpick_v3_account_replays"
+    "research_validation/shortpick_v3_account_replays",
+    "research_validation/rolling_account_execution_snapshots"
   ],
   "canonical_feature_lineage": {
     "artifact_id": "pit-feature-matrix-9e2854ba4a2cd78e",
@@ -44,6 +45,13 @@
       "relative_path": "research_validation/walk_forward_model_candidate_runs/walk-forward-model-candidate-run-0d6333a65ae410f0.json",
       "required": true,
       "role": "current_complete_history_candidate_source"
+    },
+    {
+      "artifact_id": "shortpick-v3-execution-snapshot-067c5b83e085f95f",
+      "reason": "Deterministic R14 reconstructed-baseline input and order-level output snapshot for bounded execution-efficiency replay.",
+      "relative_path": "research_validation/rolling_account_execution_snapshots/shortpick-v3-execution-snapshot-067c5b83e085f95f.json.gz",
+      "required": true,
+      "role": "current_r14_deterministic_execution_snapshot"
     }
   ],
   "required_files": [

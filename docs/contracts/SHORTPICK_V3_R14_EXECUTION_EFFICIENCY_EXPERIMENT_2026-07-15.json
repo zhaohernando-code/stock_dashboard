@@ -1,0 +1,880 @@
+{
+  "accepted_candidate_ids": [],
+  "artifact_type": "shortpick_v3_r14_execution_efficiency_experiment",
+  "baseline_diagnostics": {
+    "cash_deployment": {
+      "cash_ratio_at_least_40pct_day_count": 204,
+      "cash_ratio_at_least_40pct_day_rate": 0.3022222222222222,
+      "cash_ratio_at_least_50pct_day_count": 134,
+      "cash_ratio_at_least_50pct_day_rate": 0.1985185185185185,
+      "day_count": 675,
+      "max_cash_ratio": 1.0,
+      "mean_cash_ratio": 0.3080319777489019,
+      "median_cash_ratio": 0.28703047891615685
+    },
+    "replacement_attribution": {
+      "buy_count": 58,
+      "by_inventory_rank": {
+        "4": {
+          "closed_count": 35,
+          "mean_return": 0.0012440140949833204,
+          "median_return": -0.004491017964071666,
+          "profitable_rate": 0.4857142857142857,
+          "total_pnl_cny": 4984.618500000008
+        },
+        "5": {
+          "closed_count": 22,
+          "mean_return": -0.019250029590837277,
+          "median_return": 0.01245112777689059,
+          "profitable_rate": 0.5454545454545454,
+          "total_pnl_cny": -1520.2739999999983
+        }
+      },
+      "closed_mean_return": -0.006665967678491296,
+      "closed_median_return": 0.007317026530879806,
+      "closed_sell_count": 57,
+      "closed_total_pnl_cny": 3464.3445000000092,
+      "open_at_end_count": 1,
+      "profitable_closed_count": 29,
+      "profitable_closed_rate": 0.5087719298245614,
+      "worst_closed_samples": [
+        {
+          "pnl_cny": -469.0799999999999,
+          "replacement_inventory_rank": 5,
+          "replacement_original_symbol": "002993.SZ",
+          "return": -0.2558162363796996,
+          "signal_day": "2026-05-25",
+          "stock_name": "奇精机械",
+          "symbol": "603677.SH",
+          "trade_day": "2026-06-24"
+        },
+        {
+          "pnl_cny": -682.9049999999997,
+          "replacement_inventory_rank": 4,
+          "replacement_original_symbol": "605009.SH",
+          "return": -0.2103524432616248,
+          "signal_day": "2025-03-17",
+          "stock_name": "横店东磁",
+          "symbol": "002056.SZ",
+          "trade_day": "2025-04-16"
+        },
+        {
+          "pnl_cny": -856.3319999999999,
+          "replacement_inventory_rank": 5,
+          "replacement_original_symbol": "600211.SH",
+          "return": -0.20864813342065866,
+          "signal_day": "2025-07-31",
+          "stock_name": "茂业商业",
+          "symbol": "600828.SH",
+          "trade_day": "2025-08-29"
+        },
+        {
+          "pnl_cny": -79.87499999999994,
+          "replacement_inventory_rank": 4,
+          "replacement_original_symbol": "000617.SZ",
+          "return": -0.17329471491799,
+          "signal_day": "2024-01-25",
+          "stock_name": "宁波富达",
+          "symbol": "600724.SH",
+          "trade_day": "2024-03-04"
+        },
+        {
+          "pnl_cny": -219.54899999999998,
+          "replacement_inventory_rank": 4,
+          "replacement_original_symbol": "603260.SH",
+          "return": -0.16206418523898947,
+          "signal_day": "2025-11-10",
+          "stock_name": "金晶科技",
+          "symbol": "600586.SH",
+          "trade_day": "2025-12-09"
+        },
+        {
+          "pnl_cny": -276.4634999999996,
+          "replacement_inventory_rank": 4,
+          "replacement_original_symbol": "603678.SH",
+          "return": -0.15260601584441716,
+          "signal_day": "2024-05-08",
+          "stock_name": "昂利康",
+          "symbol": "002940.SZ",
+          "trade_day": "2024-06-06"
+        },
+        {
+          "pnl_cny": -1177.0589999999993,
+          "replacement_inventory_rank": 4,
+          "replacement_original_symbol": "002916.SZ",
+          "return": -0.14716982972166406,
+          "signal_day": "2024-12-20",
+          "stock_name": "重药控股",
+          "symbol": "000950.SZ",
+          "trade_day": "2025-01-02"
+        },
+        {
+          "pnl_cny": -168.08249999999998,
+          "replacement_inventory_rank": 4,
+          "replacement_original_symbol": "600989.SH",
+          "return": -0.1374975458918229,
+          "signal_day": "2024-06-20",
+          "stock_name": "地素时尚",
+          "symbol": "603587.SH",
+          "trade_day": "2024-07-19"
+        },
+        {
+          "pnl_cny": -482.15399999999954,
+          "replacement_inventory_rank": 4,
+          "replacement_original_symbol": "600486.SH",
+          "return": -0.11211361061660452,
+          "signal_day": "2025-06-06",
+          "stock_name": "中国科传",
+          "symbol": "601858.SH",
+          "trade_day": "2025-07-07"
+        },
+        {
+          "pnl_cny": -148.06200000000013,
+          "replacement_inventory_rank": 4,
+          "replacement_original_symbol": "601166.SH",
+          "return": -0.10362304843328779,
+          "signal_day": "2024-08-22",
+          "stock_name": "罗莱生活",
+          "symbol": "002293.SZ",
+          "trade_day": "2024-09-24"
+        }
+      ]
+    }
+  },
+  "claim_ceiling": "deterministic_historical_account_replay",
+  "decision": "retain_r14_no_execution_efficiency_candidate_cleared_gate",
+  "frozen_r14_contract": {
+    "artifact_id": "shortpick-v3-r14-quality-replacement-rebalance-20260710",
+    "baseline_reproduces_contract": {
+      "checks": {
+        "annualized_return": false,
+        "final_nav_cny": false,
+        "max_drawdown": false,
+        "max_single_symbol_exposure_pct": true,
+        "negative_month_count": true,
+        "skipped_order_rate": false,
+        "skipped_signal_rate": false,
+        "total_return": false,
+        "worst_monthly_return": true
+      },
+      "passed": false
+    },
+    "path": "docs/contracts/SHORTPICK_V3_R14_QUALITY_REPLACEMENT_REBALANCE_2026-07-10.json"
+  },
+  "multiple_testing_policy": {
+    "date_or_symbol_hardcoding": false,
+    "families": [
+      "replacement_quality_tightening",
+      "cash_deployment_sizing"
+    ],
+    "promotion_rule": "exact_snapshot_replay_and_all_nine_metrics_non_degraded_vs_both_reproducible_baseline_and_frozen_r14_contract_and_one_10pct_breakthrough_or_one_fewer_negative_month",
+    "variant_count": 8
+  },
+  "promotion_blocking_gate_ids": [],
+  "schema_version": "shortpick_v3_r14_execution_efficiency_experiment.v1",
+  "source_execution_snapshot": {
+    "artifact_id": "shortpick-v3-execution-snapshot-067c5b83e085f95f",
+    "exact_replay": true,
+    "expected_output_content_digest": "2f69c113db22357cbb3967ef7fc0490f828f06d4d6379045954d829d5e56403c",
+    "input_content_digest": "71525bd3f87329c1a2fabe673454b2b68dc6822bfb6b8311289df22d277103c0",
+    "input_counts": {
+      "candidate_inventory_row_count": 10220,
+      "market_bar_row_count": 1420262,
+      "market_bar_symbol_count": 1837,
+      "selected_pick_count": 1533
+    },
+    "observed_output_content_digest": "2f69c113db22357cbb3967ef7fc0490f828f06d4d6379045954d829d5e56403c",
+    "output_counts": {
+      "nav_row_count": 675,
+      "order_ledger_row_count": 2326
+    },
+    "relative_runtime_path": "research_validation/rolling_account_execution_snapshots/shortpick-v3-execution-snapshot-067c5b83e085f95f.json.gz"
+  },
+  "status": "completed",
+  "variants": [
+    {
+      "config_id": "daily_15_tranche_rank_adjusted_r5_093_strong154_replacement_top5_gap010_fill075_market_cap25_v1",
+      "replacement_buy_count": 58,
+      "summary": {
+        "annualized_return": 0.6862732034864376,
+        "buy_order_count": 818,
+        "final_nav_cny": 864200.6975000004,
+        "max_drawdown": -0.06885122118096298,
+        "max_single_symbol_exposure_pct": 0.24953416606359471,
+        "mean_invested_ratio": 0.6919680222510981,
+        "negative_month_count": 2,
+        "p95_invested_ratio": 0.9846518088577833,
+        "sell_order_count": 793,
+        "skipped_order_rate": 0.15145228215767634,
+        "skipped_signal_rate": 0.1350293542074364,
+        "total_return": 3.3210034875000014,
+        "turnover": 98.7175087875,
+        "worst_monthly_return": -0.014130266706049999
+      },
+      "vs_frozen_r14_contract": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.01911500863585253,
+          "final_nav_cny": -0.021882591492071397,
+          "max_drawdown": -0.012978916412563657,
+          "max_single_symbol_exposure_pct": 0.0,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.026666666666666748,
+          "skipped_signal_rate": -0.029850746268656716,
+          "total_return": -0.02828536537544473,
+          "worst_monthly_return": 0.0
+        }
+      },
+      "vs_reproducible_baseline": {
+        "all_nine_metrics_non_degraded": true,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": true,
+          "final_nav_cny": true,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": true,
+          "total_return": true,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": 0.0,
+          "final_nav_cny": 0.0,
+          "max_drawdown": 0.0,
+          "max_single_symbol_exposure_pct": 0.0,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.0,
+          "skipped_signal_rate": 0.0,
+          "total_return": 0.0,
+          "worst_monthly_return": 0.0
+        }
+      }
+    },
+    {
+      "config_id": "r14_execution_no_affordable_replacement_research_v1",
+      "replacement_buy_count": 0,
+      "summary": {
+        "annualized_return": 0.6766222878898933,
+        "buy_order_count": 762,
+        "final_nav_cny": 850419.0790000001,
+        "max_drawdown": -0.0734875003264217,
+        "max_single_symbol_exposure_pct": 0.24938706448228212,
+        "mean_invested_ratio": 0.6831392131119148,
+        "negative_month_count": 2,
+        "p95_invested_ratio": 0.9779245426904926,
+        "sell_order_count": 738,
+        "skipped_order_rate": 0.2095435684647303,
+        "skipped_signal_rate": 0.18199608610567514,
+        "total_return": 3.2520953950000004,
+        "turnover": 96.741828255,
+        "worst_monthly_return": -0.014180398279718176
+      },
+      "vs_frozen_r14_contract": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": false
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.0329089877880045,
+          "final_nav_cny": -0.03748086746113833,
+          "max_drawdown": -0.0811905318987896,
+          "max_single_symbol_exposure_pct": 0.0005895047705615695,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": -0.3466666666666667,
+          "skipped_signal_rate": -0.3880597014925373,
+          "total_return": -0.048447645294252994,
+          "worst_monthly_return": -0.0035478151057625157
+        }
+      },
+      "vs_reproducible_baseline": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": false
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.01406278949478904,
+          "final_nav_cny": -0.015947242972458038,
+          "max_drawdown": -0.0673376458098412,
+          "max_single_symbol_exposure_pct": 0.0005895047705615695,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": -0.3835616438356166,
+          "skipped_signal_rate": -0.34782608695652173,
+          "total_return": -0.020749177999771953,
+          "worst_monthly_return": -0.0035478151057625157
+        }
+      }
+    },
+    {
+      "config_id": "r14_execution_replacement_rank4_only_research_v1",
+      "replacement_buy_count": 35,
+      "summary": {
+        "annualized_return": 0.6884696576264753,
+        "buy_order_count": 795,
+        "final_nav_cny": 867357.1805000004,
+        "max_drawdown": -0.0687832019333211,
+        "max_single_symbol_exposure_pct": 0.24943237445599065,
+        "mean_invested_ratio": 0.6891219888896593,
+        "negative_month_count": 2,
+        "p95_invested_ratio": 0.9792547308116977,
+        "sell_order_count": 771,
+        "skipped_order_rate": 0.17531120331950206,
+        "skipped_signal_rate": 0.15264187866927592,
+        "total_return": 3.3367859025000017,
+        "turnover": 98.3562003225,
+        "worst_monthly_return": -0.014180398279718176
+      },
+      "vs_frozen_r14_contract": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": false
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.01597563369124249,
+          "final_nav_cny": -0.018310029029566167,
+          "max_drawdown": -0.011978177971187656,
+          "max_single_symbol_exposure_pct": 0.00040792653450961167,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": -0.12666666666666657,
+          "skipped_signal_rate": -0.16417910447761194,
+          "total_return": -0.023667482954380755,
+          "worst_monthly_return": -0.0035478151057625157
+        }
+      },
+      "vs_reproducible_baseline": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": true,
+          "final_nav_cny": true,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": true,
+          "worst_monthly_return": false
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": 0.003200553553423232,
+          "final_nav_cny": 0.0036524883735123415,
+          "max_drawdown": 0.0009879163575487707,
+          "max_single_symbol_exposure_pct": 0.00040792653450961167,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": -0.15753424657534246,
+          "skipped_signal_rate": -0.13043478260869565,
+          "total_return": 0.004752303049185016,
+          "worst_monthly_return": -0.0035478151057625157
+        }
+      }
+    },
+    {
+      "config_id": "r14_execution_replacement_score_gap005_research_v1",
+      "replacement_buy_count": 46,
+      "summary": {
+        "annualized_return": 0.685961496052335,
+        "buy_order_count": 805,
+        "final_nav_cny": 863753.3480000002,
+        "max_drawdown": -0.06866342705400574,
+        "max_single_symbol_exposure_pct": 0.24936212505991134,
+        "mean_invested_ratio": 0.6885887980016688,
+        "negative_month_count": 2,
+        "p95_invested_ratio": 0.9790366674392764,
+        "sell_order_count": 780,
+        "skipped_order_rate": 0.16493775933609958,
+        "skipped_signal_rate": 0.14481409001956946,
+        "total_return": 3.318766740000001,
+        "turnover": 98.33873046000001,
+        "worst_monthly_return": -0.014130266706049999
+      },
+      "vs_frozen_r14_contract": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.019560529664875037,
+          "final_nav_cny": -0.022388909451433427,
+          "max_drawdown": -0.01021598079615969,
+          "max_single_symbol_exposure_pct": 0.0006894486891206935,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": -0.05999999999999996,
+          "skipped_signal_rate": -0.1044776119402985,
+          "total_return": -0.028939830294825622,
+          "worst_monthly_return": 0.0
+        }
+      },
+      "vs_reproducible_baseline": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": true
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.0004542031256925533,
+          "final_nav_cny": -0.0005176453817894857,
+          "max_drawdown": 0.002727535165478888,
+          "max_single_symbol_exposure_pct": 0.0006894486891206935,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": -0.08904109589041101,
+          "skipped_signal_rate": -0.07246376811594203,
+          "total_return": -0.0006735155528801497,
+          "worst_monthly_return": 0.0
+        }
+      }
+    },
+    {
+      "config_id": "r14_execution_replacement_fill090_research_v1",
+      "replacement_buy_count": 28,
+      "summary": {
+        "annualized_return": 0.6860312332616272,
+        "buy_order_count": 789,
+        "final_nav_cny": 863853.4190000001,
+        "max_drawdown": -0.0684686188486322,
+        "max_single_symbol_exposure_pct": 0.24951391147547797,
+        "mean_invested_ratio": 0.6895305847880697,
+        "negative_month_count": 2,
+        "p95_invested_ratio": 0.9834212930386863,
+        "sell_order_count": 764,
+        "skipped_order_rate": 0.18153526970954356,
+        "skipped_signal_rate": 0.15851272015655576,
+        "total_return": 3.3192670950000007,
+        "turnover": 98.24967205499999,
+        "worst_monthly_return": -0.014180398279718176
+      },
+      "vs_frozen_r14_contract": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": false
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.019460854810040572,
+          "final_nav_cny": -0.022275647349852355,
+          "max_drawdown": -0.007349850008603963,
+          "max_single_symbol_exposure_pct": 8.116959868166957e-05,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": -0.1666666666666666,
+          "skipped_signal_rate": -0.208955223880597,
+          "total_return": -0.028793428076990746,
+          "worst_monthly_return": -0.0035478151057625157
+        }
+      },
+      "vs_reproducible_baseline": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": false
+        },
+        "negative_month_reduction": 0,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.00035258585586783763,
+          "final_nav_cny": -0.00040184936323804296,
+          "max_drawdown": 0.005556943301342218,
+          "max_single_symbol_exposure_pct": 8.116959868166957e-05,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": -0.19863013698630141,
+          "skipped_signal_rate": -0.17391304347826086,
+          "total_return": -0.0005228517544580513,
+          "worst_monthly_return": -0.0035478151057625157
+        }
+      }
+    },
+    {
+      "config_id": "r14_execution_deployment_cap_0p07_research_v1",
+      "replacement_buy_count": 57,
+      "summary": {
+        "annualized_return": 0.6890872388856057,
+        "buy_order_count": 812,
+        "final_nav_cny": 868246.0280000004,
+        "max_drawdown": -0.07089003314050468,
+        "max_single_symbol_exposure_pct": 0.24983084866382335,
+        "mean_invested_ratio": 0.7086014633875585,
+        "negative_month_count": 4,
+        "p95_invested_ratio": 0.9818606342504209,
+        "sell_order_count": 796,
+        "skipped_order_rate": 0.15767634854771784,
+        "skipped_signal_rate": 0.136986301369863,
+        "total_return": 3.341230140000002,
+        "turnover": 103.01225016000001,
+        "worst_monthly_return": -0.017152686398089312
+      },
+      "vs_frozen_r14_contract": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": false,
+          "negative_month_count": false,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": false
+        },
+        "negative_month_reduction": -2,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.015092929565609491,
+          "final_nav_cny": -0.017304015940507324,
+          "max_drawdown": -0.04297509504412818,
+          "max_single_symbol_exposure_pct": -0.0011889458061347257,
+          "negative_month_count": -1.0,
+          "skipped_order_rate": -0.013333333333333286,
+          "skipped_signal_rate": -0.04477611940298507,
+          "total_return": -0.02236711376333585,
+          "worst_monthly_return": -0.21389686089543075
+        }
+      },
+      "vs_reproducible_baseline": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": true,
+          "final_nav_cny": true,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": false,
+          "negative_month_count": false,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": true,
+          "worst_monthly_return": false
+        },
+        "negative_month_reduction": -2,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": 0.004100459386833319,
+          "final_nav_cny": 0.004681008140473108,
+          "max_drawdown": -0.02961184891961537,
+          "max_single_symbol_exposure_pct": -0.0011889458061347257,
+          "negative_month_count": -1.0,
+          "skipped_order_rate": -0.04109589041095894,
+          "skipped_signal_rate": -0.014492753623188406,
+          "total_return": 0.0060905243177648925,
+          "worst_monthly_return": -0.21389686089543075
+        }
+      }
+    },
+    {
+      "config_id": "r14_execution_deployment_cap_0p075_research_v1",
+      "replacement_buy_count": 48,
+      "summary": {
+        "annualized_return": 0.6751727293445735,
+        "buy_order_count": 801,
+        "final_nav_cny": 848361.385000001,
+        "max_drawdown": -0.07734349131369689,
+        "max_single_symbol_exposure_pct": 0.24987735350233475,
+        "mean_invested_ratio": 0.7282028476599985,
+        "negative_month_count": 5,
+        "p95_invested_ratio": 0.98827019039013,
+        "sell_order_count": 786,
+        "skipped_order_rate": 0.1690871369294606,
+        "skipped_signal_rate": 0.14481409001956946,
+        "total_return": 3.241806925000005,
+        "turnover": 108.47037952500001,
+        "worst_monthly_return": -0.01739189325117163
+      },
+      "vs_frozen_r14_contract": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": false,
+          "negative_month_count": false,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": false
+        },
+        "negative_month_reduction": -3,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.034980830625499094,
+          "final_nav_cny": -0.03980980138656069,
+          "max_drawdown": -0.13792209751213308,
+          "max_single_symbol_exposure_pct": -0.0013753124237607466,
+          "negative_month_count": -1.5,
+          "skipped_order_rate": -0.08666666666666671,
+          "skipped_signal_rate": -0.1044776119402985,
+          "total_return": -0.05145801758218371,
+          "worst_monthly_return": -0.2308255472435731
+        }
+      },
+      "vs_reproducible_baseline": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": false,
+          "negative_month_count": false,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": false
+        },
+        "negative_month_reduction": -3,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.016175007395700356,
+          "final_nav_cny": -0.018328280162027172,
+          "max_drawdown": -0.12334233129160493,
+          "max_single_symbol_exposure_pct": -0.0013753124237607466,
+          "negative_month_count": -1.5,
+          "skipped_order_rate": -0.11643835616438371,
+          "skipped_signal_rate": -0.07246376811594203,
+          "total_return": -0.023847178359819886,
+          "worst_monthly_return": -0.2308255472435731
+        }
+      }
+    },
+    {
+      "config_id": "r14_execution_deployment_cap_0p08_research_v1",
+      "replacement_buy_count": 46,
+      "summary": {
+        "annualized_return": 0.6807920563731185,
+        "buy_order_count": 792,
+        "final_nav_cny": 856356.0810000009,
+        "max_drawdown": -0.08289619119736202,
+        "max_single_symbol_exposure_pct": 0.24981848073579577,
+        "mean_invested_ratio": 0.748693417740797,
+        "negative_month_count": 5,
+        "p95_invested_ratio": 0.9903134558137798,
+        "sell_order_count": 782,
+        "skipped_order_rate": 0.17842323651452283,
+        "skipped_signal_rate": 0.14481409001956946,
+        "total_return": 3.2817804050000046,
+        "turnover": 109.43868934500001,
+        "worst_monthly_return": -0.02412778756800782
+      },
+      "vs_frozen_r14_contract": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": false,
+          "negative_month_count": false,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": false
+        },
+        "negative_month_reduction": -3,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.02694916988766939,
+          "final_nav_cny": -0.030761265142665122,
+          "max_drawdown": -0.21961662398299395,
+          "max_single_symbol_exposure_pct": -0.0011393817395273795,
+          "negative_month_count": -1.5,
+          "skipped_order_rate": -0.14666666666666667,
+          "skipped_signal_rate": -0.1044776119402985,
+          "total_return": -0.039761909565714335,
+          "worst_monthly_return": -0.7075252767647544
+        }
+      },
+      "vs_reproducible_baseline": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": false,
+          "negative_month_count": false,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": false
+        },
+        "negative_month_reduction": -3,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.007986829567981918,
+          "final_nav_cny": -0.009077308688470965,
+          "max_drawdown": -0.20399013663801802,
+          "max_single_symbol_exposure_pct": -0.0011393817395273795,
+          "negative_month_count": -1.5,
+          "skipped_order_rate": -0.17808219178082202,
+          "skipped_signal_rate": -0.07246376811594203,
+          "total_return": -0.01181061165627482,
+          "worst_monthly_return": -0.7075252767647544
+        }
+      }
+    },
+    {
+      "config_id": "r14_execution_replacement_rank4_only_deployment070_research_v1",
+      "replacement_buy_count": 31,
+      "summary": {
+        "annualized_return": 0.6862342556159984,
+        "buy_order_count": 788,
+        "final_nav_cny": 864144.7930000004,
+        "max_drawdown": -0.07047337157884837,
+        "max_single_symbol_exposure_pct": 0.24984455294128097,
+        "mean_invested_ratio": 0.70622170606056,
+        "negative_month_count": 4,
+        "p95_invested_ratio": 0.9813288572076099,
+        "sell_order_count": 773,
+        "skipped_order_rate": 0.1825726141078838,
+        "skipped_signal_rate": 0.15655577299412915,
+        "total_return": 3.3207239650000018,
+        "turnover": 102.641621985,
+        "worst_monthly_return": -0.02168733138357548
+      },
+      "vs_frozen_r14_contract": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": false,
+          "negative_month_count": false,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": false
+        },
+        "negative_month_reduction": -2,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -0.019170676526373907,
+          "final_nav_cny": -0.02194586517933185,
+          "max_drawdown": -0.036844929594657794,
+          "max_single_symbol_exposure_pct": -0.001243865249326818,
+          "negative_month_count": -1.0,
+          "skipped_order_rate": -0.17333333333333326,
+          "skipped_signal_rate": -0.19402985074626866,
+          "total_return": -0.02836715273428938,
+          "worst_monthly_return": -0.534814015526675
+        }
+      },
+      "vs_reproducible_baseline": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": false,
+          "final_nav_cny": false,
+          "max_drawdown": false,
+          "max_single_symbol_exposure_pct": false,
+          "negative_month_count": false,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": false,
+          "worst_monthly_return": false
+        },
+        "negative_month_reduction": -2,
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": -5.6752719239753606e-05,
+          "final_nav_cny": -6.468925581947468e-05,
+          "max_drawdown": -0.023560226965645987,
+          "max_single_symbol_exposure_pct": -0.001243865249326818,
+          "negative_month_count": -1.0,
+          "skipped_order_rate": -0.20547945205479454,
+          "skipped_signal_rate": -0.15942028985507245,
+          "total_return": -8.416808384927333e-05,
+          "worst_monthly_return": -0.534814015526675
+        }
+      }
+    }
+  ]
+}

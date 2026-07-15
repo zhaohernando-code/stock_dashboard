@@ -211,12 +211,16 @@ def project_shortpick_v3_initial_entry_orders(
     """Project frozen forward orders with the same sizing and account constraints as replay."""
 
     budget_mode = str(config.get("budget_mode") or "fixed_initial_cash_fraction")
+    max_single_signal_deployment_pct = _safe_float(
+        config.get("max_single_signal_deployment_pct"),
+        DEFAULT_MAX_SINGLE_SIGNAL_DEPLOYMENT_PCT,
+    )
     per_signal_budget = float(config["per_signal_target_budget_cny"])
     current_nav_cny = _safe_float((account_state or {}).get("latest_nav_cny"), initial_cash_cny)
     if budget_mode == "current_nav_fraction":
         per_signal_budget = min(
             current_nav_cny / max(float(config["target_active_tranche_count"]), 1.0),
-            current_nav_cny * DEFAULT_MAX_SINGLE_SIGNAL_DEPLOYMENT_PCT,
+            current_nav_cny * max_single_signal_deployment_pct,
         )
     bars_by_symbol = {
         symbol: [_Bar(day=planned_entry_day, close=float(close))]
@@ -330,6 +334,10 @@ def _simulate_config(
     per_signal_budget = float(config["per_signal_target_budget_cny"])
     exit_policy = str(config.get("exit_policy") or "mechanical_horizon")
     budget_mode = str(config.get("budget_mode") or "fixed_initial_cash_fraction")
+    max_single_signal_deployment_pct = _safe_float(
+        config.get("max_single_signal_deployment_pct"),
+        DEFAULT_MAX_SINGLE_SIGNAL_DEPLOYMENT_PCT,
+    )
     config_min_order_notional_cny = _safe_float(config.get("min_order_notional_cny"), min_order_notional_cny)
 
     for current_day in active_days:
@@ -353,7 +361,7 @@ def _simulate_config(
                 )["nav_cny"]
                 current_per_signal_budget = min(
                     current_nav / max(float(config["target_active_tranche_count"]), 1.0),
-                    current_nav * DEFAULT_MAX_SINGLE_SIGNAL_DEPLOYMENT_PCT,
+                    current_nav * max_single_signal_deployment_pct,
                 )
             buys, cash, open_positions = _process_entry_buys(
                 current_day,
@@ -949,6 +957,13 @@ def _process_sells(
                 "pnl_cny": pnl,
                 "return": pnl / position.cost_basis if position.cost_basis else 0.0,
                 "cash_after_cny": cash,
+                "entry_reason": (
+                    "bought_affordable_rank4_5_replacement"
+                    if position.entry_features.get("replacement_original_symbol")
+                    else "bought"
+                ),
+                "replacement_original_symbol": position.entry_features.get("replacement_original_symbol"),
+                "replacement_inventory_rank": position.entry_features.get("replacement_inventory_rank"),
             }
         )
     return cash, rows, still_open
@@ -1098,7 +1113,10 @@ def _summary(
         "p95_invested_ratio": _p95(invested_ratios),
         "max_invested_ratio": max(invested_ratios, default=0.0),
         "max_position_count": max((row["open_position_count"] for row in nav_rows), default=0),
-        "max_single_signal_deployment_pct": config["per_signal_target_budget_pct"],
+        "max_single_signal_deployment_pct": _safe_float(
+            config.get("max_single_signal_deployment_pct"),
+            config["per_signal_target_budget_pct"],
+        ),
         "max_single_symbol_exposure_pct": max((row["max_single_symbol_exposure_pct"] for row in nav_rows), default=0.0),
         "turnover": (
             sum(_safe_float(row.get("cash_spent_cny")) for row in buys)

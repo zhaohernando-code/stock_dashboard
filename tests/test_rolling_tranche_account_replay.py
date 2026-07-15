@@ -600,6 +600,61 @@ def test_r14_replay_trims_market_value_exposure_after_entries() -> None:
     assert result["summary"]["max_single_symbol_exposure_pct"] <= 0.25
 
 
+def test_dynamic_budget_uses_configured_single_signal_deployment_cap() -> None:
+    candidate_run = {
+        "artifact_id": "candidate-run",
+        "trial_diagnostics": [
+            {
+                "trial_id": "trial-1",
+                "model_spec_id": "unit-model",
+                "selected_top_k": 3,
+                "selected_top_k_picks_by_date": [
+                    _pick("2026-01-02", "AAA", rank=1, multiplier=1.0, horizon=1),
+                    _pick("2026-01-02", "BBB", rank=2, multiplier=1.0, horizon=1),
+                    _pick("2026-01-02", "CCC", rank=3, multiplier=1.0, horizon=1),
+                ],
+            }
+        ],
+    }
+    bars = {
+        symbol: [
+            {"day": "2026-01-05", "close": 10.0},
+            {"day": "2026-01-06", "close": 10.0},
+        ]
+        for symbol in ("AAA", "BBB", "CCC")
+    }
+    baseline = _research_config("baseline")
+    higher_cap = {
+        **baseline,
+        "config_id": "higher-cap",
+        "target_active_tranche_count": 12,
+        "max_single_signal_deployment_pct": 0.08,
+    }
+
+    artifact = build_shortpick_v3_rolling_account_replay_artifact(
+        candidate_run=candidate_run,
+        trial_id="trial-1",
+        market_bars_by_symbol=bars,
+        initial_cash_cny=200_000.0,
+        buy_cost_bps=0,
+        sell_cost_bps=0,
+        candidate_configurations=[baseline, higher_cap],
+    )
+
+    baseline_spend = sum(
+        row.get("cash_spent_cny", 0.0)
+        for row in artifact["results"][0]["order_ledger"]
+        if row["action"] == "buy"
+    )
+    higher_spend = sum(
+        row.get("cash_spent_cny", 0.0)
+        for row in artifact["results"][1]["order_ledger"]
+        if row["action"] == "buy"
+    )
+    assert higher_spend > baseline_spend
+    assert artifact["results"][1]["summary"]["max_single_signal_deployment_pct"] == 0.08
+
+
 def _research_config(config_id: str) -> dict[str, object]:
     return {
         "config_id": config_id,

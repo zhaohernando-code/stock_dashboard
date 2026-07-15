@@ -16,6 +16,10 @@ from ashare_evidence.model_candidate_runner import (
     _top_k_picks_by_date,
 )
 from ashare_evidence.model_spec_registry import default_model_specs
+from ashare_evidence.rolling_account_execution_snapshot import (
+    build_rolling_account_execution_snapshot,
+    write_rolling_account_execution_snapshot,
+)
 from ashare_evidence.rolling_tranche_account_replay import build_shortpick_v3_rolling_account_replay_artifact
 from ashare_evidence.rolling_tranche_execution_contract import build_shortpick_v3_rolling_tranche_execution_contract
 from ashare_evidence.shortpick_strategy_lab_v3_projection import _projection_prediction
@@ -91,6 +95,35 @@ def main() -> int:
     )
     expected_summary = expected_contract["summary"]
     baseline = next(result for result in replay["results"] if result["config_id"] == R14_CONFIG_ID)
+    execution_snapshot = None
+    if args.execution_snapshot_output is not None:
+        baseline_config = next(config for config in configurations if config["config_id"] == R14_CONFIG_ID)
+        execution_snapshot = build_rolling_account_execution_snapshot(
+            candidate_run=enriched_run,
+            trial_id=args.trial_id,
+            candidate_inventory_rows=inventory_rows,
+            market_bars_by_symbol=bars_by_symbol,
+            baseline_config=baseline_config,
+            account_profile={
+                "initial_cash_cny": 200_000.0,
+                "buy_cost_bps": 20.0,
+                "sell_cost_bps": 25.0,
+                "min_order_notional_cny": 250.0,
+                "max_entry_lag_days": 7,
+            },
+            baseline_result=baseline,
+            source_lineage={
+                "feature_matrix": str(args.feature_matrix),
+                "feature_matrix_artifact_id": _artifact_id(args.feature_matrix),
+                "candidate_run": str(args.candidate_run),
+                "candidate_run_artifact_id": candidate_run.get("artifact_id"),
+                "r14_contract": _portable_source_path(args.r14_contract),
+                "market_database": str(args.hot_database),
+                "selection_validation": selection_validation,
+                "bar_reconstruction_validation": bar_validation,
+            },
+        )
+        write_rolling_account_execution_snapshot(args.execution_snapshot_output, execution_snapshot)
     reproduction = _reproduction_readout(expected=expected_summary, observed=baseline["summary"])
     variant_rows = [
         _variant_readout(result, frontier=expected_summary)
@@ -157,6 +190,18 @@ def main() -> int:
             "promotion_rule": "all_nine_metrics_non_degraded_and_one_10pct_breakthrough_or_one_fewer_negative_month",
             "date_or_symbol_hardcoding": False,
         },
+        "execution_snapshot": (
+            {
+                "artifact_id": execution_snapshot["artifact_id"],
+                "path": str(args.execution_snapshot_output),
+                "input_content_digest": execution_snapshot["input_content_digest"],
+                "output_content_digest": execution_snapshot["output_content_digest"],
+                "input_counts": execution_snapshot["input_counts"],
+                "output_counts": execution_snapshot["output_counts"],
+            }
+            if execution_snapshot is not None
+            else None
+        ),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -172,6 +217,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--r14-contract", type=Path, required=True)
     parser.add_argument("--trial-id", default=R14_TRIAL_ID)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--execution-snapshot-output", type=Path)
     return parser.parse_args()
 
 
