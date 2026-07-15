@@ -58,6 +58,7 @@ const server = createServer(async (request, response) => {
     const body = await readFile(filePath);
     response.writeHead(200, {
       "Cache-Control": path.basename(filePath) === "index.html" ? "no-cache" : "public, max-age=31536000, immutable",
+      "Content-Length": String(body.length),
       "Content-Type": mimeTypes.get(path.extname(filePath)) ?? "application/octet-stream",
     });
     response.end(request.method === "HEAD" ? undefined : body);
