@@ -31,6 +31,11 @@ RANK5_REPLACEMENT_QUALITY_KEYS = frozenset(
         "min_return_20d_percentile",
         "min_return_5d_percentile",
         "min_distance_from_20d_high",
+        "max_path_realized_volatility_20d",
+        "max_path_downside_semivolatility_20d",
+        "min_path_max_drawdown_20d",
+        "min_path_up_day_ratio_20d",
+        "min_path_trend_efficiency_20d",
     }
 )
 
@@ -716,6 +721,36 @@ def rank5_replacement_quality_rejection_reason(
             "rank5_quality_distance_high_below_min",
             "min",
         ),
+        (
+            "max_path_realized_volatility_20d",
+            "path_realized_volatility_20d",
+            "rank5_quality_path_volatility_above_max",
+            "max_value",
+        ),
+        (
+            "max_path_downside_semivolatility_20d",
+            "path_downside_semivolatility_20d",
+            "rank5_quality_path_downside_above_max",
+            "max_value",
+        ),
+        (
+            "min_path_max_drawdown_20d",
+            "path_max_drawdown_20d",
+            "rank5_quality_path_drawdown_below_min",
+            "min",
+        ),
+        (
+            "min_path_up_day_ratio_20d",
+            "path_up_day_ratio_20d",
+            "rank5_quality_path_up_ratio_below_min",
+            "min",
+        ),
+        (
+            "min_path_trend_efficiency_20d",
+            "path_trend_efficiency_20d",
+            "rank5_quality_path_efficiency_below_min",
+            "min",
+        ),
     )
     for policy_key, feature_key, reason, comparison in checks:
         if policy_key not in policy:
@@ -727,6 +762,9 @@ def rank5_replacement_quality_rejection_reason(
         threshold = _safe_float(policy[policy_key])
         if comparison == "max":
             if observed < original_score - threshold:
+                return reason
+        elif comparison == "max_value":
+            if observed > threshold:
                 return reason
         elif observed < threshold:
             return reason

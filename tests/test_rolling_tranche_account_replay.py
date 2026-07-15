@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from ashare_evidence.rolling_tranche_account_replay import build_shortpick_v3_rolling_account_replay_artifact
+from ashare_evidence.rolling_tranche_account_replay import (
+    build_shortpick_v3_rolling_account_replay_artifact,
+    rank5_replacement_quality_rejection_reason,
+)
 
 
 def test_rolling_account_replay_uses_tranches_not_full_capital() -> None:
@@ -616,6 +619,42 @@ def test_rank5_replacement_quality_filter_is_fail_closed_and_does_not_filter_ran
     )
     buy = next(row for row in rank4_available["results"][0]["order_ledger"] if row["action"] == "buy")
     assert buy["symbol"] == "R4"
+
+
+def test_rank5_path_quality_thresholds_are_fail_closed_and_bounded() -> None:
+    candidate = {
+        "path_realized_volatility_20d": 0.03,
+        "path_downside_semivolatility_20d": 0.02,
+        "path_max_drawdown_20d": -0.08,
+        "path_up_day_ratio_20d": 0.55,
+        "path_trend_efficiency_20d": 0.3,
+    }
+    policy = {
+        "max_path_realized_volatility_20d": 0.04,
+        "max_path_downside_semivolatility_20d": 0.03,
+        "min_path_max_drawdown_20d": -0.12,
+        "min_path_up_day_ratio_20d": 0.45,
+        "min_path_trend_efficiency_20d": 0.2,
+    }
+
+    assert rank5_replacement_quality_rejection_reason(
+        candidate, inventory_rank=5, original_score=3.0, policy=policy
+    ) is None
+    assert (
+        rank5_replacement_quality_rejection_reason(
+            {**candidate, "path_realized_volatility_20d": 0.05},
+            inventory_rank=5,
+            original_score=3.0,
+            policy=policy,
+        )
+        == "rank5_quality_path_volatility_above_max"
+    )
+    assert rank5_replacement_quality_rejection_reason(
+        {}, inventory_rank=5, original_score=3.0, policy=policy
+    ) == "rank5_quality_missing_path_realized_volatility_20d"
+    assert rank5_replacement_quality_rejection_reason(
+        {}, inventory_rank=4, original_score=3.0, policy=policy
+    ) is None
 
 
 def test_r14_replay_trims_market_value_exposure_after_entries() -> None:

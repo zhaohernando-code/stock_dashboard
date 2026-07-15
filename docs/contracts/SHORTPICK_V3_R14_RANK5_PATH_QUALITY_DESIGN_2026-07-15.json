@@ -1,0 +1,92 @@
+{
+  "artifact_type": "shortpick_v3_r14_rank5_path_quality_design",
+  "schema_version": "shortpick_v3_r14_rank5_path_quality_design.v1",
+  "status": "frozen_before_candidate_outcome_evaluation",
+  "frozen_at": "2026-07-15T20:30:00+08:00",
+  "decision_scope": "replace_r14_one_for_one_or_retain_r14",
+  "source_execution_snapshot": {
+    "artifact_id": "shortpick-v3-execution-snapshot-067c5b83e085f95f",
+    "relative_runtime_path": "research_validation/rolling_account_execution_snapshots/shortpick-v3-execution-snapshot-067c5b83e085f95f.json.gz",
+    "required_exact_replay": true
+  },
+  "research_hypothesis": "Rank5 replacement quality may be better described by the full pre-trade close path than by the existing point-in-time score, momentum percentile, liquidity, or distance-to-high fields.",
+  "feature_availability_contract": {
+    "allowed_grain": "same_signal_day_candidate_symbol_close_history",
+    "as_of_rule": "use_only_daily_closes_on_or_before_signal_day_close_for_execution_on_the_next_available_trade_day",
+    "window": "exactly_20_daily_close_returns_from_the_latest_21_valid_closes",
+    "minimum_observation_count": 20,
+    "formulas": {
+      "path_realized_volatility_20d": "population_standard_deviation(daily_simple_close_returns)",
+      "path_downside_semivolatility_20d": "sqrt(mean(min(daily_simple_close_return, 0)^2))",
+      "path_max_drawdown_20d": "minimum(close / running_max_close - 1)_across_the_21_close_path",
+      "path_up_day_ratio_20d": "count(daily_simple_close_return > 0) / 20",
+      "path_trend_efficiency_20d": "abs(sum(daily_simple_close_returns)) / sum(abs(daily_simple_close_returns)); zero_when_denominator_is_zero"
+    },
+    "forbidden_fields": [
+      "net_excess_return",
+      "weighted_net_excess_return",
+      "future_price",
+      "future_return",
+      "close_after_signal_day",
+      "symbol_identity",
+      "outcome_selected_threshold"
+    ],
+    "missing_feature_behavior": "reject_rank5_candidate_fail_closed"
+  },
+  "candidate_variants": [
+    {
+      "config_id": "r14_rank5_path_volatility_4pct_research_v1",
+      "rank5_quality_policy": {
+        "max_path_realized_volatility_20d": 0.04
+      },
+      "rationale": "Use a round four-percent daily volatility ceiling without inspecting trade outcomes."
+    },
+    {
+      "config_id": "r14_rank5_path_downside_3pct_research_v1",
+      "rank5_quality_policy": {
+        "max_path_downside_semivolatility_20d": 0.03
+      },
+      "rationale": "Use a round three-percent downside semivolatility ceiling without inspecting trade outcomes."
+    },
+    {
+      "config_id": "r14_rank5_path_up_ratio_45pct_research_v1",
+      "rank5_quality_policy": {
+        "min_path_up_day_ratio_20d": 0.45
+      },
+      "rationale": "Require at least nine positive sessions in the twenty-return path."
+    },
+    {
+      "config_id": "r14_rank5_path_drawdown_m12pct_research_v1",
+      "rank5_quality_policy": {
+        "min_path_max_drawdown_20d": -0.12
+      },
+      "rationale": "Reject paths with a peak-to-trough decline worse than twelve percent."
+    },
+    {
+      "config_id": "r14_rank5_path_efficiency_20pct_research_v1",
+      "rank5_quality_policy": {
+        "min_path_trend_efficiency_20d": 0.2
+      },
+      "rationale": "Require directional movement to account for at least twenty percent of total daily path movement."
+    },
+    {
+      "config_id": "r14_rank5_path_balanced_research_v1",
+      "rank5_quality_policy": {
+        "max_path_realized_volatility_20d": 0.04,
+        "min_path_max_drawdown_20d": -0.12,
+        "min_path_trend_efficiency_20d": 0.2
+      },
+      "rationale": "One predeclared conjunction combining volatility, path drawdown, and directional efficiency."
+    }
+  ],
+  "multiple_testing_policy": {
+    "family_count": 1,
+    "variant_count": 6,
+    "date_or_symbol_hardcoding": false,
+    "threshold_selection": "round_domain_thresholds_frozen_before_feature_distribution_or_candidate_outcome_evaluation",
+    "promotion_rule": "exact_snapshot_replay_and_all_nine_metrics_non_degraded_vs_both_reproducible_baseline_and_frozen_r14_contract_and_one_10pct_breakthrough_or_one_fewer_negative_month",
+    "implementation_parity_rule": "accepted_research_candidate_remains_blocked_until_the_same_point_in_time_feature_builder_is_used_by_forward_paper_execution",
+    "active_strategy_cardinality_rule": "one_in_one_out_no_fourth_active_role"
+  },
+  "claim_ceiling": "deterministic_historical_account_replay_research_only"
+}

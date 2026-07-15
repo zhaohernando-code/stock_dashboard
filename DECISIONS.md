@@ -1,5 +1,17 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-07-15T21:00:00+08:00] R14 Rank5 path-quality thresholds are rejected and historical Rank5 threshold search stops:
+
+本轮在读取特征分布和候选结果前冻结 6 个 Rank5 专属路径质量条件，覆盖 20 日日波动率、下行半波动率、路径最大回撤、上涨日占比、趋势效率和一个组合条件。所有特征只使用信号日及以前的最近 21 个有效收盘价，明确禁止未来价格和库存结果字段。
+
+- 511 条 Rank5 库存全部具备 20 个收益观察；确定性 R14 基线逐单摘要精确复现。
+- 6 个候选均未通过相对可复现基线与旧 R14 展示合同的双基线九指标门禁。最接近的 4% 日波动率上限只增加 0.037 个百分点总收益，同时增加 0.207 个百分点跳过订单率。
+- R14、前端、API、日刷计划单和 3 条活跃策略集合保持不变；路径特征能力不进入活跃配置。
+- 已有简单库存字段与新增路径字段连续两轮未形成稳定优势。已平仓 Rank5 只有 22 笔，后续停止在该历史样本上搜索阈值，优先积累固定观察窗下的前向纸面执行证据。
+- 未来候选继续按一进一出挑战 R14；即使历史门禁通过，也必须先完成前向纸面执行的同源 PIT 特征构造与一致性验证。
+
+证据：`docs/contracts/SHORTPICK_V3_R14_RANK5_PATH_QUALITY_EXPERIMENT_2026-07-15.json`、`docs/analysis/SHORTPICK_V3_R14_RANK5_PATH_QUALITY_REPORT_2026-07-15.md` 与同目录已执行 notebook。
+
 [2026-07-15T20:00:00+08:00] R14 Rank5 simple quality thresholds are rejected and this feature set stops expanding:
 
 本轮在读取候选结果前冻结 6 个 Rank5 专属、PIT 可得的质量过滤器，覆盖分差、20 日成交额、5/20 日动量分位、距 20 日高点和一个组合条件。所有候选都精确复放同一 R14 执行快照，且明确禁止使用库存里的 `net_excess_return`、`weighted_net_excess_return` 等未来结果字段。
