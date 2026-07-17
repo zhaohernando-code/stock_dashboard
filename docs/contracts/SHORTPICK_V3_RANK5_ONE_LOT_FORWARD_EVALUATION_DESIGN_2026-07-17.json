@@ -1,0 +1,78 @@
+{
+  "artifact_type": "shortpick_v3_rank5_one_lot_forward_evaluation_design",
+  "schema_version": "shortpick_v3_rank5_one_lot_forward_evaluation_design.v1",
+  "artifact_id": "shortpick-v3-rank5-one-lot-forward-evaluation-v1",
+  "status": "superseded_by_rank5_shadow_only_policy",
+  "frozen_at": "2026-07-17T15:53:01+08:00",
+  "decision_scope": "whether_to_replace_current_rank5_sizing_with_a_one_board_lot_risk_cap_without_adding_a_strategy",
+  "active_policy_change_at_freeze": null,
+  "superseded_at": "2026-07-17T17:00:00+08:00",
+  "superseded_by": "docs/contracts/SHORTPICK_V3_R15_RANK4_ONLY_STABLE_PROFIT_2026-07-17.json",
+  "supersession_reason": "stable_profit_is_primary_and_execution_coverage_is_not_a_hard_goal_so_negative_expectation_rank5_is_disabled_instead_of_resized",
+  "source_forward_observation_contract": "docs/contracts/SHORTPICK_V3_RANK5_FORWARD_OBSERVATION_CONTRACT_2026-07-15.json",
+  "source_historical_experiment": "docs/contracts/SHORTPICK_V3_RANK5_RISK_CONTROL_EXPERIMENT_2026-07-17.json",
+  "candidate": {
+    "candidate_id": "rank5_one_lot_cap",
+    "selection_policy": "unchanged_current_r14_rank5_replacement_selection",
+    "sizing_policy": "selected_rank5_replacement_shares_equal_minimum_of_current_planned_shares_and_100",
+    "board_lot_size": 100,
+    "exit_policy": "unchanged_current_r14_exit_policy",
+    "rank4_policy": "unchanged",
+    "fees_and_slippage": "same_as_current_r14",
+    "intended_mechanism": "bound_the_currency_loss_from_rank5_tail_events_without_reducing_rank5_candidate_coverage"
+  },
+  "evaluation_population": {
+    "shadow_readiness_population": "all_evidence_eligible_rows_from_shortpick_v3_rank5_forward_observation_v1",
+    "promotion_population": "actual_selected_executed_and_closed_rank5_replacements_linked_by_rank5_forward_observation_key",
+    "historical_rows_are_not_forward_evidence": true,
+    "synchronized_backfill_is_excluded": true
+  },
+  "counterfactual_calculation": {
+    "current_sizing_pnl": "actual_closed_rank5_sell_proceeds_minus_linked_buy_cost_basis",
+    "one_lot_pnl": "actual_per_share_net_pnl_times_minimum_of_actual_bought_shares_and_100",
+    "win_definition": "one_lot_pnl_greater_than_zero",
+    "profit_factor": "sum_positive_one_lot_pnl_divided_by_absolute_sum_negative_one_lot_pnl",
+    "tail_loss": "mean_absolute_one_lot_pnl_among_the_worst_20_percent_of_closed_rank5_trades",
+    "account_replay": "deterministic_full_account_replay_with_only_rank5_sizing_changed"
+  },
+  "readiness_gates": {
+    "research_reopen_gate": {
+      "minimum_matured_shadow_observations": 80,
+      "minimum_distinct_signal_months": 6,
+      "minimum_elapsed_calendar_days": 120,
+      "data_quality_passed": true
+    },
+    "promotion_evidence_floor": {
+      "minimum_actual_executed_and_closed_rank5_replacements": 20,
+      "minimum_distinct_signal_months": 12,
+      "minimum_elapsed_calendar_days": 365
+    }
+  },
+  "promotion_gates": {
+    "rank5_one_lot_net_pnl_cny": "greater_than_or_equal_to_zero",
+    "rank5_one_lot_profit_factor": "greater_than_or_equal_to_1_0",
+    "rank5_one_lot_tail_loss_vs_current_sizing": "at_least_30_percent_lower",
+    "rank5_win_rate": "not_lower_than_current_sizing",
+    "full_account_historical_and_forward_replay": [
+      "all_nine_frontier_metrics_non_degraded_vs_reproducible_current_r14",
+      "all_nine_frontier_metrics_non_degraded_vs_frozen_r14_contract",
+      "at_least_one_10_percent_relative_breakthrough_or_one_fewer_negative_month"
+    ],
+    "replacement_rule": "one_in_one_out_replace_current_r14_only_never_add_an_active_strategy"
+  },
+  "anti_tuning_rules": {
+    "candidate_count": 1,
+    "board_lot_cap_changes_before_gate": "forbidden",
+    "new_rank5_signal_thresholds_before_gate": "forbidden",
+    "early_stop_on_favorable_results": "forbidden",
+    "late_extension_on_unfavorable_results": "forbidden",
+    "day10_exit_rule": "excluded_from_forward_candidate_due_to_weak_historical_value_and_winner_truncation",
+    "late_loss_guard": "excluded_from_forward_candidate_due_to_small_incremental_value",
+    "rank4_only": "remains_a_control_not_a_promotion_candidate"
+  },
+  "decision_rule": {
+    "if_all_gates_pass": "implement_one_lot_cap_in_replay_and_daily_plan_then_replace_current_r14_in_place",
+    "if_any_gate_fails": "retain_current_r14_and_retire_this_candidate_without_threshold_rescan"
+  },
+  "claim_ceiling": "preregistered_forward_evaluation_design_not_investment_advice"
+}

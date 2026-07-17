@@ -36,6 +36,10 @@ NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID = (
 )
 QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID = (
     "daily_15_tranche_rank_adjusted_r5_093_strong154_replacement_"
+    "rank4_gap010_fill075_market_cap25_v1"
+)
+LEGACY_RANK45_REPLACEMENT_CONTROL_ID = (
+    "daily_15_tranche_rank_adjusted_r5_093_strong154_replacement_"
     "top5_gap010_fill075_market_cap25_v1"
 )
 ACTIVE_STRATEGY_CONFIG_IDS = (
@@ -44,6 +48,7 @@ ACTIVE_STRATEGY_CONFIG_IDS = (
     MAIN_CONFIG_ID,
 )
 ARCHIVED_STRATEGY_CONFIG_IDS = (
+    LEGACY_RANK45_REPLACEMENT_CONTROL_ID,
     NEGATIVE_MONTH_RANK_ADJUSTED_CONTROL_ID,
     META_SIGNAL_QUALITY_CONTROL_ID,
     THREE_PART_STABILITY_CONTROL_ID,
@@ -108,7 +113,7 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
             },
             "quality_replacement_rebalance_control_replay": {
                 "status": "persisted_static_metrics",
-                "path": "docs/contracts/SHORTPICK_V3_R14_QUALITY_REPLACEMENT_REBALANCE_2026-07-10.json",
+                "path": "docs/contracts/SHORTPICK_V3_R15_RANK4_ONLY_STABLE_PROFIT_2026-07-17.json",
                 "artifact_type": "shortpick_v3_full_history_order_level_account_replay",
             },
         },
@@ -321,7 +326,7 @@ def _main_config_readout() -> dict[str, Any]:
         "role": "primary_forward_observation",
         "selection_rank": 3,
         "gate_status": "active",
-        "reason": "现行前向运行基线，用于衡量 R14 优化前沿和上游元信号对照；不再作为新增规则的优化候选。",
+        "reason": "现行前向运行基线，用于衡量稳定盈利前沿和上游元信号对照；不再作为新增规则的优化候选。",
         "summary": {
             "total_return": 3.119168564999999,
             "annualized_return": 0.6577172359709627,
@@ -603,30 +608,30 @@ def _quality_replacement_rebalance_control_readout() -> dict[str, Any]:
     return {
         "config_id": QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
         "model_spec_id": NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
-        "label": "候选对照：高质量可买替补 + 25% 暴露再平衡",
+        "label": "稳定盈利前沿：仅 Rank4 可买替补 + 25% 暴露再平衡",
         "role": "quality_replacement_rebalance_candidate",
         "selection_rank": 1,
-        "gate_status": "candidate_control",
+        "gate_status": "stable_profit_frontier",
         "reason": (
-            "完整历史逐订单回放严格超过前端全部策略逐指标最优值；负收益月份从最优 3 个降至 2 个，"
-            "订单跳过率和信号跳过率分别相对改善 20.21% 与 31.63%。"
+            "Rank5 真实买入已停用，只允许 Rank4 替补；相较此前 Rank4-5 前沿，完整历史回放总收益提高 "
+            "1.58 个百分点、最大回撤略降，负收益月份仍为 2 个。没有合格 Rank4 时允许保留现金。"
         ),
         "summary": {
-            "total_return": 3.4176736350000008,
-            "annualized_return": 0.6996469611916643,
-            "max_drawdown": -0.06796905647829043,
+            "total_return": 3.3367859025000017,
+            "annualized_return": 0.6884696576264753,
+            "max_drawdown": -0.0687832019333211,
             "negative_month_count": 2,
-            "worst_monthly_return": -0.014130266706049999,
-            "skipped_order_rate": 0.15560165975103735,
-            "skipped_signal_rate": 0.13111545988258316,
-            "buy_order_count": 814,
-            "sell_order_count": 790,
-            "final_nav_cny": 883534.7270000002,
-            "mean_invested_ratio": 0.6909971507926389,
-            "p95_invested_ratio": 0.9872182920144233,
-            "max_single_symbol_exposure_pct": 0.24953416606359471,
-            "max_position_count": 37,
-            "turnover": 99.425354415,
+            "worst_monthly_return": -0.014180398279718176,
+            "skipped_order_rate": 0.17531120331950206,
+            "skipped_signal_rate": 0.15264187866927592,
+            "buy_order_count": 795,
+            "sell_order_count": 771,
+            "final_nav_cny": 867357.1805000004,
+            "mean_invested_ratio": 0.689122,
+            "p95_invested_ratio": 0.979255,
+            "max_single_symbol_exposure_pct": 0.24943237445599065,
+            "max_position_count": 38,
+            "turnover": 98.3562003225,
         },
         "selection_summary": {
             "signal_date_from": "2023-09-07",
@@ -648,10 +653,10 @@ def _quality_replacement_rebalance_control_readout() -> dict[str, Any]:
             },
             "affordable_replacement": {
                 "source": "same_day_pit_top20_inventory",
-                "inventory_rank_range": [4, 5],
+                "inventory_rank_range": [4, 4],
                 "max_score_gap": 0.10,
                 "min_fill_ratio": 0.75,
-                "accepted_replacement_count": 53,
+                "accepted_replacement_count": 35,
             },
             "market_value_rebalance": {
                 "threshold": 0.25,
@@ -661,23 +666,24 @@ def _quality_replacement_rebalance_control_readout() -> dict[str, Any]:
             },
         },
         "goal10_improvements": {
-            "total_return_rel": 0.016198551986917133,
-            "annualized_return_rel": 0.010855455255086665,
-            "drawdown_reduction_rel": 0.017794513220975926,
-            "negative_month_delta": 1,
-            "worst_monthly_return_rel": 0.0035352726121860136,
-            "skip_order_reduction_rel": 0.20212765957446807,
-            "skip_signal_reduction_rel": 0.3163265306122449,
-            "exposure_reduction_rel": 0.009245479498723404,
-            "final_nav_rel": 0.01248600810220579,
+            "comparison_basis": "previous_rank4_rank5_r14_frontier",
+            "total_return_rel": 0.004752303049185016,
+            "annualized_return_rel": 0.003200553553423232,
+            "drawdown_reduction_rel": 0.0009879163575487707,
+            "negative_month_delta": 0,
+            "worst_monthly_return_rel": -0.0035478151057625157,
+            "skip_order_reduction_rel": -0.15753424657534246,
+            "skip_signal_reduction_rel": -0.13043478260869565,
+            "exposure_reduction_rel": 0.00040792653450961167,
+            "final_nav_rel": 0.0036524883735123415,
         },
         "reason_counts": {
             "below_min_order_notional": 13,
-            "insufficient_cash": 39,
+            "insufficient_cash": 40,
             "missing_entry_bar": 3,
             "missing_entry_bar_near_signal": 18,
-            "price_too_high_for_slot": 59,
-            "single_symbol_concentration_cap": 18,
+            "price_too_high_for_slot": 78,
+            "single_symbol_concentration_cap": 17,
         },
         "decision_samples": [],
     }
@@ -844,7 +850,7 @@ def _paper_quality_replacement_rebalance_control_readout() -> dict[str, Any]:
     readout = _quality_replacement_rebalance_control_readout()
     return {
         **readout,
-        "reason": "高质量可买替补与 25% 暴露再平衡按历史回放同一规则从 20 万本金开始前向观察。",
+        "reason": "仅 Rank4 可买替补与 25% 暴露再平衡按历史回放同一规则从 20 万本金开始前向观察；Rank5 只做影子记录。",
         "summary": {
             "initial_cash_cny": INITIAL_CASH_CNY,
             "current_nav_cny": INITIAL_CASH_CNY,
@@ -1079,7 +1085,8 @@ def _paper_display(
                 {
                     "label": "对照组",
                     "value": (
-                        "只保留 R14 高质量可买替补与 25% 暴露再平衡优化前沿，以及上游元信号独立对照。"
+                        "只保留稳定盈利前沿（仅 Rank4 可买替补）与 25% 暴露再平衡，以及上游元信号独立对照；"
+                        "Rank5 不再生成真实买单。"
                     ),
                 },
             ],
@@ -1338,7 +1345,7 @@ def _rank5_forward_observation_from_state(
 def _strategy_governance() -> dict[str, Any]:
     return {
         "policy": "converged_three_role_set",
-        "contract_ref": "docs/contracts/SHORTPICK_V3_ACTIVE_STRATEGY_SET_2026-07-15.md",
+        "contract_ref": "docs/contracts/SHORTPICK_V3_ACTIVE_STRATEGY_SET_2026-07-17.md",
         "active_config_ids": list(ACTIVE_STRATEGY_CONFIG_IDS),
         "active_roles": {
             QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID: "optimization_frontier",

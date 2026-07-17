@@ -427,6 +427,48 @@ def _rolling_configurations(
             },
         },
         {
+            "config_id": (
+                "daily_15_tranche_rank_adjusted_r5_093_strong154_replacement_"
+                "rank4_gap010_fill075_market_cap25_v1"
+            ),
+            "signal_cadence_trade_days": 1,
+            "target_active_tranche_count": 15,
+            "rank_allocation_mode": "model_rank_weight_with_board_lot_skip",
+            "budget_mode": "current_nav_fraction",
+            "min_order_notional_cny": 250.0,
+            "max_single_symbol_cost_basis_pct": 0.35,
+            "exit_policy": "rank3_pullback_rank1_quick_fail_guard",
+            "rank1_quality_overlay": {
+                "precedence": ["strong", "low", "lead", "weak", "base"],
+                "strong_return_20d_percentile_min": 0.95,
+                "strong_return_5d_percentile_min": 0.93,
+                "strong_benchmark_return_20d_min": 0.0,
+                "strong_industry_return_20d_excess_max": 0.50,
+                "strong_distance_from_20d_high_min": -0.08,
+                "strong_scale": 1.54,
+                "lead_scale": 1.0,
+                "low_scale": 1.0,
+                "weak_scale": 1.0,
+            },
+            "affordable_replacement_policy": {
+                "trigger_reason": "price_too_high_for_slot",
+                "inventory_rank_min": 4,
+                "inventory_rank_max": 4,
+                "max_score_gap": 0.10,
+                "min_fill_ratio": 0.75,
+                "min_order_notional_cny": 250.0,
+                "board_lot_size": 100,
+            },
+            "market_value_concentration_rebalance": {
+                "threshold": 0.25,
+                "scope": "all_positions",
+                "cooldown_trading_days": 0,
+                "execution_timing": "after_scheduled_exits_entries_at_close",
+                "sell_cost_bps": 25.0,
+                "board_lot_size": 100,
+            },
+        },
+        {
             "config_id": "daily_15_tranche_rank_weighted_compound_min1000_rank23_strong_benchmark_pullback_exit_v1",
             "signal_cadence_trade_days": 1,
             "target_active_tranche_count": 15,

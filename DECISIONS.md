@@ -1,5 +1,18 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-07-17T17:00:00+08:00] Rank5 real execution is retired and the optimization frontier becomes Rank4-only:
+
+产品目标已明确为稳定盈利优先，“尽量不要漏单”不是硬指标。可复现完整历史账户回放显示，停用 Rank5 后总收益从 332.100% 提高到 333.679%，最大回撤从 -6.885% 略降到 -6.878%，亏损月份仍为 2 个；代价是订单跳过率从 15.145% 上升到 17.531%。该覆盖代价被显式接受。
+
+执行约定
+- 新增 Rank4-only 配置作为唯一优化前沿；旧 Rank4-5 配置归档且保持可复现，不原地改变其历史语义。
+- 日刷真实替补只允许 Rank4。没有合格 Rank4 时保留现金，Rank5 不能生成买单。
+- Rank5 影子观测继续运行，用于保留未来研究证据；达到成熟门槛也不得自动恢复真实执行。
+- 活跃角色仍为 3 个，前端、API、纸面账户、日刷计划和历史对比使用同一活跃 ID 集合。
+- 当前运行时纸面账本中旧前沿没有实际 Rank4/Rank5 替补成交，因此切换配置 ID 不会改写已发生的 Rank5 经济结果。
+
+证据：`docs/contracts/SHORTPICK_V3_R15_RANK4_ONLY_STABLE_PROFIT_2026-07-17.json`、`docs/contracts/SHORTPICK_V3_ACTIVE_STRATEGY_SET_2026-07-17.md`、`docs/analysis/SHORTPICK_V3_RANK5_RISK_CONTROL_REPORT_2026-07-17.md`。
+
 [2026-07-15T21:00:00+08:00] R14 Rank5 path-quality thresholds are rejected and historical Rank5 threshold search stops:
 
 本轮在读取特征分布和候选结果前冻结 6 个 Rank5 专属路径质量条件，覆盖 20 日日波动率、下行半波动率、路径最大回撤、上涨日占比、趋势效率和一个组合条件。所有特征只使用信号日及以前的最近 21 个有效收盘价，明确禁止未来价格和库存结果字段。

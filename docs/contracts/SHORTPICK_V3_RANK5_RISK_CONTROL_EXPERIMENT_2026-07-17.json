@@ -1,0 +1,616 @@
+{
+  "artifact_id": "shortpick-v3-rank5-risk-control-2026-07-17",
+  "artifact_type": "shortpick_v3_rank5_risk_control_experiment",
+  "claim_ceiling": "exploratory_deterministic_historical_account_replay_not_live_policy",
+  "decision": {
+    "live_policy_change": null,
+    "preferred_forward_candidate": "rank5_one_lot_cap",
+    "reason": "one_lot_cap_preserved_historical_execution_coverage_and_win_count_while_reducing_rank5_net_loss_but_did_not_reduce_negative_months_or_clear_the_frontier_breakthrough_gate",
+    "rejected_directions": {
+      "combined_rules": "more_complex_without_clearing_the_existing_promotion_gate",
+      "rank4_only": "higher_return_but_materially_higher_skip_rates_and_slightly_worse_worst_month",
+      "rank5_day10_below_entry": "cut_one_eventual_winner_and_added_little_account_level_value",
+      "rank5_late_guard": "only_four_exits_and_small_account_level_improvement"
+    }
+  },
+  "experiment_design": {
+    "anti_tuning": [
+      "no_new_signal_day_quality_thresholds",
+      "one_board_lot_is_the_only_sizing_candidate",
+      "late_guard_reuses_existing_minus_8pct_return_minus_10pct_peak_drawdown_conditions",
+      "day10_below_entry_is_reported_as_exploratory_and_not_eligible_for_activation"
+    ],
+    "decision": "whether_rank5_should_be_disabled_risk_capped_or_given_a_structural_exit_guard",
+    "historical_closed_rank5_sample_count": 22,
+    "unchanged_components": [
+      "candidate_selection",
+      "rank4_replacement",
+      "fees",
+      "account_profile",
+      "rank1_overlay",
+      "existing_exit_policy",
+      "market_value_concentration_rebalance"
+    ]
+  },
+  "results": [
+    {
+      "label": "当前 R14",
+      "negative_months": [
+        {
+          "ending_nav_cny": 197810.9585,
+          "month": "2023-10",
+          "return": -0.014130266706049999
+        },
+        {
+          "ending_nav_cny": 198337.13900000002,
+          "month": "2023-12",
+          "return": -0.007935209761868123
+        }
+      ],
+      "rank5_diagnostics": {
+        "closed_count": 22,
+        "dynamic_day10_exit_count": 0,
+        "dynamic_late_guard_exit_count": 0,
+        "gross_loss_cny": 2122.1774999999993,
+        "gross_profit_cny": 601.903500000001,
+        "loser_count": 10,
+        "net_pnl_cny": -1520.2739999999983,
+        "profit_factor": 0.2836254271850499,
+        "win_rate": 0.5454545454545454,
+        "winner_count": 12
+      },
+      "summary": {
+        "annualized_return": 0.6862732034864376,
+        "buy_order_count": 818,
+        "final_nav_cny": 864200.6975000004,
+        "max_drawdown": -0.06885122118096298,
+        "max_single_symbol_exposure_pct": 0.24953416606359471,
+        "negative_month_count": 2,
+        "sell_order_count": 793,
+        "skipped_order_rate": 0.15145228215767634,
+        "skipped_signal_rate": 0.1350293542074364,
+        "total_return": 3.3210034875000014,
+        "turnover": 98.7175087875,
+        "worst_monthly_return": -0.014130266706049999
+      },
+      "variant_id": "current_r14",
+      "vs_current_r14": {
+        "all_nine_metrics_non_degraded": true,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": true,
+          "final_nav_cny": true,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": true,
+          "total_return": true,
+          "worst_monthly_return": true
+        },
+        "deltas": {
+          "annualized_return": 0.0,
+          "final_nav_cny": 0.0,
+          "max_drawdown": 0.0,
+          "max_single_symbol_exposure_pct": 0.0,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.0,
+          "skipped_signal_rate": 0.0,
+          "total_return": 0.0,
+          "worst_monthly_return": 0.0
+        },
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": 0.0,
+          "final_nav_cny": 0.0,
+          "max_drawdown": 0.0,
+          "max_single_symbol_exposure_pct": 0.0,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.0,
+          "skipped_signal_rate": 0.0,
+          "total_return": 0.0,
+          "worst_monthly_return": 0.0
+        }
+      }
+    },
+    {
+      "label": "停用 Rank5",
+      "negative_months": [
+        {
+          "ending_nav_cny": 197796.8185,
+          "month": "2023-10",
+          "return": -0.014180398279718176
+        },
+        {
+          "ending_nav_cny": 198419.327,
+          "month": "2023-12",
+          "return": -0.007141606808553802
+        }
+      ],
+      "rank5_diagnostics": {
+        "closed_count": 0,
+        "dynamic_day10_exit_count": 0,
+        "dynamic_late_guard_exit_count": 0,
+        "gross_loss_cny": 0,
+        "gross_profit_cny": 0,
+        "loser_count": 0,
+        "net_pnl_cny": 0,
+        "profit_factor": 0.0,
+        "win_rate": 0.0,
+        "winner_count": 0
+      },
+      "summary": {
+        "annualized_return": 0.6884696576264753,
+        "buy_order_count": 795,
+        "final_nav_cny": 867357.1805000004,
+        "max_drawdown": -0.0687832019333211,
+        "max_single_symbol_exposure_pct": 0.24943237445599065,
+        "negative_month_count": 2,
+        "sell_order_count": 771,
+        "skipped_order_rate": 0.17531120331950206,
+        "skipped_signal_rate": 0.15264187866927592,
+        "total_return": 3.3367859025000017,
+        "turnover": 98.3562003225,
+        "worst_monthly_return": -0.014180398279718176
+      },
+      "variant_id": "rank4_only",
+      "vs_current_r14": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": true,
+          "final_nav_cny": true,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": true,
+          "worst_monthly_return": false
+        },
+        "deltas": {
+          "annualized_return": 0.0021964541400376625,
+          "final_nav_cny": 3156.4830000000075,
+          "max_drawdown": 6.801924764188172e-05,
+          "max_single_symbol_exposure_pct": -0.00010179160760406814,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.023858921161825725,
+          "skipped_signal_rate": 0.01761252446183953,
+          "total_return": 0.015782415000000327,
+          "worst_monthly_return": -5.013157366817733e-05
+        },
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": 0.003200553553423232,
+          "final_nav_cny": 0.0036524883735123415,
+          "max_drawdown": 0.0009879163575487707,
+          "max_single_symbol_exposure_pct": 0.00040792653450961167,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": -0.15753424657534246,
+          "skipped_signal_rate": -0.13043478260869565,
+          "total_return": 0.004752303049185016,
+          "worst_monthly_return": -0.0035478151057625157
+        }
+      }
+    },
+    {
+      "label": "Rank5 最多 1 手",
+      "negative_months": [
+        {
+          "ending_nav_cny": 197803.8885,
+          "month": "2023-10",
+          "return": -0.014155332234286111
+        },
+        {
+          "ending_nav_cny": 198316.5245,
+          "month": "2023-12",
+          "return": -0.007828213491023472
+        }
+      ],
+      "rank5_diagnostics": {
+        "closed_count": 22,
+        "dynamic_day10_exit_count": 0,
+        "dynamic_late_guard_exit_count": 0,
+        "gross_loss_cny": 1205.1734999999996,
+        "gross_profit_cny": 290.66850000000017,
+        "loser_count": 10,
+        "net_pnl_cny": -914.5049999999994,
+        "profit_factor": 0.24118394571404056,
+        "win_rate": 0.5454545454545454,
+        "winner_count": 12
+      },
+      "summary": {
+        "annualized_return": 0.6879052625449757,
+        "buy_order_count": 818,
+        "final_nav_cny": 866545.3925000004,
+        "max_drawdown": -0.06879182322522559,
+        "max_single_symbol_exposure_pct": 0.24955971059962476,
+        "negative_month_count": 2,
+        "sell_order_count": 793,
+        "skipped_order_rate": 0.15145228215767634,
+        "skipped_signal_rate": 0.1350293542074364,
+        "total_return": 3.3327269625000024,
+        "turnover": 98.55434846250002,
+        "worst_monthly_return": -0.014155332234286111
+      },
+      "variant_id": "rank5_one_lot_cap",
+      "vs_current_r14": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": true,
+          "final_nav_cny": true,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": false,
+          "negative_month_count": true,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": true,
+          "total_return": true,
+          "worst_monthly_return": false
+        },
+        "deltas": {
+          "annualized_return": 0.0016320590585381378,
+          "final_nav_cny": 2344.695000000065,
+          "max_drawdown": 5.93979557373947e-05,
+          "max_single_symbol_exposure_pct": 2.5544536030042142e-05,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.0,
+          "skipped_signal_rate": 0.0,
+          "total_return": 0.011723475000001038,
+          "worst_monthly_return": -2.50655282361123e-05
+        },
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": 0.0023781477263673913,
+          "final_nav_cny": 0.002713137129815918,
+          "max_drawdown": 0.0008627001049302803,
+          "max_single_symbol_exposure_pct": -0.00010236889173537871,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.0,
+          "skipped_signal_rate": 0.0,
+          "total_return": 0.0035301001772889687,
+          "worst_monthly_return": -0.001773889251883708
+        }
+      }
+    },
+    {
+      "label": "Rank5 晚期亏损保护",
+      "negative_months": [
+        {
+          "ending_nav_cny": 197810.9585,
+          "month": "2023-10",
+          "return": -0.014130266706049999
+        },
+        {
+          "ending_nav_cny": 198337.13900000002,
+          "month": "2023-12",
+          "return": -0.007935209761868123
+        }
+      ],
+      "rank5_diagnostics": {
+        "closed_count": 22,
+        "dynamic_day10_exit_count": 0,
+        "dynamic_late_guard_exit_count": 4,
+        "gross_loss_cny": 1873.7999999999984,
+        "gross_profit_cny": 601.903500000001,
+        "loser_count": 10,
+        "net_pnl_cny": -1271.8964999999973,
+        "profit_factor": 0.32122078130003284,
+        "win_rate": 0.5454545454545454,
+        "winner_count": 12
+      },
+      "summary": {
+        "annualized_return": 0.6864462249757557,
+        "buy_order_count": 818,
+        "final_nav_cny": 864449.0750000003,
+        "max_drawdown": -0.06884142539036642,
+        "max_single_symbol_exposure_pct": 0.24953416606359471,
+        "negative_month_count": 2,
+        "sell_order_count": 793,
+        "skipped_order_rate": 0.15145228215767634,
+        "skipped_signal_rate": 0.1350293542074364,
+        "total_return": 3.3222453750000014,
+        "turnover": 98.718750675,
+        "worst_monthly_return": -0.014130266706049999
+      },
+      "variant_id": "rank5_late_guard",
+      "vs_current_r14": {
+        "all_nine_metrics_non_degraded": true,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": true,
+          "final_nav_cny": true,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": true,
+          "total_return": true,
+          "worst_monthly_return": true
+        },
+        "deltas": {
+          "annualized_return": 0.00017302148931808148,
+          "final_nav_cny": 248.37749999994412,
+          "max_drawdown": 9.795790596567322e-06,
+          "max_single_symbol_exposure_pct": 0.0,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.0,
+          "skipped_signal_rate": 0.0,
+          "total_return": 0.001241887499999983,
+          "worst_monthly_return": 0.0
+        },
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": 0.0002521175071955156,
+          "final_nav_cny": 0.0002874071968681141,
+          "max_drawdown": 0.0001422747545874438,
+          "max_single_symbol_exposure_pct": 0.0,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.0,
+          "skipped_signal_rate": 0.0,
+          "total_return": 0.00037394947180102364,
+          "worst_monthly_return": 0.0
+        }
+      }
+    },
+    {
+      "label": "1 手 + 晚期亏损保护",
+      "negative_months": [
+        {
+          "ending_nav_cny": 197803.8885,
+          "month": "2023-10",
+          "return": -0.014155332234286111
+        },
+        {
+          "ending_nav_cny": 198316.5245,
+          "month": "2023-12",
+          "return": -0.007828213491023472
+        }
+      ],
+      "rank5_diagnostics": {
+        "closed_count": 22,
+        "dynamic_day10_exit_count": 0,
+        "dynamic_late_guard_exit_count": 4,
+        "gross_loss_cny": 1004.6759999999994,
+        "gross_profit_cny": 290.66850000000017,
+        "loser_count": 10,
+        "net_pnl_cny": -714.0074999999993,
+        "profit_factor": 0.2893156599739621,
+        "win_rate": 0.5454545454545454,
+        "winner_count": 12
+      },
+      "summary": {
+        "annualized_return": 0.6883194230946013,
+        "buy_order_count": 817,
+        "final_nav_cny": 867141.0455000001,
+        "max_drawdown": -0.06869560035810374,
+        "max_single_symbol_exposure_pct": 0.24955971059962476,
+        "negative_month_count": 2,
+        "sell_order_count": 792,
+        "skipped_order_rate": 0.1524896265560166,
+        "skipped_signal_rate": 0.136986301369863,
+        "total_return": 3.335705227500001,
+        "turnover": 98.54811834750001,
+        "worst_monthly_return": -0.014155332234286111
+      },
+      "variant_id": "rank5_one_lot_plus_late_guard",
+      "vs_current_r14": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": true,
+          "final_nav_cny": true,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": false,
+          "negative_month_count": true,
+          "skipped_order_rate": false,
+          "skipped_signal_rate": false,
+          "total_return": true,
+          "worst_monthly_return": false
+        },
+        "deltas": {
+          "annualized_return": 0.0020462196081636463,
+          "final_nav_cny": 2940.3479999997653,
+          "max_drawdown": 0.00015562082285924816,
+          "max_single_symbol_exposure_pct": 2.5544536030042142e-05,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.001037344398340273,
+          "skipped_signal_rate": 0.0019569471624266144,
+          "total_return": 0.014701739999999575,
+          "worst_monthly_return": -2.50655282361123e-05
+        },
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": 0.0029816399617067146,
+          "final_nav_cny": 0.0034023902185056545,
+          "max_drawdown": 0.002260247824076017,
+          "max_single_symbol_exposure_pct": -0.00010236889173537871,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": -0.00684931506849331,
+          "skipped_signal_rate": -0.014492753623188406,
+          "total_return": 0.004426896886840312,
+          "worst_monthly_return": -0.001773889251883708
+        }
+      }
+    },
+    {
+      "label": "第 10 日仍低于买入价退出",
+      "negative_months": [
+        {
+          "ending_nav_cny": 197810.9585,
+          "month": "2023-10",
+          "return": -0.014130266706049999
+        },
+        {
+          "ending_nav_cny": 198466.814,
+          "month": "2023-12",
+          "return": -0.007234421959590676
+        }
+      ],
+      "rank5_diagnostics": {
+        "closed_count": 22,
+        "dynamic_day10_exit_count": 10,
+        "dynamic_late_guard_exit_count": 0,
+        "gross_loss_cny": 1855.568999999999,
+        "gross_profit_cny": 418.08750000000106,
+        "loser_count": 11,
+        "net_pnl_cny": -1437.481499999998,
+        "profit_factor": 0.22531498424472562,
+        "win_rate": 0.5,
+        "winner_count": 11
+      },
+      "summary": {
+        "annualized_return": 0.6864085503190387,
+        "buy_order_count": 819,
+        "final_nav_cny": 864394.9880000002,
+        "max_drawdown": -0.06884998049592406,
+        "max_single_symbol_exposure_pct": 0.249373598628799,
+        "negative_month_count": 2,
+        "sell_order_count": 794,
+        "skipped_order_rate": 0.1504149377593361,
+        "skipped_signal_rate": 0.13307240704500978,
+        "total_return": 3.3219749400000014,
+        "turnover": 98.74118556000002,
+        "worst_monthly_return": -0.014130266706049999
+      },
+      "variant_id": "rank5_day10_below_entry",
+      "vs_current_r14": {
+        "all_nine_metrics_non_degraded": true,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": true,
+          "final_nav_cny": true,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": true,
+          "total_return": true,
+          "worst_monthly_return": true
+        },
+        "deltas": {
+          "annualized_return": 0.00013534683260107983,
+          "final_nav_cny": 194.29049999988638,
+          "max_drawdown": 1.2406850389279356e-06,
+          "max_single_symbol_exposure_pct": -0.00016056743479572755,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": -0.0010373443983402453,
+          "skipped_signal_rate": -0.0019569471624266144,
+          "total_return": 0.0009714524999999696,
+          "worst_monthly_return": 0.0
+        },
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": 0.00019722004576819326,
+          "final_nav_cny": 0.00022482104048508511,
+          "max_drawdown": 1.801979714589258e-05,
+          "max_single_symbol_exposure_pct": 0.0006434687374826513,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.006849315068493127,
+          "skipped_signal_rate": 0.014492753623188406,
+          "total_return": 0.0002925177596640417,
+          "worst_monthly_return": 0.0
+        }
+      }
+    },
+    {
+      "label": "1 手 + 第 10 日退出",
+      "negative_months": [
+        {
+          "ending_nav_cny": 197803.8885,
+          "month": "2023-10",
+          "return": -0.014155332234286111
+        },
+        {
+          "ending_nav_cny": 198432.2345,
+          "month": "2023-12",
+          "return": -0.007223231445238287
+        }
+      ],
+      "rank5_diagnostics": {
+        "closed_count": 22,
+        "dynamic_day10_exit_count": 10,
+        "dynamic_late_guard_exit_count": 0,
+        "gross_loss_cny": 874.8629999999991,
+        "gross_profit_cny": 198.76050000000015,
+        "loser_count": 11,
+        "net_pnl_cny": -676.102499999999,
+        "profit_factor": 0.2271904286728326,
+        "win_rate": 0.5,
+        "winner_count": 11
+      },
+      "summary": {
+        "annualized_return": 0.688150093923684,
+        "buy_order_count": 818,
+        "final_nav_cny": 866897.4815000001,
+        "max_drawdown": -0.06877510915479645,
+        "max_single_symbol_exposure_pct": 0.24941639578419045,
+        "negative_month_count": 2,
+        "sell_order_count": 793,
+        "skipped_order_rate": 0.15145228215767634,
+        "skipped_signal_rate": 0.1350293542074364,
+        "total_return": 3.3344874075,
+        "turnover": 98.55173016750001,
+        "worst_monthly_return": -0.014155332234286111
+      },
+      "variant_id": "rank5_one_lot_plus_day10_below_entry",
+      "vs_current_r14": {
+        "all_nine_metrics_non_degraded": false,
+        "breakthrough": false,
+        "checks": {
+          "annualized_return": true,
+          "final_nav_cny": true,
+          "max_drawdown": true,
+          "max_single_symbol_exposure_pct": true,
+          "negative_month_count": true,
+          "skipped_order_rate": true,
+          "skipped_signal_rate": true,
+          "total_return": true,
+          "worst_monthly_return": false
+        },
+        "deltas": {
+          "annualized_return": 0.0018768904372463702,
+          "final_nav_cny": 2696.7839999997523,
+          "max_drawdown": 7.611202616653046e-05,
+          "max_single_symbol_exposure_pct": -0.00011777027940426676,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.0,
+          "skipped_signal_rate": 0.0,
+          "total_return": 0.013483919999998761,
+          "worst_monthly_return": -2.50655282361123e-05
+        },
+        "passed": false,
+        "relative_improvements": {
+          "annualized_return": 0.00273490270013648,
+          "final_nav_cny": 0.0031205529083708603,
+          "max_drawdown": 0.0011054564445049386,
+          "max_single_symbol_exposure_pct": 0.0004719605385590868,
+          "negative_month_count": 0.0,
+          "skipped_order_rate": 0.0,
+          "skipped_signal_rate": 0.0,
+          "total_return": 0.004060194471565955,
+          "worst_monthly_return": -0.001773889251883708
+        }
+      }
+    }
+  ],
+  "schema_version": "shortpick_v3_rank5_risk_control_experiment.v1",
+  "source_execution_snapshot": {
+    "artifact_id": "shortpick-v3-execution-snapshot-067c5b83e085f95f",
+    "exact_replay": true,
+    "expected_output_content_digest": "2f69c113db22357cbb3967ef7fc0490f828f06d4d6379045954d829d5e56403c",
+    "input_counts": {
+      "candidate_inventory_row_count": 10220,
+      "market_bar_row_count": 1420262,
+      "market_bar_symbol_count": 1837,
+      "selected_pick_count": 1533
+    },
+    "observed_output_content_digest": "2f69c113db22357cbb3967ef7fc0490f828f06d4d6379045954d829d5e56403c",
+    "output_counts": {
+      "nav_row_count": 675,
+      "order_ledger_row_count": 2326
+    },
+    "path": "/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/rolling_account_execution_snapshots/shortpick-v3-execution-snapshot-067c5b83e085f95f.json.gz"
+  },
+  "status": "completed"
+}

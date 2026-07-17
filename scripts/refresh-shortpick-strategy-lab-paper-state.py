@@ -46,7 +46,7 @@ MAIN_MIN_ORDER_NOTIONAL_CNY = 2250
 CONTROL_MIN_ORDER_NOTIONAL_CNY = 1000
 MAIN_STRATEGY_LABEL = "主策略：14 tranche 分层退出"
 UPSTREAM_META_STABILITY_STRATEGY_LABEL = "对照组：上游元信号稳健缩放"
-QUALITY_REPLACEMENT_REBALANCE_STRATEGY_LABEL = "候选对照：高质量可买替补 + 25% 暴露再平衡"
+QUALITY_REPLACEMENT_REBALANCE_STRATEGY_LABEL = "稳定盈利前沿：仅 Rank4 可买替补 + 25% 暴露再平衡"
 V3_MODEL_SPEC_ID = "selected_exhaustion_date_scaled_v3_top3_20d_v1"
 REQUIRED_V3_MODEL_SPEC_IDS = (V3_MODEL_SPEC_ID, NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID)
 V3_PLAN_SOURCE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_V3_CANDIDATE_RUN_SOURCE"
@@ -867,6 +867,8 @@ def _affordable_replacement_order(
     original_score = _safe_float(original_pick.get("score")) or 0.0
     rank_min = int(_safe_float(policy.get("inventory_rank_min")) or 4)
     rank_max = int(_safe_float(policy.get("inventory_rank_max")) or 5)
+    if strategy_id == QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID and (rank_min, rank_max) != (4, 4):
+        raise ValueError("The active stable-profit frontier must fail closed to Rank4-only replacement.")
     max_score_gap = _safe_float(policy.get("max_score_gap")) or 0.10
     min_fill_ratio = _safe_float(policy.get("min_fill_ratio")) or 0.75
     min_notional = _safe_float(policy.get("min_order_notional_cny")) or 250.0
@@ -1194,9 +1196,18 @@ def _build_strategy_orders(
             )
             if replacement is not None:
                 replacement_pick = replacement.pop("replacement_pick")
+                replacement_policy = config.get("affordable_replacement_policy") or {}
+                inventory_rank_min = int(_safe_float(replacement_policy.get("inventory_rank_min")) or 0)
+                inventory_rank_max = int(_safe_float(replacement_policy.get("inventory_rank_max")) or 0)
+                inventory_rank_label = (
+                    f"Rank{inventory_rank_min}"
+                    if inventory_rank_min == inventory_rank_max
+                    else f"Rank{inventory_rank_min}-{inventory_rank_max}"
+                )
                 replacement_note = (
                     f"原 Rank{int(_safe_float(pick.get('rank')) or 0)} 股票 {symbol} 一手超过目标预算；"
-                    f"按同日 PIT Top20 库存、分差不超过 0.10、库存 Rank4-5、填充率不低于 75% 的规则，"
+                    f"按同日 PIT Top20 库存、分差不超过 0.10、库存 {inventory_rank_label}、"
+                    f"填充率不低于 75% 的规则，"
                     f"替换为 {replacement_pick.get('stock_name') or replacement_pick.get('symbol')}，"
                     f"买入 {int(_safe_float(replacement.get('shares')) or 0)} 股。"
                 )

@@ -65,6 +65,18 @@ def test_shortpick_v3_rolling_contract_bounds_single_signal_budget() -> None:
     assert upstream_meta["three_part_stability_overlay"]["strong_scale"] == 1.65
     assert upstream_meta["meta_signal_quality_overlay"]["industry_leadership_scale"] == 1.35
     assert upstream_meta["meta_signal_quality_overlay"]["low_quality_scale"] == 0.90
+    legacy_rank45 = configs[
+        "daily_15_tranche_rank_adjusted_r5_093_strong154_replacement_"
+        "top5_gap010_fill075_market_cap25_v1"
+    ]
+    stable_profit_rank4 = configs[
+        "daily_15_tranche_rank_adjusted_r5_093_strong154_replacement_"
+        "rank4_gap010_fill075_market_cap25_v1"
+    ]
+    assert legacy_rank45["affordable_replacement_policy"]["inventory_rank_min"] == 4
+    assert legacy_rank45["affordable_replacement_policy"]["inventory_rank_max"] == 5
+    assert stable_profit_rank4["affordable_replacement_policy"]["inventory_rank_min"] == 4
+    assert stable_profit_rank4["affordable_replacement_policy"]["inventory_rank_max"] == 4
     assert configs["two_day_10_tranche_rank_weighted_v1"]["per_signal_target_budget_cny"] == 20_000.0
     assert configs["two_day_10_tranche_rank_weighted_offset1_v1"]["per_signal_target_budget_cny"] == 20_000.0
     assert configs["two_day_10_tranche_rank_weighted_offset1_v1"]["signal_cadence_offset_trade_days"] == 1

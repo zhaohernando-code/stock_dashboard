@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+from copy import deepcopy
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from ashare_evidence.shortpick_strategy_lab_read_model import (
     ACTIVE_STRATEGY_CONFIG_IDS,
     ARCHIVED_STRATEGY_CONFIG_IDS,
     INITIAL_CASH_CNY,
+    LEGACY_RANK45_REPLACEMENT_CONTROL_ID,
     MAIN_CONFIG_ID,
     NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
     PAPER_STATE_SCHEMA_VERSION,
@@ -37,10 +39,12 @@ def test_historical_replay_is_static_full_history_metrics() -> None:
     assert payload["selected_configs"][0]["config_id"] == MAIN_CONFIG_ID
     assert payload["summary"]["baseline_config_count"] == 2
     assert payload["summary"]["active_config_count"] == 3
-    assert payload["summary"]["archived_config_count"] == 5
+    assert payload["summary"]["archived_config_count"] == 6
     assert payload["baseline_configs"][0]["config_id"] == QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID
-    assert payload["baseline_configs"][0]["goal10_improvements"]["skip_order_reduction_rel"] > 0.20
-    assert payload["baseline_configs"][0]["goal10_improvements"]["skip_signal_reduction_rel"] > 0.30
+    assert payload["baseline_configs"][0]["selection_summary"]["affordable_replacement"]["inventory_rank_range"] == [4, 4]
+    assert payload["baseline_configs"][0]["goal10_improvements"]["total_return_rel"] > 0
+    assert payload["baseline_configs"][0]["goal10_improvements"]["skip_order_reduction_rel"] < 0
+    assert payload["baseline_configs"][0]["goal10_improvements"]["skip_signal_reduction_rel"] < 0
     assert payload["baseline_configs"][0]["summary"]["negative_month_count"] == 2
     assert payload["baseline_configs"][1]["config_id"] == UPSTREAM_META_STABILITY_CONTROL_ID
     assert payload["baseline_configs"][1]["goal10_improvements"]["drawdown_reduction_rel"] > 0.10
@@ -58,8 +62,8 @@ def test_historical_replay_response_schema_keeps_breakthrough_metrics() -> None:
 
     first_control = response_payload["baseline_configs"][0]
     assert first_control["config_id"] == QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID
-    assert first_control["goal10_improvements"]["skip_order_reduction_rel"] > 0.20
-    assert first_control["goal10_improvements"]["negative_month_delta"] == 1
+    assert first_control["goal10_improvements"]["total_return_rel"] > 0
+    assert first_control["goal10_improvements"]["negative_month_delta"] == 0
 
 
 def test_paper_tracking_renders_mock_next_order_without_forward_records(tmp_path) -> None:
@@ -797,7 +801,35 @@ def test_quality_candidate_replaces_unaffordable_pick_from_same_day_inventory() 
     assert rank5_observations[0]["selection_decision"] == "shadow_base_eligible_not_selected"
 
 
-def test_forward_plan_captures_point_in_time_rank5_observation_and_links_selected_order(
+def test_active_stable_profit_frontier_fails_closed_if_rank5_is_reenabled() -> None:
+    module = _load_refresh_state_script()
+    contract = build_shortpick_v3_rolling_tranche_execution_contract()
+    config = deepcopy(
+        next(
+            row
+            for row in contract["candidate_configurations"]
+            if row["config_id"] == QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID
+        )
+    )
+    config["affordable_replacement_policy"]["inventory_rank_max"] = 5
+
+    try:
+        module._affordable_replacement_order(
+            skipped_row={"reason": "price_too_high_for_slot"},
+            original_pick={},
+            inventory=[],
+            estimated_close_by_symbol={},
+            selected_symbols=set(),
+            config=config,
+            strategy_id=QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
+        )
+    except ValueError as exc:
+        assert "Rank4-only" in str(exc)
+    else:
+        raise AssertionError("Active stable-profit frontier must reject a configuration that re-enables Rank5.")
+
+
+def test_forward_plan_captures_point_in_time_rank5_observation_without_real_order(
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -922,12 +954,12 @@ def test_forward_plan_captures_point_in_time_rank5_observation_and_links_selecte
         candidate_run=candidate_run,
     )
 
-    replacement = next(
+    rank5_replacements = [
         order
         for order in orders
         if order["strategy_id"] == QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID
         and order.get("replacement_inventory_rank") == 5
-    )
+    ]
     observations = [
         observation
         for diagnostic in status["diagnostics"]
@@ -936,19 +968,19 @@ def test_forward_plan_captures_point_in_time_rank5_observation_and_links_selecte
     assert len(observations) == 1
     assert observations[0]["path_feature_complete"] is True
     assert observations[0]["path_feature_observation_count"] == 20
-    assert observations[0]["selected_by_current_r14"] is True
+    assert observations[0]["selected_by_current_r14"] is False
+    assert observations[0]["selection_decision"] == "shadow_base_eligible_not_selected"
     assert observations[0]["paper_source_capture_mode"] == "daily_forward_capture"
-    assert replacement["rank5_forward_observation_key"] == observations[0]["observation_key"]
-    assert replacement["paper_source_capture_mode"] == "daily_forward_capture"
+    assert rank5_replacements == []
 
 
-def test_forward_replacement_applies_optional_rank5_quality_filter() -> None:
+def test_archived_rank45_replacement_config_keeps_optional_rank5_quality_filter_reproducible() -> None:
     module = _load_refresh_state_script()
     contract = build_shortpick_v3_rolling_tranche_execution_contract()
     config = next(
         row
         for row in contract["candidate_configurations"]
-        if row["config_id"] == QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID
+        if row["config_id"] == LEGACY_RANK45_REPLACEMENT_CONTROL_ID
     )
     config["affordable_replacement_policy"]["rank5_quality_policy"] = {
         "min_return_20d_percentile": 0.5
@@ -975,7 +1007,7 @@ def test_forward_replacement_applies_optional_rank5_quality_filter() -> None:
         estimated_close_by_symbol={"600002.SH": 8.0},
         selected_symbols={"002371.SZ"},
         config=config,
-        strategy_id=QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
+        strategy_id=LEGACY_RANK45_REPLACEMENT_CONTROL_ID,
     )
 
     assert order is None

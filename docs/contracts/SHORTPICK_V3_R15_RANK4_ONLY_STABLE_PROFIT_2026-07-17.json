@@ -1,0 +1,70 @@
+{
+  "artifact_type": "shortpick_v3_stable_profit_frontier_contract",
+  "schema_version": "shortpick_v3_stable_profit_frontier_contract.v1",
+  "artifact_id": "shortpick-v3-r15-rank4-only-stable-profit-20260717",
+  "status": "active_stable_profit_frontier",
+  "activated_at": "2026-07-17T17:00:00+08:00",
+  "objective": {
+    "primary": "stable_account_profitability",
+    "cash_is_valid_when_no_high_confidence_replacement": true,
+    "minimize_skipped_orders_is_hard_gate": false
+  },
+  "active_config": {
+    "config_id": "daily_15_tranche_rank_adjusted_r5_093_strong154_replacement_rank4_gap010_fill075_market_cap25_v1",
+    "replacement_inventory_rank_min": 4,
+    "replacement_inventory_rank_max": 4,
+    "rank5_real_buy_enabled": false,
+    "rank5_shadow_observation_enabled": true,
+    "market_value_concentration_rebalance_threshold": 0.25
+  },
+  "retired_config": {
+    "config_id": "daily_15_tranche_rank_adjusted_r5_093_strong154_replacement_top5_gap010_fill075_market_cap25_v1",
+    "retirement_reason": "rank5_historical_net_pnl_is_negative_and_execution_coverage_is_not_a_hard_product_goal",
+    "historical_reproducibility_preserved": true
+  },
+  "replay_evidence": {
+    "execution_snapshot": "/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/research_validation/rolling_account_execution_snapshots/shortpick-v3-execution-snapshot-067c5b83e085f95f.json.gz",
+    "signal_date_from": "2023-09-07",
+    "signal_date_to": "2026-06-26",
+    "signal_day_count": 511,
+    "selected_pick_count": 1533,
+    "accepted_replacement_count": 35,
+    "accepted_replacement_ranks": [
+      4
+    ],
+    "rank5_replacement_buy_count": 0,
+    "summary": {
+      "total_return": 3.3367859025000017,
+      "annualized_return": 0.6884696576264753,
+      "final_nav_cny": 867357.1805000004,
+      "max_drawdown": -0.0687832019333211,
+      "negative_month_count": 2,
+      "worst_monthly_return": -0.014180398279718176,
+      "skipped_order_rate": 0.17531120331950206,
+      "skipped_signal_rate": 0.15264187866927592,
+      "buy_order_count": 795,
+      "sell_order_count": 771,
+      "turnover": 98.3562003225,
+      "mean_invested_ratio": 0.689122,
+      "p95_invested_ratio": 0.979255,
+      "max_single_symbol_exposure_pct": 0.24943237445599065,
+      "max_position_count": 38
+    },
+    "comparison_vs_reproducible_rank4_rank5_frontier": {
+      "total_return_percentage_point_delta": 1.5786,
+      "final_nav_cny_delta": 3156.483,
+      "max_drawdown_percentage_point_improvement": 0.0068,
+      "negative_month_count_delta": 0,
+      "skipped_order_rate_percentage_point_delta": 2.386,
+      "skipped_signal_rate_percentage_point_delta": 1.761
+    }
+  },
+  "decision": {
+    "rank5_action": "disable_real_execution_keep_shadow_observation",
+    "rank4_action": "retain_as_only_affordable_replacement_rank",
+    "coverage_tradeoff": "accepted",
+    "automatic_rank5_reactivation": "forbidden",
+    "future_rank5_research": "may_reopen_only_as_an_explicit_new_decision_after_forward_evidence"
+  },
+  "claim_ceiling": "deterministic_historical_account_replay_not_future_return_guarantee"
+}

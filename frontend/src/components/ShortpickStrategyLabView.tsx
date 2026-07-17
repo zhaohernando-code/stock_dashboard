@@ -35,12 +35,12 @@ const { Paragraph, Text, Title } = Typography;
 type ShortpickStrategyLabTab = "paper-tracking" | "historical-replay";
 const SHORTPICK_STRATEGY_LAB_TABS = new Set<ShortpickStrategyLabTab>(["paper-tracking", "historical-replay"]);
 const ACTIVE_STRATEGY_CONFIG_IDS = [
-  "daily_15_tranche_rank_adjusted_r5_093_strong154_replacement_top5_gap010_fill075_market_cap25_v1",
+  "daily_15_tranche_rank_adjusted_r5_093_strong154_replacement_rank4_gap010_fill075_market_cap25_v1",
   "daily_14_tranche_upstream_meta_signal_quality_min2250_weak100_strong165_lead135_low090_v1",
   "daily_14_tranche_rank_weighted_compound_min2250_layered_rank1_quickfail_rank3_pullback_exit_v1",
 ] as const;
 const ACTIVE_STRATEGY_CONFIG_ID_SET = new Set<string>(ACTIVE_STRATEGY_CONFIG_IDS);
-const ACTIVE_STRATEGY_LABEL_FRAGMENTS = ["高质量可买替补", "上游元信号稳健缩放", "主策略"];
+const ACTIVE_STRATEGY_LABEL_FRAGMENTS = ["仅 Rank4 可买替补", "上游元信号稳健缩放", "主策略"];
 
 function activeStrategyRows(rows: ShortpickStrategyLabConfigReadout[]): ShortpickStrategyLabConfigReadout[] {
   const order = new Map<string, number>(ACTIVE_STRATEGY_CONFIG_IDS.map((configId, index) => [configId, index]));
@@ -74,7 +74,7 @@ function stringField(source: Record<string, unknown> | undefined, key: string): 
 function configRoleLabel(role?: string | null): string {
   if (role === "primary_forward_observation") return "现行前向基线";
   if (role === "lower_concentration_control") return "低集中对照";
-  if (role === "quality_replacement_rebalance_candidate") return "R14 优化前沿";
+  if (role === "quality_replacement_rebalance_candidate") return "稳定盈利前沿";
   if (role === "upstream_meta_signal_candidate") return "独立模型对照";
   if (role === "conditional_aggressive_control_candidate") return "条件增强对照";
   if (role === "execution_stability_control_candidate") return "执行稳定对照";
@@ -111,7 +111,9 @@ function configRoleColor(role?: string | null): string {
 }
 
 function statusColor(value?: string | null): string {
-  if (value === "ready" || value === "active" || value === "passed") return "green";
+  if (value === "ready" || value === "active" || value === "passed" || value === "stable_profit_frontier") {
+    return "green";
+  }
   if (value === "contract_ready" || value === "baseline_control" || value === "active_control") return "blue";
   if (value === "failed" || value === "blocked") return "red";
   if (value === "holdout" || value === "diagnostic_only") return "gold";
@@ -133,6 +135,7 @@ function readableStatusLabel(value?: string | null): string {
   if (value === "awaiting_first_forward_fill") return "等待首笔前向成交";
   if (value === "active_control") return "对照观察中";
   if (value === "candidate_control") return "候选对照";
+  if (value === "stable_profit_frontier") return "稳定盈利前沿";
   if (value === "static_full_history_ready") return "静态历史指标已就绪";
   if (value === "passed") return "已通过";
   if (value === "failed") return "未通过";
@@ -679,7 +682,7 @@ function Rank5ForwardObservationCard({
   return (
     <Card
       className="panel-card"
-      title="Rank5 固定前瞻观察窗"
+      title="Rank5 已停用 · 影子观察"
       extra={<Tag color={!dataQualityPassed ? "red" : reopenReady ? "green" : "blue"}>{
         !dataQualityPassed ? "数据质量阻断" : reopenReady ? "可重开研究" : "样本积累中"
       }</Tag>}
@@ -691,18 +694,18 @@ function Rank5ForwardObservationCard({
           <Alert
             showIcon
             type={dataQualityPassed ? "info" : "error"}
-            message="只观察，不改变当前 R14 计划单"
-            description={`从 ${observationStart} 起独立记录所有基础条件合格的 Rank5 影子机会；同步回填不计入证据，${returnHorizon} 个后续交易日成熟前收益保持为空。`}
+            message="Rank5 不再生成真实买单"
+            description={`真实替补只允许 Rank4；没有合格 Rank4 时保留现金。从 ${observationStart} 起仍独立记录 Rank5 影子机会，${returnHorizon} 个后续交易日成熟前收益保持为空。`}
           />
           <div className="metric-strip shortpick-strategy-lab-metrics">
             <div className="metric-strip-item"><span>成熟影子样本</span><strong>{matured} / {maturedMinimum}</strong></div>
             <div className="metric-strip-item"><span>待成熟样本</span><strong>{pending}</strong></div>
             <div className="metric-strip-item"><span>成熟信号月份</span><strong>{monthCount} / {monthMinimum}</strong></div>
             <div className="metric-strip-item"><span>观察日历天</span><strong>{elapsedDays} / {elapsedMinimum}</strong></div>
-            <div className="metric-strip-item"><span>Rank5 实际闭环</span><strong>{actualClosed} / {actualClosedMinimum}</strong></div>
+            <div className="metric-strip-item"><span>历史 Rank5 闭环</span><strong>{actualClosed} / {actualClosedMinimum}</strong></div>
           </div>
           <Progress percent={sampleProgress} status={dataQualityPassed ? "normal" : "exception"} />
-          <Text type="secondary">达到上方全部前瞻门槛后，只允许重开研究，不自动调整阈值或启用 Rank5 过滤。</Text>
+          <Text type="secondary">达到上方全部前瞻门槛后只允许重开研究；不会自动恢复 Rank5 真实买入。</Text>
         </Space>
       )}
     </Card>
@@ -806,7 +809,7 @@ function ShortpickStrategyLabPaperTab({
         showIcon
         type="info"
         message="活跃策略已收敛为 3 个角色"
-        description="R14 优化前沿 · 上游元信号独立模型对照 · 现行 14 tranche 前向基线；其余策略仅保留历史归档，不再生成新计划单。"
+        description="稳定盈利前沿（仅 Rank4 可买替补）· 上游元信号独立模型对照 · 现行 14 tranche 前向基线；Rank5 已停用，其余策略只保留历史归档。"
       />
 
       <Rank5ForwardObservationCard tracking={tracking} loading={loading} />
@@ -1248,7 +1251,7 @@ function ShortpickStrategyLabReplayTab({
         showIcon
         type="info"
         message="当前只保留 3 个活跃角色"
-        description="R14 是后续优化基线，上游元信号保留为独立模型族对照，现行 14 tranche 仅作为前向基线；5 条被支配或重复策略已归档。"
+        description="仅 Rank4 替补策略是稳定盈利优化基线，上游元信号保留为独立模型族对照，现行 14 tranche 仅作为前向基线；Rank5 真实买入与其余 5 条被支配或重复策略共 6 条已归档。"
       />
 
       {replay?.metric_groups?.length ? (
