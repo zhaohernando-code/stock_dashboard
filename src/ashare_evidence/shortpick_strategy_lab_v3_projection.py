@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -8,6 +9,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ashare_evidence.benchmark import sync_benchmark_index_bars
 from ashare_evidence.model_candidate_runner import (
     _exit_horizon_days,
     _fit_model,
@@ -32,6 +34,117 @@ DEFAULT_V3_MODEL_SPEC_IDS = (V3_MODEL_SPEC_ID, NEGATIVE_MONTH_RANK_ADJUSTED_MODE
 DEFAULT_BENCHMARK_SYMBOL = "000300.SH"
 DEFAULT_V3_CANDIDATE_RUN_SOURCE_NAME = "shortpick-strategy-lab-v3-candidate-run-source.json"
 FORWARD_REPLACEMENT_INVENTORY_TOP_K = 20
+V3_BENCHMARK_REQUIRED_BAR_COUNT = 21
+V3_BENCHMARK_SYNC_ATTEMPTS = 3
+V3_BENCHMARK_SYNC_RETRY_SECONDS = (0.0, 2.0, 5.0)
+
+
+class V3BenchmarkDataUnavailableError(RuntimeError):
+    pass
+
+
+def _benchmark_readiness(
+    session: Session,
+    *,
+    signal_date: date,
+    benchmark_symbol: str,
+) -> dict[str, Any]:
+    benchmark = session.scalar(select(Stock).where(Stock.symbol == benchmark_symbol).limit(1))
+    if benchmark is None:
+        return {
+            "ready": False,
+            "reason": "benchmark_stock_missing",
+            "benchmark_symbol": benchmark_symbol,
+            "signal_date": signal_date.isoformat(),
+            "bar_count_at_or_before_signal": 0,
+            "latest_trade_day": None,
+        }
+    observed_days = list(
+        session.scalars(
+            select(func.date(MarketBar.observed_at))
+            .where(
+                MarketBar.stock_id == benchmark.id,
+                MarketBar.timeframe == "1d",
+                func.date(MarketBar.observed_at) <= signal_date.isoformat(),
+            )
+            .order_by(MarketBar.observed_at.desc(), MarketBar.id.desc())
+            .limit(V3_BENCHMARK_REQUIRED_BAR_COUNT)
+        ).all()
+    )
+    latest_trade_day = date.fromisoformat(str(observed_days[0])) if observed_days else None
+    exact_signal_day = latest_trade_day == signal_date
+    enough_history = len(observed_days) >= V3_BENCHMARK_REQUIRED_BAR_COUNT
+    reason = None
+    if not exact_signal_day:
+        reason = "benchmark_signal_day_missing"
+    elif not enough_history:
+        reason = "benchmark_history_insufficient"
+    return {
+        "ready": exact_signal_day and enough_history,
+        "reason": reason,
+        "benchmark_symbol": benchmark_symbol,
+        "signal_date": signal_date.isoformat(),
+        "bar_count_at_or_before_signal": len(observed_days),
+        "required_bar_count": V3_BENCHMARK_REQUIRED_BAR_COUNT,
+        "latest_trade_day": latest_trade_day.isoformat() if latest_trade_day else None,
+    }
+
+
+def ensure_v3_benchmark_data(
+    session: Session,
+    *,
+    signal_date: date,
+    benchmark_symbol: str = DEFAULT_BENCHMARK_SYMBOL,
+    sync_attempts: int = V3_BENCHMARK_SYNC_ATTEMPTS,
+) -> dict[str, Any]:
+    readiness = _benchmark_readiness(session, signal_date=signal_date, benchmark_symbol=benchmark_symbol)
+    if readiness["ready"]:
+        return {**readiness, "status": "existing_ready", "sync_attempt_count": 0, "sync_attempts": []}
+
+    sync_results: list[dict[str, Any]] = []
+    for attempt in range(1, max(1, sync_attempts) + 1):
+        sync_result = sync_benchmark_index_bars(session, required_through=signal_date)
+        session.flush()
+        readiness = _benchmark_readiness(session, signal_date=signal_date, benchmark_symbol=benchmark_symbol)
+        sync_results.append(
+            {
+                "attempt": attempt,
+                "sync_status": sync_result.get("status"),
+                "primary_ready": sync_result.get("primary_ready"),
+                "readiness": readiness,
+            }
+        )
+        if readiness["ready"]:
+            return {
+                **readiness,
+                "status": "auto_repaired",
+                "sync_attempt_count": attempt,
+                "sync_attempts": sync_results,
+            }
+        if attempt < sync_attempts:
+            delay = V3_BENCHMARK_SYNC_RETRY_SECONDS[min(attempt, len(V3_BENCHMARK_SYNC_RETRY_SECONDS) - 1)]
+            if delay > 0:
+                time.sleep(delay)
+
+    raise V3BenchmarkDataUnavailableError(
+        "cannot build v3 candidate source without same-day benchmark data: "
+        f"symbol={benchmark_symbol}, signal_date={signal_date.isoformat()}, "
+        f"reason={readiness.get('reason')}, attempts={len(sync_results)}"
+    )
+
+
+def _require_projection_benchmark_features(feature_rows: list[dict[str, Any]], *, signal_date: date) -> None:
+    missing_symbols = [
+        str(row.get("symbol") or "")
+        for row in feature_rows
+        if (row.get("feature_values") or {}).get("regime", {}).get("benchmark_return_20d") is None
+    ]
+    if missing_symbols:
+        sample = ",".join(missing_symbols[:5])
+        raise V3BenchmarkDataUnavailableError(
+            "v3 projection benchmark_return_20d is missing after automatic sync: "
+            f"signal_date={signal_date.isoformat()}, affected_rows={len(missing_symbols)}, sample={sample}"
+        )
 
 
 def default_v3_candidate_run_source_path(repo_root: Path) -> Path:
@@ -74,6 +187,11 @@ def build_latest_v3_candidate_run_source(
     model_spec_ids: tuple[str, ...] | list[str] | None = None,
 ) -> dict[str, Any]:
     signal_date = as_of_date or latest_model_as_of_date(session, benchmark_symbol=benchmark_symbol)
+    benchmark_data_readiness = ensure_v3_benchmark_data(
+        session,
+        signal_date=signal_date,
+        benchmark_symbol=benchmark_symbol,
+    )
     resolved_validation_run_id = validation_run_id or f"shortpick-strategy-lab-v3-forward-{signal_date.isoformat()}"
     requested_model_spec_ids = tuple(dict.fromkeys(model_spec_ids or DEFAULT_V3_MODEL_SPEC_IDS or (model_spec_id,)))
     if model_spec_id not in requested_model_spec_ids:
@@ -94,6 +212,7 @@ def build_latest_v3_candidate_run_source(
         for row in matrix_artifacts["pit_feature_matrix"].get("rows", [])
         if str(row.get("as_of_date") or "") == signal_date.isoformat()
     ]
+    _require_projection_benchmark_features(feature_rows, signal_date=signal_date)
     trial_summaries: list[dict[str, Any]] = []
     trial_diagnostics: list[dict[str, Any]] = []
     selected_pick_count_by_model_spec: dict[str, int] = {}
@@ -205,6 +324,7 @@ def build_latest_v3_candidate_run_source(
         "model_spec_ids": list(requested_model_spec_ids),
         "signal_date": signal_date.isoformat(),
         "benchmark_symbol": benchmark_symbol,
+        "benchmark_data_readiness": benchmark_data_readiness,
         "source_input_snapshot_id": matrix_artifacts["model_exploration_input_snapshot"].get("artifact_id"),
         "source_feature_matrix_id": matrix_artifacts["pit_feature_matrix"].get("artifact_id"),
         "source_universe_row_count": matrix_artifacts["model_exploration_input_snapshot"].get("universe_row_count"),

@@ -48,6 +48,7 @@ def main() -> int:
                 "selected_pick_count": payload.get("selected_pick_count"),
                 "model_spec_ids": payload.get("model_spec_ids"),
                 "selected_pick_count_by_model_spec": payload.get("selected_pick_count_by_model_spec"),
+                "benchmark_data_readiness": payload.get("benchmark_data_readiness"),
             },
             ensure_ascii=False,
         )
