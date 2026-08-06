@@ -64,6 +64,7 @@ from ashare_evidence.external_context_acquisition import (
     execute_cninfo_personal_acquisition,
     run_gdelt_multiday_relevance_canary,
 )
+from ashare_evidence.external_context_background import run_external_context_background_pipeline
 from ashare_evidence.external_context_global_market_import import (
     build_global_market_pilot_from_vendor_export,
 )
@@ -455,6 +456,7 @@ NO_DB_COMMANDS = {
     "research-external-context-cninfo-curation-audit",
     "research-external-context-global-market-import-validate",
     "research-external-context-ablation-readiness",
+    "research-external-context-background-run",
     "research-external-context-gdelt-multiday-canary",
     "research-external-context-fed-policy-poc",
     "research-external-context-federal-register-poc",
@@ -1110,6 +1112,22 @@ def build_parser() -> argparse.ArgumentParser:
     external_context_ablation_readiness.add_argument("--decision-cutoff", required=True)
     external_context_ablation_readiness.add_argument("--global-import-audit-json", default=None)
     external_context_ablation_readiness.add_argument("--output-json", required=True)
+
+    external_context_background = subparsers.add_parser(
+        "research-external-context-background-run",
+        help="Run the resumable full CNINFO acquisition and finalize offline research gates.",
+    )
+    external_context_background.add_argument("--plan-json", required=True)
+    external_context_background.add_argument("--artifact-root", required=True)
+    external_context_background.add_argument("--state-json", required=True)
+    external_context_background.add_argument("--curation-output-json", required=True)
+    external_context_background.add_argument("--readiness-output-json", required=True)
+    external_context_background.add_argument("--decision-cutoff", required=True)
+    external_context_background.add_argument("--global-import-audit-json", default=None)
+    external_context_background.add_argument("--batch-size", type=int, default=100)
+    external_context_background.add_argument("--min-request-interval-seconds", type=float, default=1.0)
+    external_context_background.add_argument("--max-zero-progress-cycles", type=int, default=12)
+    external_context_background.add_argument("--zero-progress-backoff-seconds", type=float, default=60.0)
 
     external_context_gdelt_multiday = subparsers.add_parser(
         "research-external-context-gdelt-multiday-canary",
@@ -3253,6 +3271,23 @@ def main(argv: list[str] | None = None) -> int:
             global_import_audit_path=args.global_import_audit_json,
         )
         write_external_context_artifact(payload, args.output_json)
+        _print_json(payload)
+        return 0
+
+    if args.command == "research-external-context-background-run":
+        payload = run_external_context_background_pipeline(
+            plan_path=args.plan_json,
+            artifact_root=args.artifact_root,
+            state_path=args.state_json,
+            curation_output_path=args.curation_output_json,
+            readiness_output_path=args.readiness_output_json,
+            decision_cutoff=args.decision_cutoff,
+            global_import_audit_path=args.global_import_audit_json,
+            batch_size=args.batch_size,
+            min_request_interval_seconds=args.min_request_interval_seconds,
+            max_zero_progress_cycles=args.max_zero_progress_cycles,
+            zero_progress_backoff_seconds=args.zero_progress_backoff_seconds,
+        )
         _print_json(payload)
         return 0
 

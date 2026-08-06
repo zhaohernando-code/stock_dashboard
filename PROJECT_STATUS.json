@@ -10,7 +10,7 @@
   },
   "status": "in_progress",
   "owner": "codex",
-  "updated_at": "2026-08-07T00:15:00+08:00",
+  "updated_at": "2026-08-07T01:05:00+08:00",
   "latest_personal_eligibility_and_external_context_update": {
     "status": "pit_eligibility_gate_active_external_context_research_only",
     "account_profile": "new_retail_cash_account",
@@ -103,6 +103,19 @@
       "cninfo_full713_task_coverage_incomplete",
       "qualified_global_market_full_window_export_missing"
     ],
+    "v3_signal_changed": false
+  },
+  "latest_external_context_background_run": {
+    "status": "ready_for_runtime_install",
+    "contract": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_BACKGROUND_RUN_2026-08-07.json",
+    "launchagent_label": "com.codex.ashare-dashboard.external-context-research",
+    "starting_progress": "150_of_9027_tasks",
+    "batch_size": 100,
+    "minimum_http_request_interval_seconds": 1.0,
+    "resume_from_immutable_checkpoints": true,
+    "single_instance_lock": true,
+    "storage_hard_cap_bytes": 1879048192,
+    "automatic_weight_backtest_requires_readiness_gate": true,
     "v3_signal_changed": false
   },
   "latest_public_news_storage_policy": {

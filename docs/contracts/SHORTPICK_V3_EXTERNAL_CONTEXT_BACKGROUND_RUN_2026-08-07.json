@@ -1,0 +1,54 @@
+{
+  "contract_id": "shortpick_v3_external_context_background_run_2026_08_07",
+  "schema_version": "external_context_background_pipeline.v1",
+  "status": "ready_for_runtime_install",
+  "project_owner": "ashare-dashboard",
+  "component": {
+    "launchagent_label": "com.codex.ashare-dashboard.external-context-research",
+    "wrapper": "/Users/hernando_zhao/.config/codex/launch-items/bin/codex-ashare-external-context-research",
+    "runtime_script": "/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/scripts/run-external-context-research.sh",
+    "stdout_log": "/Users/hernando_zhao/Library/Logs/codex-ashare-dashboard.external-context-research.log",
+    "stderr_log": "/Users/hernando_zhao/Library/Logs/codex-ashare-dashboard.external-context-research.err.log",
+    "port": null,
+    "database_access": false
+  },
+  "persistent_inputs": {
+    "artifact_root": "/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/external-context-personal-v1",
+    "plan": "cninfo-full713-plan.json",
+    "task_count": 9027,
+    "starting_completed_task_count": 150
+  },
+  "runtime_policy": {
+    "batch_size": 100,
+    "minimum_http_request_interval_seconds": 1.0,
+    "per_task_transient_attempts": 2,
+    "zero_progress_cycles_before_launchd_restart": 12,
+    "zero_progress_backoff_seconds": 60,
+    "prevent_idle_system_sleep_during_run": true,
+    "single_instance_file_lock": true,
+    "resume_from_immutable_input_and_result_checkpoints": true,
+    "storage_target_bytes": 1610612736,
+    "storage_hard_cap_bytes": 1879048192,
+    "article_body_retained": false,
+    "attribution": "hernando_zhao",
+    "redistribution": "forbidden"
+  },
+  "completion_pipeline": [
+    "complete_remaining_cninfo_tasks",
+    "generate_current_relevance_curation_overlay",
+    "verify_every_raw_silver_pit_manifest_offline",
+    "evaluate_fail_closed_ablation_readiness"
+  ],
+  "weight_backtest_rule": {
+    "automatic_start_without_qualified_global_market_export": false,
+    "reason": "A missing provider revision chain and frozen replay rights cannot be synthesized locally.",
+    "v3_signal_changed": false
+  },
+  "restart_and_cleanup": {
+    "run_at_login_until_terminal_state": true,
+    "restart_after_nonzero_exit": true,
+    "terminal_state_guard_exits_without_reprocessing": true,
+    "log_rotation": "covered_by_com.codex.background-log-rotation_at_512KiB",
+    "cleanup_owner": "stock_dashboard_closeout_after_terminal_state_review"
+  }
+}
