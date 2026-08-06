@@ -1,7 +1,7 @@
 {
   "contract_id": "shortpick_v3_external_context_background_run_2026_08_07",
   "schema_version": "external_context_background_pipeline.v1",
-  "status": "ready_for_runtime_install",
+  "status": "installed_running",
   "project_owner": "ashare-dashboard",
   "component": {
     "launchagent_label": "com.codex.ashare-dashboard.external-context-research",
@@ -17,6 +17,19 @@
     "plan": "cninfo-full713-plan.json",
     "task_count": 9027,
     "starting_completed_task_count": 150
+  },
+  "runtime_installation": {
+    "installed_at": "2026-08-07T01:09:21+08:00",
+    "first_checkpoint_at": "2026-08-07T01:17:58+08:00",
+    "first_checkpoint_completed_task_count": 250,
+    "first_checkpoint_processed_count": 100,
+    "first_checkpoint_failure_count": 0,
+    "first_checkpoint_transient_retry_count": 0,
+    "first_checkpoint_network_request_count": 426,
+    "state_file": "/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/external-context-personal-v1/operations/full713-background-state.json",
+    "release_manifest": "/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260806T170648Z-2079df1f856b/manifest.json",
+    "served_release_verification_checks_passed": 44,
+    "launchagent_running_verified": true
   },
   "runtime_policy": {
     "batch_size": 100,
