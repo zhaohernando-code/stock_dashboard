@@ -1,0 +1,119 @@
+{
+  "contract_id": "shortpick_v3_public_news_summary_storage_2026_08_06",
+  "status": "research_storage_and_relevance_gates_implemented_public_backfill_pending",
+  "generated_at": "2026-08-06T21:10:00+08:00",
+  "v3_signal_changed": false,
+  "claim_ceiling": "public_news_summary_storage_contract_only_no_external_strategy_validation",
+  "objective": "Use public official and discovery sources without retaining article bodies, while keeping the complete news replay root below a personal-computer storage ceiling.",
+  "source_priority": [
+    {
+      "tier": "official_fact",
+      "sources": ["cninfo", "sse", "szse", "csrc_and_government", "sec_edgar", "company_ir"],
+      "allowed_use": ["risk_gate_candidate", "global_state", "sector_state", "individual_event"],
+      "note": "Official timestamps and correction notices remain the primary truth layer."
+    },
+    {
+      "tier": "public_news_discovery",
+      "sources": ["gdelt_event_and_gkg", "official_rss", "company_ir_rss"],
+      "allowed_use": ["global_state", "sector_state", "individual_event_candidate"],
+      "note": "Discovery records remain weaker than official facts and cannot independently create buy eligibility."
+    }
+  ],
+  "retention_contract": {
+    "content_class": "news_summary",
+    "mode": "summary_only_no_article_body",
+    "allowed_raw_fields": [
+      "headline",
+      "summary",
+      "source_url",
+      "source_name",
+      "language",
+      "content_hash",
+      "summary_method",
+      "summary_model_version"
+    ],
+    "forbidden_content": ["article_body", "html", "full_text", "images", "comments", "embedded_media"],
+    "summary_max_characters": 1000,
+    "summary_max_utf8_bytes": 4096,
+    "headline_max_characters": 300,
+    "source_url_max_characters": 2048,
+    "compact_json": true,
+    "content_hash_rule": "Store a SHA-256 digest for change detection without retaining the source body.",
+    "model_summary_rule": "A model-generated summary must carry a non-empty summary_model_version."
+  },
+  "relevance_contract": {
+    "policy_version": "external_context_news_relevance.v1",
+    "minimum_score": 0.65,
+    "score_range": [0.0, 1.0],
+    "channel_models": {
+      "global_state": {
+        "weights": {"global_topic_match": 0.45, "source_quality": 0.2, "novelty": 0.15, "time_lineage": 0.2},
+        "hard_component_floor": {"global_topic_match": 0.75},
+        "daily_total_limit": 12
+      },
+      "sector_state": {
+        "weights": {"sector_match": 0.35, "entity_match": 0.25, "source_quality": 0.15, "novelty": 0.15, "time_lineage": 0.1},
+        "hard_component_floor": {"sector_match": 0.7},
+        "daily_total_limit": 48,
+        "requires": ["sector_ids"]
+      },
+      "individual_event": {
+        "weights": {"entity_match": 0.45, "sector_match": 0.15, "source_quality": 0.15, "novelty": 0.15, "time_lineage": 0.1},
+        "hard_component_floor": {"entity_match": 0.8},
+        "daily_total_limit": 90,
+        "requires": ["affected_symbols"]
+      }
+    },
+    "all_channels_require": ["topic_tags", "available_at_not_after_decision_cutoff"],
+    "pre_storage_order": [
+      "validate_summary_only_shape",
+      "compute_local_relevance",
+      "drop_below_score_or_component_floor",
+      "deduplicate_by_source_url_content_hash_headline",
+      "apply_daily_channel_quota",
+      "materialize_raw_normalized_pit"
+    ],
+    "maximum_selected_records_over_713_signal_days_from_daily_quotas": 106950
+  },
+  "storage_budget": {
+    "scope": "entire_news_artifact_root_including_raw_normalized_pit_and_manifests",
+    "target_bytes": 1610612736,
+    "target_gib": 1.5,
+    "hard_cap_bytes": 1879048192,
+    "hard_cap_gib": 1.75,
+    "user_ceiling_gib": 2.0,
+    "behavior": "Every immutable write checks projected root bytes and fails before the hard cap is exceeded.",
+    "capacity_response_order": [
+      "reduce_duplicate_and_low_relevance_records",
+      "tighten_daily_channel_quota_under_a_new_preregistered_contract",
+      "archive_or_remove_only_unreferenced_failed_pilot_artifacts_after_integrity_review",
+      "never_silently_delete_a_frozen_manifest_or_raise_the_cap"
+    ]
+  },
+  "pit_and_revision_contract": {
+    "forward_first_seen_at": "Captured locally at poll receipt.",
+    "local_revision_id": "Stable source document identifier plus content hash; every changed hash becomes a new immutable knowledge version.",
+    "historical_public_news": "Requires an archived observation timestamp such as an official publication/dissemination time or GDELT DATEADDED. A page timestamp observed only today is not backdated.",
+    "decision_rule": "available_at <= decision_cutoff",
+    "network_during_replay": "forbidden"
+  },
+  "implementation": {
+    "modules": [
+      "src/ashare_evidence/external_context_news_summary.py",
+      "src/ashare_evidence/external_context_replay.py"
+    ],
+    "materializer": "materialize_external_context_pilot",
+    "schemas": [
+      "external_context_raw_record.v1",
+      "external_context_silver_record.v1",
+      "external_context_pit_record.v1",
+      "external_context_replay_manifest.v1"
+    ],
+    "tests": "tests/test_external_context_replay.py"
+  },
+  "current_gate": {
+    "public_news_full713_materialized": false,
+    "weight_backtest_allowed": false,
+    "next_step": "Build bounded public-source adapters that emit this summary-only input contract, beginning with official A-share disclosures, SEC/IR and GDELT metadata."
+  }
+}

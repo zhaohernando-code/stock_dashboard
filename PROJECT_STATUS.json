@@ -10,7 +10,7 @@
   },
   "status": "in_progress",
   "owner": "codex",
-  "updated_at": "2026-08-06T20:30:00+08:00",
+  "updated_at": "2026-08-06T21:10:00+08:00",
   "latest_personal_eligibility_and_external_context_update": {
     "status": "pit_eligibility_gate_active_external_context_research_only",
     "account_profile": "new_retail_cash_account",
@@ -67,6 +67,22 @@
     "major_negative_official_event_can_gate": true,
     "selection_rule": "smallest_weight_within_one_standard_error_of_best_oos",
     "model_ladder": ["static", "rule_dynamic", "constrained_logistic_gam_monotonic_gbdt", "black_box_challenger_only"]
+  },
+  "latest_public_news_storage_policy": {
+    "status": "summary_only_relevance_and_storage_gates_implemented_backfill_pending",
+    "v3_signal_changed": false,
+    "contract": "docs/contracts/SHORTPICK_V3_PUBLIC_NEWS_SUMMARY_STORAGE_2026-08-06.json",
+    "source_priority": ["official_public_facts", "gdelt_and_official_rss_discovery", "commercial_challengers_later"],
+    "article_body_retained": false,
+    "summary_max_characters": 1000,
+    "summary_max_utf8_bytes": 4096,
+    "relevance_min_score": 0.65,
+    "daily_channel_limits": {"global_state": 12, "sector_state": 48, "individual_event": 90},
+    "storage_target_gib": 1.5,
+    "storage_hard_cap_gib": 1.75,
+    "user_ceiling_gib": 2.0,
+    "full713_public_news_materialized": false,
+    "weight_backtest_allowed": false
   },
   "latest_rank5_policy_update": {
     "status": "rank5_real_execution_disabled_rank4_only_active",

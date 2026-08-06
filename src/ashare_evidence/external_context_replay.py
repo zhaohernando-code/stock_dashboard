@@ -3,9 +3,21 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from ashare_evidence.external_context_news_summary import (
+    NEWS_DAILY_CHANNEL_LIMITS,
+    NEWS_RELEVANCE_POLICY_VERSION,
+    NEWS_STORAGE_HARD_CAP_BYTES,
+    NEWS_STORAGE_TARGET_BYTES,
+    NEWS_SUMMARY_MAX_BYTES,
+    NEWS_SUMMARY_MAX_CHARS,
+    curate_news_records,
+    validate_news_summary_payloads,
+)
 
 PILOT_INPUT_SCHEMA_VERSION = "external_context_pilot_input.v1"
 RAW_SCHEMA_VERSION = "external_context_raw_record.v1"
@@ -16,7 +28,7 @@ REPLAY_SCHEMA_VERSION = "external_context_offline_replay.v1"
 TRANSFORM_VERSION = "external_context_normalization.v1"
 FEATURE_VERSION = "external_context_normalized_fact.v1"
 
-ALLOWED_CONTENT_CLASSES = {"official_fact", "market_data"}
+ALLOWED_CONTENT_CLASSES = {"official_fact", "market_data", "news_summary"}
 ALLOWED_AVAILABILITY_BASES = {
     "first_seen_at",
     "provider_published_at_documented",
@@ -32,6 +44,32 @@ SECRET_FIELD_NAMES = {
     "secret",
     "token",
 }
+
+@dataclass
+class _StorageBudget:
+    root: Path
+    hard_cap_bytes: int
+    used_bytes: int
+
+    @classmethod
+    def from_root(cls, root: Path, *, hard_cap_bytes: int) -> _StorageBudget:
+        used_bytes = sum(path.stat().st_size for path in root.rglob("*") if path.is_file()) if root.exists() else 0
+        if used_bytes > hard_cap_bytes:
+            raise ValueError(
+                f"news artifact root already exceeds hard cap: {used_bytes} > {hard_cap_bytes} bytes"
+            )
+        return cls(root=root, hard_cap_bytes=hard_cap_bytes, used_bytes=used_bytes)
+
+    def ensure_can_add(self, byte_size: int) -> None:
+        projected = self.used_bytes + byte_size
+        if projected > self.hard_cap_bytes:
+            raise ValueError(
+                "news storage hard cap would be exceeded: "
+                f"projected={projected} hard_cap={self.hard_cap_bytes} bytes"
+            )
+
+    def record_addition(self, byte_size: int) -> None:
+        self.used_bytes += byte_size
 
 
 def _canonical_bytes(payload: Any) -> bytes:
@@ -86,7 +124,7 @@ def _assert_no_secret_fields(value: Any, *, path: str = "raw_payload") -> None:
             _assert_no_secret_fields(item, path=f"{path}[{index}]")
 
 
-def _validate_input(payload: dict[str, Any]) -> tuple[str, str, datetime, list[dict[str, Any]]]:
+def _validate_input(payload: dict[str, Any]) -> tuple[str, str, str, datetime, list[dict[str, Any]]]:
     if payload.get("schema_version") != PILOT_INPUT_SCHEMA_VERSION:
         raise ValueError(f"schema_version must be {PILOT_INPUT_SCHEMA_VERSION}")
     dataset_id = _required_text(payload, "dataset_id")
@@ -102,13 +140,14 @@ def _validate_input(payload: dict[str, Any]) -> tuple[str, str, datetime, list[d
         raise ValueError("records must be a non-empty list")
     if not all(isinstance(record, dict) for record in records):
         raise ValueError("every record must be an object")
-    return dataset_id, provider_id, retrieved_at, records
+    return dataset_id, provider_id, content_class, retrieved_at, records
 
 
 def _validate_record(
     record: dict[str, Any],
     *,
     provider_id: str,
+    content_class: str,
     retrieved_at: datetime,
 ) -> dict[str, Any]:
     provider_item_id = _required_text(record, "provider_item_id")
@@ -149,7 +188,14 @@ def _validate_record(
     if not isinstance(normalized_payload, dict):
         raise ValueError(f"normalized_payload must be an object: {provider_item_id}")
     _assert_no_secret_fields(raw_payload)
-    return {
+    news_curation: dict[str, Any] | None = None
+    if content_class == "news_summary":
+        raw_payload, normalized_payload, news_curation = validate_news_summary_payloads(
+            raw_payload,
+            dict(normalized_payload),
+            provider_item_id=provider_item_id,
+        )
+    normalized_record = {
         "provider_id": provider_id,
         "provider_item_id": provider_item_id,
         "normalized_event_id": normalized_event_id,
@@ -168,15 +214,31 @@ def _validate_record(
         "raw_payload": raw_payload,
         "normalized_payload": normalized_payload,
     }
+    if news_curation is not None:
+        normalized_record["_news_curation"] = news_curation
+    return normalized_record
 
 
-def _write_immutable_json(path: Path, payload: dict[str, Any]) -> None:
-    rendered = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+def _write_immutable_json(
+    path: Path,
+    payload: dict[str, Any],
+    *,
+    compact: bool = False,
+    storage_budget: _StorageBudget | None = None,
+) -> None:
+    rendered = (
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+        if compact
+        else json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    )
+    rendered_bytes = rendered.encode("utf-8")
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
         if path.read_text(encoding="utf-8") != rendered:
             raise RuntimeError(f"immutable artifact collision: {path}")
         return
+    if storage_budget is not None:
+        storage_budget.ensure_can_add(len(rendered_bytes))
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     descriptor = os.open(path, flags, 0o644)
     try:
@@ -184,6 +246,8 @@ def _write_immutable_json(path: Path, payload: dict[str, Any]) -> None:
             handle.write(rendered)
             handle.flush()
             os.fsync(handle.fileno())
+        if storage_budget is not None:
+            storage_budget.record_addition(len(rendered_bytes))
     except BaseException:
         path.unlink(missing_ok=True)
         raise
@@ -207,12 +271,31 @@ def materialize_external_context_pilot(
     *,
     artifact_root: str | Path,
 ) -> dict[str, Any]:
-    dataset_id, provider_id, retrieved_at, input_records = _validate_input(input_payload)
+    dataset_id, provider_id, content_class, retrieved_at, input_records = _validate_input(input_payload)
     root = Path(artifact_root).resolve()
+    storage_budget = (
+        _StorageBudget.from_root(root, hard_cap_bytes=NEWS_STORAGE_HARD_CAP_BYTES)
+        if content_class == "news_summary"
+        else None
+    )
     normalized_records = [
-        _validate_record(record, provider_id=provider_id, retrieved_at=retrieved_at)
+        _validate_record(
+            record,
+            provider_id=provider_id,
+            content_class=content_class,
+            retrieved_at=retrieved_at,
+        )
         for record in input_records
     ]
+    curation_counts = {
+        "relevance_excluded_count": 0,
+        "duplicate_excluded_count": 0,
+        "quota_excluded_count": 0,
+    }
+    if content_class == "news_summary":
+        normalized_records, curation_counts = curate_news_records(normalized_records)
+        if not normalized_records:
+            raise ValueError("no news summaries passed relevance, deduplication, and daily quota gates")
     unique_versions = {
         (record["normalized_event_id"], record["revision_id"])
         for record in normalized_records
@@ -246,10 +329,17 @@ def materialize_external_context_pilot(
             "content_bytes_sha256": hashlib.sha256(raw_payload_bytes).hexdigest(),
             "raw_payload": record["raw_payload"],
         }
+        if content_class == "news_summary":
+            raw_base["content_retention_mode"] = "summary_only_no_article_body"
         raw_id = f"raw-{_digest(raw_base)[:24]}"
         raw_document = {**raw_base, "raw_id": raw_id}
         raw_path = root / "raw" / "objects" / f"{raw_id}.json"
-        _write_immutable_json(raw_path, raw_document)
+        _write_immutable_json(
+            raw_path,
+            raw_document,
+            compact=content_class == "news_summary",
+            storage_budget=storage_budget,
+        )
         file_rows.append(_artifact_file_row(root, raw_path, artifact_kind="raw"))
 
         silver_base = {
@@ -273,7 +363,12 @@ def materialize_external_context_pilot(
         silver_id = f"silver-{_digest(silver_base)[:24]}"
         silver_document = {**silver_base, "silver_id": silver_id}
         silver_path = root / "silver" / "records" / f"{silver_id}.json"
-        _write_immutable_json(silver_path, silver_document)
+        _write_immutable_json(
+            silver_path,
+            silver_document,
+            compact=content_class == "news_summary",
+            storage_budget=storage_budget,
+        )
         file_rows.append(_artifact_file_row(root, silver_path, artifact_kind="silver"))
         materialized.append({"record": record, "raw_id": raw_id, "silver_id": silver_id})
 
@@ -311,7 +406,12 @@ def materialize_external_context_pilot(
             pit_id = f"pit-{_digest(pit_base)[:24]}"
             pit_document = {**pit_base, "pit_id": pit_id}
             pit_path = root / "pit" / "records" / f"{pit_id}.json"
-            _write_immutable_json(pit_path, pit_document)
+            _write_immutable_json(
+                pit_path,
+                pit_document,
+                compact=content_class == "news_summary",
+                storage_budget=storage_budget,
+            )
             file_rows.append(_artifact_file_row(root, pit_path, artifact_kind="pit"))
 
     file_rows.sort(key=lambda row: (row["artifact_kind"], row["relative_path"]))
@@ -320,9 +420,11 @@ def materialize_external_context_pilot(
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "dataset_id": dataset_id,
         "provider_id": provider_id,
-        "content_class": input_payload["content_class"],
+        "content_class": content_class,
         "retrieved_at": retrieved_at.isoformat(),
+        "input_record_count": len(input_records),
         "record_count": len(normalized_records),
+        "curation_counts": curation_counts,
         "artifact_files": file_rows,
         "temporal_contract": {
             "selection_rule": "available_from <= decision_cutoff < available_to",
@@ -333,11 +435,35 @@ def materialize_external_context_pilot(
         "v3_signal_changed": False,
         "claim_ceiling": "raw_silver_pit_replay_pilot_only",
     }
+    if storage_budget is not None:
+        manifest["news_storage_contract"] = {
+            "content_retention_mode": "summary_only_no_article_body",
+            "summary_max_chars": NEWS_SUMMARY_MAX_CHARS,
+            "summary_max_bytes": NEWS_SUMMARY_MAX_BYTES,
+            "target_bytes": NEWS_STORAGE_TARGET_BYTES,
+            "hard_cap_bytes": NEWS_STORAGE_HARD_CAP_BYTES,
+            "materialized_artifact_bytes": sum(row["byte_size"] for row in file_rows),
+            "relevance_policy_version": NEWS_RELEVANCE_POLICY_VERSION,
+            "daily_channel_limits": NEWS_DAILY_CHANNEL_LIMITS,
+        }
     manifest_id = f"external-context-manifest-{_digest(_manifest_identity_payload(manifest))[:24]}"
     manifest = {**manifest, "manifest_id": manifest_id}
     manifest_path = root / "manifests" / f"{manifest_id}.json"
-    _write_immutable_json(manifest_path, manifest)
-    return {"manifest_path": str(manifest_path), "manifest": manifest}
+    _write_immutable_json(
+        manifest_path,
+        manifest,
+        compact=content_class == "news_summary",
+        storage_budget=storage_budget,
+    )
+    result = {"manifest_path": str(manifest_path), "manifest": manifest}
+    if storage_budget is not None:
+        result["storage_budget_observation"] = {
+            "root_bytes_after_manifest": storage_budget.used_bytes,
+            "target_bytes": NEWS_STORAGE_TARGET_BYTES,
+            "hard_cap_bytes": NEWS_STORAGE_HARD_CAP_BYTES,
+            "hard_cap_respected": storage_budget.used_bytes <= NEWS_STORAGE_HARD_CAP_BYTES,
+        }
+    return result
 
 
 def _resolve_artifact_path(root: Path, relative_path: str) -> Path:
@@ -367,6 +493,15 @@ def replay_external_context_offline(
     if manifest.get("v3_signal_changed") is not False:
         raise ValueError("research replay manifest cannot change the V3 signal")
     root = path.parent.parent.resolve()
+    if manifest.get("content_class") == "news_summary":
+        storage_contract = manifest.get("news_storage_contract")
+        if not isinstance(storage_contract, dict):
+            raise ValueError("news replay manifest must declare news_storage_contract")
+        if storage_contract.get("hard_cap_bytes") != NEWS_STORAGE_HARD_CAP_BYTES:
+            raise ValueError("news replay manifest storage hard cap does not match the active contract")
+        if storage_contract.get("content_retention_mode") != "summary_only_no_article_body":
+            raise ValueError("news replay manifest must remain summary-only")
+        _StorageBudget.from_root(root, hard_cap_bytes=NEWS_STORAGE_HARD_CAP_BYTES)
     verified_files: list[dict[str, Any]] = []
     pit_documents: list[dict[str, Any]] = []
     for file_row in manifest.get("artifact_files") or []:

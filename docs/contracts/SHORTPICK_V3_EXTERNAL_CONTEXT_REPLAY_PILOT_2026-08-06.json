@@ -38,8 +38,11 @@
     "massive_benzinga_news_raw": "hard_blocked_pending_content_storage_and_replay_rights",
     "allowed_pilot_content_classes": [
       "official_fact",
-      "market_data"
+      "market_data",
+      "news_summary"
     ],
+    "news_summary_raw": "Only bounded headline, summary, source URL/name, language, content hash and summary lineage are allowed; article body, HTML and full text are rejected.",
+    "news_summary_storage": "The complete news artifact root targets 1.5 GiB and fails before 1.75 GiB, remaining below the user's 2 GiB ceiling.",
     "network_during_replay": "forbidden"
   },
   "executed_fixture_evidence": {

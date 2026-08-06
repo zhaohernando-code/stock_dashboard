@@ -5,6 +5,14 @@
   "claim_ceiling": "documentary_and_current_entitlement_poc_only_no_external_strategy_validation",
   "v3_signal_changed": false,
   "full713_external_context_backtest_allowed": false,
+  "public_news_follow_up": {
+    "contract": "docs/contracts/SHORTPICK_V3_PUBLIC_NEWS_SUMMARY_STORAGE_2026-08-06.json",
+    "priority": "public_official_and_gdelt_summary_only_before_commercial_trials",
+    "article_body_retained": false,
+    "storage_target_gib": 1.5,
+    "storage_hard_cap_gib": 1.75,
+    "status": "materialization_gates_ready_public_adapters_and_full713_backfill_pending"
+  },
   "provider_registry": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_PROVIDER_REGISTRY_V2_2026-08-06.json",
   "event_set": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_POC_EVENT_SET_2026-08-06.json",
   "current_sample_metrics": "docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_CURRENT_SAMPLE_METRICS_2026-08-06.json",
@@ -70,5 +78,5 @@
     {"item": "normalized_layer_name", "prior_deviation": "implementation used Silver terminology", "resolution": "contract now states Normalized while retaining Silver as the versioned schema alias"},
     {"item": "provider_trial_execution", "prior_deviation": "mechanics and aggregate checks could be misread as vendor PoC completion", "resolution": "claim ceiling explicitly separates synthetic replay and aggregate transport checks from entitled provider samples"}
   ],
-  "next_gate": "obtain_written_trial_fields_replay_rights_and_entitled_samples_then_materialize_frozen_event_set_and_repeat_offline_hash_replay"
+  "next_gate": "materialize_pit_safe_public_official_and_gdelt_summary_only_history_under_the_1_75_gib_cap_then_use_commercial_trials_only_as_challengers"
 }
