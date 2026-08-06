@@ -23,6 +23,8 @@ from ashare_evidence.market_rules import (
     ACCOUNT_PROFILE_LABELS,
     ACCOUNT_PROFILE_NEW_RETAIL_CASH,
     account_trade_eligibility,
+    build_trade_eligibility_snapshot,
+    summarize_trade_eligibility_snapshots,
 )
 from ashare_evidence.models import (
     MarketBar,
@@ -1207,13 +1209,33 @@ def _build_universe(
     members: list[_UniverseMember] = []
     excluded: dict[str, int] = {}
     excluded_account_examples: list[dict[str, Any]] = []
+    eligibility_snapshots: list[dict[str, Any]] = []
     stocks = session.scalars(select(Stock).order_by(Stock.symbol.asc())).all()
     for stock in stocks:
         if stock.listed_date and stock.listed_date > as_of_date:
             excluded["listed_after_as_of"] = excluded.get("listed_after_as_of", 0) + 1
             continue
-        eligibility = account_trade_eligibility(stock.symbol, stock_profile=stock, account_profile=account_profile, as_of=as_of_date)
+        eligibility = account_trade_eligibility(
+            stock.symbol,
+            stock_profile=stock,
+            account_profile=account_profile,
+            as_of=as_of_date,
+            profile_is_point_in_time=False,
+        )
         if not eligibility["tradable"]:
+            structural_snapshot = build_trade_eligibility_snapshot(
+                stock.symbol,
+                stock_profile=stock,
+                account_profile=account_profile,
+                as_of=as_of_date,
+                decision_cutoff=as_of_date,
+                price_cny=None,
+                price_observed_at=None,
+                price_source="not_loaded_after_structural_exclusion",
+                price_adjustment="unadjusted",
+                profile_is_point_in_time=False,
+            )
+            eligibility_snapshots.append(structural_snapshot)
             key = f"account_excluded_{eligibility['board']}"
             excluded[key] = excluded.get(key, 0) + 1
             if len(excluded_account_examples) < 12:
@@ -1223,6 +1245,8 @@ def _build_universe(
                         "name": stock.name,
                         "board_label": eligibility["board_label"],
                         "reason": eligibility["reason"],
+                        "reason_codes": structural_snapshot["exclusion_reason_codes"],
+                        "snapshot_id": structural_snapshot["snapshot_id"],
                     }
                 )
             continue
@@ -1233,15 +1257,68 @@ def _build_universe(
         ).all()
         if not bars:
             excluded["missing_daily_bar"] = excluded.get("missing_daily_bar", 0) + 1
+            eligibility_snapshots.append(
+                build_trade_eligibility_snapshot(
+                    stock.symbol,
+                    stock_profile=stock,
+                    account_profile=account_profile,
+                    as_of=as_of_date,
+                    decision_cutoff=as_of_date,
+                    price_cny=None,
+                    price_observed_at=None,
+                    price_source="market_bars.close_price",
+                    price_adjustment="unadjusted",
+                    profile_is_point_in_time=False,
+                )
+            )
             continue
         latest = bars[-1]
         if latest.observed_at.date() != as_of_date:
             excluded["no_bar_on_as_of_date"] = excluded.get("no_bar_on_as_of_date", 0) + 1
+            eligibility_snapshots.append(
+                build_trade_eligibility_snapshot(
+                    stock.symbol,
+                    stock_profile=stock,
+                    account_profile=account_profile,
+                    as_of=as_of_date,
+                    decision_cutoff=as_of_date,
+                    price_cny=None,
+                    price_observed_at=None,
+                    price_source="market_bars.close_price",
+                    price_adjustment="unadjusted",
+                    profile_is_point_in_time=False,
+                )
+            )
+            continue
+        eligibility_snapshot = build_trade_eligibility_snapshot(
+            stock.symbol,
+            stock_profile=stock,
+            account_profile=account_profile,
+            as_of=as_of_date,
+            decision_cutoff=as_of_date,
+            price_cny=latest.close_price,
+            price_observed_at=latest.observed_at,
+            price_source="market_bars.close_price",
+            price_adjustment="unadjusted",
+            profile_is_point_in_time=False,
+        )
+        eligibility_snapshots.append(eligibility_snapshot)
+        if not eligibility_snapshot["eligible_before_scoring"]:
+            for reason_code in eligibility_snapshot["exclusion_reason_codes"]:
+                key = f"eligibility_{reason_code}"
+                excluded[key] = excluded.get(key, 0) + 1
+            if len(excluded_account_examples) < 12:
+                excluded_account_examples.append(
+                    {
+                        "symbol": stock.symbol,
+                        "name": stock.name,
+                        "board_label": eligibility_snapshot["board_label"],
+                        "reason_codes": eligibility_snapshot["exclusion_reason_codes"],
+                        "snapshot_id": eligibility_snapshot["snapshot_id"],
+                    }
+                )
             continue
         name = stock.name or stock.symbol
-        if name.upper().startswith("ST") or "ST" in name.upper():
-            excluded["st_status"] = excluded.get("st_status", 0) + 1
-            continue
         market_cap, market_cap_source = _market_cap_for_universe_member(stock, latest)
         industry = _stock_industry(stock)
         members.append(
@@ -1271,10 +1348,14 @@ def _build_universe(
             "excluded_counts": excluded,
             "excluded_count": sum(excluded.values()),
             "excluded_account_examples": excluded_account_examples,
+            "trade_eligibility": summarize_trade_eligibility_snapshots(eligibility_snapshots),
             "excluded_st": excluded.get("st_status", 0),
             "excluded_suspended": excluded.get("suspended", 0),
             "excluded_limit_status": excluded.get("limit_status", 0),
-            "account_rule_note": "新开户普通现金账户口径仅纳入沪深主板普通A股；排除科创板、创业板、北交所、ST/退市风险类标的。",
+            "account_rule_note": (
+                "新开户普通现金账户口径仅纳入沪深主板普通A股，决策时点未复权价格不高于200元；"
+                "历史名称/风险警示状态未具备PIT数据时不使用当前静态名称回填，并显式记录验证缺口。"
+            ),
             "excluded_missing_bar": excluded.get("missing_daily_bar", 0) + excluded.get("no_bar_on_as_of_date", 0),
             "market_cap_bucket_counts": _count_by([member.market_cap_bucket for member in members]),
             "market_cap_available_count": len([member for member in members if member.market_cap is not None]),

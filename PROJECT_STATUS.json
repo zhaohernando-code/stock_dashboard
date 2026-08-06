@@ -10,7 +10,19 @@
   },
   "status": "in_progress",
   "owner": "codex",
-  "updated_at": "2026-07-17T17:00:00+08:00",
+  "updated_at": "2026-08-06T00:00:00+08:00",
+  "latest_personal_eligibility_and_external_context_update": {
+    "status": "pit_eligibility_gate_active_external_context_research_only",
+    "account_profile": "new_retail_cash_account",
+    "eligibility_snapshot_version": "account_trade_eligibility_snapshot.v1",
+    "a_share_only": true,
+    "allowed_boards": ["main"],
+    "max_unadjusted_price_cny": 200.0,
+    "historical_risk_status_gap": "pit_risk_status_unverified_current_static_name_not_used",
+    "external_context_v3_signal_changed": false,
+    "eligibility_contract": "docs/contracts/SHORTPICK_V3_PERSONAL_ELIGIBILITY_2026-08-06.json",
+    "external_research_contract": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_RESEARCH_2026-08-06.json"
+  },
   "latest_rank5_policy_update": {
     "status": "rank5_real_execution_disabled_rank4_only_active",
     "objective": "stable_profitability_over_execution_coverage",

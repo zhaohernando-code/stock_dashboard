@@ -1,0 +1,69 @@
+{
+  "contract_id": "shortpick_v3_personal_trade_eligibility_2026_08_06",
+  "status": "active_outer_universe_gate",
+  "effective_date": "2026-08-06",
+  "snapshot_version": "account_trade_eligibility_snapshot.v1",
+  "default_profile": {
+    "profile_id": "new_retail_cash_account",
+    "a_share_only": true,
+    "allowed_boards": ["main"],
+    "max_unadjusted_price_cny": 200.0,
+    "allow_star": false,
+    "allow_chinext": false,
+    "allow_bse": false,
+    "allow_risk_warning": false,
+    "allow_delisting": false,
+    "permission_basis": "conservative_default_until_broker_permissions_are_confirmed"
+  },
+  "interpretation": {
+    "account_age_is_not_trading_experience": true,
+    "note": "证券交易经验通常按投资者名下证券账户的首次证券交易日期计算，不能只由当前账户开户时间推断。账户实际权限应由券商确认后显式修改 profile。"
+  },
+  "ordering_invariant": "eligibility_snapshot_must_be_built_and_passed_before_any_strategy_score_pool_sort_or_rank",
+  "price_contract": {
+    "field": "actual_unadjusted_tradeable_price_cny",
+    "boundary": "price_cny <= 200.0",
+    "required_fields": ["value_cny", "observed_at", "source", "adjustment", "maximum_cny"],
+    "forbidden": ["forward_adjusted_price", "back_adjusted_price", "price_observed_after_decision_cutoff", "current_price_backfilled_into_history"]
+  },
+  "pit_contract": {
+    "shared_paths": ["historical_backtest", "historical_replay", "paper_tracking", "live_candidate"],
+    "deterministic_snapshot_id": true,
+    "historical_static_name_backfill": false,
+    "historical_static_board_status_backfill": false,
+    "unresolved_gap": "Historical ST/risk-warning status history is not yet broad and PIT-complete. Historical runs must emit pit_risk_status_unverified_current_static_name_not_used and cannot claim fully executable eligibility until the gap is closed."
+  },
+  "exclusion_reason_codes": [
+    "non_a_share_security",
+    "account_board_permission_required",
+    "risk_warning_not_allowed",
+    "delisting_or_inactive_security",
+    "missing_unadjusted_price",
+    "non_positive_price",
+    "price_not_available_at_decision_cutoff",
+    "price_adjustment_not_unadjusted",
+    "price_above_profile_maximum"
+  ],
+  "official_references": [
+    {
+      "authority": "Shanghai Stock Exchange",
+      "topic": "STAR Market suitability: 500k average assets and 24 months trading experience",
+      "url": "https://www.sse.com.cn/lawandrules/sselawsrules2025/fund/trading/c/c_20260424_10817739.shtml"
+    },
+    {
+      "authority": "Shenzhen Stock Exchange",
+      "topic": "ChiNext suitability: 100k average assets and 24 months trading experience",
+      "url": "https://investor.szse.cn/thematic/chinext/qa/t20200522_577479.html"
+    },
+    {
+      "authority": "Beijing Stock Exchange",
+      "topic": "BSE suitability: 500k average assets and 24 months trading experience",
+      "url": "https://www.bse.cn/jygl_list/200018386.html"
+    },
+    {
+      "authority": "Shanghai Stock Exchange",
+      "topic": "Trading experience starts from the investor's first securities transaction",
+      "url": "https://big5.sse.com.cn/site/cht/www.sse.com.cn/aboutus/mediacenter/hotandd/c/c_20190307_4732334.shtml?from=groupmessage"
+    }
+  ]
+}

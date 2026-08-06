@@ -8,7 +8,11 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ashare_evidence.market_rules import ACCOUNT_PROFILE_NEW_RETAIL_CASH, filter_account_eligible_series
+from ashare_evidence.market_rules import (
+    ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+    filter_account_eligible_series,
+    summarize_trade_eligibility_snapshots,
+)
 from ashare_evidence.shortpick_market_factor_study import (
     ENTRY_PRICE_SOURCE_NEXT_CLOSE,
     ENTRY_PRICE_SOURCES,
@@ -159,6 +163,7 @@ def build_shortpick_portfolio_backtest(
         raw_series_by_symbol,
         account_profile=account_profile,
         include_index_symbols=INDEX_SYMBOLS,
+        profile_is_point_in_time=False,
     )
     benchmark = series_by_symbol.get("000300.SH")
     signal_days = _eligible_signal_days(
@@ -168,16 +173,18 @@ def build_shortpick_portfolio_backtest(
         min_signal_symbol_count=min_signal_symbol_count,
     )
     trade_days = _trade_days(series_by_symbol, start_date=start_date, end_date=end_date, min_symbol_count=min_signal_symbol_count)
-    selections = {
-        strategy: _build_strategy_selections(
+    eligibility_snapshots: list[dict[str, Any]] = []
+    selections = {}
+    for strategy_index, strategy in enumerate(strategies):
+        selections[strategy] = _build_strategy_selections(
             series_by_symbol,
             signal_days=signal_days,
             strategy=BASE_STRATEGY_BY_VARIANT.get(strategy, strategy),
             pool_limit=pool_limit,
             rank_limit=rank_limit,
+            account_profile=account_profile,
+            eligibility_snapshots=eligibility_snapshots if strategy_index == 0 else None,
         )
-        for strategy in strategies
-    }
     selections = {
         strategy: _apply_strategy_selection_transform(strategy, strategy_selections)
         for strategy, strategy_selections in selections.items()
@@ -280,6 +287,7 @@ def build_shortpick_portfolio_backtest(
             "stock_like_series_count": len([symbol for symbol in series_by_symbol if symbol not in INDEX_SYMBOLS]),
             "raw_stock_like_series_count": len([symbol for symbol in raw_series_by_symbol if symbol not in INDEX_SYMBOLS]),
             "account_eligibility": account_eligibility,
+            "trade_eligibility": summarize_trade_eligibility_snapshots(eligibility_snapshots),
             "benchmark_note": _benchmark_note(series_by_symbol, benchmark_mode),
             "sample_concentration_note": _sample_concentration_note(signal_days),
         },

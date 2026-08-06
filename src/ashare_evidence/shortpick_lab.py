@@ -39,7 +39,12 @@ from ashare_evidence.db import utcnow
 from ashare_evidence.http_client import urlopen
 from ashare_evidence.lineage import build_lineage
 from ashare_evidence.llm_service import OpenAICompatibleTransport, route_model
-from ashare_evidence.market_rules import ACCOUNT_PROFILE_NEW_RETAIL_CASH, account_trade_eligibility
+from ashare_evidence.market_rules import (
+    ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+    account_trade_eligibility,
+    build_trade_eligibility_snapshot,
+    summarize_trade_eligibility_snapshots,
+)
 from ashare_evidence.models import (
     MarketBar,
     ModelApiKey,
@@ -339,7 +344,10 @@ def shortpick_llm_paper_control_contract() -> dict[str, Any]:
         "label": "LLM纸面对照：每日固定规则选1只",
         "mode": "从当日LLM自由推荐池中，先按新开户普通现金账户口径过滤，再按冻结排序规则选出1只；所有持有天数均按交易日计算",
         "account_profile": ACCOUNT_PROFILE_NEW_RETAIL_CASH,
-        "account_filter_rule": "仅允许沪深主板普通A股；排除科创板、创业板、北交所、ST/退市风险类标的。",
+        "account_filter_rule": (
+            "仅允许沪深主板普通A股；排除科创板、创业板、北交所、ST/退市风险类标的；"
+            "决策时点实际未复权价格不得高于200元。"
+        ),
         "selection_rule": "先过滤到新开户普通现金账户可买范围；再优先跨模型同票，其次同模型重复、跨模型同题材、单模型高置信、系统外新视角；再按来源质量、置信度、来源数量、股票代码和候选ID稳定排序。",
         "monitoring_rule": "和冻结策略使用同一入场口径与三条退出轨道，避免从LLM推荐池中事后挑选。",
         "monitoring_tracks": shortpick_frozen_paper_strategy_contract()["monitoring_tracks"],
@@ -3157,18 +3165,31 @@ def _shortpick_market_factor_contexts(session: Session, run_date: date) -> tuple
         bars_by_symbol[stock.symbol].append(bar)
 
     contexts: list[dict[str, Any]] = []
+    eligibility_snapshots: list[dict[str, Any]] = []
     for symbol, bars in bars_by_symbol.items():
         stock = stocks_by_symbol[symbol]
-        if not _stock_eligible_for_shortpick_market_factor(stock, run_date=run_date):
-            continue
         unique_bars = _dedupe_market_factor_bars(bars)
         if len(unique_bars) < 21:
             continue
         latest = unique_bars[-1]
-        if latest.close_price <= 0 or latest.amount <= 0:
+        eligibility_snapshot = build_trade_eligibility_snapshot(
+            symbol,
+            stock_profile=stock,
+            account_profile=ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+            as_of=run_date,
+            decision_cutoff=cutoff,
+            price_cny=latest.close_price,
+            price_observed_at=latest.observed_at,
+            price_source="market_bars.close_price",
+            price_adjustment="unadjusted",
+            profile_is_point_in_time=True,
+        )
+        eligibility_snapshots.append(eligibility_snapshot)
+        if not eligibility_snapshot["eligible_before_scoring"] or latest.amount <= 0:
             continue
         context = _market_factor_context_from_bars(stock, unique_bars)
         if context is not None:
+            context["_trade_eligibility_snapshot"] = eligibility_snapshot
             contexts.append(context)
 
     latest_day = max((item["latest_trade_day"] for item in contexts), default=None)
@@ -3182,6 +3203,7 @@ def _shortpick_market_factor_contexts(session: Session, run_date: date) -> tuple
         "full_eligible_symbol_count": len(current_contexts),
         "stale_symbol_count": max(len(contexts) - len(current_contexts), 0),
         "coarse_screen": screen_summary,
+        "trade_eligibility": summarize_trade_eligibility_snapshots(eligibility_snapshots),
     }
 
 
@@ -3209,11 +3231,10 @@ def _shortpick_market_factor_intraday_contexts(
         bars_by_symbol[stock.symbol].append(bar)
 
     contexts: list[dict[str, Any]] = []
+    eligibility_snapshots: list[dict[str, Any]] = []
     missing_quote_count = 0
     for symbol, bars in bars_by_symbol.items():
         stock = stocks_by_symbol[symbol]
-        if not _stock_eligible_for_shortpick_market_factor(stock, run_date=run_date):
-            continue
         quote = quotes.get(symbol)
         if not isinstance(quote, dict):
             missing_quote_count += 1
@@ -3222,6 +3243,22 @@ def _shortpick_market_factor_intraday_contexts(
         amount = _coerce_float(quote.get("amount"))
         if price is None or price <= 0 or amount is None or amount <= 0:
             missing_quote_count += 1
+            continue
+        quote_cutoff = quote_snapshot.get("generated_at") or datetime.combine(run_date, datetime.max.time()).replace(tzinfo=UTC)
+        eligibility_snapshot = build_trade_eligibility_snapshot(
+            symbol,
+            stock_profile=stock,
+            account_profile=ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+            as_of=run_date,
+            decision_cutoff=quote_cutoff,
+            price_cny=price,
+            price_observed_at=quote_snapshot.get("generated_at"),
+            price_source=str(quote_snapshot.get("source_kind") or "intraday_quote"),
+            price_adjustment="unadjusted",
+            profile_is_point_in_time=True,
+        )
+        eligibility_snapshots.append(eligibility_snapshot)
+        if not eligibility_snapshot["eligible_before_scoring"]:
             continue
         unique_bars = _dedupe_market_factor_bars(bars)
         if len(unique_bars) < 20:
@@ -3248,6 +3285,7 @@ def _shortpick_market_factor_intraday_contexts(
             continue
         context["_intraday_selection_quote"] = quote
         context["_intraday_quote_source"] = quote_snapshot.get("source_kind")
+        context["_trade_eligibility_snapshot"] = eligibility_snapshot
         contexts.append(context)
 
     screened_contexts, screen_summary = _shortpick_market_factor_coarse_screen(contexts)
@@ -3263,6 +3301,7 @@ def _shortpick_market_factor_intraday_contexts(
         "stale_symbol_count": 0,
         "intraday_same_day": True,
         "coarse_screen": screen_summary,
+        "trade_eligibility": summarize_trade_eligibility_snapshots(eligibility_snapshots),
     }
 
 
@@ -4380,6 +4419,7 @@ def _upsert_shortpick_market_factor_candidate(
         "candidate_origin": "market_factor_overlay",
         "baseline_family": family,
         "tracking_role": tracking_role,
+        "trade_eligibility_snapshot": item.get("_trade_eligibility_snapshot"),
         "frozen_paper_strategy": shortpick_frozen_paper_strategy_contract() if is_frozen_paper else None,
         "topic_normalization": {
             "topic_cluster_id": "market_factor_shortpick",
@@ -4390,6 +4430,7 @@ def _upsert_shortpick_market_factor_candidate(
             "reason": "来自历史回放后冻结的纸面策略，不使用新闻语义。" if is_frozen_paper else "来自历史回放后的市场因子对照，不使用新闻语义。",
         },
         "market_factor_overlay": {
+            "trade_eligibility_snapshot": item.get("_trade_eligibility_snapshot"),
             "rank": rank,
             "source_rank": source_rank or rank,
             "score": item.get("_market_factor_score"),
@@ -5040,14 +5081,39 @@ def select_shortpick_llm_paper_control_candidate(session: Session, run: Shortpic
     eligible: list[ShortpickCandidate] = []
     excluded_examples: list[dict[str, Any]] = []
     excluded_count = 0
+    eligibility_by_candidate_id: dict[int, dict[str, Any]] = {}
+    eligibility_snapshots: list[dict[str, Any]] = []
     for candidate in parsed:
-        eligibility = account_trade_eligibility(
+        stock = session.scalar(select(Stock).where(Stock.symbol == candidate.symbol))
+        latest_bar = (
+            session.scalar(
+                select(MarketBar)
+                .join(Stock, MarketBar.stock_id == Stock.id)
+                .where(
+                    Stock.symbol == candidate.symbol,
+                    MarketBar.timeframe == "1d",
+                    func.date(MarketBar.observed_at) <= run.run_date.isoformat(),
+                )
+                .order_by(MarketBar.observed_at.desc(), MarketBar.id.desc())
+            )
+            if stock is not None
+            else None
+        )
+        eligibility = build_trade_eligibility_snapshot(
             candidate.symbol,
-            stock_profile={"name": candidate.name},
+            stock_profile=stock or {"name": candidate.name},
             account_profile=ACCOUNT_PROFILE_NEW_RETAIL_CASH,
             as_of=run.run_date,
+            decision_cutoff=run.run_date,
+            price_cny=latest_bar.close_price if latest_bar is not None else None,
+            price_observed_at=latest_bar.observed_at if latest_bar is not None else None,
+            price_source="market_bars.close_price",
+            price_adjustment="unadjusted",
+            profile_is_point_in_time=True,
         )
-        if eligibility["tradable"]:
+        eligibility_by_candidate_id[candidate.id] = eligibility
+        eligibility_snapshots.append(eligibility)
+        if eligibility["eligible_before_scoring"]:
             eligible.append(candidate)
             continue
         excluded_count += 1
@@ -5059,7 +5125,8 @@ def select_shortpick_llm_paper_control_candidate(session: Session, run: Shortpic
                     "name": candidate.name,
                     "board": eligibility["board"],
                     "board_label": eligibility["board_label"],
-                    "reason": eligibility["reason"],
+                    "reason_codes": eligibility["exclusion_reason_codes"],
+                    "snapshot_id": eligibility["snapshot_id"],
                 }
             )
     if not eligible:
@@ -5072,6 +5139,7 @@ def select_shortpick_llm_paper_control_candidate(session: Session, run: Shortpic
             "eligible_candidate_count": 0,
             "excluded_candidate_count": excluded_count,
             "excluded_examples": excluded_examples,
+            "trade_eligibility": summarize_trade_eligibility_snapshots(eligibility_snapshots),
         }
         run.summary_payload = {**dict(run.summary_payload or {}), "llm_paper_control": result}
         session.flush()
@@ -5139,12 +5207,7 @@ def select_shortpick_llm_paper_control_candidate(session: Session, run: Shortpic
     ranked = sorted(eligible, key=sort_key)
     selected = ranked[0]
     components = score_components(selected)
-    selected_eligibility = account_trade_eligibility(
-        selected.symbol,
-        stock_profile={"name": selected.name},
-        account_profile=ACCOUNT_PROFILE_NEW_RETAIL_CASH,
-        as_of=run.run_date,
-    )
+    selected_eligibility = eligibility_by_candidate_id[selected.id]
     payload = dict(selected.candidate_payload or {})
     payload["tracking_role"] = SHORTPICK_LLM_PAPER_CONTROL_ROLE
     payload["llm_paper_control"] = {
@@ -5152,7 +5215,7 @@ def select_shortpick_llm_paper_control_candidate(session: Session, run: Shortpic
         "selected": True,
         "selection_rank": 1,
         "selection_score_components": components,
-        "account_eligibility": selected_eligibility,
+        "trade_eligibility_snapshot": selected_eligibility,
         "selected_at": utcnow().isoformat(),
     }
     selected.candidate_payload = payload
@@ -5164,11 +5227,12 @@ def select_shortpick_llm_paper_control_candidate(session: Session, run: Shortpic
         "symbol": selected.symbol,
         "name": selected.name,
         "selection_score_components": components,
-        "account_eligibility": selected_eligibility,
+        "trade_eligibility_snapshot": selected_eligibility,
         "raw_candidate_count": len(parsed),
         "eligible_candidate_count": len(eligible),
         "excluded_candidate_count": excluded_count,
         "excluded_examples": excluded_examples,
+        "trade_eligibility": summarize_trade_eligibility_snapshots(eligibility_snapshots),
     }
     run.summary_payload = {**dict(run.summary_payload or {}), "llm_paper_control": result}
     session.flush()

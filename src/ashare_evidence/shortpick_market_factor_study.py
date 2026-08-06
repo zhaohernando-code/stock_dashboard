@@ -9,7 +9,12 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ashare_evidence.market_rules import ACCOUNT_PROFILE_NEW_RETAIL_CASH, filter_account_eligible_series
+from ashare_evidence.market_rules import (
+    ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+    build_trade_eligibility_snapshot,
+    filter_account_eligible_series,
+    summarize_trade_eligibility_snapshots,
+)
 from ashare_evidence.models import MarketBar, Stock
 
 INDEX_SYMBOLS = {"000300.SH", "000905.SH", "000852.SH"}
@@ -103,6 +108,7 @@ def build_shortpick_market_factor_study(
         raw_series_by_symbol,
         account_profile=account_profile,
         include_index_symbols=INDEX_SYMBOLS,
+        profile_is_point_in_time=False,
     )
     if benchmark_mode not in BENCHMARK_MODES:
         raise ValueError(f"benchmark_mode must be one of {sorted(BENCHMARK_MODES)}")
@@ -113,16 +119,18 @@ def build_shortpick_market_factor_study(
         raise LookupError("CSI300 benchmark series 000300.SH is required.")
     signal_days = _eligible_signal_days(series_by_symbol, start_date=start_date, end_date=end_date)
     regime_features = _regime_features_by_day(series_by_symbol, signal_days=signal_days, pool_limit=pool_limit)
-    selections = {
-        strategy: _build_strategy_selections(
+    eligibility_snapshots: list[dict[str, Any]] = []
+    selections = {}
+    for strategy_index, strategy in enumerate(DEFAULT_STRATEGIES):
+        selections[strategy] = _build_strategy_selections(
             series_by_symbol,
             signal_days=signal_days,
             strategy=strategy,
             pool_limit=pool_limit,
             rank_limit=rank_limit,
+            account_profile=account_profile,
+            eligibility_snapshots=eligibility_snapshots if strategy_index == 0 else None,
         )
-        for strategy in DEFAULT_STRATEGIES
-    }
     rows_by_strategy = {
         strategy: _evaluation_rows(
             series_by_symbol,
@@ -227,6 +235,7 @@ def build_shortpick_market_factor_study(
             "stock_like_series_count": len([symbol for symbol in series_by_symbol if symbol not in INDEX_SYMBOLS]),
             "raw_stock_like_series_count": len([symbol for symbol in raw_series_by_symbol if symbol not in INDEX_SYMBOLS]),
             "account_eligibility": account_eligibility,
+            "trade_eligibility": summarize_trade_eligibility_snapshots(eligibility_snapshots),
             "benchmark_note": _benchmark_note(series_by_symbol, benchmark_mode),
         },
         "period_summary": period_summary,
@@ -338,22 +347,40 @@ def _build_strategy_selections(
     strategy: str,
     pool_limit: int,
     rank_limit: int,
+    account_profile: str = ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+    eligibility_snapshots: list[dict[str, Any]] | None = None,
 ) -> dict[date, list[str]]:
     selections: dict[date, list[str]] = {}
     for signal_day in signal_days:
-        contexts = [
-            context
-            for symbol, series in series_by_symbol.items()
-            if symbol not in INDEX_SYMBOLS
-            for context in [
-                _context_for_signal_day(
-                    series,
-                    signal_day,
-                    include_golden_cross=strategy == GOLDEN_CROSS_STRATEGY,
-                )
-            ]
-            if context is not None
-        ]
+        contexts: list[dict[str, Any]] = []
+        for symbol, series in series_by_symbol.items():
+            if symbol in INDEX_SYMBOLS:
+                continue
+            context = _context_for_signal_day(
+                series,
+                signal_day,
+                include_golden_cross=strategy == GOLDEN_CROSS_STRATEGY,
+            )
+            if context is None:
+                continue
+            snapshot = build_trade_eligibility_snapshot(
+                symbol,
+                stock_profile=None,
+                account_profile=account_profile,
+                as_of=signal_day,
+                decision_cutoff=signal_day,
+                price_cny=float(context["close_price"]),
+                price_observed_at=signal_day,
+                price_source="market_bars.close_price",
+                price_adjustment="unadjusted",
+                profile_is_point_in_time=False,
+            )
+            if eligibility_snapshots is not None:
+                eligibility_snapshots.append(snapshot)
+            if not snapshot["eligible_before_scoring"]:
+                continue
+            context["_trade_eligibility_snapshot"] = snapshot
+            contexts.append(context)
         effective_pool_limit = pool_limit
 
         def pool_sort_key(item: dict[str, Any]) -> tuple[float, float, float] | tuple[float, float]:
@@ -450,6 +477,7 @@ def _context_for_signal_day(
         "abs_return_1d": abs(_lookback_return(series, index, 1)),
         "amount": latest.amount,
         "turnover_rate": latest.turnover or 0.0,
+        "close_price": latest.close,
     }
     if include_golden_cross:
         context.update(_golden_cross_features(series, index, short_window=10, long_window=200))

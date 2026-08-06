@@ -1,0 +1,105 @@
+{
+  "contract_id": "shortpick_v3_external_context_research_2026_08_06",
+  "status": "research_infrastructure_only",
+  "v3_signal_changed": false,
+  "claim_ceiling": "channel_and_replay_contract_not_strategy_validation",
+  "baseline": {
+    "name": "full713_frozen_control",
+    "signal_date_from": "2023-06-13",
+    "signal_date_to": "2026-05-26",
+    "signal_day_count": 713,
+    "must_reuse": [
+      "same_pit_stock_inputs",
+      "same_entry_and_exit_semantics",
+      "same_cost_and_capacity_contract",
+      "same_personal_eligibility_snapshot_version",
+      "same_train_validation_test_boundaries"
+    ],
+    "forbidden": ["baseline_reselection_after_results", "future_news", "latest_article_revision_backfill", "network_fetch_during_replay"]
+  },
+  "current_readiness": {
+    "stocks": 3286,
+    "daily_market_bar_stock_coverage": 3112,
+    "news_entity_mapped_stocks": 4,
+    "sector_membership_stocks": 4,
+    "overseas_instruments": 0,
+    "news_provider_count": 1,
+    "news_item_count_observed_in_prior_hot_db_audit": 99,
+    "conclusion": "Existing external/context data is not broad or long enough for full713 validation. No external-context strategy result may be claimed from it."
+  },
+  "channel_poc": {
+    "layers": [
+      {
+        "layer": "official_fact",
+        "priority_sources": ["CSRC", "SSE", "SZSE", "BSE", "company_exchange_filings", "PBOC", "NBS", "customs"],
+        "role": "auditable facts, filings, policy and macro releases"
+      },
+      {
+        "layer": "global_market",
+        "priority_sources": ["licensed_exchange_or_vendor_eod", "official_index_publishers", "licensed_fx_rates", "licensed_commodity_futures"],
+        "role": "US/HK indices, semiconductors, FX, rates and commodities with exchange timestamps"
+      },
+      {
+        "layer": "professional_news",
+        "priority_sources": ["licensed_professional_news_vendor_with_archive_and_timestamp_sla"],
+        "role": "fast narrative/event coverage; never the sole source for official facts"
+      }
+    ],
+    "hard_gates": {
+      "legal_and_license_reviewed": true,
+      "historical_archive_covers_full713_plus_warmup": true,
+      "published_at_and_first_seen_at_available": true,
+      "article_revision_history_or_immutable_hash_available": true,
+      "stable_identifier_and_deduplication_supported": true,
+      "documented_sla_and_backfill_policy": true,
+      "machine_retrieval_and_rate_limits_documented": true,
+      "sample_entity_mapping_precision_min": 0.95,
+      "sample_timestamp_parse_success_min": 0.995,
+      "replay_hash_match_rate": 1.0
+    },
+    "scored_dimensions": ["authority", "latency", "historical_depth", "timestamp_integrity", "revision_traceability", "coverage", "entity_precision", "stability", "cost", "license_replay_rights"],
+    "selection_rule": "All hard gates must pass; then select a primary and independent fallback per layer. Free scraping without archive, SLA, timestamp lineage and replay rights cannot be primary."
+  },
+  "storage_contract": {
+    "raw": {
+      "immutable": true,
+      "fields": ["provider", "provider_item_id", "requested_at", "first_seen_at", "provider_published_at", "provider_updated_at", "received_at", "http_metadata", "license_tier", "content_bytes_sha256", "raw_payload_uri"]
+    },
+    "silver": {
+      "versioned": true,
+      "fields": ["normalized_event_id", "canonical_timestamp", "timestamp_confidence", "language", "headline", "body_hash", "revision_id", "source_authority", "entities", "sectors", "geographies", "event_type", "dedupe_cluster_id", "transform_version"]
+    },
+    "pit": {
+      "append_only": true,
+      "fields": ["decision_cutoff", "available_from", "available_to", "knowledge_version", "raw_ids", "silver_ids", "feature_version", "feature_value", "missingness_reason"],
+      "eligibility_rule": "available_from <= decision_cutoff and (available_to is null or decision_cutoff < available_to)"
+    },
+    "offline_replay": "A replay resolves only frozen manifests and content hashes. Any network access is a hard failure."
+  },
+  "experiment_ladder": [
+    {
+      "stage": "static_weight",
+      "weights": [0.0, 0.025, 0.05, 0.075, 0.1, 0.15],
+      "rule": "Stock-native score remains dominant; external score can only gate or adjust within the declared cap."
+    },
+    {
+      "stage": "rule_dynamic_weight",
+      "inputs": ["source_confidence", "event_age", "cross_source_confirmation", "market_regime", "sector_dependency"],
+      "constraints": ["monotonic_confidence", "monotonic_staleness_decay", "external_weight_cap", "missing_external_data_falls_back_to_stock_only"]
+    },
+    {
+      "stage": "constrained_learned_gate",
+      "models": ["regularized_logistic_gate", "monotonic_gradient_boosted_gate"],
+      "constraints": ["walk_forward_only", "nested_tuning", "purged_embargoed_splits", "external_weight_cap", "calibration_report", "ablation_vs_stock_only", "DSR_and_PBO_governance"]
+    }
+  ],
+  "promotion_gates": [
+    "full713_same_contract_non_degradation",
+    "holdout_and_regime_stability",
+    "timestamp_leakage_audit_clean",
+    "network_free_replay_hash_match",
+    "stock_only_ablation_retained",
+    "cost_capacity_and_personal_eligibility_ready",
+    "no_single_provider_dependency"
+  ]
+}
