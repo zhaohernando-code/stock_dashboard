@@ -1,0 +1,102 @@
+{
+  "contract_id": "shortpick_v3_external_context_residual_policy_2026_08_06",
+  "status": "research_policy_frozen_execution_blocked_by_provider_readiness",
+  "v3_signal_changed": false,
+  "runtime_activation_allowed": false,
+  "claim_ceiling": "formula_and_model_selection_contract_only_no_return_evidence",
+  "research_basis": [
+    {
+      "title": "Empirical Asset Pricing via Machine Learning",
+      "authors": "Gu, Kelly, Xiu",
+      "url": "https://www.nber.org/papers/w25398",
+      "use": "Momentum, liquidity and volatility remain dominant stock-native predictors, supporting a core-first architecture."
+    },
+    {
+      "title": "The Inefficient Pricing of News",
+      "authors": "Didisheim, Kelly, Pourmohammadi, Tian",
+      "url": "https://www.nber.org/papers/w35093",
+      "use": "News is partly predictable from stock characteristics; the external signal must be residualized before it is allowed to adjust the core score."
+    }
+  ],
+  "sign_contract": {
+    "external_residual": "external_signal - E[external_signal | past-only stock-native features]",
+    "positive_external_residual": "incremental adverse external information",
+    "negative_external_residual": "incremental favorable external information",
+    "reason": "This makes the frozen subtraction formula directionally explicit."
+  },
+  "formula": {
+    "score": "final_score = z(core_score) - clip(lambda * z(external_residual), -cap, +cap)",
+    "core_standardization": "Fit mean and standard deviation on the training window only, then apply unchanged to the later decision window.",
+    "residual_standardization": "Fit residual mean and standard deviation on the past-only residual training window only.",
+    "cap_z_units": 0.3,
+    "cap_governance": "The 0.30 cap is frozen before any external return result is observed. Sensitivity may report 0.15 and 0.50, but cannot replace the primary cap after results.",
+    "missing_external_data": "Use lambda=0 for the affected channel and record an explicit missingness reason."
+  },
+  "core_dominance": {
+    "v3_baseline_lambda": 0.0,
+    "v3_baseline_permanently_retained": true,
+    "static_lambda_ladder": [0.0, 0.025, 0.05, 0.075, 0.1, 0.15],
+    "positive_news_can_create_core_eligibility": false,
+    "positive_news_can_independently_trigger_buy": false,
+    "major_negative_official_event_can_block": true,
+    "external_adjustment_max_abs_z": 0.3
+  },
+  "channel_boundaries": {
+    "global_state": {
+      "allowed_effect": "reduce total gross exposure only",
+      "forbidden_effect": ["change cross-sectional stock ranking", "increase gross exposure above the stock-only baseline"]
+    },
+    "sector_state": {
+      "allowed_effect": "adjust ranking only among stocks inside the same PIT sector",
+      "forbidden_effect": ["move a stock across sectors", "change total gross exposure directly", "create eligibility"]
+    },
+    "individual_event": {
+      "allowed_effect": "bounded incremental score adjustment for a core-eligible stock",
+      "forbidden_effect": ["create eligibility", "trigger a buy without the core signal"],
+      "risk_gate": "A PIT-valid major negative official event may block an otherwise eligible stock."
+    }
+  },
+  "residualization": {
+    "target": "raw external channel signal available at the decision cutoff",
+    "predictors": "stock-native PIT features only, including momentum, liquidity, volatility, valuation and existing core context",
+    "fit_rule": "prediction_model_fit_end must be strictly earlier than decision_cutoff",
+    "first_model": "regularized linear or ridge residualizer",
+    "challengers": ["generalized_additive_residualizer", "monotonic_gradient_boosted_residualizer"],
+    "black_box": "challenger_only_not_first_production_version",
+    "validation": ["walk_forward", "purged_overlapping_labels", "embargoed_tuning", "stock_only_ablation", "residual_orthogonality_report"]
+  },
+  "complexity_ladder": [
+    {
+      "stage": "static_weight",
+      "allowed": true,
+      "lambda_values": [0.0, 0.025, 0.05, 0.075, 0.1, 0.15]
+    },
+    {
+      "stage": "rule_dynamic_weight",
+      "allowed_after_static_gate": true,
+      "inputs": ["source_quality", "relevance", "novelty", "age", "sector_sensitivity", "cross_source_conflict"],
+      "constraints": ["monotonic_source_quality", "monotonic_staleness_decay", "lambda_max_0_15", "missing_falls_back_to_zero"]
+    },
+    {
+      "stage": "constrained_learned_gate",
+      "allowed_after_dynamic_gate": true,
+      "models": ["regularized_logistic", "generalized_additive_model", "monotonic_gradient_boosted_tree"],
+      "constraints": ["walk_forward_only", "nested_tuning", "calibration", "monotonicity", "lambda_max_0_15", "one_standard_error_selection"]
+    }
+  ],
+  "model_selection": {
+    "primary_oos_metric": "predeclared risk-adjusted stock-only-relative objective under identical account and cost contracts",
+    "rule": "Find the best gate-passing OOS mean, calculate best_mean - best_standard_error, then select the smallest lambda whose OOS mean is at or above that lower bound.",
+    "peak_return_selection_forbidden": true,
+    "all_gates_required": ["provider_readiness", "time_leakage_clean", "full713_offline_replay", "stock_only_non_degradation", "regime_stability", "cost_capacity", "personal_eligibility", "DSR_PBO_governance"]
+  },
+  "current_gate": {
+    "full713_external_context_ready": false,
+    "weight_backtest_allowed": false,
+    "reason": "No layer currently has two independent providers passing the documentary, timestamp, sample and offline replay gates."
+  },
+  "implementation": {
+    "module": "src/ashare_evidence/external_context_residual_policy.py",
+    "functions": ["compute_external_residual", "apply_bounded_external_residual", "select_smallest_weight_within_one_standard_error"]
+  }
+}

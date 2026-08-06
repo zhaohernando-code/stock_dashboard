@@ -58,6 +58,7 @@ from ashare_evidence.exposure_floor_overlay_governance import (
     write_staggered_exposure_combo_governance_summary,
 )
 from ashare_evidence.external_context_poc import (
+    build_external_context_poc_readiness,
     build_external_context_provider_audit,
     load_external_context_registry,
     probe_tushare_external_context_from_session,
@@ -424,6 +425,7 @@ NO_DB_COMMANDS = {
     "runtime-storage-governance-archive",
     "runtime-storage-governance-audit",
     "research-external-context-provider-audit",
+    "research-external-context-poc-readiness",
     "research-external-context-materialize-pilot",
     "research-external-context-offline-replay",
     "shortpick-model-deterministic-full-history-select",
@@ -975,6 +977,15 @@ def build_parser() -> argparse.ArgumentParser:
     external_context_provider_audit.add_argument("--registry-json", required=True)
     external_context_provider_audit.add_argument("--sample-metrics-json", default=None)
     external_context_provider_audit.add_argument("--output-json", default=None)
+
+    external_context_poc_readiness = subparsers.add_parser(
+        "research-external-context-poc-readiness",
+        help="Evaluate documentary and frozen-event-set sample readiness without running a strategy backtest.",
+    )
+    external_context_poc_readiness.add_argument("--registry-json", required=True)
+    external_context_poc_readiness.add_argument("--event-set-json", required=True)
+    external_context_poc_readiness.add_argument("--sample-metrics-json", default=None)
+    external_context_poc_readiness.add_argument("--output-json", default=None)
 
     external_context_tushare_poc = subparsers.add_parser(
         "research-external-context-tushare-poc",
@@ -2970,6 +2981,24 @@ def main(argv: list[str] | None = None) -> int:
             else None
         )
         payload = build_external_context_provider_audit(registry, sample_metrics=sample_metrics)
+        if args.output_json:
+            write_external_context_artifact(payload, args.output_json)
+        _print_json(payload)
+        return 0 if payload["gate_status"] == "passed" else 1
+
+    if args.command == "research-external-context-poc-readiness":
+        registry = load_external_context_registry(args.registry_json)
+        event_set = json.loads(Path(args.event_set_json).read_text(encoding="utf-8"))
+        sample_metrics = (
+            json.loads(Path(args.sample_metrics_json).read_text(encoding="utf-8"))
+            if args.sample_metrics_json
+            else None
+        )
+        payload = build_external_context_poc_readiness(
+            registry,
+            event_set,
+            sample_metrics=sample_metrics,
+        )
         if args.output_json:
             write_external_context_artifact(payload, args.output_json)
         _print_json(payload)

@@ -1,0 +1,560 @@
+{
+  "schema_version": "external_context_provider_registry.v2",
+  "registry_id": "shortpick_v3_external_context_provider_registry_v2_2026_08_06",
+  "as_of": "2026-08-06",
+  "v3_signal_changed": false,
+  "selection_policy": "parallel_poc_no_preselected_winner",
+  "baseline_contract": {
+    "signal_date_from": "2023-06-13",
+    "signal_date_to": "2026-05-26",
+    "signal_day_count": 713,
+    "required_warmup_start": "2023-05-01"
+  },
+  "layer_readiness_rule": {
+    "mode": "parallel_candidates",
+    "required_ready_candidate_count": 2,
+    "independent_provider_groups_required": true,
+    "note": "A layer becomes selectable only after two independent candidates pass every hard, timestamp and sample gate. No winner is named before the comparative PoC."
+  },
+  "direct_elimination_rule": {
+    "required_time_lineage_fields": [
+      "published_at",
+      "first_seen_at",
+      "available_at",
+      "revision_id"
+    ],
+    "rule": "An explicitly unavailable required field eliminates the provider. An undocumented or trial-pending field blocks readiness until evidence is obtained.",
+    "derived_field_policy": "first_seen_at is captured locally; available_at may be conservatively derived only from documented provider dissemination/effective-time semantics."
+  },
+  "hard_gate_ids": [
+    "legal_and_license_reviewed",
+    "historical_archive_covers_full713_plus_warmup",
+    "stable_identifier_and_deduplication_supported",
+    "documented_sla_and_backfill_policy",
+    "machine_retrieval_and_rate_limits_documented",
+    "entity_mapping_precision",
+    "network_free_replay_hash_match"
+  ],
+  "sample_acceptance_gates": {
+    "timestamp_parse_success_min": 0.995,
+    "stable_key_unique_rate_min": 0.999,
+    "required_field_completeness_min": 0.995,
+    "entity_mapping_precision_min": 0.95,
+    "entity_mapping_recall_min": 0.9,
+    "repeat_pull_hash_match_rate": 1.0,
+    "future_available_at_violation_count": 0,
+    "unlinked_revision_rate_max": 0.001,
+    "full713_plus_warmup_start_max": "2023-05-01",
+    "full713_end_min": "2026-05-26"
+  },
+  "scorecard_dimensions": [
+    {"dimension_id": "authority", "weight": 0.15},
+    {"dimension_id": "time_lineage", "weight": 0.18},
+    {"dimension_id": "revision_traceability", "weight": 0.14},
+    {"dimension_id": "historical_depth", "weight": 0.12},
+    {"dimension_id": "coverage_and_entity_mapping", "weight": 0.1},
+    {"dimension_id": "stability_and_sla", "weight": 0.1},
+    {"dimension_id": "license_and_frozen_replay", "weight": 0.13},
+    {"dimension_id": "cost_and_accessibility", "weight": 0.08}
+  ],
+  "score_interpretation": {
+    "scale": "0_to_5_documentary_pretrial_score",
+    "use": "Ranking is permitted only among providers that pass all hard gates; an eliminated or pending provider cannot win regardless of score.",
+    "bands": {"excellent": 85, "acceptable": 75, "conditional": 60}
+  },
+  "recommended_poc_order": [
+    "cninfo_data_service",
+    "sseinfo_announcements",
+    "szse_ssic_announcements",
+    "sec_edgar",
+    "company_ir",
+    "tushare_stock_st",
+    "wind_global_market",
+    "tushare_index_global",
+    "tiingo_eod",
+    "tiingo_news",
+    "lseg_mrn",
+    "ravenpack_news_analytics",
+    "tushare_major_news"
+  ],
+  "providers": [
+    {
+      "provider_id": "cninfo_data_service",
+      "provider_name": "CNINFO Data Service",
+      "layer": "official_fact",
+      "coverage_scope": ["a_share_announcements", "szse_and_cross_market_disclosures"],
+      "target_role": "parallel_candidate",
+      "independence_group": "cninfo_ssic",
+      "access_state": "account_and_api_contract_required",
+      "cost": {"model": "quote_or_data_store_purchase"},
+      "timestamp_contract": {
+        "published_at": {"status": "pending", "note": "Public pages show announcement time, but an API field contract and timezone sample are required.", "evidence_urls": ["https://webapi.cninfo.com.cn/"]},
+        "first_seen_at": {"status": "pass", "note": "Captured by the local Raw ingestion boundary."},
+        "available_at": {"status": "pending", "note": "Requires supported API dissemination semantics; website crawl time is not accepted."},
+        "revision_id": {"status": "pending", "note": "Document ID and correction/replacement linkage require an entitled sample."}
+      },
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Public viewing does not establish bulk local frozen-replay rights."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "The official disclosure archive covers the requested period.", "evidence_urls": ["https://www.cninfo.com.cn/"]},
+        "stable_identifier_and_deduplication_supported": {"status": "pending", "note": "API document identifiers need sample verification."},
+        "documented_sla_and_backfill_policy": {"status": "pending", "note": "Contract SLA and correction policy required."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "A supported Data Service and API documentation portal exist.", "evidence_urls": ["https://webapi.cninfo.com.cn/"]},
+        "entity_mapping_precision": {"status": "pending", "note": "Must pass the frozen A-share event set."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "No entitled Raw sample is available."}
+      },
+      "score_evidence": {
+        "authority": {"score": 5, "note": "Official disclosure infrastructure."},
+        "time_lineage": {"score": 1, "note": "Public API time-field semantics not yet obtained."},
+        "revision_traceability": {"score": 1, "note": "Correction linkage not yet proven."},
+        "historical_depth": {"score": 5, "note": "Deep official archive."},
+        "coverage_and_entity_mapping": {"score": 5, "note": "Broad A-share disclosure scope."},
+        "stability_and_sla": {"score": 2, "note": "Contract SLA pending."},
+        "license_and_frozen_replay": {"score": 1, "note": "Local retention rights pending."},
+        "cost_and_accessibility": {"score": 3, "note": "Data service exists but quote/entitlement is required."}
+      },
+      "next_action": "Request API schema, sample, timestamp dictionary, correction semantics, rate limit, price and post-expiry local replay rights."
+    },
+    {
+      "provider_id": "sseinfo_announcements",
+      "provider_name": "SSE Info Announcement Data Service",
+      "layer": "official_fact",
+      "coverage_scope": ["sse_announcements", "sse_inquiry_letters", "sse_structured_disclosures"],
+      "target_role": "parallel_candidate",
+      "independence_group": "sseinfo",
+      "access_state": "business_application_and_quote_required",
+      "cost": {"model": "published_product_price_or_quote"},
+      "timestamp_contract": {
+        "published_at": {"status": "pending", "note": "Exact announcement timestamp field and timezone require a product sample."},
+        "first_seen_at": {"status": "pass", "note": "Captured locally at Raw receipt."},
+        "available_at": {"status": "pending", "note": "Delivery timestamp and late-file policy require contract evidence."},
+        "revision_id": {"status": "pending", "note": "Correction/replacement identifiers require a product sample."}
+      },
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Product agreement and local replay rights are not public."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "Historical and announcement data products cover the period.", "evidence_urls": ["https://www.sseinfo.com/services/sseai/aidata/"]},
+        "stable_identifier_and_deduplication_supported": {"status": "pending", "note": "Sample metadata required."},
+        "documented_sla_and_backfill_policy": {"status": "pending", "note": "Contract SLA required."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "Supported announcement API/file service is documented.", "evidence_urls": ["https://www.sseinfo.com/services/data/szjr/"]},
+        "entity_mapping_precision": {"status": "pending", "note": "SSE event-set sample required."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "No entitled Raw sample is available."}
+      },
+      "score_evidence": {
+        "authority": {"score": 5, "note": "Exchange-owned information provider."},
+        "time_lineage": {"score": 2, "note": "Delivery product exists; exact fields pending."},
+        "revision_traceability": {"score": 2, "note": "Sample needed."},
+        "historical_depth": {"score": 5, "note": "Historical announcement service documented."},
+        "coverage_and_entity_mapping": {"score": 3, "note": "Authoritative but SSE-only."},
+        "stability_and_sla": {"score": 3, "note": "Enterprise product; SLA text pending."},
+        "license_and_frozen_replay": {"score": 2, "note": "Agreement review pending."},
+        "cost_and_accessibility": {"score": 2, "note": "Business application/quote required."}
+      },
+      "next_action": "Apply for announcement API sample and price; request the data dictionary and correction/backfill policy."
+    },
+    {
+      "provider_id": "szse_ssic_announcements",
+      "provider_name": "SZSE / Shenzhen Securities Information Data Service",
+      "layer": "official_fact",
+      "coverage_scope": ["szse_announcements", "szse_reference_and_delisting_data"],
+      "target_role": "parallel_candidate",
+      "independence_group": "szse_ssic",
+      "access_state": "business_entitlement_required",
+      "cost": {"model": "quote_required"},
+      "timestamp_contract": {
+        "published_at": {"status": "pending", "note": "Announcement message time exists in exchange interfaces; entitled field sample required.", "evidence_urls": ["https://www.szse.cn/marketServices/technicalservice/interface/index.html"]},
+        "first_seen_at": {"status": "pass", "note": "Captured locally at Raw receipt."},
+        "available_at": {"status": "pending", "note": "Gateway/message dissemination semantics require entitlement."},
+        "revision_id": {"status": "pending", "note": "Replacement and correction linkage require an entitled sample."}
+      },
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Distribution agreement and frozen-replay rights required."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "Official announcement and reference history cover the window."},
+        "stable_identifier_and_deduplication_supported": {"status": "pending", "note": "Message/document identifiers require sample verification."},
+        "documented_sla_and_backfill_policy": {"status": "pending", "note": "Contract SLA required."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "Official market-data and announcement interface standards exist.", "evidence_urls": ["https://www.szse.cn/marketServices/technicalservice/interface/index.html"]},
+        "entity_mapping_precision": {"status": "pending", "note": "SZSE event-set sample required."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "No entitled Raw sample is available."}
+      },
+      "score_evidence": {
+        "authority": {"score": 5, "note": "Exchange/authorized information provider."},
+        "time_lineage": {"score": 2, "note": "Interface exists; sample semantics pending."},
+        "revision_traceability": {"score": 2, "note": "Sample needed."},
+        "historical_depth": {"score": 5, "note": "Official archive covers full713."},
+        "coverage_and_entity_mapping": {"score": 3, "note": "Authoritative but SZSE-only."},
+        "stability_and_sla": {"score": 3, "note": "Enterprise delivery; SLA pending."},
+        "license_and_frozen_replay": {"score": 2, "note": "Agreement review pending."},
+        "cost_and_accessibility": {"score": 2, "note": "Entitlement and quote required."}
+      },
+      "next_action": "Request an announcement/reference-data trial sample and written dissemination/revision field contract."
+    },
+    {
+      "provider_id": "sec_edgar",
+      "provider_name": "SEC EDGAR",
+      "layer": "official_fact",
+      "coverage_scope": ["us_company_filings", "chip_supply_chain_filings"],
+      "target_role": "parallel_candidate",
+      "independence_group": "sec",
+      "access_state": "public_api_available_user_agent_required",
+      "cost": {"model": "free_public_api"},
+      "timestamp_contract": {
+        "published_at": {"status": "pass", "note": "EDGAR acceptance datetime is documented.", "evidence_urls": ["https://www.sec.gov/about/webmaster-frequently-asked-questions"]},
+        "first_seen_at": {"status": "pass", "note": "Captured locally at HTTP receipt."},
+        "available_at": {"status": "pending", "note": "SEC states no exact first-public timestamp; pilot must use acceptance time plus a conservative documented lag, not zero lag.", "evidence_urls": ["https://www.sec.gov/about/webmaster-frequently-asked-questions"]},
+        "revision_id": {"status": "pass", "note": "Accession numbers are stable; amendments are separate accessions and post-acceptance corrections/deletions are documented.", "evidence_urls": ["https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data"]}
+      },
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pass", "note": "Public API and fair-access policy documented."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "EDGAR history starts in 1994/1995 and bulk submissions are available.", "evidence_urls": ["https://www.sec.gov/search-filings/edgar-application-programming-interfaces"]},
+        "stable_identifier_and_deduplication_supported": {"status": "pass", "note": "CIK plus accession number."},
+        "documented_sla_and_backfill_policy": {"status": "pass", "note": "Realtime APIs, nightly bulk refresh and weekly rebuilt indexes are documented."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "JSON/bulk APIs and maximum 10 requests per second guidance are documented."},
+        "entity_mapping_precision": {"status": "pending", "note": "CIK/ticker/A-share supply-chain mapping sample required."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "A declared contact User-Agent is required before live Raw acquisition."}
+      },
+      "score_evidence": {
+        "authority": {"score": 5, "note": "US regulator original source."},
+        "time_lineage": {"score": 4, "note": "Acceptance time is strong; exact first-public time absent."},
+        "revision_traceability": {"score": 4, "note": "Stable accessions and documented corrections."},
+        "historical_depth": {"score": 5, "note": "Decades of filings."},
+        "coverage_and_entity_mapping": {"score": 4, "note": "Excellent US coverage; cross-market mapping required."},
+        "stability_and_sla": {"score": 4, "note": "Official real-time and bulk schedules."},
+        "license_and_frozen_replay": {"score": 5, "note": "Public government filing archive under fair-access rules."},
+        "cost_and_accessibility": {"score": 5, "note": "Free; requires a compliant declared User-Agent."}
+      },
+      "next_action": "Configure a truthful project contact User-Agent, then run a 20-company semiconductor filing sample and conservative availability-lag audit."
+    },
+    {
+      "provider_id": "company_ir",
+      "provider_name": "Issuer Investor Relations Sites",
+      "layer": "official_fact",
+      "coverage_scope": ["earnings_releases", "company_presentations", "company_event_notices"],
+      "target_role": "parallel_candidate",
+      "independence_group": "issuer_ir",
+      "access_state": "public_but_heterogeneous",
+      "cost": {"model": "free_public_websites"},
+      "timestamp_contract": {
+        "published_at": {"status": "pending", "note": "Must be verified issuer by issuer; page dates are not consistently timestamped."},
+        "first_seen_at": {"status": "pass", "note": "Captured locally."},
+        "available_at": {"status": "pending", "note": "RSS/email/web availability differs by issuer."},
+        "revision_id": {"status": "pending", "note": "Many issuer sites overwrite files without an exposed revision ID."}
+      },
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Terms and storage rights vary by issuer."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pending", "note": "Must be checked for the frozen company basket."},
+        "stable_identifier_and_deduplication_supported": {"status": "pending", "note": "Requires local canonical URL plus content hash; provider IDs vary."},
+        "documented_sla_and_backfill_policy": {"status": "pending", "note": "Issuer sites generally provide no SLA."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pending", "note": "RSS/API availability varies."},
+        "entity_mapping_precision": {"status": "pass", "note": "Issuer-domain allowlist gives deterministic company mapping."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "Frozen issuer basket pilot not run."}
+      },
+      "score_evidence": {
+        "authority": {"score": 5, "note": "Issuer-original facts."},
+        "time_lineage": {"score": 2, "note": "Heterogeneous page/RSS timestamps."},
+        "revision_traceability": {"score": 2, "note": "Files may be overwritten."},
+        "historical_depth": {"score": 4, "note": "Often deep, but issuer-specific."},
+        "coverage_and_entity_mapping": {"score": 2, "note": "High precision, expensive to maintain broadly."},
+        "stability_and_sla": {"score": 1, "note": "No common SLA."},
+        "license_and_frozen_replay": {"score": 1, "note": "Terms vary by issuer."},
+        "cost_and_accessibility": {"score": 5, "note": "Public access, but engineering cost is high."}
+      },
+      "next_action": "Freeze an issuer-domain basket for NVDA, AMD, INTC, MU, TSM, ASML, AMAT and LRCX; accept only feeds with explicit timestamps and immutable documents."
+    },
+    {
+      "provider_id": "tushare_stock_st",
+      "provider_name": "Tushare Pro stock_st",
+      "layer": "official_fact",
+      "coverage_scope": ["a_share_risk_warning_status"],
+      "target_role": "low_cost_candidate",
+      "independence_group": "tushare",
+      "access_state": "configured_and_transport_tested",
+      "cost": {"model": "points", "known_requirement": "3000 points"},
+      "timestamp_contract": {
+        "published_at": {"status": "pass", "note": "trade_date and documented daily update schedule are available."},
+        "first_seen_at": {"status": "pass", "note": "Captured locally."},
+        "available_at": {"status": "pass", "note": "Use the documented 09:20 Asia/Shanghai update time conservatively."},
+        "revision_id": {"status": "fail", "note": "No provider revision ID or correction chain is exposed."}
+      },
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Post-expiry local replay rights need written confirmation."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "Daily historical ST list starts in 2016."},
+        "stable_identifier_and_deduplication_supported": {"status": "pass", "note": "ts_code+trade_date+type is unique but not revision-aware."},
+        "documented_sla_and_backfill_policy": {"status": "pending", "note": "Daily update time is documented; correction/backfill policy is not."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "REST endpoint and row limit documented."},
+        "entity_mapping_precision": {"status": "pending", "note": "Must be compared with the frozen official risk-warning truth slots."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "Two immediate pulls match, but entitled immutable Raw replay is not approved."}
+      },
+      "score_evidence": {
+        "authority": {"score": 3, "note": "Aggregator, not exchange-original."},
+        "time_lineage": {"score": 4, "note": "Effective day and update time are documented."},
+        "revision_traceability": {"score": 0, "note": "No revision ID."},
+        "historical_depth": {"score": 5, "note": "History begins in 2016."},
+        "coverage_and_entity_mapping": {"score": 4, "note": "Broad A-share code coverage."},
+        "stability_and_sla": {"score": 2, "note": "Correction SLA absent."},
+        "license_and_frozen_replay": {"score": 1, "note": "Written rights pending."},
+        "cost_and_accessibility": {"score": 4, "note": "Existing low-cost entitlement."}
+      },
+      "next_action": "Eliminated under the strict revision_id rule; use only to diagnose and cross-check official exchange truth."
+    },
+    {
+      "provider_id": "wind_global_market",
+      "provider_name": "Wind Client API",
+      "layer": "global_market",
+      "coverage_scope": ["global_indices", "us_hk_equities", "fx", "rates", "commodities", "industry_data"],
+      "target_role": "parallel_candidate",
+      "independence_group": "wind",
+      "access_state": "trial_and_terminal_entitlement_required",
+      "cost": {"model": "enterprise_quote"},
+      "timestamp_contract": {
+        "published_at": {"status": "pending", "note": "Public product page does not define source event timestamps."},
+        "first_seen_at": {"status": "pass", "note": "Captured locally at API receipt."},
+        "available_at": {"status": "pending", "note": "Trial must expose vendor availability and delayed/corrected values."},
+        "revision_id": {"status": "pending", "note": "Revision/correction identifiers require a field dictionary and sample."}
+      },
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Export, local storage and post-expiry replay rights require contract review."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "Wind documents powerful historical daily, minute and tick playback.", "evidence_urls": ["https://www.wind.com.cn/portal/zh/ClientApi/index.html"]},
+        "stable_identifier_and_deduplication_supported": {"status": "pending", "note": "Instrument and observation version keys require sample."},
+        "documented_sla_and_backfill_policy": {"status": "pending", "note": "Trial SLA and correction policy required."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "Client API is documented; entitlement-specific quotas require trial."},
+        "entity_mapping_precision": {"status": "pending", "note": "Frozen global/semiconductor basket sample required."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "No Wind entitlement is configured."}
+      },
+      "score_evidence": {
+        "authority": {"score": 4, "note": "Established enterprise aggregator."},
+        "time_lineage": {"score": 2, "note": "Public field semantics insufficient."},
+        "revision_traceability": {"score": 2, "note": "Trial required."},
+        "historical_depth": {"score": 5, "note": "Strong global history and replay coverage."},
+        "coverage_and_entity_mapping": {"score": 5, "note": "Broad global asset coverage."},
+        "stability_and_sla": {"score": 4, "note": "Enterprise service; exact SLA pending."},
+        "license_and_frozen_replay": {"score": 1, "note": "Contract rights unresolved."},
+        "cost_and_accessibility": {"score": 1, "note": "Enterprise terminal/trial required."}
+      },
+      "next_action": "Request trial with field dictionary, correction history, quotas, full713 export and perpetual frozen-replay clauses."
+    },
+    {
+      "provider_id": "tushare_index_global",
+      "provider_name": "Tushare Pro index_global",
+      "layer": "global_market",
+      "coverage_scope": ["SPX", "IXIC", "HKTECH", "HSI"],
+      "target_role": "low_cost_candidate",
+      "independence_group": "tushare",
+      "access_state": "configured_and_transport_tested",
+      "cost": {"model": "points", "known_requirement": "6000 points"},
+      "timestamp_contract": {
+        "published_at": {"status": "pass", "note": "Daily trade_date is provided."},
+        "first_seen_at": {"status": "pass", "note": "Captured locally."},
+        "available_at": {"status": "pending", "note": "Exact vendor publication/correction time is not documented."},
+        "revision_id": {"status": "fail", "note": "No provider revision ID is exposed for corrected daily rows."}
+      },
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Post-expiry local replay rights need written confirmation."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "SPX/IXIC/HKTECH full713+warmup pulls succeeded."},
+        "stable_identifier_and_deduplication_supported": {"status": "pass", "note": "ts_code+trade_date is unique but not a revision ID."},
+        "documented_sla_and_backfill_policy": {"status": "pending", "note": "Correction SLA not documented."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "REST endpoint and row limit documented."},
+        "entity_mapping_precision": {"status": "pass", "note": "Fixed index-code mapping."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "Two immediate pull digests match; frozen entitled Raw replay is not approved."}
+      },
+      "score_evidence": {
+        "authority": {"score": 3, "note": "Aggregator."},
+        "time_lineage": {"score": 2, "note": "Trade date only."},
+        "revision_traceability": {"score": 0, "note": "No revision ID."},
+        "historical_depth": {"score": 5, "note": "Window fully covered."},
+        "coverage_and_entity_mapping": {"score": 3, "note": "Useful indices, limited enterprise breadth."},
+        "stability_and_sla": {"score": 2, "note": "No formal correction SLA."},
+        "license_and_frozen_replay": {"score": 1, "note": "Written rights pending."},
+        "cost_and_accessibility": {"score": 4, "note": "Existing low-cost entitlement."}
+      },
+      "next_action": "Eliminated under the strict revision_id rule; retain only as a diagnostic comparator unless the vendor supplies revision lineage."
+    },
+    {
+      "provider_id": "tiingo_eod",
+      "provider_name": "Tiingo End-of-Day",
+      "layer": "global_market",
+      "coverage_scope": ["us_equity_eod", "semiconductor_etfs", "corporate_actions"],
+      "target_role": "low_cost_candidate",
+      "independence_group": "tiingo",
+      "access_state": "account_token_not_configured",
+      "cost": {"model": "free_or_individual_subscription"},
+      "timestamp_contract": {
+        "published_at": {"status": "pass", "note": "Observation date is exposed; most prices are available around 17:30 ET."},
+        "first_seen_at": {"status": "pass", "note": "Would be captured locally."},
+        "available_at": {"status": "pass", "note": "Use a conservative 20:00 ET cutoff because exchanges may correct data until 20:00 ET.", "evidence_urls": ["https://www.tiingo.com/documentation/end-of-day"]},
+        "revision_id": {"status": "fail", "note": "The EOD response exposes corrected values but no observation revision ID."}
+      },
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Personal use is described; local frozen replay rights require terms review."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "Historical EOD endpoint supports date ranges well beyond full713."},
+        "stable_identifier_and_deduplication_supported": {"status": "pass", "note": "Ticker/permaTicker plus date; not revision-aware."},
+        "documented_sla_and_backfill_policy": {"status": "pass", "note": "Evening availability and ongoing corrections are documented."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "REST API and request quotas are documented."},
+        "entity_mapping_precision": {"status": "pending", "note": "Frozen US semiconductor basket sample requires a token."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "No Tiingo token is configured."}
+      },
+      "score_evidence": {
+        "authority": {"score": 3, "note": "Curated market-data aggregator."},
+        "time_lineage": {"score": 3, "note": "Conservative evening cutoff can be defined."},
+        "revision_traceability": {"score": 0, "note": "No revision ID."},
+        "historical_depth": {"score": 5, "note": "Deep EOD history."},
+        "coverage_and_entity_mapping": {"score": 4, "note": "Good US equity coverage and permaTicker."},
+        "stability_and_sla": {"score": 3, "note": "Correction window documented."},
+        "license_and_frozen_replay": {"score": 2, "note": "Terms need review."},
+        "cost_and_accessibility": {"score": 5, "note": "Low-cost individual API."}
+      },
+      "next_action": "Eliminated under the strict revision_id rule; use only as a low-cost comparison unless version lineage becomes available."
+    },
+    {
+      "provider_id": "tiingo_news",
+      "provider_name": "Tiingo News API",
+      "layer": "professional_news",
+      "coverage_scope": ["us_financial_news", "blogs", "ticker_and_topic_tags"],
+      "target_role": "low_cost_candidate",
+      "independence_group": "tiingo",
+      "access_state": "account_token_not_configured",
+      "cost": {"model": "free_or_individual_subscription", "low_cost_queryable_history": "three_months"},
+      "timestamp_contract": {
+        "published_at": {"status": "pass", "note": "publishedDate is UTC and source-reported; crawler discovery time is substituted when absent."},
+        "first_seen_at": {"status": "pass", "note": "crawlDate is always recorded by Tiingo in UTC."},
+        "available_at": {"status": "pass", "note": "Use crawlDate, not publishedDate, as conservative vendor availability.", "evidence_urls": ["https://www.tiingo.com/documentation/news"]},
+        "revision_id": {"status": "fail", "note": "The article ID is stable, but no article revision chain or revision ID is documented."}
+      },
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Personal data storage and post-expiry replay rights require terms review."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "fail", "note": "Low-cost News API pricing documents only three months of queryable history; full bulk history is institutional-only.", "evidence_urls": ["https://www.tiingo.com/about/pricing"]},
+        "stable_identifier_and_deduplication_supported": {"status": "pass", "note": "Article id is unique; it is not revision-aware."},
+        "documented_sla_and_backfill_policy": {"status": "pass", "note": "crawlDate explicitly reveals backfills and daily incremental bulk behavior is documented."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "REST and institutional bulk endpoints are documented."},
+        "entity_mapping_precision": {"status": "pending", "note": "Ticker/tag precision must pass the 200-item manual sample."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "No Tiingo token or licensed Raw sample is configured."}
+      },
+      "score_evidence": {
+        "authority": {"score": 2, "note": "Broad crawler/aggregator."},
+        "time_lineage": {"score": 5, "note": "Both source time and crawler time are explicit."},
+        "revision_traceability": {"score": 0, "note": "No revision ID."},
+        "historical_depth": {"score": 1, "note": "Low-cost query history is only three months."},
+        "coverage_and_entity_mapping": {"score": 4, "note": "Large US feed with ticker/topic tags."},
+        "stability_and_sla": {"score": 3, "note": "Daily increments documented; formal SLA pending."},
+        "license_and_frozen_replay": {"score": 2, "note": "Terms need review."},
+        "cost_and_accessibility": {"score": 5, "note": "Low-cost API, but not enough history."}
+      },
+      "next_action": "Eliminated for low-cost full713 research because revision_id is absent and history is too short; institutional bulk may be reconsidered only as a separately licensed product."
+    },
+    {
+      "provider_id": "lseg_mrn",
+      "provider_name": "LSEG Machine Readable News / News Analytics",
+      "layer": "professional_news",
+      "coverage_scope": ["reuters_news", "third_party_news", "entity_sentiment", "novelty", "relevance"],
+      "target_role": "parallel_candidate",
+      "independence_group": "lseg",
+      "access_state": "enterprise_trial_required",
+      "cost": {"model": "enterprise_quote"},
+      "timestamp_contract": {
+        "published_at": {"status": "pass", "note": "Historical point-in-time streamed news metadata with millisecond timestamps is documented.", "evidence_urls": ["https://developers.lseg.com/en/product/news/news_analytics"]},
+        "first_seen_at": {"status": "pass", "note": "Captured at feed or archive receipt."},
+        "available_at": {"status": "pending", "note": "Trial must expose archive/feed availability and processing timestamps."},
+        "revision_id": {"status": "pending", "note": "MRN update/story identifiers require the entitled data model."}
+      },
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Article/analytics storage and post-expiry frozen replay must be contractually granted."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "News Analytics archives go back to 2003; broader MRN archive goes back to 1996."},
+        "stable_identifier_and_deduplication_supported": {"status": "pending", "note": "Entitled MRN schema required."},
+        "documented_sla_and_backfill_policy": {"status": "pending", "note": "Trial SLA and archive revision policy required."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "Real-time feed, WebSocket/API and SFTP archive delivery documented."},
+        "entity_mapping_precision": {"status": "pending", "note": "RIC/PermID to A-share/sector mapping must pass the event set."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "No LSEG entitlement is configured."}
+      },
+      "score_evidence": {
+        "authority": {"score": 5, "note": "Reuters-powered professional feed."},
+        "time_lineage": {"score": 4, "note": "Point-in-time millisecond archive; availability field pending."},
+        "revision_traceability": {"score": 4, "note": "MRN model likely supports updates; trial proof required."},
+        "historical_depth": {"score": 5, "note": "Archive comfortably covers full713."},
+        "coverage_and_entity_mapping": {"score": 5, "note": "Global broad coverage with RIC/PermID."},
+        "stability_and_sla": {"score": 5, "note": "Enterprise feed/archive delivery."},
+        "license_and_frozen_replay": {"score": 1, "note": "Contract rights unresolved."},
+        "cost_and_accessibility": {"score": 1, "note": "Enterprise trial/quote required."}
+      },
+      "next_action": "Request a parallel full713 archive trial with MRN field model, update chain, latency sample, A-share mapping rights and perpetual frozen-replay clause."
+    },
+    {
+      "provider_id": "ravenpack_news_analytics",
+      "provider_name": "RavenPack News Analytics",
+      "layer": "professional_news",
+      "coverage_scope": ["global_news", "events", "sentiment", "relevance", "novelty", "temporal_scores"],
+      "target_role": "parallel_candidate",
+      "independence_group": "ravenpack",
+      "access_state": "business_email_trial_required",
+      "cost": {"model": "enterprise_quote"},
+      "timestamp_contract": {
+        "published_at": {"status": "pass", "note": "Millisecond timestamped history is documented."},
+        "first_seen_at": {"status": "pass", "note": "Captured at feed/archive receipt."},
+        "available_at": {"status": "pending", "note": "Processing/availability timestamp must be verified in the trial schema."},
+        "revision_id": {"status": "pass", "note": "RavenPack documents article updates as separate normalized documents/events.", "evidence_urls": ["https://www.ravenpack.com/technology/news-aggregation"]}
+      },
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Premium-source storage and post-expiry replay rights require contract review."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "20+ year archive and history since 2001/2003 are documented."},
+        "stable_identifier_and_deduplication_supported": {"status": "pass", "note": "Unique entity identifiers and separately normalized revisions are documented."},
+        "documented_sla_and_backfill_policy": {"status": "pending", "note": "Public materials cite 99.98% uptime; contractual SLA/backfill policy required."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pending", "note": "Trial delivery/API quotas required."},
+        "entity_mapping_precision": {"status": "pending", "note": "A-share and sector mapping must pass the frozen event set."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "No RavenPack entitlement is configured."}
+      },
+      "score_evidence": {
+        "authority": {"score": 4, "note": "Premium multi-source analytics vendor."},
+        "time_lineage": {"score": 4, "note": "Millisecond history; availability field pending."},
+        "revision_traceability": {"score": 4, "note": "Updates treated as separate normalized events."},
+        "historical_depth": {"score": 5, "note": "20+ year archive."},
+        "coverage_and_entity_mapping": {"score": 5, "note": "40k sources and 12M entities."},
+        "stability_and_sla": {"score": 5, "note": "Public 99.98% uptime statement; contract pending."},
+        "license_and_frozen_replay": {"score": 1, "note": "Premium-source rights unresolved."},
+        "cost_and_accessibility": {"score": 1, "note": "Business-email enterprise trial required."}
+      },
+      "next_action": "Request the same full713 event windows as LSEG, including record IDs, availability timestamp, revision chain, mapping, latency and frozen-replay rights."
+    },
+    {
+      "provider_id": "tushare_major_news",
+      "provider_name": "Tushare Pro major_news",
+      "layer": "professional_news",
+      "coverage_scope": ["china_financial_news"],
+      "target_role": "low_cost_candidate",
+      "independence_group": "tushare",
+      "access_state": "configured_but_backfill_rate_blocked",
+      "cost": {"model": "separate_permission", "current_runtime_permission": "available"},
+      "timestamp_contract": {
+        "published_at": {"status": "pass", "note": "pub_time is exposed."},
+        "first_seen_at": {"status": "pass", "note": "Captured locally."},
+        "available_at": {"status": "pending", "note": "Historical provider ingestion/availability time is not exposed."},
+        "revision_id": {"status": "fail", "note": "No stable provider item/revision ID is exposed."}
+      },
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Article body storage and post-expiry replay rights require confirmation."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "More than eight years documented."},
+        "stable_identifier_and_deduplication_supported": {"status": "fail", "note": "Only a derived source+time+title key is available."},
+        "documented_sla_and_backfill_policy": {"status": "pending", "note": "Correction and late-backfill SLA absent."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "fail", "note": "Daily pulls saturate at 800; live account limit is 30 requests/hour."},
+        "entity_mapping_precision": {"status": "pending", "note": "Only four local stocks are currently mapped."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "News Raw storage remains blocked."}
+      },
+      "score_evidence": {
+        "authority": {"score": 2, "note": "Aggregator with mixed publisher mix."},
+        "time_lineage": {"score": 2, "note": "Publication time but no historical availability time."},
+        "revision_traceability": {"score": 0, "note": "No revision ID."},
+        "historical_depth": {"score": 5, "note": "History is long enough."},
+        "coverage_and_entity_mapping": {"score": 2, "note": "Mapping is currently sparse."},
+        "stability_and_sla": {"score": 1, "note": "Rate and saturation blockers."},
+        "license_and_frozen_replay": {"score": 1, "note": "Rights unresolved."},
+        "cost_and_accessibility": {"score": 4, "note": "Existing access."}
+      },
+      "next_action": "Eliminated under the strict revision_id rule and throughput gate; retain aggregate diagnostics only."
+    }
+  ],
+  "vendor_questionnaire": [
+    "Provide exact definitions, timezone and examples for published_at, provider_received_at, analytics_completed_at and customer_available_at.",
+    "Provide stable item ID, revision ID, parent revision ID, deletion/correction flags and whether historical rows are overwritten.",
+    "Confirm the earliest continuous archive date and whether delisted companies and withdrawn/corrected items remain queryable.",
+    "Confirm local storage of original payloads and analytics, offline backtests, derived features, and replay after subscription expiry.",
+    "Provide rate limits, bulk export options, outage SLA, late-backfill policy, correction schedule and support escalation.",
+    "Provide identifier coverage for A shares, US/HK semiconductor issuers, sectors, themes, supply-chain entities and historical mappings.",
+    "Confirm whether article bodies may be stored or only metadata, embeddings, hashes and source links.",
+    "Provide a full713+warmup trial extract for the frozen event set without survivorship or current-state backfill."
+  ]
+}

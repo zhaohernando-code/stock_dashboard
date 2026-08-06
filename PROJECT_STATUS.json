@@ -10,7 +10,7 @@
   },
   "status": "in_progress",
   "owner": "codex",
-  "updated_at": "2026-08-06T19:13:00+08:00",
+  "updated_at": "2026-08-06T20:30:00+08:00",
   "latest_personal_eligibility_and_external_context_update": {
     "status": "pit_eligibility_gate_active_external_context_research_only",
     "account_profile": "new_retail_cash_account",
@@ -24,15 +24,20 @@
     "external_research_contract": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_RESEARCH_2026-08-06.json"
   },
   "latest_external_context_provider_poc": {
-    "status": "all_layers_blocked_pending_primary_and_independent_fallback_gates",
+    "status": "all_layers_blocked_zero_ready_parallel_candidates",
     "v3_signal_changed": false,
-    "registry": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_PROVIDER_REGISTRY_2026-08-06.json",
-    "result": "docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_PROVIDER_POC_RESULT_2026-08-06.json",
-    "tushare_stock_st": "available_254_rows_on_2026_05_26_history_since_2016_candidate_only",
-    "tushare_index_global": "available_full713_plus_warmup_spx_770_ixic_770_hktech_752_candidate_only",
-    "tushare_major_news": "blocked_daily_800_row_saturation_and_30_requests_per_hour_limit",
+    "registry": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_PROVIDER_REGISTRY_V2_2026-08-06.json",
+    "event_set": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_POC_EVENT_SET_2026-08-06.json",
+    "result": "docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_CHANNEL_POC_RESULT_2026-08-06.json",
+    "provider_counts": {"total": 13, "ready": 0, "pending": 8, "eliminated": 5},
+    "official_fact": "blocked_0_of_2_independent_candidates_ready",
+    "global_market": "blocked_0_of_2_independent_candidates_ready",
+    "professional_news": "blocked_0_of_2_independent_candidates_ready",
+    "tushare_stock_st": "eliminated_missing_revision_id_despite_254_row_transport_sample",
+    "tushare_index_global": "eliminated_missing_revision_id_despite_full713_plus_warmup_transport_coverage",
+    "tushare_major_news": "eliminated_missing_revision_id_and_rate_limited",
     "immediate_new_subscription": "none",
-    "next_gate": "written_replay_rights_then_small_immutable_raw_silver_pit_pilot"
+    "next_gate": "written_trial_fields_and_replay_rights_then_entitled_raw_normalized_pit_sample"
   },
   "latest_external_context_replay_pilot": {
     "status": "storage_and_offline_replay_mechanics_ready_live_provider_data_pending",
@@ -50,6 +55,18 @@
     "news_raw_storage": "hard_blocked_pending_rights",
     "full713_external_context_backtest_allowed": false,
     "next_gate": "reviewed_live_small_sample_with_repeat_pull_hash_and_rights_evidence"
+  },
+  "latest_external_context_weight_policy": {
+    "status": "preregistered_research_only_backtest_blocked_pending_channel_data",
+    "v3_signal_changed": false,
+    "contract": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_RESIDUAL_POLICY_2026-08-06.json",
+    "formula": "z_core_minus_bounded_adverse_external_residual",
+    "lambda_grid": [0.0, 0.025, 0.05, 0.075, 0.1, 0.15],
+    "channel_boundaries": ["global_exposure_only", "within_sector_rank_only", "individual_increment_only"],
+    "positive_news_can_trigger_buy": false,
+    "major_negative_official_event_can_gate": true,
+    "selection_rule": "smallest_weight_within_one_standard_error_of_best_oos",
+    "model_ladder": ["static", "rule_dynamic", "constrained_logistic_gam_monotonic_gbdt", "black_box_challenger_only"]
   },
   "latest_rank5_policy_update": {
     "status": "rank5_real_execution_disabled_rank4_only_active",

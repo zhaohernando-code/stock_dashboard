@@ -1,0 +1,240 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "Short Pick V3 外部信息渠道 PoC 技术报告",
+    "generatedAt": "2026-08-06T20:30:00+08:00",
+    "cards": [],
+    "charts": [
+      {
+        "id": "provider_documentary_score_chart",
+        "title": "候选渠道纪录性综合分",
+        "subtitle": "13 个冻结候选；分数仅用于通过硬门禁后的比较，不能挽救时间血缘失败",
+        "type": "bar",
+        "dataset": "provider_results",
+        "sourceId": "channel_poc_result",
+        "encodings": {
+          "x": {"field": "provider_id", "type": "nominal", "label": "候选渠道 ID"},
+          "y": {"field": "documentary_score_100", "type": "quantitative", "label": "纪录性综合分（0–100）"},
+          "tooltip": [
+            {"field": "layer", "type": "nominal", "label": "层级"},
+            {"field": "status", "type": "nominal", "label": "硬门禁状态"},
+            {"field": "timestamp_gap", "type": "nominal", "label": "时间血缘缺口"},
+            {"field": "current_access", "type": "nominal", "label": "当前访问状态"}
+          ]
+        }
+      }
+    ],
+    "tables": [
+      {
+        "id": "layer_readiness_table",
+        "title": "三层渠道准入状态",
+        "subtitle": "每层至少需要两个独立且通过全部门禁的候选",
+        "dataset": "layer_readiness",
+        "sourceId": "layer_readiness_query",
+        "defaultSort": {"field": "candidate_count", "direction": "desc"},
+        "columns": [
+          {"field": "layer", "label": "层级", "type": "text"},
+          {"field": "candidate_count", "label": "候选数", "format": "number"},
+          {"field": "ready_count", "label": "Ready", "format": "number"},
+          {"field": "required_ready_count", "label": "最低独立 Ready", "format": "number"},
+          {"field": "status", "label": "状态", "type": "text"}
+        ]
+      },
+      {
+        "id": "provider_gate_table",
+        "title": "候选渠道硬门禁明细",
+        "subtitle": "按纪录性综合分降序；淘汰由四字段时间血缘硬规则触发",
+        "dataset": "provider_results",
+        "sourceId": "channel_poc_result",
+        "defaultSort": {"field": "documentary_score_100", "direction": "desc"},
+        "columns": [
+          {"field": "provider_name", "label": "候选渠道", "type": "text"},
+          {"field": "layer", "label": "层级", "type": "text"},
+          {"field": "documentary_score_100", "label": "综合分", "format": "number"},
+          {"field": "status", "label": "硬门禁", "type": "text"},
+          {"field": "timestamp_gap", "label": "待补/失败字段", "type": "text"},
+          {"field": "current_access", "label": "当前访问", "type": "text"}
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "id": "channel_poc_result",
+        "label": "渠道 PoC 冻结结果 V2",
+        "path": "docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_CHANNEL_POC_RESULT_2026-08-06.json",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT p.provider_id, p.provider_name, p.layer, p.documentary_score_100, p.status, p.timestamp_gap, p.current_access FROM read_json_auto('docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_CHANNEL_POC_RESULT_2026-08-06.json') AS r, UNNEST(r.provider_results) AS t(p)",
+          "description": "Reads the frozen V2 provider-result rows used by the report chart and tables.",
+          "executed_at": "2026-08-06T20:30:00+08:00"
+        }
+      },
+      {
+        "id": "layer_readiness_query",
+        "label": "三层准入状态查询",
+        "path": "docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_CHANNEL_POC_RESULT_2026-08-06.json",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT p.layer, p.candidate_count, p.ready_count, p.required_independent_ready_count AS required_ready_count, p.status FROM read_json_auto('docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_CHANNEL_POC_RESULT_2026-08-06.json') AS r, UNNEST(r.layer_readiness) AS t(p)",
+          "description": "Reads the frozen layer-readiness rows used by the report table.",
+          "executed_at": "2026-08-06T20:30:00+08:00"
+        }
+      },
+      {"id": "provider_registry", "label": "候选渠道与验收门禁 V2", "path": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_PROVIDER_REGISTRY_V2_2026-08-06.json"},
+      {"id": "event_set", "label": "冻结 PoC 事件集", "path": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_POC_EVENT_SET_2026-08-06.json"},
+      {"id": "sample_metrics", "label": "当前本地样本质量证据", "path": "docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_CURRENT_SAMPLE_METRICS_2026-08-06.json"},
+      {"id": "residual_policy", "label": "有界外部残差权重合同", "path": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_RESIDUAL_POLICY_2026-08-06.json"},
+      {"id": "vendor_trial_request", "label": "供应商试用申请包", "path": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_VENDOR_TRIAL_REQUEST_2026-08-06.md"}
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# Short Pick V3 外部信息渠道 PoC 技术报告\n\n**截至 2026-08-06：研究基础设施与准入规则已经冻结；V3 评分、纸面策略和生产权重均未改变。**"
+      },
+      {
+        "id": "technical_summary",
+        "type": "markdown",
+        "sourceId": "channel_poc_result",
+        "body": "## 技术摘要\n\n结论是 **现在不能进入外部信息权重回测**。冻结候选共 13 个，其中 0 个 ready、8 个 pending、5 个 eliminated；官方事实、全球行情、专业新闻三层均为 blocked。严格淘汰规则已经生效：任何渠道只要不能明确 `published_at`、`first_seen_at`、`available_at`、`revision_id`，就不能用综合分、低成本或已有访问权限挽救。\n\n当前完成的是可执行的渠道审计、冻结事件集、Raw/Normalized/PIT 重放合同和后续权重函数，而不是“新闻策略有效性”证明。"
+      },
+      {
+        "id": "layer_status_heading",
+        "type": "markdown",
+        "sourceId": "channel_poc_result",
+        "body": "## 三层都尚未达到双源准入\n\n每层要求至少两个不同独立性分组的候选通过全部门禁。现状全部为 0，因此不能先挑一个纪录性评分最高的渠道直接开跑。"
+      },
+      {"id": "layer_status", "type": "table", "tableId": "layer_readiness_table"},
+      {
+        "id": "score_interpretation",
+        "type": "markdown",
+        "sourceId": "channel_poc_result",
+        "body": "## 纪录性评分用于排 PoC 顺序，不用于决定准入\n\nSEC EDGAR 的纪录性综合分最高，但 SEC 明确没有精确的首次公开时间，仍需采用可审计的保守延迟并做现场样本；LSEG、RavenPack、Wind、交易所数据服务也都缺少当前项目可验证的授权样本或字段合同。下图只显示文档证据成熟度，不能被解读为渠道排名结论。"
+      },
+      {"id": "provider_score_chart_block", "type": "chart", "chartId": "provider_documentary_score_chart"},
+      {
+        "id": "strict_gate_result",
+        "type": "markdown",
+        "sourceId": "channel_poc_result",
+        "body": "## 五个低成本候选已被时间血缘硬规则淘汰\n\nTushare `stock_st`、`index_global`、`major_news` 以及 Tiingo EOD、Tiingo News 都无法提供满足当前合同的明确 `revision_id`。这不等于数据完全无用：它们仍可做覆盖和传输研究；但不能进入要求历史知识版本可追溯的 PIT 回测。"
+      },
+      {"id": "provider_gate", "type": "table", "tableId": "provider_gate_table"},
+      {
+        "id": "scope_definitions",
+        "type": "markdown",
+        "sourceId": "event_set",
+        "body": "## 范围、数据与定义\n\n冻结 PoC 事件集包含 96 个 A 股官方事实槽位、8 家海外芯片链公司各 5 个事实槽位（共 40 个）、8 个全球市场工具、4 个压力窗口、136 个官方事实新闻锚点和 200 条人工复核新闻样本。full713 对照期为 2023-06-13 至 2026-05-26，warmup 从 2023-05-01 开始。\n\n事件槽位采用固定哈希种子和分层抽样，避免事后只挑“容易解释”的新闻。由于目前没有供应商授权样本，具体事件 ID 尚未物化；这正是当前 blocked 状态的核心含义。"
+      },
+      {
+        "id": "methodology",
+        "type": "markdown",
+        "sourceId": "provider_registry",
+        "body": "## 方法与验收门禁\n\n每个候选依次接受许可与本地冻结重放权、full713+warmup 历史深度、四字段时间血缘、稳定 ID、修订链、实体映射、SLA/补数、重复拉取哈希和无网络重放检查。样本门槛包括必填字段与时间解析成功率、稳定键唯一率、实体映射精确率/召回率、未来可用时间违规数、未链接修订率和完整日期边界。\n\nRaw 响应不可变保存；Normalized 层在实现中继续使用 `Silver` schema 名称；PIT 快照只允许 `available_at <= decision_cutoff` 的版本。历史回测读取冻结 manifest，运行中联网即失败。"
+      },
+      {
+        "id": "current_evidence",
+        "type": "markdown",
+        "sourceId": "sample_metrics",
+        "body": "## 当前本地证据只能证明有限的传输稳定性\n\n现有凭据只覆盖 Tushare。`stock_st` 抽样日为 254 行；SPX、IXIC、HKTECH 覆盖分别为 770、770、752 行；同一时段两次聚合哈希一致。`major_news` 日查询达到 800 行饱和，并观察到 30 次/小时限制。\n\n这些检查没有保留受许可的 Raw 行，也没有证明跨日修订、`revision_id`、订阅结束后的重放权或独立双源。因此它们不能升级为渠道 ready。"
+      },
+      {
+        "id": "weight_policy",
+        "type": "markdown",
+        "sourceId": "residual_policy",
+        "body": "## 权重承载方案已经预注册，但尚未回测\n\n核心公式为 `final_score = z(core_score) - clip(lambda × z(external_residual), -cap, +cap)`，其中正的外部残差表示不利风险。`lambda` 静态网格为 0、2.5%、5%、7.5%、10%、15%；主 cap 为 0.30，并以 0.15/0.50 做敏感性检查。\n\n全球状态只调整总风险敞口，板块状态只改变板块内排序，个股事件只提供个股增量；正面信息不能独立产生买入资格，重大负面官方事件可以成为风险闸门。复杂度按静态权重、规则动态权重、受约束 Logistic/GAM/单调 GBDT 逐级晋升，黑箱模型只做挑战者。最终选择样本外最佳结果一个标准误以内的最小权重，而不是最高收益单点。"
+      },
+      {
+        "id": "limitations",
+        "type": "markdown",
+        "sourceId": "channel_poc_result",
+        "body": "## 局限与稳健性边界\n\n当前没有 Wind、LSEG、RavenPack、Tiingo、交易所数据服务或巨潮数据服务的授权凭据；SEC 在线请求还缺少符合其公平访问规则的真实联系人 `User-Agent`。因此本报告没有伪造试用结果，也没有把公开网页当前状态回填成历史 `available_at`。\n\n纪录性综合分来自公开文档与当前访问状态，只适合安排下一步 PoC；它不是统计显著性、覆盖质量或策略收益评分。外部信息回测仍被硬阻断。"
+      },
+      {
+        "id": "next_steps",
+        "type": "markdown",
+        "sourceId": "vendor_trial_request",
+        "body": "## 下一步执行顺序\n\n1. 使用已经准备好的统一申请包，向巨潮/上证/深证、Wind、LSEG、RavenPack 申请同口径字段字典、许可与冻结样本；SEC 先配置真实联系人标识。\n2. 将冻结事件槽位物化为具体事件 ID，并对每家候选执行两次拉取、修订链、实体映射与许可验收。\n3. 只对通过门禁的候选生成不可变 Raw、Normalized/Silver 和 PIT manifest，随后在断网环境复放并核对哈希。\n4. 三层均达到两个独立 ready 候选且 full713+warmup 完整后，才启动 `lambda=0` 对照、静态权重网格和逐级模型研究。"
+      },
+      {
+        "id": "deviation_audit",
+        "type": "markdown",
+        "sourceId": "channel_poc_result",
+        "body": "## 与原目标的偏差审计\n\n此前 V1 把渠道写成主源/备用源，并加入 Massive、Benzinga、GDELT、FRED/ALFRED，偏离了并行 PoC 的冻结候选；V2 已删除这些替代渠道和预设角色。此前把 Tushare 可访问样本称为“候选”也可能弱化四字段硬门禁；现在已按缺少 `revision_id` 明确淘汰。\n\n`Silver` 是已实现 schema 名称，而原计划写 `Normalized`；当前合同明确二者是实现别名，不再让层级语义漂移。合成 SEC 样本与 Tushare 聚合哈希只证明重放机制/传输检查，报告中已与真实供应商 PoC 结果严格分离。"
+      },
+      {
+        "id": "open_questions",
+        "type": "markdown",
+        "body": "## 尚需外部授权的事项\n\n当前剩余问题都不是代码问题：供应商商务联系人、试用凭据、许可文本、本地长期留存权，以及 SEC 要求的真实联系人标识。申请包已经准备好，但本轮没有代表用户对外发送消息、签署条款或购买订阅。"
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-06T20:30:00+08:00",
+    "status": "blocked",
+    "datasets": {
+      "layer_readiness": [
+        {"layer": "official_fact", "candidate_count": 6, "ready_count": 0, "required_ready_count": 2, "status": "blocked"},
+        {"layer": "professional_news", "candidate_count": 4, "ready_count": 0, "required_ready_count": 2, "status": "blocked"},
+        {"layer": "global_market", "candidate_count": 3, "ready_count": 0, "required_ready_count": 2, "status": "blocked"}
+      ],
+      "provider_results": [
+        {"rank": 1, "provider_id": "sec_edgar", "provider_name": "SEC EDGAR", "layer": "official_fact", "documentary_score_100": 89.6, "status": "pending", "timestamp_gap": "available_at", "current_access": "public_api_but_truthful_contact_user_agent_not_configured"},
+        {"rank": 2, "provider_id": "lseg_mrn", "provider_name": "LSEG Machine Readable News", "layer": "professional_news", "documentary_score_100": 76.8, "status": "pending", "timestamp_gap": "available_at_and_revision_id", "current_access": "no_entitlement"},
+        {"rank": 3, "provider_id": "ravenpack_news_analytics", "provider_name": "RavenPack News Analytics", "layer": "professional_news", "documentary_score_100": 73.8, "status": "pending", "timestamp_gap": "available_at", "current_access": "no_entitlement"},
+        {"rank": 4, "provider_id": "sseinfo_announcements", "provider_name": "SSE Info Announcement Data Service", "layer": "official_fact", "documentary_score_100": 60.2, "status": "pending", "timestamp_gap": "published_at_available_at_revision_id", "current_access": "no_entitlement"},
+        {"rank": 5, "provider_id": "szse_ssic_announcements", "provider_name": "SZSE / Shenzhen Securities Information Data Service", "layer": "official_fact", "documentary_score_100": 60.2, "status": "pending", "timestamp_gap": "published_at_available_at_revision_id", "current_access": "no_entitlement"},
+        {"rank": 6, "provider_id": "wind_global_market", "provider_name": "Wind Global Market", "layer": "global_market", "documentary_score_100": 59.0, "status": "pending", "timestamp_gap": "available_at_and_revision_id", "current_access": "no_entitlement"},
+        {"rank": 7, "provider_id": "tiingo_eod", "provider_name": "Tiingo End-of-Day", "layer": "global_market", "documentary_score_100": 59.0, "status": "eliminated", "timestamp_gap": "revision_id", "current_access": "no_token"},
+        {"rank": 8, "provider_id": "tushare_stock_st", "provider_name": "Tushare stock_st", "layer": "official_fact", "documentary_score_100": 56.4, "status": "eliminated", "timestamp_gap": "revision_id", "current_access": "configured"},
+        {"rank": 9, "provider_id": "cninfo_data_service", "provider_name": "CNINFO Data Service", "layer": "official_fact", "documentary_score_100": 54.8, "status": "pending", "timestamp_gap": "published_at_available_at_revision_id", "current_access": "no_entitlement"},
+        {"rank": 10, "provider_id": "company_ir", "provider_name": "Company Investor Relations", "layer": "official_fact", "documentary_score_100": 54.0, "status": "pending", "timestamp_gap": "available_at_and_revision_id", "current_access": "public_pages_not_historical_contract"},
+        {"rank": 11, "provider_id": "tiingo_news", "provider_name": "Tiingo News", "layer": "professional_news", "documentary_score_100": 53.6, "status": "eliminated", "timestamp_gap": "revision_id", "current_access": "no_token"},
+        {"rank": 12, "provider_id": "tushare_index_global", "provider_name": "Tushare index_global", "layer": "global_market", "documentary_score_100": 47.2, "status": "eliminated", "timestamp_gap": "revision_id", "current_access": "configured"},
+        {"rank": 13, "provider_id": "tushare_major_news", "provider_name": "Tushare major_news", "layer": "professional_news", "documentary_score_100": 40.2, "status": "eliminated", "timestamp_gap": "revision_id", "current_access": "configured_but_rate_limited"}
+      ],
+      "entitled_vendor_samples": [],
+      "full713_external_context_backtest": []
+    },
+    "accessIssues": [
+      {"id": "no_entitled_vendor_samples", "dataset": "entitled_vendor_samples", "message": "当前仅有 Tushare 凭据；Wind、LSEG、RavenPack、Tiingo、交易所与巨潮数据服务均无授权样本。"},
+      {"id": "sec_contact_user_agent_missing", "dataset": "entitled_vendor_samples", "message": "SEC 要求真实可联系的 User-Agent；项目未保存用户联系人，因此未执行在线样本。"},
+      {"id": "full713_backtest_blocked", "dataset": "full713_external_context_backtest", "message": "三层均未达到两个独立 ready 候选，禁止启动 full713 外部信息权重回测。"}
+    ]
+  },
+  "sources": [
+    {
+      "id": "channel_poc_result",
+      "label": "渠道 PoC 冻结结果 V2",
+      "path": "docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_CHANNEL_POC_RESULT_2026-08-06.json",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT p.provider_id, p.provider_name, p.layer, p.documentary_score_100, p.status, p.timestamp_gap, p.current_access FROM read_json_auto('docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_CHANNEL_POC_RESULT_2026-08-06.json') AS r, UNNEST(r.provider_results) AS t(p)",
+        "description": "Reads the frozen V2 provider-result rows used by the report chart and tables.",
+        "executed_at": "2026-08-06T20:30:00+08:00"
+      }
+    },
+    {
+      "id": "layer_readiness_query",
+      "label": "三层准入状态查询",
+      "path": "docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_CHANNEL_POC_RESULT_2026-08-06.json",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT p.layer, p.candidate_count, p.ready_count, p.required_independent_ready_count AS required_ready_count, p.status FROM read_json_auto('docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_CHANNEL_POC_RESULT_2026-08-06.json') AS r, UNNEST(r.layer_readiness) AS t(p)",
+        "description": "Reads the frozen layer-readiness rows used by the report table.",
+        "executed_at": "2026-08-06T20:30:00+08:00"
+      }
+    },
+    {"id": "provider_registry", "label": "候选渠道与验收门禁 V2", "path": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_PROVIDER_REGISTRY_V2_2026-08-06.json"},
+    {"id": "event_set", "label": "冻结 PoC 事件集", "path": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_POC_EVENT_SET_2026-08-06.json"},
+    {"id": "sample_metrics", "label": "当前本地样本质量证据", "path": "docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_CURRENT_SAMPLE_METRICS_2026-08-06.json"},
+    {"id": "residual_policy", "label": "有界外部残差权重合同", "path": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_RESIDUAL_POLICY_2026-08-06.json"},
+    {"id": "vendor_trial_request", "label": "供应商试用申请包", "path": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_VENDOR_TRIAL_REQUEST_2026-08-06.md"}
+  ]
+}

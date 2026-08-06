@@ -4,14 +4,14 @@
 
 ## 1. 先做渠道 PoC，不先做“新闻打分”
 
-渠道按三层验收：官方事实层、全球行情层、专业新闻层。每层必须有主渠道和独立备用渠道；候选渠道必须同时通过授权/历史回放权、full713 历史深度、`published_at + first_seen_at`、修订可追溯、稳定 ID、SLA、覆盖率和实体映射精度门禁。缺少历史归档、时间血缘或重放权的免费抓取只能做线索源，不能进入正式 PIT 数据集。
+渠道按三层验收：官方事实层、全球行情层、专业新闻层。PoC 阶段不预设主渠道或赢家；每层至少要有两个独立候选通过全部门禁后，才允许比较质量、成本和运维复杂度并决定生产角色。候选渠道必须同时通过授权/历史回放权、full713 历史深度、`published_at + first_seen_at + available_at + revision_id`、稳定 ID、SLA、覆盖率和实体映射精度门禁。四个时间血缘字段任一无法明确的渠道直接淘汰，不能用总分抵消。缺少历史归档、时间血缘或重放权的免费抓取只能做线索源，不能进入正式 PIT 数据集。
 
 先用两周 PoC 样本评估时间戳完整性、延迟分布、重复/修订、A 股实体映射和故障恢复，再决定采购或接入。官方事实优先回到交易所、监管和公司公告原文；专业新闻不能替代官方事实。
 
 ## 2. Raw / Silver / PIT 固化
 
 - Raw：保存不可变原文/响应、内容哈希、首次看到时间、提供方发布时间/更新时间和授权层级。
-- Silver：版本化清洗、去重、修订链、实体/板块/地域映射及转换版本。
+- Normalized（实现层沿用 `Silver` schema 名称）：版本化清洗、去重、修订链、实体/板块/地域映射及转换版本。
 - PIT：按 `available_from <= decision_cutoff < available_to` 解析当时真正可见的知识版本。
 - 回测只读取冻结 manifest 与内容哈希，运行中联网即失败。这样相同 manifest 可在以后无网络、无提供方状态依赖地重放。
 
@@ -27,16 +27,16 @@
 
 ## 5. 2026-08-06 渠道 PoC 决策
 
-已建立机器可执行 provider registry 和审计 CLI。当前三层全部保持 `blocked`，因为还没有任何一层同时具备通过全部门禁的主源和独立备源。
+已建立机器可执行 provider registry 和审计 CLI。V2 registry 恢复为原计划的并行候选制，不预设赢家；当前三层全部保持 `blocked`，因为还没有任何一层具备两个通过全部门禁、且独立性分组不同的候选。
 
-- A 股风险警示 PIT：现有 Tushare `stock_st` 权限可用，抽样日返回 254 条，官方文档历史从 2016 年开始。先作为预算优先候选；正式固化前仍需书面确认本地冻结重放权、重复拉取哈希一致性和交易所原始公告抽查。
-- 全球行情：Tushare `index_global` 已一次覆盖 2023-05-01 至 2026-05-26 的 SPX、IXIC、HKTECH，分别为 770、770、752 行。先不购买新服务；只有个股/ETF覆盖不足或需要独立校验时，才考虑 Massive Stocks Starter。
-- 专业新闻：Tushare `major_news` 有 8 年以上历史且当前凭据可访问，但整日查询连续触顶 800 行，小时分片又触发 30 次/小时限制。正式回填前必须取得批量导出/提频方案，并确认正文存储与订阅到期后的重放权。GDELT 只作覆盖对照，不能替代专业新闻；Massive/Benzinga 暂缓购买。
-- 官方事实补充：SEC EDGAR 与 FRED/ALFRED 可作为零成本的美国公司事实和宏观 vintage 层；A 股公告优先询价上证信息公告 API，巨潮资讯只作原文核验，不建立非官方爬取依赖。
+- 官方事实层：巨潮资讯、上证信息、深证/深圳证券信息、SEC EDGAR 与公司 IR 同时保留为并行候选；Tushare `stock_st` 因没有可验证的 `revision_id` 已按硬规则淘汰，不能因其抽样日可返回 254 条而恢复资格。
+- 全球行情层：Wind 保留为企业级候选。Tushare `index_global` 虽已一次覆盖 full713+warmup 的 SPX、IXIC、HKTECH（770、770、752 行），但因 `revision_id` 不明确已淘汰；Tiingo EOD 同理淘汰。它们可作为传输/覆盖研究证据，不能进入 PIT 回测数据集。
+- 专业新闻层：LSEG 与 RavenPack 并行试用，不预设赢家。Tiingo News 与 Tushare `major_news` 因 `revision_id` 不明确直接淘汰；后者同时存在日查询 800 行饱和与实测 30 次/小时限制。
+- V1 中出现的 Massive、Benzinga、GDELT 与 FRED/ALFRED 不属于本轮用户冻结的 V2 候选集。V1 仅保留为历史记录，不能据此采购、晋级或替换 V2 渠道。
 
 真实 PoC 聚合证据见 `docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_PROVIDER_POC_RESULT_2026-08-06.json`。PoC 没有保存新闻正文，也没有改变 V3。
 
-## 6. Raw / Silver / PIT 离线重放骨架
+## 6. Raw / Normalized（Silver）/ PIT 离线重放骨架
 
 已实现不可变的三层物化与 manifest 重放 CLI。Raw 保存提供方记录、获取血缘和内容哈希；Silver 保存版本化标准化结果及 Raw 引用；PIT 按下一次修订自动闭合 `available_to`。manifest 对每个文件的相对路径、SHA-256、字节数和时间合同生成稳定身份，任意文件篡改、路径越界、manifest 身份变化或同一事件同时选中多个修订都会阻断重放。
 

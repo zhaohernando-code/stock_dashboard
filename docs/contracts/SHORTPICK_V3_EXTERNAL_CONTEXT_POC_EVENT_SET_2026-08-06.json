@@ -1,0 +1,91 @@
+{
+  "schema_version": "external_context_poc_event_set.v1",
+  "event_set_id": "shortpick_v3_external_context_poc_event_set_2026_08_06",
+  "status": "selection_protocol_frozen_truth_ids_materialize_only_from_entitled_official_feeds",
+  "frozen_at": "2026-08-06T20:00:00+08:00",
+  "v3_signal_changed": false,
+  "baseline": {
+    "signal_date_from": "2023-06-13",
+    "signal_date_to": "2026-05-26",
+    "signal_day_count": 713,
+    "warmup_start": "2023-05-01",
+    "decision_cutoff_timezone": "Asia/Shanghai",
+    "historical_network_access": "forbidden_after_manifest_freeze"
+  },
+  "anti_cherry_pick_rule": {
+    "stable_seed": "shortpick-v3-external-context-poc-2026-08-06",
+    "selection": "Within each slot, sort eligible official truth records by SHA256(stable_seed|slot_id|provider_item_id) and take the first required_count.",
+    "freeze": "The resulting provider item IDs and raw hashes are appended to a versioned truth manifest before any vendor scoring is inspected.",
+    "replacement": "A missing vendor match remains a miss; it is not replaced after vendor results are observed. Only an invalid official truth record may be replaced with a logged reason."
+  },
+  "official_fact_slots": [
+    {"slot_id": "sse-risk-warning-early", "market": "SSE", "event_type": "risk_warning_or_delisting_risk", "date_from": "2023-06-13", "date_to": "2024-05-31", "required_count": 8},
+    {"slot_id": "sse-risk-warning-late", "market": "SSE", "event_type": "risk_warning_or_delisting_risk", "date_from": "2024-06-01", "date_to": "2026-05-26", "required_count": 8},
+    {"slot_id": "szse-risk-warning-early", "market": "SZSE", "event_type": "risk_warning_or_delisting_risk", "date_from": "2023-06-13", "date_to": "2024-05-31", "required_count": 8},
+    {"slot_id": "szse-risk-warning-late", "market": "SZSE", "event_type": "risk_warning_or_delisting_risk", "date_from": "2024-06-01", "date_to": "2026-05-26", "required_count": 8},
+    {"slot_id": "sse-report-correction", "market": "SSE", "event_type": "financial_report_correction_or_amendment", "date_from": "2023-06-13", "date_to": "2026-05-26", "required_count": 8},
+    {"slot_id": "szse-report-correction", "market": "SZSE", "event_type": "financial_report_correction_or_amendment", "date_from": "2023-06-13", "date_to": "2026-05-26", "required_count": 8},
+    {"slot_id": "sse-inquiry-regulatory", "market": "SSE", "event_type": "exchange_inquiry_or_regulatory_action", "date_from": "2023-06-13", "date_to": "2026-05-26", "required_count": 8},
+    {"slot_id": "szse-inquiry-regulatory", "market": "SZSE", "event_type": "exchange_inquiry_or_regulatory_action", "date_from": "2023-06-13", "date_to": "2026-05-26", "required_count": 8},
+    {"slot_id": "sse-performance-forecast-change", "market": "SSE", "event_type": "performance_forecast_or_material_revision", "date_from": "2023-06-13", "date_to": "2026-05-26", "required_count": 8},
+    {"slot_id": "szse-performance-forecast-change", "market": "SZSE", "event_type": "performance_forecast_or_material_revision", "date_from": "2023-06-13", "date_to": "2026-05-26", "required_count": 8},
+    {"slot_id": "sse-suspension-major-event", "market": "SSE", "event_type": "suspension_resumption_or_major_event", "date_from": "2023-06-13", "date_to": "2026-05-26", "required_count": 8},
+    {"slot_id": "szse-suspension-major-event", "market": "SZSE", "event_type": "suspension_resumption_or_major_event", "date_from": "2023-06-13", "date_to": "2026-05-26", "required_count": 8}
+  ],
+  "official_fact_target_count": 96,
+  "overseas_truth_basket": {
+    "issuers": [
+      {"symbol": "NVDA", "issuer": "NVIDIA", "truth_sources": ["SEC_EDGAR", "ISSUER_IR"]},
+      {"symbol": "AMD", "issuer": "Advanced Micro Devices", "truth_sources": ["SEC_EDGAR", "ISSUER_IR"]},
+      {"symbol": "INTC", "issuer": "Intel", "truth_sources": ["SEC_EDGAR", "ISSUER_IR"]},
+      {"symbol": "MU", "issuer": "Micron Technology", "truth_sources": ["SEC_EDGAR", "ISSUER_IR"]},
+      {"symbol": "TSM", "issuer": "TSMC ADR", "truth_sources": ["SEC_EDGAR", "ISSUER_IR"]},
+      {"symbol": "ASML", "issuer": "ASML Holding", "truth_sources": ["SEC_EDGAR", "ISSUER_IR"]},
+      {"symbol": "AMAT", "issuer": "Applied Materials", "truth_sources": ["SEC_EDGAR", "ISSUER_IR"]},
+      {"symbol": "LRCX", "issuer": "Lam Research", "truth_sources": ["SEC_EDGAR", "ISSUER_IR"]}
+    ],
+    "forms_or_events": ["8-K_or_6-K_earnings", "10-Q_or_20-F", "10-K_or_20-F_annual", "amendment", "issuer_earnings_release"],
+    "selection_per_issuer": 5,
+    "target_count": 40,
+    "availability_policy": "SEC acceptance time is not treated as exact public availability. Use the later of local first_seen_at and the preregistered conservative SEC lag until a measured dissemination lag is approved."
+  },
+  "global_market_basket": {
+    "instruments": ["SPX", "IXIC", "SOX_or_semiconductor_index", "HKTECH", "HSI", "USD_CNH", "US10Y", "WTI"],
+    "required_date_from": "2023-05-01",
+    "required_date_to": "2026-05-26",
+    "required_daily_partitions": "all_open_market_dates_per_instrument",
+    "stress_windows": [
+      {"window_id": "a-share-liquidity-stress-2024-02", "date_from": "2024-02-02", "date_to": "2024-02-08"},
+      {"window_id": "china-policy-repricing-2024-09", "date_from": "2024-09-23", "date_to": "2024-10-08"},
+      {"window_id": "ai-semiconductor-shock-2025-01", "date_from": "2025-01-24", "date_to": "2025-01-31"},
+      {"window_id": "global-tariff-shock-2025-04", "date_from": "2025-04-03", "date_to": "2025-04-11"}
+    ],
+    "price_fields": ["open", "high", "low", "close", "volume", "currency", "calendar", "provider_item_id", "revision_id", "published_at", "first_seen_at", "available_at"]
+  },
+  "professional_news_sample": {
+    "truth_anchor": "Use the 96 A-share and 40 overseas official facts as event anchors; news vendors must retrieve matching coverage from 24 hours before through 72 hours after each official available_at.",
+    "manual_stratified_review_count": 200,
+    "strata": ["a_share_company", "us_chip_company", "chip_supply_chain", "macro_policy", "geopolitical", "market_recap"],
+    "required_fields": ["provider_item_id", "published_at", "first_seen_at", "available_at", "revision_id", "parent_revision_id", "source", "language", "entities", "event_type", "relevance", "novelty", "sentiment_or_risk_direction"],
+    "body_storage": "forbidden_until_contractually_authorized",
+    "missing_story_policy": "A missing match is retained as zero coverage; do not substitute a later story."
+  },
+  "sample_metrics_contract": {
+    "coverage_start": "earliest continuously available date in the sampled product",
+    "coverage_end": "latest continuously available date in the sampled product",
+    "required_field_completeness": "records with every required field / sampled records",
+    "timestamp_parse_success": "timezone-aware parseable required timestamps / required timestamp values",
+    "stable_key_unique_rate": "unique provider_item_id+revision_id keys / sampled records",
+    "entity_mapping_precision": "correct mapped entities / all mapped entities in manual review",
+    "entity_mapping_recall": "official truth entities recovered / all official truth entities in manual review",
+    "repeat_pull_hash_match_rate": "unchanged immutable records with identical hashes / unchanged records across two pulls",
+    "future_available_at_violation_count": "records exposed to a cutoff earlier than available_at",
+    "unlinked_revision_rate": "revisions lacking a valid parent/original link / all revisions",
+    "event_case_coverage_rate": "official truth anchors with at least one valid provider match / truth anchors"
+  },
+  "full713_capability_decision": {
+    "pass": "Every hard and timestamp gate passes, full713+warmup coverage is continuous, the frozen event set meets all numeric thresholds, and a frozen manifest replays with network disabled.",
+    "conditional": "No hard failure, but one or more contract, sample or independent-provider gates remain pending.",
+    "fail": "Any required timestamp/revision field is explicitly unavailable, future leakage occurs, history cannot cover the window, or local replay is not licensed."
+  }
+}

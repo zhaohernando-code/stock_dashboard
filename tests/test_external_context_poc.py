@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ashare_evidence.cli import build_parser
 from ashare_evidence.external_context_poc import (
+    build_external_context_poc_readiness,
     build_external_context_provider_audit,
     load_external_context_registry,
     probe_tushare_external_context_transport,
@@ -13,6 +14,9 @@ from ashare_evidence.external_context_poc import (
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_PROVIDER_REGISTRY_2026-08-06.json"
+REGISTRY_V2 = ROOT / "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_PROVIDER_REGISTRY_V2_2026-08-06.json"
+EVENT_SET = ROOT / "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_POC_EVENT_SET_2026-08-06.json"
+SAMPLE_METRICS = ROOT / "docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_CURRENT_SAMPLE_METRICS_2026-08-06.json"
 
 
 def test_real_registry_is_valid_and_remains_blocked_before_poc_completion() -> None:
@@ -79,6 +83,41 @@ def test_sample_gate_evaluation_can_promote_documented_primary_and_fallback() ->
 
     assert audit["gate_status"] == "passed"
     assert audit["external_context_replay_ready"] is True
+
+
+def test_v2_registry_restores_frozen_parallel_channels_and_eliminates_missing_revision_ids() -> None:
+    registry = load_external_context_registry(REGISTRY_V2)
+    audit = build_external_context_provider_audit(registry)
+    providers = {row["provider_id"]: row for row in audit["providers"]}
+
+    assert len(providers) == 13
+    assert audit["provider_status_counts"] == {"pending": 8, "eliminated": 5}
+    assert all(row["layer_status"] == "blocked" for row in audit["layers"])
+    assert providers["sec_edgar"]["scorecard"]["weighted_score_100"] == 89.6
+    assert providers["lseg_mrn"]["scorecard"]["weighted_score_100"] == 76.8
+    assert providers["ravenpack_news_analytics"]["scorecard"]["weighted_score_100"] == 73.8
+    for provider_id in (
+        "tushare_stock_st",
+        "tushare_index_global",
+        "tiingo_eod",
+        "tiingo_news",
+        "tushare_major_news",
+    ):
+        assert providers[provider_id]["audit_status"] == "eliminated"
+        assert providers[provider_id]["timestamp_failures"] == ["revision_id"]
+
+
+def test_current_sample_readiness_blocks_full713_weight_research() -> None:
+    registry = load_external_context_registry(REGISTRY_V2)
+    event_set = json.loads(EVENT_SET.read_text(encoding="utf-8"))
+    samples = json.loads(SAMPLE_METRICS.read_text(encoding="utf-8"))
+
+    readiness = build_external_context_poc_readiness(registry, event_set, sample_metrics=samples)
+
+    assert readiness["gate_status"] == "blocked"
+    assert readiness["full713_external_context_ready"] is False
+    assert readiness["provider_readiness_counts"] == {"pending": 8, "eliminated": 5}
+    assert all(not provider_ids for provider_ids in readiness["sample_ready_provider_ids_by_layer"].values())
 
 
 def test_tushare_probe_shards_news_and_does_not_emit_raw_content_or_token() -> None:
@@ -171,6 +210,16 @@ def test_cli_registers_external_context_poc_commands() -> None:
         ["research-external-context-provider-audit", "--registry-json", str(REGISTRY)]
     )
     probe_args = parser.parse_args(["research-external-context-tushare-poc", "--news-day", "2026-05-26"])
+    readiness_args = parser.parse_args(
+        [
+            "research-external-context-poc-readiness",
+            "--registry-json",
+            str(REGISTRY_V2),
+            "--event-set-json",
+            str(EVENT_SET),
+        ]
+    )
 
     assert audit_args.command == "research-external-context-provider-audit"
     assert probe_args.command == "research-external-context-tushare-poc"
+    assert readiness_args.command == "research-external-context-poc-readiness"

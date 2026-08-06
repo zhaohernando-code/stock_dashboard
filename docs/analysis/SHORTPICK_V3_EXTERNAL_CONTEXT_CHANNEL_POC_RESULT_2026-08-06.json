@@ -1,0 +1,74 @@
+{
+  "schema_version": "external_context_channel_poc_result.v2",
+  "as_of": "2026-08-06",
+  "status": "blocked",
+  "claim_ceiling": "documentary_and_current_entitlement_poc_only_no_external_strategy_validation",
+  "v3_signal_changed": false,
+  "full713_external_context_backtest_allowed": false,
+  "provider_registry": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_PROVIDER_REGISTRY_V2_2026-08-06.json",
+  "event_set": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_POC_EVENT_SET_2026-08-06.json",
+  "current_sample_metrics": "docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_CURRENT_SAMPLE_METRICS_2026-08-06.json",
+  "provider_counts": {
+    "total": 13,
+    "ready": 0,
+    "pending": 8,
+    "eliminated": 5
+  },
+  "layer_readiness": [
+    {"layer": "official_fact", "candidate_count": 6, "ready_count": 0, "required_independent_ready_count": 2, "status": "blocked"},
+    {"layer": "global_market", "candidate_count": 3, "ready_count": 0, "required_independent_ready_count": 2, "status": "blocked"},
+    {"layer": "professional_news", "candidate_count": 4, "ready_count": 0, "required_independent_ready_count": 2, "status": "blocked"}
+  ],
+  "provider_results": [
+    {"provider_id": "sec_edgar", "provider_name": "SEC EDGAR", "layer": "official_fact", "documentary_score_100": 89.6, "status": "pending", "timestamp_gap": "available_at", "current_access": "public_api_but_truthful_contact_user_agent_not_configured"},
+    {"provider_id": "lseg_mrn", "provider_name": "LSEG Machine Readable News", "layer": "professional_news", "documentary_score_100": 76.8, "status": "pending", "timestamp_gap": "available_at_and_revision_id", "current_access": "no_entitlement"},
+    {"provider_id": "ravenpack_news_analytics", "provider_name": "RavenPack News Analytics", "layer": "professional_news", "documentary_score_100": 73.8, "status": "pending", "timestamp_gap": "available_at", "current_access": "no_entitlement"},
+    {"provider_id": "sseinfo_announcements", "provider_name": "SSE Info Announcement Data Service", "layer": "official_fact", "documentary_score_100": 60.2, "status": "pending", "timestamp_gap": "published_at_available_at_revision_id", "current_access": "no_entitlement"},
+    {"provider_id": "szse_ssic_announcements", "provider_name": "SZSE / Shenzhen Securities Information Data Service", "layer": "official_fact", "documentary_score_100": 60.2, "status": "pending", "timestamp_gap": "published_at_available_at_revision_id", "current_access": "no_entitlement"},
+    {"provider_id": "wind_global_market", "provider_name": "Wind Global Market", "layer": "global_market", "documentary_score_100": 59.0, "status": "pending", "timestamp_gap": "available_at_and_revision_id", "current_access": "no_entitlement"},
+    {"provider_id": "tiingo_eod", "provider_name": "Tiingo End-of-Day", "layer": "global_market", "documentary_score_100": 59.0, "status": "eliminated", "timestamp_gap": "revision_id", "current_access": "no_token"},
+    {"provider_id": "tushare_stock_st", "provider_name": "Tushare stock_st", "layer": "official_fact", "documentary_score_100": 56.4, "status": "eliminated", "timestamp_gap": "revision_id", "current_access": "configured"},
+    {"provider_id": "cninfo_data_service", "provider_name": "CNINFO Data Service", "layer": "official_fact", "documentary_score_100": 54.8, "status": "pending", "timestamp_gap": "published_at_available_at_revision_id", "current_access": "no_entitlement"},
+    {"provider_id": "company_ir", "provider_name": "Company Investor Relations", "layer": "official_fact", "documentary_score_100": 54.0, "status": "pending", "timestamp_gap": "available_at_and_revision_id", "current_access": "public_pages_not_historical_contract"},
+    {"provider_id": "tiingo_news", "provider_name": "Tiingo News", "layer": "professional_news", "documentary_score_100": 53.6, "status": "eliminated", "timestamp_gap": "revision_id", "current_access": "no_token"},
+    {"provider_id": "tushare_index_global", "provider_name": "Tushare index_global", "layer": "global_market", "documentary_score_100": 47.2, "status": "eliminated", "timestamp_gap": "revision_id", "current_access": "configured"},
+    {"provider_id": "tushare_major_news", "provider_name": "Tushare major_news", "layer": "professional_news", "documentary_score_100": 40.2, "status": "eliminated", "timestamp_gap": "revision_id", "current_access": "configured_but_rate_limited"}
+  ],
+  "current_local_evidence": {
+    "configured_provider_ids": ["tushare_stock_st", "tushare_index_global", "tushare_major_news"],
+    "stock_st_rows": 254,
+    "global_index_rows": {"SPX": 770, "IXIC": 770, "HKTECH": 752},
+    "same_session_repeat_hash_match": true,
+    "news_daily_saturation_rows": 800,
+    "observed_news_requests_per_hour_limit": 30,
+    "limitations": [
+      "aggregate transport checks did not retain licensed Raw provider rows",
+      "same-session hashes do not prove revision lineage or multi-day stability",
+      "no entitled Wind, LSEG, RavenPack, Tiingo, exchange data-service or CNINFO sample is configured",
+      "SEC live sample is blocked until a truthful contact User-Agent is configured"
+    ]
+  },
+  "research_policy": {
+    "formula": "final_score = z(core_score) - clip(lambda * z(external_residual), -cap, +cap)",
+    "lambda_grid": [0.0, 0.025, 0.05, 0.075, 0.1, 0.15],
+    "primary_cap": 0.3,
+    "sensitivity_caps": [0.15, 0.5],
+    "selection_rule": "smallest_lambda_within_one_standard_error_of_best_out_of_sample_result",
+    "channel_boundaries": {
+      "global_state": "gross_exposure_only",
+      "sector_state": "within_sector_ranking_only",
+      "individual_event": "incremental_stock_score_only"
+    },
+    "positive_external_information_can_trigger_buy": false,
+    "major_negative_official_event_can_gate": true,
+    "model_ladder": ["v3_lambda_zero", "static_weight", "rule_dynamic_weight", "constrained_logistic_gam_or_monotonic_gbdt", "black_box_challenger_only"]
+  },
+  "deviation_audit": [
+    {"item": "parallel_poc_without_preselected_winner", "prior_deviation": "v1 used primary_and_fallback roles", "resolution": "v2 requires two independent parallel candidates per layer and selects no winner"},
+    {"item": "frozen_candidate_set", "prior_deviation": "v1 introduced Massive_Benzinga_GDELT_and_FRED_ALFRED", "resolution": "removed from v2 candidate registry; v1 retained only as historical evidence"},
+    {"item": "strict_four_field_time_lineage", "prior_deviation": "Tushare transport availability was described as candidate readiness", "resolution": "Tushare stock_st_index_global_major_news and Tiingo EOD_News eliminated for missing revision_id"},
+    {"item": "normalized_layer_name", "prior_deviation": "implementation used Silver terminology", "resolution": "contract now states Normalized while retaining Silver as the versioned schema alias"},
+    {"item": "provider_trial_execution", "prior_deviation": "mechanics and aggregate checks could be misread as vendor PoC completion", "resolution": "claim ceiling explicitly separates synthetic replay and aggregate transport checks from entitled provider samples"}
+  ],
+  "next_gate": "obtain_written_trial_fields_replay_rights_and_entitled_samples_then_materialize_frozen_event_set_and_repeat_offline_hash_replay"
+}
