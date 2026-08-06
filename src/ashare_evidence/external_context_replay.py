@@ -46,13 +46,13 @@ SECRET_FIELD_NAMES = {
 }
 
 @dataclass
-class _StorageBudget:
+class ExternalContextStorageBudget:
     root: Path
     hard_cap_bytes: int
     used_bytes: int
 
     @classmethod
-    def from_root(cls, root: Path, *, hard_cap_bytes: int) -> _StorageBudget:
+    def from_root(cls, root: Path, *, hard_cap_bytes: int) -> ExternalContextStorageBudget:
         used_bytes = sum(path.stat().st_size for path in root.rglob("*") if path.is_file()) if root.exists() else 0
         if used_bytes > hard_cap_bytes:
             raise ValueError(
@@ -224,7 +224,7 @@ def _write_immutable_json(
     payload: dict[str, Any],
     *,
     compact: bool = False,
-    storage_budget: _StorageBudget | None = None,
+    storage_budget: ExternalContextStorageBudget | None = None,
 ) -> None:
     rendered = (
         json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
@@ -270,14 +270,25 @@ def materialize_external_context_pilot(
     input_payload: dict[str, Any],
     *,
     artifact_root: str | Path,
+    enforce_root_hard_cap_bytes: int | None = None,
+    storage_budget: ExternalContextStorageBudget | None = None,
 ) -> dict[str, Any]:
     dataset_id, provider_id, content_class, retrieved_at, input_records = _validate_input(input_payload)
     root = Path(artifact_root).resolve()
-    storage_budget = (
-        _StorageBudget.from_root(root, hard_cap_bytes=NEWS_STORAGE_HARD_CAP_BYTES)
+    if enforce_root_hard_cap_bytes is not None and enforce_root_hard_cap_bytes <= 0:
+        raise ValueError("enforce_root_hard_cap_bytes must be positive")
+    active_hard_cap_bytes = (
+        NEWS_STORAGE_HARD_CAP_BYTES
         if content_class == "news_summary"
-        else None
+        else enforce_root_hard_cap_bytes
     )
+    if storage_budget is not None:
+        if storage_budget.root.resolve() != root:
+            raise ValueError("storage_budget root must match artifact_root")
+        if active_hard_cap_bytes is None or storage_budget.hard_cap_bytes != active_hard_cap_bytes:
+            raise ValueError("storage_budget hard cap must match the active artifact-root hard cap")
+    elif active_hard_cap_bytes is not None:
+        storage_budget = ExternalContextStorageBudget.from_root(root, hard_cap_bytes=active_hard_cap_bytes)
     normalized_records = [
         _validate_record(
             record,
@@ -446,6 +457,13 @@ def materialize_external_context_pilot(
             "relevance_policy_version": NEWS_RELEVANCE_POLICY_VERSION,
             "daily_channel_limits": NEWS_DAILY_CHANNEL_LIMITS,
         }
+        if content_class != "news_summary":
+            manifest.pop("news_storage_contract")
+            manifest["artifact_root_storage_contract"] = {
+                "hard_cap_bytes": active_hard_cap_bytes,
+                "materialized_artifact_bytes": sum(row["byte_size"] for row in file_rows),
+                "scope": "entire_personal_external_context_artifact_root",
+            }
     manifest_id = f"external-context-manifest-{_digest(_manifest_identity_payload(manifest))[:24]}"
     manifest = {**manifest, "manifest_id": manifest_id}
     manifest_path = root / "manifests" / f"{manifest_id}.json"
@@ -460,8 +478,8 @@ def materialize_external_context_pilot(
         result["storage_budget_observation"] = {
             "root_bytes_after_manifest": storage_budget.used_bytes,
             "target_bytes": NEWS_STORAGE_TARGET_BYTES,
-            "hard_cap_bytes": NEWS_STORAGE_HARD_CAP_BYTES,
-            "hard_cap_respected": storage_budget.used_bytes <= NEWS_STORAGE_HARD_CAP_BYTES,
+            "hard_cap_bytes": active_hard_cap_bytes,
+            "hard_cap_respected": storage_budget.used_bytes <= int(active_hard_cap_bytes),
         }
     return result
 
@@ -501,7 +519,7 @@ def replay_external_context_offline(
             raise ValueError("news replay manifest storage hard cap does not match the active contract")
         if storage_contract.get("content_retention_mode") != "summary_only_no_article_body":
             raise ValueError("news replay manifest must remain summary-only")
-        _StorageBudget.from_root(root, hard_cap_bytes=NEWS_STORAGE_HARD_CAP_BYTES)
+        ExternalContextStorageBudget.from_root(root, hard_cap_bytes=NEWS_STORAGE_HARD_CAP_BYTES)
     verified_files: list[dict[str, Any]] = []
     pit_documents: list[dict[str, Any]] = []
     for file_row in manifest.get("artifact_files") or []:

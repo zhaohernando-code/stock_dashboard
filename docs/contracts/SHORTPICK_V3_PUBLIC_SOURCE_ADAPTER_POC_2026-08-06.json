@@ -1,6 +1,6 @@
 {
   "contract_id": "shortpick_v3_public_source_adapter_poc_2026_08_06",
-  "status": "bounded_live_and_historical_eligibility_canaries_passed_full713_blocked_by_bulk_rights_and_remaining_source_gates",
+  "status": "personal_cninfo_checkpoint_acquisition_ready_gdelt_discovery_only",
   "generated_at": "2026-08-06T20:39:00+08:00",
   "v3_signal_changed": false,
   "claim_ceiling": "public_source_adapter_and_offline_replay_mechanics_only_no_external_alpha_validation",
@@ -38,9 +38,13 @@
           "us_macro_policy": 2
         },
         "trade_and_macro_geo_gate": "Require China, Hong Kong, Taiwan, Japan, Korea or United States actor/location evidence.",
-        "bad_slug_gate": "Reject URL headlines with fewer than 12 alphabetic characters or three words."
+        "bad_slug_gate": "Reject URL headlines with fewer than 12 alphabetic characters or three words.",
+        "relevance_rule_version": "gdelt_headline_relevance.v2",
+        "headline_only_topic_match": true,
+        "cross_day_deduplication": "topic plus normalized headline",
+        "quality_exclusions": "investment promotion, consumer-device reviews, telecom crime, private tariff litigation, polling and food quarantine"
       },
-      "authority_limit": "Discovery metadata cannot independently trigger a buy, replace official facts, or satisfy the professional-news layer."
+      "authority_limit": "Seven-day review rejected this source as a direct feature source. Discovery metadata cannot independently trigger a buy, replace official facts, or satisfy the professional-news layer."
     }
   },
   "storage_and_pit_invariants": {
@@ -58,7 +62,10 @@
     "cli_commands": [
       "research-external-context-cninfo-public-poc",
       "research-external-context-cninfo-canary",
-      "research-external-context-gdelt-public-poc"
+      "research-external-context-gdelt-public-poc",
+      "research-external-context-cninfo-acquisition-plan",
+      "research-external-context-cninfo-acquisition-run",
+      "research-external-context-gdelt-multiday-canary"
     ],
     "materializer": "research-external-context-materialize-pilot",
     "offline_replay": "research-external-context-offline-replay",
@@ -68,8 +75,10 @@
     "full713_backfill_allowed": false,
     "external_weight_backtest_allowed": false,
     "historical_eligibility_canary_passed": true,
-    "cninfo_bulk_historical_storage_and_replay_rights": "pending_formal_data_service_or_written_confirmation",
+    "cninfo_bulk_historical_storage_and_replay_rights": "user_authorized_personal_internal_use_assumption_with_attribution_and_no_redistribution_not_a_legal_opinion",
     "gdelt_terms": "passed_unlimited_unrestricted_use_with_required_attribution",
-    "next_gate": "Obtain CNINFO bulk-history terms through its formal data service or written confirmation, then run a checkpointed acquisition dry run; separately complete a multi-day GDELT relevance review before full-window acquisition."
+    "checkpointed_cninfo_dry_run": "passed_6_of_6_tasks_125_records_offline_replay_and_zero_network_completed_rerun",
+    "gdelt_multiday_relevance_review": "failed_direct_feature_source_gate_discovery_backup_only",
+    "next_gate": "Materialize the checkpointed CNINFO full-window official-fact dataset under the root hard cap and qualify a professional-news primary source before any external-weight backtest."
   }
 }

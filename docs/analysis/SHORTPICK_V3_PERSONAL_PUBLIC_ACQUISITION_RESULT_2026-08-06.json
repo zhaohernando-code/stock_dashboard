@@ -1,0 +1,115 @@
+{
+  "artifact_type": "shortpick_v3_personal_public_acquisition_result",
+  "schema_version": "shortpick_v3_personal_public_acquisition_result.v1",
+  "generated_at": "2026-08-06T21:45:00+08:00",
+  "status": "cninfo_checkpoint_replay_passed_gdelt_direct_feature_gate_failed",
+  "v3_signal_changed": false,
+  "cninfo_full713_plan": {
+    "plan_id": "cninfo-personal-plan-a4eefe17342358110522fff1",
+    "symbol_count": 3009,
+    "task_count": 9027,
+    "window_count_per_symbol": 3,
+    "plan_file_bytes": 2777955,
+    "plan_file_sha256": "3f9414ab8e168528a66dd3a8a77e2ddfe7da7c2e79c4e443bfab263f29ec9f21",
+    "materialized": "partial_11_of_9027_tasks",
+    "persistent_artifact_root": "/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/external-context-personal-v1",
+    "reason_not_completed_as_bulk_run": "The public endpoint is constrained to one real HTTP request per second without concurrency; completion is a resumable operational job and is not strategy validation."
+  },
+  "cninfo_real_checkpoint_dry_run": {
+    "plan_id": "cninfo-personal-plan-98fae18840c49f7483cd9ab8",
+    "symbols": [
+      "002745.SZ",
+      "003012.SZ"
+    ],
+    "task_count": 6,
+    "run_batches": [
+      {
+        "completed_before": 0,
+        "network_fetch_count": 2,
+        "completed_after": 2,
+        "remaining": 4
+      },
+      {
+        "completed_before": 2,
+        "network_fetch_count": 2,
+        "completed_after": 4,
+        "remaining": 2
+      },
+      {
+        "completed_before": 4,
+        "network_fetch_count": 2,
+        "completed_after": 6,
+        "remaining": 0
+      },
+      {
+        "completed_before": 6,
+        "network_fetch_count": 0,
+        "completed_after": 6,
+        "remaining": 0
+      }
+    ],
+    "retained_event_package_count": 125,
+    "input_checkpoint_count": 6,
+    "manifest_count": 6,
+    "artifact_file_count": 393,
+    "artifact_root_bytes": 660065,
+    "offline_replay": "125_of_125_selected_hash_passed_network_used_false",
+    "idempotent_completed_rerun": true,
+    "hard_cap_respected": true
+  },
+  "gdelt_seven_day_relevance_canary": {
+    "window": "2026-05-20_to_2026-05-26",
+    "days_completed": 7,
+    "compressed_archive_bytes_read_in_memory": 42936499,
+    "rows_scanned": 693371,
+    "archive_persisted": false,
+    "article_body_downloaded": false,
+    "before_v2_selected_record_daily_sum": 77,
+    "after_v2_selected_record_daily_sum": 67,
+    "after_v2_cross_day_deduplicated_count": 65,
+    "after_v2_topic_counts": {
+      "semiconductor": 26,
+      "telecommunications": 13,
+      "trade_restriction": 26
+    },
+    "quality_exclusion_count": 76,
+    "quality_exclusion_counts": {
+      "semiconductor:investment_promotion_or_price_speculation": 24,
+      "telecommunications:consumer_device_or_review": 7,
+      "telecommunications:crime_or_weapons_not_sector_state": 12,
+      "trade_restriction:non_market_poll_or_food_quarantine": 3,
+      "trade_restriction:private_litigation_or_refund_marketing": 30
+    },
+    "remaining_manual_review_findings": [
+      "sector-adjacent corporate property and financing stories",
+      "consumer 5G router and moving-average investment content",
+      "stale or recycled month references",
+      "broad tariff stories with weak A-share transmission"
+    ],
+    "decision": "Keep as bounded discovery backup; reject as a direct professional-news or strategy-feature source.",
+    "result_file_sha256": "4a1b635c00ebf215d57f09036f54a67d0a1c6a4d8a49d04e01b812ecd9c6a72c"
+  },
+  "cninfo_persistent_first_batch": {
+    "task_count": 11,
+    "remaining_task_count": 9016,
+    "network_fetch_count": 11,
+    "network_request_count": 43,
+    "network_request_interval_seconds": 1.0,
+    "network_request_rate_scope": "every_http_get_and_post",
+    "stock_map_network_fetch_count": 1,
+    "failure_count": 0,
+    "retained_event_package_count": 196,
+    "manifest_count": 11,
+    "verified_file_count": 588,
+    "offline_replay": "196_of_196_selected_hash_passed_network_used_false",
+    "artifact_root_bytes_after_batch": 3826359,
+    "storage_hard_cap_respected": true
+  },
+  "overall_decision": {
+    "cninfo": "checkpointed_personal_acquisition_started_11_of_9027_tasks",
+    "gdelt": "discovery_backup_only",
+    "professional_news": "primary_source_still_pending",
+    "external_weight_backtest": "blocked_until_full_window_pit_data_and_channel_coverage_pass",
+    "v3_runtime": "unchanged"
+  }
+}

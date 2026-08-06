@@ -57,6 +57,11 @@ from ashare_evidence.exposure_floor_overlay_governance import (
     write_exposure_floor_overlay_governance_summary,
     write_staggered_exposure_combo_governance_summary,
 )
+from ashare_evidence.external_context_acquisition import (
+    build_cninfo_personal_acquisition_plan,
+    execute_cninfo_personal_acquisition,
+    run_gdelt_multiday_relevance_canary,
+)
 from ashare_evidence.external_context_poc import (
     build_external_context_poc_readiness,
     build_external_context_provider_audit,
@@ -434,6 +439,9 @@ NO_DB_COMMANDS = {
     "research-external-context-cninfo-public-poc",
     "research-external-context-cninfo-canary",
     "research-external-context-gdelt-public-poc",
+    "research-external-context-cninfo-acquisition-plan",
+    "research-external-context-cninfo-acquisition-run",
+    "research-external-context-gdelt-multiday-canary",
     "research-external-context-materialize-pilot",
     "research-external-context-offline-replay",
     "shortpick-model-deterministic-full-history-select",
@@ -1040,6 +1048,35 @@ def build_parser() -> argparse.ArgumentParser:
     external_context_gdelt_poc.add_argument("--selected-limit", type=int, default=12)
     external_context_gdelt_poc.add_argument("--output-json", default=None)
     external_context_gdelt_poc.add_argument("--pilot-input-json", default=None)
+
+    external_context_cninfo_plan = subparsers.add_parser(
+        "research-external-context-cninfo-acquisition-plan",
+        help="Build a personal-use CNINFO history plan from PIT unadjusted-price eligibility without network fetches.",
+    )
+    external_context_cninfo_plan.add_argument("--database-path", required=True)
+    external_context_cninfo_plan.add_argument("--start-date", required=True, help="YYYY-MM-DD")
+    external_context_cninfo_plan.add_argument("--end-date", required=True, help="YYYY-MM-DD")
+    external_context_cninfo_plan.add_argument("--max-symbols", type=int, default=None)
+    external_context_cninfo_plan.add_argument("--output-json", required=True)
+
+    external_context_cninfo_run = subparsers.add_parser(
+        "research-external-context-cninfo-acquisition-run",
+        help="Run a bounded, rate-limited, resumable slice of an approved personal-use CNINFO plan.",
+    )
+    external_context_cninfo_run.add_argument("--plan-json", required=True)
+    external_context_cninfo_run.add_argument("--artifact-root", required=True)
+    external_context_cninfo_run.add_argument("--max-tasks", type=int, default=25)
+    external_context_cninfo_run.add_argument("--min-request-interval-seconds", type=float, default=1.0)
+    external_context_cninfo_run.add_argument("--output-json", default=None)
+
+    external_context_gdelt_multiday = subparsers.add_parser(
+        "research-external-context-gdelt-multiday-canary",
+        help="Run up to 31 completed GDELT daily archives and emit one attributed summary-only pilot.",
+    )
+    external_context_gdelt_multiday.add_argument("--start-date", required=True, help="YYYY-MM-DD")
+    external_context_gdelt_multiday.add_argument("--end-date", required=True, help="YYYY-MM-DD")
+    external_context_gdelt_multiday.add_argument("--output-json", default=None)
+    external_context_gdelt_multiday.add_argument("--pilot-input-json", default=None)
 
     external_context_materialize = subparsers.add_parser(
         "research-external-context-materialize-pilot",
@@ -3100,6 +3137,42 @@ def main(argv: list[str] | None = None) -> int:
             write_external_context_artifact(payload["pilot_input"], args.pilot_input_json)
         _print_json(payload)
         return 0 if payload["pit_candidate_status"] == "sample_ready" else 1
+
+    if args.command == "research-external-context-cninfo-acquisition-plan":
+        payload = build_cninfo_personal_acquisition_plan(
+            database_path=args.database_path,
+            start_date=args.start_date,
+            end_date=args.end_date,
+            max_symbols=args.max_symbols,
+        )
+        write_external_context_artifact(payload, args.output_json)
+        _print_json(payload)
+        return 0
+
+    if args.command == "research-external-context-cninfo-acquisition-run":
+        plan = json.loads(Path(args.plan_json).read_text(encoding="utf-8"))
+        payload = execute_cninfo_personal_acquisition(
+            plan,
+            artifact_root=args.artifact_root,
+            max_tasks_this_run=args.max_tasks,
+            min_request_interval_seconds=args.min_request_interval_seconds,
+        )
+        if args.output_json:
+            write_external_context_artifact(payload, args.output_json)
+        _print_json(payload)
+        return 0 if payload["failure_count"] == 0 else 1
+
+    if args.command == "research-external-context-gdelt-multiday-canary":
+        payload = run_gdelt_multiday_relevance_canary(
+            start_date=args.start_date,
+            end_date=args.end_date,
+        )
+        if args.output_json:
+            write_external_context_artifact(payload, args.output_json)
+        if args.pilot_input_json:
+            write_external_context_artifact(payload["pilot_input"], args.pilot_input_json)
+        _print_json(payload)
+        return 0
 
     if args.command == "research-external-context-materialize-pilot":
         input_payload = json.loads(Path(args.input_json).read_text(encoding="utf-8"))

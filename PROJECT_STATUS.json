@@ -10,7 +10,7 @@
   },
   "status": "in_progress",
   "owner": "codex",
-  "updated_at": "2026-08-06T21:10:00+08:00",
+  "updated_at": "2026-08-06T21:45:00+08:00",
   "latest_personal_eligibility_and_external_context_update": {
     "status": "pit_eligibility_gate_active_external_context_research_only",
     "account_profile": "new_retail_cash_account",
@@ -85,7 +85,7 @@
     "weight_backtest_allowed": false
   },
   "latest_public_source_adapter_poc": {
-    "status": "bounded_live_and_historical_canaries_passed_full713_blocked_by_cninfo_bulk_rights_and_remaining_source_gates",
+    "status": "personal_cninfo_checkpoint_acquisition_ready_gdelt_discovery_only",
     "v3_signal_changed": false,
     "contract": "docs/contracts/SHORTPICK_V3_PUBLIC_SOURCE_ADAPTER_POC_2026-08-06.json",
     "result": "docs/analysis/SHORTPICK_V3_PUBLIC_SOURCE_POC_RESULT_2026-08-06.json",
@@ -126,9 +126,62 @@
     "storage_projection_authority": "preflight_only_hard_cap_and_larger_canary_remain_authoritative",
     "full713_public_source_materialized": false,
     "external_weight_backtest_allowed": false,
-    "cninfo_bulk_rights": "pending_formal_data_service_or_written_confirmation",
+    "cninfo_bulk_rights": "user_authorized_personal_internal_use_with_attribution_no_redistribution_not_a_legal_opinion",
     "gdelt_terms": "unlimited_unrestricted_use_with_attribution",
-    "next_gate": "cninfo_bulk_terms_checkpointed_acquisition_dry_run_and_multi_day_gdelt_relevance_review"
+    "checkpointed_cninfo_dry_run": "passed_6_of_6_tasks_125_records_offline_replay_and_zero_network_completed_rerun",
+    "gdelt_multiday_relevance_review": "failed_direct_feature_source_gate_discovery_backup_only",
+    "next_gate": "bounded_cninfo_full_window_materialization_and_professional_news_primary_qualification"
+  },
+  "latest_personal_public_acquisition": {
+    "status": "cninfo_operationally_ready_gdelt_direct_feature_rejected",
+    "contract": "docs/contracts/SHORTPICK_V3_PERSONAL_PUBLIC_ACQUISITION_2026-08-06.json",
+    "result": "docs/analysis/SHORTPICK_V3_PERSONAL_PUBLIC_ACQUISITION_RESULT_2026-08-06.json",
+    "attribution": "hernando_zhao",
+    "redistribution": false,
+    "cninfo_full713_plan": {
+      "symbols": 3009,
+      "tasks": 9027,
+      "materialized": "partial_11_of_9027_tasks"
+    },
+    "cninfo_persistent_first_batch": {
+      "tasks": 11,
+      "http_requests": 43,
+      "stock_map_fetches": 2,
+      "records": 196,
+      "offline_replay": "196_of_196_hash_passed_network_false",
+      "failures": 0,
+      "artifact_root_bytes": 3826359
+    },
+    "cninfo_checkpoint_dry_run": {
+      "tasks": 6,
+      "records": 125,
+      "artifact_root_bytes": 660065,
+      "offline_replay": "125_of_125_hash_passed_network_false",
+      "completed_rerun_network_fetches": 0
+    },
+    "gdelt_seven_day_canary": {
+      "rows_scanned": 693371,
+      "quality_exclusions": 76,
+      "deduplicated_records": 65,
+      "decision": "backup_discovery_only"
+    },
+    "external_weight_backtest_allowed": false,
+    "v3_signal_changed": false
+  },
+  "latest_official_policy_feed_poc": {
+    "status": "source_shortlist_frozen_samples_pending",
+    "contract": "docs/contracts/SHORTPICK_V3_OFFICIAL_POLICY_FEED_POC_2026-08-06.json",
+    "providers": [
+      "federal_reserve_rss_and_archive",
+      "sec_edgar_submissions_and_daily_archives",
+      "us_federal_register_api",
+      "us_bis_news_and_updates",
+      "ustr_official_rss",
+      "mofcom_official_announcements"
+    ],
+    "role": "high_authority_compact_fact_layer_not_professional_news",
+    "next_gate": "bounded_full713_historical_samples_timestamp_revision_repeat_hash_and_manual_precision",
+    "v3_signal_changed": false
   },
   "latest_rank5_policy_update": {
     "status": "rank5_real_execution_disabled_rank4_only_active",

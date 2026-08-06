@@ -1,0 +1,82 @@
+{
+  "contract_id": "shortpick_v3_personal_public_acquisition_2026_08_06",
+  "status": "personal_internal_cninfo_acquisition_ready_gdelt_discovery_only",
+  "generated_at": "2026-08-06T21:45:00+08:00",
+  "v3_signal_changed": false,
+  "claim_ceiling": "user_authorized_personal_research_assumption_not_legal_advice_or_source_license_opinion",
+  "usage_contract": {
+    "purpose": "personal_internal_research_only",
+    "attribution": "hernando_zhao",
+    "redistribution": false,
+    "commercial_republication": false,
+    "article_body_retained": false,
+    "source_content_retained": "material announcement titles, identifiers and compact discovery metadata only",
+    "authorization_basis": "The user explicitly authorized personal use and storage where the source does not state that storage is prohibited.",
+    "stop_conditions": [
+      "an explicit source prohibition is discovered",
+      "authentication or access-control bypass would be required",
+      "the 1.75 GiB project hard cap would be exceeded",
+      "repeated source errors indicate rate limiting or service harm"
+    ]
+  },
+  "cninfo_acquisition": {
+    "role": "official_fact",
+    "plan_schema": "cninfo_personal_historical_acquisition_plan.v1",
+    "run_schema": "cninfo_personal_historical_acquisition_run.v1",
+    "request_interval_seconds_minimum": 1.0,
+    "request_interval_scope": "every real HTTP GET and POST, including pagination",
+    "stock_map_cache_scope": "one acquisition invocation",
+    "tasks_per_invocation_maximum": 100,
+    "window_days_maximum": 366,
+    "immutable_input_checkpoint": true,
+    "resume_without_second_network_fetch": true,
+    "offline_replay_required": true,
+    "decision_visibility_rule": "available_from <= decision_cutoff",
+    "historical_universe_rule": "main-board code plus at least one PIT raw close above zero and at or below 200 CNY; current static name, board or risk status is not backfilled",
+    "known_limit": "Historical ST and delisting status remains unverified and must not be inferred from the current stock profile."
+  },
+  "gdelt_acquisition": {
+    "role": "bounded_backup_discovery_only",
+    "relevance_rule_version": "gdelt_headline_relevance.v2",
+    "topic_must_appear_in_headline_slug": true,
+    "cross_day_deduplication": "topic plus normalized headline",
+    "explicit_exclusions": [
+      "investment promotion and price speculation",
+      "consumer device reviews",
+      "telecom fraud, crime and weapons stories",
+      "private tariff-refund litigation",
+      "non-market polling and food-quarantine stories"
+    ],
+    "archive_persisted": false,
+    "article_body_downloaded": false,
+    "promotion_status": "failed_direct_feature_source_gate",
+    "permitted_use": "candidate discovery and source-channel diagnostics only"
+  },
+  "storage_contract": {
+    "target_gib": 1.5,
+    "hard_cap_gib": 1.75,
+    "user_ceiling_gib": 2.0,
+    "hard_cap_scope": "entire acquisition artifact root including checkpoints, Raw, Silver, PIT and manifests",
+    "raw_silver_pit_immutable": true,
+    "historical_backtest_network_allowed": false
+  },
+  "implementation": {
+    "module": "src/ashare_evidence/external_context_acquisition.py",
+    "commands": [
+      "research-external-context-cninfo-acquisition-plan",
+      "research-external-context-cninfo-acquisition-run",
+      "research-external-context-gdelt-multiday-canary"
+    ],
+    "tests": [
+      "tests/test_external_context_acquisition.py",
+      "tests/test_external_context_public_sources.py",
+      "tests/test_external_context_replay.py"
+    ]
+  },
+  "strategy_boundary": {
+    "full713_external_weight_backtest_allowed": false,
+    "reason": "The official-fact full-window dataset has started but is incomplete, and no professional-news primary source has passed the relevance, timestamp and revision gates.",
+    "v3_runtime_changed": false,
+    "paper_tracking_changed": false
+  }
+}

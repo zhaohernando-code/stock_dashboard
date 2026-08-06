@@ -2,7 +2,7 @@
   "artifact_type": "shortpick_v3_public_source_poc_result",
   "schema_version": "shortpick_v3_public_source_poc_result.v1",
   "generated_at": "2026-08-06T20:39:00+08:00",
-  "status": "bounded_live_and_historical_canaries_passed_full713_blocked_by_cninfo_bulk_rights_and_remaining_source_gates",
+  "status": "personal_cninfo_checkpoint_acquisition_ready_gdelt_discovery_only",
   "v3_signal_changed": false,
   "article_body_retained": false,
   "source_evidence": {
@@ -122,12 +122,12 @@
     "interpretation": "The estimate fits the target but the four-symbol sample is too small to authorize full acquisition. The materializer hard cap remains authoritative and a larger canary must replace this estimate."
   },
   "remaining_limits": [
-    "GDELT is discovery metadata rather than a professional-news substitute and its article relevance still needs multi-day human-reviewed precision checks.",
+    "The seven-day GDELT review failed the direct-feature-source gate. GDELT remains bounded discovery metadata rather than a professional-news substitute.",
     "GDELT permits unlimited and unrestricted use with attribution; every derived dataset and report must cite and link to the GDELT Project.",
-    "CNINFO public browsing and its app privacy statement do not establish bulk historical database storage/replay rights. Full-window acquisition is blocked pending its formal data-service terms or written confirmation.",
+    "CNINFO acquisition proceeds only under the user's personal-internal-use authorization, with attribution to hernando_zhao, no redistribution and no legal conclusion about source licensing.",
     "CNINFO correction announcements are retained as new immutable events; cross-document amendment lineage has not yet been proven across a broad sample.",
     "Historical symbol membership must come from the same PIT eligibility snapshot used by scoring; current static board membership cannot be backfilled into history.",
     "No full713 public-source history has been materialized and no external weight or alpha result exists."
   ],
-  "next_gate": "Obtain CNINFO bulk-history terms through its formal data service or written confirmation, then build a checkpointed rate-limited acquisition dry run; separately complete a multi-day GDELT relevance review before full713 acquisition."
+  "next_gate": "Run the already-planned CNINFO acquisition as bounded resumable batches under the root hard cap, then qualify a professional-news primary source before any external-weight backtest."
 }

@@ -1,0 +1,116 @@
+{
+  "contract_id": "shortpick_v3_official_policy_feed_poc_2026_08_06",
+  "status": "source_shortlist_frozen_samples_pending",
+  "generated_at": "2026-08-06T21:55:00+08:00",
+  "v3_signal_changed": false,
+  "purpose": "Add compact, high-authority global macro, trade and semiconductor-policy facts without treating public discovery metadata as professional news.",
+  "source_shortlist": [
+    {
+      "provider_id": "federal_reserve_rss_and_archive",
+      "channel": "global_state",
+      "authority": "official_us_central_bank",
+      "entrypoints": [
+        "https://www.federalreserve.gov/feeds/feeds.htm",
+        "https://www.federalreserve.gov/newsevents/pressreleases.htm"
+      ],
+      "retention": "headline, short feed summary, category, source URL and timestamps only",
+      "historical_depth_evidence": "official press-release archive lists annual collections back through the full713 window and earlier",
+      "pit_rule": "Use an explicit feed timestamp when present; otherwise freeze at end of the displayed publication day.",
+      "revision_rule": "stable source URL plus immutable content hash; a changed hash becomes a new revision and never overwrites an earlier snapshot",
+      "poc_status": "pending_bounded_historical_sample"
+    },
+    {
+      "provider_id": "sec_edgar_submissions_and_daily_archives",
+      "channel": "individual_event",
+      "authority": "official_us_securities_regulator",
+      "entrypoints": [
+        "https://www.sec.gov/about/developer-resources",
+        "https://www.sec.gov/search-filings/edgar-application-programming-interfaces"
+      ],
+      "retention": "accession metadata, form type, issuer mapping, filing and acceptance timestamps, source URL; no filing body",
+      "historical_depth_evidence": "official submissions history and static daily or quarterly archives cover the full713 window",
+      "pit_rule": "Use documented EDGAR dissemination or acceptance time; locally captured first_seen_at remains separate.",
+      "revision_rule": "accession number is immutable; amendments and corrected filings remain separate linked revisions",
+      "request_policy": "identified User-Agent, efficient bulk files where appropriate, well below the official 10 requests per second ceiling",
+      "poc_status": "pending_a_share_supply_chain_issuer_map"
+    },
+    {
+      "provider_id": "us_federal_register_api",
+      "channel": "sector_state",
+      "authority": "official_us_government_publication",
+      "entrypoints": [
+        "https://www.federalregister.gov/developers/documentation/api/v1",
+        "https://www.archives.gov/developer"
+      ],
+      "retention": "document number, agency, title, abstract, publication date, source URL and compact topic tags",
+      "pit_rule": "Use public-inspection time only when explicitly documented; otherwise freeze at end of publication day.",
+      "revision_rule": "document number plus content hash; corrections are separately linked official documents",
+      "poc_status": "pending_export_control_and_semiconductor_query_sample"
+    },
+    {
+      "provider_id": "us_bis_news_and_updates",
+      "channel": "sector_state",
+      "authority": "official_us_export_control_agency",
+      "entrypoints": [
+        "https://www.bis.gov/news-updates"
+      ],
+      "retention": "title, displayed date, compact agency excerpt, category and source URL",
+      "pit_rule": "Freeze at end of displayed publication day unless an explicit time is exposed in machine-readable metadata.",
+      "revision_rule": "stable URL plus content hash snapshot",
+      "poc_status": "pending_machine_retrieval_and_archive_stability_sample"
+    },
+    {
+      "provider_id": "ustr_official_rss",
+      "channel": "sector_state",
+      "authority": "official_us_trade_representative",
+      "entrypoints": [
+        "https://ustr.gov/archive/Meta_Content/RSS/Section_Index.html"
+      ],
+      "retention": "RSS headline, release summary, category, timestamp and source URL",
+      "pit_rule": "Use feed timestamp if explicit; otherwise end of displayed publication day.",
+      "revision_rule": "stable URL plus content hash snapshot",
+      "poc_status": "pending_current_feed_and_full713_archive_sample"
+    },
+    {
+      "provider_id": "mofcom_official_announcements",
+      "channel": "sector_state",
+      "authority": "official_prc_trade_and_export_control_agency",
+      "entrypoints": [
+        "https://www.mofcom.gov.cn/zcfb/",
+        "https://exportcontrol.mofcom.gov.cn/"
+      ],
+      "retention": "document number, title, issuing unit, displayed publication time, effective date, compact policy tags and source URL",
+      "pit_rule": "Use the official displayed publication timestamp when present; effective_at is separately recorded and never substitutes for available_at.",
+      "revision_rule": "official document number plus content hash; correction or repeal documents remain linked immutable events",
+      "poc_status": "pending_full713_listing_and_repeat_hash_sample"
+    }
+  ],
+  "hard_gates": [
+    "published_at_or_conservative_day_end_available",
+    "locally_captured_first_seen_at",
+    "separate_available_at_and_effective_at",
+    "stable_identifier_and_revision_hash",
+    "full713_plus_warmup_history",
+    "bounded_machine_retrieval",
+    "network_free_replay",
+    "manual_topic_precision_at_least_95_percent",
+    "no_article_or_document_body_retention"
+  ],
+  "storage_budget": {
+    "shared_external_context_hard_cap_gib": 1.75,
+    "expected_increment": "small_metadata_only_not_yet_measured",
+    "pre_storage_topic_filtering": true
+  },
+  "research_sequence": [
+    "official_fact_plus_global_market_ablation",
+    "official_policy_channel_incremental_ablation",
+    "professional_news_challenger_ablation_when_entitled"
+  ],
+  "claim_boundaries": {
+    "official_feeds_are_professional_news": false,
+    "positive_fact_can_trigger_buy": false,
+    "major_negative_official_event_may_be_tested_as_risk_gate": true,
+    "combined_external_strategy_validated": false,
+    "v3_runtime_changed": false
+  }
+}

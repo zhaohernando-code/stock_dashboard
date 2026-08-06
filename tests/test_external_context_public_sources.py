@@ -249,6 +249,94 @@ def test_gdelt_probe_filters_in_memory_deduplicates_urls_and_materializes_summar
     }
 
 
+def test_gdelt_probe_requires_headline_topic_and_excludes_low_relevance_news() -> None:
+    rows = [
+        _gdelt_row(
+            event_id="201",
+            source_url="https://example.com/telecom/myanmar-telecom-fraud-gang-arrested",
+        ),
+        _gdelt_row(
+            event_id="202",
+            source_url="https://example.com/telecom/ordinary-local-election-result",
+        ),
+        _gdelt_row(
+            event_id="203",
+            source_url="https://example.com/will-nvidia-stock-hit-6-trillion",
+        ),
+        _gdelt_row(
+            event_id="204",
+            source_url="https://example.com/china-telecom-network-contract-expands-5g-coverage",
+        ),
+    ]
+    archive = _zip_rows(rows)
+    session = _FakeSession(
+        get_responses=[_FakeResponse(body=archive, headers={"Content-Length": str(len(archive))})],
+        post_responses=[],
+    )
+
+    result = probe_gdelt_daily_public_discovery(
+        archive_date="20260805",
+        retrieved_at=datetime(2026, 8, 7, 1, tzinfo=UTC),
+        session=session,
+    )
+
+    assert result["topic_match_row_count"] == 3
+    assert result["relevance_quality_exclusion_counts"] == {
+        "semiconductor:investment_promotion_or_price_speculation": 1,
+        "telecommunications:crime_or_weapons_not_sector_state": 1,
+    }
+    assert result["unique_relevant_headline_count"] == 1
+    record = result["pilot_input"]["records"][0]
+    assert record["provider_item_id"] == "gdelt:204"
+    assert record["raw_payload"]["source_name"] == "example.com"
+
+
+def test_cninfo_request_gate_covers_each_network_call_and_stock_map_can_be_reused() -> None:
+    stock_map = {"stockList": [{"code": "600001", "orgId": "gssh0600001"}]}
+    page = {
+        "totalAnnouncement": 31,
+        "totalpages": 2,
+        "announcements": [],
+    }
+    session = _FakeSession(
+        get_responses=[_FakeResponse(payload=stock_map)],
+        post_responses=[
+            _FakeResponse(payload=page),
+            _FakeResponse(payload={"announcements": []}),
+            _FakeResponse(payload={"totalAnnouncement": 0, "announcements": []}),
+        ],
+    )
+    gate_calls = 0
+
+    def gate() -> None:
+        nonlocal gate_calls
+        gate_calls += 1
+
+    cache: dict[str, Any] = {}
+    fetch_cninfo_announcement_poc(
+        symbol="600001",
+        start_date="20260101",
+        end_date="20260131",
+        retrieved_at=datetime(2026, 8, 7, tzinfo=UTC),
+        session=session,
+        request_gate=gate,
+        stock_map_cache=cache,
+    )
+    fetch_cninfo_announcement_poc(
+        symbol="600001",
+        start_date="20260201",
+        end_date="20260228",
+        retrieved_at=datetime(2026, 8, 7, tzinfo=UTC),
+        session=session,
+        request_gate=gate,
+        stock_map_cache=cache,
+    )
+
+    assert gate_calls == 4
+    assert len(session.get_responses) == 0
+    assert cache["payload"] == stock_map
+
+
 def test_gdelt_probe_blocks_incomplete_day_and_oversized_archive() -> None:
     with pytest.raises(ValueError, match="second following UTC day"):
         probe_gdelt_daily_public_discovery(

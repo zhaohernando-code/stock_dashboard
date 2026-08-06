@@ -205,6 +205,15 @@ def test_materializer_blocks_news_raw_until_content_rights_pass(tmp_path: Path) 
         materialize_external_context_pilot(payload, artifact_root=tmp_path)
 
 
+def test_official_fact_materializer_can_enforce_personal_root_cap(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="hard cap would be exceeded"):
+        materialize_external_context_pilot(
+            _pilot_input(),
+            artifact_root=tmp_path,
+            enforce_root_hard_cap_bytes=100,
+        )
+
+
 def test_news_summary_materialization_is_relevant_compact_and_body_free(tmp_path: Path) -> None:
     result = materialize_external_context_pilot(_news_summary_input(), artifact_root=tmp_path)
     repeated = materialize_external_context_pilot(_news_summary_input(), artifact_root=tmp_path)

@@ -8,7 +8,7 @@ import math
 import re
 import sqlite3
 import zipfile
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
@@ -27,6 +27,7 @@ GDELT_DAILY_ARCHIVE_MAX_BYTES = 16 * 1024 * 1024
 GDELT_DAILY_UNCOMPRESSED_MAX_BYTES = 160 * 1024 * 1024
 GDELT_DAILY_MAX_ROWS = 500_000
 GDELT_DAILY_SELECTED_LIMIT = 12
+GDELT_RELEVANCE_RULE_VERSION = "gdelt_headline_relevance.v2"
 GDELT_TOPIC_SELECTED_LIMITS = {
     "semiconductor": 4,
     "telecommunications": 2,
@@ -114,6 +115,46 @@ _GDELT_TOPIC_PATTERNS: tuple[tuple[str, re.Pattern[str], tuple[str, ...]], ...] 
         ("global_macro",),
     ),
 )
+
+_GDELT_TOPIC_EXCLUSION_PATTERNS: dict[str, tuple[tuple[str, re.Pattern[str]], ...]] = {
+    "semiconductor": (
+        (
+            "investment_promotion_or_price_speculation",
+            re.compile(
+                r"\b(?:buy|sell)\b.{0,45}\b(?:stock|shares?)\b|"
+                r"\b(?:stock|shares?)\b.{0,45}\b(?:buy|sell)\b|"
+                r"\b(?:outperform(?:ed|ing)?|hedge funds?|etf investors?|kiwisaver investors?)\b|"
+                r"\bwill\b.{0,60}\b(?:hit|reach)\b.{0,30}\b(?:trillion|price|target)\b|"
+                r"\bstill (?:the )?king\b",
+                re.IGNORECASE,
+            ),
+        ),
+    ),
+    "telecommunications": (
+        (
+            "consumer_device_or_review",
+            re.compile(
+                r"\b(?:review|hands[- ]?on|now available|smartphone|phone|pixel|oneplus|oppo|"
+                r"redmagic|consumer router)\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "crime_or_weapons_not_sector_state",
+            re.compile(r"\b(?:fraud|scam|gang|arrest|cybercrime|drone deal|drones? with fiber)\b", re.IGNORECASE),
+        ),
+    ),
+    "trade_restriction": (
+        (
+            "private_litigation_or_refund_marketing",
+            re.compile(r"\b(?:class action|lawsuit|legal claim|tariff refunds?)\b", re.IGNORECASE),
+        ),
+        (
+            "non_market_poll_or_food_quarantine",
+            re.compile(r"\b(?:approval rating|potato wart|potato import ban)\b", re.IGNORECASE),
+        ),
+    ),
+}
 
 
 def _canonical_hash(payload: Any) -> str:
@@ -299,6 +340,8 @@ def fetch_cninfo_announcement_poc(
     session: requests.Session | None = None,
     timeout_seconds: float = 20.0,
     max_pages: int = CNINFO_MAX_PAGES,
+    request_gate: Callable[[], None] | None = None,
+    stock_map_cache: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Fetch compact official announcement metadata without downloading announcement bodies."""
     start = _parse_basic_date(start_date, field="start_date")
@@ -314,10 +357,20 @@ def fetch_cninfo_announcement_poc(
 
     observed_at = _retrieved_at(retrieved_at)
     client = session or requests.Session()
-    headers = {"Referer": _CNINFO_REFERER, "User-Agent": "stock-dashboard-public-poc/1.0"}
-    stock_response = client.get(_CNINFO_STOCK_MAP_URL, headers=headers, timeout=timeout_seconds)
-    stock_response.raise_for_status()
-    org_id = _cninfo_stock_org_id(stock_response.json(), symbol)
+    headers = {
+        "Referer": _CNINFO_REFERER,
+        "User-Agent": "hernando_zhao-personal-research/1.0 summary-only-no-redistribution",
+    }
+    stock_map = stock_map_cache.get("payload") if stock_map_cache is not None else None
+    if stock_map is None:
+        if request_gate is not None:
+            request_gate()
+        stock_response = client.get(_CNINFO_STOCK_MAP_URL, headers=headers, timeout=timeout_seconds)
+        stock_response.raise_for_status()
+        stock_map = stock_response.json()
+        if stock_map_cache is not None:
+            stock_map_cache["payload"] = stock_map
+    org_id = _cninfo_stock_org_id(stock_map, symbol)
     payload = {
         "pageNum": 1,
         "pageSize": 30,
@@ -334,6 +387,8 @@ def fetch_cninfo_announcement_poc(
         "sortType": "",
         "isHLtitle": "true",
     }
+    if request_gate is not None:
+        request_gate()
     first_response = client.post(_CNINFO_QUERY_URL, data=payload, headers=headers, timeout=timeout_seconds)
     first_response.raise_for_status()
     first_page = first_response.json()
@@ -344,6 +399,8 @@ def fetch_cninfo_announcement_poc(
     announcements = list(first_page.get("announcements") or [])
     for page_number in range(2, page_count + 1):
         payload["pageNum"] = page_number
+        if request_gate is not None:
+            request_gate()
         response = client.post(_CNINFO_QUERY_URL, data=payload, headers=headers, timeout=timeout_seconds)
         response.raise_for_status()
         announcements.extend(response.json().get("announcements") or [])
@@ -359,7 +416,8 @@ def fetch_cninfo_announcement_poc(
         "provider_id": "cninfo_public_announcements",
         "content_class": "official_fact",
         "source_endpoint": _CNINFO_QUERY_URL,
-        "license_tier": "public_official_metadata_research_poc",
+        "license_tier": "personal_internal_research_user_authorized_no_redistribution",
+        "attribution": "hernando_zhao",
         "retrieved_at": _iso_datetime(observed_at),
         "records": records,
     }
@@ -492,7 +550,8 @@ def run_cninfo_historical_eligibility_canary(
         "provider_id": "cninfo_public_announcements",
         "content_class": "official_fact",
         "source_endpoint": _CNINFO_QUERY_URL,
-        "license_tier": "public_official_metadata_research_poc",
+        "license_tier": "personal_internal_research_user_authorized_no_redistribution",
+        "attribution": "hernando_zhao",
         "retrieved_at": combined_retrieved_at,
         "records": list(deduplicated.values()),
     }
@@ -535,7 +594,12 @@ def _download_bounded_archive(
     timeout_seconds: float,
     max_bytes: int,
 ) -> bytes:
-    response = client.get(url, headers={"User-Agent": "stock-dashboard-public-poc/1.0"}, stream=True, timeout=timeout_seconds)
+    response = client.get(
+        url,
+        headers={"User-Agent": "hernando_zhao-personal-research/1.0 GDELT-attributed"},
+        stream=True,
+        timeout=timeout_seconds,
+    )
     response.raise_for_status()
     content_length = response.headers.get("Content-Length")
     if content_length and int(content_length) > max_bytes:
@@ -553,7 +617,9 @@ def _download_bounded_archive(
 
 
 def _gdelt_topic(source_url: str) -> tuple[str, tuple[str, ...]] | None:
-    searchable = unquote(urlparse(source_url).path).lower().replace("_", "-")
+    # Directory names and publisher domains often contain words such as "telecom" even when the
+    # linked story is unrelated. Requiring the topic in the headline slug materially reduces that noise.
+    searchable = _gdelt_headline(source_url).lower()
     for topic, pattern, sectors in _GDELT_TOPIC_PATTERNS:
         if pattern.search(searchable):
             return topic, sectors
@@ -569,6 +635,17 @@ def _gdelt_headline(source_url: str) -> str:
     if alpha_characters < 12 or len(cleaned.split()) < 3:
         return ""
     return cleaned[:300]
+
+
+def _normalized_gdelt_headline(headline: str) -> str:
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", headline.lower()).split())
+
+
+def _gdelt_relevance_exclusion(topic: str, headline: str) -> str | None:
+    for reason, pattern in _GDELT_TOPIC_EXCLUSION_PATTERNS.get(topic, ()):
+        if pattern.search(headline):
+            return reason
+    return None
 
 
 def _gdelt_geographies(row: list[str]) -> list[str]:
@@ -601,7 +678,7 @@ def _gdelt_record(
     available_from: datetime,
 ) -> dict[str, Any]:
     source_url = row[57].strip()
-    domain = urlparse(source_url).netloc.lower()
+    domain = (urlparse(source_url).hostname or "").lower()
     headline = _gdelt_headline(source_url)
     actor1 = row[6].strip() or row[5].strip() or "unspecified actor"
     actor2 = row[16].strip() or row[15].strip() or "unspecified counterpart"
@@ -631,7 +708,10 @@ def _gdelt_record(
     geographies = _gdelt_geographies(row)
     return {
         "provider_item_id": f"gdelt:{row[0]}",
-        "normalized_event_id": f"gdelt-url:{hashlib.sha256(source_url.encode()).hexdigest()[:24]}",
+        "normalized_event_id": (
+            "gdelt-headline:"
+            f"{hashlib.sha256(f'{topic}|{_normalized_gdelt_headline(headline)}'.encode()).hexdigest()[:24]}"
+        ),
         "revision_id": f"event:{row[0]}:{content_hash[:16]}",
         "provider_published_at": _iso_datetime(available_from),
         "provider_updated_at": None,
@@ -693,10 +773,12 @@ def probe_gdelt_daily_public_discovery(
         max_bytes=max_archive_bytes,
     )
     archive_hash = hashlib.sha256(archive).hexdigest()
-    candidates_by_url: dict[str, tuple[list[str], str, tuple[str, ...]]] = {}
+    candidates_by_headline: dict[str, tuple[list[str], str, tuple[str, ...]]] = {}
     row_count = 0
     malformed_row_count = 0
+    topic_match_row_count = 0
     relevant_row_count = 0
+    relevance_quality_exclusion_counts: dict[str, int] = {}
     with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
         members = [member for member in bundle.infolist() if not member.is_dir()]
         if len(members) != 1:
@@ -722,19 +804,27 @@ def probe_gdelt_daily_public_discovery(
                 topic_match = _gdelt_topic(source_url)
                 if topic_match is None:
                     continue
-                relevant_row_count += 1
                 topic, sectors = topic_match
+                topic_match_row_count += 1
+                headline = _gdelt_headline(source_url)
+                exclusion = _gdelt_relevance_exclusion(topic, headline)
+                if exclusion is not None:
+                    key = f"{topic}:{exclusion}"
+                    relevance_quality_exclusion_counts[key] = relevance_quality_exclusion_counts.get(key, 0) + 1
+                    continue
                 if topic in {"trade_restriction", "us_macro_policy"}:
                     if not set(_gdelt_geographies(row)) & _GDELT_ASIA_US_GEO_CODES:
                         continue
-                previous = candidates_by_url.get(source_url)
+                relevant_row_count += 1
+                headline_key = f"{topic}|{_normalized_gdelt_headline(headline)}"
+                previous = candidates_by_headline.get(headline_key)
                 if previous is None or _gdelt_candidate_priority(row) > _gdelt_candidate_priority(previous[0]):
-                    candidates_by_url[source_url] = (row, topic, sectors)
+                    candidates_by_headline[headline_key] = (row, topic, sectors)
     selected: list[tuple[list[str], str, tuple[str, ...]]] = []
     selected_topic_counts: dict[str, int] = {}
     for topic, topic_limit in GDELT_TOPIC_SELECTED_LIMITS.items():
         ranked_topic = sorted(
-            (item for item in candidates_by_url.values() if item[1] == topic),
+            (item for item in candidates_by_headline.values() if item[1] == topic),
             key=lambda item: (_gdelt_candidate_priority(item[0]), item[0][57]),
             reverse=True,
         )[: min(topic_limit, selected_limit - len(selected))]
@@ -763,7 +853,8 @@ def probe_gdelt_daily_public_discovery(
         "provider_id": "gdelt_daily_public_discovery",
         "content_class": "news_summary",
         "source_endpoint": archive_url,
-        "license_tier": "public_metadata_summary_only_research_poc",
+        "license_tier": "gdelt_unrestricted_use_with_attribution_summary_only",
+        "attribution": "GDELT Project; personal analysis by hernando_zhao",
         "retrieved_at": _iso_datetime(observed_at),
         "records": records,
     }
@@ -779,8 +870,12 @@ def probe_gdelt_daily_public_discovery(
         "archive_sha256": archive_hash,
         "row_count": row_count,
         "malformed_or_date_mismatch_row_count": malformed_row_count,
+        "topic_match_row_count": topic_match_row_count,
+        "relevance_quality_exclusion_counts": dict(sorted(relevance_quality_exclusion_counts.items())),
+        "relevance_rule_version": GDELT_RELEVANCE_RULE_VERSION,
         "relevant_row_count_before_url_dedup": relevant_row_count,
-        "unique_relevant_url_count": len(candidates_by_url),
+        "unique_relevant_url_count": len(candidates_by_headline),
+        "unique_relevant_headline_count": len(candidates_by_headline),
         "selected_record_count": len(records),
         "selected_topic_counts": selected_topic_counts,
         "selected_limit": selected_limit,
