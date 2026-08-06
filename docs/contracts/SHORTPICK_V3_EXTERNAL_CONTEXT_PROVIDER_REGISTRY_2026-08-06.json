@@ -1,0 +1,280 @@
+{
+  "schema_version": "external_context_provider_registry.v1",
+  "registry_id": "shortpick_v3_external_context_provider_registry_2026_08_06",
+  "as_of": "2026-08-06",
+  "baseline_contract": {
+    "signal_date_from": "2023-06-13",
+    "signal_date_to": "2026-05-26",
+    "signal_day_count": 713,
+    "required_warmup_start": "2023-05-01"
+  },
+  "hard_gate_ids": [
+    "legal_and_license_reviewed",
+    "historical_archive_covers_full713_plus_warmup",
+    "published_at_and_first_seen_at_available",
+    "revision_history_or_immutable_hash_available",
+    "stable_identifier_and_deduplication_supported",
+    "documented_sla_and_backfill_policy",
+    "machine_retrieval_and_rate_limits_documented",
+    "entity_mapping_precision",
+    "timestamp_parse_success",
+    "network_free_replay_hash_match"
+  ],
+  "recommended_poc_order": [
+    "tushare_stock_st",
+    "tushare_index_global",
+    "tushare_major_news",
+    "sec_edgar",
+    "fred_alfred",
+    "sseinfo_announcements",
+    "massive_us_stocks",
+    "massive_benzinga_news",
+    "gdelt_2_1"
+  ],
+  "vendor_questions": [
+    "Can fetched historical records and original payloads be retained locally after subscription expiry for personal, non-commercial backtesting?",
+    "What is the earliest continuously available date for each endpoint and does it include delisted instruments and later article corrections?",
+    "Is provider_published_at the first public dissemination time, and are timezone, delay and correction semantics documented?",
+    "Are stable provider item IDs and revision IDs available, or can a record be silently overwritten?",
+    "What rate-limit, outage, retry, late-backfill and support SLA applies to the purchased plan?",
+    "May article body text be stored for model research, or only metadata, hashes and source links?"
+  ],
+  "providers": [
+    {
+      "provider_id": "tushare_stock_st",
+      "provider_name": "Tushare Pro stock_st",
+      "layer": "official_fact",
+      "coverage_scope": ["a_share_risk_warning_status"],
+      "target_role": "primary",
+      "cost": {"model": "points", "known_requirement": "3000 points"},
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Personal non-commercial license is documented; post-expiry local replay retention needs written confirmation.", "evidence_urls": ["https://tushare.pro/document/1?doc_id=405"]},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "Daily historical ST list starts in 2016.", "evidence_urls": ["https://tushare.pro/document/2?doc_id=397"]},
+        "published_at_and_first_seen_at_available": {"status": "pass", "note": "trade_date is PIT-effective date; local ingestion records first_seen_at.", "evidence_urls": ["https://tushare.pro/document/2?doc_id=397"]},
+        "revision_history_or_immutable_hash_available": {"status": "pending", "note": "Provider revision semantics are not documented; local raw hashes must be tested."},
+        "stable_identifier_and_deduplication_supported": {"status": "pass", "note": "Deterministic ts_code+trade_date+type key."},
+        "documented_sla_and_backfill_policy": {"status": "pass", "note": "Documentation states daily 09:20 update and 2016 history boundary.", "evidence_urls": ["https://tushare.pro/document/2?doc_id=397"]},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "REST/SDK and per-call row limit documented.", "evidence_urls": ["https://tushare.pro/document/2?doc_id=397"]},
+        "entity_mapping_precision": {"status": "pending", "note": "Full713 symbol/date join must achieve >=0.995 for risk-status facts."},
+        "timestamp_parse_success": {"status": "pending", "note": "PoC sample required."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "Raw/Silver/PIT replay has not been materialized."}
+      },
+      "sample_gates": [
+        {"gate_id": "permission_and_nonempty", "metric": "record_count", "operator": "gte", "threshold": 1},
+        {"gate_id": "timestamp_parse", "metric": "timestamp_parse_rate", "operator": "gte", "threshold": 0.995},
+        {"gate_id": "stable_key_uniqueness", "metric": "stable_derived_id_unique_rate", "operator": "gte", "threshold": 0.999}
+      ],
+      "limitations": ["Aggregator rather than exchange-original payload", "Current terms need clarification for post-expiry frozen replay"],
+      "next_action": "Backfill stock_st by date into immutable Raw, compare against official announcement samples, and request retention-right confirmation."
+    },
+    {
+      "provider_id": "sseinfo_announcements",
+      "provider_name": "SSE Info announcement data API",
+      "layer": "official_fact",
+      "coverage_scope": ["sse_company_announcements"],
+      "target_role": "fallback",
+      "cost": {"model": "quote_required"},
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Commercial data agreement and local replay rights require quote review."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "Historical announcement data is documented.", "evidence_urls": ["https://www.sseinfo.com/services/sseai/aidata/"]},
+        "published_at_and_first_seen_at_available": {"status": "pending", "note": "Exact dissemination timestamp fields require sample schema."},
+        "revision_history_or_immutable_hash_available": {"status": "pending", "note": "Replacement/correction semantics require sample."},
+        "stable_identifier_and_deduplication_supported": {"status": "pending", "note": "API product documentation/sample required."},
+        "documented_sla_and_backfill_policy": {"status": "pending", "note": "Contract SLA required."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "Announcement data is delivered by API.", "evidence_urls": ["https://www.sseinfo.com/services/data/szjr/ggsjfwnew/c/10642309/files/cfa858a2a2b94f73b330129568844cc6.pdf"]},
+        "entity_mapping_precision": {"status": "pending", "note": "PoC sample required."},
+        "timestamp_parse_success": {"status": "pending", "note": "PoC sample required."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "PoC sample required."}
+      },
+      "limitations": ["Pricing not public", "SSE scope only"],
+      "next_action": "Request a sample schema and non-commercial research quote; buy only if rights and timestamp lineage pass."
+    },
+    {
+      "provider_id": "cninfo_announcements",
+      "provider_name": "CNINFO official disclosure platform",
+      "layer": "official_fact",
+      "coverage_scope": ["a_share_company_announcements"],
+      "target_role": "discovery_only",
+      "cost": {"model": "public_website"},
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Public viewing is clear; automated bulk retrieval and frozen replay rights are not."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "Official disclosure archive covers the period.", "evidence_urls": ["https://www.cninfo.com.cn/new/index"]},
+        "published_at_and_first_seen_at_available": {"status": "pending", "note": "Website display time is available but API timestamp contract is not."},
+        "revision_history_or_immutable_hash_available": {"status": "pending", "note": "PDF hashes can be stored only after rights review."},
+        "stable_identifier_and_deduplication_supported": {"status": "pending", "note": "Public API contract not documented."},
+        "documented_sla_and_backfill_policy": {"status": "fail", "note": "No public machine-data SLA found."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "fail", "note": "No supported public bulk API contract found."},
+        "entity_mapping_precision": {"status": "pending", "note": "PoC sample required."},
+        "timestamp_parse_success": {"status": "pending", "note": "PoC sample required."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "PoC sample required."}
+      },
+      "limitations": ["Use as original-source verification, not an unofficial scraping dependency"],
+      "next_action": "Use manual/source-link verification while a supported official API contract is evaluated."
+    },
+    {
+      "provider_id": "sec_edgar",
+      "provider_name": "SEC EDGAR data.sec.gov",
+      "layer": "official_fact",
+      "coverage_scope": ["us_company_filings", "chip_supply_chain_filings"],
+      "target_role": "fallback",
+      "cost": {"model": "free_public_api"},
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pass", "note": "Public API access with fair-access policy.", "evidence_urls": ["https://www.sec.gov/search-filings/edgar-application-programming-interfaces"]},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "Submission history and bulk archives cover the period."},
+        "published_at_and_first_seen_at_available": {"status": "pass", "note": "Acceptance/dissemination timestamps plus local first_seen_at."},
+        "revision_history_or_immutable_hash_available": {"status": "pass", "note": "Accessioned filings and amendments are immutable archive objects."},
+        "stable_identifier_and_deduplication_supported": {"status": "pass", "note": "CIK plus accession number."},
+        "documented_sla_and_backfill_policy": {"status": "pass", "note": "Real-time API and nightly bulk update schedule documented."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "JSON API, bulk ZIP and 10 requests/second fair-access guidance documented.", "evidence_urls": ["https://www.sec.gov/about/developer-resources"]},
+        "entity_mapping_precision": {"status": "pending", "note": "CIK/ticker/A-share supply-chain mapping sample required."},
+        "timestamp_parse_success": {"status": "pending", "note": "PoC sample required."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "PoC sample required."}
+      },
+      "limitations": ["US filings only", "Narrative filing extraction is not news sentiment"],
+      "next_action": "Build a 20-company semiconductor/supply-chain accession sample and freeze raw hashes."
+    },
+    {
+      "provider_id": "fred_alfred",
+      "provider_name": "FRED and ALFRED",
+      "layer": "official_fact",
+      "coverage_scope": ["us_macro", "rates", "economic_vintages"],
+      "target_role": "fallback",
+      "cost": {"model": "free_public_api"},
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pass", "note": "Public API; individual series source terms still tracked."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "Long history and vintage dates."},
+        "published_at_and_first_seen_at_available": {"status": "pass", "note": "Realtime/vintage date model supports PIT macro releases."},
+        "revision_history_or_immutable_hash_available": {"status": "pass", "note": "ALFRED vintages preserve revisions.", "evidence_urls": ["https://fred.stlouisfed.org/docs/api/fred/series_vintagedates.html"]},
+        "stable_identifier_and_deduplication_supported": {"status": "pass", "note": "Series ID plus vintage date."},
+        "documented_sla_and_backfill_policy": {"status": "pass", "note": "API observation and vintage semantics documented."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "Official API documentation.", "evidence_urls": ["https://fred.stlouisfed.org/docs/api/fred/overview.html"]},
+        "entity_mapping_precision": {"status": "not_applicable", "note": "Macro series are not company entities."},
+        "timestamp_parse_success": {"status": "pending", "note": "PoC sample required."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "PoC sample required."}
+      },
+      "limitations": ["Macro release frequency is lower than market/news data"],
+      "next_action": "Freeze a small PIT macro basket with original vintages and revision tests."
+    },
+    {
+      "provider_id": "tushare_index_global",
+      "provider_name": "Tushare Pro index_global",
+      "layer": "global_market",
+      "coverage_scope": ["SPX", "IXIC", "DJI", "HKTECH", "HSI"],
+      "target_role": "primary",
+      "cost": {"model": "points", "known_requirement": "6000 points"},
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Personal non-commercial license documented; frozen local replay after expiry needs confirmation."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "Historical date range endpoint covers full713.", "evidence_urls": ["https://tushare.pro/document/2?doc_id=211"]},
+        "published_at_and_first_seen_at_available": {"status": "pass", "note": "Daily trade date plus local ingestion first_seen_at."},
+        "revision_history_or_immutable_hash_available": {"status": "pending", "note": "Silent correction semantics must be hash-tested."},
+        "stable_identifier_and_deduplication_supported": {"status": "pass", "note": "ts_code+trade_date."},
+        "documented_sla_and_backfill_policy": {"status": "pending", "note": "Formal correction/backfill SLA not found."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "4000-row limit and cyclic retrieval documented."},
+        "entity_mapping_precision": {"status": "not_applicable", "note": "Fixed index code registry."},
+        "timestamp_parse_success": {"status": "pending", "note": "Full-window PoC sample required."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "PoC sample required."}
+      },
+      "sample_gates": [
+        {"gate_id": "full_window_start", "metric": "coverage_start", "operator": "date_lte", "threshold": "2023-05-01"},
+        {"gate_id": "full_window_end", "metric": "coverage_end", "operator": "date_gte", "threshold": "2026-05-26"},
+        {"gate_id": "all_index_requests", "metric": "all_requests_succeeded", "operator": "eq", "threshold": true}
+      ],
+      "limitations": ["Index constituents/semiconductor sector series need separate source", "No formal revision feed"],
+      "next_action": "Fetch full warmup+713 window for fixed index basket twice and compare hashes."
+    },
+    {
+      "provider_id": "massive_us_stocks",
+      "provider_name": "Massive Stocks Starter",
+      "layer": "global_market",
+      "coverage_scope": ["us_stocks", "semiconductor_etfs", "unadjusted_daily_bars"],
+      "target_role": "fallback",
+      "cost": {"model": "subscription", "usd_per_month": 29, "plan": "Stocks Starter"},
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Personal-use terms documented; local frozen replay/storage rights need plan confirmation.", "evidence_urls": ["https://massive.com/terms/market_data_terms.pdf"]},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "Starter documents five years of history.", "evidence_urls": ["https://massive.com/pricing?product=stocks"]},
+        "published_at_and_first_seen_at_available": {"status": "pass", "note": "Exchange timestamps and local first_seen_at."},
+        "revision_history_or_immutable_hash_available": {"status": "pending", "note": "Correction/backfill semantics require PoC."},
+        "stable_identifier_and_deduplication_supported": {"status": "pass", "note": "Ticker/date and reference identifiers."},
+        "documented_sla_and_backfill_policy": {"status": "pending", "note": "Individual plan SLA/backfill contract needs confirmation."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "REST and flat-file interfaces documented.", "evidence_urls": ["https://massive.com/docs/rest/stocks"]},
+        "entity_mapping_precision": {"status": "pending", "note": "Semiconductor basket mapping sample required."},
+        "timestamp_parse_success": {"status": "pending", "note": "PoC sample requires subscription."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "PoC sample requires subscription."}
+      },
+      "limitations": ["Paid independent fallback", "Do not subscribe until Tushare cross-market coverage gaps are measured"],
+      "next_action": "Defer purchase; use only if Tushare misses required US stock/ETF series or independent verification is insufficient."
+    },
+    {
+      "provider_id": "tushare_major_news",
+      "provider_name": "Tushare Pro major_news",
+      "layer": "professional_news",
+      "coverage_scope": ["china_financial_news", "policy_news", "company_news"],
+      "target_role": "primary",
+      "cost": {"model": "separate_permission", "current_runtime_permission": "available"},
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Personal viewing use is licensed; storage of full article bodies and post-expiry replay require confirmation."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "More than eight years of history documented.", "evidence_urls": ["https://tushare.pro/document/2?doc_id=195"]},
+        "published_at_and_first_seen_at_available": {"status": "pass", "note": "pub_time plus local first_seen_at; historical first_seen must use conservative availability policy."},
+        "revision_history_or_immutable_hash_available": {"status": "pending", "note": "No provider revision ID; repeated pulls and raw hashes required."},
+        "stable_identifier_and_deduplication_supported": {"status": "pending", "note": "No documented item ID; derived src+pub_time+title key must be collision-audited."},
+        "documented_sla_and_backfill_policy": {"status": "pending", "note": "Late backfill and correction SLA not documented."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "fail", "note": "Live PoC found a 30 requests/hour account cap; daily pulls saturated at 800 rows, so default access cannot complete full713 news backfill within an acceptable batch window."},
+        "entity_mapping_precision": {"status": "pending", "note": "Manual 200-item symbol/sector mapping sample required."},
+        "timestamp_parse_success": {"status": "pending", "note": "Multi-day sharded PoC required."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "Raw/Silver/PIT replay not yet materialized."}
+      },
+      "sample_gates": [
+        {"gate_id": "four_stratified_days", "metric": "sample_day_count", "operator": "gte", "threshold": 4},
+        {"gate_id": "all_hour_shards_complete", "metric": "all_days_transport_complete", "operator": "eq", "threshold": true},
+        {"gate_id": "timestamp_parse", "metric": "minimum_timestamp_parse_rate", "operator": "gte", "threshold": 0.995},
+        {"gate_id": "derived_key_uniqueness", "metric": "minimum_stable_derived_id_unique_rate", "operator": "gte", "threshold": 0.999}
+      ],
+      "limitations": ["Daily request saturates at 800 and needs adaptive sub-day splitting", "Current account is capped at 30 major_news requests per hour", "Source mix can be dominated by one publisher", "No revision ID"],
+      "next_action": "Request bulk export or higher rate limit and written body-storage/replay permission; otherwise implement adaptive interval splitting with cross-hour checkpoints before any Raw content retention."
+    },
+    {
+      "provider_id": "massive_benzinga_news",
+      "provider_name": "Massive Benzinga news add-on",
+      "layer": "professional_news",
+      "coverage_scope": ["us_financial_news", "semiconductor_company_news"],
+      "target_role": "fallback",
+      "cost": {"model": "subscription_addon", "usd_per_month": 99},
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "Body storage and historical replay rights require add-on agreement review."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pending", "note": "News history depth is not stated on the public pricing page."},
+        "published_at_and_first_seen_at_available": {"status": "pass", "note": "News API exposes article metadata/timestamps."},
+        "revision_history_or_immutable_hash_available": {"status": "pending", "note": "Revision semantics require sample/contract."},
+        "stable_identifier_and_deduplication_supported": {"status": "pending", "note": "Sample required."},
+        "documented_sla_and_backfill_policy": {"status": "pending", "note": "Contract required."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "REST news endpoint documented.", "evidence_urls": ["https://massive.com/docs/rest/stocks"]},
+        "entity_mapping_precision": {"status": "pending", "note": "Sample required."},
+        "timestamp_parse_success": {"status": "pending", "note": "Subscription sample required."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "Subscription sample required."}
+      },
+      "limitations": ["Higher cost than current budget-first path", "Historical depth not publicly confirmed"],
+      "next_action": "Do not buy yet; first request archive-depth and storage-right confirmation."
+    },
+    {
+      "provider_id": "gdelt_2_1",
+      "provider_name": "GDELT 2.1",
+      "layer": "professional_news",
+      "coverage_scope": ["global_news_discovery", "cross_source_coverage_control"],
+      "target_role": "discovery_only",
+      "cost": {"model": "free_archive"},
+      "gate_evidence": {
+        "legal_and_license_reviewed": {"status": "pending", "note": "GDELT metadata is open, but underlying publisher article rights remain source-specific."},
+        "historical_archive_covers_full713_plus_warmup": {"status": "pass", "note": "GDELT 2.x archive covers the period."},
+        "published_at_and_first_seen_at_available": {"status": "pass", "note": "DATEADDED provides 15-minute ingestion time.", "evidence_urls": ["https://data.gdeltproject.org/documentation/GDELT-Event_Codebook-V2.0.pdf"]},
+        "revision_history_or_immutable_hash_available": {"status": "pending", "note": "Underlying article revisions are not controlled by GDELT."},
+        "stable_identifier_and_deduplication_supported": {"status": "pass", "note": "Archive record identifiers and URLs support derived dedupe."},
+        "documented_sla_and_backfill_policy": {"status": "pending", "note": "No financial-data SLA."},
+        "machine_retrieval_and_rate_limits_documented": {"status": "pass", "note": "Public archives and codebooks."},
+        "entity_mapping_precision": {"status": "pending", "note": "Financial entity precision must be sampled."},
+        "timestamp_parse_success": {"status": "pending", "note": "PoC sample required."},
+        "network_free_replay_hash_match": {"status": "pending", "note": "PoC sample required."}
+      },
+      "limitations": ["Not a professional financial newsroom", "Never use as sole authoritative source", "Underlying article rights vary"],
+      "next_action": "Use only as a free coverage/control feed after financial-entity precision sampling."
+    }
+  ]
+}

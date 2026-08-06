@@ -10,7 +10,7 @@
   },
   "status": "in_progress",
   "owner": "codex",
-  "updated_at": "2026-08-06T00:00:00+08:00",
+  "updated_at": "2026-08-06T17:38:00+08:00",
   "latest_personal_eligibility_and_external_context_update": {
     "status": "pit_eligibility_gate_active_external_context_research_only",
     "account_profile": "new_retail_cash_account",
@@ -22,6 +22,17 @@
     "external_context_v3_signal_changed": false,
     "eligibility_contract": "docs/contracts/SHORTPICK_V3_PERSONAL_ELIGIBILITY_2026-08-06.json",
     "external_research_contract": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_RESEARCH_2026-08-06.json"
+  },
+  "latest_external_context_provider_poc": {
+    "status": "all_layers_blocked_pending_primary_and_independent_fallback_gates",
+    "v3_signal_changed": false,
+    "registry": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_PROVIDER_REGISTRY_2026-08-06.json",
+    "result": "docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_PROVIDER_POC_RESULT_2026-08-06.json",
+    "tushare_stock_st": "available_254_rows_on_2026_05_26_history_since_2016_candidate_only",
+    "tushare_index_global": "available_full713_plus_warmup_spx_770_ixic_770_hktech_752_candidate_only",
+    "tushare_major_news": "blocked_daily_800_row_saturation_and_30_requests_per_hour_limit",
+    "immediate_new_subscription": "none",
+    "next_gate": "written_replay_rights_then_small_immutable_raw_silver_pit_pilot"
   },
   "latest_rank5_policy_update": {
     "status": "rank5_real_execution_disabled_rank4_only_active",

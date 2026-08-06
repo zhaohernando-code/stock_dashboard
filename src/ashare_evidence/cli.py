@@ -57,6 +57,12 @@ from ashare_evidence.exposure_floor_overlay_governance import (
     write_exposure_floor_overlay_governance_summary,
     write_staggered_exposure_combo_governance_summary,
 )
+from ashare_evidence.external_context_poc import (
+    build_external_context_provider_audit,
+    load_external_context_registry,
+    probe_tushare_external_context_from_session,
+    write_external_context_artifact,
+)
 from ashare_evidence.feature_v3_capacity_triage import build_feature_v3_capacity_triage
 from ashare_evidence.feature_v3_source_coverage import audit_feature_v3_source_coverage
 from ashare_evidence.frontend_projections import refresh_frontend_projections
@@ -412,6 +418,7 @@ NO_DB_COMMANDS = {
     "research-model-preflight-compact",
     "runtime-storage-governance-archive",
     "runtime-storage-governance-audit",
+    "research-external-context-provider-audit",
     "shortpick-model-deterministic-full-history-select",
     "shortpick-strategy-lab-comparison-readiness",
     "shortpick-model-feature-diagnostics-run",
@@ -953,6 +960,29 @@ def build_parser() -> argparse.ArgumentParser:
     runtime_storage_archive.add_argument("--archive-root", required=True)
     runtime_storage_archive.add_argument("--compression-level", type=int, default=1)
     runtime_storage_archive.add_argument("--apply", action="store_true")
+
+    external_context_provider_audit = subparsers.add_parser(
+        "research-external-context-provider-audit",
+        help="Audit the frozen external-context provider registry and optional transport PoC metrics.",
+    )
+    external_context_provider_audit.add_argument("--registry-json", required=True)
+    external_context_provider_audit.add_argument("--sample-metrics-json", default=None)
+    external_context_provider_audit.add_argument("--output-json", default=None)
+
+    external_context_tushare_poc = subparsers.add_parser(
+        "research-external-context-tushare-poc",
+        help="Run a bounded aggregate-only Tushare transport/schema/permission PoC without retaining article content.",
+    )
+    external_context_tushare_poc.add_argument("--database-url", default=None)
+    external_context_tushare_poc.add_argument("--stock-st-date", default="2026-05-26")
+    external_context_tushare_poc.add_argument("--index-start", default="2023-05-01")
+    external_context_tushare_poc.add_argument("--index-end", default="2026-05-26")
+    external_context_tushare_poc.add_argument("--index-code", action="append", default=None)
+    external_context_tushare_poc.add_argument("--news-day", action="append", default=None)
+    external_context_tushare_poc.add_argument("--news-hour", action="append", type=int, default=None)
+    external_context_tushare_poc.add_argument("--max-attempts", type=int, default=3)
+    external_context_tushare_poc.add_argument("--max-batch-seconds", type=float, default=60.0)
+    external_context_tushare_poc.add_argument("--output-json", default=None)
 
     feature_v3_coverage = subparsers.add_parser(
         "research-feature-v3-source-coverage-audit",
@@ -2907,6 +2937,37 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.output_json:
             write_pit_source_readiness_audit(payload, args.output_json)
+        _print_json(payload)
+        return 0 if payload["gate_status"] == "passed" else 1
+
+    if args.command == "research-external-context-provider-audit":
+        registry = load_external_context_registry(args.registry_json)
+        sample_metrics = (
+            json.loads(Path(args.sample_metrics_json).read_text(encoding="utf-8"))
+            if args.sample_metrics_json
+            else None
+        )
+        payload = build_external_context_provider_audit(registry, sample_metrics=sample_metrics)
+        if args.output_json:
+            write_external_context_artifact(payload, args.output_json)
+        _print_json(payload)
+        return 0 if payload["gate_status"] == "passed" else 1
+
+    if args.command == "research-external-context-tushare-poc":
+        with session_scope(args.database_url) as session:
+            payload = probe_tushare_external_context_from_session(
+                session,
+                stock_st_date=date.fromisoformat(args.stock_st_date),
+                index_start=date.fromisoformat(args.index_start),
+                index_end=date.fromisoformat(args.index_end),
+                index_codes=tuple(args.index_code or ("SPX", "IXIC", "HKTECH")),
+                news_days=tuple(date.fromisoformat(value) for value in args.news_day or ()),
+                news_hours=tuple(args.news_hour) if args.news_hour is not None else tuple(range(24)),
+                max_attempts=max(1, args.max_attempts),
+                max_batch_seconds=max(1.0, args.max_batch_seconds),
+            )
+        if args.output_json:
+            write_external_context_artifact(payload, args.output_json)
         _print_json(payload)
         return 0 if payload["gate_status"] == "passed" else 1
 

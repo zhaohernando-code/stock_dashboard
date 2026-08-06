@@ -1,0 +1,108 @@
+{
+  "artifact_type": "external_context_provider_poc_result",
+  "schema_version": "external_context_provider_poc_result.v1",
+  "generated_at": "2026-08-06T17:38:00+08:00",
+  "status": "blocked_pending_channel_and_replay_gates",
+  "v3_signal_changed": false,
+  "claim_ceiling": "provider_transport_and_contract_poc_only",
+  "baseline_contract": {
+    "signal_date_from": "2023-06-13",
+    "signal_date_to": "2026-05-26",
+    "signal_day_count": 713,
+    "warmup_start": "2023-05-01"
+  },
+  "registry": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_PROVIDER_REGISTRY_2026-08-06.json",
+  "provider_audit": {
+    "gate_status": "blocked",
+    "external_context_replay_ready": false,
+    "provider_status_counts": {
+      "blocked": 2,
+      "pending": 8
+    },
+    "layer_status": {
+      "official_fact": "blocked",
+      "global_market": "blocked",
+      "professional_news": "blocked"
+    },
+    "blocking_rule": "Each layer requires both a ready primary and an independent ready fallback."
+  },
+  "live_tushare_poc": {
+    "credential_present": true,
+    "raw_payload_retained": false,
+    "raw_article_content_retained": false,
+    "stock_st": {
+      "api_status": "available",
+      "sample_date": "2026-05-26",
+      "record_count": 254,
+      "timestamp_parse_rate": 1.0,
+      "derived_key_unique_rate": 1.0,
+      "documented_history_start": "2016-01-01",
+      "decision": "budget_first_primary_candidate_for_historical_risk_warning_pit",
+      "remaining_gates": [
+        "written_local_replay_retention_right",
+        "official_source_cross_check",
+        "repeated_pull_hash_match",
+        "full713_entity_date_join_precision"
+      ]
+    },
+    "index_global": {
+      "api_status": "available",
+      "coverage_start": "2023-05-01",
+      "coverage_end": "2026-05-26",
+      "indices": {
+        "SPX": 770,
+        "IXIC": 770,
+        "HKTECH": 752
+      },
+      "all_requests_succeeded": true,
+      "timestamp_parse_rate": 1.0,
+      "derived_key_unique_rate": 1.0,
+      "decision": "budget_first_primary_candidate_for_global_daily_regime_layer",
+      "remaining_gates": [
+        "written_local_replay_retention_right",
+        "repeat_pull_hash_match",
+        "independent_us_market_fallback"
+      ]
+    },
+    "major_news": {
+      "api_status": "available_but_current_plan_not_backfill_ready",
+      "documented_history": "more_than_8_years",
+      "daily_probe_dates": [
+        "2023-06-13",
+        "2024-02-05",
+        "2025-04-07",
+        "2026-05-26"
+      ],
+      "daily_probe_result": "Each daily request returned exactly 800 rows, indicating truncation/saturation.",
+      "timestamp_parse_rate_on_daily_samples": 1.0,
+      "derived_key_unique_rate_on_daily_samples": 1.0,
+      "observed_rate_limit": "30 major_news requests per hour",
+      "full_shard_attempt": "Stopped after exceeding the bounded batch duration; subsequent calls returned 40203 frequency-limit responses.",
+      "decision": "blocked_as_primary_until_bulk_export_or_rate_upgrade_and_storage_rights",
+      "required_fix": [
+        "vendor_bulk_export_or_higher_rate_limit",
+        "adaptive_interval_split_instead_of_fixed_hourly_split",
+        "cross_hour_checkpoint_resume",
+        "non_retryable_frequency_limit_classification",
+        "article_revision_hash_audit",
+        "manual_200_item_entity_mapping_precision_sample",
+        "written_article_body_storage_and_frozen_replay_right"
+      ]
+    }
+  },
+  "selected_budget_first_path": {
+    "a_share_risk_status": "Tushare stock_st PoC first; exchange-original cross-check remains mandatory.",
+    "global_market": "Tushare index_global first; defer Massive Stocks Starter USD 29/month until missing US stock/ETF coverage is measured.",
+    "official_us_facts": "SEC EDGAR free API and bulk archives.",
+    "macro_vintages": "FRED/ALFRED free vintage API.",
+    "a_share_official_announcements": "Request SSE Info API schema/quote; use CNINFO only for original-source verification, not unsupported scraping.",
+    "professional_news": "Do not purchase yet. First request Tushare bulk/rate/storage terms and Massive/Benzinga archive-depth/storage terms; GDELT remains discovery/control only."
+  },
+  "cost_guardrail": {
+    "immediate_new_subscription": "none",
+    "deferred_independent_us_market_option": "Massive Stocks Starter USD 29/month",
+    "deferred_professional_us_news_option": "Massive Benzinga add-on USD 99/month",
+    "purchase_rule": "No purchase before written archive depth, local frozen replay right, timestamp semantics and sample SLA pass."
+  },
+  "next_gate": "Obtain written vendor answers, then materialize a small immutable Raw/Silver/PIT pilot for stock_st, three global indices, SEC filings and ALFRED vintages. News Raw storage remains forbidden until rights and throughput gates pass."
+}
