@@ -84,6 +84,52 @@
     "full713_public_news_materialized": false,
     "weight_backtest_allowed": false
   },
+  "latest_public_source_adapter_poc": {
+    "status": "bounded_live_and_historical_canaries_passed_full713_blocked_by_cninfo_bulk_rights_and_remaining_source_gates",
+    "v3_signal_changed": false,
+    "contract": "docs/contracts/SHORTPICK_V3_PUBLIC_SOURCE_ADAPTER_POC_2026-08-06.json",
+    "result": "docs/analysis/SHORTPICK_V3_PUBLIC_SOURCE_POC_RESULT_2026-08-06.json",
+    "cninfo_live_sample": {
+      "symbols": ["600519", "000001", "600589", "002415"],
+      "reported_and_fetched": 467,
+      "routine_or_irrelevant_excluded": 299,
+      "material_before_grouping": 168,
+      "retained_same_day_category_packages": 112,
+      "announcement_body_downloaded": false,
+      "pit_availability": "end_of_shanghai_calendar_day"
+    },
+    "cninfo_historical_eligibility_canary": {
+      "signal_dates": ["2023-06-13", "2024-06-05", "2025-06-05", "2026-05-26"],
+      "selected_symbols": 24,
+      "window_days": 31,
+      "requests_complete": "24_of_24",
+      "reported_and_fetched": 242,
+      "material_before_grouping": 63,
+      "retained_event_packages": 42,
+      "manual_title_review_obvious_mismatch_count": 0,
+      "historical_current_profile_fields_used": false,
+      "pit_risk_status_verified": false,
+      "offline_replay": "42_of_42_hash_passed_network_used_false"
+    },
+    "gdelt_live_sample": {
+      "archive_date": "2026-08-04",
+      "archive_bytes_read_in_memory": 6569696,
+      "archive_persisted": false,
+      "rows_scanned": 102313,
+      "unique_relevant_urls": 121,
+      "retained_summaries": 10,
+      "article_body_downloaded": false,
+      "pit_availability": "second_following_utc_day"
+    },
+    "offline_replay": "cninfo_and_gdelt_hash_verification_passed_network_used_false",
+    "projected_combined_gib_from_small_sample": 1.3183,
+    "storage_projection_authority": "preflight_only_hard_cap_and_larger_canary_remain_authoritative",
+    "full713_public_source_materialized": false,
+    "external_weight_backtest_allowed": false,
+    "cninfo_bulk_rights": "pending_formal_data_service_or_written_confirmation",
+    "gdelt_terms": "unlimited_unrestricted_use_with_attribution",
+    "next_gate": "cninfo_bulk_terms_checkpointed_acquisition_dry_run_and_multi_day_gdelt_relevance_review"
+  },
   "latest_rank5_policy_update": {
     "status": "rank5_real_execution_disabled_rank4_only_active",
     "objective": "stable_profitability_over_execution_coverage",

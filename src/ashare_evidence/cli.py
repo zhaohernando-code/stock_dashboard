@@ -64,6 +64,11 @@ from ashare_evidence.external_context_poc import (
     probe_tushare_external_context_from_session,
     write_external_context_artifact,
 )
+from ashare_evidence.external_context_public_sources import (
+    fetch_cninfo_announcement_poc,
+    probe_gdelt_daily_public_discovery,
+    run_cninfo_historical_eligibility_canary,
+)
 from ashare_evidence.external_context_replay import (
     materialize_external_context_pilot,
     replay_external_context_offline,
@@ -426,6 +431,9 @@ NO_DB_COMMANDS = {
     "runtime-storage-governance-audit",
     "research-external-context-provider-audit",
     "research-external-context-poc-readiness",
+    "research-external-context-cninfo-public-poc",
+    "research-external-context-cninfo-canary",
+    "research-external-context-gdelt-public-poc",
     "research-external-context-materialize-pilot",
     "research-external-context-offline-replay",
     "shortpick-model-deterministic-full-history-select",
@@ -1001,6 +1009,37 @@ def build_parser() -> argparse.ArgumentParser:
     external_context_tushare_poc.add_argument("--max-attempts", type=int, default=3)
     external_context_tushare_poc.add_argument("--max-batch-seconds", type=float, default=60.0)
     external_context_tushare_poc.add_argument("--output-json", default=None)
+
+    external_context_cninfo_poc = subparsers.add_parser(
+        "research-external-context-cninfo-public-poc",
+        help="Fetch bounded CNINFO announcement titles and PIT metadata without downloading document bodies.",
+    )
+    external_context_cninfo_poc.add_argument("--symbol", required=True)
+    external_context_cninfo_poc.add_argument("--start-date", required=True, help="YYYYMMDD")
+    external_context_cninfo_poc.add_argument("--end-date", required=True, help="YYYYMMDD")
+    external_context_cninfo_poc.add_argument("--max-pages", type=int, default=100)
+    external_context_cninfo_poc.add_argument("--output-json", default=None)
+    external_context_cninfo_poc.add_argument("--pilot-input-json", default=None)
+
+    external_context_cninfo_canary = subparsers.add_parser(
+        "research-external-context-cninfo-canary",
+        help="Select historical account-eligible symbols from PIT prices and fetch bounded CNINFO windows.",
+    )
+    external_context_cninfo_canary.add_argument("--database-path", required=True)
+    external_context_cninfo_canary.add_argument("--signal-date", action="append", required=True)
+    external_context_cninfo_canary.add_argument("--symbols-per-date", type=int, default=6)
+    external_context_cninfo_canary.add_argument("--window-days", type=int, default=31)
+    external_context_cninfo_canary.add_argument("--output-json", default=None)
+    external_context_cninfo_canary.add_argument("--pilot-input-json", default=None)
+
+    external_context_gdelt_poc = subparsers.add_parser(
+        "research-external-context-gdelt-public-poc",
+        help="Filter one public GDELT daily archive in memory and retain only relevant metadata summaries.",
+    )
+    external_context_gdelt_poc.add_argument("--archive-date", required=True, help="Completed UTC day in YYYYMMDD")
+    external_context_gdelt_poc.add_argument("--selected-limit", type=int, default=12)
+    external_context_gdelt_poc.add_argument("--output-json", default=None)
+    external_context_gdelt_poc.add_argument("--pilot-input-json", default=None)
 
     external_context_materialize = subparsers.add_parser(
         "research-external-context-materialize-pilot",
@@ -3021,6 +3060,46 @@ def main(argv: list[str] | None = None) -> int:
             write_external_context_artifact(payload, args.output_json)
         _print_json(payload)
         return 0 if payload["gate_status"] == "passed" else 1
+
+    if args.command == "research-external-context-cninfo-public-poc":
+        payload = fetch_cninfo_announcement_poc(
+            symbol=args.symbol,
+            start_date=args.start_date,
+            end_date=args.end_date,
+            max_pages=args.max_pages,
+        )
+        if args.output_json:
+            write_external_context_artifact(payload, args.output_json)
+        if args.pilot_input_json:
+            write_external_context_artifact(payload["pilot_input"], args.pilot_input_json)
+        _print_json(payload)
+        return 0 if payload["pit_candidate_status"] == "sample_ready" else 1
+
+    if args.command == "research-external-context-cninfo-canary":
+        payload = run_cninfo_historical_eligibility_canary(
+            database_path=args.database_path,
+            signal_dates=args.signal_date,
+            symbols_per_date=args.symbols_per_date,
+            window_days=args.window_days,
+        )
+        if args.output_json:
+            write_external_context_artifact(payload, args.output_json)
+        if args.pilot_input_json:
+            write_external_context_artifact(payload["pilot_input"], args.pilot_input_json)
+        _print_json(payload)
+        return 0 if payload["all_requests_complete"] else 1
+
+    if args.command == "research-external-context-gdelt-public-poc":
+        payload = probe_gdelt_daily_public_discovery(
+            archive_date=args.archive_date,
+            selected_limit=args.selected_limit,
+        )
+        if args.output_json:
+            write_external_context_artifact(payload, args.output_json)
+        if args.pilot_input_json:
+            write_external_context_artifact(payload["pilot_input"], args.pilot_input_json)
+        _print_json(payload)
+        return 0 if payload["pit_candidate_status"] == "sample_ready" else 1
 
     if args.command == "research-external-context-materialize-pilot":
         input_payload = json.loads(Path(args.input_json).read_text(encoding="utf-8"))

@@ -99,6 +99,7 @@
   },
   "implementation": {
     "modules": [
+      "src/ashare_evidence/external_context_public_sources.py",
       "src/ashare_evidence/external_context_news_summary.py",
       "src/ashare_evidence/external_context_replay.py"
     ],
@@ -114,6 +115,11 @@
   "current_gate": {
     "public_news_full713_materialized": false,
     "weight_backtest_allowed": false,
-    "next_step": "Build bounded public-source adapters that emit this summary-only input contract, beginning with official A-share disclosures, SEC/IR and GDELT metadata."
+    "bounded_cninfo_and_gdelt_live_samples_passed": true,
+    "historical_eligibility_canary_passed": true,
+    "cninfo_bulk_history_rights": "pending_formal_data_service_or_written_confirmation",
+    "public_source_poc_contract": "docs/contracts/SHORTPICK_V3_PUBLIC_SOURCE_ADAPTER_POC_2026-08-06.json",
+    "public_source_poc_result": "docs/analysis/SHORTPICK_V3_PUBLIC_SOURCE_POC_RESULT_2026-08-06.json",
+    "next_step": "Obtain CNINFO bulk-history terms, prepare checkpointed acquisition, and complete multi-day GDELT relevance review before authorizing full-window acquisition."
   }
 }

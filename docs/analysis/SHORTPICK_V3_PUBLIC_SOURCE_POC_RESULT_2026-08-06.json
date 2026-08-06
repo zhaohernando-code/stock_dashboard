@@ -1,0 +1,133 @@
+{
+  "artifact_type": "shortpick_v3_public_source_poc_result",
+  "schema_version": "shortpick_v3_public_source_poc_result.v1",
+  "generated_at": "2026-08-06T20:39:00+08:00",
+  "status": "bounded_live_and_historical_canaries_passed_full713_blocked_by_cninfo_bulk_rights_and_remaining_source_gates",
+  "v3_signal_changed": false,
+  "article_body_retained": false,
+  "source_evidence": {
+    "gdelt_terms_of_use": "https://www.gdeltproject.org/about.html",
+    "gdelt_event_codebook": "https://data.gdeltproject.org/documentation/GDELT-Event_Codebook-V2.0.pdf",
+    "cninfo_public_service_description": "https://static.cninfo.com.cn/cninfoapp/strategy/privacy.html",
+    "cninfo_formal_data_service": "https://webapi.cninfo.com.cn/auth/api-cloud-authweb/Apiwebcheck/checkapiweb"
+  },
+  "cninfo_live_sample": {
+    "sample_window": "2024-01-01_to_2024-12-31",
+    "symbols": ["600519", "000001", "600589", "002415"],
+    "reported_and_fetched_announcement_count": 467,
+    "routine_or_irrelevant_title_excluded_count": 299,
+    "material_announcement_count_before_grouping": 168,
+    "same_day_category_collapsed_count": 57,
+    "retained_pit_event_package_count": 112,
+    "per_symbol_retained_counts": {
+      "600519": 18,
+      "000001": 16,
+      "600589": 56,
+      "002415": 22
+    },
+    "pagination_defect_found_and_fixed": "600519 reported 68 announcements while provider totalpages initially implied only 60 rows; max(totalpages,ceil(total/30)) recovered 68/68.",
+    "timestamp_defect_found_and_fixed": "Observed epoch-millisecond values were calendar-day midnight markers, so availability is no longer backdated to midnight and is frozen at end of Shanghai day.",
+    "materialized_sample": {
+      "symbol": "600519",
+      "record_count": 18,
+      "artifact_root_bytes": 96478,
+      "bytes_per_record": 5359.89,
+      "manifest_id": "external-context-manifest-9bde0169c249fbbd135d802c",
+      "hash_verification": "passed",
+      "offline_selected_record_count": 18,
+      "network_used": false
+    }
+  },
+  "cninfo_historical_eligibility_canary": {
+    "signal_dates": ["2023-06-13", "2024-06-05", "2025-06-05", "2026-05-26"],
+    "symbols_per_date": 6,
+    "selected_symbol_count": 24,
+    "announcement_window_days": 31,
+    "request_count": 24,
+    "all_requests_complete": true,
+    "reported_and_fetched_announcement_count": 242,
+    "material_announcement_count_before_grouping": 63,
+    "retained_event_package_count": 42,
+    "manual_title_review_count": 42,
+    "obvious_topic_mismatch_count_after_second_filter": 0,
+    "retained_category_counts": {
+      "capital_and_ownership": 20,
+      "risk_enforcement_and_correction": 6,
+      "financial_performance_and_distribution": 8,
+      "material_operations": 3,
+      "financing_and_mna": 3,
+      "management_change": 2
+    },
+    "historical_current_profile_fields_used": false,
+    "pit_risk_status_verified": false,
+    "eligibility_warning": "pit_risk_status_unverified_current_static_name_not_used",
+    "sample_digest": "730ca8d6a468872780b6e3ae0d351dcbbc832065d081b055f56a137936e29684",
+    "materialized_sample": {
+      "record_count": 42,
+      "artifact_root_bytes": 224015,
+      "bytes_per_record": 5333.69,
+      "manifest_id": "external-context-manifest-00b44c03a79d89957d0f9732",
+      "hash_verification": "passed",
+      "offline_selected_record_count": 42,
+      "network_used": false
+    }
+  },
+  "gdelt_live_sample": {
+    "archive_date": "2026-08-04",
+    "compressed_bytes_read_in_memory": 6569696,
+    "archive_persisted": false,
+    "archive_sha256": "f8e1c67baf228d27388dd112e616a1676a8965de5cf9460bb2a19c853d5d9802",
+    "row_count": 102313,
+    "relevant_row_count_before_url_dedup": 629,
+    "unique_relevant_url_count": 121,
+    "retained_record_count": 10,
+    "retained_topic_counts": {
+      "semiconductor": 4,
+      "telecommunications": 2,
+      "trade_restriction": 4,
+      "us_macro_policy": 0
+    },
+    "low_quality_behavior_found_and_fixed": [
+      "Generic rate-hike URL matches were utility-price stories rather than Federal Reserve policy; generic rate-cut/rate-hike patterns were removed.",
+      "Numeric CMS URL slugs were not meaningful headlines and are now rejected.",
+      "Impact-only ranking filled all twelve slots with tariff stories; fixed topic maxima now preserve semiconductor and telecom coverage and do not fill unused macro slots with noise.",
+      "The initial country extraction used one longitude column; the GDELT V1 58-column country indices are now explicit and tested."
+    ],
+    "materialized_sample": {
+      "record_count": 10,
+      "artifact_root_bytes": 59195,
+      "bytes_per_record": 5919.5,
+      "manifest_id": "external-context-manifest-624974ff76785193f9648d7d",
+      "hash_verification": "passed",
+      "offline_selected_record_count": 10,
+      "network_used": false
+    }
+  },
+  "bounded_storage_preflight": {
+    "planning_assumptions_not_a_commitment": {
+      "historical_main_board_symbols": 3000,
+      "calendar_years": 3,
+      "average_cninfo_event_packages_per_symbol_year_from_four_symbol_sample": 28,
+      "cninfo_bytes_per_record_from_materialized_sample": 5359.89,
+      "gdelt_calendar_days": 1095,
+      "gdelt_records_per_day": 10,
+      "gdelt_bytes_per_record_from_materialized_sample": 5919.5
+    },
+    "projected_cninfo_bytes": 1350692280,
+    "projected_gdelt_bytes": 64818525,
+    "projected_combined_bytes": 1415510805,
+    "projected_combined_gib": 1.3183,
+    "target_gib": 1.5,
+    "hard_cap_gib": 1.75,
+    "interpretation": "The estimate fits the target but the four-symbol sample is too small to authorize full acquisition. The materializer hard cap remains authoritative and a larger canary must replace this estimate."
+  },
+  "remaining_limits": [
+    "GDELT is discovery metadata rather than a professional-news substitute and its article relevance still needs multi-day human-reviewed precision checks.",
+    "GDELT permits unlimited and unrestricted use with attribution; every derived dataset and report must cite and link to the GDELT Project.",
+    "CNINFO public browsing and its app privacy statement do not establish bulk historical database storage/replay rights. Full-window acquisition is blocked pending its formal data-service terms or written confirmation.",
+    "CNINFO correction announcements are retained as new immutable events; cross-document amendment lineage has not yet been proven across a broad sample.",
+    "Historical symbol membership must come from the same PIT eligibility snapshot used by scoring; current static board membership cannot be backfilled into history.",
+    "No full713 public-source history has been materialized and no external weight or alpha result exists."
+  ],
+  "next_gate": "Obtain CNINFO bulk-history terms through its formal data service or written confirmation, then build a checkpointed rate-limited acquisition dry run; separately complete a multi-day GDELT relevance review before full713 acquisition."
+}

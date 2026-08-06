@@ -1,0 +1,75 @@
+{
+  "contract_id": "shortpick_v3_public_source_adapter_poc_2026_08_06",
+  "status": "bounded_live_and_historical_eligibility_canaries_passed_full713_blocked_by_bulk_rights_and_remaining_source_gates",
+  "generated_at": "2026-08-06T20:39:00+08:00",
+  "v3_signal_changed": false,
+  "claim_ceiling": "public_source_adapter_and_offline_replay_mechanics_only_no_external_alpha_validation",
+  "sources": {
+    "cninfo": {
+      "role": "official_fact",
+      "endpoint": "https://www.cninfo.com.cn/new/hisAnnouncement/query",
+      "transport": "official_https",
+      "retention": "material_announcement_titles_and_identifiers_only_no_document_body",
+      "historical_availability": "CNINFO calendar day is conservatively available at 23:59:59.999999 Asia/Shanghai",
+      "pagination_rule": "page_count=max(provider_totalpages,ceil(totalAnnouncement/30)); never trust provider totalpages alone",
+      "materiality_rule_version": "cninfo_title_materiality.v1",
+      "excluded_routine_examples": [
+        "board_or_supervisory_board_routine_resolutions",
+        "meeting_materials_and_legal_opinions",
+        "English_duplicate_reports",
+        "director_work_and_audit_appendices",
+        "results_briefing_notices"
+      ],
+      "same_day_grouping": "One symbol plus availability day plus materiality category becomes one immutable event package retaining at most six titles and announcement identifiers."
+    },
+    "gdelt_daily_events": {
+      "role": "public_news_metadata_discovery_global_state_only",
+      "endpoint_pattern": "https://storage.googleapis.com/data.gdeltproject.org/events/YYYYMMDD.export.CSV.zip",
+      "transport": "https_google_cloud_storage_official_gdelt_bucket",
+      "retention": "URL-derived headline plus GDELT event metadata summary only; no article fetch and no article body",
+      "historical_availability": "DATEADDED has day-only resolution; the daily archive is conservatively available at 00:00 UTC on the second following day, after one full uncertain publication day.",
+      "download_rule": "Read into bounded memory, reject above 16MiB compressed or 160MiB uncompressed, never persist the archive",
+      "selection_rule": {
+        "daily_total_max": 12,
+        "topic_maxima": {
+          "semiconductor": 4,
+          "telecommunications": 2,
+          "trade_restriction": 4,
+          "us_macro_policy": 2
+        },
+        "trade_and_macro_geo_gate": "Require China, Hong Kong, Taiwan, Japan, Korea or United States actor/location evidence.",
+        "bad_slug_gate": "Reject URL headlines with fewer than 12 alphabetic characters or three words."
+      },
+      "authority_limit": "Discovery metadata cannot independently trigger a buy, replace official facts, or satisfy the professional-news layer."
+    }
+  },
+  "storage_and_pit_invariants": {
+    "article_body_retained": false,
+    "pre_storage_filtering": true,
+    "raw_silver_pit_immutable": true,
+    "offline_replay_network_required": false,
+    "decision_visibility_rule": "available_from <= decision_cutoff",
+    "news_root_target_gib": 1.5,
+    "news_root_hard_cap_gib": 1.75,
+    "user_ceiling_gib": 2.0
+  },
+  "implementation": {
+    "module": "src/ashare_evidence/external_context_public_sources.py",
+    "cli_commands": [
+      "research-external-context-cninfo-public-poc",
+      "research-external-context-cninfo-canary",
+      "research-external-context-gdelt-public-poc"
+    ],
+    "materializer": "research-external-context-materialize-pilot",
+    "offline_replay": "research-external-context-offline-replay",
+    "tests": "tests/test_external_context_public_sources.py"
+  },
+  "promotion_gates": {
+    "full713_backfill_allowed": false,
+    "external_weight_backtest_allowed": false,
+    "historical_eligibility_canary_passed": true,
+    "cninfo_bulk_historical_storage_and_replay_rights": "pending_formal_data_service_or_written_confirmation",
+    "gdelt_terms": "passed_unlimited_unrestricted_use_with_required_attribution",
+    "next_gate": "Obtain CNINFO bulk-history terms through its formal data service or written confirmation, then run a checkpointed acquisition dry run; separately complete a multi-day GDELT relevance review before full-window acquisition."
+  }
+}
