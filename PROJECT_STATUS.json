@@ -10,7 +10,7 @@
   },
   "status": "in_progress",
   "owner": "codex",
-  "updated_at": "2026-08-06T17:38:00+08:00",
+  "updated_at": "2026-08-06T19:13:00+08:00",
   "latest_personal_eligibility_and_external_context_update": {
     "status": "pit_eligibility_gate_active_external_context_research_only",
     "account_profile": "new_retail_cash_account",
@@ -33,6 +33,23 @@
     "tushare_major_news": "blocked_daily_800_row_saturation_and_30_requests_per_hour_limit",
     "immediate_new_subscription": "none",
     "next_gate": "written_replay_rights_then_small_immutable_raw_silver_pit_pilot"
+  },
+  "latest_external_context_replay_pilot": {
+    "status": "storage_and_offline_replay_mechanics_ready_live_provider_data_pending",
+    "v3_signal_changed": false,
+    "contract": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_REPLAY_PILOT_2026-08-06.json",
+    "schemas": [
+      "external_context_raw_record.v1",
+      "external_context_silver_record.v1",
+      "external_context_pit_record.v1",
+      "external_context_replay_manifest.v1"
+    ],
+    "synthetic_fixture_manifest": "external-context-manifest-3b79b96cadbda14d0eb4fec6",
+    "offline_hash_replay": "passed_revision_1_and_revision_2_cutoffs",
+    "live_aggregate_repeat_hash": "stock_st_spx_ixic_hktech_two_immediate_pulls_match",
+    "news_raw_storage": "hard_blocked_pending_rights",
+    "full713_external_context_backtest_allowed": false,
+    "next_gate": "reviewed_live_small_sample_with_repeat_pull_hash_and_rights_evidence"
   },
   "latest_rank5_policy_update": {
     "status": "rank5_real_execution_disabled_rank4_only_active",

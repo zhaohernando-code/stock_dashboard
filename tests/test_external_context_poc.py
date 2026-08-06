@@ -112,6 +112,8 @@ def test_tushare_probe_shards_news_and_does_not_emit_raw_content_or_token() -> N
     assert news["all_days_transport_complete"] is True
     assert news["days"]["2026-05-26"]["successful_request_count"] == 24
     assert news["days"]["2026-05-26"]["record_count_after_dedupe"] == 24
+    assert len(payload["providers"]["tushare_stock_st"]["response_rows_digest"]) == 64
+    assert len(payload["providers"]["tushare_index_global"]["indices"]["SPX"]["response_rows_digest"]) == 64
     serialized = json.dumps(payload, ensure_ascii=False)
     assert "secret-token-must-not-leak" not in serialized
     assert "样本-00" not in serialized

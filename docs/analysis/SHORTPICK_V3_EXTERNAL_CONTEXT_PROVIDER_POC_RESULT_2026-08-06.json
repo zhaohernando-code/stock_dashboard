@@ -38,10 +38,17 @@
       "derived_key_unique_rate": 1.0,
       "documented_history_start": "2016-01-01",
       "decision": "budget_first_primary_candidate_for_historical_risk_warning_pit",
+      "immediate_repeat_pull": {
+        "pull_count": 2,
+        "record_counts": [254, 254],
+        "response_rows_digest_match": true,
+        "raw_content_retained": false,
+        "claim_ceiling": "same_session_transport_stability_only"
+      },
       "remaining_gates": [
         "written_local_replay_retention_right",
         "official_source_cross_check",
-        "repeated_pull_hash_match",
+        "multi_day_correction_and_backfill_semantics",
         "full713_entity_date_join_precision"
       ]
     },
@@ -58,9 +65,20 @@
       "timestamp_parse_rate": 1.0,
       "derived_key_unique_rate": 1.0,
       "decision": "budget_first_primary_candidate_for_global_daily_regime_layer",
+      "immediate_repeat_pull": {
+        "pull_count": 2,
+        "record_counts": {
+          "SPX": [770, 770],
+          "IXIC": [770, 770],
+          "HKTECH": [752, 752]
+        },
+        "all_response_rows_digests_match": true,
+        "raw_content_retained": false,
+        "claim_ceiling": "same_session_transport_stability_only"
+      },
       "remaining_gates": [
         "written_local_replay_retention_right",
-        "repeat_pull_hash_match",
+        "multi_day_correction_and_backfill_semantics",
         "independent_us_market_fallback"
       ]
     },

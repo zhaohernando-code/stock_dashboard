@@ -35,3 +35,13 @@
 - 官方事实补充：SEC EDGAR 与 FRED/ALFRED 可作为零成本的美国公司事实和宏观 vintage 层；A 股公告优先询价上证信息公告 API，巨潮资讯只作原文核验，不建立非官方爬取依赖。
 
 真实 PoC 聚合证据见 `docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_PROVIDER_POC_RESULT_2026-08-06.json`。PoC 没有保存新闻正文，也没有改变 V3。
+
+## 6. Raw / Silver / PIT 离线重放骨架
+
+已实现不可变的三层物化与 manifest 重放 CLI。Raw 保存提供方记录、获取血缘和内容哈希；Silver 保存版本化标准化结果及 Raw 引用；PIT 按下一次修订自动闭合 `available_to`。manifest 对每个文件的相对路径、SHA-256、字节数和时间合同生成稳定身份，任意文件篡改、路径越界、manifest 身份变化或同一事件同时选中多个修订都会阻断重放。
+
+时间口径必须带时区。使用 `first_seen_at` 的记录不得回填到更早时间；若历史可用时间早于本地首次获取时间，只能使用提供方已文档化的发布时间/生效时间，并保存证据引用。离线重放只读本地冻结 manifest，结果明确记录 `network_used=false`。
+
+当前只用明确标注的合成 SEC 修订样本验证机制，不能据此宣称真实 SEC、宏观、全球行情或新闻数据已经通过质量门禁。Tushare `major_news` 与 Massive/Benzinga 新闻 Raw 在正文存储/重放权通过前由代码硬阻断。合同和执行证据见 `docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_REPLAY_PILOT_2026-08-06.json`。
+
+另完成两次同一时段的真实聚合哈希检查：`stock_st` 为 `254/254`，SPX、IXIC、HKTECH 分别为 `770/770`、`770/770`、`752/752`，内容摘要全部一致且没有保留原始行。这只能通过“即时重复响应稳定”检查，不能替代跨日修订、存储授权、独立备源和冻结 Raw 离线重放。

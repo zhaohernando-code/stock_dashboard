@@ -1,0 +1,103 @@
+{
+  "contract_id": "shortpick_v3_external_context_replay_pilot_2026_08_06",
+  "status": "storage_and_offline_replay_pilot_ready_provider_data_pending",
+  "generated_at": "2026-08-06T19:13:00+08:00",
+  "v3_signal_changed": false,
+  "claim_ceiling": "synthetic_contract_fixture_proves_replay_mechanics_only",
+  "implementation": {
+    "module": "src/ashare_evidence/external_context_replay.py",
+    "input_schema": "external_context_pilot_input.v1",
+    "raw_schema": "external_context_raw_record.v1",
+    "silver_schema": "external_context_silver_record.v1",
+    "pit_schema": "external_context_pit_record.v1",
+    "manifest_schema": "external_context_replay_manifest.v1",
+    "replay_schema": "external_context_offline_replay.v1",
+    "commands": [
+      "research-external-context-materialize-pilot",
+      "research-external-context-offline-replay"
+    ]
+  },
+  "immutability_contract": {
+    "raw": "Content-addressed immutable provider record including payload hash and acquisition lineage.",
+    "silver": "Versioned normalized record referencing Raw IDs and a fixed transform version.",
+    "pit": "Append-only knowledge version whose available_to is closed by the next visible revision.",
+    "manifest": "Deterministic identity over every file path, SHA-256, byte size and temporal contract.",
+    "collision_rule": "An existing path with different bytes is a hard failure.",
+    "tamper_rule": "Any file hash, byte-size or manifest-identity mismatch blocks replay."
+  },
+  "pit_contract": {
+    "selection_rule": "available_from <= decision_cutoff and (available_to is null or decision_cutoff < available_to)",
+    "timezone_rule": "Every timestamp must be ISO-8601 timezone-aware.",
+    "backfill_rule": "Availability may precede local first_seen_at only with a documented provider publication/effective-time basis and evidence reference.",
+    "first_seen_rule": "Records using first_seen_at as their basis may never be backdated.",
+    "revision_rule": "A replay may select at most one knowledge version for a normalized event."
+  },
+  "security_and_rights": {
+    "credential_fields_in_raw": "forbidden",
+    "tushare_major_news_raw": "hard_blocked_pending_content_storage_and_replay_rights",
+    "massive_benzinga_news_raw": "hard_blocked_pending_content_storage_and_replay_rights",
+    "allowed_pilot_content_classes": [
+      "official_fact",
+      "market_data"
+    ],
+    "network_during_replay": "forbidden"
+  },
+  "executed_fixture_evidence": {
+    "input": "tests/fixtures/external_context/synthetic_sec_edgar_revision_pilot_input.json",
+    "fixture_is_live_provider_data": false,
+    "manifest_id": "external-context-manifest-3b79b96cadbda14d0eb4fec6",
+    "materialized_file_count": 6,
+    "revision_1_cutoff_selected_version": "1",
+    "revision_2_cutoff_selected_version": "2",
+    "hash_verification": "passed_for_both_replays",
+    "network_used": false,
+    "tamper_test": "passed_replay_rejects_modified_raw"
+  },
+  "executed_live_aggregate_hash_evidence": {
+    "raw_content_retained": false,
+    "claim_ceiling": "same_session_transport_stability_only",
+    "tushare_stock_st": {
+      "pull_count": 2,
+      "record_counts": [254, 254],
+      "response_rows_digest_match": true
+    },
+    "tushare_index_global": {
+      "pull_count": 2,
+      "record_counts": {
+        "SPX": [770, 770],
+        "IXIC": [770, 770],
+        "HKTECH": [752, 752]
+      },
+      "all_response_rows_digests_match": true
+    },
+    "does_not_clear": [
+      "written_storage_and_frozen_replay_right",
+      "multi_day_correction_semantics",
+      "independent_fallback",
+      "network_free_raw_replay"
+    ]
+  },
+  "provider_readiness_unchanged": {
+    "official_fact": "blocked_pending_ready_primary_and_independent_fallback",
+    "global_market": "blocked_pending_ready_primary_and_independent_fallback",
+    "professional_news": "blocked_pending_ready_primary_and_independent_fallback",
+    "full713_external_context_backtest_allowed": false
+  },
+  "next_gate": {
+    "step": "reviewed_live_small_sample",
+    "providers": [
+      "sec_edgar",
+      "fred_alfred",
+      "tushare_stock_st",
+      "tushare_index_global"
+    ],
+    "requirements": [
+      "provider-specific acquisition adapter with no credential persistence",
+      "written storage and replay rights where provider terms are ambiguous",
+      "two independent pulls with content-hash comparison",
+      "timestamp and revision semantics audit",
+      "offline replay from a frozen manifest",
+      "no news article body retention"
+    ]
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "schema_version": "external_context_pilot_input.v1",
+  "dataset_id": "synthetic-sec-edgar-revision-contract-fixture",
+  "provider_id": "sec_edgar",
+  "content_class": "official_fact",
+  "source_endpoint": "data.sec.gov/submissions",
+  "license_tier": "public_api_fair_access",
+  "retrieved_at": "2026-08-06T17:00:00+08:00",
+  "records": [
+    {
+      "provider_item_id": "fixture-accession-v1",
+      "normalized_event_id": "fixture:sec-edgar:revision-event",
+      "revision_id": "1",
+      "provider_published_at": "2024-01-01T12:00:00-05:00",
+      "provider_updated_at": null,
+      "first_seen_at": "2026-08-06T16:50:00+08:00",
+      "available_from": "2024-01-01T12:00:00-05:00",
+      "availability_basis": "provider_published_at_documented",
+      "availability_evidence_ref": "https://www.sec.gov/search-filings/edgar-application-programming-interfaces",
+      "event_type": "company_filing_fact",
+      "source_authority": "official_regulator",
+      "entities": ["FIXTURE_US_CHIP_COMPANY"],
+      "sectors": ["semiconductor"],
+      "geographies": ["US"],
+      "raw_payload": {
+        "accessionNumber": "fixture-accession-v1",
+        "value": 100
+      },
+      "normalized_payload": {
+        "fact_name": "synthetic_fixture_value",
+        "value": 100
+      }
+    },
+    {
+      "provider_item_id": "fixture-accession-v2",
+      "normalized_event_id": "fixture:sec-edgar:revision-event",
+      "revision_id": "2",
+      "provider_published_at": "2024-01-03T12:00:00-05:00",
+      "provider_updated_at": "2024-01-03T12:00:00-05:00",
+      "first_seen_at": "2026-08-06T16:51:00+08:00",
+      "available_from": "2024-01-03T12:00:00-05:00",
+      "availability_basis": "provider_published_at_documented",
+      "availability_evidence_ref": "https://www.sec.gov/search-filings/edgar-application-programming-interfaces",
+      "event_type": "company_filing_fact",
+      "source_authority": "official_regulator",
+      "entities": ["FIXTURE_US_CHIP_COMPANY"],
+      "sectors": ["semiconductor"],
+      "geographies": ["US"],
+      "raw_payload": {
+        "accessionNumber": "fixture-accession-v2",
+        "value": 110
+      },
+      "normalized_payload": {
+        "fact_name": "synthetic_fixture_value",
+        "value": 110
+      }
+    }
+  ]
+}

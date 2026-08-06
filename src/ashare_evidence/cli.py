@@ -63,6 +63,11 @@ from ashare_evidence.external_context_poc import (
     probe_tushare_external_context_from_session,
     write_external_context_artifact,
 )
+from ashare_evidence.external_context_replay import (
+    materialize_external_context_pilot,
+    replay_external_context_offline,
+    write_replay_result,
+)
 from ashare_evidence.feature_v3_capacity_triage import build_feature_v3_capacity_triage
 from ashare_evidence.feature_v3_source_coverage import audit_feature_v3_source_coverage
 from ashare_evidence.frontend_projections import refresh_frontend_projections
@@ -419,6 +424,8 @@ NO_DB_COMMANDS = {
     "runtime-storage-governance-archive",
     "runtime-storage-governance-audit",
     "research-external-context-provider-audit",
+    "research-external-context-materialize-pilot",
+    "research-external-context-offline-replay",
     "shortpick-model-deterministic-full-history-select",
     "shortpick-strategy-lab-comparison-readiness",
     "shortpick-model-feature-diagnostics-run",
@@ -983,6 +990,21 @@ def build_parser() -> argparse.ArgumentParser:
     external_context_tushare_poc.add_argument("--max-attempts", type=int, default=3)
     external_context_tushare_poc.add_argument("--max-batch-seconds", type=float, default=60.0)
     external_context_tushare_poc.add_argument("--output-json", default=None)
+
+    external_context_materialize = subparsers.add_parser(
+        "research-external-context-materialize-pilot",
+        help="Materialize an immutable Raw/Silver/PIT research pilot from a reviewed local input envelope.",
+    )
+    external_context_materialize.add_argument("--input-json", required=True)
+    external_context_materialize.add_argument("--artifact-root", required=True)
+
+    external_context_replay = subparsers.add_parser(
+        "research-external-context-offline-replay",
+        help="Replay one frozen external-context manifest locally after verifying every artifact hash.",
+    )
+    external_context_replay.add_argument("--manifest-json", required=True)
+    external_context_replay.add_argument("--decision-cutoff", required=True)
+    external_context_replay.add_argument("--output-json", default=None)
 
     feature_v3_coverage = subparsers.add_parser(
         "research-feature-v3-source-coverage-audit",
@@ -2970,6 +2992,22 @@ def main(argv: list[str] | None = None) -> int:
             write_external_context_artifact(payload, args.output_json)
         _print_json(payload)
         return 0 if payload["gate_status"] == "passed" else 1
+
+    if args.command == "research-external-context-materialize-pilot":
+        input_payload = json.loads(Path(args.input_json).read_text(encoding="utf-8"))
+        payload = materialize_external_context_pilot(input_payload, artifact_root=args.artifact_root)
+        _print_json(payload)
+        return 0
+
+    if args.command == "research-external-context-offline-replay":
+        payload = replay_external_context_offline(
+            args.manifest_json,
+            decision_cutoff=args.decision_cutoff,
+        )
+        if args.output_json:
+            write_replay_result(payload, args.output_json)
+        _print_json(payload)
+        return 0
 
     if args.command == "research-capacity-staggered-entry-proxy":
         candidate_run = json.loads(Path(args.candidate_run_artifact).read_text(encoding="utf-8"))

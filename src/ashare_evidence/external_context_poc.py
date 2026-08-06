@@ -261,6 +261,7 @@ def probe_tushare_external_context_transport(
         "provider_message": stock_response["message"],
         "sample_date": stock_st_date.isoformat(),
         "record_count": len(stock_rows),
+        "response_rows_digest": _rows_digest(stock_rows),
         "timestamp_parse_rate": _compact_date_parse_rate(stock_rows, "trade_date"),
         "stable_derived_id_unique_rate": _derived_key_unique_rate(stock_rows, ("ts_code", "trade_date", "type")),
         "required_fields_present": _required_fields_present(stock_rows, {"ts_code", "trade_date", "type"}),
@@ -288,6 +289,7 @@ def probe_tushare_external_context_transport(
             "attempt_count": result["attempt_count"],
             "provider_message": result["message"],
             "record_count": len(rows),
+            "response_rows_digest": _rows_digest(rows),
             "timestamp_parse_rate": _compact_date_parse_rate(rows, "trade_date"),
             "stable_derived_id_unique_rate": _derived_key_unique_rate(rows, ("ts_code", "trade_date")),
             "required_fields_present": _required_fields_present(rows, {"ts_code", "trade_date", "open", "close"}),
@@ -518,6 +520,14 @@ def _response_rows(response: dict[str, Any] | None) -> list[dict[str, Any]]:
 def _canonical_key(row: dict[str, Any], fields: tuple[str, ...]) -> str:
     canonical = "|".join(str(row.get(field) or "") for field in fields)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _rows_digest(rows: list[dict[str, Any]]) -> str:
+    canonical_rows = sorted(
+        json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+        for row in rows
+    )
+    return hashlib.sha256("\n".join(canonical_rows).encode("utf-8")).hexdigest()
 
 
 def _derived_key_count(rows: list[dict[str, Any]], fields: tuple[str, ...]) -> int:
