@@ -7,7 +7,12 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ashare_evidence.market_rules import ACCOUNT_PROFILE_NEW_RETAIL_CASH, filter_account_eligible_series
+from ashare_evidence.market_rules import (
+    ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+    build_trade_eligibility_snapshot,
+    filter_account_eligible_series,
+    summarize_trade_eligibility_snapshots,
+)
 from ashare_evidence.models import MarketBar, Stock
 from ashare_evidence.shortpick_lab import (
     SHORTPICK_FROZEN_PAPER_FAMILY,
@@ -28,8 +33,8 @@ from ashare_evidence.shortpick_market_factor_study import (
     _context_for_signal_day,
     _entry_index_for_signal,
     _entry_price,
-    _Series,
     _industry_from_profile_payload,
+    _Series,
 )
 
 DEFAULT_REPLAY_HORIZONS = (1, 3, 5, 10, 20)
@@ -195,6 +200,7 @@ def _market_factor_contexts_from_loaded_series(
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     raw_symbol_count = len([symbol for symbol in series_by_symbol if symbol not in INDEX_SYMBOLS])
     contexts: list[dict[str, Any]] = []
+    eligibility_snapshots: list[dict[str, Any]] = []
     stale_symbol_count = 0
     for symbol, series in series_by_symbol.items():
         if symbol in INDEX_SYMBOLS:
@@ -203,6 +209,20 @@ def _market_factor_contexts_from_loaded_series(
         if context is None:
             stale_symbol_count += 1
             continue
+        eligibility_snapshot = build_trade_eligibility_snapshot(
+            symbol,
+            account_profile=ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+            as_of=signal_day,
+            decision_cutoff=signal_day,
+            price_cny=context["close_price"],
+            price_observed_at=signal_day,
+            price_source="market_bars.close_price",
+            price_adjustment="unadjusted",
+            profile_is_point_in_time=False,
+        )
+        eligibility_snapshots.append(eligibility_snapshot)
+        if not eligibility_snapshot["eligible_before_scoring"]:
+            continue
         index = series.by_day.get(signal_day)
         latest_trade_day = series.bars[index].day.isoformat() if index is not None else signal_day.isoformat()
         contexts.append(
@@ -210,6 +230,7 @@ def _market_factor_contexts_from_loaded_series(
                 **context,
                 "name": series.name,
                 "latest_trade_day": latest_trade_day,
+                "_trade_eligibility_snapshot": eligibility_snapshot,
             }
         )
     screened_contexts, screen_summary = _shortpick_market_factor_coarse_screen(contexts)
@@ -221,6 +242,7 @@ def _market_factor_contexts_from_loaded_series(
         "full_eligible_symbol_count": len(contexts),
         "stale_symbol_count": stale_symbol_count,
         "coarse_screen": screen_summary,
+        "trade_eligibility": summarize_trade_eligibility_snapshots(eligibility_snapshots),
     }
 
 

@@ -397,8 +397,9 @@ def filter_account_eligible_series(
     *,
     account_profile: str = ACCOUNT_PROFILE_NEW_RETAIL_CASH,
     include_index_symbols: set[str] | None = None,
-    profile_is_point_in_time: bool = True,
+    profile_is_point_in_time: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Filter historical series without treating today's stock name/status as historical fact."""
     include_index_symbols = include_index_symbols or set()
     filtered: dict[str, Any] = {}
     excluded_examples: list[dict[str, Any]] = []

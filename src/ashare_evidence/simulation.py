@@ -18,7 +18,11 @@ from ashare_evidence.intraday_market import (
     get_intraday_market_status,
 )
 from ashare_evidence.lineage import build_lineage
-from ashare_evidence.market_rules import ACCOUNT_PROFILE_NEW_RETAIL_CASH, account_trade_eligibility, board_rule
+from ashare_evidence.market_rules import (
+    ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+    board_rule,
+    build_trade_eligibility_snapshot,
+)
 from ashare_evidence.models import (
     MarketBar,
     ModelVersion,
@@ -759,13 +763,19 @@ def _model_advices(
         bar = latest_bars.get(symbol)
         if recommendation is None or bar is None:
             continue
-        eligibility = account_trade_eligibility(
+        eligibility = build_trade_eligibility_snapshot(
             symbol,
             stock_profile=bar.stock,
             account_profile=ACCOUNT_PROFILE_NEW_RETAIL_CASH,
             as_of=bar.observed_at,
+            decision_cutoff=bar.observed_at,
+            price_cny=bar.close_price,
+            price_observed_at=bar.observed_at,
+            price_source="market_bars.close_price",
+            price_adjustment="unadjusted",
+            profile_is_point_in_time=True,
         )
-        if not eligibility["tradable"]:
+        if not eligibility["eligible_before_scoring"]:
             continue
         summary = _serialize_recommendation(recommendation, artifact_root=artifact_root)
         reco = summary["recommendation"]
@@ -784,6 +794,7 @@ def _model_advices(
                 "risk_flags": _recommendation_risk_flags(reco),
                 "score": score,
                 "confidence_score": float(reco["confidence_score"]),
+                "trade_eligibility_snapshot": eligibility,
             }
         )
 
@@ -1453,14 +1464,21 @@ def _validate_order_request(
     effective_price = float(limit_price if limit_price is not None else reference_price)
     if effective_price <= 0:
         raise ValueError("委托价格必须大于 0。")
-    eligibility = account_trade_eligibility(
+    eligibility = build_trade_eligibility_snapshot(
         symbol,
         stock_profile=stock,
         account_profile=ACCOUNT_PROFILE_NEW_RETAIL_CASH,
         as_of=requested_at,
+        decision_cutoff=requested_at,
+        price_cny=effective_price,
+        price_observed_at=requested_at,
+        price_source="paper_order_request.effective_price",
+        price_adjustment="unadjusted",
+        profile_is_point_in_time=True,
     )
-    if side == "buy" and not eligibility["tradable"]:
-        raise ValueError(f"当前账户权限不支持买入{eligibility['board_label']}标的：{eligibility['reason']}")
+    if side == "buy" and not eligibility["eligible_before_scoring"]:
+        reason = (eligibility.get("exclusion_reasons") or [{}])[0].get("message") or "不符合账户可交易范围"
+        raise ValueError(f"当前账户不支持买入{eligibility['board_label']}标的：{reason}")
 
     previous_close = _previous_daily_close(session, stock.id, latest_bar.observed_at)
     limit_pct = rule.get("limit_pct")

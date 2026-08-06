@@ -10,7 +10,11 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ashare_evidence.market_rules import ACCOUNT_PROFILE_NEW_RETAIL_CASH, filter_account_eligible_series
+from ashare_evidence.market_rules import (
+    ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+    build_trade_eligibility_snapshot,
+    filter_account_eligible_series,
+)
 from ashare_evidence.shortpick_market_factor_study import (
     ENTRY_PRICE_SOURCE_NEXT_CLOSE,
     ENTRY_PRICE_SOURCES,
@@ -985,6 +989,20 @@ def _contexts_by_signal_day(series_by_symbol: dict[str, Any], *, signal_days: li
         for signal_day in signal_days:
             context = _context_for_signal_day(series, signal_day)
             if context is not None:
+                eligibility_snapshot = build_trade_eligibility_snapshot(
+                    symbol,
+                    account_profile=ACCOUNT_PROFILE_NEW_RETAIL_CASH,
+                    as_of=signal_day,
+                    decision_cutoff=signal_day,
+                    price_cny=context["close_price"],
+                    price_observed_at=signal_day,
+                    price_source="market_bars.close_price",
+                    price_adjustment="unadjusted",
+                    profile_is_point_in_time=False,
+                )
+                if not eligibility_snapshot["eligible_before_scoring"]:
+                    continue
+                context["_trade_eligibility_snapshot"] = eligibility_snapshot
                 output[signal_day].append(context)
     return output
 

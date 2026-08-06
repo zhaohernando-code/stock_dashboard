@@ -317,6 +317,30 @@ class SimulationWorkspaceTests(unittest.TestCase):
         self.assertEqual(advice["generated_at"], fresh.generated_at)
         self.assertNotEqual(advice["generated_at"], stale.generated_at)
 
+    def test_price_over_200_is_excluded_from_model_advice_and_buy_order(self) -> None:
+        with session_scope(self.database_url) as session:
+            seed_watchlist_fixture(session, symbols=("600519.SH",))
+            latest_bar = session.scalar(select(MarketBar).order_by(MarketBar.observed_at.desc(), MarketBar.id.desc()))
+            assert latest_bar is not None
+            latest_bar.open_price = 200.01
+            latest_bar.high_price = 200.01
+            latest_bar.low_price = 200.01
+            latest_bar.close_price = 200.01
+            session.commit()
+
+        with session_scope(self.database_url) as session:
+            workspace = get_simulation_workspace(session)
+            self.assertFalse(any(item["symbol"] == "600519.SH" for item in workspace["model_advices"]))
+            start_simulation_session(session)
+            with self.assertRaisesRegex(ValueError, "高于账户配置上限"):
+                place_manual_order(
+                    session,
+                    symbol="600519.SH",
+                    side="buy",
+                    quantity=100,
+                    reason="验证200元价格上限",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
