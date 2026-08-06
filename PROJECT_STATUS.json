@@ -10,7 +10,7 @@
   },
   "status": "in_progress",
   "owner": "codex",
-  "updated_at": "2026-08-06T21:45:00+08:00",
+  "updated_at": "2026-08-07T00:15:00+08:00",
   "latest_personal_eligibility_and_external_context_update": {
     "status": "pit_eligibility_gate_active_external_context_research_only",
     "account_profile": "new_retail_cash_account",
@@ -40,7 +40,7 @@
     "next_gate": "written_trial_fields_and_replay_rights_then_entitled_raw_normalized_pit_sample"
   },
   "latest_external_context_replay_pilot": {
-    "status": "storage_and_offline_replay_mechanics_ready_live_provider_data_pending",
+    "status": "storage_and_offline_replay_ready_for_two_live_official_policy_sources",
     "v3_signal_changed": false,
     "contract": "docs/contracts/SHORTPICK_V3_EXTERNAL_CONTEXT_REPLAY_PILOT_2026-08-06.json",
     "schemas": [
@@ -52,9 +52,15 @@
     "synthetic_fixture_manifest": "external-context-manifest-3b79b96cadbda14d0eb4fec6",
     "offline_hash_replay": "passed_revision_1_and_revision_2_cutoffs",
     "live_aggregate_repeat_hash": "stock_st_spx_ixic_hktech_two_immediate_pulls_match",
+    "live_official_manifests": [
+      "external-context-manifest-cd4b35339736e4c3a0c75c98",
+      "external-context-manifest-5edb9e44f9173059e0905442"
+    ],
+    "live_official_records": 230,
+    "live_official_offline_hash_replay": "passed_690_files_network_used_false",
     "news_raw_storage": "hard_blocked_pending_rights",
     "full713_external_context_backtest_allowed": false,
-    "next_gate": "reviewed_live_small_sample_with_repeat_pull_hash_and_rights_evidence"
+    "next_gate": "complete_cninfo_coverage_and_materialize_pit_safe_global_market_layer"
   },
   "latest_external_context_weight_policy": {
     "status": "preregistered_research_only_backtest_blocked_pending_channel_data",
@@ -67,6 +73,37 @@
     "major_negative_official_event_can_gate": true,
     "selection_rule": "smallest_weight_within_one_standard_error_of_best_oos",
     "model_ladder": ["static", "rule_dynamic", "constrained_logistic_gam_monotonic_gbdt", "black_box_challenger_only"]
+  },
+  "latest_global_market_vendor_import": {
+    "status": "validator_ready_vendor_export_pending",
+    "contract": "docs/contracts/SHORTPICK_V3_GLOBAL_MARKET_VENDOR_EXPORT_2026-08-06.json",
+    "schema_version": "external_context_global_market_vendor_export.v1",
+    "providers": ["wind_global_market", "tushare_index_global", "tiingo_eod"],
+    "frozen_instruments": ["SPX", "IXIC", "SOX_OR_SEMICONDUCTOR_INDEX", "HKTECH", "HSI", "USD_CNH", "US10Y", "WTI"],
+    "provider_supplied_revision_id_required": true,
+    "local_frozen_replay_rights_required": true,
+    "locally_generated_revision_hash_forbidden": true,
+    "wind_export_received": false,
+    "tushare_and_tiingo_status": "eliminated_until_provider_revision_lineage_exists",
+    "v3_signal_changed": false
+  },
+  "latest_external_context_ablation_readiness": {
+    "status": "official_policy_sample_ready_full713_weight_backtest_blocked",
+    "result": "docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_ABLATION_READINESS_2026-08-07.json",
+    "bundle_id": "external-context-ablation-bundle-7c9c55ffe2cf0c5c9e1ba010",
+    "manifest_count": 148,
+    "verified_file_count": 9537,
+    "network_used": false,
+    "hash_verification_status": "passed",
+    "official_policy_sample_records": 230,
+    "cninfo_curated_records": 2563,
+    "global_market_records": 0,
+    "full713_weight_backtest_allowed": false,
+    "blockers": [
+      "cninfo_full713_task_coverage_incomplete",
+      "qualified_global_market_full_window_export_missing"
+    ],
+    "v3_signal_changed": false
   },
   "latest_public_news_storage_policy": {
     "status": "summary_only_relevance_and_storage_gates_implemented_backfill_pending",
@@ -133,7 +170,7 @@
     "next_gate": "bounded_cninfo_full_window_materialization_and_professional_news_primary_qualification"
   },
   "latest_personal_public_acquisition": {
-    "status": "cninfo_operationally_ready_gdelt_direct_feature_rejected",
+    "status": "cninfo_150_of_9027_checkpointed_relevance_v9_sample_gate_passed_gdelt_direct_feature_rejected",
     "contract": "docs/contracts/SHORTPICK_V3_PERSONAL_PUBLIC_ACQUISITION_2026-08-06.json",
     "result": "docs/analysis/SHORTPICK_V3_PERSONAL_PUBLIC_ACQUISITION_RESULT_2026-08-06.json",
     "attribution": "hernando_zhao",
@@ -141,7 +178,7 @@
     "cninfo_full713_plan": {
       "symbols": 3009,
       "tasks": 9027,
-      "materialized": "partial_11_of_9027_tasks"
+      "materialized": "partial_150_of_9027_tasks"
     },
     "cninfo_persistent_first_batch": {
       "tasks": 11,
@@ -151,6 +188,43 @@
       "offline_replay": "196_of_196_hash_passed_network_false",
       "failures": 0,
       "artifact_root_bytes": 3826359
+    },
+    "cninfo_persistent_second_batch": {
+      "tasks": 25,
+      "http_requests": 111,
+      "records": 593,
+      "offline_replay": "593_of_593_hash_passed_network_false",
+      "verified_files": 1779,
+      "failures": 0,
+      "completed_after": 36,
+      "artifact_root_bytes_after_official_sources": 27000184
+    },
+    "cninfo_relevance_v9_audit": {
+      "result": "docs/analysis/SHORTPICK_V3_CNINFO_RELEVANCE_REVIEW_2026-08-06.json",
+      "completed_full_window_symbols": 50,
+      "partial_symbols": 0,
+      "source_records": 2949,
+      "curated_records": 2563,
+      "excluded_records": 386,
+      "excluded_ratio": 0.1308918277,
+      "deterministic_review_sample": 200,
+      "codex_review_obvious_mismatch_count": 0,
+      "observed_precision": 1.0,
+      "independent_human_annotation": false,
+      "projected_total_full_plan_bytes_linear": 993775605
+    },
+    "cninfo_latest_progress": {
+      "completed_tasks": 150,
+      "remaining_tasks": 8877,
+      "latest_rule_version": "cninfo_title_materiality.v9",
+      "latest_batch_tasks": 14,
+      "latest_batch_http_requests": 55,
+      "latest_batch_failures": 0,
+      "latest_batch_transient_retries": 0,
+      "last_transient_failure": "603717.SH_chunked_response_recovered_on_retry",
+      "bounded_transient_attempts": 2,
+      "artifact_root_bytes": 40006875,
+      "storage_hard_cap_respected": true
     },
     "cninfo_checkpoint_dry_run": {
       "tasks": 6,
@@ -169,8 +243,9 @@
     "v3_signal_changed": false
   },
   "latest_official_policy_feed_poc": {
-    "status": "source_shortlist_frozen_samples_pending",
+    "status": "federal_reserve_and_federal_register_full713_materialized_offline_replay_passed",
     "contract": "docs/contracts/SHORTPICK_V3_OFFICIAL_POLICY_FEED_POC_2026-08-06.json",
+    "result": "docs/analysis/SHORTPICK_V3_OFFICIAL_POLICY_SOURCE_POC_RESULT_2026-08-06.json",
     "providers": [
       "federal_reserve_rss_and_archive",
       "sec_edgar_submissions_and_daily_archives",
@@ -180,7 +255,11 @@
       "mofcom_official_announcements"
     ],
     "role": "high_authority_compact_fact_layer_not_professional_news",
-    "next_gate": "bounded_full713_historical_samples_timestamp_revision_repeat_hash_and_manual_precision",
+    "federal_reserve": "55_records_4_raw_page_checkpoints_repeat_selected_hash_and_offline_replay_passed",
+    "federal_register": "175_records_46_raw_page_checkpoints_relevance_v2_repeat_revision_and_offline_replay_passed",
+    "shared_root_bytes": 35618098,
+    "sec_edgar": "live_transport_blocked_http_403_from_current_ip",
+    "next_gate": "independent_relevance_review_cninfo_coverage_and_pit_safe_global_market_layer",
     "v3_signal_changed": false
   },
   "latest_rank5_policy_update": {

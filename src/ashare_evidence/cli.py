@@ -57,10 +57,21 @@ from ashare_evidence.exposure_floor_overlay_governance import (
     write_exposure_floor_overlay_governance_summary,
     write_staggered_exposure_combo_governance_summary,
 )
+from ashare_evidence.external_context_ablation_readiness import audit_external_context_ablation_readiness
 from ashare_evidence.external_context_acquisition import (
+    audit_cninfo_personal_curation,
     build_cninfo_personal_acquisition_plan,
     execute_cninfo_personal_acquisition,
     run_gdelt_multiday_relevance_canary,
+)
+from ashare_evidence.external_context_global_market_import import (
+    build_global_market_pilot_from_vendor_export,
+)
+from ashare_evidence.external_context_news_summary import NEWS_STORAGE_HARD_CAP_BYTES
+from ashare_evidence.external_context_official_sources import (
+    FEDERAL_REGISTER_DEFAULT_TERMS,
+    fetch_federal_register_policy_poc,
+    fetch_federal_reserve_policy_poc,
 )
 from ashare_evidence.external_context_poc import (
     build_external_context_poc_readiness,
@@ -441,7 +452,12 @@ NO_DB_COMMANDS = {
     "research-external-context-gdelt-public-poc",
     "research-external-context-cninfo-acquisition-plan",
     "research-external-context-cninfo-acquisition-run",
+    "research-external-context-cninfo-curation-audit",
+    "research-external-context-global-market-import-validate",
+    "research-external-context-ablation-readiness",
     "research-external-context-gdelt-multiday-canary",
+    "research-external-context-fed-policy-poc",
+    "research-external-context-federal-register-poc",
     "research-external-context-materialize-pilot",
     "research-external-context-offline-replay",
     "shortpick-model-deterministic-full-history-select",
@@ -1069,6 +1085,32 @@ def build_parser() -> argparse.ArgumentParser:
     external_context_cninfo_run.add_argument("--min-request-interval-seconds", type=float, default=1.0)
     external_context_cninfo_run.add_argument("--output-json", default=None)
 
+    external_context_cninfo_curation = subparsers.add_parser(
+        "research-external-context-cninfo-curation-audit",
+        help="Re-evaluate all frozen CNINFO task inputs with the active relevance policy without duplicating Raw data.",
+    )
+    external_context_cninfo_curation.add_argument("--plan-json", required=True)
+    external_context_cninfo_curation.add_argument("--artifact-root", required=True)
+    external_context_cninfo_curation.add_argument("--output-json", required=True)
+
+    external_context_global_market_import = subparsers.add_parser(
+        "research-external-context-global-market-import-validate",
+        help="Validate a Wind/Tushare/Tiingo export against the frozen PIT, revision and replay-rights contract.",
+    )
+    external_context_global_market_import.add_argument("--input-json", required=True)
+    external_context_global_market_import.add_argument("--output-audit-json", required=True)
+    external_context_global_market_import.add_argument("--output-pilot-json", required=True)
+
+    external_context_ablation_readiness = subparsers.add_parser(
+        "research-external-context-ablation-readiness",
+        help="Verify all local manifests and report fail-closed official/global ablation readiness.",
+    )
+    external_context_ablation_readiness.add_argument("--artifact-root", required=True)
+    external_context_ablation_readiness.add_argument("--curation-audit-json", required=True)
+    external_context_ablation_readiness.add_argument("--decision-cutoff", required=True)
+    external_context_ablation_readiness.add_argument("--global-import-audit-json", default=None)
+    external_context_ablation_readiness.add_argument("--output-json", required=True)
+
     external_context_gdelt_multiday = subparsers.add_parser(
         "research-external-context-gdelt-multiday-canary",
         help="Run up to 31 completed GDELT daily archives and emit one attributed summary-only pilot.",
@@ -1078,12 +1120,38 @@ def build_parser() -> argparse.ArgumentParser:
     external_context_gdelt_multiday.add_argument("--output-json", default=None)
     external_context_gdelt_multiday.add_argument("--pilot-input-json", default=None)
 
+    external_context_fed_policy = subparsers.add_parser(
+        "research-external-context-fed-policy-poc",
+        help="Fetch bounded Federal Reserve monetary-policy archive metadata with conservative PIT timing.",
+    )
+    external_context_fed_policy.add_argument("--start-date", required=True, help="YYYY-MM-DD")
+    external_context_fed_policy.add_argument("--end-date", required=True, help="YYYY-MM-DD")
+    external_context_fed_policy.add_argument("--output-json", default=None)
+    external_context_fed_policy.add_argument("--pilot-input-json", default=None)
+    external_context_fed_policy.add_argument("--checkpoint-root", default=None)
+
+    external_context_federal_register = subparsers.add_parser(
+        "research-external-context-federal-register-poc",
+        help="Fetch bounded Federal Register policy metadata for governed sector-state research.",
+    )
+    external_context_federal_register.add_argument("--start-date", required=True, help="YYYY-MM-DD")
+    external_context_federal_register.add_argument("--end-date", required=True, help="YYYY-MM-DD")
+    external_context_federal_register.add_argument("--term", action="append", default=None)
+    external_context_federal_register.add_argument("--output-json", default=None)
+    external_context_federal_register.add_argument("--pilot-input-json", default=None)
+    external_context_federal_register.add_argument("--checkpoint-root", default=None)
+
     external_context_materialize = subparsers.add_parser(
         "research-external-context-materialize-pilot",
         help="Materialize an immutable Raw/Silver/PIT research pilot from a reviewed local input envelope.",
     )
     external_context_materialize.add_argument("--input-json", required=True)
     external_context_materialize.add_argument("--artifact-root", required=True)
+    external_context_materialize.add_argument(
+        "--enforce-personal-external-context-cap",
+        action="store_true",
+        help="Enforce the shared 1.75 GiB personal external-context artifact-root cap.",
+    )
 
     external_context_replay = subparsers.add_parser(
         "research-external-context-offline-replay",
@@ -3162,6 +3230,32 @@ def main(argv: list[str] | None = None) -> int:
         _print_json(payload)
         return 0 if payload["failure_count"] == 0 else 1
 
+    if args.command == "research-external-context-cninfo-curation-audit":
+        plan = json.loads(Path(args.plan_json).read_text(encoding="utf-8"))
+        payload = audit_cninfo_personal_curation(plan, artifact_root=args.artifact_root)
+        write_external_context_artifact(payload, args.output_json)
+        _print_json(payload)
+        return 0
+
+    if args.command == "research-external-context-global-market-import-validate":
+        envelope = json.loads(Path(args.input_json).read_text(encoding="utf-8"))
+        payload = build_global_market_pilot_from_vendor_export(envelope)
+        write_external_context_artifact(payload["audit"], args.output_audit_json)
+        write_external_context_artifact(payload["pilot_input"], args.output_pilot_json)
+        _print_json(payload["audit"])
+        return 0
+
+    if args.command == "research-external-context-ablation-readiness":
+        payload = audit_external_context_ablation_readiness(
+            artifact_root=args.artifact_root,
+            curation_audit_path=args.curation_audit_json,
+            decision_cutoff=args.decision_cutoff,
+            global_import_audit_path=args.global_import_audit_json,
+        )
+        write_external_context_artifact(payload, args.output_json)
+        _print_json(payload)
+        return 0
+
     if args.command == "research-external-context-gdelt-multiday-canary":
         payload = run_gdelt_multiday_relevance_canary(
             start_date=args.start_date,
@@ -3174,9 +3268,42 @@ def main(argv: list[str] | None = None) -> int:
         _print_json(payload)
         return 0
 
+    if args.command == "research-external-context-fed-policy-poc":
+        payload = fetch_federal_reserve_policy_poc(
+            start_date=args.start_date,
+            end_date=args.end_date,
+            checkpoint_root=args.checkpoint_root,
+        )
+        if args.output_json:
+            write_external_context_artifact(payload, args.output_json)
+        if args.pilot_input_json:
+            write_external_context_artifact(payload["pilot_input"], args.pilot_input_json)
+        _print_json(payload)
+        return 0 if payload["record_count"] else 1
+
+    if args.command == "research-external-context-federal-register-poc":
+        payload = fetch_federal_register_policy_poc(
+            start_date=args.start_date,
+            end_date=args.end_date,
+            terms=tuple(args.term) if args.term else FEDERAL_REGISTER_DEFAULT_TERMS,
+            checkpoint_root=args.checkpoint_root,
+        )
+        if args.output_json:
+            write_external_context_artifact(payload, args.output_json)
+        if args.pilot_input_json:
+            write_external_context_artifact(payload["pilot_input"], args.pilot_input_json)
+        _print_json(payload)
+        return 0 if payload["record_count"] else 1
+
     if args.command == "research-external-context-materialize-pilot":
         input_payload = json.loads(Path(args.input_json).read_text(encoding="utf-8"))
-        payload = materialize_external_context_pilot(input_payload, artifact_root=args.artifact_root)
+        payload = materialize_external_context_pilot(
+            input_payload,
+            artifact_root=args.artifact_root,
+            enforce_root_hard_cap_bytes=(
+                NEWS_STORAGE_HARD_CAP_BYTES if args.enforce_personal_external_context_cap else None
+            ),
+        )
         _print_json(payload)
         return 0
 

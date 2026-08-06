@@ -1,0 +1,122 @@
+{
+  "artifact_type": "shortpick_v3_official_policy_source_poc_result",
+  "schema_version": "shortpick_v3_official_policy_source_poc_result.v1",
+  "generated_at": "2026-08-06T23:35:00+08:00",
+  "status": "two_public_official_policy_sources_materialized_and_offline_replay_passed",
+  "research_only": true,
+  "v3_signal_changed": false,
+  "window": {
+    "start_date": "2023-06-13",
+    "end_date": "2026-05-26"
+  },
+  "federal_reserve": {
+    "provider_id": "federal_reserve_official_archive",
+    "authority": "official_us_central_bank",
+    "source_directory": "https://www.federalreserve.gov/feeds/feeds.htm",
+    "schema_version": "external_context_federal_reserve_policy_poc.v2",
+    "raw_archive_checkpoint_pages": 4,
+    "record_count": 55,
+    "article_body_downloaded": false,
+    "publication_time_resolution": "calendar_day_conservative_end_of_new_york_day",
+    "first_run_network_pages": 4,
+    "repeat_run_network_pages": 0,
+    "repeat_run_checkpoint_pages": 4,
+    "selected_content_hash_repeat": true,
+    "record_revision_hash_repeat": true,
+    "first_seen_repeat": true,
+    "transport_hash_note": "Live HTML transport hashes differ because Cloudflare injects per-request challenge tokens. The first response is retained immutably; normalized selected-event and revision hashes repeat.",
+    "manifest_id": "external-context-manifest-cd4b35339736e4c3a0c75c98",
+    "offline_replay": {
+      "2024-01-01T09:25:00+08:00": {
+        "selected_records": 10,
+        "verified_files": 165,
+        "hash_verification": "passed",
+        "network_used": false
+      },
+      "2026-05-28T09:25:00+08:00": {
+        "selected_records": 55,
+        "verified_files": 165,
+        "hash_verification": "passed",
+        "network_used": false
+      }
+    }
+  },
+  "federal_register": {
+    "provider_id": "federal_register_policy_metadata",
+    "authority": "nara_gpo_metadata_with_official_pdf_reference",
+    "api_documentation": "https://www.federalregister.gov/developers/documentation/api/v1",
+    "schema_version": "external_context_federal_register_policy_poc.v2",
+    "raw_api_checkpoint_pages": 46,
+    "raw_query_result_rows_with_cross_term_duplicates": 4281,
+    "retained_record_count": 175,
+    "document_body_downloaded": false,
+    "publication_time_resolution": "calendar_day_conservative_end_of_new_york_day",
+    "repeat_run_network_pages": 0,
+    "repeat_run_checkpoint_pages": 46,
+    "record_revision_hash_repeat": true,
+    "first_seen_repeat": true,
+    "topic_counts": {
+      "trade_and_export_control": 129,
+      "semiconductor_policy": 48,
+      "telecommunications_policy": 13
+    },
+    "sector_counts": {
+      "industrial_supply_chain": 129,
+      "semiconductor": 52,
+      "telecommunications": 14,
+      "automotive": 13,
+      "strategic_materials": 12,
+      "clean_energy": 1
+    },
+    "relevance_exclusion_counts_with_cross_topic_overlap": {
+      "semiconductor_policy:agency_or_headline_scope": 78,
+      "telecommunications_policy:agency_or_headline_scope": 44,
+      "trade_and_export_control:agency_or_headline_scope": 138
+    },
+    "full_population_review": {
+      "reviewed_records": 175,
+      "review_fields": [
+        "headline",
+        "agency",
+        "abstract",
+        "topic",
+        "sector"
+      ],
+      "obvious_topic_mismatch_count_after_v2": 0,
+      "status": "codex_full_population_review_passed_independent_human_annotation_not_performed",
+      "important_distinction": "Relevance passed does not mean high impact. Importance, novelty and conflict remain later dynamic-weight inputs."
+    },
+    "manifest_id": "external-context-manifest-5edb9e44f9173059e0905442",
+    "offline_replay": {
+      "2024-01-01T09:25:00+08:00": {
+        "selected_records": 34,
+        "verified_files": 525,
+        "hash_verification": "passed",
+        "network_used": false
+      },
+      "2026-05-28T09:25:00+08:00": {
+        "selected_records": 175,
+        "verified_files": 525,
+        "hash_verification": "passed",
+        "network_used": false
+      }
+    }
+  },
+  "shared_storage": {
+    "artifact_root": "/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/external-context-personal-v1",
+    "observed_bytes_after_36_cninfo_tasks_and_official_materialization": 27000184,
+    "target_bytes": 1610612736,
+    "hard_cap_bytes": 1879048192,
+    "user_ceiling_bytes": 2147483648,
+    "hard_cap_respected": true
+  },
+  "gate_decision": {
+    "official_policy_transport_and_replay": "passed_for_research_ablation",
+    "formal_independent_relevance_review": "pending",
+    "sec_edgar_live_transport": "blocked_http_403_from_current_ip",
+    "professional_news": "not_qualified",
+    "global_market_layer": "not_materialized",
+    "full713_external_weight_backtest_allowed": false,
+    "reason": "Official-policy facts are replay-ready, but the frozen multi-layer plan still requires broader A-share official coverage and a PIT-safe global-market layer before weight research."
+  }
+}

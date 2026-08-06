@@ -5,9 +5,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from ashare_evidence.cli import build_parser
+import requests
+
+from ashare_evidence.cli import NO_DB_COMMANDS, build_parser
 from ashare_evidence.external_context_acquisition import (
     CNINFO_PERSONAL_ATTRIBUTION,
+    audit_cninfo_personal_curation,
     build_cninfo_personal_acquisition_plan,
     execute_cninfo_personal_acquisition,
     run_gdelt_multiday_relevance_canary,
@@ -179,6 +182,81 @@ def test_personal_acquisition_reuses_one_incremental_storage_budget_per_run(tmp_
     assert len(observed_budget_ids) == 2
     assert len(set(observed_budget_ids)) == 1
     assert result["artifact_root_bytes"] == actual_bytes
+    audit = audit_cninfo_personal_curation(plan, artifact_root=artifact_root)
+    assert audit["manual_review_sample"]["sample_count"] == 2
+    assert {row["category"] for row in audit["manual_review_sample"]["rows"]} == {
+        "financial_performance_and_distribution"
+    }
+
+
+def test_personal_acquisition_retries_one_transient_transport_failure(tmp_path: Path) -> None:
+    database = tmp_path / "source.db"
+    _database(database)
+    plan = build_cninfo_personal_acquisition_plan(
+        database_path=database,
+        start_date="2024-01-01",
+        end_date="2024-12-31",
+        max_symbols=1,
+    )
+    attempts = 0
+
+    def fetcher(*, symbol: str, start_date: str, end_date: str) -> dict[str, Any]:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise requests.exceptions.ChunkedEncodingError("response ended prematurely")
+        return _sample(symbol, start_date)
+
+    result = execute_cninfo_personal_acquisition(
+        plan,
+        artifact_root=tmp_path / "artifacts",
+        max_tasks_this_run=1,
+        min_request_interval_seconds=0,
+        fetcher=fetcher,
+    )
+
+    assert result["failure_count"] == 0
+    assert result["network_fetch_count"] == 1
+    assert result["network_fetch_attempt_count"] == 2
+    assert result["transient_retry_count"] == 1
+    assert result["completed_after_count"] == 1
+
+
+def test_personal_curation_audit_filters_old_frozen_inputs_without_rewriting_raw(tmp_path: Path) -> None:
+    database = tmp_path / "source.db"
+    _database(database)
+    plan = build_cninfo_personal_acquisition_plan(
+        database_path=database,
+        start_date="2024-01-01",
+        end_date="2024-12-31",
+        max_symbols=1,
+    )
+
+    def fetcher(*, symbol: str, start_date: str, end_date: str) -> dict[str, Any]:
+        payload = _sample(symbol, start_date)
+        record = payload["pilot_input"]["records"][0]
+        record["raw_payload"]["announcement_title"] = "关联交易决策制度"
+        record["normalized_payload"]["announcement_title"] = "关联交易决策制度"
+        record["normalized_payload"]["materiality_rule_version"] = "cninfo_title_materiality.v1"
+        return payload
+
+    artifact_root = tmp_path / "artifacts"
+    execute_cninfo_personal_acquisition(
+        plan,
+        artifact_root=artifact_root,
+        max_tasks_this_run=1,
+        min_request_interval_seconds=0,
+        fetcher=fetcher,
+    )
+    audit = audit_cninfo_personal_curation(plan, artifact_root=artifact_root)
+
+    assert audit["completed_task_count"] == 1
+    assert audit["source_record_count"] == 1
+    assert audit["curated_record_count"] == 0
+    assert audit["curation_exclusion_count"] == 1
+    assert audit["excluded_event_versions"][0]["reason"] == "excluded_by_active_cninfo_title_materiality_policy"
+    assert audit["v3_signal_changed"] is False
+    assert audit["manual_review_sample"]["sample_count"] == 0
 
 
 def test_cli_registers_personal_acquisition_commands() -> None:
@@ -214,11 +292,24 @@ def test_cli_registers_personal_acquisition_commands() -> None:
             "2026-05-07",
         ]
     )
+    curation = parser.parse_args(
+        [
+            "research-external-context-cninfo-curation-audit",
+            "--plan-json",
+            "/tmp/plan.json",
+            "--artifact-root",
+            "/tmp/artifacts",
+            "--output-json",
+            "/tmp/curation.json",
+        ]
+    )
 
     assert plan.command == "research-external-context-cninfo-acquisition-plan"
     assert run.command == "research-external-context-cninfo-acquisition-run"
     assert run.max_tasks == 25
     assert run.min_request_interval_seconds == 1.0
+    assert curation.command == "research-external-context-cninfo-curation-audit"
+    assert curation.command in NO_DB_COMMANDS
     assert gdelt.command == "research-external-context-gdelt-multiday-canary"
 
 

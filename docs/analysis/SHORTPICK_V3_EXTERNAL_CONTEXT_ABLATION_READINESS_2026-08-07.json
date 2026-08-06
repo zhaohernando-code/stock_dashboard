@@ -1,0 +1,49 @@
+{
+  "artifact_type": "shortpick_v3_external_context_ablation_readiness_result",
+  "schema_version": "shortpick_v3_external_context_ablation_readiness_result.v1",
+  "generated_at": "2026-08-07T00:15:00+08:00",
+  "source_artifact": "/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/external-context-personal-v1/official-poc/external-context-ablation-readiness-v9-progress-150.json",
+  "bundle_id": "external-context-ablation-bundle-7c9c55ffe2cf0c5c9e1ba010",
+  "decision_cutoff": "2026-05-27T23:59:59+08:00",
+  "network_used": false,
+  "hash_verification_status": "passed",
+  "manifest_count": 148,
+  "verified_file_count": 9537,
+  "provider_records": {
+    "federal_reserve_official_archive": 55,
+    "federal_register_policy_metadata": 175,
+    "cninfo_public_announcements_before_v9_overlay": 2949,
+    "cninfo_public_announcements_after_v9_overlay": 2563,
+    "qualified_global_market": 0
+  },
+  "ablation_ladder": [
+    {
+      "ablation": "stock_only_lambda_zero",
+      "status": "permanent_baseline"
+    },
+    {
+      "ablation": "official_policy_sample_only",
+      "status": "ready_for_data_quality_research_only"
+    },
+    {
+      "ablation": "official_facts_full713",
+      "status": "blocked_cninfo_150_of_9027_tasks"
+    },
+    {
+      "ablation": "official_facts_plus_global_market_full713",
+      "status": "blocked_no_qualified_global_market_export"
+    },
+    {
+      "ablation": "professional_news_increment",
+      "status": "deferred_pending_qualified_feed"
+    }
+  ],
+  "full713_weight_backtest_allowed": false,
+  "blockers": [
+    "cninfo_full713_task_coverage_incomplete",
+    "qualified_global_market_full_window_export_missing"
+  ],
+  "replay_digest": "7c9c55ffe2cf0c5c9e1ba010b2868e949ead0ecd48fd2f8aa2adb1e970e458d1",
+  "v3_signal_changed": false,
+  "claim_ceiling": "offline_ablation_data_readiness_only_not_strategy_value"
+}

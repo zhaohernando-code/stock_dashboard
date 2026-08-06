@@ -1,0 +1,79 @@
+{
+  "contract_id": "shortpick_v3_global_market_vendor_export_2026_08_06",
+  "schema_version": "external_context_global_market_vendor_export.v1",
+  "status": "validator_ready_vendor_export_pending",
+  "v3_signal_changed": false,
+  "implementation": "src/ashare_evidence/external_context_global_market_import.py",
+  "command": "research-external-context-global-market-import-validate",
+  "frozen_provider_candidates": [
+    "wind_global_market",
+    "tushare_index_global",
+    "tiingo_eod"
+  ],
+  "frozen_instrument_basket": [
+    "SPX",
+    "IXIC",
+    "SOX_OR_SEMICONDUCTOR_INDEX",
+    "HKTECH",
+    "HSI",
+    "USD_CNH",
+    "US10Y",
+    "WTI"
+  ],
+  "required_window": {
+    "start_date": "2023-05-01",
+    "end_date": "2026-05-26"
+  },
+  "envelope_required_fields": [
+    "provider_id",
+    "dataset_id",
+    "source_endpoint",
+    "license_tier",
+    "attribution",
+    "retrieved_at",
+    "local_frozen_replay_approved",
+    "rights_evidence_ref",
+    "revision_semantics_evidence_ref",
+    "records"
+  ],
+  "record_required_fields": [
+    "instrument_id",
+    "provider_item_id",
+    "revision_id",
+    "vendor_revision_is_provider_supplied",
+    "observation_at",
+    "published_at",
+    "available_at",
+    "first_seen_at",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "currency",
+    "calendar",
+    "adjustment_status"
+  ],
+  "hard_gates": {
+    "local_frozen_replay_approved": true,
+    "provider_supplied_revision_id": true,
+    "timezone_aware_timestamps": true,
+    "lineage_order": "observation_at <= published_at <= available_at <= first_seen_at <= retrieved_at",
+    "ohlc_bounds_valid": true,
+    "instrument_in_frozen_basket": true,
+    "duplicate_instrument_observation_revision": false,
+    "network_during_replay": false
+  },
+  "explicit_rejections": {
+    "locally_generated_content_hash_as_provider_revision": "forbidden",
+    "stable_instrument_plus_date_key_as_revision": "forbidden",
+    "current_corrected_value_backfilled_as_historical_knowledge": "forbidden",
+    "rights_assumed_from_api_access": "forbidden"
+  },
+  "current_candidate_status": {
+    "wind_global_market": "pending_entitled_export_field_dictionary_revision_semantics_and_replay_rights",
+    "tushare_index_global": "eliminated_until_provider_supplies_revision_lineage",
+    "tiingo_eod": "eliminated_until_provider_supplies_revision_lineage"
+  },
+  "claim_ceiling": "validated_vendor_export_import_only_not_full713_coverage_or_strategy_value"
+}

@@ -1,0 +1,93 @@
+{
+  "artifact_type": "shortpick_v3_cninfo_relevance_review",
+  "schema_version": "shortpick_v3_cninfo_relevance_review.v1",
+  "generated_at": "2026-08-07T00:15:00+08:00",
+  "source_audit": {
+    "path": "/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/data/artifacts/external-context-personal-v1/official-poc/cninfo-curation-v9-progress-150.json",
+    "sha256": "28c7d5d918c27a9df95f51274bcef5b01072486ba1c2f511685cce1b46f3d58f",
+    "byte_size": 152079
+  },
+  "policy_version": "cninfo_title_materiality.v9",
+  "population": {
+    "completed_tasks": 150,
+    "completed_full_window_symbols": 50,
+    "partial_symbols": 0,
+    "source_records": 2949,
+    "curated_records": 2563,
+    "excluded_records": 386,
+    "excluded_ratio": 0.13089182773821634,
+    "available_date_min": "2023-06-13",
+    "available_date_max": "2026-05-25"
+  },
+  "sample": {
+    "sampling_method": "deterministic_category_round_robin_then_seeded_hash_order",
+    "seed": "cninfo-v3-manual-review-2026-08-06",
+    "sample_count": 200,
+    "category_counts": {
+      "capital_and_ownership": 34,
+      "financial_performance_and_distribution": 34,
+      "financing_and_mna": 33,
+      "management_change": 33,
+      "material_operations": 33,
+      "risk_enforcement_and_correction": 33
+    }
+  },
+  "review": {
+    "reviewer": "codex_operator_style_full_title_review",
+    "independent_human_annotation": false,
+    "relevant_count": 200,
+    "obvious_topic_mismatch_count": 0,
+    "observed_precision": 1.0,
+    "acceptance_threshold": 0.95,
+    "threshold_passed": true,
+    "interpretation": "Every retained title describes a company-level financial, ownership, enforcement, financing, management or material-operation state. This is relevance precision, not predictive value or impact strength."
+  },
+  "iterations": [
+    {
+      "version": "v3",
+      "finding": "The first 200-item sample retained about 14 percent procedural or attachment-only noise."
+    },
+    {
+      "version": "v4",
+      "finding": "Procedural debt, governance, fund-occupancy and adviser attachments were removed; obvious sample mismatch fell to about 2.5 percent."
+    },
+    {
+      "version": "v5",
+      "finding": "Three remaining procedural documents yielded about 98.5 percent observed precision."
+    },
+    {
+      "version": "v6",
+      "finding": "The three remaining classes were excluded; their deterministic replacement rows had no obvious topic mismatch in the 111-task population."
+    },
+    {
+      "version": "v7",
+      "finding": "A fresh 25-task acquisition batch exposed annual related-party estimates, rating reports, allocation results, adviser commitments and review-meeting arrangements; narrow procedural exclusions were added."
+    },
+    {
+      "version": "v8",
+      "finding": "The expanded 136-task sample removed the final transaction-process representation class."
+    },
+    {
+      "version": "v9",
+      "finding": "Fourteen additional tasks completed a clean 50-symbol checkpoint and exposed written confirmations, supervision reports, regulatory-letter replies, briefing notices, procedural rules and small-financing authorizations; these narrow classes were removed before the 200-title review was repeated."
+    }
+  ],
+  "known_boundaries": [
+    "Title-only relevance cannot measure transaction size, severity or novelty.",
+    "Annual reports and recurring pledge events can duplicate information already present in core stock data; residualization and novelty weighting remain mandatory.",
+    "Independent human annotation remains pending for a formal production gate.",
+    "Historical ST and delisting status remains PIT-unverified and is not inferred from current names."
+  ],
+  "storage_projection": {
+    "projected_total_full_plan_bytes_linear": 993775605,
+    "target_bytes": 1610612736,
+    "hard_cap_bytes": 1879048192,
+    "projection_below_hard_cap": true,
+    "authority": "preflight_only_incremental_hard_cap_remains_authoritative"
+  },
+  "decision": {
+    "cninfo_relevance_gate": "passed_for_research_acquisition",
+    "full713_weight_backtest": "blocked_pending_broader_coverage_and_global_market_layer",
+    "v3_signal_changed": false
+  }
+}

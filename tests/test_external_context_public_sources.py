@@ -13,6 +13,7 @@ import pytest
 from ashare_evidence.cli import build_parser
 from ashare_evidence.external_context_public_sources import (
     GDELT_DAILY_ARCHIVE_MAX_BYTES,
+    classify_cninfo_materiality_title,
     fetch_cninfo_announcement_poc,
     probe_gdelt_daily_public_discovery,
     run_cninfo_historical_eligibility_canary,
@@ -128,6 +129,38 @@ def test_cninfo_fetch_handles_empty_result_without_akshare_schema_failure() -> N
     assert result["announcement_body_downloaded"] is False
 
 
+def test_cninfo_title_materiality_v9_drops_procedural_titles_but_keeps_material_changes() -> None:
+    assert classify_cninfo_materiality_title("浙江建投2024年公司债券付息公告") is None
+    assert classify_cninfo_materiality_title("2025年度非经营性资金占用及其他关联资金往来情况表") is None
+    assert classify_cninfo_materiality_title("发行股份购买资产之持续督导意见") is None
+    assert classify_cninfo_materiality_title("董事和高级管理人员引咎辞职和罢免制度") is None
+    assert classify_cninfo_materiality_title("向不特定对象发行可转换公司债券募集说明书（注册稿）") is None
+    assert classify_cninfo_materiality_title("发行股份购买资产之房地产业务专项核查报告") is None
+    assert classify_cninfo_materiality_title("公司债券（第一期）更名公告") is None
+    assert classify_cninfo_materiality_title("独立财务顾问承诺函") is None
+    assert classify_cninfo_materiality_title("发行股份购买资产独立财务顾问的承诺函") is None
+    assert classify_cninfo_materiality_title("首次公开发行股票之保荐总结报告书") is None
+    assert classify_cninfo_materiality_title("向不特定对象发行可转债信用评级报告") is None
+    assert classify_cninfo_materiality_title("审核中心意见落实函有关财务事项的说明") is None
+    assert classify_cninfo_materiality_title("并购重组审核委员会审核事项会议安排的公告") is None
+    assert classify_cninfo_materiality_title("可转债网上中签率及优先配售结果公告") is None
+    assert classify_cninfo_materiality_title("董事会关于本次交易相关主体不存在异常交易情形的说明") is None
+    assert classify_cninfo_materiality_title("董事、监事、高级管理人员关于2025年第三季度报告的书面确认意见") is None
+    assert classify_cninfo_materiality_title("保荐机构2025年持续督导年度报告书") is None
+    assert classify_cninfo_materiality_title("关于年度报告监管工作函的回复公告") is None
+    assert classify_cninfo_materiality_title("年度业绩暨现金分红说明会公告") is None
+    assert classify_cninfo_materiality_title("关联交易规则（2025年修订）") is None
+    assert classify_cninfo_materiality_title("提请股东会授权董事会办理小额快速融资的公告") is None
+    assert classify_cninfo_materiality_title("最近五年被监管处罚及整改情况的公告") is None
+    assert classify_cninfo_materiality_title("关于重组问询函部分问题的回复公告") is None
+    assert classify_cninfo_materiality_title("关于延期回复深圳证券交易所并购重组问询函的公告") == "financing_and_mna"
+    assert classify_cninfo_materiality_title("关于预计2026年度日常关联交易的公告") is None
+    assert classify_cninfo_materiality_title("关于公司2026年度关联交易预计的公告") is None
+    assert classify_cninfo_materiality_title("关于2026年度与某商业银行关联交易的公告") is None
+    assert classify_cninfo_materiality_title("关于增加2026年度日常关联交易额度的公告") == "material_operations"
+    assert classify_cninfo_materiality_title("关于向下修正可转债转股价格的公告") == "risk_enforcement_and_correction"
+
+
 def test_cninfo_fetch_paginates_consistently_and_materializes_offline(tmp_path: Path) -> None:
     first = {
         "secCode": "600519",
@@ -145,6 +178,27 @@ def test_cninfo_fetch_paginates_consistently_and_materializes_offline(tmp_path: 
         "announcementId": "1219000005",
         "announcementTitle": "关于补充流动资金的核查意见",
     }
+    routine_policy = {**first, "announcementId": "1219000006", "announcementTitle": "关联交易决策制度"}
+    routine_occupancy = {
+        **first,
+        "announcementId": "1219000007",
+        "announcementTitle": "半年度非经营性资金占用及其他关联资金往来情况汇总表",
+    }
+    routine_related_party = {
+        **first,
+        "announcementId": "1219000008",
+        "announcementTitle": "关于预计2024年度日常关联交易的公告",
+    }
+    routine_debt = {
+        **first,
+        "announcementId": "1219000009",
+        "announcementTitle": "关于2024年度第三期超短期融资券发行结果的公告",
+    }
+    routine_risk_report = {
+        **first,
+        "announcementId": "1219000010",
+        "announcementTitle": "关于财务有限公司的风险评估报告",
+    }
     session = _FakeSession(
         get_responses=[
             _FakeResponse(payload={"stockList": [{"code": "600519", "orgId": "gssh0600519"}]})
@@ -155,7 +209,17 @@ def test_cninfo_fetch_paginates_consistently_and_materializes_offline(tmp_path: 
                 payload={
                     "totalAnnouncement": 31,
                     "totalpages": 2,
-                    "announcements": [second, routine, same_group, routine_attachment],
+                    "announcements": [
+                        second,
+                        routine,
+                        same_group,
+                        routine_attachment,
+                        routine_policy,
+                        routine_occupancy,
+                        routine_related_party,
+                        routine_debt,
+                        routine_risk_report,
+                    ],
                 }
             ),
         ],
@@ -170,7 +234,7 @@ def test_cninfo_fetch_paginates_consistently_and_materializes_offline(tmp_path: 
     )
 
     assert result["record_count"] == 2
-    assert result["irrelevant_or_routine_title_excluded_count"] == 2
+    assert result["irrelevant_or_routine_title_excluded_count"] == 7
     assert result["relevant_announcement_count_before_grouping"] == 3
     assert result["same_day_category_collapsed_count"] == 1
     assert session.posts[0]["pageNum"] == 1

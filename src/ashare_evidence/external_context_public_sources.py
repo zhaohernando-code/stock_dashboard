@@ -36,7 +36,7 @@ GDELT_TOPIC_SELECTED_LIMITS = {
 }
 CNINFO_MAX_QUERY_DAYS = 366
 CNINFO_MAX_PAGES = 100
-CNINFO_RELEVANCE_RULE_VERSION = "cninfo_title_materiality.v1"
+CNINFO_RELEVANCE_RULE_VERSION = "cninfo_title_materiality.v9"
 CNINFO_GROUP_MAX_TITLES = 6
 
 _CNINFO_STOCK_MAP_URL = "https://www.cninfo.com.cn/new/data/szse_stock.json"
@@ -49,8 +49,32 @@ _CNINFO_ROUTINE_TITLE_PATTERN = re.compile(
     r"英文版|会议资料|法律意见书|述职报告|履职情况|审计报告|内控|内部控制|"
     r"环境、社会及治理|ESG|业绩说明会|召开.*股东大会|股东大会.*决议|"
     r"董事会.*(?:会议)?决议|监事会.*(?:会议)?决议|审计委员会|核查意见|"
-    r"差异对比|修订说明|跟踪评级|受托管理事务报告"
+    r"差异对比|修订说明|跟踪评级|受托管理事务报告|"
+    r"制度|议事规则|工作规则|行为规范|管理办法|管理规定|实施细则|"
+    r"独立董事.*(?:意见|说明)|非经营性资金占用|资金占用情况|"
+    r"对外担保情况.*(?:专项|意见)|"
+    r"募集资金.*(?:鉴证|核查|专项报告)|防范.*资金占用|审核意见|"
+    r"专项说明|金融业务的专项说明|风险评估报告|章程修正案|"
+    r"超短期融资券.*(?:发行结果|兑付完成)|"
+    r"(?:可转换公司债券|可转债).*(?:转股情况|转股结果|付息|持有比例变动)|"
+    r"公司债券.*(?:发行结果|付息|票面利率|上市|发行公告|簿记建档)|"
+    r"发行保荐书|募集说明书|网上路演|持续督导(?:意见|工作报告|总结报告)|"
+    r"独立财务顾问.*(?:报告|承诺函)|专项核查报告|保荐总结报告|自查报告|受托管理事务|"
+    r"信用评级报告|审核中心意见落实函|审核委员会.*会议安排|网上中签率|优先配售结果|"
+    r"本次交易相关主体不存在.*说明|"
+    r"董事、监事、高级管理人员.*书面确认意见|持续督导.*(?:年度报告|报告书)|"
+    r"监管工作函.*回复|业绩.*说明会|关联交易规则|"
+    r"股东会授权董事会.*(?:小额快速)?融资|最近五年.*(?:处罚|监管措施).*整改情况|"
+    r"申请.*融资额度|季度.*对外担保情况|对外担保情况公告|"
+    r"回购.*注销.*通知债权人|减少注册资本.*通知债权人|"
+    r"权益分派期间.*暂停转股|异常波动询问函.*回函|公司债券.*更名公告"
 )
+_CNINFO_ROUTINE_RELATED_PARTY_PATTERN = re.compile(
+    r"日常关联交易|年度.*关联交易.*(?:执行情况|预计情况|预计|授权|额度)|"
+    r"年度与.+关联交易"
+)
+_CNINFO_MATERIAL_RELATED_PARTY_CHANGE_PATTERN = re.compile(r"增加|调整|减少|超出|变更")
+_CNINFO_TITLE_ONLY_INQUIRY_REPLY_PATTERN = re.compile(r"问询函")
 _CNINFO_MATERIAL_TITLE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "financial_performance_and_distribution",
@@ -190,10 +214,22 @@ def _clean_cninfo_title(value: Any) -> str:
 def _cninfo_materiality_category(title: str) -> str | None:
     if _CNINFO_ROUTINE_TITLE_PATTERN.search(title):
         return None
+    if (
+        _CNINFO_ROUTINE_RELATED_PARTY_PATTERN.search(title)
+        and not _CNINFO_MATERIAL_RELATED_PARTY_CHANGE_PATTERN.search(title)
+    ):
+        return None
+    if _CNINFO_TITLE_ONLY_INQUIRY_REPLY_PATTERN.search(title) and "回复" in title and "延期" not in title:
+        return None
     for category, pattern in _CNINFO_MATERIAL_TITLE_PATTERNS:
         if pattern.search(title):
             return category
     return None
+
+
+def classify_cninfo_materiality_title(title: str) -> str | None:
+    """Apply the active title-only relevance policy to one already-clean CNINFO title."""
+    return _cninfo_materiality_category(_clean_cninfo_title(title))
 
 
 def _cninfo_stock_org_id(stock_map: dict[str, Any], symbol: str) -> str:
