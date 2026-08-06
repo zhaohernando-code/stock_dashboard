@@ -1,0 +1,84 @@
+{
+  "contract_id": "shortpick_v3_global_market_public_source_review_2026_08_07",
+  "schema_version": "external_context_global_market_public_source_review.v1",
+  "status": "no_public_source_qualifies_frozen_full_basket",
+  "evaluated_at": "2026-08-07T01:28:00+08:00",
+  "usage_scope": "personal_internal_research_only",
+  "attribution": "hernando_zhao",
+  "v3_signal_changed": false,
+  "frozen_instrument_basket": [
+    "SPX",
+    "IXIC",
+    "SOX_OR_SEMICONDUCTOR_INDEX",
+    "HKTECH",
+    "HSI",
+    "USD_CNH",
+    "US10Y",
+    "WTI"
+  ],
+  "hard_gates": [
+    "programmatic_access_allowed",
+    "local_storage_and_offline_replay_allowed",
+    "full_basket_and_full713_plus_warmup_coverage",
+    "provider_revision_or_correction_lineage",
+    "pit_safe_publication_and_availability_timestamps"
+  ],
+  "source_decisions": [
+    {
+      "source_id": "fred_alfred_api",
+      "decision": "rejected_for_persisted_backtest_pipeline",
+      "useful_property": "ALFRED exposes real-time periods and vintage dates for revision-aware economic series.",
+      "blocking_evidence": "The current FRED API terms prohibit using the API in connection with storing, caching or archiving FRED content and prohibit access in connection with software or machine-learning systems. Several required equity index series are also third-party copyrighted.",
+      "evidence_urls": [
+        "https://fred.stlouisfed.org/docs/api/terms_of_use.html",
+        "https://fred.stlouisfed.org/legal/terms/",
+        "https://fred.stlouisfed.org/docs/api/fred/realtime_period.html"
+      ]
+    },
+    {
+      "source_id": "cboe_public_history",
+      "decision": "diagnostic_partial_only_not_qualified",
+      "useful_property": "Cboe publishes official historical VIX closes and U.S. exchange volume files.",
+      "blocking_evidence": "The free public files do not cover the frozen equity, semiconductor, Hong Kong, FX, rate and oil basket. Broader historical index data is a separately licensed DataShop product, and the public pages do not provide per-observation correction lineage for the frozen replay contract.",
+      "evidence_urls": [
+        "https://www.cboe.com/tradable_products/vix/vix_historical_data",
+        "https://www.cboe.com/markets/us/equities/market-statistics/historical-market-volume/",
+        "https://www.cboe.com/us/indices/accessing-index-data"
+      ]
+    },
+    {
+      "source_id": "hkex_public_website",
+      "decision": "rejected_for_programmatic_backtest_acquisition",
+      "useful_property": "HKEX is an authoritative market and licensing source for Hong Kong data.",
+      "blocking_evidence": "HKEX website terms prohibit programmatic or scripted access, systematic retrieval and automated analytical use without permission. Hang Seng index information is proprietary and subject to separate licensing.",
+      "evidence_urls": [
+        "https://www.hkex.com.hk/Global/Exchange/Terms-of-Use?sc_lang=en",
+        "https://www.hkex.com.hk/eng/ods/tc.aspx?display=y"
+      ]
+    },
+    {
+      "source_id": "stooq_public_downloads",
+      "decision": "rejected_until_primary_terms_and_revision_semantics_are_documented",
+      "useful_property": "Historical downloads appear accessible and broad.",
+      "blocking_evidence": "No authoritative provider terms, full-basket field dictionary, provider correction identifiers or frozen replay rights were found. Accessibility alone is not rights or PIT lineage evidence.",
+      "evidence_urls": []
+    }
+  ],
+  "local_entitlement_audit": {
+    "qualified_vendor_environment_variable_found": false,
+    "qualified_vendor_export_found_in_user_downloads_documents_or_desktop": false,
+    "secrets_or_file_contents_exposed": false
+  },
+  "surviving_path": {
+    "provider": "wind_global_market",
+    "status": "pending_user_entitlement_or_vendor_trial_export",
+    "required_evidence": [
+      "field_dictionary",
+      "provider_revision_semantics",
+      "full713_plus_warmup_frozen_basket_export",
+      "local_storage_and_post_trial_offline_replay_rights"
+    ]
+  },
+  "automatic_action": "continue_official_fact_acquisition_and_stop_before_external_weight_backtest_if_global_export_remains_missing",
+  "claim_ceiling": "public_source_elimination_review_not_legal_advice_or_strategy_validation"
+}

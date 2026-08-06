@@ -87,6 +87,16 @@
     "tushare_and_tiingo_status": "eliminated_until_provider_revision_lineage_exists",
     "v3_signal_changed": false
   },
+  "latest_global_market_public_source_review": {
+    "status": "no_public_source_qualifies_frozen_full_basket",
+    "contract": "docs/contracts/SHORTPICK_V3_GLOBAL_MARKET_PUBLIC_SOURCE_REVIEW_2026-08-07.json",
+    "rejected_for_terms": ["fred_alfred_api", "hkex_public_website"],
+    "partial_diagnostic_only": ["cboe_public_history"],
+    "rejected_for_missing_primary_terms_and_revision_lineage": ["stooq_public_downloads"],
+    "qualified_local_entitlement_or_export_found": false,
+    "surviving_path": "wind_global_market_entitled_export",
+    "v3_signal_changed": false
+  },
   "latest_external_context_ablation_readiness": {
     "status": "official_policy_sample_ready_full713_weight_backtest_blocked",
     "result": "docs/analysis/SHORTPICK_V3_EXTERNAL_CONTEXT_ABLATION_READINESS_2026-08-07.json",
