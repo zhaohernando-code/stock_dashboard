@@ -1,0 +1,31 @@
+{
+  "artifact_type":"official_event_horizon_guard_preregistration",
+  "schema_version":"official_event_horizon_guard_preregistration.v1",
+  "status":"frozen_before_round18_outcome_evaluation",
+  "frozen_at":"2026-08-08T08:50:00+08:00",
+  "owner":"hernando_zhao",
+  "source_round17":{"artifact_id":"official-event-account-guard-db233e9614877be2","finding":"no position-scale value in the 15-25 percent bracket passed every metric due return-path and board-lot discontinuities"},
+  "event_source":{"provider":"CNINFO official announcements","curation_policy":"cninfo_title_materiality.v9","positive_event_buy_allowed":false},
+  "carrier":{
+    "scope":"baseline-buy-eligible V3 Rank1 only",
+    "lookback_days":10,
+    "half_life_days":5.0,
+    "risk_score_min":0.7,
+    "position_scale":1.0,
+    "baseline_horizon_days":20,
+    "shadow_fill_constraint":"every candidate order must also be a buy in the unmodified V3 shadow account",
+    "new_fill_allowed":false
+  },
+  "variants":[
+    {"variant_id":"event_horizon15","lookback_days":10,"half_life_days":5.0,"risk_score_min":0.7,"scale":1.0,"target_horizon_days":15},
+    {"variant_id":"event_horizon10","lookback_days":10,"half_life_days":5.0,"risk_score_min":0.7,"scale":1.0,"target_horizon_days":10},
+    {"variant_id":"event_horizon05","lookback_days":10,"half_life_days":5.0,"risk_score_min":0.7,"scale":1.0,"target_horizon_days":5}
+  ],
+  "selection":{
+    "tuning_end":"2025-05-26","validation_from":"2025-05-27","validation_end":"2025-11-26","final_untouched_from":"2025-11-27","final_untouched_to":"2026-06-26",
+    "strict_non_degrade_metrics":["total_return","annualized_return","max_drawdown","negative_month_count","worst_monthly_return","skipped_order_rate","skipped_signal_rate","max_single_symbol_exposure_pct"],
+    "one_standard_error_rule":"inside the best validation monthly-delta one-SE plateau choose the horizon closest to the V3 20-day baseline",
+    "standout_gate":"at_least_10_percent relative return improvement or one fewer negative month with drawdown improvement"
+  },
+  "claim_ceiling":"round18_preregistered_cninfo_event_horizon_guard_research_only_not_v3_change"
+}

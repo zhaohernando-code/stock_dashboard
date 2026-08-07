@@ -1,0 +1,47 @@
+{
+  "artifact_type":"official_event_minimal_weight_account_guard_preregistration",
+  "schema_version":"official_event_minimal_weight_account_guard_preregistration.v1",
+  "status":"frozen_before_round16_outcome_evaluation",
+  "frozen_at":"2026-08-08T07:50:00+08:00",
+  "owner":"hernando_zhao",
+  "source_round15":{
+    "artifact_id":"official-event-account-guard-ec8aa8c74573689f",
+    "finding":"one PIT-safe delisting-risk-warning event on 600375.SH improved tuning and validation return, but 25-50 percent trims changed execution and slightly worsened validation drawdown",
+    "trigger_signal_date":"2024-11-11",
+    "event_available_from":"2024-11-09T23:59:59.999999+08:00",
+    "event_rule":"退市风险警示"
+  },
+  "event_source":{
+    "provider":"CNINFO official announcements",
+    "curation_policy":"cninfo_title_materiality.v9",
+    "available_rule":"available_from_lte_signal_day_235959_asia_shanghai",
+    "positive_event_buy_allowed":false
+  },
+  "carrier":{
+    "scope":"baseline-buy-eligible V3 Rank1 only",
+    "lookback_days":10,
+    "half_life_days":5.0,
+    "new_fill_allowed":false,
+    "symbol_selection_change":false,
+    "objective":"find the smallest trim that preserves board-lot execution while retaining event-risk benefit"
+  },
+  "variants":[
+    {"variant_id":"event_s04_scale095","lookback_days":10,"half_life_days":5.0,"risk_score_min":0.4,"scale":0.95},
+    {"variant_id":"event_s04_scale090","lookback_days":10,"half_life_days":5.0,"risk_score_min":0.4,"scale":0.90},
+    {"variant_id":"event_s04_scale085","lookback_days":10,"half_life_days":5.0,"risk_score_min":0.4,"scale":0.85},
+    {"variant_id":"event_s07_scale095","lookback_days":10,"half_life_days":5.0,"risk_score_min":0.7,"scale":0.95},
+    {"variant_id":"event_s07_scale090","lookback_days":10,"half_life_days":5.0,"risk_score_min":0.7,"scale":0.90},
+    {"variant_id":"event_s07_scale085","lookback_days":10,"half_life_days":5.0,"risk_score_min":0.7,"scale":0.85}
+  ],
+  "selection":{
+    "tuning_end":"2025-05-26",
+    "validation_from":"2025-05-27",
+    "validation_end":"2025-11-26",
+    "final_untouched_from":"2025-11-27",
+    "final_untouched_to":"2026-06-26",
+    "strict_non_degrade_metrics":["total_return","annualized_return","max_drawdown","negative_month_count","worst_monthly_return","skipped_order_rate","skipped_signal_rate","max_single_symbol_exposure_pct"],
+    "one_standard_error_rule":"inside the best validation monthly-delta one-SE plateau choose the highest scale and highest risk threshold",
+    "standout_gate":"at_least_10_percent relative return improvement or one fewer negative month with drawdown improvement"
+  },
+  "claim_ceiling":"round16_preregistered_cninfo_minimal_weight_event_guard_research_only_not_v3_change"
+}

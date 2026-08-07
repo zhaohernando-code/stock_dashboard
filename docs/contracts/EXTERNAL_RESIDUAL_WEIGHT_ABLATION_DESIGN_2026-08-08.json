@@ -1,0 +1,42 @@
+{
+  "artifact_type": "external_residual_weight_ablation_preregistration",
+  "schema_version": "external_residual_weight_ablation_preregistration.v1",
+  "status": "frozen_before_round23_outcome_evaluation",
+  "frozen_at": "2026-08-08T09:15:00+08:00",
+  "owner": "hernando_zhao",
+  "research_question": "Can the incremental return forecast from external information, after subtracting the forecast explained by V3 stock features, provide a stable bounded Rank1 weight adjustment?",
+  "model": {
+    "core_model": "expanding past-only standardized ridge on four compressed V3 stock and benchmark features",
+    "full_model": "same core features plus global-index residuals, official policy, SW L1 sector and compact macro features",
+    "target": "realized V3 Rank1 account-trade return",
+    "external_residual": "full_model_prediction_minus_core_model_prediction",
+    "label_available_at": "actual V3 account sell date",
+    "minimum_completed_training_trades": 120,
+    "minimum_prior_live_predictions_for_standardization": 40,
+    "l2_penalty": 20.0,
+    "residual_z_cap": 3.0,
+    "future_labels_prohibited": true
+  },
+  "carrier": {
+    "formula": "rank1_portfolio_weight_times_one_plus_clip(lambda_times_external_residual_z,minus_cap,plus_cap)",
+    "maximum_absolute_weight_adjustment": 0.15,
+    "selection_unchanged": true,
+    "rank2_rank3_unchanged": true,
+    "core_v3_weight_preserved_as_base": true,
+    "positive_external_state_cannot_create_a_buy": true,
+    "shadow_fill_constraint": "candidate actual buy symbols are a subset of V3 shadow buys by signal day and rank"
+  },
+  "weights": [0.0, 0.025, 0.05, 0.075, 0.10, 0.15],
+  "selection": {
+    "tuning_end": "2025-05-26",
+    "validation_from": "2025-05-27",
+    "validation_end": "2025-11-26",
+    "extended_readout_from": "2025-11-27",
+    "extended_readout_to": "2026-06-26",
+    "extended_readout_is_not_untouched": true,
+    "strict_non_degrade_metrics": ["total_return", "annualized_return", "max_drawdown", "negative_month_count", "worst_monthly_return", "skipped_order_rate", "skipped_signal_rate", "max_single_symbol_exposure_pct"],
+    "one_standard_error_rule": "among tuning-and-validation qualifiers within one standard error of best validation monthly delta choose the smallest lambda",
+    "standout_gate": "at_least_10_percent relative return improvement or one fewer negative month with drawdown improvement"
+  },
+  "claim_ceiling": "round23_preregistered_research_replay_not_v3_change_and_not_new_untouched_holdout"
+}

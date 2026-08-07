@@ -1,0 +1,46 @@
+{
+  "artifact_type": "extended_holdout_rank1_sector_veto_account_ablation_preregistration",
+  "schema_version": "extended_holdout_rank1_sector_veto_account_ablation_preregistration.v1",
+  "status": "frozen_before_round11_outcome_evaluation",
+  "frozen_at": "2026-08-08T04:55:00+08:00",
+  "owner": "hernando_zhao",
+  "source_round9": {
+    "artifact_id": "external-loss-gate-account-ablation-a81354ac917438d3",
+    "frozen_challenger": "rank1_q095_full",
+    "finding": "passed all non-degrade metrics through 2026-05-26 with 3.77 percent relative final return improvement"
+  },
+  "extended_data": {
+    "signal_end": "2026-06-26",
+    "global_snapshot_digest": "c8148c11eb1ac219eaeb6dc45a0ff760cafa97faf70321ee2f835491af16aa71",
+    "sector_snapshot_digest": "2d3be520030b63ca10b30fbb539e5ed650d7c1687af09d73e98524d33760e56e",
+    "holdout_rationale": "mature the 2026-05-21 and 2026-05-25 flagged 20-trading-day positions and evaluate all remaining execution-snapshot signals"
+  },
+  "model": {
+    "family": "frozen_round9_expanding_past_only_weighted_hierarchical_l2_logistic",
+    "label": "realized_rank1_account_trade_return_lt_zero",
+    "loss_return_threshold": 0.0,
+    "minimum_completed_training_trades": 120,
+    "minimum_completed_strong_training_trades": 30,
+    "strong_signal_sample_weight": 4.0,
+    "minimum_prior_live_predictions_for_quantile": 30,
+    "l2_penalty": 5.0,
+    "features": "same frozen core_global_sw_l1_feature_set_as_round9",
+    "future_label_rule": "sell_trade_day_lte_current_signal_day"
+  },
+  "variants": [
+    {"variant_id": "extended_core_control_q095_full", "feature_set": "compressed_core_only", "risk_percentile_min": 0.95, "target_scope": "strong_rank1_overlay_only", "neutralize_fraction": 1.00, "control_only": true},
+    {"variant_id": "extended_rank1_q095_full", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.95, "target_scope": "strong_rank1_overlay_only", "neutralize_fraction": 1.00}
+  ],
+  "selection": {
+    "tuning_end": "2025-05-26",
+    "validation_from": "2025-05-27",
+    "validation_end": "2025-11-26",
+    "final_untouched_from": "2025-11-27",
+    "final_untouched_to": "2026-06-26",
+    "requires_nonzero_intervention": true,
+    "strict_non_degrade_metrics": ["total_return", "annualized_return", "max_drawdown", "negative_month_count", "worst_monthly_return", "skipped_order_rate", "skipped_signal_rate", "max_single_symbol_exposure_pct"],
+    "final_metrics_computed_only_for_the_frozen_round9_challenger": true,
+    "standout_gate": "at_least_10_percent_relative return improvement or one fewer negative month with drawdown improvement"
+  },
+  "claim_ceiling": "round11_preregistered_extended_holdout_research_only_not_v3_change"
+}

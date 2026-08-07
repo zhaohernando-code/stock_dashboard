@@ -1,0 +1,68 @@
+{
+  "artifact_type": "sw_sector_strong_overlay_veto_account_ablation_preregistration",
+  "schema_version": "sw_sector_strong_overlay_veto_account_ablation_preregistration.v1",
+  "status": "frozen_before_round7_outcome_evaluation",
+  "frozen_at": "2026-08-08T02:40:00+08:00",
+  "owner": "hernando_zhao",
+  "source_round6": {
+    "artifact_id": "external-loss-gate-account-ablation-efaf0ff09b2e574d",
+    "finding": "global external features correctly vetoed two China Unicom strong-overlay dates and improved tuning and validation return, but validation drawdown missed the strict floor",
+    "external_q090_full_tuning_relative_return_improvement": 0.014832062092104876,
+    "external_q090_full_validation_relative_return_improvement": 0.017784989080811074
+  },
+  "sector_source": {
+    "provider": "Tushare sw_daily / SW2021 L1",
+    "snapshot_digest": "6557753933ef2cfa1243aa489b894cea600ba151bb7d0841f78d93ccb2c255f8",
+    "sector_count": 31,
+    "record_count": 22971,
+    "date_range": ["2023-05-04", "2026-05-26"],
+    "candidate_inventory_mapping_rate": 1.0,
+    "revision_lineage_available": false
+  },
+  "model": {
+    "family": "expanding_past_only_l2_logistic_with_past_only_probability_quantile",
+    "label": "realized_rank1_account_trade_return_lt_zero",
+    "minimum_completed_training_trades": 120,
+    "minimum_prior_live_predictions_for_quantile": 30,
+    "l2_penalty": 5.0,
+    "core_features": ["return_5d_percentile", "return_20d_percentile", "turnover_rate_percentile", "benchmark_return_20d"],
+    "global_external_features": ["global_risk_residual_z", "tech_loading_times_global_tech_residual_z", "tech_loading_times_us_policy_tech_risk_decay_20d"],
+    "sector_external_features": ["sw_l1_relative_5d", "sw_l1_relative_20d", "sw_l1_drawdown_20d", "sw_l1_breadth_5d", "sw_l1_breadth_20d"],
+    "future_label_rule": "sell_trade_day_lte_current_signal_day",
+    "sector_availability_rule": "available_at_lte_signal_day_235959_asia_shanghai",
+    "interpretability_constraint": "external information can only neutralize part or all of the V3 strong quality overlay"
+  },
+  "carrier": {
+    "target_scope": "strong_quality_overlay_only",
+    "neutralize_formula": "effective_pre_overlay_scale = 1 / (1 + neutralize_fraction * (1.54 - 1))",
+    "ordinary_v3_signal_rule": "no change"
+  },
+  "variants": [
+    {"variant_id": "global_control_q090_full", "feature_set": "compressed_core_plus_external", "risk_percentile_min": 0.90, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 1.00, "control_only": true},
+    {"variant_id": "sector_q075_half", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.75, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 0.50},
+    {"variant_id": "sector_q075_three_quarter", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.75, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 0.75},
+    {"variant_id": "sector_q075_full", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.75, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 1.00},
+    {"variant_id": "sector_q080_half", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.80, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 0.50},
+    {"variant_id": "sector_q080_three_quarter", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.80, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 0.75},
+    {"variant_id": "sector_q080_full", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.80, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 1.00},
+    {"variant_id": "sector_q085_half", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.85, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 0.50},
+    {"variant_id": "sector_q085_three_quarter", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.85, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 0.75},
+    {"variant_id": "sector_q085_full", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.85, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 1.00},
+    {"variant_id": "sector_q090_half", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.90, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 0.50},
+    {"variant_id": "sector_q090_three_quarter", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.90, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 0.75},
+    {"variant_id": "sector_q090_full", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.90, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 1.00}
+  ],
+  "selection": {
+    "tuning_end": "2025-05-26",
+    "validation_from": "2025-05-27",
+    "validation_end": "2025-11-26",
+    "final_untouched_from": "2025-11-27",
+    "final_untouched_to": "2026-05-26",
+    "requires_nonzero_intervention": true,
+    "strict_non_degrade_metrics": ["total_return", "annualized_return", "max_drawdown", "negative_month_count", "worst_monthly_return", "skipped_order_rate", "skipped_signal_rate", "max_single_symbol_exposure_pct"],
+    "one_standard_error_rule": "among strict-gate candidates within one validation monthly-delta standard error of the best, select the smallest neutralize_fraction, then the highest risk percentile",
+    "final_metrics_computed_only_for_one_selected_external_candidate": true,
+    "standout_gate": "at_least_10_percent_relative_return_improvement_or_one_fewer_negative_month_with_drawdown_improvement"
+  },
+  "claim_ceiling": "round7_preregistered_research_only_sw_sector_external_veto_not_v3_change"
+}

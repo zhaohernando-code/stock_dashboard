@@ -1,0 +1,53 @@
+{
+  "artifact_type": "sector_near_tie_budget_shift_account_ablation_preregistration",
+  "schema_version": "sector_near_tie_budget_shift_account_ablation_preregistration.v1",
+  "status": "frozen_before_round14_outcome_evaluation",
+  "frozen_at": "2026-08-08T06:20:00+08:00",
+  "owner": "hernando_zhao",
+  "source_round13": {
+    "artifact_id": "external-loss-gate-account-ablation-ab664961154185ca",
+    "finding": "fill-preserving risk veto failed return and worst-month floors; abandon risk-trim carrier"
+  },
+  "signal": {
+    "family": "past_only_ridge_sector_residual",
+    "target": "SW2021_L1_relative_20d_return",
+    "core_explanatory_features": ["industry_return_20d_excess", "benchmark_return_20d", "return_20d_percentile"],
+    "ridge_alpha": 5.0,
+    "minimum_prior_residual_rows": 30,
+    "same_day_fit_rule": "predict every signal-day row before adding any row from that day to training",
+    "availability_rule": "sector_available_at_lte_signal_day_235959_asia_shanghai"
+  },
+  "carrier": {
+    "scope": "existing_v3_rank1_rank2_only",
+    "baseline_buy_shadow_required_for_both_ranks": true,
+    "symbol_selection_change": false,
+    "new_fill_allowed": false,
+    "effective_signal_budget_conserved": true,
+    "positive_external_information_cannot_create_independent_buy": true
+  },
+  "variants": [
+    {"variant_id":"gap001_adv05_shift005","score_gap_max":0.01,"residual_advantage_min":0.5,"transfer_fraction":0.05},
+    {"variant_id":"gap001_adv05_shift010","score_gap_max":0.01,"residual_advantage_min":0.5,"transfer_fraction":0.10},
+    {"variant_id":"gap001_adv10_shift005","score_gap_max":0.01,"residual_advantage_min":1.0,"transfer_fraction":0.05},
+    {"variant_id":"gap001_adv10_shift010","score_gap_max":0.01,"residual_advantage_min":1.0,"transfer_fraction":0.10},
+    {"variant_id":"gap002_adv05_shift005","score_gap_max":0.02,"residual_advantage_min":0.5,"transfer_fraction":0.05},
+    {"variant_id":"gap002_adv05_shift010","score_gap_max":0.02,"residual_advantage_min":0.5,"transfer_fraction":0.10},
+    {"variant_id":"gap002_adv10_shift005","score_gap_max":0.02,"residual_advantage_min":1.0,"transfer_fraction":0.05},
+    {"variant_id":"gap002_adv10_shift010","score_gap_max":0.02,"residual_advantage_min":1.0,"transfer_fraction":0.10},
+    {"variant_id":"gap003_adv05_shift005","score_gap_max":0.03,"residual_advantage_min":0.5,"transfer_fraction":0.05},
+    {"variant_id":"gap003_adv05_shift010","score_gap_max":0.03,"residual_advantage_min":0.5,"transfer_fraction":0.10},
+    {"variant_id":"gap003_adv10_shift005","score_gap_max":0.03,"residual_advantage_min":1.0,"transfer_fraction":0.05},
+    {"variant_id":"gap003_adv10_shift010","score_gap_max":0.03,"residual_advantage_min":1.0,"transfer_fraction":0.10}
+  ],
+  "selection": {
+    "tuning_end":"2025-05-26",
+    "validation_from":"2025-05-27",
+    "validation_end":"2025-11-26",
+    "final_untouched_from":"2025-11-27",
+    "final_untouched_to":"2026-06-26",
+    "strict_non_degrade_metrics":["total_return","annualized_return","max_drawdown","negative_month_count","worst_monthly_return","skipped_order_rate","skipped_signal_rate","max_single_symbol_exposure_pct"],
+    "one_standard_error_rule":"choose smallest transfer fraction, then narrowest core gap, then strongest residual threshold inside best validation monthly-delta one-SE plateau",
+    "standout_gate":"at_least_10_percent relative return improvement or one fewer negative month with drawdown improvement"
+  },
+  "claim_ceiling":"round14_preregistered_budget_conserving_sector_residual_research_only_not_v3_change"
+}

@@ -148,6 +148,15 @@
 - **逻辑 artifact 引用必须声明是否物化**：流式重建可能只需要 input snapshot 而不生成独立 universe matrix。此时必须记录 `logical_only_not_materialized_by_streaming_rebuild`，不能留下一个看似缺失文件的裸 artifact id；历史 `code_version=unresolved_local_checkout` 只能诚实降级为冻结输入可复用，禁止补写虚假的提交版本。
 - **发布成功标记前必须完成存储治理**：发布流程应先归档过期数据库备份、执行真实研究目录生命周期审计、轮转发布快照和可重建运行时缓存，最后才更新 `latest-successful`。治理失败不能留下一个看似成功的发布标记。
 
+## 外部信息账户回放真实性原则
+
+- **研究大快照必须放在持久 artifact root**：长时间采集结果不能依赖临时目录；每个可回放输入都要冻结摘要、内容哈希、时间覆盖和来源许可假设，历史回测只读本地快照。
+- **公开源批量采集要有有界重试与幂等 checkpoint**：单次批任务只重试可恢复错误，完成的 checkpoint 不再联网，失败不留下半写文件；这样中断或更新 Codex 后都能从最近 checkpoint 继续。
+- **`lambda=0` 复现检查以经济结果为准**：冻结 NAV 与实际成交买卖账本必须完全一致。为阻断伪成交新增的 shadow skip reason 可以改变完整订单日志摘要，但不能改变成交结果；若改变，整轮结果作废。
+- **候选池深度必须写入研究合同**：Top3 内换序、Top5 近似同分破平、Top20 提升是不同问题，不能用较浅池结果替代较深池结论。
+- **现金路径副作用不是 alpha**：候选被删除或换序后释放的现金，若让原基线未成交股票随后成交，属于 candidate-only cash-path buy；必须用冻结基线实际买入符号约束或等价 shadow replay 排除，不能计入外部信号收益。
+- **失败轮次不得事后降低门槛**：收益、回撤、月份稳定性、跳单、跳过信号和暴露按预注册口径共同判断；不得把 deliberate no-order 改名规避失败，也不得在已查看延伸段后称其为 untouched holdout。
+
 ## 已归档流水来源
 
 历史详细发布流水、提交、截图、测试输出已经从本文件压缩为以上原则。需要追溯单次事实时查 git 历史、`PROJECT_STATUS.json`、release manifest 或对应 `output/` artifact，不再把这些细节追加回 PROCESS。

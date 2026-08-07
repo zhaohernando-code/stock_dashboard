@@ -1,0 +1,44 @@
+{
+  "artifact_type": "global_risk_guard_account_ablation_preregistration",
+  "schema_version": "global_risk_guard_account_ablation_preregistration.v1",
+  "status": "frozen_before_round2_outcome_evaluation",
+  "frozen_at": "2026-08-07T23:10:00+08:00",
+  "owner": "hernando_zhao",
+  "source_failure": {
+    "round1_artifact_id": "global-sector-state-account-ablation-7f4fee5991ef5252",
+    "finding": "Even lambda 0.025 changed 114 rank slots because the V3 rank1 allocation is approximately 91 percent of each signal budget; external reranking therefore overrode rather than complemented the core.",
+    "round1_final_holdout_used_for_redesign": false
+  },
+  "baseline": {
+    "execution_snapshot_id": "shortpick-v3-execution-snapshot-067c5b83e085f95f",
+    "trial_id": "negative_month_rank_weight_adjusted_capacity_cluster_v3_top3_20d_v1:trial-000",
+    "signal_end": "2026-05-26"
+  },
+  "policy": {
+    "selection_and_rank_order_changed": false,
+    "positive_external_state_can_increase_position": false,
+    "scope": "rank1_position_trim_only",
+    "global_residual": "expanding_past_only_ridge_of_global_5d_20d_mean_return_against_a_share_benchmark_return_20d",
+    "tech_residual": "round1_expanding_past_only_global_tech_relative_residual",
+    "maximum_trim": 0.25
+  },
+  "variants": [
+    {"variant_id": "global_mild_z1_breadth25_scale090", "global_risk_z_max": -1.0, "global_breadth_5d_max": 0.25, "global_scale": 0.90},
+    {"variant_id": "global_balanced_z15_breadth25_scale085", "global_risk_z_max": -1.5, "global_breadth_5d_max": 0.25, "global_scale": 0.85},
+    {"variant_id": "global_severe_z2_breadth25_scale075", "global_risk_z_max": -2.0, "global_breadth_5d_max": 0.25, "global_scale": 0.75},
+    {"variant_id": "tech_mild_z1_scale085", "tech_risk_z_max": -1.0, "tech_scale": 0.85},
+    {"variant_id": "tech_severe_z15_scale075", "tech_risk_z_max": -1.5, "tech_scale": 0.75},
+    {"variant_id": "combined_balanced_global085_tech080", "global_risk_z_max": -1.5, "global_breadth_5d_max": 0.25, "global_scale": 0.85, "tech_risk_z_max": -1.5, "tech_scale": 0.80}
+  ],
+  "selection": {
+    "tuning_end": "2025-05-26",
+    "validation_from": "2025-05-27",
+    "validation_end": "2025-11-26",
+    "final_untouched_from": "2025-11-27",
+    "final_untouched_to": "2026-05-26",
+    "final_metrics_computed_only_for_one_candidate_after_tuning_and_validation_selection": true,
+    "strict_non_degrade_metrics": ["total_return", "annualized_return", "max_drawdown", "negative_month_count", "worst_monthly_return", "skipped_order_rate", "skipped_signal_rate", "max_single_symbol_exposure_pct"],
+    "standout_gate": "at_least_10_percent_relative_return_improvement_or_one_fewer_negative_month_with_drawdown_improvement"
+  },
+  "claim_ceiling": "round2_preregistered_research_only_account_ablation_not_v3_change"
+}

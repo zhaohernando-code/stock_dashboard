@@ -1,0 +1,42 @@
+{
+  "artifact_type": "compressed_external_loss_gate_account_ablation_preregistration",
+  "schema_version": "compressed_external_loss_gate_account_ablation_preregistration.v1",
+  "status": "frozen_before_round4_outcome_evaluation",
+  "frozen_at": "2026-08-08T00:10:00+08:00",
+  "owner": "hernando_zhao",
+  "source_round3": {
+    "artifact_id": "external-loss-gate-account-ablation-1a382f3f31c9462e",
+    "finding": "external models improved validation return by roughly 2.8 to 4.0 percent but degraded tuning because 20 features activated after only 60 completed trades",
+    "final_holdout_computed": false
+  },
+  "model": {
+    "family": "expanding_past_only_l2_logistic",
+    "label": "realized_rank1_account_trade_return_lt_zero",
+    "minimum_completed_training_trades": 210,
+    "l2_penalty": 5.0,
+    "minimum_sample_rationale": "seven features times about ten loss events per feature at the observed one-third loss rate",
+    "core_features": ["return_5d_percentile", "return_20d_percentile", "turnover_rate_percentile", "benchmark_return_20d"],
+    "external_features": ["global_risk_residual_z", "tech_loading_times_global_tech_residual_z", "tech_loading_times_us_policy_tech_risk_decay_20d"],
+    "future_label_rule": "sell_trade_day_lte_current_signal_day",
+    "interpretability_constraint": "model_can_only_trim_rank1_and_never_select_reorder_or_increase_position"
+  },
+  "variants": [
+    {"variant_id": "compressed_core_p070_scale090", "feature_set": "compressed_core_only", "loss_probability_min": 0.70, "scale": 0.90, "control_only": true},
+    {"variant_id": "compressed_external_p065_scale090", "feature_set": "compressed_core_plus_external", "loss_probability_min": 0.65, "scale": 0.90},
+    {"variant_id": "compressed_external_p070_scale085", "feature_set": "compressed_core_plus_external", "loss_probability_min": 0.70, "scale": 0.85},
+    {"variant_id": "compressed_external_p075_scale085", "feature_set": "compressed_core_plus_external", "loss_probability_min": 0.75, "scale": 0.85}
+  ],
+  "selection": {
+    "tuning_end": "2025-05-26",
+    "validation_from": "2025-05-27",
+    "validation_end": "2025-11-26",
+    "final_untouched_from": "2025-11-27",
+    "final_untouched_to": "2026-05-26",
+    "control_only_variant_cannot_be_selected": true,
+    "external_candidate_must_not_underperform_core_only_control_on_validation_return": true,
+    "final_metrics_computed_only_for_one_selected_external_candidate": true,
+    "strict_non_degrade_metrics": ["total_return", "annualized_return", "max_drawdown", "negative_month_count", "worst_monthly_return", "skipped_order_rate", "skipped_signal_rate", "max_single_symbol_exposure_pct"],
+    "standout_gate": "at_least_10_percent_relative_return_improvement_or_one_fewer_negative_month_with_drawdown_improvement"
+  },
+  "claim_ceiling": "round4_preregistered_research_only_compressed_loss_gate_not_v3_change"
+}

@@ -1,0 +1,53 @@
+{
+  "artifact_type": "hierarchical_strong_sector_veto_account_ablation_preregistration",
+  "schema_version": "hierarchical_strong_sector_veto_account_ablation_preregistration.v1",
+  "status": "frozen_before_round8_outcome_evaluation",
+  "frozen_at": "2026-08-08T03:20:00+08:00",
+  "owner": "hernando_zhao",
+  "source_round7": {
+    "artifact_id": "external-loss-gate-account-ablation-c539a75e87df51d0",
+    "finding": "sector features created a return-drawdown frontier near q90 but broad q75-q80 intervention failed validation; the prior model trained on all rank1 trades while acting only on strong-overlay signals"
+  },
+  "model": {
+    "family": "expanding_past_only_weighted_hierarchical_l2_logistic",
+    "label": "realized_rank1_account_trade_return_lt_zero",
+    "minimum_completed_training_trades": 120,
+    "minimum_completed_strong_training_trades": 30,
+    "strong_signal_sample_weight": 4.0,
+    "minimum_prior_live_predictions_for_quantile": 30,
+    "l2_penalty": 5.0,
+    "weighting_rationale": "all completed rank1 trades provide a pooled prior while V3 strong-overlay trades receive fourfold weight to align the model with the intervention target without fitting only 74 observations",
+    "core_features": ["return_5d_percentile", "return_20d_percentile", "turnover_rate_percentile", "benchmark_return_20d"],
+    "global_external_features": ["global_risk_residual_z", "tech_loading_times_global_tech_residual_z", "tech_loading_times_us_policy_tech_risk_decay_20d"],
+    "sector_external_features": ["sw_l1_relative_5d", "sw_l1_relative_20d", "sw_l1_drawdown_20d", "sw_l1_breadth_5d", "sw_l1_breadth_20d"],
+    "future_label_rule": "sell_trade_day_lte_current_signal_day",
+    "interpretability_constraint": "external information can only neutralize V3 strong quality overlay"
+  },
+  "variants": [
+    {"variant_id": "hier_core_control_q090_full", "feature_set": "compressed_core_only", "risk_percentile_min": 0.90, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 1.00, "control_only": true},
+    {"variant_id": "hier_sector_q085_half", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.85, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 0.50},
+    {"variant_id": "hier_sector_q085_three_quarter", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.85, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 0.75},
+    {"variant_id": "hier_sector_q085_full", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.85, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 1.00},
+    {"variant_id": "hier_sector_q090_half", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.90, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 0.50},
+    {"variant_id": "hier_sector_q090_three_quarter", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.90, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 0.75},
+    {"variant_id": "hier_sector_q090_full", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.90, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 1.00},
+    {"variant_id": "hier_sector_q0925_half", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.925, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 0.50},
+    {"variant_id": "hier_sector_q0925_three_quarter", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.925, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 0.75},
+    {"variant_id": "hier_sector_q0925_full", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.925, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 1.00},
+    {"variant_id": "hier_sector_q095_half", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.95, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 0.50},
+    {"variant_id": "hier_sector_q095_three_quarter", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.95, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 0.75},
+    {"variant_id": "hier_sector_q095_full", "feature_set": "compressed_core_plus_global_sector", "risk_percentile_min": 0.95, "target_scope": "strong_quality_overlay_only", "neutralize_fraction": 1.00}
+  ],
+  "selection": {
+    "tuning_end": "2025-05-26",
+    "validation_from": "2025-05-27",
+    "validation_end": "2025-11-26",
+    "final_untouched_from": "2025-11-27",
+    "final_untouched_to": "2026-05-26",
+    "requires_nonzero_intervention": true,
+    "strict_non_degrade_metrics": ["total_return", "annualized_return", "max_drawdown", "negative_month_count", "worst_monthly_return", "skipped_order_rate", "skipped_signal_rate", "max_single_symbol_exposure_pct"],
+    "one_standard_error_rule": "select smallest neutralize fraction inside best validation monthly-delta one-SE plateau",
+    "standout_gate": "at_least_10_percent_relative return improvement or one fewer negative month with drawdown improvement"
+  },
+  "claim_ceiling": "round8_preregistered_research_only_hierarchical_sector_veto_not_v3_change"
+}

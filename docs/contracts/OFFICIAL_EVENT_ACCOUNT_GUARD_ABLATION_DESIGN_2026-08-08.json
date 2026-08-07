@@ -1,0 +1,45 @@
+{
+  "artifact_type":"official_event_account_guard_ablation_preregistration",
+  "schema_version":"official_event_account_guard_ablation_preregistration.v1",
+  "status":"frozen_before_round15_outcome_evaluation",
+  "frozen_at":"2026-08-08T07:10:00+08:00",
+  "owner":"hernando_zhao",
+  "source_round14":{"artifact_id":"sector-near-tie-budget-shift-account-ablation-c9e56407fed33c43","finding":"budget-conserving sector momentum shift did not pass tuning and validation together"},
+  "event_source":{
+    "provider":"CNINFO official announcements",
+    "curation_policy":"cninfo_title_materiality.v9",
+    "pit_records":155518,
+    "adverse_events":7292,
+    "available_rule":"available_from_lte_signal_day_235959_asia_shanghai",
+    "positive_event_buy_allowed":false
+  },
+  "carrier":{
+    "scope":"baseline-buy-eligible V3 Rank1 only",
+    "symbol_selection_change":false,
+    "new_fill_allowed":false,
+    "position_increase_allowed":false
+  },
+  "variants":[
+    {"variant_id":"event10_hl5_s04_scale075","lookback_days":10,"half_life_days":5.0,"risk_score_min":0.4,"scale":0.75},
+    {"variant_id":"event10_hl5_s04_scale050","lookback_days":10,"half_life_days":5.0,"risk_score_min":0.4,"scale":0.50},
+    {"variant_id":"event10_hl5_s07_scale075","lookback_days":10,"half_life_days":5.0,"risk_score_min":0.7,"scale":0.75},
+    {"variant_id":"event10_hl5_s07_scale050","lookback_days":10,"half_life_days":5.0,"risk_score_min":0.7,"scale":0.50},
+    {"variant_id":"event20_hl5_s04_scale075","lookback_days":20,"half_life_days":5.0,"risk_score_min":0.4,"scale":0.75},
+    {"variant_id":"event20_hl5_s04_scale050","lookback_days":20,"half_life_days":5.0,"risk_score_min":0.4,"scale":0.50},
+    {"variant_id":"event20_hl5_s07_scale075","lookback_days":20,"half_life_days":5.0,"risk_score_min":0.7,"scale":0.75},
+    {"variant_id":"event20_hl5_s07_scale050","lookback_days":20,"half_life_days":5.0,"risk_score_min":0.7,"scale":0.50},
+    {"variant_id":"event20_hl10_s10_scale075","lookback_days":20,"half_life_days":10.0,"risk_score_min":1.0,"scale":0.75},
+    {"variant_id":"event20_hl10_s10_scale050","lookback_days":20,"half_life_days":10.0,"risk_score_min":1.0,"scale":0.50}
+  ],
+  "selection":{
+    "tuning_end":"2025-05-26",
+    "validation_from":"2025-05-27",
+    "validation_end":"2025-11-26",
+    "final_untouched_from":"2025-11-27",
+    "final_untouched_to":"2026-06-26",
+    "strict_non_degrade_metrics":["total_return","annualized_return","max_drawdown","negative_month_count","worst_monthly_return","skipped_order_rate","skipped_signal_rate","max_single_symbol_exposure_pct"],
+    "one_standard_error_rule":"within the best validation monthly-delta one-SE plateau choose the highest scale, highest risk threshold, then shortest lookback",
+    "standout_gate":"at_least_10_percent relative return improvement or one fewer negative month with drawdown improvement"
+  },
+  "claim_ceiling":"round15_preregistered_cninfo_official_negative_event_guard_research_only_not_v3_change"
+}

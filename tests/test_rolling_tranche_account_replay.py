@@ -67,6 +67,60 @@ def test_rolling_account_replay_rejects_price_too_high_slots() -> None:
     assert daily["reason_counts"]["price_too_high_for_slot"] == 1
 
 
+def test_rolling_account_replay_enforces_shadow_baseline_buy_eligibility() -> None:
+    pick = _pick("2026-01-02", "AAA", rank=1, multiplier=2.73)
+    pick["shadow_baseline_buy_eligible"] = False
+    candidate_run = {
+        "artifact_id": "candidate-run",
+        "trial_diagnostics": [
+            {
+                "trial_id": "trial-1",
+                "model_spec_id": "selected_exhaustion_date_scaled_v3_top3_20d_v1",
+                "selected_top_k": 3,
+                "selected_top_k_picks_by_date": [pick],
+            }
+        ],
+    }
+    bars = {"AAA": [{"day": f"2026-01-{day:02d}", "close": 10.0} for day in range(2, 31)]}
+
+    artifact = build_shortpick_v3_rolling_account_replay_artifact(
+        candidate_run=candidate_run,
+        trial_id="trial-1",
+        market_bars_by_symbol=bars,
+    )
+
+    daily = next(row for row in artifact["results"] if row["config_id"] == "daily_20_tranche_rank_weighted_v1")
+    assert daily["summary"]["buy_order_count"] == 0
+    assert daily["reason_counts"]["shadow_baseline_not_buy_eligible"] == 1
+
+
+def test_rolling_account_replay_enforces_shadow_actual_symbol_allowlist() -> None:
+    pick = _pick("2026-01-02", "AAA", rank=1, multiplier=2.73)
+    pick["shadow_baseline_buy_symbols"] = ["BBB"]
+    candidate_run = {
+        "artifact_id": "candidate-run",
+        "trial_diagnostics": [
+            {
+                "trial_id": "trial-1",
+                "model_spec_id": "selected_exhaustion_date_scaled_v3_top3_20d_v1",
+                "selected_top_k": 3,
+                "selected_top_k_picks_by_date": [pick],
+            }
+        ],
+    }
+    bars = {"AAA": [{"day": f"2026-01-{day:02d}", "close": 10.0} for day in range(2, 31)]}
+
+    artifact = build_shortpick_v3_rolling_account_replay_artifact(
+        candidate_run=candidate_run,
+        trial_id="trial-1",
+        market_bars_by_symbol=bars,
+    )
+
+    daily = next(row for row in artifact["results"] if row["config_id"] == "daily_20_tranche_rank_weighted_v1")
+    assert daily["summary"]["buy_order_count"] == 0
+    assert daily["reason_counts"]["shadow_baseline_not_buy_eligible"] == 1
+
+
 def test_rolling_account_replay_treats_zero_weight_as_no_order_not_skip() -> None:
     candidate_run = {
         "artifact_id": "candidate-run",
@@ -518,7 +572,11 @@ def test_r14_replay_replaces_an_unaffordable_slot_from_rank4_inventory() -> None
                 "model_spec_id": "negative-month-rank-adjusted",
                 "selected_top_k": 1,
                 "selected_top_k_picks_by_date": [
-                    {**_pick("2026-01-02", "AAA", rank=1, multiplier=1.0), "score": 3.0}
+                    {
+                        **_pick("2026-01-02", "AAA", rank=1, multiplier=1.0),
+                        "score": 3.0,
+                        "shadow_baseline_buy_symbols": ["BBB"],
+                    }
                 ],
             }
         ],

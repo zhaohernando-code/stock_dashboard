@@ -1,0 +1,1120 @@
+{
+  "artifact_id": "external-loss-gate-account-ablation-73e013b9fc265f8e",
+  "artifact_type": "external_loss_gate_account_ablation",
+  "baseline_segments_pre_final": {
+    "full_pre_final": {
+      "annualized_return": 0.6169246977162617,
+      "buy_order_count": 630,
+      "ending_nav_cny": 581305.1725000003,
+      "from": "2023-09-07",
+      "max_drawdown": -0.0679446018162233,
+      "max_single_symbol_exposure_pct": 0.24953416606359471,
+      "mean_invested_ratio": 0.7006337462846501,
+      "negative_month_count": 2,
+      "skip_order_count": 113,
+      "skipped_order_rate": 0.15208613728129206,
+      "skipped_signal_rate": 0.23573200992555832,
+      "to": "2025-11-26",
+      "total_return": 1.9065258625000019,
+      "worst_monthly_return": -0.014130266706049999
+    },
+    "tuning": {
+      "annualized_return": 0.557639363593706,
+      "buy_order_count": 464,
+      "ending_nav_cny": 427981.4485,
+      "from": "2023-09-07",
+      "max_drawdown": -0.0679446018162233,
+      "max_single_symbol_exposure_pct": 0.24953416606359471,
+      "mean_invested_ratio": 0.6787137107966705,
+      "negative_month_count": 2,
+      "skip_order_count": 86,
+      "skipped_order_rate": 0.15636363636363637,
+      "skipped_signal_rate": 0.24333333333333335,
+      "to": "2025-05-26",
+      "total_return": 1.1399072425,
+      "worst_monthly_return": -0.014130266706049999
+    },
+    "validation": {
+      "annualized_return": 0.8425254244780453,
+      "buy_order_count": 166,
+      "ending_nav_cny": 581305.1725000003,
+      "from": "2025-05-27",
+      "max_drawdown": -0.0658039312712575,
+      "max_single_symbol_exposure_pct": 0.24711031894249974,
+      "mean_invested_ratio": 0.7727068229691271,
+      "negative_month_count": 0,
+      "skip_order_count": 27,
+      "skipped_order_rate": 0.13989637305699482,
+      "skipped_signal_rate": 0.21359223300970873,
+      "to": "2025-11-26",
+      "total_return": 0.3582485281485288,
+      "worst_monthly_return": 0.0076962284390442726
+    }
+  },
+  "claim_ceiling": "research_only_constrained_expanding_logistic_account_replay",
+  "content_digest": "73e013b9fc265f8e65f1622d4a57e989f88ff45568138826e77cdd4cd275ab2d",
+  "external_data_audit": {
+    "fed_event_count": 55,
+    "federal_register_event_count": 175,
+    "global_risk_residual_digest": "82bef70d2742c5259cc4819c10f0dee0afb0f52abcd6ff68568c8dd6a54ec0e3",
+    "global_tech_residual_digest": "ebff4541189068e4916d105a4de2dd510e9dc4e1aa8aa5da5b7e821f4f7d472a",
+    "official_feature_digest": "be173324e309f9f0c31c55e28e2f7785a258ba017fb7fa0d9c9b3d8b4fecf794"
+  },
+  "final_untouched_readout": {
+    "baseline": {
+      "annualized_return": 0.8355120586069205,
+      "buy_order_count": 156,
+      "ending_nav_cny": 784128.4700000004,
+      "from": "2025-11-27",
+      "max_drawdown": -0.06885122118096298,
+      "max_single_symbol_exposure_pct": 0.14541152191275225,
+      "mean_invested_ratio": 0.6648407004545729,
+      "negative_month_count": 0,
+      "skip_order_count": 27,
+      "skipped_order_rate": 0.14754098360655737,
+      "skipped_signal_rate": 0.26373626373626374,
+      "to": "2026-05-26",
+      "total_return": 0.3489101888216899,
+      "worst_monthly_return": 0.011514620376649853
+    },
+    "candidate": {
+      "annualized_return": 0.8307912744967709,
+      "buy_order_count": 156,
+      "ending_nav_cny": 783232.9895000004,
+      "from": "2025-11-27",
+      "max_drawdown": -0.06884345876373743,
+      "max_single_symbol_exposure_pct": 0.14539327853536413,
+      "mean_invested_ratio": 0.6642392587343489,
+      "negative_month_count": 0,
+      "skip_order_count": 27,
+      "skipped_order_rate": 0.14754098360655737,
+      "skipped_signal_rate": 0.26373626373626374,
+      "to": "2026-05-26",
+      "total_return": 0.34719936320884837,
+      "worst_monthly_return": 0.011513154282406735
+    },
+    "gate": {
+      "comparisons": {
+        "annualized_return": {
+          "baseline": 0.8355120586069205,
+          "candidate": 0.8307912744967709,
+          "passed": false
+        },
+        "max_drawdown": {
+          "baseline": -0.06885122118096298,
+          "candidate": -0.06884345876373743,
+          "passed": true
+        },
+        "max_single_symbol_exposure_pct": {
+          "baseline": 0.14541152191275225,
+          "candidate": 0.14539327853536413,
+          "passed": true
+        },
+        "negative_month_count": {
+          "baseline": 0,
+          "candidate": 0,
+          "passed": true
+        },
+        "skipped_order_rate": {
+          "baseline": 0.14754098360655737,
+          "candidate": 0.14754098360655737,
+          "passed": true
+        },
+        "skipped_signal_rate": {
+          "baseline": 0.26373626373626374,
+          "candidate": 0.26373626373626374,
+          "passed": true
+        },
+        "total_return": {
+          "baseline": 0.3489101888216899,
+          "candidate": 0.34719936320884837,
+          "passed": false
+        },
+        "worst_monthly_return": {
+          "baseline": 0.011514620376649853,
+          "candidate": 0.011513154282406735,
+          "passed": false
+        }
+      },
+      "failed_metrics": [
+        "annualized_return",
+        "total_return",
+        "worst_monthly_return"
+      ],
+      "passed": false
+    },
+    "standout": {
+      "drawdown_improved": true,
+      "negative_month_reduction": 0,
+      "passed": false,
+      "relative_total_return_improvement": -0.00490334093887938
+    },
+    "variant_id": "quantile_external_q090_scale090"
+  },
+  "prediction_audit": {
+    "compressed_core_only": {
+      "feature_names": [
+        "return_5d_percentile",
+        "return_20d_percentile",
+        "turnover_rate_percentile",
+        "benchmark_return_20d"
+      ],
+      "feature_set": "compressed_core_only",
+      "last_class_counts": {
+        "loss": 117,
+        "non_loss": 216
+      },
+      "last_fit_count": 333,
+      "maximum_probability": 0.48648329890728037,
+      "minimum_probability": 0.24012303501240478,
+      "minimum_training_trades": 210,
+      "ready_prediction_day_count": 194,
+      "warmup_prediction_day_count": 299
+    },
+    "compressed_core_plus_external": {
+      "feature_names": [
+        "return_5d_percentile",
+        "return_20d_percentile",
+        "turnover_rate_percentile",
+        "benchmark_return_20d",
+        "global_risk_residual_z",
+        "tech_loading_times_global_tech_residual_z",
+        "tech_loading_times_us_policy_tech_risk_decay_20d"
+      ],
+      "feature_set": "compressed_core_plus_external",
+      "last_class_counts": {
+        "loss": 117,
+        "non_loss": 216
+      },
+      "last_fit_count": 333,
+      "maximum_probability": 0.5048641702992295,
+      "minimum_probability": 0.21503006284426787,
+      "minimum_training_trades": 210,
+      "ready_prediction_day_count": 194,
+      "warmup_prediction_day_count": 299
+    },
+    "future_label_violations": 0
+  },
+  "promotion_blocker": "provider_revision_lineage_missing_requires_qualified_vendor_reproduction",
+  "provider_revision_lineage_missing": true,
+  "rank1_loss_label_count": 117,
+  "rank1_realized_label_count": 341,
+  "results_pre_final": [
+    {
+      "gates": {
+        "full_pre_final": {
+          "comparisons": {
+            "annualized_return": {
+              "baseline": 0.6169246977162617,
+              "candidate": 0.6169246977162617,
+              "passed": true
+            },
+            "max_drawdown": {
+              "baseline": -0.0679446018162233,
+              "candidate": -0.0679446018162233,
+              "passed": true
+            },
+            "max_single_symbol_exposure_pct": {
+              "baseline": 0.24953416606359471,
+              "candidate": 0.24953416606359471,
+              "passed": true
+            },
+            "negative_month_count": {
+              "baseline": 2,
+              "candidate": 2,
+              "passed": true
+            },
+            "skipped_order_rate": {
+              "baseline": 0.15208613728129206,
+              "candidate": 0.15208613728129206,
+              "passed": true
+            },
+            "skipped_signal_rate": {
+              "baseline": 0.23573200992555832,
+              "candidate": 0.23573200992555832,
+              "passed": true
+            },
+            "total_return": {
+              "baseline": 1.9065258625000019,
+              "candidate": 1.9065258625000019,
+              "passed": true
+            },
+            "worst_monthly_return": {
+              "baseline": -0.014130266706049999,
+              "candidate": -0.014130266706049999,
+              "passed": true
+            }
+          },
+          "failed_metrics": [],
+          "passed": true
+        },
+        "tuning": {
+          "comparisons": {
+            "annualized_return": {
+              "baseline": 0.557639363593706,
+              "candidate": 0.557639363593706,
+              "passed": true
+            },
+            "max_drawdown": {
+              "baseline": -0.0679446018162233,
+              "candidate": -0.0679446018162233,
+              "passed": true
+            },
+            "max_single_symbol_exposure_pct": {
+              "baseline": 0.24953416606359471,
+              "candidate": 0.24953416606359471,
+              "passed": true
+            },
+            "negative_month_count": {
+              "baseline": 2,
+              "candidate": 2,
+              "passed": true
+            },
+            "skipped_order_rate": {
+              "baseline": 0.15636363636363637,
+              "candidate": 0.15636363636363637,
+              "passed": true
+            },
+            "skipped_signal_rate": {
+              "baseline": 0.24333333333333335,
+              "candidate": 0.24333333333333335,
+              "passed": true
+            },
+            "total_return": {
+              "baseline": 1.1399072425,
+              "candidate": 1.1399072425,
+              "passed": true
+            },
+            "worst_monthly_return": {
+              "baseline": -0.014130266706049999,
+              "candidate": -0.014130266706049999,
+              "passed": true
+            }
+          },
+          "failed_metrics": [],
+          "passed": true
+        },
+        "validation": {
+          "comparisons": {
+            "annualized_return": {
+              "baseline": 0.8425254244780453,
+              "candidate": 0.8425254244780453,
+              "passed": true
+            },
+            "max_drawdown": {
+              "baseline": -0.0658039312712575,
+              "candidate": -0.0658039312712575,
+              "passed": true
+            },
+            "max_single_symbol_exposure_pct": {
+              "baseline": 0.24711031894249974,
+              "candidate": 0.24711031894249974,
+              "passed": true
+            },
+            "negative_month_count": {
+              "baseline": 0,
+              "candidate": 0,
+              "passed": true
+            },
+            "skipped_order_rate": {
+              "baseline": 0.13989637305699482,
+              "candidate": 0.13989637305699482,
+              "passed": true
+            },
+            "skipped_signal_rate": {
+              "baseline": 0.21359223300970873,
+              "candidate": 0.21359223300970873,
+              "passed": true
+            },
+            "total_return": {
+              "baseline": 0.3582485281485288,
+              "candidate": 0.3582485281485288,
+              "passed": true
+            },
+            "worst_monthly_return": {
+              "baseline": 0.0076962284390442726,
+              "candidate": 0.0076962284390442726,
+              "passed": true
+            }
+          },
+          "failed_metrics": [],
+          "passed": true
+        }
+      },
+      "segments": {
+        "full_pre_final": {
+          "annualized_return": 0.6169246977162617,
+          "buy_order_count": 630,
+          "ending_nav_cny": 581305.1725000003,
+          "from": "2023-09-07",
+          "max_drawdown": -0.0679446018162233,
+          "max_single_symbol_exposure_pct": 0.24953416606359471,
+          "mean_invested_ratio": 0.7006337462846501,
+          "negative_month_count": 2,
+          "skip_order_count": 113,
+          "skipped_order_rate": 0.15208613728129206,
+          "skipped_signal_rate": 0.23573200992555832,
+          "to": "2025-11-26",
+          "total_return": 1.9065258625000019,
+          "worst_monthly_return": -0.014130266706049999
+        },
+        "tuning": {
+          "annualized_return": 0.557639363593706,
+          "buy_order_count": 464,
+          "ending_nav_cny": 427981.4485,
+          "from": "2023-09-07",
+          "max_drawdown": -0.0679446018162233,
+          "max_single_symbol_exposure_pct": 0.24953416606359471,
+          "mean_invested_ratio": 0.6787137107966705,
+          "negative_month_count": 2,
+          "skip_order_count": 86,
+          "skipped_order_rate": 0.15636363636363637,
+          "skipped_signal_rate": 0.24333333333333335,
+          "to": "2025-05-26",
+          "total_return": 1.1399072425,
+          "worst_monthly_return": -0.014130266706049999
+        },
+        "validation": {
+          "annualized_return": 0.8425254244780453,
+          "buy_order_count": 166,
+          "ending_nav_cny": 581305.1725000003,
+          "from": "2025-05-27",
+          "max_drawdown": -0.0658039312712575,
+          "max_single_symbol_exposure_pct": 0.24711031894249974,
+          "mean_invested_ratio": 0.7727068229691271,
+          "negative_month_count": 0,
+          "skip_order_count": 27,
+          "skipped_order_rate": 0.13989637305699482,
+          "skipped_signal_rate": 0.21359223300970873,
+          "to": "2025-11-26",
+          "total_return": 0.3582485281485288,
+          "worst_monthly_return": 0.0076962284390442726
+        }
+      },
+      "standout": {
+        "full_pre_final": {
+          "drawdown_improved": false,
+          "negative_month_reduction": 0,
+          "passed": false,
+          "relative_total_return_improvement": 0.0
+        },
+        "tuning": {
+          "drawdown_improved": false,
+          "negative_month_reduction": 0,
+          "passed": false,
+          "relative_total_return_improvement": 0.0
+        },
+        "validation": {
+          "drawdown_improved": false,
+          "negative_month_reduction": 0,
+          "passed": false,
+          "relative_total_return_improvement": 0.0
+        }
+      },
+      "trigger_audit": {
+        "ready_percentile_day_count": 154,
+        "ready_probability_day_count": 194,
+        "triggered_signal_day_count": 3
+      },
+      "variant": {
+        "control_only": true,
+        "feature_set": "compressed_core_only",
+        "risk_percentile_min": 0.9,
+        "scale": 0.9,
+        "variant_id": "quantile_core_q090_scale090"
+      }
+    },
+    {
+      "gates": {
+        "full_pre_final": {
+          "comparisons": {
+            "annualized_return": {
+              "baseline": 0.6169246977162617,
+              "candidate": 0.6170167809157514,
+              "passed": true
+            },
+            "max_drawdown": {
+              "baseline": -0.0679446018162233,
+              "candidate": -0.0679446018162233,
+              "passed": true
+            },
+            "max_single_symbol_exposure_pct": {
+              "baseline": 0.24953416606359471,
+              "candidate": 0.24953416606359471,
+              "passed": true
+            },
+            "negative_month_count": {
+              "baseline": 2,
+              "candidate": 2,
+              "passed": true
+            },
+            "skipped_order_rate": {
+              "baseline": 0.15208613728129206,
+              "candidate": 0.15208613728129206,
+              "passed": true
+            },
+            "skipped_signal_rate": {
+              "baseline": 0.23573200992555832,
+              "candidate": 0.23573200992555832,
+              "passed": true
+            },
+            "total_return": {
+              "baseline": 1.9065258625000019,
+              "candidate": 1.906893407500002,
+              "passed": true
+            },
+            "worst_monthly_return": {
+              "baseline": -0.014130266706049999,
+              "candidate": -0.014130266706049999,
+              "passed": true
+            }
+          },
+          "failed_metrics": [],
+          "passed": true
+        },
+        "tuning": {
+          "comparisons": {
+            "annualized_return": {
+              "baseline": 0.557639363593706,
+              "candidate": 0.557639363593706,
+              "passed": true
+            },
+            "max_drawdown": {
+              "baseline": -0.0679446018162233,
+              "candidate": -0.0679446018162233,
+              "passed": true
+            },
+            "max_single_symbol_exposure_pct": {
+              "baseline": 0.24953416606359471,
+              "candidate": 0.24953416606359471,
+              "passed": true
+            },
+            "negative_month_count": {
+              "baseline": 2,
+              "candidate": 2,
+              "passed": true
+            },
+            "skipped_order_rate": {
+              "baseline": 0.15636363636363637,
+              "candidate": 0.15636363636363637,
+              "passed": true
+            },
+            "skipped_signal_rate": {
+              "baseline": 0.24333333333333335,
+              "candidate": 0.24333333333333335,
+              "passed": true
+            },
+            "total_return": {
+              "baseline": 1.1399072425,
+              "candidate": 1.1399072425,
+              "passed": true
+            },
+            "worst_monthly_return": {
+              "baseline": -0.014130266706049999,
+              "candidate": -0.014130266706049999,
+              "passed": true
+            }
+          },
+          "failed_metrics": [],
+          "passed": true
+        },
+        "validation": {
+          "comparisons": {
+            "annualized_return": {
+              "baseline": 0.8425254244780453,
+              "candidate": 0.8429904923062053,
+              "passed": true
+            },
+            "max_drawdown": {
+              "baseline": -0.0658039312712575,
+              "candidate": -0.06579612328892381,
+              "passed": true
+            },
+            "max_single_symbol_exposure_pct": {
+              "baseline": 0.24711031894249974,
+              "candidate": 0.24711031894249974,
+              "passed": true
+            },
+            "negative_month_count": {
+              "baseline": 0,
+              "candidate": 0,
+              "passed": true
+            },
+            "skipped_order_rate": {
+              "baseline": 0.13989637305699482,
+              "candidate": 0.13989637305699482,
+              "passed": true
+            },
+            "skipped_signal_rate": {
+              "baseline": 0.21359223300970873,
+              "candidate": 0.21359223300970873,
+              "passed": true
+            },
+            "total_return": {
+              "baseline": 0.3582485281485288,
+              "candidate": 0.3584202855932912,
+              "passed": true
+            },
+            "worst_monthly_return": {
+              "baseline": 0.0076962284390442726,
+              "candidate": 0.0076962284390442726,
+              "passed": true
+            }
+          },
+          "failed_metrics": [],
+          "passed": true
+        }
+      },
+      "segments": {
+        "full_pre_final": {
+          "annualized_return": 0.6170167809157514,
+          "buy_order_count": 630,
+          "ending_nav_cny": 581378.6815000004,
+          "from": "2023-09-07",
+          "max_drawdown": -0.0679446018162233,
+          "max_single_symbol_exposure_pct": 0.24953416606359471,
+          "mean_invested_ratio": 0.7004585034617539,
+          "negative_month_count": 2,
+          "skip_order_count": 113,
+          "skipped_order_rate": 0.15208613728129206,
+          "skipped_signal_rate": 0.23573200992555832,
+          "to": "2025-11-26",
+          "total_return": 1.906893407500002,
+          "worst_monthly_return": -0.014130266706049999
+        },
+        "tuning": {
+          "annualized_return": 0.557639363593706,
+          "buy_order_count": 464,
+          "ending_nav_cny": 427981.4485,
+          "from": "2023-09-07",
+          "max_drawdown": -0.0679446018162233,
+          "max_single_symbol_exposure_pct": 0.24953416606359471,
+          "mean_invested_ratio": 0.6787137107966705,
+          "negative_month_count": 2,
+          "skip_order_count": 86,
+          "skipped_order_rate": 0.15636363636363637,
+          "skipped_signal_rate": 0.24333333333333335,
+          "to": "2025-05-26",
+          "total_return": 1.1399072425,
+          "worst_monthly_return": -0.014130266706049999
+        },
+        "validation": {
+          "annualized_return": 0.8429904923062053,
+          "buy_order_count": 166,
+          "ending_nav_cny": 581378.6815000004,
+          "from": "2025-05-27",
+          "max_drawdown": -0.06579612328892381,
+          "max_single_symbol_exposure_pct": 0.24711031894249974,
+          "mean_invested_ratio": 0.7719553817445481,
+          "negative_month_count": 0,
+          "skip_order_count": 27,
+          "skipped_order_rate": 0.13989637305699482,
+          "skipped_signal_rate": 0.21359223300970873,
+          "to": "2025-11-26",
+          "total_return": 0.3584202855932912,
+          "worst_monthly_return": 0.0076962284390442726
+        }
+      },
+      "standout": {
+        "full_pre_final": {
+          "drawdown_improved": false,
+          "negative_month_reduction": 0,
+          "passed": false,
+          "relative_total_return_improvement": 0.000192782593317705
+        },
+        "tuning": {
+          "drawdown_improved": false,
+          "negative_month_reduction": 0,
+          "passed": false,
+          "relative_total_return_improvement": 0.0
+        },
+        "validation": {
+          "drawdown_improved": true,
+          "negative_month_reduction": 0,
+          "passed": false,
+          "relative_total_return_improvement": 0.00047943656782081193
+        }
+      },
+      "trigger_audit": {
+        "ready_percentile_day_count": 154,
+        "ready_probability_day_count": 194,
+        "triggered_signal_day_count": 3
+      },
+      "variant": {
+        "feature_set": "compressed_core_plus_external",
+        "risk_percentile_min": 0.9,
+        "scale": 0.9,
+        "variant_id": "quantile_external_q090_scale090"
+      }
+    },
+    {
+      "gates": {
+        "full_pre_final": {
+          "comparisons": {
+            "annualized_return": {
+              "baseline": 0.6169246977162617,
+              "candidate": 0.6139271990922752,
+              "passed": false
+            },
+            "max_drawdown": {
+              "baseline": -0.0679446018162233,
+              "candidate": -0.0679446018162233,
+              "passed": true
+            },
+            "max_single_symbol_exposure_pct": {
+              "baseline": 0.24953416606359471,
+              "candidate": 0.24953416606359471,
+              "passed": true
+            },
+            "negative_month_count": {
+              "baseline": 2,
+              "candidate": 2,
+              "passed": true
+            },
+            "skipped_order_rate": {
+              "baseline": 0.15208613728129206,
+              "candidate": 0.15208613728129206,
+              "passed": true
+            },
+            "skipped_signal_rate": {
+              "baseline": 0.23573200992555832,
+              "candidate": 0.23573200992555832,
+              "passed": true
+            },
+            "total_return": {
+              "baseline": 1.9065258625000019,
+              "candidate": 1.8945754600000022,
+              "passed": false
+            },
+            "worst_monthly_return": {
+              "baseline": -0.014130266706049999,
+              "candidate": -0.014130266706049999,
+              "passed": true
+            }
+          },
+          "failed_metrics": [
+            "annualized_return",
+            "total_return"
+          ],
+          "passed": false
+        },
+        "tuning": {
+          "comparisons": {
+            "annualized_return": {
+              "baseline": 0.557639363593706,
+              "candidate": 0.557639363593706,
+              "passed": true
+            },
+            "max_drawdown": {
+              "baseline": -0.0679446018162233,
+              "candidate": -0.0679446018162233,
+              "passed": true
+            },
+            "max_single_symbol_exposure_pct": {
+              "baseline": 0.24953416606359471,
+              "candidate": 0.24953416606359471,
+              "passed": true
+            },
+            "negative_month_count": {
+              "baseline": 2,
+              "candidate": 2,
+              "passed": true
+            },
+            "skipped_order_rate": {
+              "baseline": 0.15636363636363637,
+              "candidate": 0.15636363636363637,
+              "passed": true
+            },
+            "skipped_signal_rate": {
+              "baseline": 0.24333333333333335,
+              "candidate": 0.24333333333333335,
+              "passed": true
+            },
+            "total_return": {
+              "baseline": 1.1399072425,
+              "candidate": 1.1399072425,
+              "passed": true
+            },
+            "worst_monthly_return": {
+              "baseline": -0.014130266706049999,
+              "candidate": -0.014130266706049999,
+              "passed": true
+            }
+          },
+          "failed_metrics": [],
+          "passed": true
+        },
+        "validation": {
+          "comparisons": {
+            "annualized_return": {
+              "baseline": 0.8425254244780453,
+              "candidate": 0.8274360620251939,
+              "passed": false
+            },
+            "max_drawdown": {
+              "baseline": -0.0658039312712575,
+              "candidate": -0.06605881452695561,
+              "passed": false
+            },
+            "max_single_symbol_exposure_pct": {
+              "baseline": 0.24711031894249974,
+              "candidate": 0.24711031894249974,
+              "passed": true
+            },
+            "negative_month_count": {
+              "baseline": 0,
+              "candidate": 0,
+              "passed": true
+            },
+            "skipped_order_rate": {
+              "baseline": 0.13989637305699482,
+              "candidate": 0.13989637305699482,
+              "passed": true
+            },
+            "skipped_signal_rate": {
+              "baseline": 0.21359223300970873,
+              "candidate": 0.21359223300970873,
+              "passed": true
+            },
+            "total_return": {
+              "baseline": 0.3582485281485288,
+              "candidate": 0.35266398585498604,
+              "passed": false
+            },
+            "worst_monthly_return": {
+              "baseline": 0.0076962284390442726,
+              "candidate": 0.0076962284390442726,
+              "passed": true
+            }
+          },
+          "failed_metrics": [
+            "annualized_return",
+            "max_drawdown",
+            "total_return"
+          ],
+          "passed": false
+        }
+      },
+      "segments": {
+        "full_pre_final": {
+          "annualized_return": 0.6139271990922752,
+          "buy_order_count": 630,
+          "ending_nav_cny": 578915.0920000004,
+          "from": "2023-09-07",
+          "max_drawdown": -0.0679446018162233,
+          "max_single_symbol_exposure_pct": 0.24953416606359471,
+          "mean_invested_ratio": 0.7018254694128484,
+          "negative_month_count": 2,
+          "skip_order_count": 113,
+          "skipped_order_rate": 0.15208613728129206,
+          "skipped_signal_rate": 0.23573200992555832,
+          "to": "2025-11-26",
+          "total_return": 1.8945754600000022,
+          "worst_monthly_return": -0.014130266706049999
+        },
+        "tuning": {
+          "annualized_return": 0.557639363593706,
+          "buy_order_count": 464,
+          "ending_nav_cny": 427981.4485,
+          "from": "2023-09-07",
+          "max_drawdown": -0.0679446018162233,
+          "max_single_symbol_exposure_pct": 0.24953416606359471,
+          "mean_invested_ratio": 0.6787137107966705,
+          "negative_month_count": 2,
+          "skip_order_count": 86,
+          "skipped_order_rate": 0.15636363636363637,
+          "skipped_signal_rate": 0.24333333333333335,
+          "to": "2025-05-26",
+          "total_return": 1.1399072425,
+          "worst_monthly_return": -0.014130266706049999
+        },
+        "validation": {
+          "annualized_return": 0.8274360620251939,
+          "buy_order_count": 166,
+          "ending_nav_cny": 578915.0920000004,
+          "from": "2025-05-27",
+          "max_drawdown": -0.06605881452695561,
+          "max_single_symbol_exposure_pct": 0.24711031894249974,
+          "mean_invested_ratio": 0.7778169317428412,
+          "negative_month_count": 0,
+          "skip_order_count": 27,
+          "skipped_order_rate": 0.13989637305699482,
+          "skipped_signal_rate": 0.21359223300970873,
+          "to": "2025-11-26",
+          "total_return": 0.35266398585498604,
+          "worst_monthly_return": 0.0076962284390442726
+        }
+      },
+      "standout": {
+        "full_pre_final": {
+          "drawdown_improved": false,
+          "negative_month_reduction": 0,
+          "passed": false,
+          "relative_total_return_improvement": -0.006268156511828943
+        },
+        "tuning": {
+          "drawdown_improved": false,
+          "negative_month_reduction": 0,
+          "passed": false,
+          "relative_total_return_improvement": 0.0
+        },
+        "validation": {
+          "drawdown_improved": false,
+          "negative_month_reduction": 0,
+          "passed": false,
+          "relative_total_return_improvement": -0.015588458443651821
+        }
+      },
+      "trigger_audit": {
+        "ready_percentile_day_count": 154,
+        "ready_probability_day_count": 194,
+        "triggered_signal_day_count": 2
+      },
+      "variant": {
+        "feature_set": "compressed_core_plus_external",
+        "risk_percentile_min": 0.95,
+        "scale": 0.85,
+        "variant_id": "quantile_external_q095_scale085"
+      }
+    },
+    {
+      "gates": {
+        "full_pre_final": {
+          "comparisons": {
+            "annualized_return": {
+              "baseline": 0.6169246977162617,
+              "candidate": 0.6139604265165441,
+              "passed": false
+            },
+            "max_drawdown": {
+              "baseline": -0.0679446018162233,
+              "candidate": -0.0679446018162233,
+              "passed": true
+            },
+            "max_single_symbol_exposure_pct": {
+              "baseline": 0.24953416606359471,
+              "candidate": 0.24953416606359471,
+              "passed": true
+            },
+            "negative_month_count": {
+              "baseline": 2,
+              "candidate": 2,
+              "passed": true
+            },
+            "skipped_order_rate": {
+              "baseline": 0.15208613728129206,
+              "candidate": 0.15208613728129206,
+              "passed": true
+            },
+            "skipped_signal_rate": {
+              "baseline": 0.23573200992555832,
+              "candidate": 0.23573200992555832,
+              "passed": true
+            },
+            "total_return": {
+              "baseline": 1.9065258625000019,
+              "candidate": 1.8947077825000016,
+              "passed": false
+            },
+            "worst_monthly_return": {
+              "baseline": -0.014130266706049999,
+              "candidate": -0.014130266706049999,
+              "passed": true
+            }
+          },
+          "failed_metrics": [
+            "annualized_return",
+            "total_return"
+          ],
+          "passed": false
+        },
+        "tuning": {
+          "comparisons": {
+            "annualized_return": {
+              "baseline": 0.557639363593706,
+              "candidate": 0.557639363593706,
+              "passed": true
+            },
+            "max_drawdown": {
+              "baseline": -0.0679446018162233,
+              "candidate": -0.0679446018162233,
+              "passed": true
+            },
+            "max_single_symbol_exposure_pct": {
+              "baseline": 0.24953416606359471,
+              "candidate": 0.24953416606359471,
+              "passed": true
+            },
+            "negative_month_count": {
+              "baseline": 2,
+              "candidate": 2,
+              "passed": true
+            },
+            "skipped_order_rate": {
+              "baseline": 0.15636363636363637,
+              "candidate": 0.15636363636363637,
+              "passed": true
+            },
+            "skipped_signal_rate": {
+              "baseline": 0.24333333333333335,
+              "candidate": 0.24333333333333335,
+              "passed": true
+            },
+            "total_return": {
+              "baseline": 1.1399072425,
+              "candidate": 1.1399072425,
+              "passed": true
+            },
+            "worst_monthly_return": {
+              "baseline": -0.014130266706049999,
+              "candidate": -0.014130266706049999,
+              "passed": true
+            }
+          },
+          "failed_metrics": [],
+          "passed": true
+        },
+        "validation": {
+          "comparisons": {
+            "annualized_return": {
+              "baseline": 0.8425254244780453,
+              "candidate": 0.8276028021158421,
+              "passed": false
+            },
+            "max_drawdown": {
+              "baseline": -0.0658039312712575,
+              "candidate": -0.0660559814864744,
+              "passed": false
+            },
+            "max_single_symbol_exposure_pct": {
+              "baseline": 0.24711031894249974,
+              "candidate": 0.24711031894249974,
+              "passed": true
+            },
+            "negative_month_count": {
+              "baseline": 0,
+              "candidate": 0,
+              "passed": true
+            },
+            "skipped_order_rate": {
+              "baseline": 0.13989637305699482,
+              "candidate": 0.13989637305699482,
+              "passed": true
+            },
+            "skipped_signal_rate": {
+              "baseline": 0.21359223300970873,
+              "candidate": 0.21359223300970873,
+              "passed": true
+            },
+            "total_return": {
+              "baseline": 0.3582485281485288,
+              "candidate": 0.3527258214791529,
+              "passed": false
+            },
+            "worst_monthly_return": {
+              "baseline": 0.0076962284390442726,
+              "candidate": 0.0076962284390442726,
+              "passed": true
+            }
+          },
+          "failed_metrics": [
+            "annualized_return",
+            "max_drawdown",
+            "total_return"
+          ],
+          "passed": false
+        }
+      },
+      "segments": {
+        "full_pre_final": {
+          "annualized_return": 0.6139604265165441,
+          "buy_order_count": 630,
+          "ending_nav_cny": 578941.5565000003,
+          "from": "2023-09-07",
+          "max_drawdown": -0.0679446018162233,
+          "max_single_symbol_exposure_pct": 0.24953416606359471,
+          "mean_invested_ratio": 0.7019179861414978,
+          "negative_month_count": 2,
+          "skip_order_count": 113,
+          "skipped_order_rate": 0.15208613728129206,
+          "skipped_signal_rate": 0.23573200992555832,
+          "to": "2025-11-26",
+          "total_return": 1.8947077825000016,
+          "worst_monthly_return": -0.014130266706049999
+        },
+        "tuning": {
+          "annualized_return": 0.557639363593706,
+          "buy_order_count": 464,
+          "ending_nav_cny": 427981.4485,
+          "from": "2023-09-07",
+          "max_drawdown": -0.0679446018162233,
+          "max_single_symbol_exposure_pct": 0.24953416606359471,
+          "mean_invested_ratio": 0.6787137107966705,
+          "negative_month_count": 2,
+          "skip_order_count": 86,
+          "skipped_order_rate": 0.15636363636363637,
+          "skipped_signal_rate": 0.24333333333333335,
+          "to": "2025-05-26",
+          "total_return": 1.1399072425,
+          "worst_monthly_return": -0.014130266706049999
+        },
+        "validation": {
+          "annualized_return": 0.8276028021158421,
+          "buy_order_count": 166,
+          "ending_nav_cny": 578941.5565000003,
+          "from": "2025-05-27",
+          "max_drawdown": -0.0660559814864744,
+          "max_single_symbol_exposure_pct": 0.24711031894249974,
+          "mean_invested_ratio": 0.7782136434752899,
+          "negative_month_count": 0,
+          "skip_order_count": 27,
+          "skipped_order_rate": 0.13989637305699482,
+          "skipped_signal_rate": 0.21359223300970873,
+          "to": "2025-11-26",
+          "total_return": 0.3527258214791529,
+          "worst_monthly_return": 0.0076962284390442726
+        }
+      },
+      "standout": {
+        "full_pre_final": {
+          "drawdown_improved": false,
+          "negative_month_reduction": 0,
+          "passed": false,
+          "relative_total_return_improvement": -0.006198751473795061
+        },
+        "tuning": {
+          "drawdown_improved": false,
+          "negative_month_reduction": 0,
+          "passed": false,
+          "relative_total_return_improvement": 0.0
+        },
+        "validation": {
+          "drawdown_improved": false,
+          "negative_month_reduction": 0,
+          "passed": false,
+          "relative_total_return_improvement": -0.015415853061331305
+        }
+      },
+      "trigger_audit": {
+        "ready_percentile_day_count": 154,
+        "ready_probability_day_count": 194,
+        "triggered_signal_day_count": 1
+      },
+      "variant": {
+        "feature_set": "compressed_core_plus_external",
+        "risk_percentile_min": 0.975,
+        "scale": 0.75,
+        "variant_id": "quantile_external_q0975_scale075"
+      }
+    }
+  ],
+  "round": 5,
+  "schema_version": "global_sector_state_account_ablation.v1",
+  "selection_before_final": "quantile_external_q090_scale090",
+  "signal_day_count": 493,
+  "source_design_digest": "3bea4ad96b25a14b52ab72c46a01e8af070f39df4747b31f88840574afb9f430",
+  "source_execution_snapshot_id": "shortpick-v3-execution-snapshot-067c5b83e085f95f",
+  "source_global_market_digest": "4a97e90a4ee86483f4e1b1549c641d196e8f1288c131f36459f988611b61719d",
+  "status": "no_candidate_cleared_full_objective",
+  "v3_signal_changed": false
+}

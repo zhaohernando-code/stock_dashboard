@@ -10,7 +10,7 @@
   },
   "status": "in_progress",
   "owner": "codex",
-  "updated_at": "2026-08-07T22:10:00+08:00",
+  "updated_at": "2026-08-08T01:40:00+08:00",
   "latest_personal_eligibility_and_external_context_update": {
     "status": "pit_eligibility_gate_active_external_context_research_only",
     "account_profile": "new_retail_cash_account",
@@ -861,8 +861,8 @@
           455,
           26,
           162
-        ]
-      },
+    ]
+  },
       "finding": "Existing PIT-safe capacity/liquidity/momentum/drawdown/industry-relative/OHLC price-action feature recipes can strongly reject the bad fallback picks, but none ranks the three blocker-date liquid winners consistently inside Top25. Industry-relative pullback improves one date to rank 14 but remains rank 30 and 144 on the other two dates; price-action recipes are weaker. This shifts the remaining capacity blocker from execution/fallback mechanics to missing or insufficient PIT-safe ranking features.",
       "target_fitted_combo_search": {
         "claim_ceiling": "target_fitted_existing_feature_combo_diagnostic_only_no_model_replay_no_promotion",
@@ -1411,5 +1411,77 @@
       "status": "done"
     }
   ],
+  "latest_external_context_multi_round_account_research": {
+    "status": "research_complete_no_external_candidate_qualified_v3_unchanged",
+    "as_of": "2026-08-08",
+    "baseline_execution_snapshot": "shortpick-v3-execution-snapshot-067c5b83e085f95f",
+    "baseline_signal_days": 511,
+    "baseline_signal_range": ["2023-09-07", "2026-06-26"],
+    "baseline_full_total_return": 3.3210034875,
+    "baseline_full_max_drawdown": -0.0688512212,
+    "baseline_extended_total_return": 0.4866557849,
+    "baseline_extended_negative_month_count": 0,
+    "frozen_non_degrade_metrics": [
+      "total_return",
+      "annualized_return",
+      "max_drawdown",
+      "negative_month_count",
+      "worst_monthly_return",
+      "skipped_order_rate",
+      "skipped_signal_rate",
+      "max_single_symbol_exposure_pct"
+    ],
+    "research_layers_materialized": {
+      "global_market_records": 3132,
+      "sw_l1_sector_records": 23653,
+      "macro_records": 5715,
+      "sector_flow_records": 209087,
+      "cninfo_source_records": 155518,
+      "cninfo_curated_records": 155132
+    },
+    "new_compact_snapshot_bytes_approx": 194000000,
+    "user_storage_ceiling_bytes": 2147483648,
+    "evaluated_carriers": [
+      "static_and_dynamic_bounded_score_weight",
+      "global_and_sector_risk_veto",
+      "official_negative_event_gate",
+      "adaptive_10d_20d_30d_horizon",
+      "rank1_rank2_budget_transfer",
+      "sector_flow_enriched_pair_allocation",
+      "full_top20_external_residual_rerank",
+      "near_tie_top5_sector_momentum_rerank",
+      "past_only_dynamic_sector_gate",
+      "expanded_affordable_replacement_pool"
+    ],
+    "closest_external_candidate": {
+      "id": "external_pair_q060_transfer5",
+      "tuning_total_return_delta": 0.0216008,
+      "validation_total_return_delta": 0.0116925,
+      "extended_total_return_delta": 0.0050280,
+      "extended_relative_return_improvement": 0.0103318,
+      "rejection_reasons": [
+        "skipped_order_rate_worse",
+        "skipped_signal_rate_worse",
+        "max_single_symbol_exposure_worse",
+        "not_a_10_percent_relative_return_improvement"
+      ]
+    },
+    "authenticity_findings": [
+      "candidate_only_cash_path_buys_are_not_strategy_alpha",
+      "official_event_apparent_gains_disappeared_when_actual_buy_symbols_were_enforced",
+      "lambda_zero_must_match_frozen_nav_and_executed_buy_sell_ledger",
+      "candidate_pool_depth_must_be_explicit"
+    ],
+    "news_title_diagnostic": {
+      "candidate_symbols": 1837,
+      "covered_symbols": 1833,
+      "classified_candidate_events": 20979,
+      "decision": "title_only_positive_negative_direction_unstable_not_admitted"
+    },
+    "production_lambda": 0.0,
+    "v3_signal_changed": false,
+    "runtime_publish_required": false,
+    "next_gate": "qualified_professional_news_or_document_body_expectation_surprise_features_then_new_independent_time_holdout"
+  },
   "exposure_floor_stability_proxy": "2026-07-07 `research-exposure-floor-stability-proxy` found `gross_exposure_linear_scale_overlay@0.3`, then formal full713 stream replay promoted it to fixed registered spec `weak_defensive_grind_tail_cash_congested_low_liquidity_top3_20d_gross_exposure_scaled_v1`. Candidate-run support is now in `selection_policy.date_exposure_scaling.mode=gross_exposure_floor_linear_scale`, applying the same date-level scale to selected returns and selected-pick weights. Formal replay root `/tmp/stock_dashboard_label_v3_gross_exposure_scaled_full713_min60` produced report `model-comparison-report-26c4f58b6afcabe0`, candidate run `walk-forward-model-candidate-run-53b14185088ead43`, governance `governance-promotion-decision-5ff85ab74df18cc1`, dashboard registry `dashboard-approved-projection-registry-62ff61ace39f0365`. Best trial-002 scales `77` dates / `231` pick rows; total return `+247.3%`, annualized `+61.7%`, maxDD `-3.06%`, selected mean `0.03103`, execution mean `0.03190`, positive-date rate `46.71%`, negative months `3`, worst month `-0.00882`, path drawdown sum `-0.8715`, alpha `7.0512`, DSR `0.999999964`, PBO `0.0`. It improved return/path/worst-month over the previous benchmark-momentum frontier, but was later superseded by the Rank1 replacement frontier and remains blocked by negative monthly mean stress and 1M ADV/capacity fill-rate. This was superseded by the Rank1 replacement frontier on 2026-07-07; keep it as the direct predecessor comparator only, not production/paper/dashboard/runtime policy."
 }

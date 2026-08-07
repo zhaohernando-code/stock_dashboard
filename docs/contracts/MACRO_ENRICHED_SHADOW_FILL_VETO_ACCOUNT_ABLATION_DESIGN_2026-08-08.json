@@ -1,0 +1,53 @@
+{
+  "artifact_type": "macro_enriched_shadow_fill_veto_account_ablation_preregistration",
+  "schema_version": "macro_enriched_shadow_fill_veto_account_ablation_preregistration.v1",
+  "status": "frozen_before_round20_outcome_evaluation",
+  "frozen_at": "2026-08-08T07:45:00+08:00",
+  "owner": "hernando_zhao",
+  "research_question": "Can compact PIT-conservative volatility, FX, rates, gold and oil features improve the identification of losing V3 strong-overlay Rank1 trades without creating any trade that the unmodified V3 shadow account could not execute?",
+  "source_data": {
+    "macro_snapshot_digest": "affa423dd4198a2ca723ed0ef1dc41b055c9fdff39b4594cce9afddc6b7032e2",
+    "macro_series": ["VIXCLS", "USDCNH_MID", "UST_10Y", "UST_10Y_MINUS_2Y", "SGE_AU9999", "DCOILWTICO"],
+    "availability_rule": "available_at <= decision_cutoff",
+    "revision_limitation": "historical revision lineage is unavailable; production promotion requires vintage-qualified reproduction"
+  },
+  "model": {
+    "family": "expanding_past_only_weighted_l2_logistic",
+    "label": "realized_rank1_account_trade_return_lt_zero",
+    "loss_return_threshold": 0.0,
+    "minimum_completed_training_trades": 120,
+    "minimum_completed_strong_training_trades": 30,
+    "strong_signal_sample_weight": 4.0,
+    "minimum_prior_live_predictions_for_quantile": 30,
+    "l2_penalty": 8.0,
+    "macro_feature_count": 8,
+    "regularization_reason": "stronger than prior five-point penalty because the macro feature set adds eight correlated features"
+  },
+  "carrier": {
+    "target_scope": "strong_rank1_overlay_only",
+    "effect": "partially or fully remove only the V3 1.54 quality overlay; never reverse the core selection and never create a positive-news buy",
+    "enforce_shadow_baseline_buy_eligibility_all_orders": true,
+    "prohibited_effect": "no candidate-only buy is permitted on any signal date, including downstream cash-path divergence"
+  },
+  "variants": [
+    {"variant_id": "core_shadow_control_q090_full", "feature_set": "compressed_core_only", "risk_percentile_min": 0.90, "target_scope": "strong_rank1_overlay_only", "neutralize_fraction": 1.00, "must_preserve_baseline_buy_eligibility": true, "enforce_shadow_baseline_buy_eligibility_all_orders": true, "control_only": true},
+    {"variant_id": "macro_q085_half", "feature_set": "compressed_core_plus_global_sector_macro", "risk_percentile_min": 0.85, "target_scope": "strong_rank1_overlay_only", "neutralize_fraction": 0.50, "must_preserve_baseline_buy_eligibility": true, "enforce_shadow_baseline_buy_eligibility_all_orders": true},
+    {"variant_id": "macro_q085_full", "feature_set": "compressed_core_plus_global_sector_macro", "risk_percentile_min": 0.85, "target_scope": "strong_rank1_overlay_only", "neutralize_fraction": 1.00, "must_preserve_baseline_buy_eligibility": true, "enforce_shadow_baseline_buy_eligibility_all_orders": true},
+    {"variant_id": "macro_q090_half", "feature_set": "compressed_core_plus_global_sector_macro", "risk_percentile_min": 0.90, "target_scope": "strong_rank1_overlay_only", "neutralize_fraction": 0.50, "must_preserve_baseline_buy_eligibility": true, "enforce_shadow_baseline_buy_eligibility_all_orders": true},
+    {"variant_id": "macro_q090_full", "feature_set": "compressed_core_plus_global_sector_macro", "risk_percentile_min": 0.90, "target_scope": "strong_rank1_overlay_only", "neutralize_fraction": 1.00, "must_preserve_baseline_buy_eligibility": true, "enforce_shadow_baseline_buy_eligibility_all_orders": true},
+    {"variant_id": "macro_q095_half", "feature_set": "compressed_core_plus_global_sector_macro", "risk_percentile_min": 0.95, "target_scope": "strong_rank1_overlay_only", "neutralize_fraction": 0.50, "must_preserve_baseline_buy_eligibility": true, "enforce_shadow_baseline_buy_eligibility_all_orders": true},
+    {"variant_id": "macro_q095_full", "feature_set": "compressed_core_plus_global_sector_macro", "risk_percentile_min": 0.95, "target_scope": "strong_rank1_overlay_only", "neutralize_fraction": 1.00, "must_preserve_baseline_buy_eligibility": true, "enforce_shadow_baseline_buy_eligibility_all_orders": true}
+  ],
+  "selection": {
+    "tuning_end": "2025-05-26",
+    "validation_from": "2025-05-27",
+    "validation_end": "2025-11-26",
+    "extended_readout_from": "2025-11-27",
+    "extended_readout_to": "2026-06-26",
+    "extended_readout_is_not_untouched": true,
+    "selection_rule": "within one standard error of the best validation monthly delta, choose the smallest neutralization and then the highest trigger percentile",
+    "strict_non_degrade_metrics": ["total_return", "annualized_return", "max_drawdown", "negative_month_count", "worst_monthly_return", "skipped_order_rate", "skipped_signal_rate", "max_single_symbol_exposure_pct"],
+    "standout_gate": "at_least_10_percent relative return improvement or one fewer negative month with drawdown improvement"
+  },
+  "claim_ceiling": "round20_preregistered_research_replay_not_v3_change_and_not_new_untouched_holdout"
+}

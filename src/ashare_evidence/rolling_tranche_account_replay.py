@@ -833,6 +833,8 @@ def _affordable_replacement_request(
             "replacement_inventory_rank": inventory_rank,
             "replacement_original_symbol": str(original_pick.get("symbol") or ""),
             "target_horizon_days": horizon,
+            "shadow_baseline_buy_eligible": original_pick.get("shadow_baseline_buy_eligible"),
+            "shadow_baseline_buy_symbols": original_pick.get("shadow_baseline_buy_symbols"),
         }
         return {
             "pick": replacement_pick,
@@ -888,6 +890,21 @@ def _try_buy_request(
     shares = int(floor(target_notional / one_lot_notional) * board_lot_size)
     if shares <= 0:
         return [_skip(signal_day, symbol, stock_name, rank, "board_lot_rounding_zero", target_notional)], cash, positions, False
+    shadow_symbols = pick.get("shadow_baseline_buy_symbols")
+    if shadow_symbols is not None and symbol not in {str(value) for value in shadow_symbols}:
+        return (
+            [_skip(signal_day, symbol, stock_name, rank, "shadow_baseline_not_buy_eligible", target_notional)],
+            cash,
+            positions,
+            False,
+        )
+    if pick.get("shadow_baseline_buy_eligible") is False:
+        return (
+            [_skip(signal_day, symbol, stock_name, rank, "shadow_baseline_not_buy_eligible", target_notional)],
+            cash,
+            positions,
+            False,
+        )
     gross_cost = shares * entry_bar.close
     cash_spent = gross_cost * (1.0 + buy_cost_rate)
     if cash_spent > cash:

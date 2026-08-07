@@ -1,0 +1,25 @@
+{
+  "artifact_type":"external_regime_horizon_preregistration",
+  "schema_version":"external_regime_horizon_preregistration.v1",
+  "status":"frozen_before_round19_outcome_evaluation",
+  "frozen_at":"2026-08-08T09:30:00+08:00",
+  "owner":"hernando_zhao",
+  "source_round18":{"artifact_id":"official-event-account-guard-8dd332998bd06893","finding":"official-event shortened holding periods underperformed; individual event channel remains alert-only"},
+  "state":{
+    "family":"past_only_global_and_sw_sector_breadth_regime_percentile",
+    "minimum_prior_days":60,
+    "components":{"sw_breadth_5d":0.30,"sw_breadth_20d":0.20,"global_breadth_5d":0.25,"global_breadth_20d":0.10,"rank1_sw_sector_relative_5d_z":0.15},
+    "availability_rule":"all component available_at values must be at or before signal cutoff"
+  },
+  "carrier":{"scope":"baseline-buy-eligible V3 Rank1 horizon only","baseline_horizon_days":20,"position_weight_change":false,"symbol_selection_change":false,"shadow_fill_constraint":true,"positive_state_cannot_create_buy":true},
+  "variants":[
+    {"variant_id":"regime_q10_90_h15_25","risk_percentile_max":0.10,"rebound_percentile_min":0.90,"risk_horizon_days":15,"rebound_horizon_days":25},
+    {"variant_id":"regime_q10_90_h10_30","risk_percentile_max":0.10,"rebound_percentile_min":0.90,"risk_horizon_days":10,"rebound_horizon_days":30},
+    {"variant_id":"regime_q15_85_h15_25","risk_percentile_max":0.15,"rebound_percentile_min":0.85,"risk_horizon_days":15,"rebound_horizon_days":25},
+    {"variant_id":"regime_q15_85_h10_30","risk_percentile_max":0.15,"rebound_percentile_min":0.85,"risk_horizon_days":10,"rebound_horizon_days":30},
+    {"variant_id":"regime_q20_80_h15_25","risk_percentile_max":0.20,"rebound_percentile_min":0.80,"risk_horizon_days":15,"rebound_horizon_days":25},
+    {"variant_id":"regime_q20_80_h10_30","risk_percentile_max":0.20,"rebound_percentile_min":0.80,"risk_horizon_days":10,"rebound_horizon_days":30}
+  ],
+  "selection":{"tuning_end":"2025-05-26","validation_from":"2025-05-27","validation_end":"2025-11-26","final_untouched_from":"2025-11-27","final_untouched_to":"2026-06-26","strict_non_degrade_metrics":["total_return","annualized_return","max_drawdown","negative_month_count","worst_monthly_return","skipped_order_rate","skipped_signal_rate","max_single_symbol_exposure_pct"],"one_standard_error_rule":"inside best validation monthly-delta one-SE plateau choose horizons closest to 20 days and narrower tail coverage","standout_gate":"at_least_10_percent relative return improvement or one fewer negative month with drawdown improvement"},
+  "claim_ceiling":"round19_preregistered_external_regime_horizon_research_only_not_v3_change"
+}
