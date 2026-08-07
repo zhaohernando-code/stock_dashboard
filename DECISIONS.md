@@ -2863,3 +2863,12 @@ The stream replay bottleneck after JSON parsing was removed by replacing full pr
 - Treat external global/sector residuals as bounded holding-period and risk-conflict inputs, not independent positive buy triggers.
 - Do not promote the rounds 30–47 challenger despite a reused-final return lift above 10%; the result is concentrated in too few triggers and exact non-degradation was not cleared.
 - Freeze the next evidence step to concentration, leave-one-trigger-out, execution stress, and an untouched forward paper window. Do not continue optimizing against the reused final period.
+
+## 2026-08-08 — Round 75 is the first all-gate external-context challenger, but V3 remains unchanged
+
+- Retain V3 as the production and paper-tracking strategy. External information may not create a buy, change a V3 symbol/rank, or scale later V3 orders through profit-path compounding.
+- Freeze `exact_share_core_median_veto_forward` as the leading research challenger. It requires the stock-only core percentile to be at least 50%, the past-only full prediction percentile to be at least 70%, an existing position return of at least 5%, and supportive global breadth/return. It may only extend an already-held V3 position for 40 trading days with bounded stop/trailing protection.
+- Freeze exact V3 buy share counts in account replay. This prevents earlier external P&L from silently increasing later core order sizes and was necessary to clear the forward maximum-exposure gate.
+- Round 75 passed all eight tuning, validation, full-readout and 2026-06-29 to 2026-08-07 forward non-degradation gates. The full readout improved total return from 40.32% to 46.39% and max drawdown from -7.61% to -7.35%.
+- Do not promote the challenger yet. Its standout contribution is concentrated in one 603115.SH extension; leave-one-trigger-out removes the advantage. Round 78's sparse global-risk gate improves the recent downturn but covers only one shock episode and cannot be selected from independent earlier episodes.
+- Continue no-change shadow observation until at least three independent qualifying extensions and three independent global-shock episodes exist. No V3 signal, paper order, live candidate or runtime behavior changes in this research package.

@@ -26,7 +26,11 @@ def main() -> int:
     ):
         parser.add_argument(f"--{name}", type=Path, required=True)
     parser.add_argument("--signal-end", type=date.fromisoformat, default=date(2026, 6, 26))
+    parser.add_argument("--additional-external-root", type=Path, action="append", default=[])
+    parser.add_argument("--additional-curation", type=Path, action="append", default=[])
     args = parser.parse_args()
+    if len(args.additional_external_root) != len(args.additional_curation):
+        parser.error("--additional-external-root and --additional-curation must be supplied in pairs")
     payload = run_event_confirmed_position_extension_ablation(
         execution_snapshot_path=args.execution_snapshot,
         global_market_snapshot_path=args.global_market_snapshot,
@@ -36,6 +40,7 @@ def main() -> int:
         curation_path=args.curation,
         design_path=args.design,
         signal_end=args.signal_end,
+        additional_event_sources=list(zip(args.additional_external_root, args.additional_curation)),
     )
     write_event_confirmed_position_extension_result(args.output, payload)
     print(

@@ -1,0 +1,71 @@
+{
+  "artifact_type": "personal_tiered_winner_post_trigger_cap_preregistration",
+  "schema_version": "event_confirmed_position_extension_preregistration.v1",
+  "status": "frozen_before_round64_historical_tiered_protection_outcome_evaluation",
+  "frozen_at": "2026-08-08T05:02:00+08:00",
+  "owner": "hernando_zhao",
+  "research_question": "Can tiered protection for already-profitable, event-conflict-free positions recover a standout continuation payoff under the corrected personal baseline and post-trigger risk cap?",
+  "data_contract": {
+    "execution_snapshot_id": "shortpick-v3-execution-snapshot-9b18339d2e21b622",
+    "global_market_digest": "c8148c11eb1ac219eaeb6dc45a0ff760cafa97faf70321ee2f835491af16aa71",
+    "sector_market_digest": "2d3be520030b63ca10b30fbb539e5ed650d7c1687af09d73e98524d33760e56e",
+    "macro_market_digest": "affa423dd4198a2ca723ed0ef1dc41b055c9fdff39b4594cce9afddc6b7032e2",
+    "cninfo_curation_file_sha256": "39e59e53818a70628e26d75196def79117eff4c0e92353b7cdc358c2f64d71c7",
+    "cninfo_curation_exclusion_digest": "012f8957ad67388d651f344cda9b97b0b6d7d83a3b3376fba26823cdaf754c52",
+    "network_access_during_replay": false,
+    "available_at_rule": "available_at <= decision_cutoff",
+    "entry_identity_rule": "preserve exact personal-V3 executed-buy identity and protect future V3 entries by recalling only externally deferred positions"
+  },
+  "boundary": {
+    "event_lookback_calendar_days": 20,
+    "minimum_core_position_return": 0.05,
+    "maximum_recent_official_event_count": 0,
+    "extension_trade_days": 40,
+    "post_trigger_market_value_cap": 0.238,
+    "wide_protection_thresholds": [0.1, 0.15, 0.2]
+  },
+  "model": {
+    "minimum_completed_position_labels": 220,
+    "minimum_prior_predictions": 100,
+    "l2_penalty": 25.0
+  },
+  "variant_defaults": {
+    "extension_trade_days": 40,
+    "prediction_percentile_min": 0.7,
+    "minimum_predicted_advantage": 0.0,
+    "minimum_position_return": 0.05,
+    "minimum_global_breadth_5d": 0.5,
+    "minimum_global_mean_return_5d": 0.0,
+    "minimum_sector_relative_5d": -1.0,
+    "minimum_cash_reserve_cny": 0.0,
+    "entry_liquidity_recall": true,
+    "freeze_to_baseline_executed_buys": true,
+    "freeze_baseline_buy_shares": false,
+    "require_recent_event": false,
+    "maximum_event_count": 0,
+    "deferral_stop_loss_pct": 0.05,
+    "deferral_trailing_activation_pct": 0.15,
+    "deferral_trailing_drawdown_pct": 0.05,
+    "wide_deferral_stop_loss_pct": 0.1,
+    "wide_deferral_trailing_activation_pct": 0.5,
+    "wide_deferral_trailing_drawdown_pct": 0.15,
+    "post_first_external_trigger_market_value_cap_pct": 0.238
+  },
+  "variants": [
+    {"variant_id": "personal_tiered40_wide10_postcap0238", "wide_protection_min_position_return": 0.1},
+    {"variant_id": "personal_tiered40_wide15_postcap0238", "wide_protection_min_position_return": 0.15},
+    {"variant_id": "personal_tiered40_wide20_postcap0238", "wide_protection_min_position_return": 0.2}
+  ],
+  "selection": {
+    "tuning_end": "2025-05-26",
+    "validation_from": "2025-05-27",
+    "validation_end": "2025-11-26",
+    "extended_readout_from": "2025-11-27",
+    "extended_readout_to": "2026-06-26",
+    "extended_readout_is_not_untouched": true,
+    "selection_rule": "strict eight-metric tuning and validation non-degradation followed by one-standard-error minimum-complexity selection",
+    "standout_gate": "at least 10 percent relative return improvement, or one fewer negative month together with improved drawdown",
+    "robustness_requirement": "any standout candidate must pass trigger contribution concentration and leave-one-trigger-out before forward evaluation"
+  },
+  "claim_ceiling": "round64_reused_history_tiered_protection_research_only_not_v3_change"
+}

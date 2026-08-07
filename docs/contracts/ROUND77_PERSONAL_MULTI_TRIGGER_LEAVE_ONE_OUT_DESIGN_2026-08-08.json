@@ -1,0 +1,71 @@
+{
+  "artifact_type": "personal_multi_trigger_leave_one_out_preregistration",
+  "schema_version": "event_confirmed_position_extension_preregistration.v1",
+  "status": "frozen_before_round77_multi_trigger_leave_one_out_diagnostic",
+  "frozen_at": "2026-08-08T10:55:00+08:00",
+  "owner": "hernando_zhao",
+  "research_question": "Which of the three round76 triggers causes the tiny final worst-month degradation, and is the standout return concentrated in one trigger?",
+  "data_contract": {
+    "execution_snapshot_id": "shortpick-v3-execution-snapshot-9b18339d2e21b622",
+    "global_market_digest": "c8148c11eb1ac219eaeb6dc45a0ff760cafa97faf70321ee2f835491af16aa71",
+    "sector_market_digest": "2d3be520030b63ca10b30fbb539e5ed650d7c1687af09d73e98524d33760e56e",
+    "macro_market_digest": "affa423dd4198a2ca723ed0ef1dc41b055c9fdff39b4594cce9afddc6b7032e2",
+    "cninfo_curation_file_sha256": "39e59e53818a70628e26d75196def79117eff4c0e92353b7cdc358c2f64d71c7",
+    "cninfo_curation_exclusion_digest": "012f8957ad67388d651f344cda9b97b0b6d7d83a3b3376fba26823cdaf754c52",
+    "network_access_during_replay": false,
+    "available_at_rule": "same frozen PIT features as round76",
+    "entry_identity_rule": "freeze exact personal-V3 executed symbols, ranks and share counts"
+  },
+  "boundary": {
+    "event_lookback_calendar_days": 20,
+    "source_variant": "multi_p070_r0025",
+    "diagnostic_only": true
+  },
+  "model": {
+    "minimum_completed_position_labels": 220,
+    "minimum_prior_predictions": 100,
+    "l2_penalty": 25.0,
+    "global_residual_minimum_history": 20
+  },
+  "variant_defaults": {
+    "extension_trade_days": 40,
+    "prediction_percentile_min": 0.7,
+    "minimum_predicted_advantage": 0.0,
+    "minimum_core_percentile": 0.5,
+    "minimum_position_return": 0.025,
+    "minimum_global_breadth_5d": 0.5,
+    "minimum_global_mean_return_5d": 0.0,
+    "minimum_sector_relative_5d": -1.0,
+    "minimum_cash_reserve_cny": 0.0,
+    "entry_liquidity_substitution": true,
+    "freeze_to_baseline_executed_buys": true,
+    "freeze_baseline_buy_shares": true,
+    "require_recent_event": false,
+    "maximum_event_count": 0,
+    "deferral_stop_loss_pct": 0.05,
+    "deferral_trailing_activation_pct": 0.15,
+    "deferral_trailing_drawdown_pct": 0.05,
+    "wide_deferral_stop_loss_pct": 0.1,
+    "wide_deferral_trailing_activation_pct": 0.5,
+    "wide_deferral_trailing_drawdown_pct": 0.15,
+    "wide_protection_min_position_return": 0.1,
+    "post_first_external_trigger_market_value_cap_pct": 0.238
+  },
+  "variants": [
+    {"variant_id": "all_three_control"},
+    {"variant_id": "loo_600012", "diagnostic_excluded_position_keys": ["2025-05-06|2025-05-07|600012.SH|2"]},
+    {"variant_id": "loo_600018", "diagnostic_excluded_position_keys": ["2025-05-07|2025-05-08|600018.SH|1"]},
+    {"variant_id": "loo_603115", "diagnostic_excluded_position_keys": ["2026-01-20|2026-01-21|603115.SH|1"]}
+  ],
+  "selection": {
+    "tuning_end": "2025-05-26",
+    "validation_from": "2025-05-27",
+    "validation_end": "2025-11-26",
+    "extended_readout_from": "2025-11-27",
+    "extended_readout_to": "2026-06-26",
+    "extended_readout_is_not_untouched": true,
+    "selection_rule": "diagnostic only; no candidate selection claim",
+    "standout_gate": "report each leave-one-out contribution without threshold changes"
+  },
+  "claim_ceiling": "round77_leave_one_out_diagnostic_only_not_v3_change"
+}

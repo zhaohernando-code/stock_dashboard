@@ -1,0 +1,83 @@
+{
+  "artifact_type": "personal_exact_share_core_veto_forward_preregistration",
+  "schema_version": "event_confirmed_position_extension_preregistration.v1",
+  "status": "frozen_before_round75_forward_exact_share_core_veto_outcome_evaluation",
+  "frozen_at": "2026-08-08T10:05:00+08:00",
+  "owner": "hernando_zhao",
+  "research_question": "Does freezing exact V3 buy shares prevent profit-path amplification of later core positions while retaining the round73 continuation advantage and all forward non-degradation gates?",
+  "data_contract": {
+    "execution_snapshot_id": "shortpick-v3-execution-snapshot-dd04af2f51a1c038",
+    "global_market_digest": "fa6cadfc70ea1cfbd0a52ec1c9ba84cbca5221eed86d000ef25a01c7a5921403",
+    "sector_market_digest": "3ab05ad06f0fe1415ef6c3c9831e59d9c66a61fce61ce2e980ee5e085524aae9",
+    "macro_market_digest": "3ddcaa378284dd39184db2b3d620690cd7e48627492288cfc9306309f285863e",
+    "cninfo_curation_file_sha256": "39e59e53818a70628e26d75196def79117eff4c0e92353b7cdc358c2f64d71c7",
+    "cninfo_curation_exclusion_digest": "012f8957ad67388d651f344cda9b97b0b6d7d83a3b3376fba26823cdaf754c52",
+    "additional_cninfo_sources": [
+      {
+        "curation_file_sha256": "b3d85973f665bc252fe07ea4075612ab56d3501bfc7bb56021a170182ca68bdc",
+        "curation_exclusion_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      {
+        "curation_file_sha256": "b4af73119461e26f9277f307995eb4308461af1682156da14ca42b5e3d6e4d78",
+        "curation_exclusion_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      }
+    ],
+    "network_access_during_replay": false,
+    "available_at_rule": "available_at <= decision_cutoff",
+    "entry_identity_rule": "freeze exact personal-V3 executed symbols, ranks and share counts; external data may alter only the exit horizon"
+  },
+  "boundary": {
+    "event_lookback_calendar_days": 20,
+    "selected_historical_source": "ROUND73_PERSONAL_CORE_VETO_EXTENSION_RESULT_2026-08-08.json",
+    "minimum_core_percentile": 0.5,
+    "freeze_baseline_buy_shares": true,
+    "forward_candidate_outcome_used_for_design": false
+  },
+  "model": {
+    "minimum_completed_position_labels": 220,
+    "minimum_prior_predictions": 100,
+    "l2_penalty": 25.0,
+    "global_residual_minimum_history": 20
+  },
+  "variant_defaults": {
+    "extension_trade_days": 40,
+    "prediction_percentile_min": 0.7,
+    "minimum_predicted_advantage": 0.0,
+    "minimum_core_percentile": 0.5,
+    "minimum_position_return": 0.05,
+    "minimum_global_breadth_5d": 0.5,
+    "minimum_global_mean_return_5d": 0.0,
+    "minimum_sector_relative_5d": -1.0,
+    "minimum_cash_reserve_cny": 0.0,
+    "entry_liquidity_substitution": true,
+    "freeze_to_baseline_executed_buys": true,
+    "freeze_baseline_buy_shares": true,
+    "require_recent_event": false,
+    "maximum_event_count": 0,
+    "deferral_stop_loss_pct": 0.05,
+    "deferral_trailing_activation_pct": 0.15,
+    "deferral_trailing_drawdown_pct": 0.05,
+    "wide_deferral_stop_loss_pct": 0.1,
+    "wide_deferral_trailing_activation_pct": 0.5,
+    "wide_deferral_trailing_drawdown_pct": 0.15,
+    "wide_protection_min_position_return": 0.1,
+    "post_first_external_trigger_market_value_cap_pct": 0.238
+  },
+  "variants": [
+    {"variant_id": "exact_share_core_median_veto_forward"}
+  ],
+  "selection": {
+    "tuning_end": "2025-05-26",
+    "validation_from": "2025-05-27",
+    "validation_end": "2025-11-26",
+    "extended_readout_from": "2025-11-27",
+    "extended_readout_to": "2026-08-07",
+    "forward_readout_from": "2026-06-27",
+    "forward_readout_to": "2026-08-07",
+    "forward_non_degrade_required": true,
+    "selection_rule": "single frozen exact-share challenger; no outcome-based reselection",
+    "standout_gate": "at least 10 percent relative return improvement, or one fewer negative month together with improved drawdown",
+    "robustness_requirement": "all historical and forward non-degradation gates plus trigger concentration disclosure"
+  },
+  "claim_ceiling": "round75_forward_exact_share_core_veto_research_only_not_v3_change"
+}

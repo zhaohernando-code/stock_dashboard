@@ -119,6 +119,54 @@ def load_curated_official_events(
     }
 
 
+def load_merged_curated_official_events(
+    *, sources: list[tuple[Path, Path]]
+) -> tuple[dict[str, list[OfficialEvent]], dict[str, Any]]:
+    if not sources:
+        raise ValueError("at least one curated official-event source is required")
+    merged: dict[str, list[OfficialEvent]] = defaultdict(list)
+    seen: dict[tuple[str, str], OfficialEvent] = {}
+    source_audits: list[dict[str, Any]] = []
+    duplicate_event_versions = 0
+    category_counts: dict[str, int] = defaultdict(int)
+    for external_root, curation_path in sources:
+        events_by_symbol, audit = load_curated_official_events(
+            external_root=external_root,
+            curation_path=curation_path,
+        )
+        source_audits.append(audit)
+        for symbol, events in events_by_symbol.items():
+            for event in events:
+                key = (event.normalized_event_id, event.revision_id)
+                prior = seen.get(key)
+                if prior is not None:
+                    if prior != event:
+                        raise ValueError(f"conflicting official-event version across sources: {key}")
+                    duplicate_event_versions += 1
+                    continue
+                seen[key] = event
+                merged[symbol].append(event)
+                category_counts[event.category] += 1
+    for rows in merged.values():
+        rows.sort(key=lambda row: row.available_from)
+    return dict(merged), {
+        "source_count": len(sources),
+        "source_audits": source_audits,
+        "pit_records_scanned": sum(int(row["pit_records_scanned"]) for row in source_audits),
+        "curation_excluded_records": sum(
+            int(row["curation_excluded_records"]) for row in source_audits
+        ),
+        "duplicate_event_versions": duplicate_event_versions,
+        "retained_event_count": len(seen),
+        "retained_symbol_count": len(merged),
+        "category_counts": dict(sorted(category_counts.items())),
+        "curation_policy_versions": [row.get("curation_policy_version") for row in source_audits],
+        "curation_exclusion_digests": [
+            row.get("curation_exclusion_digest") for row in source_audits
+        ],
+    }
+
+
 def _bar_index_by_day(rows: list[dict[str, Any]]) -> dict[str, int]:
     return {str(row["day"]): index for index, row in enumerate(rows)}
 

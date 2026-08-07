@@ -27,6 +27,8 @@ data/artifacts/manual_reviews/
 data/artifacts/shortpick_lab/
 data/artifacts/autonomous_flow/
 data/runtime-artifacts/
+data/research_validation_personal_*/
+data/research_validation_forward_*/
 artifacts/
 output/playwright/
 output/chrome-acceptance-profile/

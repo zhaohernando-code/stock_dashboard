@@ -1,0 +1,72 @@
+{
+  "artifact_type": "core_preserving_q70_extension_preregistration",
+  "schema_version": "event_confirmed_position_extension_preregistration.v1",
+  "status": "frozen_before_round54_outcome_evaluation",
+  "frozen_at": "2026-08-08T04:51:00+08:00",
+  "owner": "hernando_zhao",
+  "research_question": "Does the q70 residual overlay remove round 53's drawdown deficit when core ordinary positions are never liquidated to preserve an external extension and the extension itself is recalled for V3 liquidity?",
+  "data_contract": {
+    "execution_snapshot_id": "shortpick-v3-execution-snapshot-067c5b83e085f95f",
+    "global_market_digest": "c8148c11eb1ac219eaeb6dc45a0ff760cafa97faf70321ee2f835491af16aa71",
+    "sector_market_digest": "2d3be520030b63ca10b30fbb539e5ed650d7c1687af09d73e98524d33760e56e",
+    "macro_market_digest": "affa423dd4198a2ca723ed0ef1dc41b055c9fdff39b4594cce9afddc6b7032e2",
+    "cninfo_curation_file_sha256": "39e59e53818a70628e26d75196def79117eff4c0e92353b7cdc358c2f64d71c7",
+    "cninfo_curation_exclusion_digest": "012f8957ad67388d651f344cda9b97b0b6d7d83a3b3376fba26823cdaf754c52",
+    "network_access_during_replay": false,
+    "available_at_rule": "available_at <= decision_cutoff",
+    "failure_driven_change_from_round53": "disable ordinary-position liquidity substitution because every external order inside the final-window drawdown was a loss-making sale of a core ordinary position; recall the residual extension itself instead",
+    "authentic_entry_rule": "reconstruct affordable replacements from same-day PIT inventory; preserve exact baseline symbol, rank and shares; recall same-symbol deferred positions before the core buy",
+    "liquidity_priority": "core ordinary positions are protected; externally deferred positions are partially or fully recalled to fund exact V3 entries",
+    "exit_timing": "all recall choices use prior-close state and execute at the current close"
+  },
+  "boundary": {
+    "entry_set_and_size": "exact frozen V3 executed-buy ledger including affordable replacements",
+    "external_information_can_trigger_buy": false,
+    "minimum_core_position_return": 0.0,
+    "global_confirmation": "global_breadth_5d >= 0.50 and global_mean_return_5d >= 0.0",
+    "event_lookback_calendar_days": 20,
+    "candidate_extension_trade_days": [30]
+  },
+  "model": {
+    "target": "30-day deferred-exit close return minus frozen mechanical-exit close return",
+    "target_availability": "deferred label joins only after its exit day is strictly before the current decision",
+    "core_features": "position path, rank and V3 entry price-volume features",
+    "full_features": "core plus PIT global, SW L1, macro and official-event features",
+    "external_increment": "full ridge prediction minus core ridge prediction",
+    "minimum_completed_position_labels": 220,
+    "minimum_prior_predictions": 100,
+    "l2_penalty": 25.0
+  },
+  "variants": [
+    {
+      "variant_id": "corepreserving_recall_exactentry_extend30_q070_stop5_trail5",
+      "extension_trade_days": 30,
+      "prediction_percentile_min": 0.70,
+      "minimum_predicted_advantage": 0.0,
+      "minimum_position_return": 0.0,
+      "minimum_global_breadth_5d": 0.50,
+      "minimum_global_mean_return_5d": 0.0,
+      "minimum_sector_relative_5d": -1.0,
+      "minimum_cash_reserve_cny": 0.0,
+      "entry_liquidity_recall": true,
+      "freeze_to_baseline_executed_buys": true,
+      "freeze_baseline_buy_shares": true,
+      "require_recent_event": false,
+      "deferral_stop_loss_pct": 0.05,
+      "deferral_trailing_activation_pct": 0.10,
+      "deferral_trailing_drawdown_pct": 0.05
+    }
+  ],
+  "selection": {
+    "tuning_end": "2025-05-26",
+    "validation_from": "2025-05-27",
+    "validation_end": "2025-11-26",
+    "extended_readout_from": "2025-11-27",
+    "extended_readout_to": "2026-06-26",
+    "extended_readout_is_not_untouched": true,
+    "strict_non_degrade_metrics": ["total_return", "annualized_return", "max_drawdown", "negative_month_count", "worst_monthly_return", "skipped_order_rate", "skipped_signal_rate", "max_single_symbol_exposure_pct"],
+    "standout_gate": "at least 10 percent relative return improvement, or one fewer negative month together with improved drawdown",
+    "robustness_requirement": "formal pass still requires trigger concentration, leave-one-trigger-out and an untouched forward account window"
+  },
+  "claim_ceiling": "round54_preregistered_research_replay_not_v3_change"
+}

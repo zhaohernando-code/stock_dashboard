@@ -191,3 +191,9 @@
 ## 2026-08-08 — Rebase partial boundary months inside each evaluation segment
 
 When tuning, validation, or final evaluation starts mid-month, never reuse the account's whole-calendar-month return for that boundary month. Recompute monthly returns from the segment starting NAV, and attribute order metrics by trade day. Otherwise adjacent evaluation segments overlap and a reused boundary month can silently contaminate non-degradation gates.
+
+## 2026-08-08 — External holding modifiers must freeze downstream core order identity and size
+
+An external exit-horizon change can increase or decrease account NAV and thereby alter later board-lot sizing even when later symbols and ranks remain identical. That path amplification is not independent external alpha and can worsen forward concentration. For holding-modifier research, freeze the baseline's executed buy symbols, ranks and share counts; treat any candidate-only symbol, missing baseline buy, or changed share count as a failed authenticity check.
+
+Core-first residual gating is also mandatory. If a candidate works only when external features overturn a below-median stock-only core signal, test a core veto before optimizing fractional weights. Report trigger count and leave-one-trigger-out results separately from aggregate gates; an all-metric pass driven by one stock is a concentration-limited challenger, not production evidence.

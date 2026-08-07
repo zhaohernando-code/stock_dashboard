@@ -1075,6 +1075,13 @@ def build_parser() -> argparse.ArgumentParser:
     external_context_cninfo_plan.add_argument("--start-date", required=True, help="YYYY-MM-DD")
     external_context_cninfo_plan.add_argument("--end-date", required=True, help="YYYY-MM-DD")
     external_context_cninfo_plan.add_argument("--max-symbols", type=int, default=None)
+    external_context_cninfo_plan.add_argument(
+        "--symbol",
+        action="append",
+        dest="requested_symbols",
+        default=None,
+        help="Limit the plan to an explicit account-relevant symbol; repeat for multiple symbols.",
+    )
     external_context_cninfo_plan.add_argument("--output-json", required=True)
 
     external_context_cninfo_run = subparsers.add_parser(
@@ -3230,6 +3237,7 @@ def main(argv: list[str] | None = None) -> int:
             start_date=args.start_date,
             end_date=args.end_date,
             max_symbols=args.max_symbols,
+            requested_symbols=args.requested_symbols,
         )
         write_external_context_artifact(payload, args.output_json)
         _print_json(payload)

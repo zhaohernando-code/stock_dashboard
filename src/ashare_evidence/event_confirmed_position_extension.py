@@ -15,7 +15,7 @@ from ashare_evidence.event_confirmed_position_exit import (
     _position_features,
     _position_key,
     expanding_position_predictions,
-    load_curated_official_events,
+    load_merged_curated_official_events,
 )
 from ashare_evidence.external_context_global_market_research import (
     load_research_snapshot,
@@ -38,11 +38,22 @@ from ashare_evidence.global_sector_state_account_ablation import (
     _non_degrade,
     _segment_metrics,
     _standout,
+    build_past_only_global_risk_residuals,
 )
 from ashare_evidence.rolling_account_execution_snapshot import load_rolling_account_execution_snapshot, stable_digest
 from ashare_evidence.rolling_tranche_account_replay import build_shortpick_v3_rolling_account_replay_artifact
 
 SCHEMA_VERSION = "event_confirmed_position_extension_account_ablation.v1"
+
+
+def _resolved_variants(design: dict[str, Any]) -> list[dict[str, Any]]:
+    defaults = design.get("variant_defaults") or {}
+    if not isinstance(defaults, dict):
+        raise ValueError("variant_defaults must be an object")
+    variants = design.get("variants") or []
+    if not isinstance(variants, list) or not variants:
+        raise ValueError("event-confirmed extension design requires variants")
+    return [{**defaults, **row} for row in variants]
 
 
 def build_position_extension_observations(
@@ -160,7 +171,12 @@ def _deferrals_for_variant(
 ) -> tuple[dict[str, dict[str, dict[str, str]]], list[dict[str, Any]]]:
     signals: dict[str, dict[str, dict[str, str]]] = defaultdict(dict)
     triggers: list[dict[str, Any]] = []
+    excluded_position_keys = {
+        str(value) for value in (variant.get("diagnostic_excluded_position_keys") or [])
+    }
     for row in observations:
+        if str(row["position_key"]) in excluded_position_keys:
+            continue
         if bool(variant.get("require_recent_event", True)) and int(row["event_count"]) <= 0:
             continue
         maximum_event_count = variant.get("maximum_event_count")
@@ -174,6 +190,12 @@ def _deferrals_for_variant(
         predicted = float(prediction["core_prediction"] if control else prediction["full_prediction"])
         percentile = float(prediction["core_percentile"] if control else prediction["full_percentile"])
         if not control and float(prediction["external_increment"]) <= 0:
+            continue
+        minimum_core_percentile = variant.get("minimum_core_percentile")
+        if (
+            minimum_core_percentile is not None
+            and float(prediction["core_percentile"]) < float(minimum_core_percentile)
+        ):
             continue
         if predicted < float(variant["minimum_predicted_advantage"]):
             continue
@@ -190,12 +212,27 @@ def _deferrals_for_variant(
         use_wide_protection = (
             variant.get("wide_protection_min_position_return") is not None
             and float(row["position_return"]) >= float(variant["wide_protection_min_position_return"])
+            and (
+                variant.get("wide_protection_min_core_percentile") is None
+                or float(prediction["core_percentile"])
+                >= float(variant["wide_protection_min_core_percentile"])
+            )
         )
+        weak_core_scale_threshold = variant.get("weak_core_partial_extension_max_core_percentile")
+        retained_share_scale = 1.0
+        if (
+            weak_core_scale_threshold is not None
+            and float(prediction["core_percentile"]) < float(weak_core_scale_threshold)
+        ):
+            retained_share_scale = float(variant["weak_core_retained_share_scale"])
+        if not 0.0 < retained_share_scale <= 1.0:
+            raise ValueError("weak-core retained share scale must be in (0, 1]")
         protection_prefix = "wide_" if use_wide_protection else ""
         signals[str(row["effective_deferral_day"])][str(row["position_key"])] = {
             "deferred_exit_day": str(row["deferred_exit_day"]),
             "reason": "pit_external_event_confirmed_rebound_extension",
             "extension_priority": predicted,
+            "retained_share_scale": retained_share_scale,
             "minimum_cash_reserve_cny": float(variant.get("minimum_cash_reserve_cny") or 0.0),
             "deferral_stop_loss_pct": float(
                 variant.get(f"{protection_prefix}deferral_stop_loss_pct") or 0.0
@@ -220,6 +257,7 @@ def _deferrals_for_variant(
                 "position_return": row["position_return"],
                 "global_breadth_5d": row["global_breadth_5d"],
                 "sector_relative_5d": row["sector_relative_5d"],
+                "retained_share_scale": retained_share_scale,
                 **prediction,
             }
         )
@@ -236,6 +274,7 @@ def run_event_confirmed_position_extension_ablation(
     curation_path: Path,
     design_path: Path,
     signal_end: date,
+    additional_event_sources: list[tuple[Path, Path]] | None = None,
 ) -> dict[str, Any]:
     design = json.loads(design_path.read_text(encoding="utf-8"))
     if design.get("status") not in {
@@ -256,19 +295,67 @@ def run_event_confirmed_position_extension_ablation(
         "frozen_before_round45_outcome_evaluation",
         "frozen_before_round46_outcome_evaluation",
         "frozen_before_round47_outcome_evaluation",
+        "frozen_before_round48_concentration_diagnostic",
+        "frozen_before_round49_outcome_evaluation",
+        "frozen_before_round50_outcome_evaluation",
+        "frozen_before_round51_outcome_evaluation",
+        "frozen_before_round52_outcome_evaluation",
+        "frozen_before_round53_outcome_evaluation",
+        "frozen_before_round54_outcome_evaluation",
+        "frozen_before_round55_outcome_evaluation",
+        "frozen_before_round56_outcome_evaluation",
+        "frozen_before_round57_outcome_evaluation",
+        "frozen_before_round58_outcome_evaluation",
+        "frozen_before_round59_personal_baseline_outcome_evaluation",
+        "frozen_before_round60_forward_outcome_evaluation",
+        "frozen_before_round60_historical_refinement_outcome_evaluation",
+        "frozen_before_round61_forward_outcome_evaluation",
+        "frozen_before_round61_historical_risk_cap_outcome_evaluation",
+        "frozen_before_round62_historical_external_state_cap_outcome_evaluation",
+        "frozen_before_round63_historical_post_trigger_cap_outcome_evaluation",
+        "frozen_before_round64_historical_tiered_protection_outcome_evaluation",
+        "frozen_before_round65_forward_candidate_outcome_evaluation",
+        "frozen_before_round66_historical_global_risk_budget_outcome_evaluation",
+        "frozen_before_round67_historical_global_residual_risk_budget_outcome_evaluation",
+        "frozen_before_round68_historical_sparse_residual_cap_boundary_outcome_evaluation",
+        "frozen_before_round69_historical_combined_extension_residual_risk_outcome_evaluation",
+        "frozen_before_round70_historical_domestic_alignment_decomposition_outcome_evaluation",
+        "frozen_before_round71_historical_core_confirmed_protection_outcome_evaluation",
+        "frozen_before_round72_historical_bounded_residual_position_weight_outcome_evaluation",
+        "frozen_before_round73_historical_core_veto_outcome_evaluation",
+        "frozen_before_round74_forward_core_veto_outcome_evaluation",
+        "frozen_before_round75_forward_exact_share_core_veto_outcome_evaluation",
+        "frozen_before_round76_historical_multi_trigger_core_veto_outcome_evaluation",
+        "frozen_before_round77_multi_trigger_leave_one_out_diagnostic",
+        "frozen_before_round78_forward_divergence_risk_channel_outcome_evaluation",
     }:
         raise ValueError("event-confirmed extension design must be frozen before outcome evaluation")
     snapshot = load_rolling_account_execution_snapshot(execution_snapshot_path)
     global_snapshot = load_research_snapshot(global_market_snapshot_path)
     sector_snapshot = load_sector_research_snapshot(sector_market_snapshot_path)
     macro_snapshot = load_macro_research_snapshot(macro_market_snapshot_path)
-    actual_digests = {
+    primary_curation = json.loads(curation_path.read_text(encoding="utf-8"))
+    actual_digests: dict[str, Any] = {
         "global_market_digest": global_snapshot["content_digest"],
         "sector_market_digest": sector_snapshot["content_digest"],
         "macro_market_digest": macro_snapshot["content_digest"],
         "cninfo_curation_file_sha256": hashlib.sha256(curation_path.read_bytes()).hexdigest(),
+        "cninfo_curation_exclusion_digest": primary_curation.get("excluded_event_versions_sha256"),
     }
+    resolved_additional_sources = additional_event_sources or []
+    if resolved_additional_sources:
+        actual_digests["additional_cninfo_sources"] = [
+            {
+                "curation_file_sha256": hashlib.sha256(source_curation.read_bytes()).hexdigest(),
+                "curation_exclusion_digest": json.loads(
+                    source_curation.read_text(encoding="utf-8")
+                ).get("excluded_event_versions_sha256"),
+            }
+            for _, source_curation in resolved_additional_sources
+        ]
     expected = design["data_contract"]
+    if "execution_snapshot_id" in expected:
+        actual_digests["execution_snapshot_id"] = snapshot["artifact_id"]
     mismatches = {
         key: {"expected": expected.get(key), "actual": value}
         for key, value in actual_digests.items()
@@ -276,11 +363,9 @@ def run_event_confirmed_position_extension_ablation(
     }
     if mismatches:
         raise ValueError(f"round31 data digest mismatch: {mismatches}")
-    events_by_symbol, event_audit = load_curated_official_events(
-        external_root=external_root, curation_path=curation_path
+    events_by_symbol, event_audit = load_merged_curated_official_events(
+        sources=[(external_root, curation_path), *resolved_additional_sources]
     )
-    if event_audit["curation_exclusion_digest"] != expected["cninfo_curation_exclusion_digest"]:
-        raise ValueError("round31 CNINFO exclusion digest mismatch")
     bars_by_symbol = snapshot["inputs"]["market_bars_by_symbol"]
     baseline_buy_days = [
         date.fromisoformat(str(row["trade_day"]))
@@ -307,7 +392,8 @@ def run_event_confirmed_position_extension_ablation(
     observations_by_horizon: dict[int, list[dict[str, Any]]] = {}
     predictions_by_horizon: dict[int, dict[tuple[str, str], dict[str, float] | None]] = {}
     prediction_audit_by_horizon: dict[int, dict[str, Any]] = {}
-    for extension_days in sorted({int(row["extension_trade_days"]) for row in design["variants"]}):
+    resolved_variants = _resolved_variants(design)
+    for extension_days in sorted({int(row["extension_trade_days"]) for row in resolved_variants}):
         observations = build_position_extension_observations(
             snapshot=snapshot,
             events_by_symbol=events_by_symbol,
@@ -330,6 +416,11 @@ def run_event_confirmed_position_extension_ablation(
     trial = snapshot["inputs"]["candidate_run"]["trial_diagnostics"][0]
     picks_by_date = _group_by_date(trial["selected_top_k_picks_by_date"], end=signal_end)
     inventory_by_date = _group_by_date(snapshot["inputs"]["candidate_inventory_rows"], end=signal_end)
+    global_risk_residuals, global_risk_residual_audit = build_past_only_global_risk_residuals(
+        inventory_by_date=inventory_by_date,
+        market_states=market_states,
+        minimum_history=int(design.get("model", {}).get("global_residual_minimum_history") or 20),
+    )
     selected = [copy.deepcopy(row) for day in sorted(picks_by_date) for row in picks_by_date[day]]
     frozen_baseline = snapshot["baseline_output"]
     baseline_buy_symbols_by_signal_rank: dict[tuple[str, int], set[str]] = defaultdict(set)
@@ -340,17 +431,26 @@ def run_event_confirmed_position_extension_ablation(
             symbol = str(row["symbol"])
             baseline_buy_symbols_by_signal_rank[key].add(symbol)
             baseline_buy_shares_by_signal_rank[key][symbol] = int(row["shares"])
+    inventory_rows_by_signal_symbol = {
+        (str(row["as_of_date"]), str(row["symbol"])): row
+        for rows in inventory_by_date.values()
+        for row in rows
+    }
 
     def replay(variant: dict[str, Any] | None) -> tuple[dict[str, Any], dict[str, Any]]:
         config = copy.deepcopy(snapshot["inputs"]["baseline_config"])
         triggers: list[dict[str, Any]] = []
+        risk_days: list[str] = []
         if variant is not None:
             extension_days = int(variant["extension_trade_days"])
-            deferrals, triggers = _deferrals_for_variant(
-                observations=observations_by_horizon[extension_days],
-                predictions=predictions_by_horizon[extension_days],
-                variant=variant,
-            )
+            if bool(variant.get("disable_position_extension")):
+                deferrals, triggers = {}, []
+            else:
+                deferrals, triggers = _deferrals_for_variant(
+                    observations=observations_by_horizon[extension_days],
+                    predictions=predictions_by_horizon[extension_days],
+                    variant=variant,
+                )
             config["config_id"] = str(variant["variant_id"])
             config["pit_external_position_exit_deferrals"] = deferrals
             config["pit_external_entry_liquidity_recall"] = bool(
@@ -360,6 +460,86 @@ def run_event_confirmed_position_extension_ablation(
             config["pit_external_entry_liquidity_substitution"] = bool(
                 variant.get("entry_liquidity_substitution")
             )
+            config["pit_external_core_entry_conflict_recall"] = bool(
+                variant.get("freeze_to_baseline_executed_buys")
+            )
+            external_concentration_cap = variant.get("external_deferred_market_value_cap_pct")
+            if external_concentration_cap is not None:
+                concentration_policy = copy.deepcopy(config.get("market_value_concentration_rebalance") or {})
+                concentration_policy["external_deferred_threshold"] = float(external_concentration_cap)
+                config["market_value_concentration_rebalance"] = concentration_policy
+            market_value_cap = variant.get("market_value_cap_pct")
+            if market_value_cap is not None:
+                concentration_policy = copy.deepcopy(config.get("market_value_concentration_rebalance") or {})
+                concentration_policy["threshold"] = float(market_value_cap)
+                config["market_value_concentration_rebalance"] = concentration_policy
+            active_external_state_cap = variant.get("active_external_state_market_value_cap_pct")
+            if active_external_state_cap is not None:
+                concentration_policy = copy.deepcopy(config.get("market_value_concentration_rebalance") or {})
+                concentration_policy["active_external_state_threshold"] = float(active_external_state_cap)
+                config["market_value_concentration_rebalance"] = concentration_policy
+            post_trigger_cap = variant.get("post_first_external_trigger_market_value_cap_pct")
+            if post_trigger_cap is not None and triggers:
+                concentration_policy = copy.deepcopy(config.get("market_value_concentration_rebalance") or {})
+                concentration_policy["post_external_trigger_threshold"] = float(post_trigger_cap)
+                concentration_policy["post_external_trigger_active_from"] = min(
+                    str(row["effective_deferral_day"]) for row in triggers
+                )
+                config["market_value_concentration_rebalance"] = concentration_policy
+            risk_target = variant.get("global_risk_target_invested_ratio")
+            if risk_target is not None:
+                breadth_max = float(variant["global_risk_breadth_5d_max"])
+                return_max = float(variant["global_risk_mean_return_5d_max"])
+                for state_day, execution_day in zip(all_days, all_days[1:]):
+                    state = market_states.get(state_day.isoformat()) or {}
+                    if (
+                        state
+                        and
+                        float(state.get("global_breadth_5d") or 0.0) <= breadth_max
+                        and float(state.get("global_mean_return_5d") or 0.0) <= return_max
+                    ):
+                        risk_days.append(execution_day.isoformat())
+                config["pit_external_invested_ratio_caps"] = {
+                    day: float(risk_target) for day in sorted(set(risk_days))
+                }
+            residual_risk_target = variant.get("global_residual_risk_target_invested_ratio")
+            if residual_risk_target is not None:
+                breadth_max = float(variant["global_residual_risk_breadth_5d_max"])
+                residual_z_max = float(variant["global_residual_risk_z_max"])
+                return_max = float(variant.get("global_residual_risk_mean_return_5d_max") or 0.0)
+                benchmark_return_min = variant.get("global_residual_risk_benchmark_return_20d_min")
+                benchmark_return_max = variant.get("global_residual_risk_benchmark_return_20d_max")
+                for state_day, execution_day in zip(all_days, all_days[1:]):
+                    day_key = state_day.isoformat()
+                    state = market_states.get(day_key) or {}
+                    residual_z = global_risk_residuals.get(day_key)
+                    residual_audit = global_risk_residual_audit.get(day_key) or {}
+                    benchmark_return = residual_audit.get("benchmark_return_20d")
+                    if (
+                        state
+                        and residual_z is not None
+                        and residual_z <= residual_z_max
+                        and float(state.get("global_breadth_5d") or 0.0) <= breadth_max
+                        and float(state.get("global_mean_return_5d") or 0.0) <= return_max
+                        and (
+                            benchmark_return_min is None
+                            or (
+                                benchmark_return is not None
+                                and float(benchmark_return) >= float(benchmark_return_min)
+                            )
+                        )
+                        and (
+                            benchmark_return_max is None
+                            or (
+                                benchmark_return is not None
+                                and float(benchmark_return) <= float(benchmark_return_max)
+                            )
+                        )
+                    ):
+                        risk_days.append(execution_day.isoformat())
+                config["pit_external_invested_ratio_caps"] = {
+                    day: float(residual_risk_target) for day in sorted(set(risk_days))
+                }
         replay_picks = selected
         if variant is not None and bool(variant.get("freeze_to_baseline_executed_buys")):
             replay_picks = _freeze_to_baseline_executed_buys(
@@ -370,6 +550,7 @@ def run_event_confirmed_position_extension_ablation(
                     if bool(variant.get("freeze_baseline_buy_shares"))
                     else None
                 ),
+                inventory_rows_by_signal_symbol=inventory_rows_by_signal_symbol,
             )
         candidate_run = _candidate_run(snapshot=snapshot, selected_picks=replay_picks, weight=0.0)
         candidate_run["artifact_id"] = "round31-lambda-zero" if variant is None else f"round31-{variant['variant_id']}"
@@ -381,7 +562,49 @@ def run_event_confirmed_position_extension_ablation(
             candidate_configurations=[config],
             **snapshot["inputs"]["account_profile"],
         )["results"][0]
-        return account, {"triggered_position_count": len(triggers), "triggers": triggers}
+        risk_orders = [
+            {
+                key: row.get(key)
+                for key in (
+                    "trade_day",
+                    "signal_day",
+                    "symbol",
+                    "action",
+                    "shares",
+                    "price",
+                    "gross_amount_cny",
+                    "transaction_cost_cny",
+                    "reason",
+                )
+            }
+            for row in account["order_ledger"]
+            if row.get("reason") == "pit_external_global_risk_invested_ratio_rebalance"
+        ]
+        risk_signal_audit = []
+        for execution_day in sorted(set(risk_days)):
+            index = all_days.index(date.fromisoformat(execution_day))
+            signal_day = all_days[index - 1].isoformat()
+            risk_signal_audit.append(
+                {
+                    "execution_day": execution_day,
+                    "signal_day": signal_day,
+                    **copy.deepcopy(global_risk_residual_audit.get(signal_day) or {}),
+                    "global_mean_return_5d": (
+                        market_states.get(signal_day) or {}
+                    ).get("global_mean_return_5d"),
+                }
+            )
+        return account, {
+            "triggered_position_count": len(triggers),
+            "triggers": triggers,
+            "global_risk_cap_signal_count": len(risk_days) if variant is not None else 0,
+            "global_risk_cap_execution_days": sorted(set(risk_days)) if variant is not None else [],
+            "global_risk_signal_audit": risk_signal_audit if variant is not None else [],
+            "global_risk_rebalance_orders": risk_orders if variant is not None else [],
+            "external_action_signal_count": (
+                len(triggers) + len(set(risk_days)) if variant is not None else 0
+            ),
+        }
 
     baseline_account, _ = replay(None)
     lambda_zero_nav_match = stable_digest(baseline_account["nav_rows"]) == stable_digest(frozen_baseline["nav_rows"])
@@ -403,7 +626,7 @@ def run_event_confirmed_position_extension_ablation(
     }
     rows: list[dict[str, Any]] = []
     accounts: dict[str, dict[str, Any]] = {}
-    for variant in design["variants"]:
+    for variant in resolved_variants:
         account, trigger_audit = replay(variant)
         variant_id = str(variant["variant_id"])
         accounts[variant_id] = account
@@ -433,6 +656,12 @@ def run_event_confirmed_position_extension_ablation(
                     start=DEFAULT_TUNING_END + (DEFAULT_FINAL_START - DEFAULT_VALIDATION_END),
                     end=DEFAULT_VALIDATION_END,
                 ),
+                "validation_skip_order_delta": _skip_order_delta(
+                    account,
+                    baseline_account,
+                    start=DEFAULT_TUNING_END + (DEFAULT_FINAL_START - DEFAULT_VALIDATION_END),
+                    end=DEFAULT_VALIDATION_END,
+                ),
                 "extended_diagnostic": {
                     "baseline": _segment_metrics(baseline_account, start=DEFAULT_FINAL_START, end=signal_end),
                     "candidate": _segment_metrics(account, start=DEFAULT_FINAL_START, end=signal_end),
@@ -450,11 +679,19 @@ def run_event_confirmed_position_extension_ablation(
                 },
             }
         )
+    selection_contract = design.get("selection", {})
+    minimum_triggered_position_count = int(
+        selection_contract["minimum_triggered_position_count"]
+        if "minimum_triggered_position_count" in selection_contract
+        else 1
+    )
     eligible = [
         row
         for row in rows
         if not row["variant"].get("control_only")
-        and int(row["trigger_audit"]["triggered_position_count"]) > 0
+        and int(row["trigger_audit"]["external_action_signal_count"]) > 0
+        and int(row["trigger_audit"]["triggered_position_count"])
+        >= minimum_triggered_position_count
         and row["gates"]["tuning"]["passed"]
         and row["gates"]["validation"]["passed"]
     ]
@@ -471,11 +708,22 @@ def run_event_confirmed_position_extension_ablation(
             plateau,
             key=lambda row: (
                 int(row["variant"]["extension_trade_days"]),
+                float(row["variant"].get("weak_core_retained_share_scale") or 1.0),
                 -float(row["variant"].get("minimum_cash_reserve_cny") or 0.0),
                 -float(row["variant"]["prediction_percentile_min"]),
+                -float(row["variant"].get("minimum_position_return") or 0.0),
+                -float(row["variant"].get("market_value_cap_pct") or 1.0),
+                -float(row["variant"].get("active_external_state_market_value_cap_pct") or 1.0),
+                -float(row["variant"].get("post_first_external_trigger_market_value_cap_pct") or 1.0),
+                float(row["variant"].get("global_risk_breadth_5d_max") or 0.0),
+                float(row["variant"].get("global_risk_mean_return_5d_max") or 0.0),
+                -float(row["variant"].get("global_risk_target_invested_ratio") or 1.0),
+                float(row["variant"].get("global_residual_risk_z_max") or 0.0),
+                -float(row["variant"].get("global_residual_risk_target_invested_ratio") or 1.0),
             ),
         )
     extended = None
+    forward_readout = None
     if selected_row is not None:
         variant_id = str(selected_row["variant"]["variant_id"])
         baseline_final = _segment_metrics(baseline_account, start=DEFAULT_FINAL_START, end=signal_end)
@@ -490,7 +738,34 @@ def run_event_confirmed_position_extension_ablation(
                 accounts[variant_id], baseline_account, start=DEFAULT_FINAL_START, end=signal_end
             ),
         }
-    passed = bool(extended and extended["gate"]["passed"] and extended["standout"]["passed"])
+        forward_start_value = design.get("selection", {}).get("forward_readout_from")
+        if forward_start_value:
+            forward_start = date.fromisoformat(str(forward_start_value))
+            if forward_start > signal_end:
+                raise ValueError("forward_readout_from cannot be after signal_end")
+            baseline_forward = _segment_metrics(baseline_account, start=forward_start, end=signal_end)
+            candidate_forward = _segment_metrics(accounts[variant_id], start=forward_start, end=signal_end)
+            forward_readout = {
+                "from": forward_start.isoformat(),
+                "to": signal_end.isoformat(),
+                "baseline": baseline_forward,
+                "candidate": candidate_forward,
+                "gate": _non_degrade(candidate_forward, baseline_forward),
+                "standout": _standout(candidate_forward, baseline_forward),
+                "buy_order_delta": _buy_order_delta(
+                    accounts[variant_id], baseline_account, start=forward_start, end=signal_end
+                ),
+                "monthly_returns": _monthly_return_comparison(
+                    accounts[variant_id], baseline_account, start=forward_start, end=signal_end
+                ),
+            }
+    forward_required = bool(design.get("selection", {}).get("forward_non_degrade_required"))
+    passed = bool(
+        extended
+        and extended["gate"]["passed"]
+        and extended["standout"]["passed"]
+        and (not forward_required or (forward_readout and forward_readout["gate"]["passed"]))
+    )
     material = {
         "artifact_type": "event_confirmed_position_extension_account_ablation",
         "schema_version": SCHEMA_VERSION,
@@ -501,6 +776,7 @@ def run_event_confirmed_position_extension_ablation(
         "source_external_digests": actual_digests,
         "official_event_audit": {**event_audit, "future_event_violations": 0},
         "prediction_audit_by_extension_days": prediction_audit_by_horizon,
+        "global_risk_residual_audit_digest": stable_digest(global_risk_residual_audit),
         "lambda_zero_reproduction": {
             "passed": True,
             "economic_nav_match": lambda_zero_nav_match,
@@ -512,6 +788,8 @@ def run_event_confirmed_position_extension_ablation(
         if selected_row is None
         else selected_row["variant"]["variant_id"],
         "extended_readout": extended,
+        "forward_readout": forward_readout,
+        "forward_non_degrade_required": forward_required,
         "extended_readout_status": "reused_evaluation_not_untouched_due_prior_iterations",
         "entry_selection_changed": False,
         "external_buy_trigger_count": 0,
@@ -566,6 +844,41 @@ def _drawdown_audit(account: dict[str, Any], *, start: date, end: date) -> dict[
     }
 
 
+def _skip_order_delta(
+    candidate: dict[str, Any],
+    baseline: dict[str, Any],
+    *,
+    start: date,
+    end: date,
+) -> dict[str, Any]:
+    fields = ("signal_day", "trade_day", "symbol", "rank", "reason")
+
+    def rows(account: dict[str, Any]) -> dict[tuple[str, str, str, int, str], dict[str, Any]]:
+        result: dict[tuple[str, str, str, int, str], dict[str, Any]] = {}
+        for row in account["order_ledger"]:
+            trade_day = date.fromisoformat(str(row.get("trade_day") or row["signal_day"]))
+            if row.get("action") != "skip" or not start <= trade_day <= end:
+                continue
+            key = (
+                str(row.get("signal_day") or ""),
+                str(row.get("trade_day") or ""),
+                str(row.get("symbol") or ""),
+                int(row.get("rank") or 0),
+                str(row.get("reason") or ""),
+            )
+            result[key] = {field: row.get(field) for field in fields}
+        return result
+
+    candidate_rows = rows(candidate)
+    baseline_rows = rows(baseline)
+    return {
+        "candidate_only": [candidate_rows[key] for key in sorted(set(candidate_rows) - set(baseline_rows))],
+        "baseline_only": [baseline_rows[key] for key in sorted(set(baseline_rows) - set(candidate_rows))],
+        "candidate_count": len(candidate_rows),
+        "baseline_count": len(baseline_rows),
+    }
+
+
 def _monthly_return_comparison(
     candidate: dict[str, Any],
     baseline: dict[str, Any],
@@ -613,14 +926,34 @@ def _freeze_to_baseline_executed_buys(
     *,
     baseline_buy_symbols_by_signal_rank: dict[tuple[str, int], set[str]],
     baseline_buy_shares_by_signal_rank: dict[tuple[str, int], dict[str, int]] | None = None,
+    inventory_rows_by_signal_symbol: dict[tuple[str, str], dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     frozen: list[dict[str, Any]] = []
     for row in picks:
         key = (str(row["as_of_date"]), int(float(row.get("rank") or 0)))
         symbols = sorted(baseline_buy_symbols_by_signal_rank.get(key) or set())
+        if len(symbols) > 1:
+            raise ValueError(f"multiple frozen baseline buys for one signal/rank: {key} -> {symbols}")
+        frozen_row = row
+        if symbols and str(row.get("symbol") or "") != symbols[0]:
+            replacement = (inventory_rows_by_signal_symbol or {}).get((key[0], symbols[0]))
+            if replacement is None:
+                raise ValueError(f"frozen baseline replacement is absent from PIT inventory: {key} -> {symbols[0]}")
+            frozen_row = {
+                **row,
+                **replacement,
+                "as_of_date": key[0],
+                "symbol": symbols[0],
+                "rank": key[1],
+                "portfolio_weight": row.get("portfolio_weight"),
+                "rank_weight_multiplier": row.get("rank_weight_multiplier"),
+                "target_horizon_days": row.get("target_horizon_days"),
+                "replacement_original_symbol": str(row.get("symbol") or ""),
+                "replacement_inventory_rank": replacement.get("rank"),
+            }
         frozen.append(
             {
-                **row,
+                **frozen_row,
                 "shadow_baseline_buy_eligible": bool(symbols),
                 "shadow_baseline_buy_symbols": symbols,
                 "shadow_baseline_buy_shares_by_symbol": (

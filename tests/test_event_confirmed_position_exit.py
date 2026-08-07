@@ -9,6 +9,7 @@ from ashare_evidence.event_confirmed_position_exit import (
     _matched_events,
     expanding_position_predictions,
     load_curated_official_events,
+    load_merged_curated_official_events,
 )
 
 
@@ -40,6 +41,38 @@ def test_load_curated_official_events_applies_exact_revision_exclusion(tmp_path:
     assert events["600000.SH"][0].category == "material_operations"
     assert audit["curation_excluded_records"] == 1
     assert audit["retained_event_count"] == 1
+
+
+def test_load_merged_curated_official_events_deduplicates_exact_versions(tmp_path: Path) -> None:
+    sources: list[tuple[Path, Path]] = []
+    for index in (1, 2):
+        root = tmp_path / f"external-{index}"
+        records = root / "pit" / "records"
+        records.mkdir(parents=True)
+        (records / "event.json").write_text(
+            json.dumps(_record("event-1", "revision-1", "600000", "2026-01-02T23:59:59+08:00")),
+            encoding="utf-8",
+        )
+        curation = tmp_path / f"curation-{index}.json"
+        curation.write_text(
+            json.dumps(
+                {
+                    "active_relevance_policy_version": f"v-{index}",
+                    "excluded_event_versions_sha256": f"digest-{index}",
+                    "excluded_event_versions": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        sources.append((root, curation))
+
+    events, audit = load_merged_curated_official_events(sources=sources)
+
+    assert len(events["600000.SH"]) == 1
+    assert audit["source_count"] == 2
+    assert audit["duplicate_event_versions"] == 1
+    assert audit["retained_event_count"] == 1
+    assert audit["curation_exclusion_digests"] == ["digest-1", "digest-2"]
 
 
 def test_matched_events_excludes_same_day_end_of_day_record_until_next_decision() -> None:

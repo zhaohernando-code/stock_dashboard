@@ -368,6 +368,7 @@ def _simulate_config(
             open_positions=open_positions,
             bars_by_symbol=bars_by_symbol,
             sell_cost_rate=sell_cost_rate,
+            board_lot_size=board_lot_size,
             exit_policy=exit_policy,
             pit_external_exit_signals=(config.get("pit_external_position_exit_signals") or {}).get(
                 current_day.isoformat(), {}
@@ -378,6 +379,16 @@ def _simulate_config(
         )
         order_rows.extend(sells)
         if current_day in entry_requests_by_day:
+            if bool(config.get("pit_external_core_entry_conflict_recall")):
+                cash, conflict_sells, open_positions = _process_deferred_core_entry_conflict_recall(
+                    current_day,
+                    cash=cash,
+                    requests=entry_requests_by_day[current_day],
+                    open_positions=open_positions,
+                    bars_by_symbol=bars_by_symbol,
+                    sell_cost_rate=sell_cost_rate,
+                )
+                order_rows.extend(conflict_sells)
             current_per_signal_budget = per_signal_budget
             if budget_mode == "current_nav_fraction":
                 current_nav = _nav_row(
@@ -502,6 +513,20 @@ def _simulate_config(
             policy=config.get("market_value_concentration_rebalance"),
         )
         order_rows.extend(rebalance_sells)
+        invested_ratio_cap = (config.get("pit_external_invested_ratio_caps") or {}).get(
+            current_day.isoformat()
+        )
+        if invested_ratio_cap is not None:
+            cash, risk_sells, open_positions = _process_external_invested_ratio_cap(
+                current_day,
+                cash=cash,
+                open_positions=open_positions,
+                bars_by_symbol=bars_by_symbol,
+                target_invested_ratio=float(invested_ratio_cap),
+                sell_cost_rate=sell_cost_rate,
+                board_lot_size=board_lot_size,
+            )
+            order_rows.extend(risk_sells)
         nav_rows.append(_nav_row(current_day, cash=cash, open_positions=open_positions, bars_by_symbol=bars_by_symbol))
 
     summary = _summary(
@@ -1118,6 +1143,10 @@ def _process_market_value_concentration_rebalance(
     if not isinstance(policy, dict) or not open_positions:
         return cash, [], open_positions
     threshold = _safe_float(policy.get("threshold"), 0.25)
+    external_deferred_threshold = policy.get("external_deferred_threshold")
+    active_external_state_threshold = policy.get("active_external_state_threshold")
+    post_external_trigger_threshold = policy.get("post_external_trigger_threshold")
+    post_external_trigger_active_from = policy.get("post_external_trigger_active_from")
     board_lot_size = int(_safe_float(policy.get("board_lot_size"), 100.0))
     sell_cost_rate = _safe_float(policy.get("sell_cost_bps"), 25.0) / 10_000.0
     positions = list(open_positions)
@@ -1130,10 +1159,29 @@ def _process_market_value_concentration_rebalance(
         prices[position.symbol] = position.last_price
         values_by_symbol[position.symbol] += position.shares * position.last_price
     nav = cash + sum(values_by_symbol.values())
+    any_external_deferral = any(
+        position.entry_features.get("pit_external_deferred_exit_day")
+        for position in positions
+    )
     rows: list[dict[str, Any]] = []
     for symbol in sorted(values_by_symbol, key=values_by_symbol.get, reverse=True):
         price = prices[symbol]
         symbol_positions = [position for position in positions if position.symbol == symbol]
+        has_external_deferral = any(
+            position.entry_features.get("pit_external_deferred_exit_day")
+            for position in symbol_positions
+        )
+        symbol_threshold = threshold
+        if (
+            post_external_trigger_threshold is not None
+            and post_external_trigger_active_from is not None
+            and current_day >= _parse_day(str(post_external_trigger_active_from))
+        ):
+            symbol_threshold = min(symbol_threshold, float(post_external_trigger_threshold))
+        if any_external_deferral and active_external_state_threshold is not None:
+            symbol_threshold = min(symbol_threshold, float(active_external_state_threshold))
+        if has_external_deferral and external_deferred_threshold is not None:
+            symbol_threshold = min(symbol_threshold, float(external_deferred_threshold))
         available_shares = sum(position.shares for position in symbol_positions)
         post_value = values_by_symbol[symbol]
         post_nav = nav
@@ -1141,7 +1189,7 @@ def _process_market_value_concentration_rebalance(
         while (
             sell_shares + board_lot_size <= available_shares
             and post_nav > 0
-            and post_value / post_nav > threshold
+            and post_value / post_nav > symbol_threshold
         ):
             sell_shares += board_lot_size
             post_value -= board_lot_size * price
@@ -1189,6 +1237,71 @@ def _process_market_value_concentration_rebalance(
     return cash, rows, positions
 
 
+def _process_external_invested_ratio_cap(
+    current_day: date,
+    *,
+    cash: float,
+    open_positions: list[_Position],
+    bars_by_symbol: dict[str, list[_Bar]],
+    target_invested_ratio: float,
+    sell_cost_rate: float,
+    board_lot_size: int,
+) -> tuple[float, list[dict[str, Any]], list[_Position]]:
+    if not 0.0 <= target_invested_ratio <= 1.0:
+        raise ValueError("PIT external target invested ratio must be between zero and one")
+    if not open_positions:
+        return cash, [], open_positions
+    positions = list(open_positions)
+    position_values: list[tuple[_Position, float]] = []
+    for position in positions:
+        price = _price_on_day(bars_by_symbol.get(position.symbol) or [], current_day)
+        if price is not None:
+            position.last_price = price
+        position_values.append((position, position.shares * position.last_price))
+    invested_value = sum(value for _, value in position_values)
+    nav = cash + invested_value
+    target_value = nav * target_invested_ratio
+    if invested_value <= target_value + 1e-9 or invested_value <= 0:
+        return cash, [], positions
+    scale = max(0.0, min(1.0, target_value / invested_value))
+    planned_sales: list[tuple[_Position, int]] = []
+    for position, _ in position_values:
+        target_shares = int(position.shares * scale // board_lot_size) * board_lot_size
+        sell_shares = max(0, position.shares - target_shares)
+        if sell_shares:
+            planned_sales.append((position, sell_shares))
+    rows: list[dict[str, Any]] = []
+    for position, sell_shares in planned_sales:
+        price = position.last_price
+        cost_basis_per_share = position.cost_basis / position.shares if position.shares else 0.0
+        removed_cost_basis = sell_shares * cost_basis_per_share
+        position.shares -= sell_shares
+        position.cost_basis -= removed_cost_basis
+        proceeds = sell_shares * price * (1.0 - sell_cost_rate)
+        cash += proceeds
+        rows.append(
+            {
+                "action": "sell",
+                "reason": "pit_external_global_risk_invested_ratio_rebalance",
+                "signal_day": current_day.isoformat(),
+                "trade_day": current_day.isoformat(),
+                "symbol": position.symbol,
+                "stock_name": position.stock_name,
+                "rank": position.rank,
+                "shares": sell_shares,
+                "price": price,
+                "cost_basis_cny": removed_cost_basis,
+                "proceeds_cny": proceeds,
+                "pnl_cny": proceeds - removed_cost_basis,
+                "return": proceeds / removed_cost_basis - 1.0 if removed_cost_basis else 0.0,
+                "cash_after_cny": cash,
+                "target_invested_ratio": target_invested_ratio,
+            }
+        )
+    positions = [position for position in positions if position.shares > 0]
+    return cash, rows, positions
+
+
 def _process_sells(
     current_day: date,
     *,
@@ -1196,6 +1309,7 @@ def _process_sells(
     open_positions: list[_Position],
     bars_by_symbol: dict[str, list[_Bar]],
     sell_cost_rate: float,
+    board_lot_size: int,
     exit_policy: str,
     pit_external_exit_signals: dict[str, str] | None = None,
     pit_external_exit_deferrals: dict[str, dict[str, str]] | None = None,
@@ -1233,6 +1347,41 @@ def _process_sells(
                 raise ValueError("PIT external exit-deferral reasons must use the pit_external_ prefix")
             if deferred_exit_day <= current_day:
                 raise ValueError("PIT external deferred exit day must be after the original exit day")
+            retained_share_scale = _safe_float(deferral.get("retained_share_scale"), 1.0)
+            if not 0.0 < retained_share_scale <= 1.0:
+                raise ValueError("PIT external retained share scale must be in (0, 1]")
+            target_shares = int(position.shares * retained_share_scale / board_lot_size) * board_lot_size
+            minimum_retained_shares = min(board_lot_size, position.shares)
+            target_shares = max(min(target_shares, position.shares), minimum_retained_shares)
+            shares_to_sell = position.shares - target_shares
+            if retained_share_scale < 1.0 and shares_to_sell > 0 and price is not None:
+                cost_basis_per_share = position.cost_basis / position.shares if position.shares else 0.0
+                removed_cost_basis = shares_to_sell * cost_basis_per_share
+                proceeds = shares_to_sell * price * (1.0 - sell_cost_rate)
+                position.shares -= shares_to_sell
+                position.cost_basis -= removed_cost_basis
+                cash += proceeds
+                rows.append(
+                    {
+                        "action": "sell",
+                        "reason": "pit_external_core_weak_partial_extension",
+                        "signal_day": position.signal_day.isoformat(),
+                        "trade_day": current_day.isoformat(),
+                        "symbol": position.symbol,
+                        "stock_name": position.stock_name,
+                        "rank": position.rank,
+                        "shares": shares_to_sell,
+                        "entry_price": position.entry_price,
+                        "price": price,
+                        "cost_basis_cny": removed_cost_basis,
+                        "proceeds_cny": proceeds,
+                        "pnl_cny": proceeds - removed_cost_basis,
+                        "return": proceeds / removed_cost_basis - 1.0 if removed_cost_basis else 0.0,
+                        "cash_after_cny": cash,
+                        "retained_share_scale": retained_share_scale,
+                        "entry_reason": "bought",
+                    }
+                )
             fully_required = False
             if cash < minimum_cash_reserve_cny and price is not None:
                 cash, partial_row, fully_required = _partial_deferral_liquidity_sale(
@@ -1461,6 +1610,67 @@ def _process_deferred_entry_liquidity_recall(
         )
     positions = [position for position in positions if position.shares > 0]
     return cash, rows, positions
+
+
+def _process_deferred_core_entry_conflict_recall(
+    current_day: date,
+    *,
+    cash: float,
+    requests: list[dict[str, Any]],
+    open_positions: list[_Position],
+    bars_by_symbol: dict[str, list[_Bar]],
+    sell_cost_rate: float,
+) -> tuple[float, list[dict[str, Any]], list[_Position]]:
+    required_symbols = {
+        str(symbol)
+        for request in requests
+        for symbol in (
+            (request.get("pick") or {}).get("shadow_baseline_buy_symbols")
+            or [(request.get("pick") or {}).get("symbol")]
+        )
+        if symbol
+    }
+    if not required_symbols:
+        return cash, [], open_positions
+    rows: list[dict[str, Any]] = []
+    positions = list(open_positions)
+    for position in positions:
+        if (
+            position.symbol not in required_symbols
+            or not position.entry_features.get("pit_external_deferred_exit_day")
+            or position.planned_exit_day <= current_day
+        ):
+            continue
+        price = _price_on_day(bars_by_symbol.get(position.symbol) or [], current_day)
+        if price is None or price <= 0 or position.shares <= 0:
+            continue
+        shares = position.shares
+        removed_cost_basis = position.cost_basis
+        proceeds = shares * price * (1.0 - sell_cost_rate)
+        position.shares = 0
+        position.cost_basis = 0.0
+        cash += proceeds
+        rows.append(
+            {
+                "action": "sell",
+                "reason": "pit_external_deferral_core_entry_conflict_recall",
+                "signal_day": position.signal_day.isoformat(),
+                "trade_day": current_day.isoformat(),
+                "symbol": position.symbol,
+                "stock_name": position.stock_name,
+                "rank": position.rank,
+                "shares": shares,
+                "entry_price": position.entry_price,
+                "price": price,
+                "cost_basis_cny": removed_cost_basis,
+                "proceeds_cny": proceeds,
+                "pnl_cny": proceeds - removed_cost_basis,
+                "return": proceeds / removed_cost_basis - 1.0 if removed_cost_basis else 0.0,
+                "cash_after_cny": cash,
+                "entry_reason": "bought",
+            }
+        )
+    return cash, rows, [position for position in positions if position.shares > 0]
 
 
 def _process_core_liquidity_substitution(

@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import pytest
 import requests
 
 from ashare_evidence.cli import NO_DB_COMMANDS, build_parser
@@ -101,6 +102,36 @@ def test_personal_plan_uses_historical_unadjusted_price_and_main_board_only(tmp_
         "announcement_body_retained": False,
         "license_tier": "personal_internal_research_user_authorized_no_redistribution",
     }
+
+
+def test_personal_plan_can_target_explicit_account_relevant_symbols(tmp_path: Path) -> None:
+    database = tmp_path / "source.db"
+    _database(database)
+
+    plan = build_cninfo_personal_acquisition_plan(
+        database_path=database,
+        start_date="2024-01-01",
+        end_date="2024-12-31",
+        requested_symbols=["000001.sz", "600001.SH", "000001.SZ"],
+    )
+
+    assert plan["requested_symbols"] == ["000001.SZ", "600001.SH"]
+    assert {row["symbol"] for row in plan["symbols"]} == {"000001.SZ", "600001.SH"}
+    assert plan["symbol_count"] == 2
+    assert plan["symbol_inclusion_rule"].startswith("explicit_requested_symbols_intersected")
+
+
+def test_personal_plan_rejects_requested_symbol_outside_pit_eligible_universe(tmp_path: Path) -> None:
+    database = tmp_path / "source.db"
+    _database(database)
+
+    with pytest.raises(ValueError, match="absent from the personal PIT-eligible universe"):
+        build_cninfo_personal_acquisition_plan(
+            database_path=database,
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+            requested_symbols=["300001.SZ"],
+        )
 
 
 def test_personal_acquisition_resumes_frozen_input_without_second_network_fetch(tmp_path: Path) -> None:
@@ -270,6 +301,8 @@ def test_cli_registers_personal_acquisition_commands() -> None:
             "2023-06-13",
             "--end-date",
             "2026-05-26",
+            "--symbol",
+            "600001.SH",
             "--output-json",
             "/tmp/plan.json",
         ]
@@ -305,6 +338,7 @@ def test_cli_registers_personal_acquisition_commands() -> None:
     )
 
     assert plan.command == "research-external-context-cninfo-acquisition-plan"
+    assert plan.requested_symbols == ["600001.SH"]
     assert run.command == "research-external-context-cninfo-acquisition-run"
     assert run.max_tasks == 25
     assert run.min_request_interval_seconds == 1.0

@@ -110,6 +110,7 @@ def build_cninfo_personal_acquisition_plan(
     start_date: str,
     end_date: str,
     max_symbols: int | None = None,
+    requested_symbols: list[str] | None = None,
 ) -> dict[str, Any]:
     start = date.fromisoformat(start_date)
     end = date.fromisoformat(end_date)
@@ -117,6 +118,13 @@ def build_cninfo_personal_acquisition_plan(
         raise ValueError("end_date cannot precede start_date")
     if max_symbols is not None and (max_symbols < 1 or max_symbols > 10_000):
         raise ValueError("max_symbols must be between 1 and 10000")
+    normalized_requested_symbols = sorted(
+        {str(symbol).strip().upper() for symbol in (requested_symbols or []) if str(symbol).strip()}
+    )
+    if requested_symbols is not None and not normalized_requested_symbols:
+        raise ValueError("requested_symbols must contain at least one symbol when provided")
+    if len(normalized_requested_symbols) > 10_000:
+        raise ValueError("requested_symbols cannot contain more than 10000 symbols")
     resolved_path = Path(database_path).expanduser().resolve()
     if not resolved_path.is_file():
         raise ValueError(f"database_path does not exist: {resolved_path}")
@@ -145,8 +153,11 @@ def build_cninfo_personal_acquisition_plan(
     finally:
         connection.close()
     symbols: list[dict[str, Any]] = []
+    requested_symbol_set = set(normalized_requested_symbols)
     for row in rows:
         symbol = str(row["symbol"])
+        if requested_symbol_set and symbol not in requested_symbol_set:
+            continue
         structural = account_trade_eligibility(
             symbol,
             stock_profile=None,
@@ -169,6 +180,13 @@ def build_cninfo_personal_acquisition_plan(
             }
         )
     symbols.sort(key=lambda row: hashlib.sha256(f"{start}:{end}:{row['symbol']}".encode()).hexdigest())
+    resolved_symbols = {str(row["symbol"]) for row in symbols}
+    missing_requested_symbols = sorted(requested_symbol_set - resolved_symbols)
+    if missing_requested_symbols:
+        raise ValueError(
+            "requested symbols are absent from the personal PIT-eligible universe: "
+            + ", ".join(missing_requested_symbols)
+        )
     if max_symbols is not None:
         symbols = symbols[:max_symbols]
     tasks: list[dict[str, Any]] = []
@@ -186,6 +204,7 @@ def build_cninfo_personal_acquisition_plan(
         "end_date": end.isoformat(),
         "symbols": symbols,
         "tasks": tasks,
+        "requested_symbols": normalized_requested_symbols,
         "usage_profile": CNINFO_PERSONAL_LICENSE_TIER,
         "attribution": CNINFO_PERSONAL_ATTRIBUTION,
     }
@@ -201,7 +220,13 @@ def build_cninfo_personal_acquisition_plan(
         "account_profile": ACCOUNT_PROFILE_NEW_RETAIL_CASH,
         "historical_current_profile_fields_used": False,
         "pit_risk_status_verified": False,
-        "symbol_inclusion_rule": "main_board_code_and_at_least_one_historical_unadjusted_close_in_0_to_200_cny",
+        "symbol_inclusion_rule": (
+            "explicit_requested_symbols_intersected_with_main_board_code_and_at_least_one_"
+            "historical_unadjusted_close_in_0_to_200_cny"
+            if normalized_requested_symbols
+            else "main_board_code_and_at_least_one_historical_unadjusted_close_in_0_to_200_cny"
+        ),
+        "requested_symbols": normalized_requested_symbols,
         "symbol_count": len(symbols),
         "task_count": len(tasks),
         "symbols": symbols,

@@ -6,9 +6,44 @@ from ashare_evidence.rolling_tranche_account_replay import (
     _Bar,
     _Position,
     _process_core_liquidity_substitution,
+    _process_deferred_core_entry_conflict_recall,
+    _process_external_invested_ratio_cap,
+    _process_market_value_concentration_rebalance,
     build_shortpick_v3_rolling_account_replay_artifact,
     rank5_replacement_quality_rejection_reason,
 )
+
+
+def test_core_entry_conflict_recall_closes_same_symbol_external_deferral() -> None:
+    deferred = _Position(
+        signal_day=date(2026, 1, 1),
+        entry_day=date(2026, 1, 2),
+        planned_exit_day=date(2026, 2, 2),
+        symbol="AAA",
+        stock_name="AAA",
+        rank=1,
+        shares=200,
+        entry_price=10.0,
+        cost_basis=2000.0,
+        target_notional=2000.0,
+        last_price=12.0,
+        peak_price=12.0,
+        entry_features={"pit_external_deferred_exit_day": "2026-02-02"},
+    )
+
+    cash, rows, positions = _process_deferred_core_entry_conflict_recall(
+        date(2026, 1, 10),
+        cash=100.0,
+        requests=[{"pick": {"symbol": "AAA", "shadow_baseline_buy_symbols": ["AAA"]}}],
+        open_positions=[deferred],
+        bars_by_symbol={"AAA": [_Bar(date(2026, 1, 10), 12.0)]},
+        sell_cost_rate=0.0,
+    )
+
+    assert cash == 2500.0
+    assert positions == []
+    assert rows[0]["reason"] == "pit_external_deferral_core_entry_conflict_recall"
+    assert rows[0]["shares"] == 200
 
 
 def test_core_liquidity_substitution_sells_weak_ordinary_position_before_external_winner() -> None:
@@ -57,6 +92,168 @@ def test_core_liquidity_substitution_sells_weak_ordinary_position_before_externa
     assert rows[0]["symbol"] == "LOSER"
     assert rows[0]["reason"] == "pit_external_core_position_liquidity_substitution"
     assert [position.symbol for position in positions] == ["WINNER"]
+
+
+def test_market_value_cap_can_target_only_external_deferred_positions() -> None:
+    def position(symbol: str, *, deferred: bool) -> _Position:
+        return _Position(
+            signal_day=date(2026, 1, 1),
+            entry_day=date(2026, 1, 2),
+            planned_exit_day=date(2026, 2, 2),
+            symbol=symbol,
+            stock_name=symbol,
+            rank=1,
+            shares=300,
+            entry_price=10.0,
+            cost_basis=3000.0,
+            target_notional=3000.0,
+            last_price=20.0,
+            peak_price=20.0,
+            entry_features={"pit_external_deferred_exit_day": "2026-02-02"} if deferred else {},
+        )
+
+    ordinary = position("ORDINARY", deferred=False)
+    deferred = position("DEFERRED", deferred=True)
+    cash, rows, positions = _process_market_value_concentration_rebalance(
+        date(2026, 1, 10),
+        cash=8000.0,
+        open_positions=[ordinary, deferred],
+        bars_by_symbol={
+            "ORDINARY": [_Bar(date(2026, 1, 10), 20.0)],
+            "DEFERRED": [_Bar(date(2026, 1, 10), 20.0)],
+        },
+        policy={
+            "threshold": 1.0,
+            "external_deferred_threshold": 0.25,
+            "board_lot_size": 100,
+            "sell_cost_bps": 0.0,
+        },
+    )
+
+    assert cash == 10000.0
+    assert [row["symbol"] for row in rows] == ["DEFERRED"]
+    shares_by_symbol = {row.symbol: row.shares for row in positions}
+    assert shares_by_symbol == {"ORDINARY": 300, "DEFERRED": 200}
+
+
+def test_external_state_market_value_cap_is_inactive_without_deferred_position() -> None:
+    ordinary = _Position(
+        signal_day=date(2026, 1, 1),
+        entry_day=date(2026, 1, 2),
+        planned_exit_day=date(2026, 2, 2),
+        symbol="ORDINARY",
+        stock_name="ORDINARY",
+        rank=1,
+        shares=300,
+        entry_price=10.0,
+        cost_basis=3000.0,
+        target_notional=3000.0,
+        last_price=20.0,
+        peak_price=20.0,
+        entry_features={},
+    )
+
+    cash, rows, positions = _process_market_value_concentration_rebalance(
+        date(2026, 1, 10),
+        cash=1000.0,
+        open_positions=[ordinary],
+        bars_by_symbol={"ORDINARY": [_Bar(date(2026, 1, 10), 20.0)]},
+        policy={
+            "threshold": 1.0,
+            "active_external_state_threshold": 0.25,
+            "board_lot_size": 100,
+            "sell_cost_bps": 0.0,
+        },
+    )
+
+    assert cash == 1000.0
+    assert rows == []
+    assert positions[0].shares == 300
+
+
+def test_post_external_trigger_market_value_cap_activates_only_after_frozen_date() -> None:
+    def position() -> _Position:
+        return _Position(
+            signal_day=date(2026, 1, 1),
+            entry_day=date(2026, 1, 2),
+            planned_exit_day=date(2026, 2, 2),
+            symbol="ORDINARY",
+            stock_name="ORDINARY",
+            rank=1,
+            shares=300,
+            entry_price=10.0,
+            cost_basis=3000.0,
+            target_notional=3000.0,
+            last_price=20.0,
+            peak_price=20.0,
+            entry_features={},
+        )
+
+    policy = {
+        "threshold": 1.0,
+        "post_external_trigger_threshold": 0.30,
+        "post_external_trigger_active_from": "2026-01-10",
+        "board_lot_size": 100,
+        "sell_cost_bps": 0.0,
+    }
+    before_cash, before_rows, before_positions = _process_market_value_concentration_rebalance(
+        date(2026, 1, 9),
+        cash=1000.0,
+        open_positions=[position()],
+        bars_by_symbol={"ORDINARY": [_Bar(date(2026, 1, 9), 20.0)]},
+        policy=policy,
+    )
+    after_cash, after_rows, after_positions = _process_market_value_concentration_rebalance(
+        date(2026, 1, 10),
+        cash=1000.0,
+        open_positions=[position()],
+        bars_by_symbol={"ORDINARY": [_Bar(date(2026, 1, 10), 20.0)]},
+        policy=policy,
+    )
+
+    assert before_cash == 1000.0 and before_rows == [] and before_positions[0].shares == 300
+    assert after_cash == 5000.0
+    assert after_rows[0]["symbol"] == "ORDINARY"
+    assert after_positions[0].shares == 100
+
+
+def test_external_invested_ratio_cap_reduces_positions_proportionally() -> None:
+    positions = [
+        _Position(
+            signal_day=date(2026, 1, 1),
+            entry_day=date(2026, 1, 2),
+            planned_exit_day=date(2026, 2, 2),
+            symbol=symbol,
+            stock_name=symbol,
+            rank=rank,
+            shares=200,
+            entry_price=10.0,
+            cost_basis=2000.0,
+            target_notional=2000.0,
+            last_price=10.0,
+            peak_price=10.0,
+            entry_features={},
+        )
+        for rank, symbol in enumerate(("AAA", "BBB"), start=1)
+    ]
+
+    cash, rows, remaining = _process_external_invested_ratio_cap(
+        date(2026, 1, 10),
+        cash=1000.0,
+        open_positions=positions,
+        bars_by_symbol={
+            "AAA": [_Bar(date(2026, 1, 10), 10.0)],
+            "BBB": [_Bar(date(2026, 1, 10), 10.0)],
+        },
+        target_invested_ratio=0.4,
+        sell_cost_rate=0.0,
+        board_lot_size=100,
+    )
+
+    assert cash == 3000.0
+    assert [row["shares"] for row in rows] == [100, 100]
+    assert [row.shares for row in remaining] == [100, 100]
+    assert all(row["reason"] == "pit_external_global_risk_invested_ratio_rebalance" for row in rows)
 
 
 def test_rolling_account_replay_uses_tranches_not_full_capital() -> None:
