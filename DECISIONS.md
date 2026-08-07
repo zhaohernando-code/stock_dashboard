@@ -2857,3 +2857,9 @@ The stream replay bottleneck after JSON parsing was removed by replacing full pr
 - Apparent gains caused by candidate-only cash-path purchases are invalid. `lambda=0` must reproduce frozen NAV and the executed buy/sell ledger; added shadow-guard skip reasons may change instrumentation-only order digests but cannot change economic execution.
 - External candidate-pool depth must be explicit. Reranking only the original Top3 cannot support a claim about promotion from ranks 4–20; the subsequent explicit Top20 residual rerank and Top5 near-tie sector rerank both failed tuning gates.
 - V3, paper tracking and live-facing candidates remain unchanged at `lambda=0`. Gates will not be relaxed post hoc, and deliberate no-orders will not be renamed to hide skip failures. Another formal promotion attempt requires a genuinely new information set or a newly accumulated independent holdout.
+## 2026-08-08 — External context remains a research-only holding modifier
+
+- Keep V3 at external weight zero in paper tracking and runtime.
+- Treat external global/sector residuals as bounded holding-period and risk-conflict inputs, not independent positive buy triggers.
+- Do not promote the rounds 30–47 challenger despite a reused-final return lift above 10%; the result is concentrated in too few triggers and exact non-degradation was not cleared.
+- Freeze the next evidence step to concentration, leave-one-trigger-out, execution stress, and an untouched forward paper window. Do not continue optimizing against the reused final period.

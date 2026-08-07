@@ -828,17 +828,20 @@ def _segment_metrics(result: dict[str, Any], *, start: date | None, end: date) -
         nav = float(row["nav_cny"])
         peak = max(peak, nav)
         max_drawdown = min(max_drawdown, nav / peak - 1.0)
-    months = [
-        row
-        for row in result["monthly_returns"]
-        if (start is None or str(row["month"]) >= start.strftime("%Y-%m"))
-        and str(row["month"]) <= end.strftime("%Y-%m")
-    ]
+    month_end_nav: dict[str, float] = {}
+    for row in nav_rows:
+        month_end_nav[str(row["day"])[:7]] = float(row["nav_cny"])
+    segment_monthly_returns: list[float] = []
+    previous_nav = starting_nav
+    for month in sorted(month_end_nav):
+        ending_month_nav = month_end_nav[month]
+        segment_monthly_returns.append(ending_month_nav / previous_nav - 1.0 if previous_nav else 0.0)
+        previous_nav = ending_month_nav
     orders = [
         row
         for row in result["order_ledger"]
-        if (start is None or date.fromisoformat(str(row["signal_day"])) >= start)
-        and date.fromisoformat(str(row["signal_day"])) <= end
+        if (start is None or date.fromisoformat(str(row.get("trade_day") or row["signal_day"])) >= start)
+        and date.fromisoformat(str(row.get("trade_day") or row["signal_day"])) <= end
     ]
     buys = [row for row in orders if row.get("action") == "buy"]
     skips = [row for row in orders if row.get("action") == "skip"]
@@ -850,8 +853,8 @@ def _segment_metrics(result: dict[str, Any], *, start: date | None, end: date) -
         "total_return": total_return,
         "annualized_return": annualized,
         "max_drawdown": max_drawdown,
-        "negative_month_count": sum(float(row["return"]) < 0 for row in months),
-        "worst_monthly_return": min((float(row["return"]) for row in months), default=0.0),
+        "negative_month_count": sum(value < 0 for value in segment_monthly_returns),
+        "worst_monthly_return": min(segment_monthly_returns, default=0.0),
         "skipped_order_rate": len(skips) / max(len(skips) + len(buys), 1),
         "skipped_signal_rate": len(skipped_signal_days) / max(len(signal_days), 1),
         "max_single_symbol_exposure_pct": max(

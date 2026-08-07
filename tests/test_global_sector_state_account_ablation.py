@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from datetime import date
+
 from ashare_evidence.global_sector_state_account_ablation import (
     PastOnlyRidge,
+    _segment_metrics,
     apply_negative_external_guard,
     apply_sector_near_tie_budget_shift,
     past_only_probability_percentiles,
@@ -17,6 +20,48 @@ def test_past_only_ridge_predicts_before_update() -> None:
     ridge.update_one([1.0], 3.0)
     assert ridge.row_count == 1
     assert ridge.predict_one([1.0]) > 0.0
+
+
+def test_segment_metrics_rebases_partial_boundary_month_instead_of_reusing_full_month() -> None:
+    result = {
+        "summary": {"initial_cash_cny": 100.0},
+        "nav_rows": [
+            {
+                "day": "2025-11-26",
+                "nav_cny": 100.0,
+                "max_single_symbol_exposure_pct": 0.1,
+                "invested_ratio": 0.5,
+            },
+            {
+                "day": "2025-11-27",
+                "nav_cny": 105.0,
+                "max_single_symbol_exposure_pct": 0.1,
+                "invested_ratio": 0.5,
+            },
+            {
+                "day": "2025-11-28",
+                "nav_cny": 110.0,
+                "max_single_symbol_exposure_pct": 0.1,
+                "invested_ratio": 0.5,
+            },
+            {
+                "day": "2025-12-01",
+                "nav_cny": 99.0,
+                "max_single_symbol_exposure_pct": 0.1,
+                "invested_ratio": 0.5,
+            },
+        ],
+        "monthly_returns": [
+            {"month": "2025-11", "return": -0.50},
+            {"month": "2025-12", "return": 0.75},
+        ],
+        "order_ledger": [],
+    }
+
+    metrics = _segment_metrics(result, start=date(2025, 11, 27), end=date(2025, 12, 1))
+
+    assert metrics["negative_month_count"] == 1
+    assert round(metrics["worst_monthly_return"], 10) == -0.10
 
 
 def test_lambda_zero_keeps_core_order() -> None:

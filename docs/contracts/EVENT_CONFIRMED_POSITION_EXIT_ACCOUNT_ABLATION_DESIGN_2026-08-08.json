@@ -1,0 +1,58 @@
+{
+  "artifact_type": "event_confirmed_position_exit_preregistration",
+  "schema_version": "event_confirmed_position_exit_preregistration.v1",
+  "status": "frozen_before_round30_outcome_evaluation",
+  "frozen_at": "2026-08-08T02:20:00+08:00",
+  "owner": "hernando_zhao",
+  "research_question": "Can official-event presence combined with stock-price confirmation and PIT-safe global/sector/macro state improve exits of already-bought V3 positions without changing V3 entry selection?",
+  "data_contract": {
+    "execution_snapshot_id": "shortpick-v3-execution-snapshot-067c5b83e085f95f",
+    "global_market_digest": "96aaf71ddf5fe6a0659e2a4248570ec117804d3f44d0f9f3133e324c233920ce",
+    "sector_market_digest": "8a581d0af78954130959295547e32e68a551b0d32edabe63c11cb4f9f3fa227d",
+    "macro_market_digest": "35735120206749c325c8761c0e4219173d811a2914b1167bc906987f8676cdcf",
+    "cninfo_curation_file_sha256": "39e59e53818a70628e26d75196def79117eff4c0e92353b7cdc358c2f64d71c7",
+    "cninfo_curation_exclusion_digest": "012f8957ad67388d651f344cda9b97b0b6d7d83a3b3376fba26823cdaf754c52",
+    "network_access_during_replay": false,
+    "available_at_rule": "available_at <= decision_cutoff",
+    "exit_execution_rule": "a signal computed after decision-day close can execute only on the next symbol trading day"
+  },
+  "boundary": {
+    "entry_symbols_and_rank_weights": "unchanged frozen V3",
+    "external_information_can_trigger_buy": false,
+    "eligible_positions": "positions actually bought in the frozen baseline account",
+    "candidate_only_positions": "mechanical horizon only because no preregistered prediction exists",
+    "minimum_holding_trade_days": 3,
+    "event_lookback_calendar_days": 20
+  },
+  "model": {
+    "target": "next-trading-day exit return minus frozen baseline-exit return for each baseline position-day",
+    "target_availability": "training row joins only after the frozen baseline sell day is strictly before the current decision day",
+    "core_features": "position path, holding age, rank and V3 entry price-volume features",
+    "full_features": "core plus PIT global, SW L1, macro, official-event counts/categories and post-event stock-price confirmation",
+    "external_increment": "full ridge prediction minus core ridge prediction",
+    "minimum_completed_position_day_labels": 1500,
+    "minimum_prior_predictions": 250,
+    "l2_penalty": 50.0
+  },
+  "variants": [
+    {"variant_id": "core_control_q090_adv50bp", "control_only": true, "prediction_percentile_min": 0.90, "minimum_predicted_advantage": 0.005, "maximum_position_return": 0.05},
+    {"variant_id": "event_external_q075_adv0", "prediction_percentile_min": 0.75, "minimum_predicted_advantage": 0.0, "maximum_position_return": 0.05},
+    {"variant_id": "event_external_q085_adv0", "prediction_percentile_min": 0.85, "minimum_predicted_advantage": 0.0, "maximum_position_return": 0.05},
+    {"variant_id": "event_external_q090_adv50bp", "prediction_percentile_min": 0.90, "minimum_predicted_advantage": 0.005, "maximum_position_return": 0.05},
+    {"variant_id": "event_external_q095_adv50bp", "prediction_percentile_min": 0.95, "minimum_predicted_advantage": 0.005, "maximum_position_return": 0.05},
+    {"variant_id": "event_external_q090_adv100bp_nonwinner", "prediction_percentile_min": 0.90, "minimum_predicted_advantage": 0.01, "maximum_position_return": 0.0},
+    {"variant_id": "event_external_q095_adv100bp_nonwinner", "prediction_percentile_min": 0.95, "minimum_predicted_advantage": 0.01, "maximum_position_return": 0.0}
+  ],
+  "selection": {
+    "tuning_end": "2025-05-26",
+    "validation_from": "2025-05-27",
+    "validation_end": "2025-11-26",
+    "extended_readout_from": "2025-11-27",
+    "extended_readout_to": "2026-06-26",
+    "extended_readout_is_not_untouched": true,
+    "strict_non_degrade_metrics": ["total_return", "annualized_return", "max_drawdown", "negative_month_count", "worst_monthly_return", "skipped_order_rate", "skipped_signal_rate", "max_single_symbol_exposure_pct"],
+    "one_standard_error_rule": "among tuning-and-validation survivors choose the sparsest highest-threshold variant within one validation monthly-delta standard error of the best",
+    "standout_gate": "at least 10 percent relative return improvement, or one fewer negative month together with improved drawdown"
+  },
+  "claim_ceiling": "round30_preregistered_research_replay_not_v3_change"
+}

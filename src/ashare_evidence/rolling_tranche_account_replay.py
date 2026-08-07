@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
-from math import floor
+from math import ceil, floor
 from statistics import mean, quantiles
 from typing import Any
 
@@ -336,7 +336,14 @@ def _simulate_config(
         bars_by_symbol=bars_by_symbol,
         max_entry_lag_days=max_entry_lag_days,
     )
-    active_days = _active_days(signal_days, bars_by_symbol, end_day=_max_planned_exit_day(entry_requests_by_day))
+    active_days = _active_days(
+        signal_days,
+        bars_by_symbol,
+        end_day=_max_replay_day(
+            entry_requests_by_day,
+            pit_external_position_exit_deferrals=config.get("pit_external_position_exit_deferrals"),
+        ),
+    )
     cash = float(initial_cash_cny)
     open_positions: list[_Position] = []
     nav_rows: list[dict[str, Any]] = []
@@ -362,6 +369,12 @@ def _simulate_config(
             bars_by_symbol=bars_by_symbol,
             sell_cost_rate=sell_cost_rate,
             exit_policy=exit_policy,
+            pit_external_exit_signals=(config.get("pit_external_position_exit_signals") or {}).get(
+                current_day.isoformat(), {}
+            ),
+            pit_external_exit_deferrals=(config.get("pit_external_position_exit_deferrals") or {}).get(
+                current_day.isoformat(), {}
+            ),
         )
         order_rows.extend(sells)
         if current_day in entry_requests_by_day:
@@ -377,6 +390,91 @@ def _simulate_config(
                     current_nav / max(float(config["target_active_tranche_count"]), 1.0),
                     current_nav * max_single_signal_deployment_pct,
                 )
+            if bool(config.get("pit_external_entry_cash_fit")) and _has_active_external_deferral(
+                open_positions,
+                current_day=current_day,
+            ):
+                required_entry_cash = _preview_required_entry_cash(
+                    current_day,
+                    open_positions=open_positions,
+                    requests=entry_requests_by_day[current_day],
+                    rank_allocation_mode=str(
+                        config.get("rank_allocation_mode") or "model_rank_weight_with_board_lot_skip"
+                    ),
+                    bars_by_symbol=bars_by_symbol,
+                    selected_top_k=selected_top_k,
+                    per_signal_budget=current_per_signal_budget,
+                    board_lot_size=board_lot_size,
+                    buy_cost_rate=buy_cost_rate,
+                    initial_cash_cny=initial_cash_cny,
+                    max_single_symbol_cost_basis_pct=max_single_symbol_cost_basis_pct,
+                    min_order_notional_cny=config_min_order_notional_cny,
+                    affordable_replacement_policy=config.get("affordable_replacement_policy"),
+                    inventory_by_day=inventory_by_day,
+                )
+                if required_entry_cash > cash and required_entry_cash > 0:
+                    current_per_signal_budget *= max(0.0, min(1.0, cash / required_entry_cash))
+            if bool(config.get("pit_external_entry_liquidity_substitution")) and _has_active_external_deferral(
+                open_positions,
+                current_day=current_day,
+            ):
+                required_entry_cash = _preview_required_entry_cash(
+                    current_day,
+                    open_positions=open_positions,
+                    requests=entry_requests_by_day[current_day],
+                    rank_allocation_mode=str(
+                        config.get("rank_allocation_mode") or "model_rank_weight_with_board_lot_skip"
+                    ),
+                    bars_by_symbol=bars_by_symbol,
+                    selected_top_k=selected_top_k,
+                    per_signal_budget=current_per_signal_budget,
+                    board_lot_size=board_lot_size,
+                    buy_cost_rate=buy_cost_rate,
+                    initial_cash_cny=initial_cash_cny,
+                    max_single_symbol_cost_basis_pct=max_single_symbol_cost_basis_pct,
+                    min_order_notional_cny=config_min_order_notional_cny,
+                    affordable_replacement_policy=config.get("affordable_replacement_policy"),
+                    inventory_by_day=inventory_by_day,
+                )
+                cash, substitution_sells, open_positions = _process_core_liquidity_substitution(
+                    current_day,
+                    cash=cash,
+                    required_entry_cash=required_entry_cash,
+                    open_positions=open_positions,
+                    bars_by_symbol=bars_by_symbol,
+                    sell_cost_rate=sell_cost_rate,
+                    board_lot_size=board_lot_size,
+                )
+                order_rows.extend(substitution_sells)
+            if bool(config.get("pit_external_entry_liquidity_recall")):
+                required_entry_cash = _preview_required_entry_cash(
+                    current_day,
+                    open_positions=open_positions,
+                    requests=entry_requests_by_day[current_day],
+                    rank_allocation_mode=str(
+                        config.get("rank_allocation_mode") or "model_rank_weight_with_board_lot_skip"
+                    ),
+                    bars_by_symbol=bars_by_symbol,
+                    selected_top_k=selected_top_k,
+                    per_signal_budget=current_per_signal_budget,
+                    board_lot_size=board_lot_size,
+                    buy_cost_rate=buy_cost_rate,
+                    initial_cash_cny=initial_cash_cny,
+                    max_single_symbol_cost_basis_pct=max_single_symbol_cost_basis_pct,
+                    min_order_notional_cny=config_min_order_notional_cny,
+                    affordable_replacement_policy=config.get("affordable_replacement_policy"),
+                    inventory_by_day=inventory_by_day,
+                )
+                cash, recall_sells, open_positions = _process_deferred_entry_liquidity_recall(
+                    current_day,
+                    cash=cash,
+                    required_entry_cash=required_entry_cash,
+                    open_positions=open_positions,
+                    bars_by_symbol=bars_by_symbol,
+                    sell_cost_rate=sell_cost_rate,
+                    board_lot_size=board_lot_size,
+                )
+                order_rows.extend(recall_sells)
             buys, cash, open_positions = _process_entry_buys(
                 current_day,
                 cash=cash,
@@ -628,6 +726,50 @@ def _process_entry_buys(
     return rows, cash, positions
 
 
+def _preview_required_entry_cash(
+    trade_day: date,
+    *,
+    open_positions: list[_Position],
+    requests: list[dict[str, Any]],
+    rank_allocation_mode: str,
+    bars_by_symbol: dict[str, list[_Bar]],
+    selected_top_k: int,
+    per_signal_budget: float,
+    board_lot_size: int,
+    buy_cost_rate: float,
+    initial_cash_cny: float,
+    max_single_symbol_cost_basis_pct: float,
+    min_order_notional_cny: float,
+    affordable_replacement_policy: Any,
+    inventory_by_day: dict[date, list[dict[str, Any]]],
+) -> float:
+    preview_rows, _cash, _positions = _process_entry_buys(
+        trade_day,
+        cash=float("inf"),
+        open_positions=open_positions,
+        requests=requests,
+        rank_allocation_mode=rank_allocation_mode,
+        bars_by_symbol=bars_by_symbol,
+        selected_top_k=selected_top_k,
+        per_signal_budget=per_signal_budget,
+        board_lot_size=board_lot_size,
+        buy_cost_rate=buy_cost_rate,
+        initial_cash_cny=initial_cash_cny,
+        max_single_symbol_cost_basis_pct=max_single_symbol_cost_basis_pct,
+        min_order_notional_cny=min_order_notional_cny,
+        affordable_replacement_policy=affordable_replacement_policy,
+        inventory_by_day=inventory_by_day,
+    )
+    return sum(_safe_float(row.get("cash_spent_cny")) for row in preview_rows if row.get("action") == "buy")
+
+
+def _has_active_external_deferral(open_positions: list[_Position], *, current_day: date) -> bool:
+    return any(
+        position.entry_features.get("pit_external_deferred_exit_day") and position.planned_exit_day > current_day
+        for position in open_positions
+    )
+
+
 def _apply_rank1_quality_overlay(
     picks_by_day: dict[date, list[dict[str, Any]]],
     *,
@@ -835,6 +977,9 @@ def _affordable_replacement_request(
             "target_horizon_days": horizon,
             "shadow_baseline_buy_eligible": original_pick.get("shadow_baseline_buy_eligible"),
             "shadow_baseline_buy_symbols": original_pick.get("shadow_baseline_buy_symbols"),
+            "shadow_baseline_buy_shares_by_symbol": original_pick.get(
+                "shadow_baseline_buy_shares_by_symbol"
+            ),
         }
         return {
             "pick": replacement_pick,
@@ -887,7 +1032,11 @@ def _try_buy_request(
         return [_skip(signal_day, symbol, stock_name, rank, "below_min_order_notional", target_notional)], cash, positions, False
     if one_lot_notional > target_notional:
         return [_skip(signal_day, symbol, stock_name, rank, "price_too_high_for_slot", target_notional)], cash, positions, False
-    shares = int(floor(target_notional / one_lot_notional) * board_lot_size)
+    frozen_shares_by_symbol = pick.get("shadow_baseline_buy_shares_by_symbol")
+    if isinstance(frozen_shares_by_symbol, dict) and symbol in frozen_shares_by_symbol:
+        shares = int(float(frozen_shares_by_symbol[symbol]))
+    else:
+        shares = int(floor(target_notional / one_lot_notional) * board_lot_size)
     if shares <= 0:
         return [_skip(signal_day, symbol, stock_name, rank, "board_lot_rounding_zero", target_notional)], cash, positions, False
     shadow_symbols = pick.get("shadow_baseline_buy_symbols")
@@ -1048,15 +1197,97 @@ def _process_sells(
     bars_by_symbol: dict[str, list[_Bar]],
     sell_cost_rate: float,
     exit_policy: str,
+    pit_external_exit_signals: dict[str, str] | None = None,
+    pit_external_exit_deferrals: dict[str, dict[str, str]] | None = None,
 ) -> tuple[float, list[dict[str, Any]], list[_Position]]:
     rows: list[dict[str, Any]] = []
     still_open: list[_Position] = []
     for position in open_positions:
+        prior_close = position.last_price
+        position_key = "|".join(
+            (
+                position.signal_day.isoformat(),
+                position.entry_day.isoformat(),
+                position.symbol,
+                str(position.rank),
+            )
+        )
+        external_exit_reason = (pit_external_exit_signals or {}).get(position_key)
+        if external_exit_reason is None:
+            external_exit_reason = _deferred_position_prior_close_exit_reason(position, current_day=current_day)
         price = _price_on_day(bars_by_symbol.get(position.symbol) or [], current_day)
         if price is not None:
             position.last_price = price
             position.peak_price = max(position.peak_price, price)
-        exit_reason = _exit_reason(position, current_day=current_day, price=price, exit_policy=exit_policy)
+            if position.entry_features.get("pit_external_deferred_exit_day"):
+                position.entry_features["pit_external_deferral_peak_price"] = max(
+                    _safe_float(position.entry_features.get("pit_external_deferral_peak_price"), price),
+                    price,
+                )
+        deferral = (pit_external_exit_deferrals or {}).get(position_key)
+        if deferral is not None and current_day >= position.planned_exit_day:
+            reason = str(deferral.get("reason") or "")
+            deferred_exit_day = _parse_day(deferral["deferred_exit_day"])
+            minimum_cash_reserve_cny = _safe_float(deferral.get("minimum_cash_reserve_cny"))
+            if not reason.startswith("pit_external_"):
+                raise ValueError("PIT external exit-deferral reasons must use the pit_external_ prefix")
+            if deferred_exit_day <= current_day:
+                raise ValueError("PIT external deferred exit day must be after the original exit day")
+            fully_required = False
+            if cash < minimum_cash_reserve_cny and price is not None:
+                cash, partial_row, fully_required = _partial_deferral_liquidity_sale(
+                    position,
+                    current_day=current_day,
+                    cash=cash,
+                    minimum_cash_reserve_cny=minimum_cash_reserve_cny,
+                    sizing_price=prior_close,
+                    execution_price=price,
+                    sell_cost_rate=sell_cost_rate,
+                )
+                if partial_row is not None:
+                    rows.append(partial_row)
+            if not fully_required and cash >= minimum_cash_reserve_cny:
+                position.entry_features["pit_external_original_exit_day"] = position.planned_exit_day.isoformat()
+                position.planned_exit_day = deferred_exit_day
+                position.entry_features["pit_external_exit_deferral_reason"] = reason
+                position.entry_features["pit_external_deferred_exit_day"] = deferred_exit_day.isoformat()
+                position.entry_features["pit_external_minimum_cash_reserve_cny"] = minimum_cash_reserve_cny
+                position.entry_features["pit_external_deferral_start_price"] = price
+                position.entry_features["pit_external_deferral_peak_price"] = price
+                position.entry_features["pit_external_deferral_stop_loss_pct"] = _safe_float(
+                    deferral.get("deferral_stop_loss_pct")
+                )
+                position.entry_features["pit_external_deferral_trailing_activation_pct"] = _safe_float(
+                    deferral.get("deferral_trailing_activation_pct")
+                )
+                position.entry_features["pit_external_deferral_trailing_drawdown_pct"] = _safe_float(
+                    deferral.get("deferral_trailing_drawdown_pct")
+                )
+                position.entry_features["pit_external_extension_priority"] = _safe_float(
+                    deferral.get("extension_priority")
+                )
+        active_reserve = _safe_float(position.entry_features.get("pit_external_minimum_cash_reserve_cny"))
+        if position.entry_features.get("pit_external_deferred_exit_day") and cash < active_reserve and price is not None:
+            cash, partial_row, fully_required = _partial_deferral_liquidity_sale(
+                position,
+                current_day=current_day,
+                cash=cash,
+                minimum_cash_reserve_cny=active_reserve,
+                sizing_price=prior_close,
+                execution_price=price,
+                sell_cost_rate=sell_cost_rate,
+            )
+            if partial_row is not None:
+                rows.append(partial_row)
+            if fully_required:
+                external_exit_reason = "pit_external_deferral_liquidity_recall"
+        exit_reason = _exit_reason(
+            position,
+            current_day=current_day,
+            price=price,
+            exit_policy=exit_policy,
+            pit_external_exit_reason=external_exit_reason,
+        )
         if exit_reason is None:
             still_open.append(position)
             continue
@@ -1092,11 +1323,244 @@ def _process_sells(
     return cash, rows, still_open
 
 
-def _exit_reason(position: _Position, *, current_day: date, price: float | None, exit_policy: str) -> str | None:
+def _deferred_position_prior_close_exit_reason(position: _Position, *, current_day: date) -> str | None:
+    deferred_exit_day = position.entry_features.get("pit_external_deferred_exit_day")
+    original_exit_day = position.entry_features.get("pit_external_original_exit_day")
+    if not deferred_exit_day or not original_exit_day or current_day <= _parse_day(original_exit_day):
+        return None
+    start_price = _safe_float(position.entry_features.get("pit_external_deferral_start_price"))
+    peak_price = _safe_float(position.entry_features.get("pit_external_deferral_peak_price"), start_price)
+    if start_price <= 0 or peak_price <= 0:
+        return None
+    prior_return = position.last_price / start_price - 1.0
+    stop_loss = _safe_float(position.entry_features.get("pit_external_deferral_stop_loss_pct"))
+    if stop_loss > 0 and prior_return <= -stop_loss:
+        return "pit_external_deferral_next_day_stop_loss"
+    activation = _safe_float(position.entry_features.get("pit_external_deferral_trailing_activation_pct"))
+    drawdown_limit = _safe_float(position.entry_features.get("pit_external_deferral_trailing_drawdown_pct"))
+    peak_return = peak_price / start_price - 1.0
+    prior_drawdown = position.last_price / peak_price - 1.0
+    if activation > 0 and drawdown_limit > 0 and peak_return >= activation and prior_drawdown <= -drawdown_limit:
+        return "pit_external_deferral_next_day_profit_trailing_exit"
+    return None
+
+
+def _partial_deferral_liquidity_sale(
+    position: _Position,
+    *,
+    current_day: date,
+    cash: float,
+    minimum_cash_reserve_cny: float,
+    sizing_price: float,
+    execution_price: float,
+    sell_cost_rate: float,
+) -> tuple[float, dict[str, Any] | None, bool]:
+    required_cash = max(0.0, minimum_cash_reserve_cny - cash)
+    net_sizing_price = sizing_price * (1.0 - sell_cost_rate)
+    if required_cash <= 0 or net_sizing_price <= 0:
+        return cash, None, False
+    board_lot_size = DEFAULT_BOARD_LOT_SIZE
+    shares_to_sell = int(ceil(required_cash / net_sizing_price / board_lot_size) * board_lot_size)
+    if shares_to_sell >= position.shares:
+        return cash, None, True
+    cost_basis_per_share = position.cost_basis / position.shares if position.shares else 0.0
+    removed_cost_basis = shares_to_sell * cost_basis_per_share
+    proceeds = shares_to_sell * execution_price * (1.0 - sell_cost_rate)
+    position.shares -= shares_to_sell
+    position.cost_basis -= removed_cost_basis
+    updated_cash = cash + proceeds
+    return (
+        updated_cash,
+        {
+            "action": "sell",
+            "reason": "pit_external_deferral_partial_liquidity_reserve",
+            "signal_day": position.signal_day.isoformat(),
+            "trade_day": current_day.isoformat(),
+            "symbol": position.symbol,
+            "stock_name": position.stock_name,
+            "rank": position.rank,
+            "shares": shares_to_sell,
+            "entry_price": position.entry_price,
+            "price": execution_price,
+            "cost_basis_cny": removed_cost_basis,
+            "proceeds_cny": proceeds,
+            "pnl_cny": proceeds - removed_cost_basis,
+            "return": proceeds / removed_cost_basis - 1.0 if removed_cost_basis else 0.0,
+            "cash_after_cny": updated_cash,
+            "entry_reason": "bought",
+        },
+        False,
+    )
+
+
+def _process_deferred_entry_liquidity_recall(
+    current_day: date,
+    *,
+    cash: float,
+    required_entry_cash: float,
+    open_positions: list[_Position],
+    bars_by_symbol: dict[str, list[_Bar]],
+    sell_cost_rate: float,
+    board_lot_size: int,
+) -> tuple[float, list[dict[str, Any]], list[_Position]]:
+    if required_entry_cash <= cash:
+        return cash, [], open_positions
+    rows: list[dict[str, Any]] = []
+    positions = list(open_positions)
+    eligible = sorted(
+        (
+            position
+            for position in positions
+            if position.entry_features.get("pit_external_deferred_exit_day")
+            and position.planned_exit_day > current_day
+        ),
+        key=lambda position: (
+            _safe_float(position.entry_features.get("pit_external_extension_priority")),
+            position.signal_day,
+            position.rank,
+            position.symbol,
+        ),
+    )
+    for position in eligible:
+        if cash >= required_entry_cash:
+            break
+        price = _price_on_day(bars_by_symbol.get(position.symbol) or [], current_day)
+        if price is None or price <= 0:
+            continue
+        required_cash = required_entry_cash - cash
+        net_price = price * (1.0 - sell_cost_rate)
+        shares_to_sell = int(ceil(required_cash / net_price / board_lot_size) * board_lot_size)
+        shares_to_sell = min(position.shares, shares_to_sell)
+        if shares_to_sell <= 0:
+            continue
+        cost_basis_per_share = position.cost_basis / position.shares if position.shares else 0.0
+        removed_cost_basis = shares_to_sell * cost_basis_per_share
+        proceeds = shares_to_sell * price * (1.0 - sell_cost_rate)
+        position.shares -= shares_to_sell
+        position.cost_basis -= removed_cost_basis
+        cash += proceeds
+        rows.append(
+            {
+                "action": "sell",
+                "reason": "pit_external_deferral_entry_liquidity_recall",
+                "signal_day": position.signal_day.isoformat(),
+                "trade_day": current_day.isoformat(),
+                "symbol": position.symbol,
+                "stock_name": position.stock_name,
+                "rank": position.rank,
+                "shares": shares_to_sell,
+                "entry_price": position.entry_price,
+                "price": price,
+                "cost_basis_cny": removed_cost_basis,
+                "proceeds_cny": proceeds,
+                "pnl_cny": proceeds - removed_cost_basis,
+                "return": proceeds / removed_cost_basis - 1.0 if removed_cost_basis else 0.0,
+                "cash_after_cny": cash,
+                "entry_reason": "bought",
+            }
+        )
+    positions = [position for position in positions if position.shares > 0]
+    return cash, rows, positions
+
+
+def _process_core_liquidity_substitution(
+    current_day: date,
+    *,
+    cash: float,
+    required_entry_cash: float,
+    open_positions: list[_Position],
+    bars_by_symbol: dict[str, list[_Bar]],
+    sell_cost_rate: float,
+    board_lot_size: int,
+) -> tuple[float, list[dict[str, Any]], list[_Position]]:
+    if required_entry_cash <= cash:
+        return cash, [], open_positions
+    positions = list(open_positions)
+    rows: list[dict[str, Any]] = []
+
+    def prior_close_return(position: _Position) -> float:
+        prior_prices = [
+            bar.close
+            for bar in bars_by_symbol.get(position.symbol) or []
+            if bar.day < current_day
+        ]
+        prior_close = prior_prices[-1] if prior_prices else position.entry_price
+        return prior_close / position.entry_price - 1.0 if position.entry_price else 0.0
+
+    eligible = sorted(
+        (
+            position
+            for position in positions
+            if not position.entry_features.get("pit_external_deferred_exit_day")
+            and position.planned_exit_day > current_day
+        ),
+        key=lambda position: (
+            prior_close_return(position),
+            position.planned_exit_day,
+            position.rank,
+            position.symbol,
+        ),
+    )
+    for position in eligible:
+        if cash >= required_entry_cash:
+            break
+        price = _price_on_day(bars_by_symbol.get(position.symbol) or [], current_day)
+        if price is None or price <= 0:
+            continue
+        required_cash = required_entry_cash - cash
+        net_price = price * (1.0 - sell_cost_rate)
+        shares_to_sell = int(ceil(required_cash / net_price / board_lot_size) * board_lot_size)
+        shares_to_sell = min(position.shares, shares_to_sell)
+        if shares_to_sell <= 0:
+            continue
+        cost_basis_per_share = position.cost_basis / position.shares if position.shares else 0.0
+        removed_cost_basis = shares_to_sell * cost_basis_per_share
+        proceeds = shares_to_sell * price * (1.0 - sell_cost_rate)
+        position.shares -= shares_to_sell
+        position.cost_basis -= removed_cost_basis
+        cash += proceeds
+        rows.append(
+            {
+                "action": "sell",
+                "reason": "pit_external_core_position_liquidity_substitution",
+                "signal_day": position.signal_day.isoformat(),
+                "trade_day": current_day.isoformat(),
+                "symbol": position.symbol,
+                "stock_name": position.stock_name,
+                "rank": position.rank,
+                "shares": shares_to_sell,
+                "entry_price": position.entry_price,
+                "price": price,
+                "cost_basis_cny": removed_cost_basis,
+                "proceeds_cny": proceeds,
+                "pnl_cny": proceeds - removed_cost_basis,
+                "return": proceeds / removed_cost_basis - 1.0 if removed_cost_basis else 0.0,
+                "cash_after_cny": cash,
+                "entry_reason": "bought",
+            }
+        )
+    positions = [position for position in positions if position.shares > 0]
+    return cash, rows, positions
+
+
+def _exit_reason(
+    position: _Position,
+    *,
+    current_day: date,
+    price: float | None,
+    exit_policy: str,
+    pit_external_exit_reason: str | None = None,
+) -> str | None:
     if price is None:
         return None
     if current_day >= position.planned_exit_day:
+        if position.entry_features.get("pit_external_deferred_exit_day"):
+            return "pit_external_event_confirmed_rebound_extension_exit"
         return "mechanical_horizon"
+    if pit_external_exit_reason is not None and current_day > position.entry_day:
+        if not pit_external_exit_reason.startswith("pit_external_"):
+            raise ValueError("PIT external exit reasons must use the pit_external_ prefix")
+        return pit_external_exit_reason
     if exit_policy == "stop_loss_12pct" and current_day > position.entry_day:
         position_return = price / position.entry_price - 1.0 if position.entry_price else 0.0
         if position_return <= -0.12:
@@ -1328,6 +1792,26 @@ def _max_planned_exit_day(entry_requests_by_day: dict[date, list[dict[str, Any]]
         ),
         default=max(entry_requests_by_day, default=None),
     )
+
+
+def _max_replay_day(
+    entry_requests_by_day: dict[date, list[dict[str, Any]]],
+    *,
+    pit_external_position_exit_deferrals: Any,
+) -> date | None:
+    planned = _max_planned_exit_day(entry_requests_by_day)
+    if not isinstance(pit_external_position_exit_deferrals, dict):
+        return planned
+    deferred = [
+        _parse_day(payload["deferred_exit_day"])
+        for rows in pit_external_position_exit_deferrals.values()
+        if isinstance(rows, dict)
+        for payload in rows.values()
+        if isinstance(payload, dict) and payload.get("deferred_exit_day")
+    ]
+    if planned is None:
+        return None
+    return max([planned, *deferred])
 
 
 def _active_days(signal_days: list[date], bars_by_symbol: dict[str, list[_Bar]], *, end_day: date | None) -> list[date]:

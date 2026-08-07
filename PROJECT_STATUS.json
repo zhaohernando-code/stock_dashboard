@@ -10,7 +10,28 @@
   },
   "status": "in_progress",
   "owner": "codex",
-  "updated_at": "2026-08-08T01:40:00+08:00",
+  "updated_at": "2026-08-08T11:30:00+08:00",
+  "latest_external_context_account_research_checkpoint": {
+    "status": "strong_research_challenger_not_verified_not_v3_change",
+    "rounds": "30_to_47",
+    "report": "docs/research/EXTERNAL_CONTEXT_ROUNDS_30_47_CHECKPOINT_2026-08-08.md",
+    "best_pre_extended_selected_variant": "event0_winner5_sub_extend40_tier15_q070",
+    "reused_final_relative_total_return_improvement": 0.15993032153904885,
+    "reused_final_strict_gate_passed": false,
+    "reused_final_failed_metrics": [
+      "max_drawdown",
+      "worst_monthly_return"
+    ],
+    "entry_symbol_set_frozen": true,
+    "skip_rates_match_v3": true,
+    "entry_share_frozen_challenger_relative_return_improvement": 0.12476378824541912,
+    "entry_share_frozen_pre_extended_gate_passed": false,
+    "segment_partial_month_boundary_fixed": true,
+    "v3_signal_changed": false,
+    "paper_tracking_changed": false,
+    "runtime_published": false,
+    "next_gate": "trigger_concentration_leave_one_out_execution_stress_and_new_untouched_forward_paper_window"
+  },
   "latest_personal_eligibility_and_external_context_update": {
     "status": "pit_eligibility_gate_active_external_context_research_only",
     "account_profile": "new_retail_cash_account",

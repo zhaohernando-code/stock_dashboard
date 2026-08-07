@@ -188,3 +188,6 @@
 - `origin/main` 已包含运行时代码提交，发布 manifest 为 `output/releases/20260604T134157Z-2cd4b24213b4/manifest.json`，deploy verifier `19 passed, 0 failed`。
 - runtime 验收：portfolios detail `0.007s/476KB`，summary `0.034s/43KB`，legacy `/dashboard/operations` `0.011s/556KB` 且 `simulation_workspace=null`。首次 post-publish replay 曾因启动/后台预热竞争抖到 `18.578s`，连续复测恢复为 `0.287s`、`0.194s`、`0.119s`。
 - 浏览器验收：本地裸入口和显式 `?view=shortpick&shortpickTab=paper-tracking` 均进入 `试验田 -> 纸面跟踪`，刷新后不退回首页，控制台无错误。
+## 2026-08-08 — Rebase partial boundary months inside each evaluation segment
+
+When tuning, validation, or final evaluation starts mid-month, never reuse the account's whole-calendar-month return for that boundary month. Recompute monthly returns from the segment starting NAV, and attribute order metrics by trade day. Otherwise adjacent evaluation segments overlap and a reused boundary month can silently contaminate non-degradation gates.
