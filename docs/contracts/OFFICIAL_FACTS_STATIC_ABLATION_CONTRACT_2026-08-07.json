@@ -1,0 +1,68 @@
+{
+  "artifact_type": "official_facts_static_ablation_preregistration",
+  "schema_version": "official_facts_static_ablation_preregistration.v1",
+  "as_of": "2026-08-07",
+  "attribution": "hernando_zhao",
+  "production_effect": "forbidden",
+  "v3_signal_changed": false,
+  "baseline": {
+    "model_spec_id": "negative_month_rank_weight_adjusted_capacity_cluster_v3_top3_20d_v1",
+    "trial_id": "negative_month_rank_weight_adjusted_capacity_cluster_v3_top3_20d_v1:trial-000",
+    "lambda_zero_must_exactly_reproduce_frozen_symbol_rank_pairs": true
+  },
+  "data_window": {
+    "full713_envelope_start": "2023-06-13",
+    "full713_envelope_end": "2026-05-26",
+    "model_feature_start": "2023-09-07",
+    "tuning_end": "2025-05-26",
+    "untouched_holdout_start": "2025-05-27",
+    "untouched_holdout_end": "2026-05-26"
+  },
+  "personal_eligibility": {
+    "profile": "new_retail_cash_account",
+    "apply_before_scoring": true,
+    "a_share_only": true,
+    "allowed_boards": ["main"],
+    "maximum_unadjusted_decision_price_cny": 200.0,
+    "current_static_name_or_status_must_not_be_backfilled": true,
+    "historical_risk_warning_status_without_pit_master": "record_as_unverified_limitation"
+  },
+  "official_signal": {
+    "source": "CNINFO official announcement PIT records after cninfo_title_materiality.v9 curation",
+    "content_used": "title_and_metadata_only",
+    "decision_cutoff": "23:59:59+08:00 on each signal day",
+    "hard_condition": "available_from <= decision_cutoff",
+    "lookback_calendar_days": 20,
+    "half_life_calendar_days": 5.0,
+    "direction": "positive_is_adverse",
+    "resolved_or_positive_title_suppression_required": true
+  },
+  "residual": {
+    "model": "expanding_past_only_ridge",
+    "alpha": 1.0,
+    "fit_order": "predict_current_date_then_update_with_current_date",
+    "stock_native_features": [
+      "return_5d_percentile",
+      "return_20d_percentile",
+      "amount_10d_vs_20d_percentile",
+      "low_volatility_percentile",
+      "low_turnover_percentile",
+      "turnover_rate_percentile"
+    ]
+  },
+  "weight_scan": {
+    "formula": "z(core_score)-clip(lambda*z(external_residual),-cap,+cap)",
+    "lambda_values": [0.0, 0.025, 0.05, 0.075, 0.1, 0.15],
+    "cap": 0.3,
+    "channel": "individual_event",
+    "positive_information_can_create_eligibility": false,
+    "selection_rule": "smallest weight within one standard error of the best tuning mean"
+  },
+  "gates": {
+    "pit_future_event_violation_count": 0,
+    "lambda_zero_reproduction_mismatch_count": 0,
+    "tuning_mean_floor": "lambda_zero_mean - lambda_zero_daily_standard_error",
+    "negative_month_count_maximum": "lambda_zero_negative_month_count + 1"
+  },
+  "claim_ceiling": "research_only_signal_level_static_weight_ablation_not_account_replay_not_v3_promotion"
+}
