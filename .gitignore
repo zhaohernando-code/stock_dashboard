@@ -29,6 +29,8 @@ data/artifacts/autonomous_flow/
 data/runtime-artifacts/
 data/research_validation_personal_*/
 data/research_validation_forward_*/
+data/shortpick-round75-shadow-signals.json
+data/shortpick-round75-shadow-tracking.json
 artifacts/
 output/playwright/
 output/chrome-acceptance-profile/

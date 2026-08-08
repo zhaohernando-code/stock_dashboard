@@ -2,7 +2,7 @@ import re
 import unittest
 from pathlib import Path
 
-from ashare_evidence.shortpick_strategy_lab_read_model import ACTIVE_STRATEGY_CONFIG_IDS
+from ashare_evidence.shortpick_strategy_lab_read_model import PAPER_ACTIVE_STRATEGY_CONFIG_IDS
 
 
 class FrontendShortpickStaticTests(unittest.TestCase):
@@ -65,7 +65,7 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("PaperDisplayChartCard", component_source)
         self.assertIn("paperDisplayTableColumns", component_source)
         self.assertIn('title={table?.title || "模拟交易明细"}', component_source)
-        self.assertIn("统一从 2026-07-08 起算", component_source)
+        self.assertIn("V3 账户从 2026-07-08 起算", component_source)
         self.assertIn('if (value === "tracking_active") return "纸面追踪中";', component_source)
         self.assertIn("最新来源信号日", component_source)
         self.assertIn("数据缺口", component_source)
@@ -73,8 +73,8 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("...(tracking?.baseline_configs ?? [])", component_source)
         self.assertIn("const ACTIVE_STRATEGY_CONFIG_IDS = [", component_source)
         self.assertIn("activeStrategyRows", component_source)
-        self.assertIn("活跃策略已收敛为 3 个角色", component_source)
-        self.assertIn("Rank5 已停用，其余策略只保留历史归档", component_source)
+        self.assertIn("3 个原有角色 + 1 个不影响正式计划的外部信息影子对照", component_source)
+        self.assertIn("Round 75 持仓延期影子组", component_source)
         self.assertIn("Rank5 已停用 · 影子观察", component_source)
         self.assertIn("Rank5 不再生成真实买单", component_source)
         self.assertIn("真实替补只允许 Rank4；没有合格 Rank4 时保留现金", component_source)
@@ -82,7 +82,7 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         active_ids_source = component_source.split("const ACTIVE_STRATEGY_CONFIG_IDS = [", 1)[1].split(
             "] as const;", 1
         )[0]
-        self.assertEqual(set(re.findall(r'"([^"]+)"', active_ids_source)), set(ACTIVE_STRATEGY_CONFIG_IDS))
+        self.assertEqual(set(re.findall(r'"([^"]+)"', active_ids_source)), set(PAPER_ACTIVE_STRATEGY_CONFIG_IDS))
 
         paper_tab_source = component_source[
             component_source.index("function ShortpickStrategyLabPaperTab"):

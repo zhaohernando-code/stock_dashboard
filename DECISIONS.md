@@ -1,5 +1,18 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-08-08T14:55:00+08:00] Round 75 enters V3 forward validation as an isolated shadow control, not as a replacement:
+
+- 保留现有 V3 和三条原有纸面角色不变，新增 `round75_exact_share_core_veto_exit_extension_shadow_v1` 独立 20 万纸面账户。
+- 影子组严格复现 Round 75 冻结的 Rank 调整核心入场流；外部信息不能生成买入，只能对已有持仓延长退出期限。Rank5 如出现也只属于影子研究，不恢复真实执行。
+- 2025-11-27 至 2026-08-07 的曲线作为 `retrospective_pit_backfill` 补齐，但不计入 2026-08-08 起的 `true_forward_shadow` 成绩。
+- 延期信号使用 append-only 注册表；每条必须满足 `available_at <= decision_cutoff`、决策日与 cutoff 同日、执行日晚于决策日、延期日晚于执行日。既有决策行不得重写或删除。
+- 纸面账户、前端和 API 可以展示该对照，但正式计划、V3 买卖建议和 live order 不读取影子账户。
+- 首次迁移只合并 Round 75 账户、记录和计划，原三组经济账本必须保持同一规范化摘要；后续日刷从已冻结账本增量结算新交易日，不再重放历史候选源。
+- 外部信号注册表缺失、无效或落后于最新交易日时失败关闭延期动作；Round 75 核心影子仍继续记账，V3 不受影响。
+- 晋升仍需至少 3 个独立真实前向延期触发，并重新通过八项非劣化门槛；不得自动晋升。
+
+证据：`docs/contracts/ROUND75_SHADOW_FORWARD_CONTROL_2026-08-08.json`、`docs/research/ROUND75_PERSONAL_EXACT_SHARE_CORE_VETO_FORWARD_RESULT_2026-08-08.json`。
+
 [2026-07-17T17:00:00+08:00] Rank5 real execution is retired and the optimization frontier becomes Rank4-only:
 
 产品目标已明确为稳定盈利优先，“尽量不要漏单”不是硬指标。可复现完整历史账户回放显示，停用 Rank5 后总收益从 332.100% 提高到 333.679%，最大回撤从 -6.885% 略降到 -6.878%，亏损月份仍为 2 个；代价是订单跳过率从 15.145% 上升到 17.531%。该覆盖代价被显式接受。

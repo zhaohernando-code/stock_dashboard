@@ -27,6 +27,7 @@ import type {
   ShortpickStrategyLabPaperDisplayTableRow,
   ShortpickStrategyLabPaperDisplayTextItem,
   ShortpickStrategyLabPaperTrackingResponse,
+  ShortpickRound75ShadowTracking,
 } from "../types";
 import { formatDate, formatNumber, formatPercent, valueTone } from "../utils/format";
 import { readRouteParam, writeWorkbenchRoute } from "../utils/route";
@@ -38,9 +39,10 @@ const ACTIVE_STRATEGY_CONFIG_IDS = [
   "daily_15_tranche_rank_adjusted_r5_093_strong154_replacement_rank4_gap010_fill075_market_cap25_v1",
   "daily_14_tranche_upstream_meta_signal_quality_min2250_weak100_strong165_lead135_low090_v1",
   "daily_14_tranche_rank_weighted_compound_min2250_layered_rank1_quickfail_rank3_pullback_exit_v1",
+  "round75_exact_share_core_veto_exit_extension_shadow_v1",
 ] as const;
 const ACTIVE_STRATEGY_CONFIG_ID_SET = new Set<string>(ACTIVE_STRATEGY_CONFIG_IDS);
-const ACTIVE_STRATEGY_LABEL_FRAGMENTS = ["仅 Rank4 可买替补", "上游元信号稳健缩放", "主策略"];
+const ACTIVE_STRATEGY_LABEL_FRAGMENTS = ["仅 Rank4 可买替补", "上游元信号稳健缩放", "主策略", "Round 75"];
 
 function activeStrategyRows(rows: ShortpickStrategyLabConfigReadout[]): ShortpickStrategyLabConfigReadout[] {
   const order = new Map<string, number>(ACTIVE_STRATEGY_CONFIG_IDS.map((configId, index) => [configId, index]));
@@ -712,6 +714,119 @@ function Rank5ForwardObservationCard({
   );
 }
 
+function Round75ShadowTrackingCard({
+  shadow,
+  forwardConfig,
+  loading,
+}: {
+  shadow: ShortpickRound75ShadowTracking | undefined;
+  forwardConfig: ShortpickStrategyLabConfigReadout | undefined;
+  loading: boolean;
+}) {
+  const chartRef = useRef<HTMLDivElement | null>(null);
+  const backfill = shadow?.historical_backfill;
+  const baseline = backfill?.baseline_summary;
+  const candidate = backfill?.candidate_summary;
+  const trueForward = shadow?.true_forward;
+  const pitAudit = shadow?.pit_audit;
+  const baselineCurve = backfill?.baseline_curve ?? [];
+  const candidateCurve = backfill?.candidate_curve ?? [];
+  const forwardSummary = forwardConfig?.summary;
+  const registryStatus = stringField(trueForward, "signal_registry_status");
+  const registryThrough = stringField(trueForward, "signal_registry_evaluated_through");
+  const violationCount = (
+    (numberField(pitAudit, "future_event_violations") ?? 0)
+    + (numberField(pitAudit, "future_feature_violations") ?? 0)
+    + (numberField(pitAudit, "future_label_violations") ?? 0)
+  );
+
+  useEffect(() => {
+    const container = chartRef.current;
+    if (!container || !baselineCurve.length || !candidateCurve.length) return undefined;
+    const chart = init(container, undefined, { renderer: "canvas" });
+    chart.setOption({
+      grid: { top: 34, right: 18, bottom: 38, left: 58 },
+      legend: { top: 0, right: 8 },
+      tooltip: { trigger: "axis", valueFormatter: (value: number) => formatPercent(value) },
+      xAxis: {
+        type: "category",
+        boundaryGap: false,
+        data: baselineCurve.map((point) => point.date),
+        axisLabel: { hideOverlap: true },
+      },
+      yAxis: { type: "value", axisLabel: { formatter: (value: number) => formatPercent(value) } },
+      series: [
+        {
+          name: "V3 同源基线",
+          type: "line",
+          smooth: true,
+          showSymbol: false,
+          data: baselineCurve.map((point) => point.total_return),
+        },
+        {
+          name: "Round 75 影子组",
+          type: "line",
+          smooth: true,
+          showSymbol: false,
+          data: candidateCurve.map((point) => point.total_return),
+        },
+      ],
+    });
+    const handleResize = () => chart.resize();
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      chart.dispose();
+    };
+  }, [baselineCurve, candidateCurve]);
+
+  return (
+    <Card
+      className="panel-card"
+      title="Round 75 外部信息影子对照"
+      extra={<Tag color={shadow?.status === "active_shadow_control" ? "purple" : "red"}>{
+        shadow?.status === "active_shadow_control" ? "影子运行中" : "数据未就绪"
+      }</Tag>}
+    >
+      {loading && !shadow ? (
+        <Skeleton active paragraph={{ rows: 4 }} />
+      ) : (
+        <Space direction="vertical" size="middle" className="full-width">
+          <Alert
+            showIcon
+            type="info"
+            message="不替换 V3，也不允许外部信息新增买入"
+            description={`历史曲线 ${backfill?.from || "待补齐"} 至 ${backfill?.to || "待补齐"} 是 PIT 回填；从 ${shadow?.activation_date || "2026-08-08"} 起才计入真实前向影子成绩。两段不会混算。`}
+          />
+          {registryStatus === "stale_fail_closed" ? (
+            <Alert
+              showIcon
+              type="warning"
+              message="外部信号注册表已过期，当前按失败关闭"
+              description={`核心影子账户继续运行，但不会执行新的外部延期动作。注册表目前冻结到 ${registryThrough || "未知日期"}。`}
+            />
+          ) : null}
+          <div className="metric-strip shortpick-strategy-lab-metrics">
+            <div className="metric-strip-item"><span>历史 V3</span><strong>{formatPercent(numberField(baseline, "total_return"))}</strong></div>
+            <div className="metric-strip-item"><span>历史影子组</span><strong>{formatPercent(numberField(candidate, "total_return"))}</strong></div>
+            <div className="metric-strip-item"><span>历史触发</span><strong>{formatNumber(backfill?.trigger_count ?? 0)}</strong></div>
+            <div className="metric-strip-item"><span>真实前向收益</span><strong>{formatPercent(numberField(forwardSummary, "paper_total_return"))}</strong></div>
+            <div className="metric-strip-item"><span>前向触发</span><strong>{formatNumber(numberField(trueForward, "observed_extension_trigger_count") ?? 0)}</strong></div>
+            <div className="metric-strip-item"><span>PIT 违规</span><strong>{formatNumber(violationCount)}</strong></div>
+          </div>
+          {baselineCurve.length && candidateCurve.length ? (
+            <div>
+              <Text strong>PIT 历史回填曲线</Text>
+              <div ref={chartRef} className="shortpick-paper-effect-chart" />
+            </div>
+          ) : <Empty description="历史回填曲线尚未生成。" />}
+          <Text type="secondary">历史回填只用于理解机制；正式晋升仍要求至少 3 个独立延期触发，并重新检查全部非劣化门槛。</Text>
+        </Space>
+      )}
+    </Card>
+  );
+}
+
 function ShortpickStrategyLabPaperTab({
   tracking,
   loading,
@@ -748,6 +863,9 @@ function ShortpickStrategyLabPaperTab({
     ...(tracking?.selected_configs ?? []),
     ...(tracking?.baseline_configs ?? []),
   ]);
+  const round75ForwardConfig = strategyRows.find((row) => (
+    row.config_id === "round75_exact_share_core_veto_exit_extension_shadow_v1"
+  ));
   const strategyOptions = useMemo(() => uniquePaperOptions(tableRows, "strategy_text"), [tableRows]);
   const actionOptions = useMemo(() => uniquePaperOptions(tableRows, "action_text"), [tableRows]);
   const exitOptions = useMemo(() => uniquePaperOptions(tableRows, "exit_state_text"), [tableRows]);
@@ -797,7 +915,7 @@ function ShortpickStrategyLabPaperTab({
               ))}
             </div>
             <Space wrap className="inline-tags">
-              <Tag color="blue">统一从 2026-07-08 起算</Tag>
+              <Tag color="blue">V3 账户从 2026-07-08 起算</Tag>
               <Tag color="red">不允许延迟买入</Tag>
               <Tag color="green">研究观察，不构成建议</Tag>
             </Space>
@@ -808,8 +926,14 @@ function ShortpickStrategyLabPaperTab({
       <Alert
         showIcon
         type="info"
-        message="活跃策略已收敛为 3 个角色"
-        description="稳定盈利前沿（仅 Rank4 可买替补）· 上游元信号独立模型对照 · 现行 14 tranche 前向基线；Rank5 已停用，其余策略只保留历史归档。"
+        message="3 个原有角色 + 1 个不影响正式计划的外部信息影子对照"
+        description="稳定盈利前沿（仅 Rank4 可买替补）· 上游元信号独立模型对照 · 现行 14 tranche 前向基线 · Round 75 持仓延期影子组；影子组不会改变 V3 正式建议。"
+      />
+
+      <Round75ShadowTrackingCard
+        shadow={tracking?.round75_shadow_tracking}
+        forwardConfig={round75ForwardConfig}
+        loading={loading}
       />
 
       <Rank5ForwardObservationCard tracking={tracking} loading={loading} />

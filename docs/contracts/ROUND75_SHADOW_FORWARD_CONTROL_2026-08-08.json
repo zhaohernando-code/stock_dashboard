@@ -1,0 +1,66 @@
+{
+  "artifact_type": "round75_shadow_forward_control_contract",
+  "schema_version": "round75_shadow_forward_control_contract.v1",
+  "status": "active_shadow_control_not_v3_replacement",
+  "owner": "hernando_zhao",
+  "frozen_at": "2026-08-08T14:55:00+08:00",
+  "strategy_id": "round75_exact_share_core_veto_exit_extension_shadow_v1",
+  "activation_date": "2026-08-08",
+  "historical_backfill": {
+    "from": "2025-11-27",
+    "to": "2026-08-07",
+    "evidence_basis": "retrospective_pit_backfill",
+    "counts_toward_true_forward": false,
+    "source_result": "docs/research/ROUND75_PERSONAL_EXACT_SHARE_CORE_VETO_FORWARD_RESULT_2026-08-08.json",
+    "source_execution_snapshot_id": "shortpick-v3-execution-snapshot-dd04af2f51a1c038"
+  },
+  "true_forward": {
+    "from": "2026-08-08",
+    "evidence_basis": "true_forward_shadow",
+    "initial_cash_cny": 200000,
+    "execution_mode": "paper_only_no_live_order",
+    "core_entry_stream": "frozen_round75_negative_month_rank_adjusted_rank4_5_replacement_stream",
+    "external_buy_allowed": false,
+    "external_action": "extend_existing_position_exit_horizon_only",
+    "daily_account_isolated_from_v3": true
+  },
+  "pit_contract": {
+    "availability_rule": "available_at <= decision_cutoff",
+    "decision_cutoff_must_match_decision_day": true,
+    "effective_deferral_day_must_follow_decision_day": true,
+    "deferred_exit_day_must_follow_effective_deferral_day": true,
+    "signal_registry_mutation_policy": "append_only_prior_decision_rows_immutable",
+    "historical_and_true_forward_labels_must_not_be_mixed": true
+  },
+  "eligibility_contract": {
+    "a_share_only": true,
+    "allowed_boards": ["main"],
+    "maximum_unadjusted_decision_price_cny": 200,
+    "same_personal_eligibility_snapshot_as_round75": true,
+    "historical_current_static_board_or_risk_name_backfill_forbidden": true
+  },
+  "data_state_at_activation": {
+    "historical_backfill_complete_through": "2026-08-07",
+    "true_forward_signal_registry_evaluated_through": "2026-08-07",
+    "historical_extension_trigger_count": 1,
+    "true_forward_extension_trigger_count": 0,
+    "future_information_violation_count": 0,
+    "article_body_retained": false
+  },
+  "promotion_gate": {
+    "minimum_independent_extension_triggers": 3,
+    "all_eight_non_degradation_metrics_required": true,
+    "historical_backfill_is_not_promotion_evidence": true,
+    "automatic_promotion_allowed": false
+  },
+  "runtime_contract": {
+    "paper_state_field": "round75_shadow_tracking",
+    "signal_registry_default": "data/shortpick-round75-shadow-signals.json",
+    "backfill_artifact_default": "data/shortpick-round75-shadow-tracking.json",
+    "initial_migration_behavior": "preserve_original_three_accounts_records_and_plans_byte_for_byte_then_merge_only_round75_shadow_rows",
+    "daily_refresh_behavior": "advance_existing_four_account_ledger_append_only_without_replaying_prior_source_days",
+    "missing_or_invalid_signal_registry_behavior": "continue_core_shadow_fail_closed_without_external_extension_keep_v3_unchanged",
+    "stale_signal_registry_behavior": "continue_core_shadow_fail_closed_without_external_extension_and_show_stale_status"
+  },
+  "claim_ceiling": "historical_backfill_plus_true_forward_shadow_not_v3_change"
+}

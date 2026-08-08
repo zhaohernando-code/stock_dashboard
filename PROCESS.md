@@ -197,3 +197,12 @@ When tuning, validation, or final evaluation starts mid-month, never reuse the a
 An external exit-horizon change can increase or decrease account NAV and thereby alter later board-lot sizing even when later symbols and ranks remain identical. That path amplification is not independent external alpha and can worsen forward concentration. For holding-modifier research, freeze the baseline's executed buy symbols, ranks and share counts; treat any candidate-only symbol, missing baseline buy, or changed share count as a failed authenticity check.
 
 Core-first residual gating is also mandatory. If a candidate works only when external features overturn a below-median stock-only core signal, test a core veto before optimizing fractional weights. Report trigger count and leave-one-trigger-out results separately from aggregate gates; an all-metric pass driven by one stock is a concentration-limited challenger, not production evidence.
+# Round 75 影子前向验证：历史回填必须与真实前向分账（2026-08-08）
+
+- 一个历史候选进入前向观察时，不能把回测曲线直接续接成“真实前向”。同一策略 ID 下也必须保留 `retrospective_pit_backfill` 与 `true_forward_shadow` 两种证据标签，并明确回填不计入晋升样本。
+- 影子组必须拥有独立账户状态和交易记录；它可以读取 V3 同源候选数据，但不能修改正式 V3 账户、计划单或 live order。
+- 延期决策注册表采用 append-only：已评估日期只能向前推进，旧信号内容不得修改，新信号不得迟到回填到已经冻结的决策日。
+- 当前生产基线与候选研究时的核心入场流不同时，前向影子必须复现候选自己的冻结入场流；不能为了接入方便改成另一条 V3 入场流，否则历史与前向不再是同一策略。
+- 既有纸面账本不能用当前数据库重放后直接覆盖。若历史逐日候选源未完整固化，重放会悄然改写旧账户；首次新增对照必须保留旧组，后续改为从冻结状态 append-only 增量结算。
+- 外部信号注册表过期时不能沿用最后一次结论。核心影子可以继续，但外部动作必须 fail closed，并在 API/UI 暴露冻结日期。
+- 历史回填完成不等于候选成熟。Round 75 仍需至少 3 个独立真实前向延期事件，再重跑完整八指标门槛。

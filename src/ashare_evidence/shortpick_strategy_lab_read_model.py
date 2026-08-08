@@ -7,6 +7,11 @@ from pathlib import Path
 from typing import Any
 
 from ashare_evidence.rank5_forward_observation import build_rank5_forward_observation_artifact
+from ashare_evidence.round75_shadow_tracking import (
+    ROUND75_ACTIVATION_DATE,
+    ROUND75_SHADOW_LABEL,
+    ROUND75_SHADOW_STRATEGY_ID,
+)
 
 STRATEGY_LAB_SCHEMA_VERSION = "shortpick_strategy_lab.v1"
 PAPER_STATE_SCHEMA_VERSION = "shortpick_strategy_lab_paper_state.v1"
@@ -46,6 +51,10 @@ ACTIVE_STRATEGY_CONFIG_IDS = (
     QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
     UPSTREAM_META_STABILITY_CONTROL_ID,
     MAIN_CONFIG_ID,
+)
+PAPER_ACTIVE_STRATEGY_CONFIG_IDS = (
+    *ACTIVE_STRATEGY_CONFIG_IDS,
+    ROUND75_SHADOW_STRATEGY_ID,
 )
 ARCHIVED_STRATEGY_CONFIG_IDS = (
     LEGACY_RANK45_REPLACEMENT_CONTROL_ID,
@@ -191,13 +200,29 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
     account_states = {
         strategy_id: account_state
         for strategy_id, account_state in raw_account_states.items()
-        if strategy_id in ACTIVE_STRATEGY_CONFIG_IDS and isinstance(account_state, dict)
+        if strategy_id in PAPER_ACTIVE_STRATEGY_CONFIG_IDS and isinstance(account_state, dict)
     }
     source_coverage = (state or {}).get("source_coverage") if isinstance((state or {}).get("source_coverage"), dict) else {}
     rank5_forward_observation = _rank5_forward_observation_from_state(
         state,
         include_rows=include_records,
         as_of_day=today,
+    )
+    round75_shadow_tracking = (
+        (state or {}).get("round75_shadow_tracking")
+        if isinstance((state or {}).get("round75_shadow_tracking"), dict)
+        else {
+            "strategy_id": ROUND75_SHADOW_STRATEGY_ID,
+            "strategy_label": ROUND75_SHADOW_LABEL,
+            "status": "blocked_missing_backfill_artifact",
+            "activation_date": ROUND75_ACTIVATION_DATE,
+            "historical_backfill": None,
+            "true_forward": {
+                "evidence_basis": "true_forward_shadow",
+                "from": ROUND75_ACTIVATION_DATE,
+                "status": "awaiting_artifact",
+            },
+        }
     )
     rank5_forward_progress = rank5_forward_observation.get("progress")
     if not isinstance(rank5_forward_progress, dict):
@@ -281,6 +306,7 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             for readout in (
                 _paper_quality_replacement_rebalance_control_readout(),
                 _paper_upstream_meta_stability_control_readout(),
+                _paper_round75_shadow_control_readout(),
             )
         ],
         "paper_governance": {
@@ -289,6 +315,7 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             "control_config_ids": [
                 QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
                 UPSTREAM_META_STABILITY_CONTROL_ID,
+                ROUND75_SHADOW_STRATEGY_ID,
             ],
             "daily_sync_policy": "same_scheduled_refresh_window_as_shortpick_v1",
             "rank5_forward_observation_contract": rank5_forward_observation.get("contract_ref"),
@@ -296,6 +323,7 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             "active_rank5_quality_policy": None,
         },
         "rank5_forward_observation": rank5_forward_observation,
+        "round75_shadow_tracking": round75_shadow_tracking,
         "paper_display": _paper_display(
             summary=summary,
             records=records,
@@ -312,6 +340,8 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             "read_model_policy": "forward_paper_state_only_no_v2_replay_cache_no_dynamic_backtest",
             "rank5_forward_outcome_policy": "outcomes_remain_null_until_fixed_20d_window_matures",
             "synchronized_backfill_eligible_for_rank5_evidence": False,
+            "round75_backfill_counts_toward_true_forward": False,
+            "round75_signal_registry": plan_generation_status.get("round75_shadow_signal_registry"),
         },
         "research_labeling": _research_labeling(EVIDENCE_BASIS_PAPER),
         "strategy_governance": _strategy_governance(),
@@ -865,6 +895,42 @@ def _paper_quality_replacement_rebalance_control_readout() -> dict[str, Any]:
     }
 
 
+def _paper_round75_shadow_control_readout() -> dict[str, Any]:
+    readout = _main_config_readout()
+    return {
+        **readout,
+        "config_id": ROUND75_SHADOW_STRATEGY_ID,
+        "label": ROUND75_SHADOW_LABEL,
+        "role": "external_context_shadow_control",
+        "gate_status": "shadow_only",
+        "reason": (
+            "严格复现 Round 75 冻结的 Rank 调整核心入场流；外部信息只能延长已有持仓，不能新增买入。"
+            "2026-08-08 起单独累计真实前向成绩。"
+        ),
+        "summary": {
+            "initial_cash_cny": INITIAL_CASH_CNY,
+            "current_nav_cny": INITIAL_CASH_CNY,
+            "paper_total_return": None,
+            "max_drawdown": None,
+            "record_count": 0,
+            "planned_order_count": None,
+            "forward_status": "awaiting_first_forward_fill",
+        },
+        "selection_summary": {
+            "tranche_count": 15,
+            "budget_mode": "current_nav_fraction",
+            "min_order_notional_cny": 250,
+            "core_model_spec_id": NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
+            "shadow_replacement_inventory_rank_range": [4, 5],
+            "external_action": "extend_existing_position_exit_horizon_only",
+            "external_buy_allowed": False,
+            "activation_date": ROUND75_ACTIVATION_DATE,
+        },
+        "reason_counts": {},
+        "decision_samples": [],
+    }
+
+
 def _paper_control_config_readout() -> dict[str, Any]:
     readout = _control_config_readout()
     return {
@@ -988,6 +1054,8 @@ def _paper_config_with_account_state(
     config_id = str(readout.get("config_id") or "")
     state = account_states.get(config_id) if isinstance(account_states.get(config_id), dict) else {}
     nav_rows = [row for row in state.get("nav_points") or [] if isinstance(row, dict)]
+    if config_id == ROUND75_SHADOW_STRATEGY_ID:
+        return _paper_round75_config_with_account_state(readout, state, nav_rows, records, planned_orders)
     peak_nav = float(INITIAL_CASH_CNY)
     max_drawdown = 0.0
     for row in nav_rows:
@@ -1010,6 +1078,78 @@ def _paper_config_with_account_state(
             "forward_status": "tracking_active" if record_count else "awaiting_first_forward_fill",
         },
     }
+
+
+def _paper_round75_config_with_account_state(
+    readout: dict[str, Any],
+    state: dict[str, Any],
+    nav_rows: list[dict[str, Any]],
+    records: list[dict[str, Any]],
+    planned_orders: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Keep synchronized account backfill out of the true-forward score."""
+
+    activation = date.fromisoformat(ROUND75_ACTIVATION_DATE)
+    dated_nav_rows = sorted(
+        (
+            (date.fromisoformat(str(row["date"])), row)
+            for row in nav_rows
+            if row.get("date")
+        ),
+        key=lambda item: item[0],
+    )
+    base_rows = [row for row_date, row in dated_nav_rows if row_date < activation]
+    forward_nav_rows = [row for row_date, row in dated_nav_rows if row_date >= activation]
+    base_nav = float(base_rows[-1].get("nav_cny") or INITIAL_CASH_CNY) if base_rows else None
+    latest_nav = (
+        float(forward_nav_rows[-1].get("nav_cny") or base_nav or INITIAL_CASH_CNY)
+        if forward_nav_rows
+        else base_nav
+    )
+    peak_nav = float(base_nav or INITIAL_CASH_CNY)
+    max_drawdown = 0.0
+    for row in forward_nav_rows:
+        nav = float(row.get("nav_cny") or peak_nav)
+        peak_nav = max(peak_nav, nav)
+        max_drawdown = min(max_drawdown, nav / peak_nav - 1.0 if peak_nav else 0.0)
+
+    strategy_records = [row for row in records if row.get("strategy_id") == ROUND75_SHADOW_STRATEGY_ID]
+    forward_records = [
+        row for row in strategy_records if _row_date(row, "trade_date", "date", "execution_date") >= activation
+    ]
+    strategy_plans = [
+        row for row in planned_orders if row.get("strategy_id") == ROUND75_SHADOW_STRATEGY_ID
+    ]
+    forward_plans = [
+        row for row in strategy_plans if _row_date(row, "signal_date", "signal_day", "decision_date") >= activation
+    ]
+    has_forward_day = bool(forward_nav_rows)
+    paper_return = latest_nav / base_nav - 1.0 if base_nav and latest_nav is not None else None
+    return {
+        **readout,
+        "summary": {
+            **(readout.get("summary") or {}),
+            "initial_cash_cny": base_nav,
+            "true_forward_nav_base_cny": base_nav,
+            "current_nav_cny": latest_nav,
+            "paper_total_return": paper_return,
+            "max_drawdown": max_drawdown if has_forward_day else 0.0 if base_nav else None,
+            "record_count": len(forward_records),
+            "synchronized_backfill_record_count": len(strategy_records) - len(forward_records),
+            "true_forward_record_count": len(forward_records),
+            "planned_order_count": len(forward_plans),
+            "true_forward_from": ROUND75_ACTIVATION_DATE,
+            "forward_status": "tracking_active" if has_forward_day else "awaiting_first_true_forward_trade_day",
+        },
+    }
+
+
+def _row_date(row: dict[str, Any], *keys: str) -> date:
+    for key in keys:
+        value = row.get(key)
+        if value:
+            return date.fromisoformat(str(value)[:10])
+    return date.min
 
 
 def _historical_metric_groups() -> list[dict[str, Any]]:
@@ -1124,7 +1264,7 @@ def _paper_display(
             ),
             "planned_order_count": summary.get("planned_order_count"),
             "historical_replay_row_count": 0,
-            "strategy_count": len(ACTIVE_STRATEGY_CONFIG_IDS),
+            "strategy_count": len(PAPER_ACTIVE_STRATEGY_CONFIG_IDS),
             "common_start_enforced": bool(source_coverage.get("common_start_enforced")),
             "source_gap_count": 0,
         },
@@ -1152,7 +1292,10 @@ def _paper_account_curves(account_states: dict[str, Any], records: list[dict[str
             sell_counts[strategy_id] = sell_counts.get(strategy_id, 0) + 1
     curves: list[dict[str, Any]] = []
     for strategy_id, state in account_states.items():
-        if strategy_id not in ACTIVE_STRATEGY_CONFIG_IDS or not isinstance(state, dict):
+        if strategy_id not in PAPER_ACTIVE_STRATEGY_CONFIG_IDS or not isinstance(state, dict):
+            continue
+        if strategy_id == ROUND75_SHADOW_STRATEGY_ID:
+            curves.append(_round75_true_forward_curve(state, records))
             continue
         points: list[dict[str, Any]] = []
         peak_nav = float(INITIAL_CASH_CNY)
@@ -1187,6 +1330,57 @@ def _paper_account_curves(account_states: dict[str, Any], records: list[dict[str
             }
         )
     return curves
+
+
+def _round75_true_forward_curve(state: dict[str, Any], records: list[dict[str, Any]]) -> dict[str, Any]:
+    activation = date.fromisoformat(ROUND75_ACTIVATION_DATE)
+    dated_rows = sorted(
+        (
+            (date.fromisoformat(str(row["date"])), row)
+            for row in state.get("nav_points") or []
+            if isinstance(row, dict) and row.get("date")
+        ),
+        key=lambda item: item[0],
+    )
+    backfill_rows = [row for row_date, row in dated_rows if row_date < activation]
+    forward_rows = [row for row_date, row in dated_rows if row_date >= activation]
+    base_nav = float(backfill_rows[-1].get("nav_cny") or INITIAL_CASH_CNY) if backfill_rows else INITIAL_CASH_CNY
+    peak_nav = base_nav
+    max_drawdown = 0.0
+    points: list[dict[str, Any]] = []
+    for row in forward_rows:
+        nav = float(row.get("nav_cny") or base_nav)
+        peak_nav = max(peak_nav, nav)
+        drawdown = nav / peak_nav - 1.0 if peak_nav else 0.0
+        max_drawdown = min(max_drawdown, drawdown)
+        points.append(
+            {
+                "date": row.get("date"),
+                "nav_cny": nav,
+                "account_return": nav / base_nav - 1.0 if base_nav else 0.0,
+                "drawdown": drawdown,
+            }
+        )
+    latest_nav = float(points[-1]["nav_cny"]) if points else base_nav
+    completed_trade_count = sum(
+        1
+        for row in records
+        if row.get("strategy_id") == ROUND75_SHADOW_STRATEGY_ID
+        and row.get("action") == "sell"
+        and _row_date(row, "trade_date", "date", "execution_date") >= activation
+    )
+    return {
+        "strategy": str(state.get("strategy_label") or ROUND75_SHADOW_LABEL),
+        "strategy_id": ROUND75_SHADOW_STRATEGY_ID,
+        "initial_cash": base_nav,
+        "latest_nav": latest_nav,
+        "latest_return": latest_nav / base_nav - 1.0 if base_nav else 0.0,
+        "max_drawdown": max_drawdown,
+        "point_count": len(points),
+        "completed_trade_count": completed_trade_count,
+        "true_forward_from": ROUND75_ACTIVATION_DATE,
+        "points": points,
+    }
 
 
 def _latest_trade_display(
@@ -1296,10 +1490,10 @@ def _planned_orders_from_state(state: dict[str, Any] | None) -> list[dict[str, A
     normalized = [
         row
         for row in rows
-        if isinstance(row, dict) and str(row.get("strategy_id") or "") in ACTIVE_STRATEGY_CONFIG_IDS
+        if isinstance(row, dict) and str(row.get("strategy_id") or "") in PAPER_ACTIVE_STRATEGY_CONFIG_IDS
     ]
     strategy_order = {
-        strategy_id: index for index, strategy_id in enumerate(ACTIVE_STRATEGY_CONFIG_IDS)
+        strategy_id: index for index, strategy_id in enumerate(PAPER_ACTIVE_STRATEGY_CONFIG_IDS)
     }
     return sorted(
         normalized,
@@ -1318,7 +1512,7 @@ def _records_from_state(state: dict[str, Any] | None) -> list[dict[str, Any]]:
     return [
         row
         for row in rows
-        if isinstance(row, dict) and str(row.get("strategy_id") or "") in ACTIVE_STRATEGY_CONFIG_IDS
+        if isinstance(row, dict) and str(row.get("strategy_id") or "") in PAPER_ACTIVE_STRATEGY_CONFIG_IDS
     ]
 
 

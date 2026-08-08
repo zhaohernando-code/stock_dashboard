@@ -24,8 +24,15 @@ from ashare_evidence.rolling_tranche_account_replay import (
     rank5_replacement_quality_rejection_reason,
 )
 from ashare_evidence.rolling_tranche_execution_contract import build_shortpick_v3_rolling_tranche_execution_contract
+from ashare_evidence.round75_shadow_tracking import (
+    ROUND75_ACTIVATION_DATE,
+    ROUND75_SHADOW_LABEL,
+    ROUND75_SHADOW_STRATEGY_ID,
+    validate_round75_signal_registry,
+)
 from ashare_evidence.shortpick_strategy_lab_read_model import (
     INITIAL_CASH_CNY,
+    LEGACY_RANK45_REPLACEMENT_CONTROL_ID,
     MAIN_CONFIG_ID,
     NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
     PAPER_STATE_ENV,
@@ -53,6 +60,8 @@ V3_PLAN_SOURCE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_V3_CANDIDATE_RUN_SOURCE"
 V3_SOURCE_DATABASE_URL_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_V3_SOURCE_DATABASE_URL"
 V3_DAILY_SOURCE_DIR_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_V3_DAILY_SOURCE_DIR"
 EXTERNAL_PLAN_SOURCE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_PLAN_SOURCE"
+ROUND75_SHADOW_SIGNAL_ENV = "ASHARE_SHORTPICK_ROUND75_SHADOW_SIGNALS"
+ROUND75_SHADOW_TRACKING_ENV = "ASHARE_SHORTPICK_ROUND75_SHADOW_TRACKING"
 BUY_COST_RATE = 20.0 / 10_000.0
 SELL_COST_RATE = 25.0 / 10_000.0
 ALLOWED_EXTERNAL_PLAN_SOURCES = {
@@ -63,11 +72,13 @@ STRATEGY_MODEL_SPEC_IDS = {
     MAIN_CONFIG_ID: V3_MODEL_SPEC_ID,
     UPSTREAM_META_STABILITY_CONTROL_ID: V3_MODEL_SPEC_ID,
     QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID: NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
+    ROUND75_SHADOW_STRATEGY_ID: NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
 }
 STRATEGY_LABELS = {
     MAIN_CONFIG_ID: MAIN_STRATEGY_LABEL,
     QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID: QUALITY_REPLACEMENT_REBALANCE_STRATEGY_LABEL,
     UPSTREAM_META_STABILITY_CONTROL_ID: UPSTREAM_META_STABILITY_STRATEGY_LABEL,
+    ROUND75_SHADOW_STRATEGY_ID: ROUND75_SHADOW_LABEL,
 }
 
 
@@ -114,6 +125,76 @@ def _daily_source_dir() -> Path:
 
 def _daily_source_path(signal_day: date) -> Path:
     return _daily_source_dir() / f"{signal_day.isoformat()}.json"
+
+
+def _round75_shadow_signal_path() -> Path:
+    configured = os.getenv(ROUND75_SHADOW_SIGNAL_ENV)
+    if configured:
+        return Path(configured)
+    return _repo_root() / "data" / "shortpick-round75-shadow-signals.json"
+
+
+def _round75_shadow_tracking_payload() -> dict[str, Any] | None:
+    configured = os.getenv(ROUND75_SHADOW_TRACKING_ENV)
+    path = Path(configured) if configured else _repo_root() / "data" / "shortpick-round75-shadow-tracking.json"
+    payload = _load_json(path)
+    if payload is None:
+        return None
+    return {**payload, "artifact_path": str(path)}
+
+
+def _round75_shadow_signals() -> tuple[dict[tuple[str, str], dict[str, Any]], dict[str, Any]]:
+    path = _round75_shadow_signal_path()
+    payload = _load_json(path)
+    if payload is None:
+        return {}, {
+            "status": "blocked_missing_signal_registry",
+            "path": str(path),
+            "future_information_violation_count": 0,
+        }
+    try:
+        validation = validate_round75_signal_registry(payload)
+    except (KeyError, TypeError, ValueError) as exc:
+        return {}, {
+            "status": "blocked_invalid_signal_registry",
+            "path": str(path),
+            "future_information_violation_count": 0,
+            "message": str(exc),
+        }
+    activation = date.fromisoformat(str(payload.get("activation_date") or ROUND75_ACTIVATION_DATE))
+    signals = {
+        (str(row["effective_deferral_day"]), str(row["position_key"])): row
+        for row in validation["signals"]
+        if date.fromisoformat(str(row["decision_day"])) >= activation
+    }
+    return signals, {
+        "status": "ready",
+        "path": str(path),
+        "signal_count": validation["signal_count"],
+        "true_forward_signal_count": validation["true_forward_signal_count"],
+        "evaluated_through": validation["evaluated_through"],
+        "future_information_violation_count": validation["future_information_violation_count"],
+    }
+
+
+def _round75_signals_for_source_day(
+    latest_source_day: date,
+) -> tuple[dict[tuple[str, str], dict[str, Any]], dict[str, Any]]:
+    signals, status = _round75_shadow_signals()
+    registry_through = status.get("evaluated_through")
+    if registry_through and date.fromisoformat(str(registry_through)) < latest_source_day:
+        return {}, {
+            **status,
+            "status": "stale_fail_closed",
+            "latest_source_day": latest_source_day.isoformat(),
+            "external_actions_enabled": False,
+            "message": "Round 75 registry is stale; core shadow continues but no external extension may execute.",
+        }
+    return signals, {
+        **status,
+        "latest_source_day": latest_source_day.isoformat(),
+        "external_actions_enabled": status.get("status") == "ready",
+    }
 
 
 def _candidate_source_signal_day(payload: dict[str, Any]) -> date:
@@ -226,6 +307,32 @@ def _position_exit_reason(position: dict[str, Any], *, current_day: date, price:
     drawdown_from_peak = price / peak_price - 1.0 if peak_price else 0.0
     entry_day = date.fromisoformat(str(position["entry_date"]))
     holding_calendar_days = (current_day - entry_day).days
+    deferred_exit_day = str(position.get("pit_external_deferred_exit_day") or "")
+    if deferred_exit_day:
+        if current_day >= date.fromisoformat(deferred_exit_day):
+            return "pit_external_event_confirmed_rebound_extension_exit"
+        original_exit_day = str(position.get("pit_external_original_exit_day") or "")
+        if original_exit_day and current_day > date.fromisoformat(original_exit_day):
+            start_price = _safe_float(position.get("pit_external_deferral_start_price")) or 0.0
+            prior_price = _safe_float(position.get("pit_external_prior_close_price")) or price
+            peak_price = _safe_float(position.get("pit_external_deferral_peak_price")) or start_price
+            if start_price > 0 and peak_price > 0:
+                prior_return = prior_price / start_price - 1.0
+                stop_loss = _safe_float(position.get("pit_external_deferral_stop_loss_pct")) or 0.0
+                if stop_loss > 0 and prior_return <= -stop_loss:
+                    return "pit_external_deferral_next_day_stop_loss"
+                activation = _safe_float(position.get("pit_external_deferral_trailing_activation_pct")) or 0.0
+                drawdown_limit = _safe_float(position.get("pit_external_deferral_trailing_drawdown_pct")) or 0.0
+                peak_return = peak_price / start_price - 1.0
+                prior_drawdown = prior_price / peak_price - 1.0
+                if (
+                    activation > 0
+                    and drawdown_limit > 0
+                    and peak_return >= activation
+                    and prior_drawdown <= -drawdown_limit
+                ):
+                    return "pit_external_deferral_next_day_profit_trailing_exit"
+        return None
     if int(position.get("trading_days_held") or 0) >= int(position.get("target_horizon_days") or 20):
         return "mechanical_horizon"
     if current_day <= entry_day:
@@ -297,6 +404,7 @@ def _settle_account_day(
     pending_orders: list[dict[str, Any]],
     records: list[dict[str, Any]],
     execution_events: list[dict[str, Any]],
+    round75_shadow_signals: dict[tuple[str, str], dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     due_orders = [row for row in pending_orders if str(row.get("planned_entry_date") or "") == current_day.isoformat()]
     remaining_orders = [row for row in pending_orders if row not in due_orders]
@@ -318,10 +426,64 @@ def _settle_account_day(
             if price is None:
                 still_open.append(position)
                 continue
+            prior_close_price = _safe_float(position.get("last_price_cny")) or price
             if current_day > date.fromisoformat(str(position["entry_date"])):
                 position["trading_days_held"] = int(position.get("trading_days_held") or 0) + 1
+            position["pit_external_prior_close_price"] = prior_close_price
             position["last_price_cny"] = price
             position["peak_price_cny"] = max(_safe_float(position.get("peak_price_cny")) or price, price)
+            if strategy_id == ROUND75_SHADOW_STRATEGY_ID:
+                position_key = str(
+                    position.get("position_key")
+                    or "|".join(
+                        (
+                            str(position.get("signal_date") or ""),
+                            str(position.get("entry_date") or ""),
+                            str(position.get("symbol") or ""),
+                            str(int(_safe_float(position.get("rank")) or 0)),
+                        )
+                    )
+                )
+                signal = (round75_shadow_signals or {}).get((current_day.isoformat(), position_key))
+                if signal is not None and not position.get("pit_external_deferred_exit_day"):
+                    execution = signal.get("execution") if isinstance(signal.get("execution"), dict) else {}
+                    position.update(
+                        {
+                            "pit_external_deferred_exit_day": execution.get("deferred_exit_day")
+                            or signal.get("deferred_exit_day"),
+                            "pit_external_original_exit_day": current_day.isoformat(),
+                            "pit_external_deferral_start_price": prior_close_price,
+                            "pit_external_deferral_peak_price": prior_close_price,
+                            "pit_external_deferral_stop_loss_pct": execution.get("deferral_stop_loss_pct"),
+                            "pit_external_deferral_trailing_activation_pct": execution.get(
+                                "deferral_trailing_activation_pct"
+                            ),
+                            "pit_external_deferral_trailing_drawdown_pct": execution.get(
+                                "deferral_trailing_drawdown_pct"
+                            ),
+                            "pit_external_signal_decision_day": signal.get("decision_day"),
+                            "pit_external_signal_available_at": signal.get("available_at"),
+                            "pit_external_signal_source_artifact_id": signal.get("source_artifact_id"),
+                        }
+                    )
+                    execution_events.append(
+                        {
+                            "action": "extend_exit_horizon",
+                            "reason": "pit_external_event_confirmed_rebound_extension",
+                            "strategy_id": strategy_id,
+                            "decision_day": signal.get("decision_day"),
+                            "trade_date": current_day.isoformat(),
+                            "position_key": position_key,
+                            "symbol": position.get("symbol"),
+                            "available_at": signal.get("available_at"),
+                            "source_artifact_id": signal.get("source_artifact_id"),
+                        }
+                    )
+                if position.get("pit_external_deferred_exit_day"):
+                    position["pit_external_deferral_peak_price"] = max(
+                        _safe_float(position.get("pit_external_deferral_peak_price")) or prior_close_price,
+                        prior_close_price,
+                    )
             reason = _position_exit_reason(position, current_day=current_day, price=price, exit_policy=exit_policy)
             if reason is None:
                 still_open.append(position)
@@ -407,6 +569,14 @@ def _settle_account_day(
         state["cash_cny"] -= cash_spent
         position = {
             "position_id": f"{strategy_id}:{order.get('signal_date')}:{order.get('symbol')}:{current_day.isoformat()}",
+            "position_key": "|".join(
+                (
+                    str(order.get("signal_date") or ""),
+                    current_day.isoformat(),
+                    str(order.get("symbol") or ""),
+                    str(int(_safe_float(order.get("rank")) or 0)),
+                )
+            ),
             "strategy_id": strategy_id,
             "strategy_label": state["strategy_label"],
             "signal_date": str(order.get("signal_date") or ""),
@@ -577,9 +747,12 @@ def _selected_pick_plan_row(
 
 def _rolling_config_by_id(config_id: str) -> dict[str, Any]:
     contract = build_shortpick_v3_rolling_tranche_execution_contract()
+    lookup_id = LEGACY_RANK45_REPLACEMENT_CONTROL_ID if config_id == ROUND75_SHADOW_STRATEGY_ID else config_id
     for config in contract["candidate_configurations"]:
-        if config.get("config_id") == config_id:
-            return dict(config)
+        if config.get("config_id") == lookup_id:
+            resolved = dict(config)
+            resolved["config_id"] = config_id
+            return resolved
     raise RuntimeError(f"missing rolling tranche config: {config_id}")
 
 
@@ -1194,6 +1367,10 @@ def _build_strategy_orders(
                 config=config,
                 strategy_id=strategy_id,
             )
+            if strategy_id == ROUND75_SHADOW_STRATEGY_ID:
+                # Round 75 reproduces its own frozen Rank4/5 core. Its Rank5
+                # rows must not count toward the separate V3 Rank5 promotion study.
+                rank5_forward_observations = []
             if replacement is not None:
                 replacement_pick = replacement.pop("replacement_pick")
                 replacement_policy = config.get("affordable_replacement_policy") or {}
@@ -1389,6 +1566,18 @@ def _v3_model_generated_plan(
             model_spec_id=V3_MODEL_SPEC_ID,
             account_state=(account_states or {}).get(MAIN_CONFIG_ID),
         )
+        round75_shadow_orders, round75_shadow_diagnostics = _build_strategy_orders(
+            session=session,
+            picks=rank_adjusted_picks,
+            signal_date=rank_adjusted_signal_date,
+            tranche_count=CONTROL_TRANCHE_COUNT,
+            min_order_notional=250.0,
+            strategy_id=ROUND75_SHADOW_STRATEGY_ID,
+            strategy_label=ROUND75_SHADOW_LABEL,
+            model_spec_id=NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
+            replacement_inventory=rank_adjusted_inventory,
+            account_state=(account_states or {}).get(ROUND75_SHADOW_STRATEGY_ID),
+        )
         upstream_meta_orders, upstream_meta_diagnostics = _build_strategy_orders(
             session=session,
             picks=picks,
@@ -1430,6 +1619,7 @@ def _v3_model_generated_plan(
         )
     planned_orders = [
         *main_orders,
+        *round75_shadow_orders,
         *quality_orders,
         *quality_rebalance_orders,
         *upstream_meta_orders,
@@ -1440,6 +1630,7 @@ def _v3_model_generated_plan(
         order["source_candidate_artifact_id"] = candidate_run.get("artifact_id")
     diagnostics = [
         *main_diagnostics,
+        *round75_shadow_diagnostics,
         *quality_diagnostics,
         *quality_rebalance_diagnostics,
         *upstream_meta_diagnostics,
@@ -1473,7 +1664,7 @@ def _v3_model_generated_plan(
             NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID: len(rank_adjusted_inventory),
         },
         "diagnostics": diagnostics,
-        "message": "计划单仅为三条活跃策略由 v3 selected_top_k candidate-run 按 rolling tranche 订单语义生成。",
+        "message": "计划单由三条活跃策略和一条 Round 75 影子对照按同一 v3 selected_top_k rolling tranche 订单语义生成。",
     }
 
 
@@ -1514,6 +1705,7 @@ def _rebuild_forward_paper_ledger(
 
     tracking_start_day = date.fromisoformat(TRACKING_START_DATE)
     latest_source_day = max(date.fromisoformat(str(source["signal_date"])) for source in sources)
+    round75_shadow_signals, round75_signal_status = _round75_signals_for_source_day(latest_source_day)
     with session_scope(_v3_source_database_url()) as session:
         market_days = _market_days(session, start_day=tracking_start_day, end_day=latest_source_day)
         market_day_index = 0
@@ -1527,6 +1719,7 @@ def _rebuild_forward_paper_ledger(
                     pending_orders=pending_orders,
                     records=records,
                     execution_events=execution_events,
+                    round75_shadow_signals=round75_shadow_signals,
                 )
                 market_day_index += 1
             planned_orders, latest_plan_status = _v3_model_generated_plan(
@@ -1559,6 +1752,7 @@ def _rebuild_forward_paper_ledger(
                 pending_orders=pending_orders,
                 records=records,
                 execution_events=execution_events,
+                round75_shadow_signals=round75_shadow_signals,
             )
             market_day_index += 1
         observation_symbols = {
@@ -1599,6 +1793,7 @@ def _rebuild_forward_paper_ledger(
         "synchronized_backfill_source_count": sum(
             1 for source in sources if source.get("paper_source_capture_mode") == "synchronized_start_backfill"
         ),
+        "round75_shadow_signal_registry": round75_signal_status,
     }
     return (
         records,
@@ -1611,11 +1806,222 @@ def _rebuild_forward_paper_ledger(
     )
 
 
+def _merge_round75_shadow_migration(
+    existing: dict[str, Any],
+    rebuilt: tuple[
+        list[dict[str, Any]],
+        dict[str, dict[str, Any]],
+        list[dict[str, Any]],
+        dict[str, Any],
+        list[dict[str, Any]],
+        list[dict[str, Any]],
+        dict[str, Any],
+    ],
+) -> tuple[
+    list[dict[str, Any]],
+    dict[str, dict[str, Any]],
+    list[dict[str, Any]],
+    dict[str, Any],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    dict[str, Any],
+]:
+    """Add the shadow account while preserving every original V3 ledger row."""
+
+    (
+        rebuilt_records,
+        rebuilt_states,
+        rebuilt_orders,
+        rebuilt_status,
+        rebuilt_history,
+        rebuilt_events,
+        _rebuilt_rank5,
+    ) = rebuilt
+    original_ids = set(STRATEGY_LABELS) - {ROUND75_SHADOW_STRATEGY_ID}
+    existing_records = [row for row in existing.get("records") or [] if isinstance(row, dict)]
+    records = [row for row in existing_records if row.get("strategy_id") in original_ids]
+    records.extend(row for row in rebuilt_records if row.get("strategy_id") == ROUND75_SHADOW_STRATEGY_ID)
+    existing_states = existing.get("account_states") if isinstance(existing.get("account_states"), dict) else {}
+    account_states = {
+        strategy_id: existing_states[strategy_id]
+        for strategy_id in original_ids
+        if isinstance(existing_states.get(strategy_id), dict)
+    }
+    account_states[ROUND75_SHADOW_STRATEGY_ID] = rebuilt_states[ROUND75_SHADOW_STRATEGY_ID]
+    existing_orders = [row for row in existing.get("planned_orders") or [] if isinstance(row, dict)]
+    planned_orders = [row for row in existing_orders if row.get("strategy_id") in original_ids]
+    planned_orders.extend(
+        row for row in rebuilt_orders if row.get("strategy_id") == ROUND75_SHADOW_STRATEGY_ID
+    )
+
+    shadow_history = {
+        str(row.get("signal_date") or ""): [
+            order
+            for order in row.get("planned_orders") or []
+            if isinstance(order, dict) and order.get("strategy_id") == ROUND75_SHADOW_STRATEGY_ID
+        ]
+        for row in rebuilt_history
+        if isinstance(row, dict)
+    }
+    plan_history: list[dict[str, Any]] = []
+    for row in existing.get("plan_history") or []:
+        if not isinstance(row, dict):
+            continue
+        original_orders = [
+            order
+            for order in row.get("planned_orders") or []
+            if isinstance(order, dict) and order.get("strategy_id") in original_ids
+        ]
+        merged_orders = [*original_orders, *shadow_history.get(str(row.get("signal_date") or ""), [])]
+        plan_history.append({**row, "planned_order_count": len(merged_orders), "planned_orders": merged_orders})
+
+    existing_status = existing.get("plan_generation_status") or {}
+    shadow_diagnostics = [
+        row
+        for row in rebuilt_status.get("diagnostics") or []
+        if isinstance(row, dict) and row.get("strategy_id") == ROUND75_SHADOW_STRATEGY_ID
+    ]
+    plan_status = {
+        **existing_status,
+        "diagnostics": [
+            row
+            for row in existing_status.get("diagnostics") or []
+            if isinstance(row, dict) and row.get("strategy_id") in original_ids
+        ]
+        + shadow_diagnostics,
+        "round75_shadow_signal_registry": rebuilt_status.get("round75_shadow_signal_registry"),
+        "message": "原三组账本保持不变；Round 75 作为独立影子对照加入。",
+    }
+    execution_events = [
+        row for row in existing.get("execution_events") or [] if isinstance(row, dict)
+    ]
+    execution_events.extend(
+        row
+        for row in rebuilt_events
+        if isinstance(row, dict) and row.get("strategy_id") == ROUND75_SHADOW_STRATEGY_ID
+    )
+    rank5_forward_observation = (
+        existing.get("rank5_forward_observation")
+        if isinstance(existing.get("rank5_forward_observation"), dict)
+        else build_rank5_forward_observation_artifact(
+            [], market_bars_by_symbol={}, paper_records=records, as_of_day=date.today()
+        )
+    )
+    return (
+        records,
+        account_states,
+        planned_orders,
+        plan_status,
+        plan_history,
+        execution_events,
+        rank5_forward_observation,
+    )
+
+
+def _advance_existing_forward_paper_ledger(
+    existing: dict[str, Any],
+    latest_source: dict[str, Any],
+) -> tuple[
+    list[dict[str, Any]],
+    dict[str, dict[str, Any]],
+    list[dict[str, Any]],
+    dict[str, Any],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    dict[str, Any],
+]:
+    """Advance one or more new source days without replaying frozen history."""
+
+    coverage = existing.get("source_coverage") or {}
+    previous_source_day = date.fromisoformat(str(coverage["end_date"]))
+    latest_source_day = date.fromisoformat(str(latest_source["signal_date"]))
+    round75_signals, registry_status = _round75_signals_for_source_day(latest_source_day)
+    account_states = {
+        strategy_id: state
+        for strategy_id, state in (existing.get("account_states") or {}).items()
+        if strategy_id in STRATEGY_LABELS and isinstance(state, dict)
+    }
+    records = [row for row in existing.get("records") or [] if isinstance(row, dict)]
+    planned_orders = [row for row in existing.get("planned_orders") or [] if isinstance(row, dict)]
+    plan_history = [row for row in existing.get("plan_history") or [] if isinstance(row, dict)]
+    execution_events = [row for row in existing.get("execution_events") or [] if isinstance(row, dict)]
+    rank5_forward_observation = existing.get("rank5_forward_observation") or {}
+    if latest_source_day <= previous_source_day:
+        plan_status = {
+            **(existing.get("plan_generation_status") or {}),
+            "round75_shadow_signal_registry": registry_status,
+        }
+        return (
+            records,
+            account_states,
+            planned_orders,
+            plan_status,
+            plan_history,
+            execution_events,
+            rank5_forward_observation,
+        )
+
+    with session_scope(_v3_source_database_url()) as session:
+        for market_day in _market_days(
+            session,
+            start_day=previous_source_day + timedelta(days=1),
+            end_day=latest_source_day,
+        ):
+            planned_orders = _settle_account_day(
+                session=session,
+                current_day=market_day,
+                account_states=account_states,
+                pending_orders=planned_orders,
+                records=records,
+                execution_events=execution_events,
+                round75_shadow_signals=round75_signals,
+            )
+        new_orders, plan_status = _v3_model_generated_plan(
+            account_states=account_states,
+            candidate_run=latest_source,
+        )
+        planned_orders.extend(new_orders)
+    plan_history.append(
+        {
+            "signal_date": latest_source_day.isoformat(),
+            "source_artifact_id": latest_source.get("artifact_id"),
+            "source_capture_mode": latest_source.get("paper_source_capture_mode"),
+            "planned_order_count": len(new_orders),
+            "planned_orders": new_orders,
+        }
+    )
+    next_sequence = max((int(row.get("ledger_sequence") or -1) for row in records), default=-1) + 1
+    for row in records:
+        if row.get("ledger_sequence") is None:
+            row["ledger_sequence"] = next_sequence
+            next_sequence += 1
+    plan_status = {
+        **plan_status,
+        "tracking_start_date": TRACKING_START_DATE,
+        "daily_source_count": int(coverage.get("source_count") or len(plan_history)) + 1,
+        "daily_source_date_from": coverage.get("start_date") or TRACKING_START_DATE,
+        "daily_source_date_to": latest_source_day.isoformat(),
+        "synchronized_backfill_source_count": int(
+            (existing.get("plan_generation_status") or {}).get("synchronized_backfill_source_count") or 0
+        ),
+        "round75_shadow_signal_registry": registry_status,
+    }
+    return (
+        records,
+        account_states,
+        planned_orders,
+        plan_status,
+        plan_history,
+        execution_events,
+        rank5_forward_observation,
+    )
+
+
 def main() -> int:
     path = _state_path()
+    existing = _load_json(path) or {}
     sourced_orders, source_status = _external_plan_source_orders()
     if source_status is not None:
-        existing = _load_json(path) or {}
         existing_records = existing.get("records") if isinstance(existing.get("records"), list) else []
         records = [
             row
@@ -1652,24 +2058,82 @@ def main() -> int:
         latest_source, latest_source_status = _load_v3_candidate_run_source()
         if latest_source is None:
             raise RuntimeError(str(latest_source_status.get("message") or "v3 candidate-run source unavailable"))
-        daily_sources = _ensure_daily_candidate_sources(latest_source)
-        (
-            records,
-            account_states,
-            planned_orders,
-            plan_status,
-            plan_history,
-            execution_events,
-            rank5_forward_observation,
-        ) = (
-            _rebuild_forward_paper_ledger(daily_sources)
+        existing_states = existing.get("account_states") if isinstance(existing.get("account_states"), dict) else {}
+        existing_has_all_strategies = set(STRATEGY_LABELS).issubset(existing_states)
+        existing_coverage = (
+            existing.get("source_coverage") if isinstance(existing.get("source_coverage"), dict) else {}
         )
-        source_coverage = {
-            "start_date": daily_sources[0].get("signal_date") if daily_sources else TRACKING_START_DATE,
-            "end_date": daily_sources[-1].get("signal_date") if daily_sources else TRACKING_START_DATE,
-            "source_count": len(daily_sources),
-            "strategy_count": len(account_states),
-            "common_start_enforced": True,
+        if existing_has_all_strategies and existing_coverage.get("end_date"):
+            (
+                records,
+                account_states,
+                planned_orders,
+                plan_status,
+                plan_history,
+                execution_events,
+                rank5_forward_observation,
+            ) = _advance_existing_forward_paper_ledger(existing, latest_source)
+            latest_source_day = date.fromisoformat(str(latest_source["signal_date"]))
+            previous_source_day = date.fromisoformat(str(existing_coverage["end_date"]))
+            advanced = latest_source_day > previous_source_day
+            source_coverage = {
+                **existing_coverage,
+                "end_date": max(latest_source_day, previous_source_day).isoformat(),
+                "source_count": int(existing_coverage.get("source_count") or len(plan_history)) + int(advanced),
+                "strategy_count": len(account_states),
+                "common_start_enforced": True,
+                "update_mode": "append_only_incremental",
+            }
+        else:
+            daily_sources = _ensure_daily_candidate_sources(latest_source)
+            rebuilt = _rebuild_forward_paper_ledger(daily_sources)
+            original_ids = set(STRATEGY_LABELS) - {ROUND75_SHADOW_STRATEGY_ID}
+            if original_ids.issubset(existing_states) and ROUND75_SHADOW_STRATEGY_ID not in existing_states:
+                (
+                    records,
+                    account_states,
+                    planned_orders,
+                    plan_status,
+                    plan_history,
+                    execution_events,
+                    rank5_forward_observation,
+                ) = _merge_round75_shadow_migration(existing, rebuilt)
+                source_coverage = {
+                    **existing_coverage,
+                    "strategy_count": len(account_states),
+                    "common_start_enforced": True,
+                    "update_mode": "round75_shadow_migration_preserve_existing_v3",
+                }
+            else:
+                (
+                    records,
+                    account_states,
+                    planned_orders,
+                    plan_status,
+                    plan_history,
+                    execution_events,
+                    rank5_forward_observation,
+                ) = rebuilt
+                source_coverage = {
+                    "start_date": daily_sources[0].get("signal_date") if daily_sources else TRACKING_START_DATE,
+                    "end_date": daily_sources[-1].get("signal_date") if daily_sources else TRACKING_START_DATE,
+                    "source_count": len(daily_sources),
+                    "strategy_count": len(account_states),
+                    "common_start_enforced": True,
+                    "update_mode": "full_rebuild_no_prior_state",
+                }
+    round75_tracking = _round75_shadow_tracking_payload()
+    round75_registry = plan_status.get("round75_shadow_signal_registry") or {}
+    if round75_tracking is not None:
+        round75_tracking = {
+            **round75_tracking,
+            "true_forward": {
+                **(round75_tracking.get("true_forward") or {}),
+                "observed_extension_trigger_count": int(round75_registry.get("true_forward_signal_count") or 0),
+                "signal_registry_status": round75_registry.get("status"),
+                "signal_registry_evaluated_through": round75_registry.get("evaluated_through"),
+                "external_actions_enabled": bool(round75_registry.get("external_actions_enabled")),
+            },
         }
     payload = {
         "schema_version": PAPER_STATE_SCHEMA_VERSION,
@@ -1683,6 +2147,7 @@ def main() -> int:
         "execution_events": execution_events,
         "source_coverage": source_coverage,
         "rank5_forward_observation": rank5_forward_observation,
+        "round75_shadow_tracking": round75_tracking,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_name(f".{path.name}.tmp")

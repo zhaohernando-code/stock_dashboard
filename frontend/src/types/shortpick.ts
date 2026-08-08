@@ -725,6 +725,38 @@ export interface ShortpickStrategyLabRank5ForwardObservation {
   rows?: Record<string, unknown>[];
 }
 
+export interface ShortpickRound75ShadowCurvePoint {
+  date: string;
+  nav_cny: number;
+  normalized_nav: number;
+  total_return: number;
+  evidence_basis: string;
+}
+
+export interface ShortpickRound75ShadowTracking {
+  strategy_id?: string;
+  strategy_label?: string;
+  status?: string;
+  activation_date?: string;
+  claim_ceiling?: string;
+  historical_backfill?: {
+    evidence_basis?: string;
+    from?: string;
+    to?: string;
+    baseline_summary?: Record<string, unknown>;
+    candidate_summary?: Record<string, unknown>;
+    gate?: Record<string, unknown>;
+    standout?: Record<string, unknown>;
+    baseline_curve?: ShortpickRound75ShadowCurvePoint[];
+    candidate_curve?: ShortpickRound75ShadowCurvePoint[];
+    trigger_count?: number;
+    triggers?: Record<string, unknown>[];
+  } | null;
+  true_forward?: Record<string, unknown>;
+  pit_audit?: Record<string, unknown>;
+  source_lineage?: Record<string, unknown>;
+}
+
 export interface ShortpickStrategyLabPaperTrackingResponse {
   generated_at: string;
   status: string;
@@ -743,6 +775,7 @@ export interface ShortpickStrategyLabPaperTrackingResponse {
   baseline_configs: ShortpickStrategyLabConfigReadout[];
   paper_governance: Record<string, unknown>;
   rank5_forward_observation?: ShortpickStrategyLabRank5ForwardObservation;
+  round75_shadow_tracking?: ShortpickRound75ShadowTracking;
   strategy_governance?: Record<string, unknown>;
   paper_display?: ShortpickStrategyLabPaperDisplay;
   records: Record<string, unknown>[];
