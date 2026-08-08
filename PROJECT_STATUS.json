@@ -10,7 +10,7 @@
   },
   "status": "in_progress",
   "owner": "codex",
-  "updated_at": "2026-08-08T15:10:00+08:00",
+  "updated_at": "2026-08-08T15:20:00+08:00",
   "latest_round75_shadow_forward_control": {
     "status": "implemented_backfilled_true_forward_shadow_active_not_v3_replacement",
     "contract": "docs/contracts/ROUND75_SHADOW_FORWARD_CONTROL_2026-08-08.json",
@@ -31,7 +31,11 @@
     "live_order_changed": false,
     "paper_state_update_mode": "preserve_original_three_then_append_only_incremental",
     "stale_external_signal_behavior": "fail_closed_core_shadow_continues_v3_unchanged",
-    "runtime_published": false,
+    "runtime_published": true,
+    "runtime_release_manifest": "/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260808T071424Z-08c78ee7db7d/manifest.json",
+    "runtime_api_verified": true,
+    "original_three_paper_economic_digest_before": "07f19b007ea0423a2391cfcee6578ffb226394413eec689360f2bba268abaaf0",
+    "original_three_paper_economic_digest_after": "07f19b007ea0423a2391cfcee6578ffb226394413eec689360f2bba268abaaf0",
     "next_gate": "collect_at_least_three_independent_true_forward_extension_triggers_then_repeat_all_eight_non_degradation_gates"
   },
   "latest_personal_external_context_strategy_research": {
