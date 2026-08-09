@@ -107,7 +107,7 @@ class SimulationWorkspaceTests(unittest.TestCase):
 
     def test_session_can_start_step_trade_pause_resume_and_end(self) -> None:
         with session_scope(self.database_url) as session:
-            seed_watchlist_fixture(session)
+            seed_watchlist_fixture(session, symbols=("002028.SZ", "300750.SZ", "601318.SH", "002594.SZ"))
 
         with session_scope(self.database_url) as session:
             started = start_simulation_session(session)
@@ -120,7 +120,7 @@ class SimulationWorkspaceTests(unittest.TestCase):
 
             traded = place_manual_order(
                 session,
-                symbol=stepped["session"]["focus_symbol"] or stepped["session"]["watch_symbols"][0],
+                symbol="002028.SZ",
                 side="buy",
                 quantity=100,
                 reason="参考模型建议后做人工确认买入。",
@@ -140,9 +140,9 @@ class SimulationWorkspaceTests(unittest.TestCase):
 
     def test_manual_order_enforces_new_account_permission_t_plus_one_and_current_stamp_tax(self) -> None:
         with session_scope(self.database_url) as session:
-            seed_watchlist_fixture(session)
+            seed_watchlist_fixture(session, symbols=("002028.SZ", "300750.SZ", "601318.SH", "002594.SZ"))
             start_simulation_session(session)
-            main_symbol = "600519.SH"
+            main_symbol = "002028.SZ"
             bought = place_manual_order(
                 session,
                 symbol=main_symbol,
@@ -177,7 +177,7 @@ class SimulationWorkspaceTests(unittest.TestCase):
             sell_fill = session.scalars(select(PaperFill).order_by(PaperFill.id.desc()).limit(1)).one()
             self.assertAlmostEqual(sell_fill.tax, round(sell_fill.price * sell_fill.quantity * 0.0005, 2))
 
-            with self.assertRaisesRegex(ValueError, "账户权限"):
+            with self.assertRaisesRegex(ValueError, "账户.*权限"):
                 place_manual_order(
                     session,
                     symbol="300750.SZ",
@@ -188,7 +188,7 @@ class SimulationWorkspaceTests(unittest.TestCase):
 
     def test_auto_execute_can_drive_model_track_fills_in_simulation_only(self) -> None:
         with session_scope(self.database_url) as session:
-            seed_watchlist_fixture(session)
+            seed_watchlist_fixture(session, symbols=("002028.SZ", "300750.SZ", "601318.SH", "002594.SZ"))
             workspace = get_simulation_workspace(session)
             self.assertFalse(workspace["session"]["auto_execute_model"])
             simulation_session = session.scalar(select(SimulationSession))
@@ -307,13 +307,13 @@ class SimulationWorkspaceTests(unittest.TestCase):
 
     def test_workspace_model_advices_ignore_stale_same_as_of_backfill(self) -> None:
         with session_scope(self.database_url) as session:
-            seed_watchlist_fixture(session, symbols=("600519.SH",))
-            fresh, stale = inject_market_data_stale_backfill(session, "600519.SH")
+            seed_watchlist_fixture(session, symbols=("002028.SZ",))
+            fresh, stale = inject_market_data_stale_backfill(session, "002028.SZ")
 
         with session_scope(self.database_url) as session:
             workspace = get_simulation_workspace(session)
 
-        advice = next(item for item in workspace["model_advices"] if item["symbol"] == "600519.SH")
+        advice = next(item for item in workspace["model_advices"] if item["symbol"] == "002028.SZ")
         self.assertEqual(advice["generated_at"], fresh.generated_at)
         self.assertNotEqual(advice["generated_at"], stale.generated_at)
 

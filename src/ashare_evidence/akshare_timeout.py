@@ -78,10 +78,12 @@ def _worker_entry(input_path: str, output_path: str) -> int:
 
 
 def _python_executable() -> str:
+    if sys.executable and Path(sys.executable).exists():
+        return sys.executable
     executable = Path(sys.base_exec_prefix) / "bin" / f"python{sys.version_info.major}.{sys.version_info.minor}"
     if executable.exists():
         return str(executable)
-    return sys.executable
+    raise RuntimeError("Unable to locate the current Python interpreter for the AkShare worker")
 
 
 def call_module_function_with_timeout(
@@ -97,6 +99,7 @@ def call_module_function_with_timeout(
         temp_root = Path(temp_dir)
         input_path = temp_root / "input.pkl"
         output_path = temp_root / "output.pkl"
+        stderr_path = temp_root / "stderr.log"
         with open(input_path, "wb") as handle:
             pickle.dump(
                 {
@@ -110,18 +113,18 @@ def call_module_function_with_timeout(
                 handle,
                 protocol=pickle.HIGHEST_PROTOCOL,
             )
-        process = subprocess.Popen(
-            [
-                _python_executable(),
-                "-m",
-                "ashare_evidence.akshare_timeout",
-                str(input_path),
-                str(output_path),
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            close_fds=False,
-        )
+        with open(stderr_path, "wb") as stderr_handle:
+            process = subprocess.Popen(
+                [
+                    _python_executable(),
+                    str(Path(__file__).resolve()),
+                    str(input_path),
+                    str(output_path),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=stderr_handle,
+                close_fds=True,
+            )
         try:
             process.wait(timeout=timeout_seconds + 2)
         except subprocess.TimeoutExpired as exc:
@@ -134,7 +137,11 @@ def call_module_function_with_timeout(
             raise AkshareCallTimeoutError(f"{module_name}.{function_name} timed out after {timeout_seconds}s") from exc
 
         if process.returncode != 0 or not output_path.exists():
-            raise RuntimeError(f"{module_name}.{function_name} worker failed with exit code {process.returncode}")
+            stderr_excerpt = stderr_path.read_text(encoding="utf-8", errors="replace")[-2000:].strip()
+            detail = f": {stderr_excerpt}" if stderr_excerpt else ""
+            raise RuntimeError(
+                f"{module_name}.{function_name} worker failed with exit code {process.returncode}{detail}"
+            )
 
         with open(output_path, "rb") as handle:
             status, payload = pickle.load(handle)

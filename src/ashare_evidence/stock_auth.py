@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 
 from fastapi import HTTPException, Request, status
 
+from ashare_evidence.access import load_beta_access_config
 from ashare_evidence.account_space import ROLE_MEMBER, ROLE_ROOT
-from ashare_evidence.access import BetaAccessContext, load_beta_access_config
 
 USER_LOGIN_HEADER = "X-HZ-User-Login"
 USER_ROLE_HEADER = "X-HZ-User-Role"
@@ -17,6 +17,7 @@ ACT_AS_LOGIN_HEADER = "X-Ashare-Act-As-Login"
 class StockAccessContext:
     actor_login: str
     actor_role: str
+    actor_access_role: str
     target_login: str
     can_act_as: bool
     auth_mode: str
@@ -38,6 +39,7 @@ def _fallback_legacy_context(request: Request) -> StockAccessContext:
         return StockAccessContext(
             actor_login=actor_login,
             actor_role=actor_role,
+            actor_access_role=actor_role,
             target_login=actor_login,
             can_act_as=actor_role == ROLE_ROOT,
             auth_mode="dev_open",
@@ -57,6 +59,7 @@ def _fallback_legacy_context(request: Request) -> StockAccessContext:
     return StockAccessContext(
         actor_login=actor_login,
         actor_role=actor_role,
+        actor_access_role=role,
         target_login=actor_login,
         can_act_as=actor_role == ROLE_ROOT,
         auth_mode=f"legacy_{config.mode}",
@@ -83,6 +86,7 @@ def require_stock_access(request: Request) -> StockAccessContext:
     return StockAccessContext(
         actor_login=actor_login,
         actor_role=actor_role,
+        actor_access_role=actor_role,
         target_login=target_login,
         can_act_as=actor_role == ROLE_ROOT,
         auth_mode="root_domain_headers",
@@ -92,4 +96,10 @@ def require_stock_access(request: Request) -> StockAccessContext:
 def require_stock_root(access: StockAccessContext) -> StockAccessContext:
     if access.actor_role != ROLE_ROOT:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="root role required")
+    return access
+
+
+def require_stock_researcher(access: StockAccessContext) -> StockAccessContext:
+    if access.actor_role != ROLE_ROOT and access.actor_access_role != "analyst":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="analyst or root role required")
     return access

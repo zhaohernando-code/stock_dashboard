@@ -6,6 +6,7 @@ from tests.shortpick_lab_test_support import *
 
 class ShortpickLabFeedbackTests(ShortpickLabTestCase):
     def test_llm_paper_control_excludes_non_mainboard_for_new_retail_account(self) -> None:
+        self._seed_stock_bars("002028.SZ", "思源电气", [70 + index for index in range(8)])
         with session_scope(self.database_url) as session:
             run = ShortpickExperimentRun(
                 run_key="shortpick:test:llm-paper-account-filter",
@@ -71,10 +72,10 @@ class ShortpickLabFeedbackTests(ShortpickLabTestCase):
                     ShortpickCandidate(
                         run_id=run.id,
                         round_id=rounds[1].id,
-                        candidate_key="shortpick-candidate:test:600519",
-                        symbol="600519.SH",
-                        name="贵州茅台",
-                        normalized_theme="消费修复",
+                        candidate_key="shortpick-candidate:test:002028",
+                        symbol="002028.SZ",
+                        name="思源电气",
+                        normalized_theme="电网设备",
                         confidence=0.6,
                         research_priority="single_model_high_conviction",
                         parse_status="parsed",
@@ -88,7 +89,7 @@ class ShortpickLabFeedbackTests(ShortpickLabTestCase):
             result = select_shortpick_llm_paper_control_candidate(session, run)
 
             self.assertEqual(result["status"], "selected")
-            self.assertEqual(result["symbol"], "600519.SH")
+            self.assertEqual(result["symbol"], "002028.SZ")
             self.assertEqual(result["eligible_candidate_count"], 1)
             self.assertEqual(result["excluded_candidate_count"], 2)
             excluded = {item["symbol"]: item["board_label"] for item in result["excluded_examples"]}
@@ -101,7 +102,7 @@ class ShortpickLabFeedbackTests(ShortpickLabTestCase):
                 candidate.symbol: (candidate.candidate_payload or {}).get("tracking_role")
                 for candidate in selected_candidates
             }
-            self.assertEqual(tracking_by_symbol["600519.SH"], "llm_paper_control_primary")
+            self.assertEqual(tracking_by_symbol["002028.SZ"], "llm_paper_control_primary")
             self.assertIsNone(tracking_by_symbol["300604.SZ"])
             self.assertIsNone(tracking_by_symbol["688981.SH"])
 

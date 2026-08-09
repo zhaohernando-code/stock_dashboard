@@ -158,7 +158,8 @@ class ShortpickLabValidationTests(ShortpickLabTestCase):
                 return {"updated_validation_count": completed, "summary": {"run_id": run_id}}
 
             with patch("ashare_evidence.shortpick_lab.validate_shortpick_run", side_effect=fake_validate):
-                payload = validate_recent_shortpick_runs(session, days=30, limit=2, horizons=[10])
+                lookback_days = max(30, (datetime.now(UTC).date() - date(2026, 5, 20)).days + 1)
+                payload = validate_recent_shortpick_runs(session, days=lookback_days, limit=2, horizons=[10])
 
         self.assertLess(seen_run_ids.index(stalled_ids[0]), seen_run_ids.index(mature_pending_id))
         self.assertLess(seen_run_ids.index(stalled_ids[1]), seen_run_ids.index(mature_pending_id))
@@ -610,7 +611,8 @@ class ShortpickLabValidationTests(ShortpickLabTestCase):
                 return {"updated_validation_count": updated, "summary": {"run_id": run_id}}
 
             with patch("ashare_evidence.shortpick_lab.validate_shortpick_run", side_effect=fake_validate):
-                payload = validate_recent_shortpick_runs(session, days=30, limit=20, horizons=[5])
+                lookback_days = max(30, (datetime.now(UTC).date() - date(2026, 5, 26)).days + 1)
+                payload = validate_recent_shortpick_runs(session, days=lookback_days, limit=20, horizons=[5])
 
             self.assertGreaterEqual(payload["refreshed_run_count"], 1)
             snap = session.get(ShortpickValidationSnapshot, snapshot_id)
@@ -632,7 +634,8 @@ class ShortpickLabValidationTests(ShortpickLabTestCase):
                 return {"updated_validation_count": 0, "summary": {"run_id": run_id}}
 
             with patch("ashare_evidence.shortpick_lab.validate_shortpick_run", side_effect=fake_validate):
-                payload = validate_recent_shortpick_runs(session, days=30, limit=20, horizons=[5])
+                lookback_days = max(30, (datetime.now(UTC).date() - date(2026, 6, 2)).days + 1)
+                payload = validate_recent_shortpick_runs(session, days=lookback_days, limit=20, horizons=[5])
 
         # Two runs, each processed exactly once (no infinite loop, no re-process).
         self.assertEqual(call_count["n"], 2)

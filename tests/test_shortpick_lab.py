@@ -537,9 +537,10 @@ class ShortpickLabTests(ShortpickLabTestCase):
 
     def test_run_builds_consensus_and_validation_without_polluting_main_pools(self) -> None:
         self._seed_daily_bars()
+        self._seed_stock_bars("002028.SZ", "思源电气", [70 + index for index in range(8)])
         executors = [
-            StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("600519.SH", "贵州茅台", "消费龙头修复", "https://a.example/news")),
-            StaticShortpickExecutor("deepseek", "deepseek-test", "fake", _answer("600519.SH", "贵州茅台", "消费龙头修复", "https://b.example/news")),
+            StaticShortpickExecutor("openai", "gpt-test", "fake", _answer("002028.SZ", "思源电气", "电网设备景气", "https://a.example/news")),
+            StaticShortpickExecutor("deepseek", "deepseek-test", "fake", _answer("002028.SZ", "思源电气", "电网设备景气", "https://b.example/news")),
         ]
 
         with patch("ashare_evidence.shortpick_lab._sync_shortpick_benchmarks", return_value={"status": "skipped"}):
@@ -556,12 +557,12 @@ class ShortpickLabTests(ShortpickLabTestCase):
         self.assertEqual(payload["status"], "completed")
         self.assertEqual(payload["summary"]["completed_round_count"], 2)
         self.assertEqual(payload["consensus"]["research_priority"], "cross_model_same_symbol")
-        self.assertEqual(payload["consensus"]["summary"]["leader_symbols"], ["600519.SH"])
-        self.assertEqual(payload["consensus"]["summary"]["cross_model_symbols"], ["600519.SH"])
+        self.assertEqual(payload["consensus"]["summary"]["leader_symbols"], ["002028.SZ"])
+        self.assertEqual(payload["consensus"]["summary"]["cross_model_symbols"], ["002028.SZ"])
         self.assertEqual(len(payload["candidates"]), 2)
         self.assertTrue(all(item["research_priority"] == "cross_model_same_symbol" for item in payload["candidates"]))
         self.assertEqual(payload["summary"]["llm_paper_control"]["status"], "selected")
-        self.assertEqual(payload["summary"]["llm_paper_control"]["symbol"], "600519.SH")
+        self.assertEqual(payload["summary"]["llm_paper_control"]["symbol"], "002028.SZ")
         self.assertEqual(
             sum(1 for item in payload["candidates"] if item.get("tracking_role") == "llm_paper_control_primary"),
             1,
@@ -569,7 +570,7 @@ class ShortpickLabTests(ShortpickLabTestCase):
         self.assertTrue(any(v["status"] == "completed" for v in payload["candidates"][0]["validations"]))
 
         with session_scope(self.database_url) as session:
-            self.assertEqual(session.scalar(select(WatchlistFollow).where(WatchlistFollow.symbol == "600519.SH")), None)
+            self.assertEqual(session.scalar(select(WatchlistFollow).where(WatchlistFollow.symbol == "002028.SZ")), None)
             self.assertEqual(session.scalar(select(Recommendation).limit(1)), None)
 
     def test_validate_recent_shortpick_runs_refreshes_completed_runs(self) -> None:

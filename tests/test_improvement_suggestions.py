@@ -6,13 +6,15 @@ from tests.improvement_suggestions_test_support import *
 
 class ImprovementSuggestionTests(ImprovementSuggestionTestCase):
     def test_collects_event_and_validation_suggestions_with_dedupe(self) -> None:
+        fixture_date = date(2026, 5, 1)
+        lookback_days = max(30, (datetime.now(UTC).date() - fixture_date).days + 1)
         with session_scope(self.database_url) as session:
             seed_watchlist_fixture(session)
         self._write_event_analysis()
         self._write_event_analysis(suggestion="首页风险展示应优先解释 RankIC 冲突。")
 
         with session_scope(self.database_url) as session:
-            suggestions = collect_improvement_suggestions(session, window_days=30)
+            suggestions = collect_improvement_suggestions(session, window_days=lookback_days)
 
         claims = [item["claim"] for item in suggestions]
         self.assertTrue(any("首页风险展示" in claim for claim in claims))

@@ -182,7 +182,12 @@ from ashare_evidence.simulation import (
     step_simulation_session,
     update_simulation_config,
 )
-from ashare_evidence.stock_auth import StockAccessContext, require_stock_access, require_stock_root
+from ashare_evidence.stock_auth import (
+    StockAccessContext,
+    require_stock_access,
+    require_stock_researcher,
+    require_stock_root,
+)
 from ashare_evidence.watchlist import (
     add_watchlist_symbol,
     list_watchlist_entries,
@@ -1900,10 +1905,8 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
-        payload = get_runtime_settings(session, account_login=access.target_login)
-        if access.actor_role != "root":
-            payload = {**payload, "provider_credentials": []}
-        return payload
+        require_stock_root(access)
+        return get_runtime_settings(session, account_login=access.target_login)
 
     @app.get("/policy-governance/active")
     def policy_governance_active(
@@ -2035,6 +2038,7 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        require_stock_researcher(access)
         try:
             return run_follow_up_analysis(
                 session,
@@ -2057,6 +2061,7 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        require_stock_researcher(access)
         try:
             result = create_manual_research_request(
                 session,
@@ -2084,6 +2089,7 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        require_stock_researcher(access)
         return list_manual_research_requests(
             session,
             symbol=symbol,
@@ -2098,6 +2104,7 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        require_stock_researcher(access)
         try:
             return get_manual_research_request(session, request_id)
         except LookupError as exc:
@@ -2110,6 +2117,7 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        require_stock_researcher(access)
         try:
             result = execute_manual_research_request(
                 session,
@@ -2178,6 +2186,7 @@ def create_app(
         access: StockAccessContext = Depends(require_stock_access),
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
+        require_stock_researcher(access)
         try:
             result = retry_manual_research_request(
                 session,
@@ -2677,6 +2686,7 @@ def create_app(
         sample_symbol: str = Query(default="600519.SH"),
         session: Session = Depends(get_session),
     ) -> Response:
+        require_stock_root(access)
         cache_key = operations_cache_key(kind="legacy", target_login=access.target_login, sample_symbol=sample_symbol)
 
         def build_payload(active_session: Session) -> object:
@@ -2702,6 +2712,7 @@ def create_app(
         sample_symbol: str = Query(default="600519.SH"),
         session: Session = Depends(get_session),
     ) -> Response:
+        require_stock_root(access)
         cache_key = operations_cache_key(kind="summary", target_login=access.target_login, sample_symbol=sample_symbol)
 
         def build_payload(active_session: Session) -> object:
@@ -2751,6 +2762,7 @@ def create_app(
         sample_symbol: str = Query(default="600519.SH"),
         session: Session = Depends(get_session),
     ) -> Response:
+        require_stock_root(access)
         cache_key = operations_cache_key(
             kind="details",
             target_login=access.target_login,
