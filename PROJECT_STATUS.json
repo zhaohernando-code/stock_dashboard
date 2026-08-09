@@ -10,7 +10,40 @@
   },
   "status": "in_progress",
   "owner": "codex",
-  "updated_at": "2026-08-08T15:20:00+08:00",
+  "updated_at": "2026-08-09T16:05:00+08:00",
+  "latest_runtime_integration_repair": {
+    "status": "resolved_published_verified",
+    "as_of": "2026-08-09",
+    "original_failure_count": 13,
+    "root_causes": [
+      "runtime_settings_and_operations_permission_boundary_drift",
+      "akshare_worker_depended_on_parent_import_state_and_inherited_file_descriptors",
+      "eligibility_tests_used_a_price_above_200_or_a_disallowed_board_as_the_positive_control",
+      "historical_fixture_dates_fell_outside_rolling_validation_windows"
+    ],
+    "strategy_behavior_changed": false,
+    "v3_signal_changed": false,
+    "personal_eligibility_relaxed": false,
+    "runtime_permissions": {
+      "member_runtime_settings_status": 403,
+      "root_runtime_settings_status": 200,
+      "member_operations_status": 403,
+      "legacy_beta_analyst_research_capability_preserved": true
+    },
+    "verification": {
+      "original_failures": "13_passed",
+      "affected_runtime_files": "97_passed",
+      "default_fast_suite": "1310_passed_181_deselected_6_subtests_passed",
+      "runtime_integration_suite": "181_passed_1310_deselected",
+      "policy_audit": "pass",
+      "ruff": "pass",
+      "deploy_verification": "44_passed_0_failed",
+      "runtime_worker_smoke": "operator.add_2_3_equals_5"
+    },
+    "runtime_release_manifest": "/Users/hernando_zhao/codex/runtime/projects/ashare-dashboard/output/releases/20260809T080427Z-96ec013c3a9e/manifest.json",
+    "source_commit": "96ec013c3a9e9404dd2a4a5488a613afc5b73032",
+    "pushed_to_origin_main": false
+  },
   "latest_round75_shadow_forward_control": {
     "status": "implemented_backfilled_true_forward_shadow_active_not_v3_replacement",
     "contract": "docs/contracts/ROUND75_SHADOW_FORWARD_CONTROL_2026-08-08.json",
