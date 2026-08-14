@@ -210,12 +210,7 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
     rank5_forward_progress = rank5_forward_observation.get("progress")
     if not isinstance(rank5_forward_progress, dict):
         rank5_forward_progress = {}
-    plan_generation_status = (state or {}).get("plan_generation_status") if isinstance((state or {}), dict) else None
-    if not isinstance(plan_generation_status, dict):
-        plan_generation_status = {
-            "status": "unknown",
-            "message": "尚未写入 v3 计划源状态。",
-        }
+    plan_generation_status = _paper_plan_generation_status_from_state(state)
     tracking_start = str((state or {}).get("tracking_start_date") or TRACKING_START_DATE)
     latest_plan_signal_date = _latest_value(planned_orders, "signal_date") or plan_generation_status.get("signal_date")
     plan_status_code = str(plan_generation_status.get("status") or "unknown")
@@ -1459,6 +1454,28 @@ def _read_paper_state(path: Path) -> dict[str, Any] | None:
     if payload.get("schema_version") != PAPER_STATE_SCHEMA_VERSION:
         return None
     return payload
+
+
+def _paper_plan_generation_status_from_state(state: dict[str, Any] | None) -> dict[str, Any]:
+    raw_status = (state or {}).get("plan_generation_status")
+    if not isinstance(raw_status, dict):
+        return {
+            "status": "unknown",
+            "message": "尚未写入 v3 计划源状态。",
+        }
+
+    status = dict(raw_status)
+    status.pop("round75_shadow_signal_registry", None)
+    diagnostics = status.get("diagnostics")
+    if isinstance(diagnostics, list):
+        status["diagnostics"] = [
+            row
+            for row in diagnostics
+            if not isinstance(row, dict)
+            or not row.get("strategy_id")
+            or str(row.get("strategy_id")) in PAPER_ACTIVE_STRATEGY_CONFIG_IDS
+        ]
+    return status
 
 
 def _planned_orders_from_state(state: dict[str, Any] | None) -> list[dict[str, Any]]:

@@ -2093,6 +2093,31 @@ def main() -> int:
     ]
     plan_status = dict(plan_status)
     plan_status.pop("round75_shadow_signal_registry", None)
+    diagnostics = plan_status.get("diagnostics")
+    if isinstance(diagnostics, list):
+        plan_status["diagnostics"] = [
+            row
+            for row in diagnostics
+            if not isinstance(row, dict)
+            or not row.get("strategy_id")
+            or str(row.get("strategy_id")) in STRATEGY_LABELS
+        ]
+    filtered_plan_history: list[dict[str, Any]] = []
+    for row in plan_history:
+        if not isinstance(row, dict):
+            continue
+        filtered_row = dict(row)
+        history_orders = filtered_row.get("planned_orders")
+        if isinstance(history_orders, list):
+            filtered_orders = [
+                order
+                for order in history_orders
+                if isinstance(order, dict) and str(order.get("strategy_id") or "") in STRATEGY_LABELS
+            ]
+            filtered_row["planned_orders"] = filtered_orders
+            filtered_row["planned_order_count"] = len(filtered_orders)
+        filtered_plan_history.append(filtered_row)
+    plan_history = filtered_plan_history
     source_coverage = {**source_coverage, "strategy_count": len(STRATEGY_LABELS)}
     payload = {
         "schema_version": PAPER_STATE_SCHEMA_VERSION,

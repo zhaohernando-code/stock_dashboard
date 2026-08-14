@@ -210,7 +210,11 @@ def test_paper_tracking_excludes_round75_shadow_rows_and_account_state(tmp_path)
                         "signal_date": "2026-08-10",
                     },
                 ],
-                "plan_generation_status": {"status": "ready"},
+                "plan_generation_status": {
+                    "status": "ready",
+                    "diagnostics": [{"strategy_id": ROUND75_SHADOW_STRATEGY_ID, "reason": "legacy"}],
+                    "round75_shadow_signal_registry": {"path": "shortpick-round75-shadow-signals.json"},
+                },
             },
             ensure_ascii=False,
         ),
@@ -226,8 +230,12 @@ def test_paper_tracking_excludes_round75_shadow_rows_and_account_state(tmp_path)
     assert payload["paper_display"]["account_curves"] == []
     assert payload["paper_display"]["planned_orders"] == []
     assert "round75_shadow_tracking" not in payload
-    serialized = ShortpickStrategyLabPaperTrackingResponse.model_validate(payload).model_dump()
+    serialized = ShortpickStrategyLabPaperTrackingResponse.model_validate(payload).model_dump(mode="json")
     assert "round75_shadow_tracking" not in serialized
+    assert "round75" not in json.dumps(
+        serialized["paper_display"]["plan_generation_status"],
+        ensure_ascii=False,
+    ).lower()
 
 
 def test_paper_tracking_projects_rank5_observation_progress_and_bounds_summary_rows(tmp_path) -> None:
