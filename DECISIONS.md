@@ -1,5 +1,11 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-08-14T16:10:00+08:00] Retired Rank5 shadow progress is removed from the V3 paper page:
+
+- 纸面追踪页只展示当前三策略同窗对比、计划单、账户曲线和交易明细，不再展示“Rank5 已停用 · 影子观察”卡片。
+- Rank5 不能生成真实买单的既有策略约束保持不变；独立研究采集与历史资料继续保留，但不占用用户的日常决策页面。
+- 本次仅收缩展示面，不改变 V3、对照组、日刷经济账本、参数或晋升门禁。
+
 [2026-08-08T14:55:00+08:00] Round 75 enters V3 forward validation as an isolated shadow control, not as a replacement:
 
 - 保留现有 V3 和三条原有纸面角色不变，新增 `round75_exact_share_core_veto_exit_extension_shadow_v1` 独立 20 万纸面账户。

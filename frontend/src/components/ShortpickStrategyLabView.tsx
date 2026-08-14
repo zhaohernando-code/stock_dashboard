@@ -656,62 +656,6 @@ function PlannedOrdersCard({
   );
 }
 
-function Rank5ForwardObservationCard({
-  tracking,
-  loading,
-}: {
-  tracking: ShortpickStrategyLabPaperTrackingResponse | null;
-  loading: boolean;
-}) {
-  const observation = tracking?.rank5_forward_observation;
-  const progress = observation?.progress;
-  const matured = numberField(progress, "matured_shadow_observation_count") ?? 0;
-  const maturedMinimum = numberField(progress, "research_reopen_min_matured") ?? 0;
-  const monthCount = numberField(progress, "distinct_matured_signal_month_count") ?? 0;
-  const monthMinimum = numberField(progress, "research_reopen_min_months") ?? 0;
-  const elapsedDays = numberField(progress, "elapsed_calendar_days") ?? 0;
-  const elapsedMinimum = numberField(progress, "research_reopen_min_days") ?? 0;
-  const pending = numberField(progress, "pending_shadow_observation_count") ?? 0;
-  const actualClosed = numberField(progress, "actual_closed_rank5_count") ?? 0;
-  const actualClosedMinimum = numberField(progress, "promotion_min_actual_closed") ?? 0;
-  const returnHorizon = numberField(progress, "return_horizon_trading_days") ?? 0;
-  const observationStart = observation?.observation_start_signal_date || "待写入";
-  const dataQualityPassed = progress?.data_quality_passed !== false;
-  const reopenReady = progress?.research_reopen_ready === true;
-  const sampleProgress = maturedMinimum > 0 ? Math.min(100, Math.round(matured / maturedMinimum * 100)) : 0;
-  return (
-    <Card
-      className="panel-card"
-      title="Rank5 已停用 · 影子观察"
-      extra={<Tag color={!dataQualityPassed ? "red" : reopenReady ? "green" : "blue"}>{
-        !dataQualityPassed ? "数据质量阻断" : reopenReady ? "可重开研究" : "样本积累中"
-      }</Tag>}
-    >
-      {loading && !tracking ? (
-        <Skeleton active paragraph={{ rows: 3 }} />
-      ) : (
-        <Space direction="vertical" size="middle" className="full-width">
-          <Alert
-            showIcon
-            type={dataQualityPassed ? "info" : "error"}
-            message="Rank5 不再生成真实买单"
-            description={`真实替补只允许 Rank4；没有合格 Rank4 时保留现金。从 ${observationStart} 起仍独立记录 Rank5 影子机会，${returnHorizon} 个后续交易日成熟前收益保持为空。`}
-          />
-          <div className="metric-strip shortpick-strategy-lab-metrics">
-            <div className="metric-strip-item"><span>成熟影子样本</span><strong>{matured} / {maturedMinimum}</strong></div>
-            <div className="metric-strip-item"><span>待成熟样本</span><strong>{pending}</strong></div>
-            <div className="metric-strip-item"><span>成熟信号月份</span><strong>{monthCount} / {monthMinimum}</strong></div>
-            <div className="metric-strip-item"><span>观察日历天</span><strong>{elapsedDays} / {elapsedMinimum}</strong></div>
-            <div className="metric-strip-item"><span>历史 Rank5 闭环</span><strong>{actualClosed} / {actualClosedMinimum}</strong></div>
-          </div>
-          <Progress percent={sampleProgress} status={dataQualityPassed ? "normal" : "exception"} />
-          <Text type="secondary">达到上方全部前瞻门槛后只允许重开研究；不会自动恢复 Rank5 真实买入。</Text>
-        </Space>
-      )}
-    </Card>
-  );
-}
-
 function ShortpickStrategyLabPaperTab({
   tracking,
   loading,
@@ -811,8 +755,6 @@ function ShortpickStrategyLabPaperTab({
         message="3 个角色统一从 2026-07-08 开始前向追踪"
         description="稳定盈利前沿（仅 Rank4 可买替补）· 上游元信号独立模型对照 · 现行 14 tranche 前向基线；历史回放和不同起点的研究影子组不进入本页比较。"
       />
-
-      <Rank5ForwardObservationCard tracking={tracking} loading={loading} />
 
       <PlannedOrdersCard
         orders={plannedOrders}

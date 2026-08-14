@@ -76,10 +76,8 @@ class FrontendShortpickStaticTests(unittest.TestCase):
         self.assertIn("3 个角色统一从 2026-07-08 开始前向追踪", component_source)
         self.assertIn("历史回放和不同起点的研究影子组不进入本页比较", component_source)
         self.assertNotIn("Round 75 外部信息影子对照", component_source)
-        self.assertIn("Rank5 已停用 · 影子观察", component_source)
-        self.assertIn("Rank5 不再生成真实买单", component_source)
-        self.assertIn("真实替补只允许 Rank4；没有合格 Rank4 时保留现金", component_source)
-        self.assertIn("个后续交易日成熟前收益保持为空", component_source)
+        self.assertNotIn("Rank5 已停用 · 影子观察", component_source)
+        self.assertNotIn("Rank5ForwardObservationCard", component_source)
         active_ids_source = component_source.split("const ACTIVE_STRATEGY_CONFIG_IDS = [", 1)[1].split(
             "] as const;", 1
         )[0]
