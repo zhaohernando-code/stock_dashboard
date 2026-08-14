@@ -63,6 +63,14 @@ def build_capacity_contract_tier_scan(
         (row["portfolio_notional_cny"] for row in tier_summaries if row["underfilled_pick_count"] == 0),
         None,
     )
+    largest_full_fill_tier = next(
+        (
+            row["portfolio_notional_cny"]
+            for row in reversed(tier_summaries)
+            if row["underfilled_pick_count"] == 0
+        ),
+        None,
+    )
     binding_picks_at_largest_tier: list[dict[str, Any]] = []
     if tier_summaries:
         largest_tier = max(sorted_tiers)
@@ -84,6 +92,7 @@ def build_capacity_contract_tier_scan(
         "notional_tiers_cny": list(sorted_tiers),
         "full_fill_notional_limit_cny": full_fill_notional_limit,
         "first_scanned_full_fill_tier_cny": first_full_fill_tier,
+        "largest_scanned_full_fill_tier_cny": largest_full_fill_tier,
         "tier_summaries": tier_summaries,
         "binding_picks_at_largest_tier": binding_picks_at_largest_tier,
         "interpretation": (

@@ -1598,5 +1598,32 @@
     "runtime_publish_required": false,
     "next_gate": "qualified_professional_news_or_document_body_expectation_surprise_features_then_new_independent_time_holdout"
   },
+  "latest_personal_capital_and_round75_forward_audit": {
+    "status": "capital_tier_verified_round75_removed_from_v3_paper_tracking",
+    "as_of": "2026-08-14",
+    "report": "docs/research/PERSONAL_STRATEGY_OPTIMIZATION_ATTEMPT_2026-08-10.md",
+    "capital_tier_scan": "docs/research/PERSONAL_CAPITAL_CONTRACT_TIER_SCAN_2026-08-10.json",
+    "max_adv_participation_rate": 0.05,
+    "largest_scanned_full_fill_tier_cny": 120000.0,
+    "continuous_full_fill_limit_cny": 121937.78296703297,
+    "first_underfilled_tier_cny": 150000.0,
+    "paper_tracking_start_date": "2026-07-08",
+    "paper_tracking_strategy_count": 3,
+    "round75_in_paper_tracking": false,
+    "round75_research_artifacts_retained": true,
+    "v3_signal_changed": false,
+    "next_gate": "keep_all_v3_paper_comparators_on_common_2026_07_08_window"
+  },
+  "latest_global_market_challenger_admission_audit": {
+    "status": "research_challenger_retained_formal_full_window_challenger_blocked",
+    "as_of": "2026-08-10",
+    "audit": "docs/research/GLOBAL_MARKET_CHALLENGER_ADMISSION_AUDIT_2026-08-10.json",
+    "historical_research_records": 3132,
+    "formally_qualified_records": 0,
+    "network_used": false,
+    "blocker": "qualified_global_market_full_window_export_missing",
+    "production_lambda": 0.0,
+    "v3_signal_changed": false
+  },
   "exposure_floor_stability_proxy": "2026-07-07 `research-exposure-floor-stability-proxy` found `gross_exposure_linear_scale_overlay@0.3`, then formal full713 stream replay promoted it to fixed registered spec `weak_defensive_grind_tail_cash_congested_low_liquidity_top3_20d_gross_exposure_scaled_v1`. Candidate-run support is now in `selection_policy.date_exposure_scaling.mode=gross_exposure_floor_linear_scale`, applying the same date-level scale to selected returns and selected-pick weights. Formal replay root `/tmp/stock_dashboard_label_v3_gross_exposure_scaled_full713_min60` produced report `model-comparison-report-26c4f58b6afcabe0`, candidate run `walk-forward-model-candidate-run-53b14185088ead43`, governance `governance-promotion-decision-5ff85ab74df18cc1`, dashboard registry `dashboard-approved-projection-registry-62ff61ace39f0365`. Best trial-002 scales `77` dates / `231` pick rows; total return `+247.3%`, annualized `+61.7%`, maxDD `-3.06%`, selected mean `0.03103`, execution mean `0.03190`, positive-date rate `46.71%`, negative months `3`, worst month `-0.00882`, path drawdown sum `-0.8715`, alpha `7.0512`, DSR `0.999999964`, PBO `0.0`. It improved return/path/worst-month over the previous benchmark-momentum frontier, but was later superseded by the Rank1 replacement frontier and remains blocked by negative monthly mean stress and 1M ADV/capacity fill-rate. This was superseded by the Rank1 replacement frontier on 2026-07-07; keep it as the direct predecessor comparator only, not production/paper/dashboard/runtime policy."
 }

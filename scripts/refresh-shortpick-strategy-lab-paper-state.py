@@ -72,13 +72,11 @@ STRATEGY_MODEL_SPEC_IDS = {
     MAIN_CONFIG_ID: V3_MODEL_SPEC_ID,
     UPSTREAM_META_STABILITY_CONTROL_ID: V3_MODEL_SPEC_ID,
     QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID: NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
-    ROUND75_SHADOW_STRATEGY_ID: NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
 }
 STRATEGY_LABELS = {
     MAIN_CONFIG_ID: MAIN_STRATEGY_LABEL,
     QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID: QUALITY_REPLACEMENT_REBALANCE_STRATEGY_LABEL,
     UPSTREAM_META_STABILITY_CONTROL_ID: UPSTREAM_META_STABILITY_STRATEGY_LABEL,
-    ROUND75_SHADOW_STRATEGY_ID: ROUND75_SHADOW_LABEL,
 }
 
 
@@ -1566,18 +1564,6 @@ def _v3_model_generated_plan(
             model_spec_id=V3_MODEL_SPEC_ID,
             account_state=(account_states or {}).get(MAIN_CONFIG_ID),
         )
-        round75_shadow_orders, round75_shadow_diagnostics = _build_strategy_orders(
-            session=session,
-            picks=rank_adjusted_picks,
-            signal_date=rank_adjusted_signal_date,
-            tranche_count=CONTROL_TRANCHE_COUNT,
-            min_order_notional=250.0,
-            strategy_id=ROUND75_SHADOW_STRATEGY_ID,
-            strategy_label=ROUND75_SHADOW_LABEL,
-            model_spec_id=NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
-            replacement_inventory=rank_adjusted_inventory,
-            account_state=(account_states or {}).get(ROUND75_SHADOW_STRATEGY_ID),
-        )
         upstream_meta_orders, upstream_meta_diagnostics = _build_strategy_orders(
             session=session,
             picks=picks,
@@ -1619,7 +1605,6 @@ def _v3_model_generated_plan(
         )
     planned_orders = [
         *main_orders,
-        *round75_shadow_orders,
         *quality_orders,
         *quality_rebalance_orders,
         *upstream_meta_orders,
@@ -1630,7 +1615,6 @@ def _v3_model_generated_plan(
         order["source_candidate_artifact_id"] = candidate_run.get("artifact_id")
     diagnostics = [
         *main_diagnostics,
-        *round75_shadow_diagnostics,
         *quality_diagnostics,
         *quality_rebalance_diagnostics,
         *upstream_meta_diagnostics,
@@ -1705,7 +1689,6 @@ def _rebuild_forward_paper_ledger(
 
     tracking_start_day = date.fromisoformat(TRACKING_START_DATE)
     latest_source_day = max(date.fromisoformat(str(source["signal_date"])) for source in sources)
-    round75_shadow_signals, round75_signal_status = _round75_signals_for_source_day(latest_source_day)
     with session_scope(_v3_source_database_url()) as session:
         market_days = _market_days(session, start_day=tracking_start_day, end_day=latest_source_day)
         market_day_index = 0
@@ -1719,7 +1702,6 @@ def _rebuild_forward_paper_ledger(
                     pending_orders=pending_orders,
                     records=records,
                     execution_events=execution_events,
-                    round75_shadow_signals=round75_shadow_signals,
                 )
                 market_day_index += 1
             planned_orders, latest_plan_status = _v3_model_generated_plan(
@@ -1752,7 +1734,6 @@ def _rebuild_forward_paper_ledger(
                 pending_orders=pending_orders,
                 records=records,
                 execution_events=execution_events,
-                round75_shadow_signals=round75_shadow_signals,
             )
             market_day_index += 1
         observation_symbols = {
@@ -1793,7 +1774,6 @@ def _rebuild_forward_paper_ledger(
         "synchronized_backfill_source_count": sum(
             1 for source in sources if source.get("paper_source_capture_mode") == "synchronized_start_backfill"
         ),
-        "round75_shadow_signal_registry": round75_signal_status,
     }
     return (
         records,
@@ -1935,7 +1915,6 @@ def _advance_existing_forward_paper_ledger(
     coverage = existing.get("source_coverage") or {}
     previous_source_day = date.fromisoformat(str(coverage["end_date"]))
     latest_source_day = date.fromisoformat(str(latest_source["signal_date"]))
-    round75_signals, registry_status = _round75_signals_for_source_day(latest_source_day)
     account_states = {
         strategy_id: state
         for strategy_id, state in (existing.get("account_states") or {}).items()
@@ -1947,10 +1926,8 @@ def _advance_existing_forward_paper_ledger(
     execution_events = [row for row in existing.get("execution_events") or [] if isinstance(row, dict)]
     rank5_forward_observation = existing.get("rank5_forward_observation") or {}
     if latest_source_day <= previous_source_day:
-        plan_status = {
-            **(existing.get("plan_generation_status") or {}),
-            "round75_shadow_signal_registry": registry_status,
-        }
+        plan_status = dict(existing.get("plan_generation_status") or {})
+        plan_status.pop("round75_shadow_signal_registry", None)
         return (
             records,
             account_states,
@@ -1974,7 +1951,6 @@ def _advance_existing_forward_paper_ledger(
                 pending_orders=planned_orders,
                 records=records,
                 execution_events=execution_events,
-                round75_shadow_signals=round75_signals,
             )
         new_orders, plan_status = _v3_model_generated_plan(
             account_states=account_states,
@@ -2004,7 +1980,6 @@ def _advance_existing_forward_paper_ledger(
         "synchronized_backfill_source_count": int(
             (existing.get("plan_generation_status") or {}).get("synchronized_backfill_source_count") or 0
         ),
-        "round75_shadow_signal_registry": registry_status,
     }
     return (
         records,
@@ -2087,54 +2062,38 @@ def main() -> int:
         else:
             daily_sources = _ensure_daily_candidate_sources(latest_source)
             rebuilt = _rebuild_forward_paper_ledger(daily_sources)
-            original_ids = set(STRATEGY_LABELS) - {ROUND75_SHADOW_STRATEGY_ID}
-            if original_ids.issubset(existing_states) and ROUND75_SHADOW_STRATEGY_ID not in existing_states:
-                (
-                    records,
-                    account_states,
-                    planned_orders,
-                    plan_status,
-                    plan_history,
-                    execution_events,
-                    rank5_forward_observation,
-                ) = _merge_round75_shadow_migration(existing, rebuilt)
-                source_coverage = {
-                    **existing_coverage,
-                    "strategy_count": len(account_states),
-                    "common_start_enforced": True,
-                    "update_mode": "round75_shadow_migration_preserve_existing_v3",
-                }
-            else:
-                (
-                    records,
-                    account_states,
-                    planned_orders,
-                    plan_status,
-                    plan_history,
-                    execution_events,
-                    rank5_forward_observation,
-                ) = rebuilt
-                source_coverage = {
-                    "start_date": daily_sources[0].get("signal_date") if daily_sources else TRACKING_START_DATE,
-                    "end_date": daily_sources[-1].get("signal_date") if daily_sources else TRACKING_START_DATE,
-                    "source_count": len(daily_sources),
-                    "strategy_count": len(account_states),
-                    "common_start_enforced": True,
-                    "update_mode": "full_rebuild_no_prior_state",
-                }
-    round75_tracking = _round75_shadow_tracking_payload()
-    round75_registry = plan_status.get("round75_shadow_signal_registry") or {}
-    if round75_tracking is not None:
-        round75_tracking = {
-            **round75_tracking,
-            "true_forward": {
-                **(round75_tracking.get("true_forward") or {}),
-                "observed_extension_trigger_count": int(round75_registry.get("true_forward_signal_count") or 0),
-                "signal_registry_status": round75_registry.get("status"),
-                "signal_registry_evaluated_through": round75_registry.get("evaluated_through"),
-                "external_actions_enabled": bool(round75_registry.get("external_actions_enabled")),
-            },
-        }
+            (
+                records,
+                account_states,
+                planned_orders,
+                plan_status,
+                plan_history,
+                execution_events,
+                rank5_forward_observation,
+            ) = rebuilt
+            source_coverage = {
+                "start_date": daily_sources[0].get("signal_date") if daily_sources else TRACKING_START_DATE,
+                "end_date": daily_sources[-1].get("signal_date") if daily_sources else TRACKING_START_DATE,
+                "source_count": len(daily_sources),
+                "strategy_count": len(account_states),
+                "common_start_enforced": True,
+                "update_mode": "full_rebuild_no_prior_state",
+            }
+    records = [
+        row for row in records
+        if isinstance(row, dict) and str(row.get("strategy_id") or "") in STRATEGY_LABELS
+    ]
+    planned_orders = [
+        row for row in planned_orders
+        if isinstance(row, dict) and str(row.get("strategy_id") or "") in STRATEGY_LABELS
+    ]
+    execution_events = [
+        row for row in execution_events
+        if not isinstance(row, dict) or str(row.get("strategy_id") or "") in STRATEGY_LABELS
+    ]
+    plan_status = dict(plan_status)
+    plan_status.pop("round75_shadow_signal_registry", None)
+    source_coverage = {**source_coverage, "strategy_count": len(STRATEGY_LABELS)}
     payload = {
         "schema_version": PAPER_STATE_SCHEMA_VERSION,
         "generated_at": datetime.now(UTC).isoformat(),
@@ -2147,7 +2106,6 @@ def main() -> int:
         "execution_events": execution_events,
         "source_coverage": source_coverage,
         "rank5_forward_observation": rank5_forward_observation,
-        "round75_shadow_tracking": round75_tracking,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_name(f".{path.name}.tmp")

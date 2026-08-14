@@ -74,6 +74,7 @@ def test_capacity_contract_tier_scan_identifies_supported_notional_limit() -> No
     assert scan["artifact_type"] == "capacity_contract_tier_scan"
     assert scan["full_fill_notional_limit_cny"] == 240_000.0
     assert scan["first_scanned_full_fill_tier_cny"] == 100_000.0
+    assert scan["largest_scanned_full_fill_tier_cny"] == 240_000.0
     by_tier = {row["portfolio_notional_cny"]: row for row in scan["tier_summaries"]}
     assert by_tier[100_000.0]["underfilled_pick_count"] == 0
     assert by_tier[240_000.0]["underfilled_pick_count"] == 0

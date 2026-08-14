@@ -54,7 +54,6 @@ ACTIVE_STRATEGY_CONFIG_IDS = (
 )
 PAPER_ACTIVE_STRATEGY_CONFIG_IDS = (
     *ACTIVE_STRATEGY_CONFIG_IDS,
-    ROUND75_SHADOW_STRATEGY_ID,
 )
 ARCHIVED_STRATEGY_CONFIG_IDS = (
     LEGACY_RANK45_REPLACEMENT_CONTROL_ID,
@@ -208,22 +207,6 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
         include_rows=include_records,
         as_of_day=today,
     )
-    round75_shadow_tracking = (
-        (state or {}).get("round75_shadow_tracking")
-        if isinstance((state or {}).get("round75_shadow_tracking"), dict)
-        else {
-            "strategy_id": ROUND75_SHADOW_STRATEGY_ID,
-            "strategy_label": ROUND75_SHADOW_LABEL,
-            "status": "blocked_missing_backfill_artifact",
-            "activation_date": ROUND75_ACTIVATION_DATE,
-            "historical_backfill": None,
-            "true_forward": {
-                "evidence_basis": "true_forward_shadow",
-                "from": ROUND75_ACTIVATION_DATE,
-                "status": "awaiting_artifact",
-            },
-        }
-    )
     rank5_forward_progress = rank5_forward_observation.get("progress")
     if not isinstance(rank5_forward_progress, dict):
         rank5_forward_progress = {}
@@ -306,7 +289,6 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             for readout in (
                 _paper_quality_replacement_rebalance_control_readout(),
                 _paper_upstream_meta_stability_control_readout(),
-                _paper_round75_shadow_control_readout(),
             )
         ],
         "paper_governance": {
@@ -315,7 +297,6 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             "control_config_ids": [
                 QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
                 UPSTREAM_META_STABILITY_CONTROL_ID,
-                ROUND75_SHADOW_STRATEGY_ID,
             ],
             "daily_sync_policy": "same_scheduled_refresh_window_as_shortpick_v1",
             "rank5_forward_observation_contract": rank5_forward_observation.get("contract_ref"),
@@ -323,7 +304,6 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             "active_rank5_quality_policy": None,
         },
         "rank5_forward_observation": rank5_forward_observation,
-        "round75_shadow_tracking": round75_shadow_tracking,
         "paper_display": _paper_display(
             summary=summary,
             records=records,
@@ -340,8 +320,6 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
             "read_model_policy": "forward_paper_state_only_no_v2_replay_cache_no_dynamic_backtest",
             "rank5_forward_outcome_policy": "outcomes_remain_null_until_fixed_20d_window_matures",
             "synchronized_backfill_eligible_for_rank5_evidence": False,
-            "round75_backfill_counts_toward_true_forward": False,
-            "round75_signal_registry": plan_generation_status.get("round75_shadow_signal_registry"),
         },
         "research_labeling": _research_labeling(EVIDENCE_BASIS_PAPER),
         "strategy_governance": _strategy_governance(),

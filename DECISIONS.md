@@ -2893,3 +2893,10 @@ The stream replay bottleneck after JSON parsing was removed by replacing full pr
 - Launch AkShare timeout workers with the active Python interpreter and the worker file itself, close inherited file descriptors, and retain a bounded stderr excerpt on failure. The worker must not depend on pytest-only import state or silently discard startup diagnostics.
 - Historical fixture tests calculate a lookback large enough to include their frozen event/run dates. Production rolling windows remain unchanged; moving wall-clock time must not invalidate a test whose subject is dedupe or bounded revalidation behavior.
 - The repair does not change V3 signals, external-context weights, paper strategy logic, eligibility thresholds, or production parameters. Full runtime integration passed 181/181 and the published runtime release is `20260809T080427Z-96ec013c3a9e`.
+
+## 2026-08-14 — Use the 120k capital tier and keep Round75 outside V3 paper tracking
+
+- Under the frozen Top3 and 5% ADV capacity contract, 120,000 CNY is the largest scanned tier with full fill across all 957 active picks. The continuous limiting value is about 121,938 CNY; do not round it upward or use it as an operating target. At 150,000 CNY, three 603117.SH pick-dates become underfilled.
+- Preserve the current stock selection and return claims. This capacity result is a product-capital diagnostic, not a new return frontier and not permission to change symbols or redistribute into unseen candidates.
+- V3 paper tracking is a same-window comparison whose three roles all start on 2026-07-08. Round75 starts true-forward evidence on 2026-08-08 and therefore must not appear in the same account curves, summary cards, orders or ledger. Keep its frozen artifacts as independent research evidence only and stop advancing it through the V3 paper refresh.
+- Retain the prior 3,132-row global-market research layer, but keep the formal qualified layer blocked at zero until a full-basket vendor export supplies provider revision lineage and frozen replay rights. Production external weight remains zero and V3 is unchanged.
