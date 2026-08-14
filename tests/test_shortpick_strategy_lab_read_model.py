@@ -14,7 +14,10 @@ from ashare_evidence.models import MarketBar, ShortpickCandidate, ShortpickExper
 from ashare_evidence.rolling_tranche_account_replay import project_shortpick_v3_initial_entry_orders
 from ashare_evidence.rolling_tranche_execution_contract import build_shortpick_v3_rolling_tranche_execution_contract
 from ashare_evidence.round75_shadow_tracking import ROUND75_SHADOW_STRATEGY_ID
-from ashare_evidence.schemas.shortpick import ShortpickStrategyLabHistoricalReplayResponse
+from ashare_evidence.schemas.shortpick import (
+    ShortpickStrategyLabHistoricalReplayResponse,
+    ShortpickStrategyLabPaperTrackingResponse,
+)
 from ashare_evidence.shortpick_strategy_lab_read_model import (
     ACTIVE_STRATEGY_CONFIG_IDS,
     ARCHIVED_STRATEGY_CONFIG_IDS,
@@ -223,6 +226,8 @@ def test_paper_tracking_excludes_round75_shadow_rows_and_account_state(tmp_path)
     assert payload["paper_display"]["account_curves"] == []
     assert payload["paper_display"]["planned_orders"] == []
     assert "round75_shadow_tracking" not in payload
+    serialized = ShortpickStrategyLabPaperTrackingResponse.model_validate(payload).model_dump()
+    assert "round75_shadow_tracking" not in serialized
 
 
 def test_paper_tracking_projects_rank5_observation_progress_and_bounds_summary_rows(tmp_path) -> None:
