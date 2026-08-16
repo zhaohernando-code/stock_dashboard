@@ -1,5 +1,16 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-08-17T00:45:00+08:00] The constrained expanding hotspot-state model is not a V3 candidate; retain only a stock-only ranking seed:
+
+- Replaced fixed secondary-start thresholds with a preregistered L2 Logistic walk-forward model. The stock-only opportunity set is causal V3 Top20 memory filtered by the personal account profile and a frozen stock-path Top50 prefilter. Labels are net 10-day outcomes and may enter training only after the exit date. The replay built `25,478` opportunity rows, completed 23 expanding fits per family and recorded zero future-label violations.
+- `stock_only` generated 12 gated trades and lost `4.23%`; `stock_plus_sector` generated 9 trades and gained `1.67%`, but each had zero validation trades and a 10-day win rate of only `33.33%`. No nonzero carrier weight passed tuning and validation gates.
+- A post-hoc attribution that did not alter selection found the stock-only daily Top1 had `+0.93%` mean net 10-day return across 103 validation observations but only `45.63%` wins. This is a weak, right-tail-dependent ranking seed, not stable alpha.
+- Sector features reduced validation Top1 mean from `+0.93%` to `-0.05%` and win rate from `45.63%` to `38.83%`. Their better reused-extended result cannot be used for selection. Keep external/sector weight at zero.
+- The frozen absolute probability threshold lost coverage after probability drift and produced zero validation trades. Do not lower or remove it on the reused interval. A successor requires a new independent interval and must preregister either past-only relative-rank gating, a causal calibration layer, or new PIT activity/core-score recovery features before outcomes are observed.
+- Do not add this model to V3, paper tracking, live candidates or runtime. Keep the stock-only ranker only as an offline research seed.
+
+Evidence: `docs/contracts/HOTSPOT_STATE_REESTABLISHMENT_MODEL_DESIGN_2026-08-17.json`, `docs/research/HOTSPOT_STATE_REESTABLISHMENT_MODEL_RESULT_2026-08-17.json`, `docs/research/HOTSPOT_STATE_MODEL_TOP1_ATTRIBUTION_2026-08-17.json`, `docs/analysis/HOTSPOT_STATE_REESTABLISHMENT_MODEL_REPORT_2026-08-17.md`.
+
 [2026-08-16T23:55:00+08:00] The hotspot secondary-start candidate-memory sleeve is rejected; case separation did not generalize:
 
 - A different selection mechanism was frozen before the wide replay. It retains a causal memory of symbols that entered the personal-eligible V3 Top20, then requires a recent deep drawdown, two consecutive positive stock days, a bounded two-day recovery, SMA5 recovery, and two-day SW L1 breadth/relative-strength confirmation. Same-day V3 Top3 is excluded; sector context cannot independently create a buy.

@@ -165,6 +165,18 @@ GOVERNED_CLASSIFICATIONS = [
         ),
     },
     {
+        "id": "hotspot_state_reestablishment_model_challenger",
+        "classification": "research_assumption",
+        "scope": "shortpick_lab",
+        "config_key": "docs.contracts.hotspot_state_reestablishment_model.v1",
+        "owner": "shortpick_lab",
+        "source": "hotspot_state_model.py + hotspot_state_model_replay.py + frozen preregistration contract",
+        "reason": (
+            "Causal memory, stock-only prefilter, feature families, label horizon, fit cadence, regularization, "
+            "confidence gates, bounded carrier weights, and selection rules are frozen offline research assumptions."
+        ),
+    },
+    {
         "id": "frontend_display_threshold_boundary",
         "classification": "allowed_literal",
         "scope": "frontend",

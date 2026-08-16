@@ -258,6 +258,43 @@
     "runtime_publish_required": false,
     "next_gate": "stop deterministic threshold tuning; any successor must model causal V3-state re-establishment and use a new independent time holdout"
   },
+  "latest_hotspot_state_reestablishment_model_research": {
+    "status": "expanding_model_replay_complete_no_candidate_stock_only_seed_retained",
+    "as_of": "2026-08-17",
+    "contract": "docs/contracts/HOTSPOT_STATE_REESTABLISHMENT_MODEL_DESIGN_2026-08-17.json",
+    "result": "docs/research/HOTSPOT_STATE_REESTABLISHMENT_MODEL_RESULT_2026-08-17.json",
+    "posthoc_attribution": "docs/research/HOTSPOT_STATE_MODEL_TOP1_ATTRIBUTION_2026-08-17.json",
+    "report": "docs/analysis/HOTSPOT_STATE_REESTABLISHMENT_MODEL_REPORT_2026-08-17.md",
+    "artifact_id": "hotspot-state-model-e438dd8760829124",
+    "opportunity_rows": 25478,
+    "fit_count_per_family": 23,
+    "ready_prediction_days_per_family": 445,
+    "future_label_violations": 0,
+    "stock_only": {
+      "signal_counts": {"tuning": 11, "validation": 0, "reused_extended": 1},
+      "sleeve_total_return": -0.042276704999999914,
+      "max_drawdown": -0.12039314110979116,
+      "top1_validation_count": 103,
+      "top1_validation_mean_net_return_10d": 0.009317275155861225,
+      "top1_validation_win_rate_10d": 0.4563106796116505,
+      "status": "weak_tail_dependent_ranking_seed_only"
+    },
+    "stock_plus_sector": {
+      "signal_counts": {"tuning": 8, "validation": 0, "reused_extended": 1},
+      "sleeve_total_return": 0.016676925000000287,
+      "max_drawdown": -0.07584494157107424,
+      "top1_validation_mean_net_return_10d": -0.0005489554194298219,
+      "top1_validation_win_rate_10d": 0.3883495145631068,
+      "sector_increment_passed": false
+    },
+    "selected_model": null,
+    "production_weight": 0.0,
+    "independent_holdout_status": "missing",
+    "v3_signal_changed": false,
+    "paper_tracking_changed": false,
+    "runtime_publish_required": false,
+    "next_gate": "new independent interval with preregistered past-only rank calibration or new PIT activity and core-score recovery features"
+  },
   "latest_external_context_account_research_checkpoint": {
     "status": "strong_research_challenger_not_verified_not_v3_change",
     "rounds": "30_to_47",
