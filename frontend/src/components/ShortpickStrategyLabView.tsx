@@ -38,9 +38,10 @@ const ACTIVE_STRATEGY_CONFIG_IDS = [
   "daily_15_tranche_rank_adjusted_r5_093_strong154_replacement_rank4_gap010_fill075_market_cap25_v1",
   "daily_14_tranche_upstream_meta_signal_quality_min2250_weak100_strong165_lead135_low090_v1",
   "daily_14_tranche_rank_weighted_compound_min2250_layered_rank1_quickfail_rank3_pullback_exit_v1",
+  "round75_exact_share_core_veto_exit_extension_shadow_v1",
 ] as const;
 const ACTIVE_STRATEGY_CONFIG_ID_SET = new Set<string>(ACTIVE_STRATEGY_CONFIG_IDS);
-const ACTIVE_STRATEGY_LABEL_FRAGMENTS = ["仅 Rank4 可买替补", "上游元信号稳健缩放", "主策略"];
+const ACTIVE_STRATEGY_LABEL_FRAGMENTS = ["仅 Rank4 可买替补", "上游元信号稳健缩放", "主策略", "Round 75"];
 
 function activeStrategyRows(rows: ShortpickStrategyLabConfigReadout[]): ShortpickStrategyLabConfigReadout[] {
   const order = new Map<string, number>(ACTIVE_STRATEGY_CONFIG_IDS.map((configId, index) => [configId, index]));
@@ -83,6 +84,7 @@ function configRoleLabel(role?: string | null): string {
   if (role === "phase6_forward_observation_candidate") return "前向观察候选";
   if (role === "primary_future_observation_candidate") return "冻结主策略";
   if (role === "capital_shadow_future_observation_candidate") return "资金影子对照";
+  if (role === "external_context_shadow_control") return "外部信息对照";
   if (role === "diagnostic_boundary") return "诊断边界";
   if (role === "legacy_baseline_control") return "旧基线参照";
   if (role === "legacy_holdout") return "旧留出参照";
@@ -101,6 +103,7 @@ function configRoleColor(role?: string | null): string {
   if (role === "phase6_forward_observation_candidate") return "green";
   if (role === "primary_future_observation_candidate") return "green";
   if (role === "capital_shadow_future_observation_candidate") return "blue";
+  if (role === "external_context_shadow_control") return "purple";
   if (role === "diagnostic_boundary") return "gold";
   if (role?.startsWith("legacy_")) return "default";
   if (role === "phase5_contract_candidate") return "green";
@@ -741,7 +744,7 @@ function ShortpickStrategyLabPaperTab({
               ))}
             </div>
             <Space wrap className="inline-tags">
-              <Tag color="blue">V3 账户从 2026-07-08 起算</Tag>
+              <Tag color="blue">4 个账户统一从 2026-07-08 起算</Tag>
               <Tag color="red">不允许延迟买入</Tag>
               <Tag color="green">研究观察，不构成建议</Tag>
             </Space>
@@ -752,8 +755,8 @@ function ShortpickStrategyLabPaperTab({
       <Alert
         showIcon
         type="info"
-        message="3 个角色统一从 2026-07-08 开始前向追踪"
-        description="稳定盈利前沿（仅 Rank4 可买替补）· 上游元信号独立模型对照 · 现行 14 tranche 前向基线；历史回放和不同起点的研究影子组不进入本页比较。"
+        message="3 个 V3 角色 + 1 个外部信息对照统一从 2026-07-08 起算"
+        description="外部信息对照直接进入下方同一策略表格、账户曲线和交易明细；7 月 8 日起的补回数据逐段标注 PIT 证据，本次发布后的新交易日才计入真实前向，且不会改变 V3 正式建议。"
       />
 
       <PlannedOrdersCard

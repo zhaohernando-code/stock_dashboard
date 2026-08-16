@@ -124,10 +124,12 @@ def test_paper_tracking_renders_mock_next_order_without_forward_records(tmp_path
     assert [row["config_id"] for row in payload["baseline_configs"]] == [
         QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
         UPSTREAM_META_STABILITY_CONTROL_ID,
+        ROUND75_SHADOW_STRATEGY_ID,
     ]
     assert payload["paper_governance"]["control_config_ids"] == [
         QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
         UPSTREAM_META_STABILITY_CONTROL_ID,
+        ROUND75_SHADOW_STRATEGY_ID,
     ]
     assert payload["strategy_governance"]["active_config_ids"] == list(ACTIVE_STRATEGY_CONFIG_IDS)
     assert payload["paper_display"]["account_curves"] == []
@@ -171,7 +173,7 @@ def test_paper_tracking_distinguishes_ready_no_executable_orders(tmp_path) -> No
     assert payload["summary"]["planned_order_count"] == 0
 
 
-def test_paper_tracking_excludes_round75_shadow_rows_and_account_state(tmp_path) -> None:
+def test_paper_tracking_includes_round75_in_common_window_without_separate_module(tmp_path) -> None:
     state_path = tmp_path / "round75-paper-state.json"
     state_path.write_text(
         json.dumps(
@@ -183,20 +185,34 @@ def test_paper_tracking_excludes_round75_shadow_rows_and_account_state(tmp_path)
                         "strategy_id": ROUND75_SHADOW_STRATEGY_ID,
                         "trade_date": "2026-08-07",
                         "action": "buy",
+                        "evidence_basis": "synchronized_start_backfill",
                     },
                     {
                         "strategy_id": ROUND75_SHADOW_STRATEGY_ID,
                         "trade_date": "2026-08-10",
                         "action": "sell",
+                        "evidence_basis": "daily_forward_capture",
                     },
                 ],
                 "account_states": {
                     ROUND75_SHADOW_STRATEGY_ID: {
                         "strategy_label": "Round 75",
-                        "latest_nav_cny": 212_100.0,
-                        "nav_points": [
+                        "latest_nav_cny": 202_000.0,
+                        "historical_comparison_nav_points": [
+                            {"date": "2026-07-08", "nav_cny": 200_000.0},
                             {"date": "2026-08-07", "nav_cny": 210_000.0},
-                            {"date": "2026-08-10", "nav_cny": 212_100.0},
+                        ],
+                        "nav_points": [
+                            {
+                                "date": "2026-08-10",
+                                "nav_cny": 200_000.0,
+                                "evidence_basis": "true_forward_shadow",
+                            },
+                            {
+                                "date": "2026-08-11",
+                                "nav_cny": 202_000.0,
+                                "evidence_basis": "true_forward_shadow",
+                            },
                         ],
                     }
                 },
@@ -223,19 +239,68 @@ def test_paper_tracking_excludes_round75_shadow_rows_and_account_state(tmp_path)
 
     payload = build_shortpick_strategy_lab_paper_tracking_read_model(
         paper_state_path=state_path,
-        today=date(2026, 8, 10),
+        today=date(2026, 8, 11),
     )
-    assert all(row["config_id"] != ROUND75_SHADOW_STRATEGY_ID for row in payload["baseline_configs"])
-    assert payload["records"] == []
-    assert payload["paper_display"]["account_curves"] == []
-    assert payload["paper_display"]["planned_orders"] == []
+    config = next(row for row in payload["baseline_configs"] if row["config_id"] == ROUND75_SHADOW_STRATEGY_ID)
+    assert config["summary"]["initial_cash_cny"] == INITIAL_CASH_CNY
+    assert config["summary"]["paper_total_return"] == pytest.approx(0.0605)
+    assert config["summary"]["record_count"] == 2
+    assert config["summary"]["synchronized_backfill_record_count"] == 1
+    assert config["summary"]["true_forward_record_count"] == 1
+    assert config["summary"]["planned_order_count"] == 2
+    curve = next(
+        row
+        for row in payload["paper_display"]["account_curves"]
+        if row["strategy_id"] == ROUND75_SHADOW_STRATEGY_ID
+    )
+    assert [point["date"] for point in curve["points"]] == [
+        "2026-07-08",
+        "2026-08-07",
+        "2026-08-10",
+        "2026-08-11",
+    ]
+    assert [point["evidence_basis"] for point in curve["points"]] == [
+        "retrospective_pit_backfill",
+        "retrospective_pit_backfill",
+        "true_forward_shadow",
+        "true_forward_shadow",
+    ]
+    assert curve["latest_return"] == pytest.approx(0.0605)
     assert "round75_shadow_tracking" not in payload
     serialized = ShortpickStrategyLabPaperTrackingResponse.model_validate(payload).model_dump(mode="json")
     assert "round75_shadow_tracking" not in serialized
-    assert "round75" not in json.dumps(
-        serialized["paper_display"]["plan_generation_status"],
-        ensure_ascii=False,
-    ).lower()
+    assert serialized["paper_display"]["coverage"]["strategy_count"] == 4
+
+
+def test_round75_frozen_backfill_is_normalized_to_common_start(tmp_path, monkeypatch) -> None:
+    module = _load_refresh_state_script()
+    tracking_path = tmp_path / "round75-tracking.json"
+    tracking_path.write_text(
+        json.dumps(
+            {
+                "strategy_id": ROUND75_SHADOW_STRATEGY_ID,
+                "historical_backfill": {
+                    "candidate_curve": [
+                        {"date": "2026-07-07", "nav_cny": 800_000.0},
+                        {"date": "2026-07-08", "nav_cny": 872_000.0},
+                        {"date": "2026-08-07", "nav_cny": 915_600.0},
+                        {"date": "2026-08-10", "nav_cny": 920_000.0},
+                    ]
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv(module.ROUND75_SHADOW_TRACKING_ENV, str(tracking_path))
+
+    state = module._empty_account_state(ROUND75_SHADOW_STRATEGY_ID)
+
+    points = state["historical_comparison_nav_points"]
+    assert [row["date"] for row in points] == ["2026-07-08", "2026-08-07"]
+    assert points[0]["nav_cny"] == INITIAL_CASH_CNY
+    assert points[-1]["nav_cny"] == pytest.approx(210_000.0)
+    assert state["comparison_curve_status"]["status"] == "ready_frozen_pit_backfill"
 
 
 def test_paper_tracking_projects_rank5_observation_progress_and_bounds_summary_rows(tmp_path) -> None:
@@ -778,11 +843,19 @@ def test_forward_ledger_fills_active_strategies_from_common_start(tmp_path, monk
     )
 
     buys = [row for row in records if row["action"] == "buy"]
-    assert len(account_states) == 3
-    assert {row["strategy_id"] for row in buys} == set(account_states)
+    assert len(account_states) == 4
+    assert {row["strategy_id"] for row in buys} == set(account_states) - {ROUND75_SHADOW_STRATEGY_ID}
+    assert not [row for row in records if row["strategy_id"] == ROUND75_SHADOW_STRATEGY_ID]
     assert {row["signal_date"] for row in buys} == {"2026-07-08"}
-    assert all(state["cash_cny"] < INITIAL_CASH_CNY for state in account_states.values())
-    assert all(state["positions"] for state in account_states.values())
+    original_states = [
+        state
+        for strategy_id, state in account_states.items()
+        if strategy_id != ROUND75_SHADOW_STRATEGY_ID
+    ]
+    assert all(state["cash_cny"] < INITIAL_CASH_CNY for state in original_states)
+    assert all(state["positions"] for state in original_states)
+    assert account_states[ROUND75_SHADOW_STRATEGY_ID]["cash_cny"] == INITIAL_CASH_CNY
+    assert account_states[ROUND75_SHADOW_STRATEGY_ID]["positions"] == []
     assert {row["signal_date"] for row in pending} == {"2026-07-09"}, json.dumps(
         {"status": status, "history": history, "events": events}, ensure_ascii=False
     )
@@ -803,7 +876,7 @@ def test_forward_ledger_fills_active_strategies_from_common_start(tmp_path, monk
                 "source_coverage": {
                     "start_date": "2026-07-08",
                     "end_date": "2026-07-09",
-                    "strategy_count": 3,
+                    "strategy_count": 4,
                     "common_start_enforced": True,
                 },
             },
@@ -819,7 +892,7 @@ def test_forward_ledger_fills_active_strategies_from_common_start(tmp_path, monk
     assert paper_table["columns"][0] == {"key": "trade_date_text", "label": "交易日"}
     assert len(paper_table["rows"]) == len(buys)
     assert {row["trade_date_text"] for row in paper_table["rows"]} == {"2026-07-09"}
-    assert len(read_model["paper_display"]["account_curves"]) == 3
+    assert len(read_model["paper_display"]["account_curves"]) == 4
     assert all(
         curve["points"][0]["date"] == "2026-07-08"
         for curve in read_model["paper_display"]["account_curves"]
