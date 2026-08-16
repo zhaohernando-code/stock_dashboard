@@ -10,7 +10,7 @@
   },
   "status": "in_progress",
   "owner": "codex",
-  "updated_at": "2026-08-16T21:30:00+08:00",
+  "updated_at": "2026-08-16T23:00:00+08:00",
   "latest_runtime_integration_repair": {
     "status": "resolved_published_verified",
     "as_of": "2026-08-09",
@@ -185,6 +185,47 @@
     "runtime_publish_required": false,
     "new_research_direction": "keep V3 stock identity as the core signal and study position lifecycle and cash scheduling: earlier risk release on deterioration, explicit reserve capacity, and evidence-based re-entry after confirmation; external information may veto or scale risk but must not create buys",
     "next_gate": "preregister a same-symbol position-lifecycle challenger with unchanged entries, a fully shared cash ledger, exact baseline buy preservation, and a new independent time holdout"
+  },
+  "latest_position_lifecycle_direction_research": {
+    "status": "two_preregistered_lifecycle_rounds_complete_no_candidate_v3_unchanged",
+    "as_of": "2026-08-16",
+    "purpose": "test whether faster risk release from already-selected V3 positions can improve reversal response without changing stock selection",
+    "stock_only_full_exit_round": {
+      "contract": "docs/contracts/V3_POSITION_LIFECYCLE_CHALLENGER_DESIGN_2026-08-16.json",
+      "result": "docs/research/V3_POSITION_LIFECYCLE_CHALLENGER_RESULT_2026-08-16.json",
+      "artifact_id": "v3-position-lifecycle-12b74892f75ebfd7",
+      "variants": 4,
+      "best_shared_cash_variant": "peak_failure_v1",
+      "best_shared_cash_validation_total_return": 0.2752,
+      "baseline_validation_total_return": 0.35509094814845055,
+      "finding": "all stock-only full-exit rules cut recoverable pullbacks too early and materially degraded tuning and validation"
+    },
+    "negative_context_partial_trim_round": {
+      "contract": "docs/contracts/V3_MARKET_CONFIRMED_LIFECYCLE_CHALLENGER_DESIGN_2026-08-16.json",
+      "result": "docs/research/V3_MARKET_CONFIRMED_LIFECYCLE_CHALLENGER_RESULT_2026-08-16.json",
+      "artifact_id": "v3-market-confirmed-lifecycle-0ed637b68bd32be1",
+      "variants": 4,
+      "global_sector_trim25_validation_total_return": 0.349212,
+      "global_only_trim25_validation_total_return": 0.355163,
+      "baseline_validation_total_return": 0.35509094814845055,
+      "global_only_trim25_tuning_total_return": 1.113676,
+      "baseline_tuning_total_return": 1.1230331874999995,
+      "finding": "negative context and a 25 percent trim nearly removed the damage, but no variant passed both tuning and validation on shared-cash and frozen-entry ledgers"
+    },
+    "causal_controls": {
+      "unrestricted_lambda_zero_nav_and_trade_reproduction": true,
+      "frozen_entry_lambda_zero_nav_and_trade_reproduction": true,
+      "dual_ledger_required": true,
+      "future_feature_violations": 0,
+      "next_day_execution_only": true
+    },
+    "selected_variant": null,
+    "v3_signal_changed": false,
+    "paper_tracking_changed": false,
+    "runtime_publish_required": false,
+    "conclusion": "fixed deterministic early-exit and partial-trim rules do not solve the recent reversal lag; do not tune these thresholds further",
+    "new_model_direction": "if lifecycle research continues, use an expanding-window survival or discrete-time hazard challenger that estimates remaining hold value from PIT position path, V3 rank persistence and negative context, with a new independent holdout and the same dual-ledger attribution",
+    "next_gate": "no additional hand-tuned lifecycle threshold scan; first secure a new untouched interval or longer PIT training history, then preregister the learned hazard model and forward shadow"
   },
   "latest_external_context_account_research_checkpoint": {
     "status": "strong_research_challenger_not_verified_not_v3_change",

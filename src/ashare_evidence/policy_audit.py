@@ -129,6 +129,30 @@ GOVERNED_CLASSIFICATIONS = [
         ),
     },
     {
+        "id": "v3_position_lifecycle_challenger",
+        "classification": "research_assumption",
+        "scope": "shortpick_lab",
+        "config_key": "docs.contracts.v3_position_lifecycle_challenger.v1",
+        "owner": "shortpick_lab",
+        "source": "v3_position_lifecycle.py + frozen preregistration contract",
+        "reason": (
+            "Post-entry PIT deterioration rules, execution lag, causal ledgers, validation coverage, and risk "
+            "budgets are frozen research assumptions and are not runtime policy."
+        ),
+    },
+    {
+        "id": "v3_market_confirmed_lifecycle_challenger",
+        "classification": "research_assumption",
+        "scope": "shortpick_lab",
+        "config_key": "docs.contracts.v3_market_confirmed_lifecycle_challenger.v1",
+        "owner": "shortpick_lab",
+        "source": "v3_market_confirmed_lifecycle.py + frozen preregistration contract",
+        "reason": (
+            "Negative market/sector confirmation, bounded partial trims, execution lag, dual-ledger attribution, "
+            "and validation gates are frozen research assumptions and are not runtime policy."
+        ),
+    },
+    {
         "id": "frontend_display_threshold_boundary",
         "classification": "allowed_literal",
         "scope": "frontend",

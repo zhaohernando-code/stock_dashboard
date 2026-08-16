@@ -1,0 +1,109 @@
+{
+  "artifact_type": "v3_position_lifecycle_challenger_preregistration",
+  "schema_version": "v3_position_lifecycle_challenger_preregistration.v1",
+  "status": "frozen_before_outcome_evaluation",
+  "frozen_at": "2026-08-16T22:00:00+08:00",
+  "owner": "hernando_zhao",
+  "research_question": "Can PIT deterioration of an already-held V3 name release risk and cash earlier without changing V3 stock selection or relying on external information?",
+  "direction_change": {
+    "closed_directions": [
+      "sector_reversal_reranking",
+      "new_reversal_stock_selection",
+      "positive_rebound_entry_amplification"
+    ],
+    "new_direction": "same-symbol position lifecycle and shared-cash scheduling",
+    "external_information_used": false,
+    "external_information_can_create_buy": false
+  },
+  "data_contract": {
+    "execution_snapshot_id": "shortpick-v3-execution-snapshot-067c5b83e085f95f",
+    "personal_eligibility_profile": "new_retail_cash_account",
+    "network_access_during_replay": false,
+    "market_data": "unadjusted daily close frozen inside the execution snapshot",
+    "v3_selection_source": "personal-eligible original V3 Top3 only",
+    "future_result_fields_forbidden_in_decision_logic": [
+      "net_excess_return",
+      "weighted_net_excess_return"
+    ]
+  },
+  "pit_execution_contract": {
+    "decision_features_available_through": "decision_day_close",
+    "execution": "next available trading-day close",
+    "minimum_execution_lag_trading_days": 1,
+    "same_close_decision_and_execution_forbidden": true,
+    "candidate_entry_selector": "unchanged personal V3 entry picks and baseline execution configuration",
+    "candidate_only_buy_scope": "only buys created by the unchanged V3 entry stream after lifecycle exits release cash",
+    "reentry": "only a later unchanged V3 signal may buy the symbol again"
+  },
+  "variants": [
+    {
+      "id": "price_loss_acceleration_v1",
+      "complexity_order": 1,
+      "minimum_holding_sessions": 4,
+      "maximum_position_return": -0.04,
+      "maximum_trailing_3_session_return": -0.025,
+      "require_close_below_sma5": true
+    },
+    {
+      "id": "peak_failure_v1",
+      "complexity_order": 2,
+      "minimum_holding_sessions": 5,
+      "maximum_position_return": 0.01,
+      "maximum_drawdown_from_peak": -0.06,
+      "maximum_trailing_3_session_return": -0.02
+    },
+    {
+      "id": "rank_decay_loss_v1",
+      "complexity_order": 3,
+      "minimum_holding_sessions": 5,
+      "minimum_consecutive_top3_absence_signal_days": 3,
+      "maximum_position_return": -0.03,
+      "require_close_below_sma5": true
+    },
+    {
+      "id": "confirmed_deterioration_v1",
+      "complexity_order": 4,
+      "minimum_holding_sessions": 5,
+      "minimum_consecutive_top3_absence_signal_days": 2,
+      "maximum_position_return": -0.03,
+      "maximum_trailing_3_session_return": -0.02,
+      "maximum_drawdown_from_peak": -0.05,
+      "require_close_below_sma5": true
+    }
+  ],
+  "causal_attribution": {
+    "unrestricted_shared_cash_replay": "measure the complete execution effect including additional unchanged-V3 fills made possible by released cash",
+    "frozen_entry_shadow_replay": "freeze baseline bought symbol and share count by signal/rank slot, then change exits only",
+    "selection_requires_both_ledgers_to_pass": true,
+    "candidate_only_buys_must_be_reported": true,
+    "missing_baseline_buys_must_be_reported": true
+  },
+  "selection": {
+    "tuning_end": "2025-05-26",
+    "validation_from": "2025-05-27",
+    "validation_end": "2025-11-26",
+    "reused_extended_from": "2025-11-27",
+    "reused_extended_to": "2026-06-26",
+    "reused_extended_is_not_untouched": true,
+    "minimum_validation_exit_count": 12,
+    "risk_tolerances": {
+      "total_return_must_not_degrade": true,
+      "annualized_return_must_not_degrade": true,
+      "maximum_additional_drawdown_loss": 0.005,
+      "maximum_extra_negative_months": 0,
+      "maximum_worst_month_loss": 0.005,
+      "maximum_skip_order_rate_increase": 0.02,
+      "maximum_skip_signal_rate_increase": 0.02,
+      "maximum_single_symbol_exposure": 0.25
+    },
+    "one_standard_error_rule": "among variants passing tuning and validation on both ledgers with positive validation mean monthly delta on both, choose the lowest-complexity variant within one standard error of the best unrestricted validation mean monthly delta",
+    "extended_readout_rule": "report only the preselected variant; never select or retune from the reused extended interval"
+  },
+  "promotion_contract": {
+    "research_only": true,
+    "v3_or_paper_tracking_change": false,
+    "requires_new_independent_time_holdout": true,
+    "requires_true_forward_shadow": true
+  },
+  "claim_ceiling": "preregistered_pit_same_symbol_lifecycle_attribution_not_v3_change_not_production_ready"
+}

@@ -9,9 +9,50 @@ from ashare_evidence.rolling_tranche_account_replay import (
     _process_deferred_core_entry_conflict_recall,
     _process_external_invested_ratio_cap,
     _process_market_value_concentration_rebalance,
+    _process_sells,
     build_shortpick_v3_rolling_account_replay_artifact,
     rank5_replacement_quality_rejection_reason,
 )
+
+
+def test_pit_lifecycle_trim_releases_one_lot_and_keeps_position_open() -> None:
+    position = _Position(
+        signal_day=date(2026, 1, 1),
+        entry_day=date(2026, 1, 2),
+        planned_exit_day=date(2026, 2, 2),
+        symbol="AAA",
+        stock_name="AAA",
+        rank=1,
+        shares=400,
+        entry_price=10.0,
+        cost_basis=4000.0,
+        target_notional=4000.0,
+        last_price=10.0,
+        peak_price=10.0,
+        entry_features={},
+    )
+    position_key = "2026-01-01|2026-01-02|AAA|1"
+
+    cash, rows, positions = _process_sells(
+        date(2026, 1, 10),
+        cash=0.0,
+        open_positions=[position],
+        bars_by_symbol={"AAA": [_Bar(date(2026, 1, 10), 9.0)]},
+        sell_cost_rate=0.0,
+        board_lot_size=100,
+        exit_policy="mechanical_horizon",
+        pit_position_lifecycle_trim_signals={
+            position_key: {
+                "reason": "pit_lifecycle_test_trim",
+                "retained_share_scale": 0.75,
+            }
+        },
+    )
+
+    assert cash == 900.0
+    assert rows[0]["reason"] == "pit_lifecycle_test_trim"
+    assert rows[0]["shares"] == 100
+    assert positions[0].shares == 300
 
 
 def test_core_entry_conflict_recall_closes_same_symbol_external_deferral() -> None:

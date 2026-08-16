@@ -376,6 +376,12 @@ def _simulate_config(
             pit_external_exit_deferrals=(config.get("pit_external_position_exit_deferrals") or {}).get(
                 current_day.isoformat(), {}
             ),
+            pit_position_lifecycle_exit_signals=(
+                config.get("pit_position_lifecycle_exit_signals") or {}
+            ).get(current_day.isoformat(), {}),
+            pit_position_lifecycle_trim_signals=(
+                config.get("pit_position_lifecycle_trim_signals") or {}
+            ).get(current_day.isoformat(), {}),
         )
         order_rows.extend(sells)
         if current_day in entry_requests_by_day:
@@ -1313,6 +1319,8 @@ def _process_sells(
     exit_policy: str,
     pit_external_exit_signals: dict[str, str] | None = None,
     pit_external_exit_deferrals: dict[str, dict[str, str]] | None = None,
+    pit_position_lifecycle_exit_signals: dict[str, str] | None = None,
+    pit_position_lifecycle_trim_signals: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[float, list[dict[str, Any]], list[_Position]]:
     rows: list[dict[str, Any]] = []
     still_open: list[_Position] = []
@@ -1329,6 +1337,8 @@ def _process_sells(
         external_exit_reason = (pit_external_exit_signals or {}).get(position_key)
         if external_exit_reason is None:
             external_exit_reason = _deferred_position_prior_close_exit_reason(position, current_day=current_day)
+        lifecycle_exit_reason = (pit_position_lifecycle_exit_signals or {}).get(position_key)
+        lifecycle_trim = (pit_position_lifecycle_trim_signals or {}).get(position_key)
         price = _price_on_day(bars_by_symbol.get(position.symbol) or [], current_day)
         if price is not None:
             position.last_price = price
@@ -1337,6 +1347,44 @@ def _process_sells(
                 position.entry_features["pit_external_deferral_peak_price"] = max(
                     _safe_float(position.entry_features.get("pit_external_deferral_peak_price"), price),
                     price,
+                )
+        if lifecycle_trim is not None and current_day > position.entry_day and price is not None:
+            reason = str(lifecycle_trim.get("reason") or "")
+            retained_share_scale = _safe_float(lifecycle_trim.get("retained_share_scale"), 1.0)
+            if not reason.startswith("pit_lifecycle_"):
+                raise ValueError("PIT lifecycle trim reasons must use the pit_lifecycle_ prefix")
+            if not 0.0 < retained_share_scale < 1.0:
+                raise ValueError("PIT lifecycle retained share scale must be in (0, 1)")
+            target_shares = int(position.shares * retained_share_scale / board_lot_size) * board_lot_size
+            target_shares = max(target_shares, min(board_lot_size, position.shares))
+            shares_to_sell = position.shares - target_shares
+            if shares_to_sell > 0:
+                cost_basis_per_share = position.cost_basis / position.shares if position.shares else 0.0
+                removed_cost_basis = shares_to_sell * cost_basis_per_share
+                proceeds = shares_to_sell * price * (1.0 - sell_cost_rate)
+                position.shares -= shares_to_sell
+                position.cost_basis -= removed_cost_basis
+                cash += proceeds
+                rows.append(
+                    {
+                        "action": "sell",
+                        "reason": reason,
+                        "signal_day": position.signal_day.isoformat(),
+                        "trade_day": current_day.isoformat(),
+                        "symbol": position.symbol,
+                        "stock_name": position.stock_name,
+                        "rank": position.rank,
+                        "shares": shares_to_sell,
+                        "entry_price": position.entry_price,
+                        "price": price,
+                        "cost_basis_cny": removed_cost_basis,
+                        "proceeds_cny": proceeds,
+                        "pnl_cny": proceeds - removed_cost_basis,
+                        "return": proceeds / removed_cost_basis - 1.0 if removed_cost_basis else 0.0,
+                        "cash_after_cny": cash,
+                        "retained_share_scale": retained_share_scale,
+                        "entry_reason": "bought",
+                    }
                 )
         deferral = (pit_external_exit_deferrals or {}).get(position_key)
         if deferral is not None and current_day >= position.planned_exit_day:
@@ -1436,6 +1484,7 @@ def _process_sells(
             price=price,
             exit_policy=exit_policy,
             pit_external_exit_reason=external_exit_reason,
+            pit_lifecycle_exit_reason=lifecycle_exit_reason,
         )
         if exit_reason is None:
             still_open.append(position)
@@ -1760,6 +1809,7 @@ def _exit_reason(
     price: float | None,
     exit_policy: str,
     pit_external_exit_reason: str | None = None,
+    pit_lifecycle_exit_reason: str | None = None,
 ) -> str | None:
     if price is None:
         return None
@@ -1771,6 +1821,10 @@ def _exit_reason(
         if not pit_external_exit_reason.startswith("pit_external_"):
             raise ValueError("PIT external exit reasons must use the pit_external_ prefix")
         return pit_external_exit_reason
+    if pit_lifecycle_exit_reason is not None and current_day > position.entry_day:
+        if not pit_lifecycle_exit_reason.startswith("pit_lifecycle_"):
+            raise ValueError("PIT lifecycle exit reasons must use the pit_lifecycle_ prefix")
+        return pit_lifecycle_exit_reason
     if exit_policy == "stop_loss_12pct" and current_day > position.entry_day:
         position_return = price / position.entry_price - 1.0 if position.entry_price else 0.0
         if position_return <= -0.12:

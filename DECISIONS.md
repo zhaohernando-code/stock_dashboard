@@ -1,5 +1,16 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-08-16T23:00:00+08:00] Deterministic early-exit and partial-trim lifecycle rules are rejected; V3 remains unchanged:
+
+- The direction changed from selecting or amplifying rebound stocks to managing the lifecycle of positions already selected by V3. Entry symbols, ranks, eligibility and baseline execution configuration stayed unchanged. Every decision used only information through the decision-day close and executed on the next trading day.
+- Each variant ran two causal ledgers: a real shared-cash replay and a frozen-entry replay that limited entries to baseline bought symbols and shares. Both zero-action controls reproduced baseline NAV and executed trades exactly. This prevents newly available cash or missing later buys from being mistaken for exit alpha.
+- Four stock-only full-exit rules all failed. The best shared-cash variant returned `27.520%` in validation versus V3's `35.509%`; frequent early exits cut positions that subsequently recovered.
+- A second preregistered round required negative market/sector confirmation and compared `25%`, `50%` and full exits. The market+sector `25%` trim improved substantially over full exits but still returned only `34.921%` in validation. A market-only `25%` trim was almost flat at `35.516%`, but degraded tuning (`111.368%` versus `112.303%`), weakened the frozen-entry ledger, and changed later buy availability. It is not a candidate.
+- Do not add any lifecycle rule to V3, paper tracking, live candidates or runtime. Do not hand-tune these thresholds on the reused interval.
+- If this direction is revisited, the next legitimate challenger is an expanding-window survival/discrete-time hazard model that estimates remaining holding value using only PIT position path, V3 rank persistence and negative context. It still requires dual-ledger attribution, a new independent time holdout and true-forward shadow evidence.
+
+Evidence: `docs/contracts/V3_POSITION_LIFECYCLE_CHALLENGER_DESIGN_2026-08-16.json`, `docs/research/V3_POSITION_LIFECYCLE_CHALLENGER_RESULT_2026-08-16.json`, `docs/contracts/V3_MARKET_CONFIRMED_LIFECYCLE_CHALLENGER_DESIGN_2026-08-16.json`, `docs/research/V3_MARKET_CONFIRMED_LIFECYCLE_CHALLENGER_RESULT_2026-08-16.json`.
+
 [2026-08-16T21:30:00+08:00] Close the fast-reversal selection/amplification direction; move future research to V3 position lifecycle and cash scheduling:
 
 - Four preregistered attribution tests replaced the failed sector-reranking direction. All used the same personal-eligible V3 snapshot, the same PIT sector source, zero future-feature violations, and the frozen `0%/2.5%/5%/7.5%/10%/15%` carrier grid.
