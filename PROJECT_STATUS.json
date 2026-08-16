@@ -227,6 +227,37 @@
     "new_model_direction": "if lifecycle research continues, use an expanding-window survival or discrete-time hazard challenger that estimates remaining hold value from PIT position path, V3 rank persistence and negative context, with a new independent holdout and the same dual-ledger attribution",
     "next_gate": "no additional hand-tuned lifecycle threshold scan; first secure a new untouched interval or longer PIT training history, then preregister the learned hazard model and forward shadow"
   },
+  "latest_hotspot_secondary_start_research": {
+    "status": "preregistered_wide_replay_complete_no_candidate_v3_unchanged",
+    "as_of": "2026-08-16",
+    "contract": "docs/contracts/HOTSPOT_SECONDARY_START_SLEEVE_DESIGN_2026-08-16.json",
+    "result": "docs/research/HOTSPOT_SECONDARY_START_SLEEVE_RESULT_2026-08-16.json",
+    "case_diagnostic": "docs/research/HOTSPOT_SECONDARY_START_CASE_DIAGNOSTIC_2026-08-16.json",
+    "report": "docs/analysis/HOTSPOT_SECONDARY_START_SLEEVE_REPORT_2026-08-16.md",
+    "artifact_id": "hotspot-secondary-start-880831e85deb84d4",
+    "source_execution_snapshot": "shortpick-v3-execution-snapshot-067c5b83e085f95f",
+    "candidate_source": "causal_personal_eligible_v3_top20_memory_registry",
+    "replay_from": "2023-09-07",
+    "replay_to": "2026-06-26",
+    "strict": {
+      "signals": 156,
+      "sleeve_total_return": -0.0978,
+      "max_drawdown": -0.2132,
+      "win_rate_10d": 0.4118,
+      "mean_return_10d": -0.0011
+    },
+    "balanced_sleeve_total_return": -0.2191,
+    "broad_sleeve_total_return": -0.3786,
+    "selected_variant": null,
+    "production_weight": 0.0,
+    "lambda_zero_nav_reproduction": true,
+    "future_feature_violations": 0,
+    "case_finding": "the frozen rule rejected the July 21 one-day bounce and identified JCET on August 5 and Shengyi Technology on August 6, but this case-informed diagnostic did not generalize",
+    "v3_signal_changed": false,
+    "paper_tracking_changed": false,
+    "runtime_publish_required": false,
+    "next_gate": "stop deterministic threshold tuning; any successor must model causal V3-state re-establishment and use a new independent time holdout"
+  },
   "latest_external_context_account_research_checkpoint": {
     "status": "strong_research_challenger_not_verified_not_v3_change",
     "rounds": "30_to_47",

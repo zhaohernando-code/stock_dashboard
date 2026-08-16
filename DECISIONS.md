@@ -1,5 +1,15 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-08-16T23:55:00+08:00] The hotspot secondary-start candidate-memory sleeve is rejected; case separation did not generalize:
+
+- A different selection mechanism was frozen before the wide replay. It retains a causal memory of symbols that entered the personal-eligible V3 Top20, then requires a recent deep drawdown, two consecutive positive stock days, a bounded two-day recovery, SMA5 recovery, and two-day SW L1 breadth/relative-strength confirmation. Same-day V3 Top3 is excluded; sector context cannot independently create a buy.
+- Three preregistered strictness variants and six bounded capital weights were replayed from `2023-09-07` through `2026-06-26`. Lambda zero reproduced personal V3 NAV exactly, forbidden result fields were absent, and reported future-feature violations were zero.
+- All three independent sleeves lost money: strict `-9.78%`, balanced `-21.91%`, broad `-37.86%`. Strict had 10-day win rate `41.18%` and mean 10-day return `-0.11%`. Every nonzero blend reduced both tuning and validation return versus V3; no variant/weight passed preselection.
+- The case diagnostic rejects the 2026-07-21 one-day rebound and flags JCET on 2026-08-05 and Shengyi Technology on 2026-08-06. This only shows the persistence rule can describe the motivating cases. The case is design-informed, lacks a full PIT SW sector snapshot and does not have a complete 10-day outcome; it cannot override the negative wide replay.
+- Do not add this sleeve to V3, paper tracking, live candidates or runtime, and do not tune its fixed thresholds further on the reused interval. A future attempt must estimate re-establishment of the original V3 core state with expanding-window memory decay, core-score recovery, persistent industry relative strength and activity recovery, then validate on a new independent interval.
+
+Evidence: `docs/contracts/HOTSPOT_SECONDARY_START_SLEEVE_DESIGN_2026-08-16.json`, `docs/research/HOTSPOT_SECONDARY_START_SLEEVE_RESULT_2026-08-16.json`, `docs/research/HOTSPOT_SECONDARY_START_CASE_DIAGNOSTIC_2026-08-16.json`, `docs/analysis/HOTSPOT_SECONDARY_START_SLEEVE_REPORT_2026-08-16.md`.
+
 [2026-08-16T23:00:00+08:00] Deterministic early-exit and partial-trim lifecycle rules are rejected; V3 remains unchanged:
 
 - The direction changed from selecting or amplifying rebound stocks to managing the lifecycle of positions already selected by V3. Entry symbols, ranks, eligibility and baseline execution configuration stayed unchanged. Every decision used only information through the decision-day close and executed on the next trading day.

@@ -1,0 +1,78 @@
+{
+  "artifact_type": "hotspot_secondary_start_case_diagnostic",
+  "schema_version": "hotspot_secondary_start_case_diagnostic.v1",
+  "status": "completed_case_informed_diagnostic_not_untouched",
+  "as_of": "2026-08-14",
+  "symbols": [
+    {
+      "symbol": "600183.SH",
+      "name": "生益科技",
+      "source_url": "https://q.stock.sohu.com/hisHq?code=cn_600183&start=20260701&end=20260814&stat=1&order=D&period=d&rt=json",
+      "raw_sha256": "b4792c709b80151170981d31507ac207f4b5708ee01ba579a716ac00d43a2bfd",
+      "balanced_rule": {
+        "2026-07-21": {
+          "passed": false,
+          "reason": "prior trading day return was -6.7654%, two-day return was only +2.5550%, and close remained below SMA5"
+        },
+        "2026-08-05": {
+          "passed": false,
+          "reason": "two-day return was +20.3470%, marginally above the frozen 20% overheat cap"
+        },
+        "2026-08-06": {
+          "passed": true,
+          "shock_drawdown": -0.4653846153846154,
+          "two_day_return": 0.13383230865187556,
+          "next_trading_day": "2026-08-07",
+          "next_open_to_2026_08_14_return": 0.09320610687022901,
+          "frozen_next_close_proxy_to_2026_08_14_return": 0.023074724960708837
+        }
+      }
+    },
+    {
+      "symbol": "600584.SH",
+      "name": "长电科技",
+      "source_url": "https://q.stock.sohu.com/hisHq?code=cn_600584&start=20260701&end=20260814&stat=1&order=D&period=d&rt=json",
+      "raw_sha256": "98b6b7703253e8f73f9aa515f278b629be28a7afbc284d8abeb61d0765e7ab0a",
+      "balanced_rule": {
+        "2026-07-21": {
+          "passed": false,
+          "reason": "prior trading day return was -9.9427% and the two-day return remained -0.9358%"
+        },
+        "2026-08-05": {
+          "passed": true,
+          "shock_drawdown": -0.4279819954988747,
+          "two_day_return": 0.130655737704918,
+          "next_trading_day": "2026-08-06",
+          "next_open_to_2026_08_14_return": 0.17460080584987292,
+          "frozen_next_close_proxy_to_2026_08_14_return": 0.0374324502438379
+        },
+        "2026-08-06": {
+          "passed": true,
+          "shock_drawdown": -0.4279819954988747,
+          "two_day_return": 0.1599143861794834
+        }
+      }
+    }
+  ],
+  "pair_confirmation": {
+    "scope": "two-symbol case proxy only; not a full SW2021 L1 PIT sector snapshot",
+    "2026-07-21": {
+      "current_positive_breadth": 1.0,
+      "prior_positive_breadth": 0.0,
+      "passed": false
+    },
+    "2026-08-05": {
+      "current_positive_breadth": 1.0,
+      "prior_positive_breadth": 1.0,
+      "passed": true
+    },
+    "2026-08-06": {
+      "current_positive_breadth": 1.0,
+      "prior_positive_breadth": 1.0,
+      "passed": true
+    }
+  },
+  "finding": "The frozen persistence rule distinguishes the July 21 one-day bounce from the August restart in both examples, but this descriptive success cannot override the negative wide-history replay. Full 10-day outcomes and a full PIT sector snapshot are unavailable for this case window.",
+  "v3_signal_changed": false,
+  "paper_tracking_changed": false
+}

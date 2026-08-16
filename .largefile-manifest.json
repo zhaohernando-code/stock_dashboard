@@ -116,6 +116,12 @@
       "status": "accepted",
       "reviewed_at": "2026-05-03"
     },
+    "src/ashare_evidence/hotspot_secondary_start.py": {
+      "lines": 628,
+      "reason": "Offline-only preregistered research challenger keeps the frozen feature state, causal V3 memory registry, deterministic sleeve replay, selection gates, and immutable artifact writer together for one reproducible experiment. It does not enter runtime or live strategy code. Split feature construction from replay orchestration before any successor is reused or promoted.",
+      "status": "planned_refactor",
+      "reviewed_at": "2026-08-16"
+    },
     "tests/fixtures.py": {
       "lines": 630,
       "reason": "Large file pending review.",

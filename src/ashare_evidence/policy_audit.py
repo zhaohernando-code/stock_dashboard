@@ -153,6 +153,18 @@ GOVERNED_CLASSIFICATIONS = [
         ),
     },
     {
+        "id": "hotspot_secondary_start_sleeve_challenger",
+        "classification": "research_assumption",
+        "scope": "shortpick_lab",
+        "config_key": "docs.contracts.hotspot_secondary_start_sleeve.v1",
+        "owner": "shortpick_lab",
+        "source": "hotspot_secondary_start.py + frozen preregistration contract",
+        "reason": (
+            "Candidate-memory length, shock and confirmation windows, bounded threshold variants, capital weights, "
+            "cooldown, horizon, and selection gates are frozen research assumptions and are not runtime policy."
+        ),
+    },
+    {
         "id": "frontend_display_threshold_boundary",
         "classification": "allowed_literal",
         "scope": "frontend",
