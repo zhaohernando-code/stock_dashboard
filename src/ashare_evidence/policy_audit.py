@@ -81,6 +81,54 @@ GOVERNED_CLASSIFICATIONS = [
         ),
     },
     {
+        "id": "stock_transition_sleeve_challenger",
+        "classification": "research_assumption",
+        "scope": "shortpick_lab",
+        "config_key": "docs.contracts.stock_transition_sleeve_challenger.v1",
+        "owner": "shortpick_lab",
+        "source": "stock_transition_sleeve.py + frozen preregistration contract",
+        "reason": (
+            "Stock-transition filters, sleeve score weights, account horizon, portfolio weights, and risk budgets "
+            "are frozen research assumptions and are not runtime policy."
+        ),
+    },
+    {
+        "id": "v3_rebound_deployment_accelerator",
+        "classification": "research_assumption",
+        "scope": "shortpick_lab",
+        "config_key": "docs.contracts.v3_rebound_deployment_accelerator.v1",
+        "owner": "shortpick_lab",
+        "source": "v3_rebound_deployment.py + frozen preregistration contract",
+        "reason": (
+            "Rebound confirmation rules, bounded deployment weights, validation trigger count, and risk budgets "
+            "are frozen research assumptions and are not runtime policy."
+        ),
+    },
+    {
+        "id": "v3_rebound_timing_overlay",
+        "classification": "research_assumption",
+        "scope": "shortpick_lab",
+        "config_key": "docs.contracts.v3_rebound_timing_overlay.v1",
+        "owner": "shortpick_lab",
+        "source": "v3_rebound_timing_overlay.py + frozen preregistration contract",
+        "reason": (
+            "Cash-isolated Rank1 timing, overlay horizon, capital weights, validation coverage, and risk budgets "
+            "are frozen research assumptions and are not runtime policy."
+        ),
+    },
+    {
+        "id": "v3_rebound_exact_increment_overlay",
+        "classification": "research_assumption",
+        "scope": "shortpick_lab",
+        "config_key": "docs.contracts.v3_rebound_exact_increment_overlay.v1",
+        "owner": "shortpick_lab",
+        "source": "v3_rebound_exact_overlay.py + frozen preregistration contract",
+        "reason": (
+            "Exact V3 trigger-date subset, bounded capital weights, validation coverage, and risk budgets are "
+            "frozen research assumptions and are not runtime policy."
+        ),
+    },
+    {
         "id": "frontend_display_threshold_boundary",
         "classification": "allowed_literal",
         "scope": "frontend",

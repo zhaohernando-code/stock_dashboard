@@ -10,7 +10,7 @@
   },
   "status": "in_progress",
   "owner": "codex",
-  "updated_at": "2026-08-16T20:05:00+08:00",
+  "updated_at": "2026-08-16T21:30:00+08:00",
   "latest_runtime_integration_repair": {
     "status": "resolved_published_verified",
     "as_of": "2026-08-09",
@@ -130,6 +130,61 @@
     "paper_tracking_changed": false,
     "runtime_publish_required": false,
     "next_gate": "do_not_tune_on_the_reused_window; accumulate independent PIT events or introduce a genuinely different qualified state-transition source before another preregistered challenger"
+  },
+  "latest_fast_reversal_direction_change_research": {
+    "status": "four_preregistered_attribution_challengers_complete_no_candidate_v3_unchanged",
+    "as_of": "2026-08-16",
+    "research_purpose": "replace the failed sector reranking direction with causal tests of stock-transition selection, same-stock shared-cash deployment, cash-isolated timing, and an exact V3 trigger-date subset",
+    "common_source_execution_snapshot": "shortpick-v3-execution-snapshot-067c5b83e085f95f",
+    "common_source_sector_market_digest": "2d3be520030b63ca10b30fbb539e5ed650d7c1687af09d73e98524d33760e56e",
+    "common_trigger_counts": {
+      "tuning": 66,
+      "validation": 17,
+      "reused_extended": 17
+    },
+    "stock_transition_sleeve": {
+      "contract": "docs/contracts/STOCK_TRANSITION_SLEEVE_CHALLENGER_DESIGN_2026-08-16.json",
+      "result": "docs/research/STOCK_TRANSITION_SLEEVE_CHALLENGER_RESULT_2026-08-16.json",
+      "artifact_id": "stock-transition-sleeve-6947f20d7ecd0f76",
+      "finding": "new reversal-stock selection lost 32.285 percent over the full replay and every blend weight reduced V3 return",
+      "selected_weight": null
+    },
+    "same_stock_shared_cash_deployment": {
+      "contract": "docs/contracts/V3_REBOUND_DEPLOYMENT_ACCELERATOR_DESIGN_2026-08-16.json",
+      "result": "docs/research/V3_REBOUND_DEPLOYMENT_ACCELERATOR_RESULT_2026-08-16.json",
+      "artifact_id": "v3-rebound-deployment-4ee7e4354513d565",
+      "finding": "small nonzero weights lifted gross return but crowded out later V3 orders and failed frozen skip-order and skip-signal authenticity gates",
+      "selected_weight": null
+    },
+    "rank1_10d_cash_isolated_timing": {
+      "contract": "docs/contracts/V3_REBOUND_TIMING_OVERLAY_DESIGN_2026-08-16.json",
+      "result": "docs/research/V3_REBOUND_TIMING_OVERLAY_RESULT_2026-08-16.json",
+      "artifact_id": "v3-rebound-timing-overlay-47f6b357f5813892",
+      "finding": "the independent overlay was positive in absolute terms but weaker than V3, so every blend reduced V3 return",
+      "selected_weight": null
+    },
+    "exact_top3_20d_cash_isolated_attribution": {
+      "contract": "docs/contracts/V3_REBOUND_EXACT_INCREMENT_OVERLAY_DESIGN_2026-08-16.json",
+      "result": "docs/research/V3_REBOUND_EXACT_INCREMENT_OVERLAY_RESULT_2026-08-16.json",
+      "artifact_id": "v3-rebound-exact-overlay-2c84efe74536ba0d",
+      "exact_original_recipe_matches": "300_of_300",
+      "baseline_execution_config_match": true,
+      "future_feature_violations": 0,
+      "forbidden_result_field_count": 0,
+      "overlay_tuning_total_return": 0.318110915000001,
+      "baseline_tuning_total_return": 1.1230331874999995,
+      "overlay_validation_total_return": 0.04915702598517657,
+      "baseline_validation_total_return": 0.35509094814845055,
+      "finding": "the exact triggered subset underperformed the full V3 in tuning and validation; every nonzero blend weight reduced return",
+      "selected_weight": null
+    },
+    "conclusion": "the attempted fast-reversal edge is not in sector reranking, reversal-stock replacement, or positive-state entry amplification; the apparent shared-cash gain was a capital-path effect rather than independently reproducible timing alpha",
+    "production_external_weight": 0.0,
+    "v3_signal_changed": false,
+    "paper_tracking_changed": false,
+    "runtime_publish_required": false,
+    "new_research_direction": "keep V3 stock identity as the core signal and study position lifecycle and cash scheduling: earlier risk release on deterioration, explicit reserve capacity, and evidence-based re-entry after confirmation; external information may veto or scale risk but must not create buys",
+    "next_gate": "preregister a same-symbol position-lifecycle challenger with unchanged entries, a fully shared cash ledger, exact baseline buy preservation, and a new independent time holdout"
   },
   "latest_external_context_account_research_checkpoint": {
     "status": "strong_research_challenger_not_verified_not_v3_change",

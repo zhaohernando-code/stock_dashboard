@@ -1,5 +1,17 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-08-16T21:30:00+08:00] Close the fast-reversal selection/amplification direction; move future research to V3 position lifecycle and cash scheduling:
+
+- Four preregistered attribution tests replaced the failed sector-reranking direction. All used the same personal-eligible V3 snapshot, the same PIT sector source, zero future-feature violations, and the frozen `0%/2.5%/5%/7.5%/10%/15%` carrier grid.
+- A separate reversal-stock sleeve is rejected: it lost `32.285%` over the full replay, and every blend weight reduced V3 return. Fast style change is therefore not solved by introducing newly selected “reversal stocks.”
+- Increasing allocation to unchanged V3 Top3 on rebound days produced a small gross lift in a shared account, but every nonzero weight displaced later baseline orders and failed the frozen skipped-order/skipped-signal gates. Treat that lift as a capital-path effect, not alpha.
+- The cash-isolated Rank1/10-day overlay was positive but materially weaker than V3. The final exact attribution preserved all 300 triggered V3 Top3 rows, original ranks, allocations, 20-day horizons, and the complete execution config. Its validation return was `4.916%`, versus `35.509%` for full V3; all nonzero blends reduced tuning and validation returns.
+- Keep V3, paper tracking, the external-information control, and production external weight unchanged (`lambda=0`). Do not publish these research engines to runtime or add another paper module.
+- The next direction is not another news/sector weight search. Keep V3 stock identity as the core signal and test the lifecycle of already selected positions on a shared cash ledger: release risk earlier when evidence deteriorates, preserve explicit reserve capacity, and re-enter the same V3 names only after confirmation. External information may veto or bound risk; it still cannot create a buy.
+- Any lifecycle challenger must be frozen before outcomes, reproduce baseline buys at lambda zero, distinguish missing buys from alpha, and use a new independent time holdout. The reused extended interval is diagnostic only.
+
+Evidence: `docs/contracts/STOCK_TRANSITION_SLEEVE_CHALLENGER_DESIGN_2026-08-16.json`, `docs/research/STOCK_TRANSITION_SLEEVE_CHALLENGER_RESULT_2026-08-16.json`, `docs/contracts/V3_REBOUND_DEPLOYMENT_ACCELERATOR_DESIGN_2026-08-16.json`, `docs/research/V3_REBOUND_DEPLOYMENT_ACCELERATOR_RESULT_2026-08-16.json`, `docs/contracts/V3_REBOUND_TIMING_OVERLAY_DESIGN_2026-08-16.json`, `docs/research/V3_REBOUND_TIMING_OVERLAY_RESULT_2026-08-16.json`, `docs/contracts/V3_REBOUND_EXACT_INCREMENT_OVERLAY_DESIGN_2026-08-16.json`, `docs/research/V3_REBOUND_EXACT_INCREMENT_OVERLAY_RESULT_2026-08-16.json`.
+
 [2026-08-16T20:05:00+08:00] The preregistered sector-acceleration reversal challenger is rejected; V3 remains unchanged:
 
 - The challenger was frozen before outcome evaluation. It uses only PIT SW L1 sector state, an expanding 60-signal-day prior distribution, a 0.5 combined acceleration trigger, 10-signal-day event cooldown and a three-signal-day active window. Rank1 is frozen; Rank2/3 may introduce at most one personal-eligible symbol from the core Top20 within 0.10 raw score of the original Rank3.
