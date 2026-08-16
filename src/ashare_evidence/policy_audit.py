@@ -69,6 +69,18 @@ GOVERNED_CLASSIFICATIONS = [
         "reason": "Frozen paper-tracking pool size, TopK, gates, exit thresholds, and scoring penalties are governed by a versioned default config.",
     },
     {
+        "id": "external_reversal_rotation_challenger",
+        "classification": "research_assumption",
+        "scope": "shortpick_lab",
+        "config_key": "docs.contracts.external_reversal_rotation_challenger.v1",
+        "owner": "shortpick_lab",
+        "source": "external_reversal_rotation.py + frozen preregistration contract",
+        "reason": (
+            "Event thresholds, windows, bounded weights, candidate limits, and promotion gates are frozen research "
+            "assumptions and are not runtime policy."
+        ),
+    },
+    {
         "id": "frontend_display_threshold_boundary",
         "classification": "allowed_literal",
         "scope": "frontend",

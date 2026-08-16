@@ -1,5 +1,15 @@
 # 一个关于a股的当前数据和投资建议看板 Decisions
 
+[2026-08-16T20:05:00+08:00] The preregistered sector-acceleration reversal challenger is rejected; V3 remains unchanged:
+
+- The challenger was frozen before outcome evaluation. It uses only PIT SW L1 sector state, an expanding 60-signal-day prior distribution, a 0.5 combined acceleration trigger, 10-signal-day event cooldown and a three-signal-day active window. Rank1 is frozen; Rank2/3 may introduce at most one personal-eligible symbol from the core Top20 within 0.10 raw score of the original Rank3.
+- Six bounded weights (`0`, `2.5%`, `5%`, `7.5%`, `10%`, `15%`) were replayed against the personal main-board/`<=200 CNY` account snapshot. Lambda zero exactly reproduced NAV and the executed buy/sell ledger; all sector records obeyed `available_at <= decision_cutoff`, with zero detected future-feature violations.
+- The detector found 15 independent events: 8 tuning, 3 validation and 4 reused extended diagnostics. No non-zero weight changed a selection in any of the three validation events, and every non-zero weight failed at least one frozen account non-degradation gate. Unchanged slots were restricted to baseline-executed buy symbols; the apparent pre-extended lift disappeared under this authenticity guard. Small NAV differences caused by inherited account paths are not event-capture evidence.
+- The reused extended window contains some small positive 10-day deltas, but the current June event does not yet have a complete 10-day outcome and its observed five-day incremental effect is approximately flat to slightly negative. It cannot rescue a candidate that had zero actionable validation events.
+- Keep production external weight at zero. Do not add this challenger to V3, paper tracking, live candidates or runtime. Another attempt requires new independent PIT events or a genuinely different qualified state-transition source; do not tune thresholds on the reused interval.
+
+Evidence: `docs/contracts/EXTERNAL_REVERSAL_ROTATION_CHALLENGER_DESIGN_2026-08-16.json`, `docs/research/EXTERNAL_REVERSAL_ROTATION_CHALLENGER_RESULT_2026-08-16.json`.
+
 [2026-08-16T00:00:00+08:00] External information is a fourth same-window paper control, not a separate module:
 
 - “不要单独加入纸面追踪模块”的产品含义是取消独立卡片，而不是删除外部信息对照。

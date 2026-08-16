@@ -1,0 +1,76 @@
+{
+  "artifact_type": "external_reversal_rotation_challenger_preregistration",
+  "schema_version": "external_reversal_rotation_challenger_preregistration.v1",
+  "status": "frozen_before_outcome_evaluation",
+  "frozen_at": "2026-08-16T00:00:00+08:00",
+  "owner": "hernando_zhao",
+  "research_question": "Can a bounded, PIT-only cross-sector acceleration event improve V3 response to fast style reversals without allowing external information to become an independent buy signal?",
+  "prior_evidence_disclosure": "Earlier external-context rounds did not establish a robust production candidate. Round75 only extends exits of already-profitable positions and is not a reversal solution. The extended interval has been reused and is diagnostic rather than untouched.",
+  "data_contract": {
+    "execution_snapshot_id": "shortpick-v3-execution-snapshot-067c5b83e085f95f",
+    "sector_market_digest": "2d3be520030b63ca10b30fbb539e5ed650d7c1687af09d73e98524d33760e56e",
+    "personal_eligibility_profile": "new_retail_cash_main_board_only_max_price_200",
+    "network_access_during_replay": false,
+    "available_at_rule": "available_at <= decision_cutoff",
+    "provider_revision_lineage_required_for_production": true
+  },
+  "event_definition": {
+    "breadth_acceleration": "breadth_5d - breadth_20d",
+    "return_acceleration": "mean_return_5d / 5 - mean_return_20d / 20",
+    "standardization": "expanding z-score fitted only on prior signal dates",
+    "minimum_prior_signal_days": 60,
+    "combined_score": "(z(breadth_acceleration) + z(return_acceleration)) / 2",
+    "trigger": "breadth_acceleration > 0 and return_acceleration > 0 and combined_score >= 0.5",
+    "independent_event_cooldown_signal_days": 10,
+    "active_window_signal_days": 3,
+    "minimum_validation_event_count": 3
+  },
+  "candidate_boundary": {
+    "source": "personal-PIT-eligible frozen V3 inventory",
+    "maximum_original_rank": 20,
+    "maximum_raw_score_gap_from_original_rank3": 0.1,
+    "rank1_frozen": true,
+    "mutable_ranks": [2, 3],
+    "maximum_new_symbol_count_per_event_day": 1,
+    "positive_external_signal_independent_buy_trigger": false
+  },
+  "carrier": {
+    "external_feature": "SW2021 L1 sector acceleration relative to the equal-weight SW L1 market",
+    "sector_acceleration": "relative_5d / 5 - relative_20d / 20",
+    "formula": "adjusted_score = z(core_score) + clip(lambda * z(sector_acceleration), -0.15, +0.15)",
+    "maximum_absolute_external_contribution": 0.15,
+    "rank_weights_and_execution": "unchanged personal-eligible V3 account replay contract with shadow-baseline instrumentation",
+    "lambda_zero_must_reproduce_personal_eligible_v3_nav_and_executed_trades": true
+  },
+  "weights": [0.0, 0.025, 0.05, 0.075, 0.1, 0.15],
+  "selection": {
+    "tuning_end": "2025-05-26",
+    "validation_from": "2025-05-27",
+    "validation_end": "2025-11-26",
+    "extended_readout_from": "2025-11-27",
+    "extended_readout_to": "2026-06-26",
+    "extended_readout_is_not_untouched": true,
+    "strict_non_degrade_metrics": [
+      "total_return",
+      "annualized_return",
+      "max_drawdown",
+      "negative_month_count",
+      "worst_monthly_return",
+      "skipped_order_rate",
+      "skipped_signal_rate",
+      "max_single_symbol_exposure_pct"
+    ],
+    "event_horizons_signal_days": [5, 10],
+    "validation_positive_event_share_minimum": 0.5,
+    "one_standard_error_rule": "among tuning-and-validation non-degrade survivors with at least three validation events and positive mean validation 10-day incremental return, choose the smallest lambda within one standard error of the best mean validation 10-day incremental return",
+    "leave_one_event_out_rule": "a positive full-period improvement is concentrated if removing any changed event removes more than 50 percent of that improvement or flips its sign"
+  },
+  "promotion_contract": {
+    "research_only": true,
+    "v3_or_paper_tracking_change": false,
+    "requires_independent_future_events": true,
+    "requires_provider_revision_lineage": true,
+    "black_box_model_allowed": false
+  },
+  "claim_ceiling": "preregistered_research_challenger_not_v3_change_not_production_ready"
+}
