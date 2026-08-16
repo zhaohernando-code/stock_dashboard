@@ -122,6 +122,12 @@
       "status": "planned_refactor",
       "reviewed_at": "2026-08-16"
     },
+    "src/ashare_evidence/hotspot_recovery_dual_head.py": {
+      "lines": 556,
+      "reason": "Offline-only frozen dual-head recovery diagnostic keeps the causal historical opportunity registry, activity-feature join, two-head model fit, recent PIT scoring, named-case mechanism gate, and immutable result writer together for one reproducible experiment. It is rejected from forward activation and does not enter runtime. Split historical training assembly from recent scoring before any successor reuses this module.",
+      "status": "planned_refactor",
+      "reviewed_at": "2026-08-17"
+    },
     "tests/fixtures.py": {
       "lines": 630,
       "reason": "Large file pending review.",

@@ -177,6 +177,19 @@ GOVERNED_CLASSIFICATIONS = [
         ),
     },
     {
+        "id": "hotspot_recovery_dual_head_shadow_challenger",
+        "classification": "research_assumption",
+        "scope": "shortpick_lab",
+        "config_key": "docs.contracts.hotspot_recovery_dual_head_shadow.v1",
+        "owner": "shortpick_lab",
+        "source": "recent_hotspot_pit.py + hotspot_recovery_dual_head.py + frozen preregistration contract",
+        "reason": (
+            "The outcome-aware recent diagnostic thresholds, causal V3-memory opportunity set, two-head targets, "
+            "regularization, relative-rank gates, cooldown, and forward-shadow admission rules are offline research "
+            "assumptions and do not change runtime V3 policy."
+        ),
+    },
+    {
         "id": "frontend_display_threshold_boundary",
         "classification": "allowed_literal",
         "scope": "frontend",

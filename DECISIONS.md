@@ -2968,3 +2968,10 @@ The stream replay bottleneck after JSON parsing was removed by replacing full pr
 - Preserve the current stock selection and return claims. This capacity result is a product-capital diagnostic, not a new return frontier and not permission to change symbols or redistribute into unseen candidates.
 - V3 paper tracking is a same-window comparison whose three roles all start on 2026-07-08. Round75 starts true-forward evidence on 2026-08-08 and therefore must not appear in the same account curves, summary cards, orders or ledger. Keep its frozen artifacts as independent research evidence only and stop advancing it through the V3 paper refresh.
 - Retain the prior 3,132-row global-market research layer, but keep the formal qualified layer blocked at zero until a full-basket vendor export supplies provider revision lineage and frozen replay rights. Production external weight remains zero and V3 is unchanged.
+
+## 2026-08-17 — Reject the V3-memory dual-head hotspot challenger before forward activation
+
+- Freeze the 2026-06-29 through 2026-08-14 stock-only PIT diagnostic as `recent-hotspot-pit-76f7e40234875927`. It contains 106,189 rows, uses no network during replay, and exactly reproduces all 28 available daily V3 archives from 2026-07-08 onward; the seven earlier days remain explicit archive-missing reconstructions.
+- Do not activate the registered 2026-08-17 dual-head shadow. Although its reused-window completed 10-day selections average +3.08% with an 80% win rate, completed 5-day selections average -0.22%, JCET never enters the opportunity set, and Shengyi Technology appears only after the target move at rank 40/50.
+- Treat the failure as an opportunity-set mechanism failure, not a request to tune Ridge/Logistic weights. A successor may scan the full personally eligible universe and use V3 quality/risk as soft evidence, but may not use causal V3 Top20 identity as a hard admission gate.
+- Keep V3, paper tracking, frontend, live orders, external-information weight, and runtime unchanged. Historical results remain outcome-aware diagnostics and do not count as true-forward evidence.
