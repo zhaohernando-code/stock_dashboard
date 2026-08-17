@@ -215,6 +215,12 @@ def test_personal_acquisition_reuses_one_incremental_storage_budget_per_run(tmp_
     assert result["artifact_root_bytes"] == actual_bytes
     audit = audit_cninfo_personal_curation(plan, artifact_root=artifact_root)
     assert audit["manual_review_sample"]["sample_count"] == 2
+    assert audit["plan_start_date"] == "2024-01-01"
+    assert audit["plan_end_date"] == "2025-01-01"
+    assert audit["manifest_count"] == 2
+    assert len(audit["manifest_ids"]) == 2
+    assert audit["manifest_ids"] == sorted(audit["manifest_ids"])
+    assert len(audit["manifest_ids_sha256"]) == 64
     assert {row["category"] for row in audit["manual_review_sample"]["rows"]} == {
         "financial_performance_and_distribution"
     }

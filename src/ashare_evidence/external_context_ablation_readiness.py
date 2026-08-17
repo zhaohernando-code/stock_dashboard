@@ -15,6 +15,8 @@ OFFICIAL_POLICY_PROVIDERS = {
 }
 CNINFO_PROVIDER = "cninfo_public_announcements"
 ABLATION_READINESS_SCHEMA_VERSION = "external_context_ablation_readiness.v1"
+CNINFO_FULL713_START_DATE = "2023-06-13"
+CNINFO_FULL713_END_DATE = "2026-05-26"
 
 
 def _digest(payload: Any) -> str:
@@ -52,16 +54,29 @@ def audit_external_context_ablation_readiness(
     expected_exclusion_hash = curation.get("excluded_event_versions_sha256")
     if expected_exclusion_hash != _digest(curation.get("excluded_event_versions") or []):
         raise ValueError("CNINFO curation exclusion digest mismatch")
+    scoped_cninfo_manifest_ids = {
+        str(manifest_id) for manifest_id in curation.get("manifest_ids") or [] if str(manifest_id)
+    }
+    if scoped_cninfo_manifest_ids:
+        expected_manifest_scope_hash = curation.get("manifest_ids_sha256")
+        if expected_manifest_scope_hash != _digest(sorted(scoped_cninfo_manifest_ids)):
+            raise ValueError("CNINFO curation manifest scope digest mismatch")
 
     provider_manifest_counts: Counter[str] = Counter()
     provider_selected_counts: Counter[str] = Counter()
     provider_curated_counts: Counter[str] = Counter()
     replay_rows: list[dict[str, Any]] = []
+    replayed_cninfo_manifest_ids: set[str] = set()
     for manifest_path in manifests:
         manifest = _load_object(manifest_path, label="external-context manifest")
         provider_id = str(manifest.get("provider_id") or "").strip()
         if not provider_id:
             raise ValueError(f"manifest is missing provider_id: {manifest_path}")
+        manifest_id = str(manifest.get("manifest_id") or "")
+        if provider_id == CNINFO_PROVIDER and scoped_cninfo_manifest_ids:
+            if manifest_id not in scoped_cninfo_manifest_ids:
+                continue
+            replayed_cninfo_manifest_ids.add(manifest_id)
         replay = replay_external_context_offline(manifest_path, decision_cutoff=decision_cutoff)
         selected = replay["selected_records"]
         curated_count = len(selected)
@@ -84,6 +99,9 @@ def audit_external_context_ablation_readiness(
                 "replay_digest": replay["replay_digest"],
             }
         )
+    if scoped_cninfo_manifest_ids and replayed_cninfo_manifest_ids != scoped_cninfo_manifest_ids:
+        missing_ids = sorted(scoped_cninfo_manifest_ids - replayed_cninfo_manifest_ids)
+        raise ValueError(f"CNINFO curation manifest scope is missing from replay root: {missing_ids}")
 
     available_providers = set(provider_manifest_counts)
     expected_cninfo_manifest_count = int(curation.get("manifest_count") or 0)
@@ -102,12 +120,20 @@ def audit_external_context_ablation_readiness(
     completed_tasks = int(curation.get("completed_task_count") or 0)
     total_tasks = int(curation.get("total_task_count") or 0)
     partial_symbols = int(curation.get("partial_symbol_count") or 0)
-    cninfo_full_ready = (
+    cninfo_plan_ready = (
         total_tasks > 0
         and completed_tasks == total_tasks
         and partial_symbols == 0
         and provider_curated_counts[CNINFO_PROVIDER] > 0
     )
+    plan_start_date = str(curation.get("plan_start_date") or "")
+    plan_end_date = str(curation.get("plan_end_date") or "")
+    cninfo_full713_window_ready = (
+        plan_start_date <= CNINFO_FULL713_START_DATE and plan_end_date >= CNINFO_FULL713_END_DATE
+        if plan_start_date and plan_end_date
+        else True
+    )
+    cninfo_full_ready = cninfo_plan_ready and cninfo_full713_window_ready
 
     global_providers = sorted(set(GLOBAL_MARKET_SUPPORTED_PROVIDERS) & available_providers)
     global_import_audit = (
@@ -136,8 +162,10 @@ def audit_external_context_ablation_readiness(
     blockers: list[str] = []
     if not policy_sample_ready:
         blockers.append("official_policy_manifest_or_record_missing")
-    if not cninfo_full_ready:
+    if not cninfo_plan_ready:
         blockers.append("cninfo_full713_task_coverage_incomplete")
+    elif not cninfo_full713_window_ready:
+        blockers.append("cninfo_full713_window_incomplete")
     if not global_window_envelope_ready:
         blockers.append("qualified_global_market_full_window_export_missing")
     bundle_identity = {
@@ -165,10 +193,16 @@ def audit_external_context_ablation_readiness(
             "partial_symbols": partial_symbols,
             "exclusion_count": len(excluded_versions),
             "exclusion_digest": expected_exclusion_hash,
+            "manifest_scope_count": len(scoped_cninfo_manifest_ids) or expected_cninfo_manifest_count,
+            "manifest_scope_digest": curation.get("manifest_ids_sha256"),
+            "plan_start_date": plan_start_date or None,
+            "plan_end_date": plan_end_date or None,
         },
         "channel_gates": {
             "official_policy_sample_ready": policy_sample_ready,
             "official_policy_providers_missing": policy_providers_missing,
+            "cninfo_plan_ready": cninfo_plan_ready,
+            "cninfo_full713_window_ready": cninfo_full713_window_ready,
             "cninfo_full713_ready": cninfo_full_ready,
             "global_market_providers_present": global_providers,
             "global_market_window_envelope_ready": global_window_envelope_ready,

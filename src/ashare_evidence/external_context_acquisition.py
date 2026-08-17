@@ -439,6 +439,7 @@ def audit_cninfo_personal_curation(
     available_dates: list[str] = []
     cninfo_artifact_bytes = 0
     verified_manifest_count = 0
+    verified_manifest_ids: list[str] = []
     for result_path in result_paths:
         result = json.loads(result_path.read_text(encoding="utf-8"))
         task_id = str(result["task_id"])
@@ -494,6 +495,7 @@ def audit_cninfo_personal_curation(
             cninfo_artifact_bytes += manifest_path.stat().st_size
             cninfo_artifact_bytes += sum(int(row["byte_size"]) for row in manifest.get("artifact_files") or [])
             verified_manifest_count += 1
+            verified_manifest_ids.append(str(manifest["manifest_id"]))
     full_window_symbols = sorted(
         symbol
         for symbol, expected_count in expected_tasks_by_symbol.items()
@@ -515,6 +517,7 @@ def audit_cninfo_personal_curation(
     )
     projected_total_bytes = fixed_non_cninfo_bytes + projected_cninfo_bytes
     excluded_event_versions.sort(key=lambda row: (row["normalized_event_id"], row["revision_id"]))
+    verified_manifest_ids.sort()
     review_seed = "cninfo-v3-manual-review-2026-08-06"
     review_queues = {
         category: sorted(
@@ -541,6 +544,8 @@ def audit_cninfo_personal_curation(
         "schema_version": "cninfo_personal_curation_audit.v1",
         "generated_at": datetime.now(UTC).isoformat(),
         "plan_id": plan["plan_id"],
+        "plan_start_date": plan.get("start_date"),
+        "plan_end_date": plan.get("end_date"),
         "active_relevance_policy_version": CNINFO_RELEVANCE_RULE_VERSION,
         "completed_task_count": completed_task_count,
         "total_task_count": total_task_count,
@@ -570,6 +575,8 @@ def audit_cninfo_personal_curation(
             "review_status": "unreviewed",
         },
         "manifest_count": verified_manifest_count,
+        "manifest_ids": verified_manifest_ids,
+        "manifest_ids_sha256": _digest(verified_manifest_ids),
         "storage_observation": {
             "current_root_bytes": current_root_bytes,
             "observed_cninfo_bytes": cninfo_artifact_bytes,

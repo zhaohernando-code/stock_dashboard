@@ -72,7 +72,7 @@
       "curated_cninfo_events": 155132,
       "global_instruments": 4,
       "macro_series": 7,
-      "allowed_now": "no_same_window_weight_rescan_after_failed_four_arm_screen",
+      "allowed_now": "collect_structured_event_delta_fields_no_title_model_rescan",
       "exact_v3_blockers": [
         "full_candidate_core_score_missing",
         "effective_dated_PIT_sector_membership_missing",
@@ -95,7 +95,52 @@
         "status": "failed_no_stable_increment",
         "implementation_retained": false,
         "tests_retained": false
+      },
+      "title_semantic_residual_challenger": {
+        "executed": true,
+        "claim_ceiling": "opportunity_head_semantic_screen_not_v3_backtest",
+        "selected_weight": 0.0,
+        "calibration_best_weight": 0.075,
+        "calibration_best_mean_lift_percentage_points": 0.1148,
+        "calibration_best_standard_error_percentage_points": 0.178,
+        "validation_best_scanned_lift_percentage_points": 0.3768,
+        "final_same_weight_lift_percentage_points": -0.2739,
+        "independent_post_20260527_outcomes_opened": false,
+        "status": "failed_cross_period_sign_flip",
+        "implementation_retained": false,
+        "tests_retained": false
       }
+    },
+    "structured_event_source_poc": {
+      "candidate": "Tushare forecast_express_repurchase_fina_indicator",
+      "field_contract_fit": "promising_for_numeric_event_magnitude",
+      "permission_validated": false,
+      "transport_validated": false,
+      "blocker": "configured_endpoint_is_plain_http_https_probe_failed_and_plain_http_token_transmission_was_rejected",
+      "pit_revision_lineage_validated": false
+    },
+    "post_20260527_cninfo_acquisition": {
+      "status": "complete_plan_ready_not_full713",
+      "window": [
+        "2026-05-27",
+        "2026-08-14"
+      ],
+      "completed_tasks": 1629,
+      "total_tasks": 1629,
+      "completed_symbols": 1629,
+      "partial_symbols": 0,
+      "source_records": 6744,
+      "curated_records": 6744,
+      "manifest_count": 1559,
+      "manifest_scope_digest": "3f20a6a10532e1d13ca026a85c4040ad96096600245d18bac3857900628b0852",
+      "offline_hash_verification": "passed",
+      "offline_verified_file_count": 20922,
+      "plan_ready": true,
+      "full713_window_ready": false,
+      "logical_root_bytes": 1171093112,
+      "allocated_root_bytes": 2514382848,
+      "independent_outcomes_opened_for_failed_title_model": false,
+      "v3_signal_changed": false
     }
   },
   "research_closeout": {
@@ -105,29 +150,30 @@
     "retained_hotspot_dataset": "docs/research/data/ALL_UNIVERSE_OPPORTUNITY_DATASET_COVERAGE_CORRECTED_V2_2026-08-17.json.gz",
     "retained_hotspot_dataset_rows": 32028,
     "retained_hotspot_dataset_historical_st_pit": false,
-    "current_conclusion": "stock_path_expands_coverage_but_stock_only_and_current_external_category_global_features_do_not_stably_rank_hotspot_recovery",
+    "current_conclusion": "stock_path_expands_coverage_but_stock_only_category_counts_global_state_and_title_semantics_do_not_stably_rank_hotspot_recovery",
     "forbidden_reuse": [
       "more_threshold_scans_on_the_reused_window",
       "positive_news_as_independent_buy_signal",
       "v3_top20_identity_as_hotspot_hard_gate",
       "cash_path_side_effects_as_alpha",
       "single_trigger_or_zero_validation_coverage_as_promotion_evidence",
-      "same_window_external_weight_or_regularization_rescan"
+      "same_window_external_weight_or_regularization_rescan",
+      "same_window_title_semantic_model_variant_scan"
     ]
   },
   "next_step": {
-    "direction": "wait_for_material_information_gain_before_external_retest",
+    "direction": "structured_event_delta_data_contract_before_external_retest",
     "allowed_now": {
       "scope": "data_collection_and_new_information_design_only",
       "required_material_change": [
-        "qualified_content_semantics",
+        "structured_event_surprise_or_licensed_content_with_numeric_context",
         "full_v3_core_score_residual_entry",
         "new_independent_time_period"
       ],
       "forbidden_action": "rerun_same_window_weight_window_regularization_or_model_scan"
     },
     "sequence": [
-      "qualify_new_content_semantics_or_full_v3_residual_entry",
+      "qualify_structured_event_magnitude_or_full_v3_residual_entry",
       "accumulate_new_independent_outcomes",
       "pre_register_a_non_reused_test",
       "retain_lambda_zero_until_validation_and_final_are_both_stable"

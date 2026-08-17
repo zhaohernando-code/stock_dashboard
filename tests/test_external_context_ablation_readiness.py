@@ -68,6 +68,68 @@ def _curation(path: Path, exclusions: list[dict[str, str]], *, completed: int, t
     return path
 
 
+def test_ablation_readiness_scopes_cninfo_to_incremental_plan_manifests(tmp_path: Path) -> None:
+    first = materialize_external_context_pilot(
+        _pilot("cninfo_public_announcements", "cninfo:old", "document:old"), artifact_root=tmp_path
+    )
+    materialize_external_context_pilot(
+        _pilot("cninfo_public_announcements", "cninfo:new", "document:new"), artifact_root=tmp_path
+    )
+    manifest_ids = [str(first["manifest"]["manifest_id"])]
+    curation = _curation(tmp_path / "curation.json", [], completed=1, total=1)
+    payload = json.loads(curation.read_text())
+    payload.update(
+        {
+            "plan_start_date": "2026-05-27",
+            "plan_end_date": "2026-08-14",
+            "manifest_ids": manifest_ids,
+            "manifest_ids_sha256": _digest(manifest_ids),
+        }
+    )
+    curation.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = audit_external_context_ablation_readiness(
+        artifact_root=tmp_path,
+        curation_audit_path=curation,
+        decision_cutoff="2026-08-15T00:00:00+00:00",
+    )
+
+    assert result["provider_manifest_counts"]["cninfo_public_announcements"] == 1
+    assert result["provider_selected_record_counts"]["cninfo_public_announcements"] == 1
+    assert result["channel_gates"]["cninfo_plan_ready"] is True
+    assert result["channel_gates"]["cninfo_full713_window_ready"] is False
+    assert result["channel_gates"]["cninfo_full713_ready"] is False
+    assert "cninfo_full713_window_incomplete" in result["blockers"]
+
+
+def test_ablation_readiness_accepts_frozen_full713_cninfo_window(tmp_path: Path) -> None:
+    pilot = materialize_external_context_pilot(
+        _pilot("cninfo_public_announcements", "cninfo:full713", "document:full713"), artifact_root=tmp_path
+    )
+    manifest_ids = [str(pilot["manifest"]["manifest_id"])]
+    curation = _curation(tmp_path / "curation.json", [], completed=1, total=1)
+    payload = json.loads(curation.read_text())
+    payload.update(
+        {
+            "plan_start_date": "2023-06-13",
+            "plan_end_date": "2026-05-26",
+            "manifest_ids": manifest_ids,
+            "manifest_ids_sha256": _digest(manifest_ids),
+        }
+    )
+    curation.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = audit_external_context_ablation_readiness(
+        artifact_root=tmp_path,
+        curation_audit_path=curation,
+        decision_cutoff="2026-05-27T00:00:00+00:00",
+    )
+
+    assert result["channel_gates"]["cninfo_plan_ready"] is True
+    assert result["channel_gates"]["cninfo_full713_window_ready"] is True
+    assert result["channel_gates"]["cninfo_full713_ready"] is True
+
+
 def test_ablation_readiness_replays_hashes_and_remains_blocked_without_full_layers(tmp_path: Path) -> None:
     for provider, event_id, revision in (
         ("federal_reserve_official_archive", "fed:1", "1"),
