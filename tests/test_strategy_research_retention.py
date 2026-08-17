@@ -26,9 +26,12 @@ def test_retained_research_assets_match_the_closeout_contract() -> None:
     assert payload["historical_st_status_point_in_time"] is False
 
     signal_path = PROJECT_ROOT / assets["active_append_only_external_shadow_signal_registry"]["path"]
-    signals = json.loads(signal_path.read_text(encoding="utf-8"))
-    validation = validate_external_shadow_signal_registry(signals)
-    assert validation["future_information_violation_count"] == 0
+    signal_asset = assets["active_append_only_external_shadow_signal_registry"]
+    assert signal_asset["materialization"] == "runtime_local_not_git_tracked"
+    if signal_path.exists():
+        signals = json.loads(signal_path.read_text(encoding="utf-8"))
+        validation = validate_external_shadow_signal_registry(signals)
+        assert validation["future_information_violation_count"] == 0
 
 
 def test_retired_research_engines_do_not_return_to_runtime_source() -> None:

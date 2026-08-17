@@ -14,6 +14,7 @@
     {
       "path": "data/shortpick-round75-shadow-signals.json",
       "role": "active_append_only_external_shadow_signal_registry",
+      "materialization": "runtime_local_not_git_tracked",
       "mutability": "append_only_active",
       "sha256_as_of_2026_08_17": "66aefad60616433e2b0b748b1e98b004241aacea0f15f59f01dcb9ac86e648fe",
       "claim_ceiling": "historical_backfill_plus_true_forward_shadow_not_v3_change"
@@ -21,6 +22,7 @@
     {
       "path": "data/shortpick-round75-shadow-tracking.json",
       "role": "active_same_window_external_shadow_comparison_backfill",
+      "materialization": "runtime_local_not_git_tracked",
       "mutability": "frozen_historical_backfill_plus_explicit_reconstruction_metadata",
       "sha256_as_of_2026_08_17": "64197dd9f73efa07fd8fd06154eaf27515b021c0dfa3384ac8dbe98eead286e7",
       "claim_ceiling": "retrospective_pit_backfill_not_true_forward"
