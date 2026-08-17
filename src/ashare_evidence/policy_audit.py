@@ -190,6 +190,32 @@ GOVERNED_CLASSIFICATIONS = [
         ),
     },
     {
+        "id": "all_universe_opportunity_head_challenger",
+        "classification": "research_assumption",
+        "scope": "shortpick_lab",
+        "config_key": "docs.contracts.all_universe_opportunity_head.v1",
+        "owner": "shortpick_lab",
+        "source": "all_universe_opportunity_data.py + all_universe_opportunity_head.py + frozen contract",
+        "reason": (
+            "Full-universe recovery admission thresholds, stock-only features, bounded V3 soft quality, two-head "
+            "targets, expanding-fit cadence, relative-rank gates, cooldown, and historical evidence limits are "
+            "frozen offline research assumptions and do not change runtime V3 policy."
+        ),
+    },
+    {
+        "id": "all_universe_hotspot_classifier_challenger",
+        "classification": "research_assumption",
+        "scope": "shortpick_lab",
+        "config_key": "docs.contracts.all_universe_hotspot_classifier.v1",
+        "owner": "shortpick_lab",
+        "source": "all_universe_hotspot_classifier.py + frozen classifier contract",
+        "reason": (
+            "The tail-event label, expanding logistic heads, relative-rank composition, named-case rank gate, "
+            "cooldown, and reused-history claim ceiling are frozen offline research assumptions and cannot change "
+            "V3 or start a forward shadow."
+        ),
+    },
+    {
         "id": "frontend_display_threshold_boundary",
         "classification": "allowed_literal",
         "scope": "frontend",

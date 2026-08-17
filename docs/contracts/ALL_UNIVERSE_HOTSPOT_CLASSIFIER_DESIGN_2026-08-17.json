@@ -1,0 +1,64 @@
+{
+  "schema_version": "all_universe_hotspot_classifier_design.v1",
+  "status": "frozen_after_mean_return_regression_failure_before_classifier_outcome_evaluation",
+  "frozen_at": "2026-08-17T16:15:00+08:00",
+  "source_dataset_id": "all-universe-opportunity-dataset-cce129757b37e949",
+  "source_dataset": "docs/research/data/ALL_UNIVERSE_OPPORTUNITY_DATASET_COVERAGE_CORRECTED_V2_2026-08-17.json.gz",
+  "source_regression_result_id": "all-universe-opportunity-head-4e915f000966ca4f",
+  "research_question": "Does changing the opportunity head from conditional-mean return regression to a hotspot-event classifier improve fast-tail capture without weakening the separate downside-risk head?",
+  "claim_boundary": {
+    "all_historical_and_recent_outcomes_reused": true,
+    "use": "target-family mechanism diagnostic only",
+    "independent_holdout": false,
+    "forward_activation_allowed": false,
+    "historical_st_status_point_in_time": false
+  },
+  "model": {
+    "family": "expanding_two_head_standardized_l2_logistic",
+    "hotspot_head": {
+      "target": "tradable research proxy and net 5-day return >= 3 percent",
+      "l2_penalty": 10.0
+    },
+    "risk_head": {
+      "target": "minimum entry-to-next-5-day close return <= -5 percent",
+      "l2_penalty": 10.0
+    },
+    "minimum_training_rows": 1000,
+    "maximum_training_rows": 30000,
+    "refit_signal_days": 20,
+    "feature_names_source": "ALL_UNIVERSE_OPPORTUNITY_HEAD_DESIGN_2026-08-17.json",
+    "transition_score": "0.65*hotspot_probability_percentile+0.25*(1-downside_probability_percentile)+0.10*v3_soft_quality",
+    "selection": {
+      "daily_top_k": 1,
+      "minimum_hotspot_probability_percentile": 0.9,
+      "maximum_downside_probability_percentile": 0.7,
+      "same_symbol_cooldown_signal_days": 10
+    }
+  },
+  "evaluation": {
+    "segments": {
+      "tuning_end": "2025-05-26",
+      "validation_end": "2025-11-26",
+      "final_end": "2026-06-26"
+    },
+    "required_segments": ["validation", "final"],
+    "minimum_completed_signals": 30,
+    "minimum_mean_net_5d_return": 0.0,
+    "minimum_median_net_5d_return": 0.0,
+    "minimum_win_rate": 0.52,
+    "must_not_trail_prefilter_control_mean": true,
+    "named_cases": ["600183.SH", "600584.SH"],
+    "named_case_rank_window_from": "2026-07-31",
+    "named_case_rank_deadline": "2026-08-04",
+    "maximum_named_case_rank": 10,
+    "both_named_cases_must_pass_rank_gate": true,
+    "future_information_violation_tolerance": 0
+  },
+  "forward_shadow": {
+    "activation_allowed": false,
+    "activation_date": null,
+    "paper_tracking_or_frontend_module": false,
+    "v3_signal_changed": false,
+    "external_information_weight": 0.0
+  }
+}

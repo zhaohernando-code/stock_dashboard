@@ -2975,3 +2975,11 @@ The stream replay bottleneck after JSON parsing was removed by replacing full pr
 - Do not activate the registered 2026-08-17 dual-head shadow. Although its reused-window completed 10-day selections average +3.08% with an 80% win rate, completed 5-day selections average -0.22%, JCET never enters the opportunity set, and Shengyi Technology appears only after the target move at rank 40/50.
 - Treat the failure as an opportunity-set mechanism failure, not a request to tune Ridge/Logistic weights. A successor may scan the full personally eligible universe and use V3 quality/risk as soft evidence, but may not use causal V3 Top20 identity as a hard admission gate.
 - Keep V3, paper tracking, frontend, live orders, external-information weight, and runtime unchanged. Historical results remain outcome-aware diagnostics and do not count as true-forward evidence.
+
+## 2026-08-17 — Admit hotspot candidates outside V3, but reject both stock-only ranking heads
+
+- The full-universe opportunity rule may scan all invariant main-board, signal-day price-eligible stocks. V3 Top20 quality is a bounded soft feature and must not be a symbol-identity gate. This change admits both Shengyi Technology and JCET by 2026-08-04, validating the opportunity-entry diagnosis.
+- Reject both registered ranking heads. The conditional-mean regression fails median and win-rate gates in Validation and all return gates in Final; the hotspot-event classifier performs worse and fails the named-case Top10 rank gate.
+- Do not tune more stock-only thresholds on the reused full history. Preserve V3 as the defensive core and require a future successor to test whether PIT sector confirmation and bounded event residuals add discrimination after the stock-path filter.
+- The hot-only preliminary replay was invalid because early historical coverage formed features for only three stocks. Its temporary artifacts were removed and replaced by the frozen source amendment plus a coverage-corrected composite replay. Data coverage checks are part of strategy validity, not an operational footnote.
+- Historical ST status remains unknown and was not backfilled from current static metadata. No candidate from this research may start forward shadow, paper tracking, frontend display, live orders, or runtime execution until that lineage gap and the external PIT data gap are resolved.

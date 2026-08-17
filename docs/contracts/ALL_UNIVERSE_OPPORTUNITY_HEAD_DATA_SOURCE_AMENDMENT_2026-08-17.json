@@ -1,0 +1,32 @@
+{
+  "schema_version": "all_universe_opportunity_head_data_source_amendment.v1",
+  "status": "frozen_data_source_correction_before_corrected_broad_evaluation",
+  "frozen_at": "2026-08-17T16:05:00+08:00",
+  "base_design": "docs/contracts/ALL_UNIVERSE_OPPORTUNITY_HEAD_DESIGN_2026-08-17.json",
+  "base_design_parameters_changed": false,
+  "discovered_defect": {
+    "database": "ashare_hot.db",
+    "description": "The database is current through 2026-08-14 but most stocks lack sufficient pre-2025 history; only three main-board symbols formed 60-bar features on the registered historical start day.",
+    "invalidated_artifact_ids": [
+      "all-universe-opportunity-dataset-f97481ecc3a1a30b",
+      "all-universe-opportunity-head-7feb4be2f68ea86b"
+    ],
+    "invalidated_claims": ["historical_validation_performance", "historical_final_performance"]
+  },
+  "corrected_data_sources": {
+    "historical_database": "ashare_dashboard.db",
+    "historical_database_coverage": "2022-11-21 through 2026-07-13; about 2.33 million daily bars and roughly 3,000 symbols per registered historical day",
+    "recent_overlay_database": "ashare_hot.db",
+    "recent_overlay_coverage": "through 2026-08-14",
+    "merge_rule": "merge by symbol and trading day; recent overlay wins on duplicate keys",
+    "network_access": false
+  },
+  "unchanged_contract_sections": [
+    "outer_eligibility",
+    "opportunity_rule",
+    "model",
+    "evaluation",
+    "forward_shadow"
+  ],
+  "corrected_evaluation_artifacts_must_use_suffix": "coverage-corrected-v2"
+}

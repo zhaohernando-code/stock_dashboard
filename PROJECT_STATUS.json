@@ -10,7 +10,7 @@
   },
   "status": "in_progress",
   "owner": "codex",
-  "updated_at": "2026-08-17T02:20:00+08:00",
+  "updated_at": "2026-08-17T16:30:00+08:00",
   "latest_hotspot_recovery_dual_head_research": {
     "status": "rejected_mechanism_gate_failed_no_forward_activation",
     "as_of": "2026-08-17",
@@ -37,6 +37,40 @@
     "paper_tracking_changed": false,
     "runtime_published": false,
     "next_direction": "all_personally_eligible_stock_path_opportunity_head_with_v3_as_soft_quality_and_risk_feature"
+  },
+  "latest_all_universe_opportunity_research": {
+    "status": "two_model_families_rejected_no_forward_activation",
+    "as_of": "2026-08-17",
+    "report": "docs/analysis/ALL_UNIVERSE_OPPORTUNITY_HEAD_REPORT_2026-08-17.md",
+    "base_design": "docs/contracts/ALL_UNIVERSE_OPPORTUNITY_HEAD_DESIGN_2026-08-17.json",
+    "coverage_correction": "docs/contracts/ALL_UNIVERSE_OPPORTUNITY_HEAD_DATA_SOURCE_AMENDMENT_2026-08-17.json",
+    "classifier_design": "docs/contracts/ALL_UNIVERSE_HOTSPOT_CLASSIFIER_DESIGN_2026-08-17.json",
+    "corrected_dataset_id": "all-universe-opportunity-dataset-cce129757b37e949",
+    "corrected_dataset_rows": 32028,
+    "corrected_dataset_size_mb": 7.8,
+    "regression_result_id": "all-universe-opportunity-head-4e915f000966ca4f",
+    "classifier_result_id": "all-universe-hotspot-classifier-b18408904cec9adb",
+    "named_case_candidate_admission_passed": true,
+    "regression_named_case_ranks_on_2026_08_04": {
+      "600183.SH": 33,
+      "600584.SH": 50
+    },
+    "classifier_best_named_case_ranks": {
+      "600183.SH": 25,
+      "600584.SH": 69
+    },
+    "regression_validation_mean_net_5d": 0.0038403566309592667,
+    "regression_final_mean_net_5d": -0.003125315289565769,
+    "classifier_validation_mean_net_5d": -0.023361200171372835,
+    "classifier_final_mean_net_5d": 0.00045054092425013344,
+    "future_label_violation_count": 0,
+    "historical_st_status_point_in_time": false,
+    "future_static_status_backfill_used": false,
+    "forward_activation_allowed": false,
+    "v3_signal_changed": false,
+    "paper_tracking_changed": false,
+    "runtime_published": false,
+    "next_direction": "sector_confirmed_bounded_opportunity_sleeve_after_pit_sector_and_event_data_backfill"
   },
   "latest_runtime_integration_repair": {
     "status": "resolved_published_verified",
