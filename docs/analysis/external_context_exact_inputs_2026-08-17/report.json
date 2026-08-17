@@ -1,0 +1,118 @@
+{
+  "artifact_type": "external_context_exact_input_readiness_closeout",
+  "schema_version": "external_context_exact_input_readiness_closeout.v1",
+  "as_of": "2026-08-17",
+  "status": "exact_core_and_effective_dated_sector_materialized_weight_backtest_still_blocked",
+  "production_effect": {
+    "v3_signal_changed": false,
+    "external_weight": 0.0,
+    "paper_tracking_changed": false,
+    "live_order_changed": false
+  },
+  "exact_v3_core": {
+    "path": "data/research_validation_forward_20260808/external/exact-v3-core-scores-candidates-20260817-v3.json",
+    "sha256": "4a42b7fc7c7668697556d5ab98eaa63415dd2faef9c1d860439121e99aa87102",
+    "content_digest": "dea718a6c411a86fb2c7ff5e36437b42292ed53ef7e4d4644d1aec7d91ed7481",
+    "bytes": 107842430,
+    "model_spec_id": "negative_month_rank_weight_adjusted_capacity_cluster_v3_top3_20d_v1",
+    "trial_id": "negative_month_rank_weight_adjusted_capacity_cluster_v3_top3_20d_v1:trial-000",
+    "candidate_rows_all_retained_dataset": 32028,
+    "resolved_rows": 30681,
+    "all_dataset_coverage_ratio": 0.9579430498313976,
+    "v3_active_window": [
+      "2023-09-07",
+      "2026-08-14"
+    ],
+    "v3_active_window_candidate_rows": 30761,
+    "v3_active_window_resolved_rows": 30681,
+    "v3_active_window_coverage_ratio": 0.997399304313904,
+    "common_research_window": [
+      "2023-09-07",
+      "2026-05-26"
+    ],
+    "common_research_window_candidate_rows": 26782,
+    "common_research_window_resolved_rows": 26705,
+    "common_research_window_coverage_ratio": 0.9971249346576059,
+    "unresolved_active_window_rows": 80,
+    "unresolved_reason": "frozen V3 matrix excluded a small set of later-renamed, ST, inactive or metadata-divergent symbols; post-hoc scoring would fabricate frozen history",
+    "pre_v3_inception_rows_not_claimed_as_v3": 1267,
+    "overlap_audit": {
+      "overlap_rows": 1575,
+      "feature_disagreements": 1575,
+      "core_score_disagreements": 0,
+      "policy": "earliest frozen matrix wins; later overlapping rebuild is audit-only"
+    },
+    "network_used": false,
+    "offline_rebuild_content_digest_match": true,
+    "row_digest_failure_count": 0
+  },
+  "effective_dated_sector_membership": {
+    "path": "data/research_validation_forward_20260808/external/tushare-sw2021-sector-membership-effective-dated-20260817-v2.json",
+    "sha256": "4dcbfa3dd1e5d2e29858a36a2ab2329e0e057b6d9c1dc21bccd494bc25adc8a0",
+    "bytes": 7184677,
+    "provider": "Tushare index_member_all / SW2021",
+    "attribution": "hernando_zhao / Tushare / Shenwan Hongyuan Research",
+    "l1_sector_count": 31,
+    "raw_response_count": 62,
+    "raw_rows": 7899,
+    "normalized_rows": 7899,
+    "symbols": 5895,
+    "current_rows": 5895,
+    "historical_rows": 2004,
+    "effective_interval_overlaps": 0,
+    "raw_payload_retained_without_credentials": true,
+    "offline_rebuild_digest_match": true,
+    "effective_date_research_ready": true,
+    "strict_historical_pit_ready": false,
+    "strict_blockers": [
+      "provider_published_at_missing",
+      "historical_first_seen_at_missing",
+      "provider_revision_lineage_missing"
+    ]
+  },
+  "combined_coverage": {
+    "common_research_window": {
+      "window": [
+        "2023-09-07",
+        "2026-05-26"
+      ],
+      "candidate_rows": 26782,
+      "effective_sector_rows": 26742,
+      "effective_sector_ratio": 0.9985064595623927,
+      "exact_core_and_effective_sector_rows": 26666,
+      "exact_core_and_effective_sector_ratio": 0.9956687327309387
+    },
+    "through_latest_retained_candidate_date": {
+      "window": [
+        "2023-09-07",
+        "2026-08-14"
+      ],
+      "candidate_rows": 30761,
+      "effective_sector_rows": 30719,
+      "effective_sector_ratio": 0.9986346347647996,
+      "exact_core_and_effective_sector_rows": 30640,
+      "exact_core_and_effective_sector_ratio": 0.9960664477747797
+    }
+  },
+  "decision": {
+    "same_window_weight_or_model_rescan_allowed": false,
+    "exact_v3_weight_backtest_executed": false,
+    "production_activation_allowed": false,
+    "reason": "effective dates remove current-static sector backfill for provisional mechanism research, but do not prove historical availability; professional news, provider revision vintage and new independent outcomes remain absent",
+    "next_allowed_work": [
+      "append new independent forward outcomes after 2026-08-07",
+      "collect event revision or realization surprise fields without opening outcomes",
+      "evaluate qualified professional news history with published_at first_seen_at available_at revision lineage",
+      "pre-register a new non-reused residual test only after those inputs exist"
+    ]
+  },
+  "storage": {
+    "user_limit_bytes": 2147483648,
+    "new_exact_core_bytes": 107842430,
+    "new_sector_membership_bytes": 7184677,
+    "new_recent_feature_slice_bytes": 43048141,
+    "new_total_bytes": 158075248,
+    "within_limit": true
+  },
+  "claim_ceiling": "data_input_readiness_and_coverage_only_no_external_strategy_return_claim"
+}

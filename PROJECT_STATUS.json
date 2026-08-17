@@ -2,7 +2,7 @@
   "project": "stock_dashboard",
   "status": "in_progress",
   "owner": "hernando_zhao",
-  "updated_at": "2026-08-18T01:00:00+08:00",
+  "updated_at": "2026-08-17T23:58:00+08:00",
   "current_phase": {
     "id": "phase-5",
     "label": "V3 true-forward validation and external-context evidence collection"
@@ -74,11 +74,32 @@
       "macro_series": 7,
       "allowed_now": "collect_structured_event_delta_fields_no_title_model_rescan",
       "exact_v3_blockers": [
-        "full_candidate_core_score_missing",
-        "effective_dated_PIT_sector_membership_missing",
         "professional_news_history_missing",
-        "production_grade_revision_lineage_missing"
+        "production_grade_revision_lineage_missing",
+        "new_independent_outcomes_missing"
       ],
+      "exact_input_closeout": {
+        "report": "docs/analysis/external_context_exact_inputs_2026-08-17/report.json",
+        "exact_core_path": "data/research_validation_forward_20260808/external/exact-v3-core-scores-candidates-20260817-v3.json",
+        "exact_core_active_window_rows": 30681,
+        "exact_core_active_window_candidate_rows": 30761,
+        "exact_core_active_window_coverage_ratio": 0.997399304313904,
+        "effective_sector_path": "data/research_validation_forward_20260808/external/tushare-sw2021-sector-membership-effective-dated-20260817-v2.json",
+        "effective_sector_rows": 7899,
+        "effective_sector_symbols": 5895,
+        "combined_common_window_rows": 26666,
+        "combined_common_window_candidate_rows": 26782,
+        "combined_common_window_coverage_ratio": 0.9956687327309387,
+        "effective_dated_research_ready": true,
+        "strict_historical_pit_ready": false,
+        "strict_sector_blockers": [
+          "provider_published_at_missing",
+          "historical_first_seen_at_missing",
+          "provider_revision_lineage_missing"
+        ],
+        "same_window_weight_rescan_executed": false,
+        "v3_signal_changed": false
+      },
       "exact_v3_backtest_executed": false,
       "four_arm_mechanism_screen": {
         "executed": true,
@@ -194,12 +215,12 @@
     ]
   },
   "next_step": {
-    "direction": "new_independent_forward_outcomes_or_exact_v3_core_before_any_structured_event_delta_retest",
+    "direction": "new_independent_forward_outcomes_and_strict_provider_vintage_before_any_structured_event_delta_retest",
     "allowed_now": {
       "scope": "data_collection_and_new_information_design_only",
       "required_material_change": [
         "structured_event_revision_or_realization_surprise_with_new_unseen_outcomes",
-        "full_v3_core_score_residual_entry",
+        "qualified_provider_published_first_seen_revision_lineage",
         "new_independent_time_period"
       ],
       "forbidden_action": "rerun_same_window_weight_window_regularization_or_model_scan"
@@ -211,9 +232,8 @@
       "retain_lambda_zero_until_validation_and_final_are_both_stable"
     ],
     "exact_v3_blocked_until": [
-      "full_candidate_core_score_is_materialized",
-      "PIT_sector_membership_and_state_coverage_is_sufficient",
-      "feature_freshness_and_missingness_contract_is_frozen",
+      "strict_historical_sector_availability_or_qualified_vendor_vintage_exists",
+      "professional_news_history_is_qualified_or_formally_removed_from_test_scope",
       "new_independent_outcomes_exist"
     ]
   },

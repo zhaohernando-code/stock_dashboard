@@ -54,6 +54,30 @@
       "allocated_root_kib": 396200,
       "claim_ceiling": "provisional_structured_event_research_input_not_exact_v3_backtest",
       "known_gap": "provider_revision_id_and_intraday_publish_time_unavailable"
+    },
+    {
+      "path": "data/research_validation_forward_20260808/external/exact-v3-core-scores-candidates-20260817-v3.json",
+      "role": "exact_active_v3_trial000_core_scores_for_retained_candidates",
+      "materialization": "local_ignored_research_artifact_not_git_tracked",
+      "sha256": "4a42b7fc7c7668697556d5ab98eaa63415dd2faef9c1d860439121e99aa87102",
+      "content_digest": "dea718a6c411a86fb2c7ff5e36437b42292ed53ef7e4d4644d1aec7d91ed7481",
+      "bytes": 107842430,
+      "resolved_rows": 30681,
+      "v3_active_window_coverage_ratio": 0.997399304313904,
+      "claim_ceiling": "exact_registered_core_score_for_covered_candidates_no_external_weight_result",
+      "known_gap": "80 active-window candidates were not present in the frozen source matrices"
+    },
+    {
+      "path": "data/research_validation_forward_20260808/external/tushare-sw2021-sector-membership-effective-dated-20260817-v2.json",
+      "role": "raw_and_normalized_effective_dated_sw2021_sector_membership",
+      "materialization": "local_ignored_research_artifact_not_git_tracked",
+      "sha256": "4dcbfa3dd1e5d2e29858a36a2ab2329e0e057b6d9c1dc21bccd494bc25adc8a0",
+      "bytes": 7184677,
+      "raw_response_count": 62,
+      "normalized_rows": 7899,
+      "symbols": 5895,
+      "claim_ceiling": "effective_dated_provisional_sector_research_not_strict_historical_pit_vendor_vintage",
+      "known_gap": "published_at historical_first_seen_at and provider revision lineage unavailable"
     }
   ],
   "production_impact": {
