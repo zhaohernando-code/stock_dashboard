@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Iterable
 from datetime import UTC, datetime, time, timedelta
 from typing import Any
-from urllib import error, request
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -12,17 +10,17 @@ from sqlalchemy.orm import Session
 
 from ashare_evidence.akshare_timeout import call_akshare_function
 from ashare_evidence.db import utcnow
-from ashare_evidence.http_client import urlopen
 from ashare_evidence.lineage import build_lineage
 from ashare_evidence.models import AppSetting, MarketBar, ProviderCredential, Stock
 from ashare_evidence.stock_master import DEFAULT_AKSHARE_TIMEOUT_SECONDS, akshare_runtime_ready
+from ashare_evidence.tushare_transport import DEFAULT_TUSHARE_BASE_URL
+from ashare_evidence.tushare_transport import post_tushare as _post_tushare
 
 INTRADAY_MARKET_SETTING_KEY = "ops_intraday_market_status"
 INTRADAY_MARKET_TIMEFRAME = "5min"
 INTRADAY_MARKET_INTERVAL_SECONDS = 300
 INTRADAY_DECISION_INTERVAL_SECONDS = 1800
 INTRADAY_STALE_THRESHOLD_SECONDS = 300
-DEFAULT_TUSHARE_BASE_URL = "http://api.tushare.pro"
 MARKET_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
@@ -155,39 +153,6 @@ def _tushare_credential(session: Session) -> ProviderCredential | None:
             ProviderCredential.enabled.is_(True),
         )
     )
-
-
-def _post_tushare(
-    *,
-    base_url: str,
-    token: str,
-    api_name: str,
-    params: dict[str, Any],
-    fields: str | None = None,
-) -> dict[str, Any] | None:
-    payload = {
-        "api_name": api_name,
-        "token": token,
-        "params": params,
-        "fields": fields or "",
-    }
-    req = request.Request(
-        url=base_url.rstrip("/"),
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urlopen(req, timeout=8) as response:
-            body = response.read()
-    except (error.URLError, TimeoutError, OSError, ValueError):
-        return None
-
-    try:
-        parsed = json.loads(body.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    return parsed if isinstance(parsed, dict) else None
 
 
 def _tushare_rows(session: Session, symbol: str) -> list[dict[str, Any]]:

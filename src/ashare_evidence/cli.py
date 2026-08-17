@@ -91,6 +91,12 @@ from ashare_evidence.external_context_replay import (
     replay_external_context_offline,
     write_replay_result,
 )
+from ashare_evidence.external_context_structured_events import (
+    build_tushare_structured_event_plan,
+    execute_tushare_structured_event_plan,
+    verify_tushare_structured_event_replay,
+    write_tushare_structured_event_plan,
+)
 from ashare_evidence.feature_v3_capacity_triage import build_feature_v3_capacity_triage
 from ashare_evidence.feature_v3_source_coverage import audit_feature_v3_source_coverage
 from ashare_evidence.frontend_projections import refresh_frontend_projections
@@ -454,6 +460,8 @@ NO_DB_COMMANDS = {
     "research-external-context-cninfo-acquisition-plan",
     "research-external-context-cninfo-acquisition-run",
     "research-external-context-cninfo-curation-audit",
+    "research-external-context-tushare-structured-plan",
+    "research-external-context-tushare-structured-verify",
     "research-external-context-global-market-import-validate",
     "research-external-context-ablation-readiness",
     "research-external-context-background-run",
@@ -1101,6 +1109,34 @@ def build_parser() -> argparse.ArgumentParser:
     external_context_cninfo_curation.add_argument("--plan-json", required=True)
     external_context_cninfo_curation.add_argument("--artifact-root", required=True)
     external_context_cninfo_curation.add_argument("--output-json", required=True)
+
+    external_context_tushare_structured_plan = subparsers.add_parser(
+        "research-external-context-tushare-structured-plan",
+        help="Build a resumable personal-use Tushare earnings and repurchase event plan without network fetches.",
+    )
+    external_context_tushare_structured_plan.add_argument("--start-date", required=True, help="YYYY-MM-DD")
+    external_context_tushare_structured_plan.add_argument("--end-date", required=True, help="YYYY-MM-DD")
+    external_context_tushare_structured_plan.add_argument("--output-json", required=True)
+
+    external_context_tushare_structured_run = subparsers.add_parser(
+        "research-external-context-tushare-structured-run",
+        help="Run a bounded HTTPS-only resumable slice of a frozen Tushare structured-event plan.",
+    )
+    external_context_tushare_structured_run.add_argument("--database-url", default=None)
+    external_context_tushare_structured_run.add_argument("--plan-json", required=True)
+    external_context_tushare_structured_run.add_argument("--artifact-root", required=True)
+    external_context_tushare_structured_run.add_argument("--max-tasks", type=int, default=100)
+    external_context_tushare_structured_run.add_argument("--min-request-interval-seconds", type=float, default=1.0)
+    external_context_tushare_structured_run.add_argument("--output-json", default=None)
+
+    external_context_tushare_structured_verify = subparsers.add_parser(
+        "research-external-context-tushare-structured-verify",
+        help="Verify frozen Tushare structured-event manifests and replay them without network access.",
+    )
+    external_context_tushare_structured_verify.add_argument("--plan-json", required=True)
+    external_context_tushare_structured_verify.add_argument("--artifact-root", required=True)
+    external_context_tushare_structured_verify.add_argument("--decision-cutoff", required=True)
+    external_context_tushare_structured_verify.add_argument("--output-json", default=None)
 
     external_context_global_market_import = subparsers.add_parser(
         "research-external-context-global-market-import-validate",
@@ -3262,6 +3298,39 @@ def main(argv: list[str] | None = None) -> int:
         write_external_context_artifact(payload, args.output_json)
         _print_json(payload)
         return 0
+
+    if args.command == "research-external-context-tushare-structured-plan":
+        payload = build_tushare_structured_event_plan(start_date=args.start_date, end_date=args.end_date)
+        write_tushare_structured_event_plan(args.output_json, payload)
+        _print_json(payload)
+        return 0
+
+    if args.command == "research-external-context-tushare-structured-run":
+        plan = json.loads(Path(args.plan_json).read_text(encoding="utf-8"))
+        with session_scope(args.database_url) as session:
+            payload = execute_tushare_structured_event_plan(
+                session,
+                plan,
+                artifact_root=args.artifact_root,
+                max_tasks_this_run=args.max_tasks,
+                min_request_interval_seconds=args.min_request_interval_seconds,
+            )
+        if args.output_json:
+            write_external_context_artifact(payload, args.output_json)
+        _print_json(payload)
+        return 0
+
+    if args.command == "research-external-context-tushare-structured-verify":
+        plan = json.loads(Path(args.plan_json).read_text(encoding="utf-8"))
+        payload = verify_tushare_structured_event_replay(
+            plan,
+            artifact_root=args.artifact_root,
+            decision_cutoff=args.decision_cutoff,
+        )
+        if args.output_json:
+            write_external_context_artifact(payload, args.output_json)
+        _print_json(payload)
+        return 0 if payload["plan_ready"] else 1
 
     if args.command == "research-external-context-global-market-import-validate":
         envelope = json.loads(Path(args.input_json).read_text(encoding="utf-8"))

@@ -2,7 +2,7 @@
   "project": "stock_dashboard",
   "status": "in_progress",
   "owner": "hernando_zhao",
-  "updated_at": "2026-08-18T00:30:00+08:00",
+  "updated_at": "2026-08-18T01:00:00+08:00",
   "current_phase": {
     "id": "phase-5",
     "label": "V3 true-forward validation and external-context evidence collection"
@@ -114,10 +114,42 @@
     "structured_event_source_poc": {
       "candidate": "Tushare forecast_express_repurchase_fina_indicator",
       "field_contract_fit": "promising_for_numeric_event_magnitude",
-      "permission_validated": false,
-      "transport_validated": false,
-      "blocker": "configured_endpoint_is_plain_http_https_probe_failed_and_plain_http_token_transmission_was_rejected",
-      "pit_revision_lineage_validated": false
+      "permission_validated": true,
+      "transport_validated": true,
+      "transport": "https_only_with_legacy_official_http_url_upgraded_before_token_transmission",
+      "pit_revision_lineage_validated": false,
+      "remaining_blocker": "provider_exposes_announcement_date_but_no_provider_revision_id_or_intraday_publish_time",
+      "acquisition": {
+        "window": [
+          "2023-06-13",
+          "2026-08-14"
+        ],
+        "plan_id": "tushare-structured-events-9de1b510de33c04106d65173",
+        "completed_tasks": 71,
+        "total_tasks": 71,
+        "raw_rows": 56885,
+        "retained_main_board_rows": 31197,
+        "manifest_count": 65,
+        "manifest_scope_digest": "54a3b4df93de0d1d8434d3b30e8762c8e2f9aacaa444bedf3710d0efb16db6d5",
+        "offline_verified_file_count": 93591,
+        "offline_network_used": false,
+        "logical_root_bytes": 175409126,
+        "allocated_root_kib": 396200,
+        "hard_cap_bytes": 1879048192
+      },
+      "structured_level_residual_screen": {
+        "status": "failed_one_se_selected_zero_weight",
+        "candidate_rows_after_personal_outer_filter": 29696,
+        "event_present_candidate_rows": 6302,
+        "best_calibration_weight": 0.15,
+        "selected_weight": 0.0,
+        "validation_lift_at_15pct_percentage_points": 0.0402,
+        "independent_final_lift_at_15pct_percentage_points": 0.1826,
+        "claim_ceiling": "opportunity_head_mechanism_screen_not_exact_v3_backtest",
+        "implementation_retained": false,
+        "tests_retained": false,
+        "v3_signal_changed": false
+      }
     },
     "post_20260527_cninfo_acquisition": {
       "status": "complete_plan_ready_not_full713",
@@ -162,19 +194,19 @@
     ]
   },
   "next_step": {
-    "direction": "structured_event_delta_data_contract_before_external_retest",
+    "direction": "new_independent_forward_outcomes_or_exact_v3_core_before_any_structured_event_delta_retest",
     "allowed_now": {
       "scope": "data_collection_and_new_information_design_only",
       "required_material_change": [
-        "structured_event_surprise_or_licensed_content_with_numeric_context",
+        "structured_event_revision_or_realization_surprise_with_new_unseen_outcomes",
         "full_v3_core_score_residual_entry",
         "new_independent_time_period"
       ],
       "forbidden_action": "rerun_same_window_weight_window_regularization_or_model_scan"
     },
     "sequence": [
-      "qualify_structured_event_magnitude_or_full_v3_residual_entry",
-      "accumulate_new_independent_outcomes",
+      "retain_the_qualified_structured_event_PIT_data_layer_without_strategy_activation",
+      "accumulate_new_independent_outcomes_after_2026_08_07",
       "pre_register_a_non_reused_test",
       "retain_lambda_zero_until_validation_and_final_are_both_stable"
     ],
@@ -195,9 +227,10 @@
     "retired_detail": "git_history_only"
   },
   "last_verified_baseline": {
-    "source_commit_before_cleanup": "c4b69867657383b9bd8b9413a288abb556c50201",
-    "default_fast_suite": "1350_passed_181_deselected_6_subtests_passed",
+    "source_commit_before_tushare_structured_event_repair": "cab027cacf246b156d6738a41649f71b9e4d680b",
+    "default_fast_suite": "1292_passed_181_deselected_6_subtests_passed",
     "policy_audit": "pass",
+    "ruff_changed_files": "pass",
     "origin_main_at_source_commit": true
   }
 }

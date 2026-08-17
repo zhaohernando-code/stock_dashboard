@@ -39,6 +39,21 @@
       "observed_to": "2026-08-14",
       "claim_ceiling": "offline_mechanism_research_not_account_eligible_historical_replay",
       "known_gap": "historical_st_status_is_not_point_in_time"
+    },
+    {
+      "path": "data/research_validation_forward_20260808/external/tushare-structured-events",
+      "role": "reusable_personal_structured_event_raw_silver_pit_replay",
+      "materialization": "local_ignored_research_artifact_not_git_tracked",
+      "plan_id": "tushare-structured-events-9de1b510de33c04106d65173",
+      "plan_sha256": "43f94eda7dfe9cf96bcc5f48bc5a5fc5f9203149eb9a45f46e651afa840b2e17",
+      "manifest_scope_digest": "54a3b4df93de0d1d8434d3b30e8762c8e2f9aacaa444bedf3710d0efb16db6d5",
+      "retained_event_rows": 31197,
+      "observed_from": "2023-06-13",
+      "observed_to": "2026-08-14",
+      "logical_root_bytes": 175409126,
+      "allocated_root_kib": 396200,
+      "claim_ceiling": "provisional_structured_event_research_input_not_exact_v3_backtest",
+      "known_gap": "provider_revision_id_and_intraday_publish_time_unavailable"
     }
   ],
   "production_impact": {

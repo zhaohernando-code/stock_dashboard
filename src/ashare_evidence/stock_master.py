@@ -1,23 +1,21 @@
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import date
 from functools import lru_cache
 from typing import Any
-from urllib import error, request
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ashare_evidence.akshare_timeout import call_akshare_function
-from ashare_evidence.http_client import urlopen
 from ashare_evidence.models import ProviderCredential
+from ashare_evidence.tushare_transport import DEFAULT_TUSHARE_BASE_URL
+from ashare_evidence.tushare_transport import post_tushare as _post_tushare
 
 TUSHARE_STOCK_BASIC_FIELDS = "ts_code,symbol,name,industry,list_date"
-DEFAULT_TUSHARE_BASE_URL = "http://api.tushare.pro"
 DEFAULT_AKSHARE_TIMEOUT_SECONDS = 5
 
 
@@ -266,39 +264,6 @@ def _query_akshare_stock_basic(symbol: str) -> dict[str, Any] | None:
         "industry": industry,
         "list_date": listed_date,
     }
-
-
-def _post_tushare(
-    *,
-    base_url: str,
-    token: str,
-    api_name: str,
-    params: dict[str, Any],
-    fields: str,
-) -> dict[str, Any] | None:
-    payload = {
-        "api_name": api_name,
-        "token": token,
-        "params": params,
-        "fields": fields,
-    }
-    req = request.Request(
-        url=base_url.rstrip("/"),
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urlopen(req, timeout=5) as response:
-            body = response.read()
-    except (error.URLError, TimeoutError, OSError, ValueError):
-        return None
-
-    try:
-        parsed = json.loads(body.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    return parsed if isinstance(parsed, dict) else None
 
 
 def _first_row(payload: dict[str, Any] | None) -> dict[str, Any] | None:

@@ -1,28 +1,26 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 from typing import Any
-from urllib import error, parse, request
+from urllib import parse
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ashare_evidence.akshare_timeout import call_akshare_function, call_module_function_with_timeout
 from ashare_evidence.analysis_enrichment import (
-    ANNOUNCEMENT_PDF_TIMEOUT,
     _CNINFO_CONTENT_RE as _ANALYSIS_ENRICHMENT_CNINFO_CONTENT_RE,
 )
 from ashare_evidence.analysis_enrichment import (
     _HTML_TAG as _ANALYSIS_ENRICHMENT_HTML_TAG,
 )
 from ashare_evidence.analysis_enrichment import (
+    ANNOUNCEMENT_PDF_TIMEOUT,
     compute_financial_trends,
     enrich_with_llm_analysis,
 )
-from ashare_evidence.akshare_timeout import call_akshare_function, call_module_function_with_timeout
-from ashare_evidence.http_client import urlopen
 from ashare_evidence.lineage import build_lineage
 from ashare_evidence.market_rules import board_rule
 from ashare_evidence.models import ProviderCredential, Recommendation, Stock
@@ -33,8 +31,9 @@ from ashare_evidence.services import ingest_bundle
 from ashare_evidence.signal_engine import build_signal_artifacts
 from ashare_evidence.stock_master import DEFAULT_AKSHARE_TIMEOUT_SECONDS, StockProfileResolution, resolve_stock_profile
 from ashare_evidence.symbols import normalize_symbol
+from ashare_evidence.tushare_transport import DEFAULT_TUSHARE_BASE_URL
+from ashare_evidence.tushare_transport import post_tushare as _post_tushare
 
-DEFAULT_TUSHARE_BASE_URL = "http://api.tushare.pro"
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 DAILY_LOOKBACK_DAYS = PHASE5_MARKET_HISTORY_LOOKBACK_DAYS
 ANNOUNCEMENT_LOOKBACK_DAYS = 30
@@ -147,38 +146,6 @@ def _provider_credential(session: Session, provider_name: str) -> ProviderCreden
             ProviderCredential.enabled.is_(True),
         )
     )
-
-def _post_tushare(
-    *,
-    base_url: str,
-    token: str,
-    api_name: str,
-    params: dict[str, Any],
-    fields: str,
-) -> dict[str, Any] | None:
-    payload = {
-        "api_name": api_name,
-        "token": token,
-        "params": params,
-        "fields": fields,
-    }
-    req = request.Request(
-        url=base_url.rstrip("/"),
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urlopen(req, timeout=8) as response:
-            body = response.read()
-    except (error.URLError, TimeoutError, OSError, ValueError):
-        return None
-
-    try:
-        parsed = json.loads(body.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    return parsed if isinstance(parsed, dict) else None
 
 def _tushare_rows(
     session: Session,
