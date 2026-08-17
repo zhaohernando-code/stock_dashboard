@@ -1,0 +1,253 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "V3 外部信息 PIT 回测准入检查",
+    "generatedAt": "2026-08-17T16:51:37+08:00",
+    "cards": [],
+    "charts": [
+      {
+        "id": "event_reach_chart",
+        "title": "候选行的公告事件可达率",
+        "subtitle": "共同窗口 28,049 条候选；事件必须在信号日 23:59:59 前可用",
+        "type": "bar",
+        "dataset": "event_reach",
+        "sourceId": "event_reach_query",
+        "encodings": {
+          "x": {"field": "lookback_window", "type": "nominal", "label": "回看窗口"},
+          "y": {"field": "candidate_hit_rate", "type": "quantitative", "label": "有至少一条公告的候选占比"},
+          "tooltip": [
+            {"field": "candidate_hit_rows", "type": "quantitative", "label": "命中候选行"},
+            {"field": "candidate_rows", "type": "quantitative", "label": "候选行分母"},
+            {"field": "cutoff_rule", "type": "nominal", "label": "时间规则"}
+          ]
+        }
+      }
+    ],
+    "tables": [
+      {
+        "id": "channel_readiness_table",
+        "title": "各数据通道当前可用层级",
+        "subtitle": "研究级可用不等于 V3 或生产级准入",
+        "dataset": "channel_readiness",
+        "sourceId": "channel_readiness_query",
+        "defaultSort": {"field": "component", "direction": "asc"},
+        "columns": [
+          {"field": "component", "label": "组件", "type": "text"},
+          {"field": "status", "label": "状态", "type": "text"},
+          {"field": "research_use", "label": "当前允许用途", "type": "text"},
+          {"field": "blocker", "label": "主要阻塞", "type": "text"}
+        ]
+      },
+      {
+        "id": "coverage_table",
+        "title": "共同窗口的数据覆盖与唯一性",
+        "subtitle": "共同窗口为 2023-07-13 至 2026-05-26；所有数值来自离线复算",
+        "dataset": "coverage",
+        "sourceId": "coverage_query",
+        "defaultSort": {"field": "dataset", "direction": "asc"},
+        "columns": [
+          {"field": "dataset", "label": "数据集", "type": "text"},
+          {"field": "record_count", "label": "记录数", "format": "number"},
+          {"field": "coverage_unit", "label": "覆盖单位", "type": "text"},
+          {"field": "coverage_value", "label": "覆盖量", "format": "number"},
+          {"field": "duplicate_keys", "label": "重复键", "format": "number"},
+          {"field": "note", "label": "说明", "type": "text"}
+        ]
+      },
+      {
+        "id": "segment_table",
+        "title": "预留时序分段仍有足够候选与标签",
+        "subtitle": "标签完成率约 93%；这只证明样本量，不证明外部信息有效",
+        "dataset": "segments",
+        "sourceId": "segment_query",
+        "defaultSort": {"field": "segment", "direction": "asc"},
+        "columns": [
+          {"field": "segment", "label": "分段", "type": "text"},
+          {"field": "candidate_rows", "label": "候选行", "format": "number"},
+          {"field": "candidate_days", "label": "候选日", "format": "number"},
+          {"field": "candidate_symbols", "label": "股票数", "format": "number"},
+          {"field": "completed_labels", "label": "已完成标签", "format": "number"},
+          {"field": "label_completion_rate", "label": "标签完成率", "format": "percent"}
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "id": "readiness_summary",
+        "label": "外部信息 PIT 准入复算摘要",
+        "path": "docs/analysis/external_context_pit_readiness_2026-08-17/summary.json"
+      },
+      {
+        "id": "readiness_notebook",
+        "label": "可复跑数据质量 notebook",
+        "path": "docs/analysis/external_context_pit_readiness_2026-08-17/external_context_pit_readiness.ipynb"
+      },
+      {
+        "id": "event_reach_query",
+        "label": "公告事件可达率查询",
+        "path": "docs/analysis/external_context_pit_readiness_2026-08-17/summary.json",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "WITH s AS (SELECT * FROM read_json_auto('docs/analysis/external_context_pit_readiness_2026-08-17/summary.json')) SELECT '此前 1 个自然日' AS lookback_window, 1 AS lookback_days, event_profile.candidate_row_event_hit_rates.prior_1_calendar_days AS candidate_hit_rate, ROUND(event_profile.candidate_row_event_hit_rates.prior_1_calendar_days * candidate_profile.overlap_rows) AS candidate_hit_rows, candidate_profile.overlap_rows AS candidate_rows, 'available_at <= signal_day 23:59:59 Asia/Shanghai' AS cutoff_rule FROM s UNION ALL SELECT '此前 5 个自然日', 5, event_profile.candidate_row_event_hit_rates.prior_5_calendar_days, ROUND(event_profile.candidate_row_event_hit_rates.prior_5_calendar_days * candidate_profile.overlap_rows), candidate_profile.overlap_rows, 'available_at <= signal_day 23:59:59 Asia/Shanghai' FROM s UNION ALL SELECT '此前 20 个自然日', 20, event_profile.candidate_row_event_hit_rates.prior_20_calendar_days, ROUND(event_profile.candidate_row_event_hit_rates.prior_20_calendar_days * candidate_profile.overlap_rows), candidate_profile.overlap_rows, 'available_at <= signal_day 23:59:59 Asia/Shanghai' FROM s ORDER BY lookback_days",
+          "description": "Reshapes the independently recomputed PIT event hit rates for the report chart.",
+          "executed_at": "2026-08-17T16:51:37+08:00"
+        }
+      },
+      {
+        "id": "channel_readiness_query",
+        "label": "数据通道准入状态查询",
+        "path": "docs/analysis/external_context_pit_readiness_2026-08-17/summary.json",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT p.component, p.status, p.research_use, p.blocker FROM read_json_auto('docs/analysis/external_context_pit_readiness_2026-08-17/summary.json') AS r, UNNEST(r.channel_readiness) AS t(p)",
+          "description": "Reads the independently recomputed channel-readiness rows.",
+          "executed_at": "2026-08-17T16:51:37+08:00"
+        }
+      },
+      {
+        "id": "coverage_query",
+        "label": "共同窗口覆盖查询",
+        "path": "docs/analysis/external_context_pit_readiness_2026-08-17/summary.json",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "WITH s AS (SELECT * FROM read_json_auto('docs/analysis/external_context_pit_readiness_2026-08-17/summary.json')) SELECT '共同窗口机会候选' AS dataset, candidate_profile.overlap_rows AS record_count, '候选股票' AS coverage_unit, candidate_profile.overlap_symbols AS coverage_value, candidate_profile.duplicate_candidate_keys AS duplicate_keys, '692 个有候选交易日' AS note FROM s UNION ALL SELECT '已完成 5 日标签', candidate_profile.overlap_completed_labels, '标签完成率', candidate_profile.overlap_completed_labels::DOUBLE / candidate_profile.overlap_rows, 0, '未完成标签不得填 0' FROM s UNION ALL SELECT '全球市场', market_profile.global_records, '指数', market_profile.global_instruments, market_profile.global_duplicate_keys, '共同窗口 692/692 日可构造状态' FROM s UNION ALL SELECT '宏观市场', market_profile.macro_records, '序列', market_profile.macro_series, market_profile.macro_duplicate_keys, '共同窗口 692/692 日可构造状态' FROM s UNION ALL SELECT '申万一级行业状态', market_profile.sector_records, '行业', market_profile.sector_series, market_profile.sector_duplicate_keys, '缺 PIT 个股归属连接' FROM s UNION ALL SELECT '巨潮筛选公告', event_profile.curated_events, '有事件股票', event_profile.curated_symbols, event_profile.duplicate_event_versions, '候选股票全部在采集计划内' FROM s",
+          "description": "Builds the compact coverage table from the recomputed summary fields.",
+          "executed_at": "2026-08-17T16:51:37+08:00"
+        }
+      },
+      {
+        "id": "segment_query",
+        "label": "时序分段标签覆盖查询",
+        "path": "docs/analysis/external_context_pit_readiness_2026-08-17/summary.json",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT p.segment, p.candidate_rows, p.candidate_days, p.candidate_symbols, p.completed_labels, p.label_completion_rate FROM read_json_auto('docs/analysis/external_context_pit_readiness_2026-08-17/summary.json') AS r, UNNEST(r.segment_profile) AS t(p)",
+          "description": "Reads the frozen tuning, validation and final segment coverage rows.",
+          "executed_at": "2026-08-17T16:51:37+08:00"
+        }
+      },
+      {
+        "id": "research_ledger",
+        "label": "V3 策略研究结论台账",
+        "path": "docs/research/STRATEGY_RESEARCH_LEDGER.md"
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# V3 外部信息 PIT 回测准入检查\n\n**结论：外部数据不再是全阻塞，但当前只能启动机会头机制筛选，不能称为 V3 权重回测。V3 生产权重继续为 `lambda=0`。**"
+      },
+      {
+        "id": "technical_summary",
+        "type": "markdown",
+        "sourceId": "readiness_summary",
+        "body": "## 已具备两条研究通道，但精确 V3 连接仍缺两块关键数据\n\n共同窗口内有 28,049 条机会候选、26,144 条已完成 5 日标签、4 个全球指数、7 个宏观序列和 155,132 条经筛选巨潮公告。候选键、市场序列键和公告事件版本均未发现重复，公告必填 PIT 字段缺失为 0。\n\n但这 28,049 条数据是热点机会头候选，不是完整 V3 候选矩阵：`core_score` 行数为 0，`v3_soft_quality` 非零仅 36 条。31 条申万一级行业状态虽完整，股票到行业却没有历史生效区间。因此现在可以检验“外部信息是否改善机会头辨别”，不能宣称“V3 已被优化”。"
+      },
+      {
+        "id": "channel_heading",
+        "type": "markdown",
+        "sourceId": "readiness_summary",
+        "body": "## 全球/宏观与官方事件可做 provisional 筛选，板块和专业新闻仍阻塞\n\n这里的 `provisional_ready` 只允许离线机制研究。缺少供应商 revision/vintage、独立双源或历史修订链的渠道仍不得晋级生产。"
+      },
+      {"id": "channel_table", "type": "table", "tableId": "channel_readiness_table"},
+      {
+        "id": "coverage_heading",
+        "type": "markdown",
+        "sourceId": "readiness_summary",
+        "body": "## 公告覆盖不是稀疏小样本，真正缺口是连接语义\n\n共同窗口的 2,788 只候选股票全部包含在巨潮采集计划内；约 64.86% 的候选行在此前 20 个自然日内至少有一条保留公告，5 日内为 21.00%，1 日内为 4.37%。这足以区分“无事件”与“渠道没覆盖”，但标题与元数据不能直接等同于利好或利空。"
+      },
+      {"id": "event_reach_chart_block", "type": "chart", "chartId": "event_reach_chart"},
+      {"id": "coverage_table_block", "type": "table", "tableId": "coverage_table"},
+      {
+        "id": "scope_definitions",
+        "type": "markdown",
+        "sourceId": "readiness_notebook",
+        "body": "## 范围与定义\n\n分析粒度为 `(signal_day, symbol)`。共同窗口从候选集首日 2023-07-13 起，到完整巨潮回补末日 2026-05-26 止。决策截止统一为信号日 `23:59:59 Asia/Shanghai`；任何记录必须满足 `available_at <= decision_cutoff`。巨潮同日公告采用保守日末可用时间，因此不会进入同日决策。\n\n750 个审计交易日中有 749 日产生候选；2024-10-09 的规则合格候选为 0，这不是缺分区。"
+      },
+      {
+        "id": "methodology",
+        "type": "markdown",
+        "sourceId": "readiness_notebook",
+        "body": "## 方法\n\nnotebook 直接读取保留候选集、全球/宏观/板块紧凑快照、运行时只读数据库和 155,518 份巨潮 PIT 记录；应用冻结的 386 条相关性排除后得到 155,132 条事件。检查内容包括主键唯一性、必填字段、时区、来源覆盖、决策时点可用性、连接分母、标签完成率、观察值年龄和存储占用。运行中没有网络访问，也没有读取未来标签来决定准入状态。"
+      },
+      {
+        "id": "segment_heading",
+        "type": "markdown",
+        "sourceId": "readiness_summary",
+        "body": "## 原有 tuning / validation / final 时间切分可以继续复用\n\n三个分段都有超过 3,600 条已完成标签，且标签完成率均约 93%。未完成标签主要是未来窗口尚未完成或下一共同交易日不可成交；后续账户回放必须继续按执行状态处理，不能把缺失标签填成 0。"
+      },
+      {"id": "segment_table_block", "type": "table", "tableId": "segment_table"},
+      {
+        "id": "limitations",
+        "type": "markdown",
+        "sourceId": "readiness_summary",
+        "body": "## 三项限制会改变结果能否解释为 V3 增量\n\n第一，候选集没有 `core_score`，只能以热点机会 `prefilter_score` 做股票路径对照。第二，当前股票行业标签虽然可静态映射到申万一级的比例为 99.93%，但没有 `effective_from/effective_to`；将它回填三年会违反 PIT 合同。第三，全球、宏观和板块快照都没有供应商 revision/vintage，巨潮也没有完整历史修订链，所以即使筛选结果为正，也只能进入下一轮数据补强，不能晋级生产。\n\n外部 artifact 的逻辑内容约 1.05 GiB，但 494,312 个小文件实际占盘约 2.24 GiB；这是此前用户已接受的不压缩例外，报告没有再复制这些数据。"
+      },
+      {
+        "id": "next_steps",
+        "type": "markdown",
+        "sourceId": "readiness_summary",
+        "body": "## 下一步只跑四臂机会头机制筛选\n\n在共同窗口内预注册四组：股票路径对照、仅全球/宏观、仅官方个股事件、全球/宏观加官方事件。股票路径仍是主信号；正面事件不得单独创建买入，全球状态只影响机会头预算，个股事件只提供有界残差。\n\n若外部增量在 validation 与 final 都稳定，下一步才重建完整候选 `core_score`，补带生效区间的 PIT 板块归属，并冻结新鲜度/缺失值合同，随后进入真正的 V3 残差权重检验。若四臂筛选仍无增量，就停止，不再调权重。"
+      },
+      {
+        "id": "open_questions",
+        "type": "markdown",
+        "body": "## 尚未回答的问题\n\n本轮没有跑收益回测，因此还不知道全球/公告是否真正改善排序，也没有验证板块与专业新闻。需要通过下一轮四臂消融回答：新增信息是否在未见时段提升辨别力、提升是否只由少数事件驱动、以及效果是否能在冻结执行账本下保留。"
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-17T16:51:37+08:00",
+    "status": "partial",
+    "datasets": {
+      "channel_readiness": [
+        {"order": 1, "component": "机会候选与股票路径", "status": "partial", "research_use": "可做机会头机制筛选", "blocker": "无完整 V3 core_score；历史 ST 非 PIT"},
+        {"order": 2, "component": "全球 / 宏观状态", "status": "provisional_ready", "research_use": "可做共同窗口风险预算消融", "blocker": "单一低成本供应链且无 revision/vintage"},
+        {"order": 3, "component": "巨潮个股官方事件", "status": "provisional_ready", "research_use": "可做共同窗口个股事件残差筛选", "blocker": "历史修订链不完整；仅标题与元数据"},
+        {"order": 4, "component": "申万板块状态与个股归属", "status": "blocked", "research_use": "板块指数本身可回放", "blocker": "缺股票→板块 PIT membership"},
+        {"order": 5, "component": "专业新闻", "status": "blocked", "research_use": "无历史样本", "blocker": "没有合格历史 feed / 摘要 / 修订链"},
+        {"order": 6, "component": "完整 V3 外部权重回测", "status": "blocked", "research_use": "不得宣称已启动", "blocker": "core_score、PIT 板块归属、独立新闻源与生产级 revision 未齐"}
+      ],
+      "coverage": [
+        {"order": 1, "dataset": "共同窗口机会候选", "record_count": 28049, "coverage_unit": "候选股票", "coverage_value": 2788, "duplicate_keys": 0, "note": "692 个有候选交易日"},
+        {"order": 2, "dataset": "已完成 5 日标签", "record_count": 26144, "coverage_unit": "标签完成率", "coverage_value": 0.93208314, "duplicate_keys": 0, "note": "未完成标签不得填 0"},
+        {"order": 3, "dataset": "全球市场", "record_count": 3246, "coverage_unit": "指数", "coverage_value": 4, "duplicate_keys": 0, "note": "共同窗口 692/692 日可构造状态"},
+        {"order": 4, "dataset": "宏观市场", "record_count": 5912, "coverage_unit": "序列", "coverage_value": 7, "duplicate_keys": 0, "note": "共同窗口 692/692 日可构造状态"},
+        {"order": 5, "dataset": "申万一级行业状态", "record_count": 24583, "coverage_unit": "行业", "coverage_value": 31, "duplicate_keys": 0, "note": "缺 PIT 个股归属连接"},
+        {"order": 6, "dataset": "巨潮筛选公告", "record_count": 155132, "coverage_unit": "有事件股票", "coverage_value": 3007, "duplicate_keys": 0, "note": "候选股票全部在采集计划内"}
+      ],
+      "event_reach": [
+        {"order": 1, "lookback_window": "此前 1 个自然日", "lookback_days": 1, "candidate_hit_rate": 0.0436735713, "candidate_hit_rows": 1225, "candidate_rows": 28049, "cutoff_rule": "available_at <= signal_day 23:59:59 Asia/Shanghai"},
+        {"order": 2, "lookback_window": "此前 5 个自然日", "lookback_days": 5, "candidate_hit_rate": 0.2100253128, "candidate_hit_rows": 5891, "candidate_rows": 28049, "cutoff_rule": "available_at <= signal_day 23:59:59 Asia/Shanghai"},
+        {"order": 3, "lookback_window": "此前 20 个自然日", "lookback_days": 20, "candidate_hit_rate": 0.6486149239, "candidate_hit_rows": 18193, "candidate_rows": 28049, "cutoff_rule": "available_at <= signal_day 23:59:59 Asia/Shanghai"}
+      ],
+      "segments": [
+        {"order": 1, "segment": "tuning", "candidate_rows": 18433, "candidate_days": 450, "candidate_symbols": 2611, "completed_labels": 17200, "label_completion_rate": 0.9331090978},
+        {"order": 2, "segment": "validation", "candidate_rows": 3955, "candidate_days": 125, "candidate_symbols": 1518, "completed_labels": 3678, "label_completion_rate": 0.9299620733},
+        {"order": 3, "segment": "final", "candidate_rows": 5661, "candidate_days": 117, "candidate_symbols": 1834, "completed_labels": 5266, "label_completion_rate": 0.9302243420}
+      ]
+    },
+    "accessIssues": [
+      {"id": "exact_v3_core_score_missing", "dataset": "channel_readiness", "message": "保留机会候选没有完整 V3 core_score，禁止把机会头筛选称为 V3 权重回测。"},
+      {"id": "pit_sector_membership_missing", "dataset": "channel_readiness", "message": "股票到申万行业只有当前静态映射，没有历史生效区间，板块通道保持 blocked。"},
+      {"id": "professional_news_history_missing", "dataset": "channel_readiness", "message": "当前没有合格专业新闻历史 feed，专业新闻通道保持 blocked。"}
+    ]
+  },
+  "sources": [
+    {"id": "readiness_summary", "label": "外部信息 PIT 准入复算摘要", "path": "docs/analysis/external_context_pit_readiness_2026-08-17/summary.json"},
+    {"id": "readiness_notebook", "label": "可复跑数据质量 notebook", "path": "docs/analysis/external_context_pit_readiness_2026-08-17/external_context_pit_readiness.ipynb"},
+    {"id": "event_reach_query", "label": "公告事件可达率查询", "path": "docs/analysis/external_context_pit_readiness_2026-08-17/summary.json", "query": {"engine": "duckdb", "language": "sql", "sql": "WITH s AS (SELECT * FROM read_json_auto('docs/analysis/external_context_pit_readiness_2026-08-17/summary.json')) SELECT '此前 1 个自然日' AS lookback_window, 1 AS lookback_days, event_profile.candidate_row_event_hit_rates.prior_1_calendar_days AS candidate_hit_rate, ROUND(event_profile.candidate_row_event_hit_rates.prior_1_calendar_days * candidate_profile.overlap_rows) AS candidate_hit_rows, candidate_profile.overlap_rows AS candidate_rows, 'available_at <= signal_day 23:59:59 Asia/Shanghai' AS cutoff_rule FROM s UNION ALL SELECT '此前 5 个自然日', 5, event_profile.candidate_row_event_hit_rates.prior_5_calendar_days, ROUND(event_profile.candidate_row_event_hit_rates.prior_5_calendar_days * candidate_profile.overlap_rows), candidate_profile.overlap_rows, 'available_at <= signal_day 23:59:59 Asia/Shanghai' FROM s UNION ALL SELECT '此前 20 个自然日', 20, event_profile.candidate_row_event_hit_rates.prior_20_calendar_days, ROUND(event_profile.candidate_row_event_hit_rates.prior_20_calendar_days * candidate_profile.overlap_rows), candidate_profile.overlap_rows, 'available_at <= signal_day 23:59:59 Asia/Shanghai' FROM s ORDER BY lookback_days", "description": "Reshapes the independently recomputed PIT event hit rates for the report chart.", "executed_at": "2026-08-17T16:51:37+08:00"}},
+    {"id": "channel_readiness_query", "label": "数据通道准入状态查询", "path": "docs/analysis/external_context_pit_readiness_2026-08-17/summary.json", "query": {"engine": "duckdb", "language": "sql", "sql": "SELECT p.component, p.status, p.research_use, p.blocker FROM read_json_auto('docs/analysis/external_context_pit_readiness_2026-08-17/summary.json') AS r, UNNEST(r.channel_readiness) AS t(p)", "description": "Reads the independently recomputed channel-readiness rows.", "executed_at": "2026-08-17T16:51:37+08:00"}},
+    {"id": "coverage_query", "label": "共同窗口覆盖查询", "path": "docs/analysis/external_context_pit_readiness_2026-08-17/summary.json", "query": {"engine": "duckdb", "language": "sql", "sql": "WITH s AS (SELECT * FROM read_json_auto('docs/analysis/external_context_pit_readiness_2026-08-17/summary.json')) SELECT '共同窗口机会候选' AS dataset, candidate_profile.overlap_rows AS record_count, '候选股票' AS coverage_unit, candidate_profile.overlap_symbols AS coverage_value, candidate_profile.duplicate_candidate_keys AS duplicate_keys, '692 个有候选交易日' AS note FROM s UNION ALL SELECT '已完成 5 日标签', candidate_profile.overlap_completed_labels, '标签完成率', candidate_profile.overlap_completed_labels::DOUBLE / candidate_profile.overlap_rows, 0, '未完成标签不得填 0' FROM s UNION ALL SELECT '全球市场', market_profile.global_records, '指数', market_profile.global_instruments, market_profile.global_duplicate_keys, '共同窗口 692/692 日可构造状态' FROM s UNION ALL SELECT '宏观市场', market_profile.macro_records, '序列', market_profile.macro_series, market_profile.macro_duplicate_keys, '共同窗口 692/692 日可构造状态' FROM s UNION ALL SELECT '申万一级行业状态', market_profile.sector_records, '行业', market_profile.sector_series, market_profile.sector_duplicate_keys, '缺 PIT 个股归属连接' FROM s UNION ALL SELECT '巨潮筛选公告', event_profile.curated_events, '有事件股票', event_profile.curated_symbols, event_profile.duplicate_event_versions, '候选股票全部在采集计划内' FROM s", "description": "Builds the compact coverage table from the recomputed summary fields.", "executed_at": "2026-08-17T16:51:37+08:00"}},
+    {"id": "segment_query", "label": "时序分段标签覆盖查询", "path": "docs/analysis/external_context_pit_readiness_2026-08-17/summary.json", "query": {"engine": "duckdb", "language": "sql", "sql": "SELECT p.segment, p.candidate_rows, p.candidate_days, p.candidate_symbols, p.completed_labels, p.label_completion_rate FROM read_json_auto('docs/analysis/external_context_pit_readiness_2026-08-17/summary.json') AS r, UNNEST(r.segment_profile) AS t(p)", "description": "Reads the frozen tuning, validation and final segment coverage rows.", "executed_at": "2026-08-17T16:51:37+08:00"}},
+    {"id": "research_ledger", "label": "V3 策略研究结论台账", "path": "docs/research/STRATEGY_RESEARCH_LEDGER.md"}
+  ]
+}

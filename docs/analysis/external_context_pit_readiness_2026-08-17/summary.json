@@ -1,0 +1,179 @@
+{
+  "artifact_type": "external_context_pit_readiness_audit",
+  "schema_version": "external_context_pit_readiness_audit.v1",
+  "as_of": "2026-08-17",
+  "decision_cutoff_convention": "signal_day_23_59_59_asia_shanghai",
+  "network_used": false,
+  "v3_signal_changed": false,
+  "backtest_executed": false,
+  "overall_assessment": "partial_provisional_research_ready_not_v3_weight_backtest_ready",
+  "candidate_profile": {
+    "candidate_rows": 32028,
+    "duplicate_candidate_keys": 0,
+    "candidate_bearing_days": 749,
+    "audited_days": 750,
+    "zero_candidate_audit_days": [
+      "2024-10-09"
+    ],
+    "candidate_symbols": 2839,
+    "overlap_from": "2023-07-13",
+    "overlap_to": "2026-05-26",
+    "overlap_rows": 28049,
+    "overlap_days": 692,
+    "overlap_symbols": 2788,
+    "overlap_symbols_in_cninfo_plan": 2788,
+    "overlap_completed_labels": 26144,
+    "v3_soft_quality_nonzero_rows": 36,
+    "core_score_present_rows": 0,
+    "candidate_sector_field_rows": 0
+  },
+  "market_profile": {
+    "global_records": 3246,
+    "global_instruments": 4,
+    "global_duplicate_keys": 0,
+    "global_state_days_full": 749,
+    "global_state_days_overlap": 692,
+    "global_overlap_observation_age": {
+      "maximum_calendar_days": 5,
+      "p95_calendar_days": 3.0
+    },
+    "global_provider_revision_id_available": false,
+    "macro_records": 5912,
+    "macro_series": 7,
+    "macro_duplicate_keys": 0,
+    "macro_state_days_full": 749,
+    "macro_state_days_overlap": 692,
+    "macro_overlap_observation_age": {
+      "maximum_calendar_days": 11,
+      "p95_calendar_days": 4.0
+    },
+    "macro_provider_revision_id_available": false,
+    "sector_records": 24583,
+    "sector_series": 31,
+    "sector_duplicate_keys": 0,
+    "sector_provider_revision_id_available": false
+  },
+  "sector_join_profile": {
+    "runtime_membership_rows": 7,
+    "runtime_membership_stocks": 4,
+    "candidate_symbols_with_current_industry": 2839,
+    "current_static_sw_l1_mapping_rate": 0.9992955265938711,
+    "pit_effective_membership_available": false,
+    "why_blocked": "current stock profile has no historical effective_from/effective_to lineage"
+  },
+  "event_profile": {
+    "source_events": 155518,
+    "curated_events": 155132,
+    "curated_symbols": 3007,
+    "duplicate_event_versions": 0,
+    "missing_required_fields": {},
+    "category_counts": {
+      "capital_and_ownership": 57115,
+      "financial_performance_and_distribution": 48949,
+      "financing_and_mna": 13204,
+      "management_change": 3065,
+      "material_operations": 11615,
+      "risk_enforcement_and_correction": 21184
+    },
+    "candidate_row_event_hit_rates": {
+      "prior_1_calendar_days": 0.04367357125031195,
+      "prior_5_calendar_days": 0.21002531284537773,
+      "prior_20_calendar_days": 0.6486149238832044
+    },
+    "candidate_symbols_with_prior_20d_event": 2648
+  },
+  "segment_profile": [
+    {
+      "segment": "tuning",
+      "candidate_rows": 18433,
+      "candidate_days": 450,
+      "candidate_symbols": 2611,
+      "completed_labels": 17200,
+      "label_completion_rate": 0.9331090978137037
+    },
+    {
+      "segment": "validation",
+      "candidate_rows": 3955,
+      "candidate_days": 125,
+      "candidate_symbols": 1518,
+      "completed_labels": 3678,
+      "label_completion_rate": 0.9299620733249052
+    },
+    {
+      "segment": "final",
+      "candidate_rows": 5661,
+      "candidate_days": 117,
+      "candidate_symbols": 1834,
+      "completed_labels": 5266,
+      "label_completion_rate": 0.9302243419890479
+    }
+  ],
+  "storage_profile": {
+    "logical_bytes": 1130699345,
+    "allocated_bytes": 2408026112,
+    "file_count": 494312,
+    "user_exception": "uncompressed_small_file_layout_accepted_in_prior_turn"
+  },
+  "channel_readiness": [
+    {
+      "component": "机会候选与股票路径",
+      "status": "partial",
+      "research_use": "可做机会头机制筛选",
+      "blocker": "无完整 V3 core_score；历史 ST 非 PIT"
+    },
+    {
+      "component": "全球 / 宏观状态",
+      "status": "provisional_ready",
+      "research_use": "可做共同窗口风险预算消融",
+      "blocker": "单一低成本供应链且无 revision/vintage，不可晋级生产"
+    },
+    {
+      "component": "巨潮个股官方事件",
+      "status": "provisional_ready",
+      "research_use": "可做共同窗口个股事件残差筛选",
+      "blocker": "历史修订链不完整；仅标题与元数据"
+    },
+    {
+      "component": "申万板块状态与个股归属",
+      "status": "blocked",
+      "research_use": "板块指数本身可回放",
+      "blocker": "缺股票→板块 PIT membership，当前静态映射禁止历史回填"
+    },
+    {
+      "component": "专业新闻",
+      "status": "blocked",
+      "research_use": "无历史样本",
+      "blocker": "没有合格历史 feed / 摘要 / 修订链"
+    },
+    {
+      "component": "完整 V3 外部权重回测",
+      "status": "blocked",
+      "research_use": "不得宣称已启动",
+      "blocker": "core_score、PIT 板块归属、独立新闻源与生产级 revision 均未齐"
+    }
+  ],
+  "allowed_next_experiment": {
+    "scope": "opportunity_head_mechanism_screen_only",
+    "window": [
+      "2023-07-13",
+      "2026-05-26"
+    ],
+    "arms": [
+      "stock_path_control",
+      "global_macro_only",
+      "official_event_only",
+      "global_macro_plus_official_event"
+    ],
+    "forbidden_claims": [
+      "V3_improved",
+      "production_ready",
+      "sector_increment_validated",
+      "professional_news_validated"
+    ],
+    "must_precede_exact_v3_test": [
+      "materialize_full_candidate_core_score",
+      "acquire_or_construct_effective_dated_PIT_sector_membership",
+      "freeze_feature_freshness_and_missingness_contract"
+    ]
+  }
+}

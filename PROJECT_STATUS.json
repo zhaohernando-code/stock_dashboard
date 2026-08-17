@@ -2,7 +2,7 @@
   "project": "stock_dashboard",
   "status": "in_progress",
   "owner": "hernando_zhao",
-  "updated_at": "2026-08-17T23:30:00+08:00",
+  "updated_at": "2026-08-17T23:45:00+08:00",
   "current_phase": {
     "id": "phase-5",
     "label": "V3 true-forward validation and external-context evidence collection"
@@ -50,7 +50,7 @@
     "production_activation": false,
     "historical_replay_network_access": false,
     "pit_rule": "available_at <= decision_cutoff",
-    "storage_policy": "summaries_and_metadata_only_under_2_GiB",
+    "storage_policy": "logical_summary_payload_under_2_GiB_with_user_accepted_uncompressed_small_file_allocation_exception",
     "required_time_lineage": [
       "published_at",
       "first_seen_at",
@@ -58,7 +58,29 @@
       "revision_id_or_non_revision_declaration"
     ],
     "raw_normalized_pit_replay_contract_ready": true,
-    "provider_quality_and_revision_lineage_still_block_production": true
+    "provider_quality_and_revision_lineage_still_block_production": true,
+    "pit_readiness_audit": {
+      "report": "docs/analysis/external_context_pit_readiness_2026-08-17/report.html",
+      "notebook": "docs/analysis/external_context_pit_readiness_2026-08-17/external_context_pit_readiness.ipynb",
+      "status": "partial_provisional_research_ready_not_v3_weight_backtest_ready",
+      "common_window": [
+        "2023-07-13",
+        "2026-05-26"
+      ],
+      "candidate_rows": 28049,
+      "completed_labels": 26144,
+      "curated_cninfo_events": 155132,
+      "global_instruments": 4,
+      "macro_series": 7,
+      "allowed_now": "four_arm_opportunity_head_mechanism_screen",
+      "exact_v3_blockers": [
+        "full_candidate_core_score_missing",
+        "effective_dated_PIT_sector_membership_missing",
+        "professional_news_history_missing",
+        "production_grade_revision_lineage_missing"
+      ],
+      "backtest_executed": false
+    }
   },
   "research_closeout": {
     "status": "failed_engines_retired_reusable_inputs_retained",
@@ -78,6 +100,16 @@
   },
   "next_step": {
     "direction": "PIT sector_global_event_incremental_discrimination",
+    "allowed_now": {
+      "scope": "opportunity_head_mechanism_screen_only",
+      "arms": [
+        "stock_path_control",
+        "global_macro_only",
+        "official_event_only",
+        "global_macro_plus_official_event"
+      ],
+      "forbidden_claim": "V3_improved_or_production_ready"
+    },
     "sequence": [
       "qualify_stable_sources_and_time_lineage",
       "freeze_compact_replayable_sector_global_event_snapshots",
@@ -85,9 +117,10 @@
       "evaluate_zero_then_bounded_static_then_rule_dynamic_then_constrained_learned_weight",
       "use_new_independent_time_and_one_standard_error_smallest_weight_selection"
     ],
-    "blocked_until": [
+    "exact_v3_blocked_until": [
+      "full_candidate_core_score_is_materialized",
       "PIT_sector_membership_and_state_coverage_is_sufficient",
-      "event_relevance_and_revision_lineage_pass_quality_gate",
+      "feature_freshness_and_missingness_contract_is_frozen",
       "new_independent_outcomes_exist"
     ]
   },
