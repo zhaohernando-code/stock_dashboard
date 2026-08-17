@@ -10,6 +10,12 @@ from typing import Any
 from sqlalchemy import func, select
 
 from ashare_evidence.db import session_scope
+from ashare_evidence.external_shadow_control import (
+    ROUND75_ACTIVATION_DATE,
+    ROUND75_SHADOW_LABEL,
+    ROUND75_SHADOW_STRATEGY_ID,
+    validate_round75_signal_registry,
+)
 from ashare_evidence.models import MarketBar, Stock
 from ashare_evidence.rank5_forward_observation import (
     RANK5_FORWARD_BENCHMARK_SYMBOL,
@@ -24,12 +30,6 @@ from ashare_evidence.rolling_tranche_account_replay import (
     rank5_replacement_quality_rejection_reason,
 )
 from ashare_evidence.rolling_tranche_execution_contract import build_shortpick_v3_rolling_tranche_execution_contract
-from ashare_evidence.round75_shadow_tracking import (
-    ROUND75_ACTIVATION_DATE,
-    ROUND75_SHADOW_LABEL,
-    ROUND75_SHADOW_STRATEGY_ID,
-    validate_round75_signal_registry,
-)
 from ashare_evidence.shortpick_strategy_lab_read_model import (
     INITIAL_CASH_CNY,
     LEGACY_RANK45_REPLACEMENT_CONTROL_ID,

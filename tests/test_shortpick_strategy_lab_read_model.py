@@ -9,11 +9,11 @@ from pathlib import Path
 import pytest
 
 from ashare_evidence.db import init_database, session_scope
+from ashare_evidence.external_shadow_control import ROUND75_SHADOW_STRATEGY_ID
 from ashare_evidence.lineage import build_lineage
 from ashare_evidence.models import MarketBar, ShortpickCandidate, ShortpickExperimentRun, Stock
 from ashare_evidence.rolling_tranche_account_replay import project_shortpick_v3_initial_entry_orders
 from ashare_evidence.rolling_tranche_execution_contract import build_shortpick_v3_rolling_tranche_execution_contract
-from ashare_evidence.round75_shadow_tracking import ROUND75_SHADOW_STRATEGY_ID
 from ashare_evidence.schemas.shortpick import (
     ShortpickStrategyLabHistoricalReplayResponse,
     ShortpickStrategyLabPaperTrackingResponse,

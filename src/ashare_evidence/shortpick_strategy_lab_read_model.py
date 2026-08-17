@@ -6,12 +6,12 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from ashare_evidence.rank5_forward_observation import build_rank5_forward_observation_artifact
-from ashare_evidence.round75_shadow_tracking import (
+from ashare_evidence.external_shadow_control import (
     ROUND75_ACTIVATION_DATE,
     ROUND75_SHADOW_LABEL,
     ROUND75_SHADOW_STRATEGY_ID,
 )
+from ashare_evidence.rank5_forward_observation import build_rank5_forward_observation_artifact
 
 STRATEGY_LAB_SCHEMA_VERSION = "shortpick_strategy_lab.v1"
 PAPER_STATE_SCHEMA_VERSION = "shortpick_strategy_lab_paper_state.v1"

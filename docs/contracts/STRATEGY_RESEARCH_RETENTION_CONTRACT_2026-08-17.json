@@ -1,0 +1,48 @@
+{
+  "artifact_type": "strategy_research_retention_contract",
+  "schema_version": "strategy_research_retention_contract.v1",
+  "as_of": "2026-08-17",
+  "owner": "hernando_zhao",
+  "policy": {
+    "failed_implementation_retention": "git_history_only",
+    "failed_conclusion_authority": "docs/research/STRATEGY_RESEARCH_LEDGER.md",
+    "detailed_prediction_retention": "delete_after_closeout_unless_required_by_active_control_or_reusable_input",
+    "historical_replay_network_access": false,
+    "pit_rule": "available_at <= decision_cutoff"
+  },
+  "retained_assets": [
+    {
+      "path": "data/shortpick-round75-shadow-signals.json",
+      "role": "active_append_only_external_shadow_signal_registry",
+      "mutability": "append_only_active",
+      "sha256_as_of_2026_08_17": "66aefad60616433e2b0b748b1e98b004241aacea0f15f59f01dcb9ac86e648fe",
+      "claim_ceiling": "historical_backfill_plus_true_forward_shadow_not_v3_change"
+    },
+    {
+      "path": "data/shortpick-round75-shadow-tracking.json",
+      "role": "active_same_window_external_shadow_comparison_backfill",
+      "mutability": "frozen_historical_backfill_plus_explicit_reconstruction_metadata",
+      "sha256_as_of_2026_08_17": "64197dd9f73efa07fd8fd06154eaf27515b021c0dfa3384ac8dbe98eead286e7",
+      "claim_ceiling": "retrospective_pit_backfill_not_true_forward"
+    },
+    {
+      "path": "docs/research/data/ALL_UNIVERSE_OPPORTUNITY_DATASET_COVERAGE_CORRECTED_V2_2026-08-17.json.gz",
+      "role": "reusable_full_universe_hotspot_opportunity_candidates",
+      "sha256": "32f2aa4e58efb04c474ef8249f485a5664d0f5ab13859f8f682ca04a63598ba9",
+      "artifact_id": "all-universe-opportunity-dataset-cce129757b37e949",
+      "content_digest": "cce129757b37e949005e7162672dbf03c6cbf52d1fae14750393765e4efaf54d",
+      "candidate_rows": 32028,
+      "signal_days": 750,
+      "observed_from": "2023-07-13",
+      "observed_to": "2026-08-14",
+      "claim_ceiling": "offline_mechanism_research_not_account_eligible_historical_replay",
+      "known_gap": "historical_st_status_is_not_point_in_time"
+    }
+  ],
+  "production_impact": {
+    "v3_signal_changed": false,
+    "paper_control_removed": false,
+    "live_order_changed": false,
+    "runtime_publish_required": false
+  }
+}

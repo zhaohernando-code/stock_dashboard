@@ -1,7 +1,7 @@
 {
   "artifact_type": "round75_shadow_forward_control_contract",
   "schema_version": "round75_shadow_forward_control_contract.v1",
-  "status": "active_shadow_control_not_v3_replacement",
+  "status": "active_same_window_external_shadow_control_not_v3_replacement",
   "owner": "hernando_zhao",
   "frozen_at": "2026-08-08T14:55:00+08:00",
   "strategy_id": "round75_exact_share_core_veto_exit_extension_shadow_v1",
@@ -11,7 +11,8 @@
     "to": "2026-08-07",
     "evidence_basis": "retrospective_pit_backfill",
     "counts_toward_true_forward": false,
-    "source_result": "docs/research/ROUND75_PERSONAL_EXACT_SHARE_CORE_VETO_FORWARD_RESULT_2026-08-08.json",
+    "source_result_retention": "retired_to_git_history_after_research_closeout",
+    "source_result_commit": "4127600",
     "source_execution_snapshot_id": "shortpick-v3-execution-snapshot-dd04af2f51a1c038"
   },
   "true_forward": {
@@ -23,6 +24,13 @@
     "external_buy_allowed": false,
     "external_action": "extend_existing_position_exit_horizon_only",
     "daily_account_isolated_from_v3": true
+  },
+  "comparison_contract": {
+    "visible_from": "2026-07-08",
+    "initial_cash_cny": 200000,
+    "display_surface": "same_strategy_table_nav_curve_and_trade_ledger_as_three_v3_roles",
+    "separate_research_card_allowed": false,
+    "historical_backfill_before_visible_from_is_not_compared": true
   },
   "pit_contract": {
     "availability_rule": "available_at <= decision_cutoff",
