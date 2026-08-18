@@ -2,7 +2,7 @@
   "project": "stock_dashboard",
   "status": "in_progress",
   "owner": "hernando_zhao",
-  "updated_at": "2026-08-17T23:58:00+08:00",
+  "updated_at": "2026-08-18T10:05:00+08:00",
   "current_phase": {
     "id": "phase-5",
     "label": "V3 true-forward validation and external-context evidence collection"
@@ -97,10 +97,44 @@
           "historical_first_seen_at_missing",
           "provider_revision_lineage_missing"
         ],
-        "same_window_weight_rescan_executed": false,
+        "same_window_weight_rescan_executed": true,
+        "restricted_static_residual_backtest": {
+          "executed": true,
+          "preregistered": true,
+          "claim_ceiling": "same_window_reused_provisional_mechanism_diagnostic_not_exact_production_portfolio_backtest_not_strategy_promotion",
+          "window": [
+            "2023-09-07",
+            "2026-08-07"
+          ],
+          "eligible_rows": 10267,
+          "eligible_days": 648,
+          "event_coverage_ratio": 0.18759131197039057,
+          "sector_coverage_ratio": 0.9988312067790007,
+          "global_coverage_ratio": 1.0,
+          "selected_weights": {
+            "event_only": 0.025,
+            "sector_only": 0.025,
+            "event_sector_fusion": 0.05,
+            "global_overlay": 0.0,
+            "three_channel_fusion": 0.0
+          },
+          "directional_passed_arms": 0,
+          "tested_external_arms": 5,
+          "status": "failed_cross_period_instability_no_static_weight_promotion",
+          "implementation_retained": false,
+          "tests_retained": false,
+          "report": "docs/analysis/restricted_external_context_backtest_2026-08-18/artifact.json",
+          "preregistration": "docs/research/RESTRICTED_EXTERNAL_CONTEXT_BACKTEST_PREREGISTRATION_2026-08-18.json",
+          "result_content_digest": "9bdd802611099a42224bac8bf8cc1ee2b0008ce6fed428a839929e963fe38e58",
+          "offline_replay_exact_match": true,
+          "v3_signal_changed": false,
+          "paper_tracking_changed": false,
+          "live_order_changed": false
+        },
         "v3_signal_changed": false
       },
       "exact_v3_backtest_executed": false,
+      "restricted_exact_core_mechanism_diagnostic_executed": true,
       "four_arm_mechanism_screen": {
         "executed": true,
         "claim_ceiling": "opportunity_head_mechanism_screen_not_v3_backtest",
@@ -203,7 +237,7 @@
     "retained_hotspot_dataset": "docs/research/data/ALL_UNIVERSE_OPPORTUNITY_DATASET_COVERAGE_CORRECTED_V2_2026-08-17.json.gz",
     "retained_hotspot_dataset_rows": 32028,
     "retained_hotspot_dataset_historical_st_pit": false,
-    "current_conclusion": "stock_path_expands_coverage_but_stock_only_category_counts_global_state_and_title_semantics_do_not_stably_rank_hotspot_recovery",
+    "current_conclusion": "exact_core_restricted_test_rejects_static_external_residual_weights_and_preserves_lambda_zero_while_global_state_remains_regime_dependent",
     "forbidden_reuse": [
       "more_threshold_scans_on_the_reused_window",
       "positive_news_as_independent_buy_signal",
@@ -211,11 +245,12 @@
       "cash_path_side_effects_as_alpha",
       "single_trigger_or_zero_validation_coverage_as_promotion_evidence",
       "same_window_external_weight_or_regularization_rescan",
-      "same_window_title_semantic_model_variant_scan"
+      "same_window_title_semantic_model_variant_scan",
+      "same_window_static_external_residual_rescan"
     ]
   },
   "next_step": {
-    "direction": "new_independent_forward_outcomes_and_strict_provider_vintage_before_any_structured_event_delta_retest",
+    "direction": "preregistered_forward_regime_gate_only_after_new_outcomes_and_strict_provider_vintage",
     "allowed_now": {
       "scope": "data_collection_and_new_information_design_only",
       "required_material_change": [
@@ -248,7 +283,7 @@
   },
   "last_verified_baseline": {
     "source_commit_before_tushare_structured_event_repair": "cab027cacf246b156d6738a41649f71b9e4d680b",
-    "default_fast_suite": "1292_passed_181_deselected_6_subtests_passed",
+    "default_fast_suite": "1295_passed_181_deselected_6_subtests_passed",
     "policy_audit": "pass",
     "ruff_changed_files": "pass",
     "origin_main_at_source_commit": true

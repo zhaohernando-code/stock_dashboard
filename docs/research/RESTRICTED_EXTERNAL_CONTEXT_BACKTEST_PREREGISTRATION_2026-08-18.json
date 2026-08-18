@@ -1,0 +1,147 @@
+{
+  "artifact_type": "restricted_external_context_backtest_preregistration",
+  "schema_version": "restricted_external_context_backtest_preregistration.v1",
+  "frozen_at": "2026-08-18T00:30:00+08:00",
+  "owner": "hernando_zhao",
+  "decision_question": "Does provisional external context add stable ranking or downside-control information on top of the exact frozen V3 core within the retained opportunity-candidate pool?",
+  "claim_ceiling": "same_window_reused_provisional_mechanism_diagnostic_not_exact_production_portfolio_backtest_not_strategy_promotion",
+  "outcome_reuse": {
+    "same_window_outcomes_previously_opened": true,
+    "independent_holdout_available": false,
+    "result_use": "directional mechanism diagnosis only",
+    "parameter_iteration_after_outcome_open": false
+  },
+  "inputs": {
+    "candidate_outcomes": {
+      "path": "docs/research/data/ALL_UNIVERSE_OPPORTUNITY_DATASET_COVERAGE_CORRECTED_V2_2026-08-17.json.gz",
+      "sha256": "32f2aa4e58efb04c474ef8249f485a5664d0f5ab13859f8f682ca04a63598ba9"
+    },
+    "exact_v3_core": {
+      "path": "data/research_validation_forward_20260808/external/exact-v3-core-scores-candidates-20260817-v3.json",
+      "sha256": "4a42b7fc7c7668697556d5ab98eaa63415dd2faef9c1d860439121e99aa87102"
+    },
+    "effective_sector_membership": {
+      "path": "data/research_validation_forward_20260808/external/tushare-sw2021-sector-membership-effective-dated-20260817-v2.json",
+      "sha256": "4dcbfa3dd1e5d2e29858a36a2ab2329e0e057b6d9c1dc21bccd494bc25adc8a0",
+      "mode": "effective_date_research"
+    },
+    "sector_market": {
+      "path": "data/research_validation_forward_20260808/external/tushare-sw2021-l1-sector-market-research-20230501-20260807.json",
+      "sha256": "4ab9ddef09451f06e6383fca54f39b89a28299555a78984b50da9ebd7975de20"
+    },
+    "global_market": {
+      "path": "data/research_validation_forward_20260808/external/tushare-global-market-research-20230501-20260807.json",
+      "sha256": "972653588058cb53a56149dc9a2e82e92f10fe86935955b50a62090f787dcb02"
+    },
+    "structured_events": {
+      "root": "data/research_validation_forward_20260808/external/tushare-structured-events",
+      "plan_sha256": "43f94eda7dfe9cf96bcc5f48bc5a5fc5f9203149eb9a45f46e651afa840b2e17",
+      "existing_feature_contract_sha256": "8c5566f0278abe548f143c18be1d4b287375c6b90f8866fed74411fcfd645d91"
+    }
+  },
+  "population": {
+    "date_from": "2023-09-07",
+    "date_to": "2026-08-07",
+    "required": [
+      "exact core row exists",
+      "selection_allowed is true",
+      "entry_status is tradable_research_proxy",
+      "net_return_5d is finite",
+      "label_available_day is on or before 2026-08-17"
+    ],
+    "daily_selection": "Top3 by the arm score from the unchanged retained candidate set",
+    "candidate_set_changed": false,
+    "positive_external_information_can_create_eligibility": false
+  },
+  "decision_time": {
+    "cutoff": "signal_day 23:59:59.999999 Asia/Shanghai",
+    "entry": "next available close as already frozen in candidate_outcomes",
+    "hard_rule": "available_at_or_available_from <= decision_cutoff",
+    "network_during_backtest": false
+  },
+  "windows": {
+    "calibration": ["2023-09-07", "2024-06-30"],
+    "validation": ["2024-07-01", "2025-06-30"],
+    "reused_evaluation": ["2025-07-01", "2026-05-26"],
+    "recent_diagnostic": ["2026-05-27", "2026-08-07"]
+  },
+  "features": {
+    "event_favorability": {
+      "event_types": ["earnings_forecast", "earnings_express"],
+      "lookback_calendar_days": 60,
+      "half_life_calendar_days": 30,
+      "forecast": "tanh(profit_change_mid_pct / 100); fixed Chinese forecast-type polarity only when midpoint is missing",
+      "express": "0.7*tanh(yoy_net_profit/100)+0.3*tanh(yoy_sales/50)",
+      "aggregation": "latest available announcement per symbol/provider/report_period, same-day ties averaged, exponentially decayed mean across report periods",
+      "missing": 0.0
+    },
+    "sector_favorability": {
+      "formula": "0.5*cross_sectional_z(return_5d)+0.3*cross_sectional_z(return_20d)+0.2*cross_sectional_z(log(amount_5d_mean/amount_20d_mean))",
+      "membership": "effective interval at decision cutoff",
+      "market_record": "latest sector record whose available_at is on or before decision cutoff",
+      "missing": 0.0
+    },
+    "global_risk": {
+      "instruments": ["SPX", "IXIC", "HSI", "HKTECH"],
+      "formula_per_instrument": "-0.5*rolling_z_252(return_5d)-0.3*rolling_z_252(return_20d)+0.2*rolling_z_252(volatility_20d)",
+      "aggregation": "equal mean of available instruments; rolling statistics use only earlier available observations with minimum 60",
+      "use": "cash exposure reduction only; favorable global state cannot increase exposure above 100%"
+    },
+    "residualization": {
+      "method": "OLS with intercept fit on calibration rows only",
+      "stock_path_controls": [
+        "return_1d",
+        "return_5d",
+        "return_20d",
+        "turnover_rate",
+        "volatility_20d",
+        "industry_return_5d_excess",
+        "industry_return_20d_excess",
+        "benchmark_return_20d"
+      ],
+      "standardization": "calibration residual mean and population standard deviation; clip to [-3,3]",
+      "event_fit_population": "calibration rows with an event",
+      "sector_fit_population": "calibration rows with a sector market feature"
+    }
+  },
+  "arms": {
+    "baseline": "daily z(exact core_score)",
+    "event_only": "core_z + clip(lambda*event_residual_z,-cap,cap)",
+    "sector_only": "core_z + clip(lambda*sector_residual_z,-cap,cap)",
+    "equal_fusion": "core_z + clip(lambda*(event_residual_z+sector_residual_z)/2,-cap,cap)",
+    "global_overlay": "baseline Top3 return multiplied by exposure",
+    "equal_fusion_global": "equal_fusion Top3 return multiplied by exposure"
+  },
+  "parameters": {
+    "lambda_ladder": [0.0, 0.025, 0.05, 0.075, 0.1, 0.15],
+    "cap": 0.3,
+    "top_k": 3,
+    "exposure_floor": 0.7,
+    "bootstrap": {
+      "method": "moving_block_bootstrap_on_daily_lift",
+      "block_length_trading_days": 5,
+      "replicates": 2000,
+      "seed": 20260818
+    }
+  },
+  "selection_and_gates": {
+    "lambda_selection": "within each non-baseline arm choose the smallest lambda whose calibration daily mean is within one calibration standard error of that arm's best lambda",
+    "arm_selection": "none; report all arms and do not choose a production winner",
+    "directional_pass": "selected lambda > 0 and mean lift is non-negative in validation and reused_evaluation",
+    "strong_provisional_pass": "directional_pass and the 95% moving-block-bootstrap interval is above zero in both validation and reused_evaluation",
+    "production_promotion_allowed": false
+  },
+  "reported_metrics": [
+    "daily mean and median Top3 net_return_5d",
+    "win rate",
+    "mean lift versus lambda=0",
+    "moving-block-bootstrap standard error and 95% interval of lift",
+    "selected-stock turnover versus baseline",
+    "event, sector and global feature coverage",
+    "results by window, year and sector",
+    "worst-decile mean return and maximum adverse return where available"
+  ],
+  "v3_signal_changed": false,
+  "paper_tracking_changed": false,
+  "live_order_changed": false
+}

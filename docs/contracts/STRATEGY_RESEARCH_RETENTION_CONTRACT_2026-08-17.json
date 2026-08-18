@@ -1,7 +1,7 @@
 {
   "artifact_type": "strategy_research_retention_contract",
   "schema_version": "strategy_research_retention_contract.v1",
-  "as_of": "2026-08-17",
+  "as_of": "2026-08-18",
   "owner": "hernando_zhao",
   "policy": {
     "failed_implementation_retention": "git_history_only",
@@ -78,6 +78,21 @@
       "symbols": 5895,
       "claim_ceiling": "effective_dated_provisional_sector_research_not_strict_historical_pit_vendor_vintage",
       "known_gap": "published_at historical_first_seen_at and provider revision lineage unavailable"
+    },
+    {
+      "path": "data/research_validation_forward_20260808/external/restricted-external-context-backtest-20260818-v2.json",
+      "role": "frozen_offline_evidence_for_failed_restricted_static_external_residual_test",
+      "materialization": "local_ignored_research_artifact_not_git_tracked",
+      "sha256": "474fb2106a087382b34afc5c10a2562723efbc0e68a565f970ccce41a1112167",
+      "content_digest": "9bdd802611099a42224bac8bf8cc1ee2b0008ce6fed428a839929e963fe38e58",
+      "bytes": 2361846,
+      "eligible_rows": 10267,
+      "signal_days": 648,
+      "network_used": false,
+      "offline_exact_replay_verified": true,
+      "claim_ceiling": "same_window_reused_provisional_mechanism_diagnostic_not_exact_production_portfolio_backtest_not_strategy_promotion",
+      "known_gap": "event coverage 18.76 percent strict historical sector PIT and provider revision lineage unavailable",
+      "retention_reason": "compact frozen evidence for the durable failure conclusion; obsolete v1 and duplicate replay removed"
     }
   ],
   "production_impact": {

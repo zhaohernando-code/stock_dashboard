@@ -1,0 +1,294 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "外部信息受限历史回测",
+    "description": "外部事件、板块状态与全球状态作为 V3 有界残差的受限机制验证。",
+    "generatedAt": "2026-08-18T10:03:00+08:00",
+    "sources": [
+      {
+        "id": "restricted_result",
+        "label": "受限历史回测 v2（离线复放）",
+        "path": "data/research_validation_forward_20260808/external/restricted-external-context-backtest-20260818-v2.json",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT * FROM read_json_auto('data/research_validation_forward_20260808/external/restricted-external-context-backtest-20260818-v2.json');",
+          "description": "读取预注册回测结果，再选择各臂冻结的一标准误权重，比较相对 lambda=0 基线的分窗日均五日收益提升。",
+          "executed_at": "2026-08-18T10:03:00+08:00",
+          "filters": [
+            "signal_date between 2023-09-07 and 2026-08-07",
+            "exact core row exists",
+            "selection_allowed = true",
+            "tradable_research_proxy = true",
+            "5-day outcome available by 2026-08-17"
+          ],
+          "metric_definitions": [
+            "日均收益提升(bps)=10000×mean(候选臂每日Top3等权5日收益-lambda=0基线每日Top3等权5日收益)。",
+            "方向门禁=冻结选择权重>0，且验证期与复用评估期日均收益提升均不低于0。",
+            "置信区间=按交易日收益提升进行5日移动块Bootstrap，2000次，seed=20260818。"
+          ],
+          "tables_used": [
+            "candidate_outcomes_20260907T064813Z.json.gz",
+            "exact-v3-core-v3.json",
+            "sector_membership_effective.json",
+            "sector_market_daily.json",
+            "global_market_daily.json",
+            "event-available-at-plan-v2.json"
+          ]
+        }
+      },
+      {
+        "id": "restricted_dq",
+        "label": "受限历史回测数据质量",
+        "path": "data/research_validation_forward_20260808/external/restricted-external-context-backtest-20260818-v2.json",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT data_quality, selected_weight_daily_rows FROM read_json_auto('data/research_validation_forward_20260808/external/restricted-external-context-backtest-20260818-v2.json');",
+          "description": "读取回测覆盖率、排除原因和候选池规模。",
+          "executed_at": "2026-08-18T10:03:00+08:00",
+          "filters": ["与 restricted_result 相同的预注册样本"],
+          "metric_definitions": [
+            "事件覆盖率=event_present_rows/joined_row_count。",
+            "板块覆盖率=sector_present_rows/joined_row_count。",
+            "全球覆盖率=global_present_rows/joined_row_count。"
+          ],
+          "tables_used": ["restricted-external-context-backtest-20260818-v2.json"]
+        }
+      }
+    ],
+    "blocks": [
+      {"id": "title", "type": "markdown", "body": "# 外部信息受限历史回测"},
+      {
+        "id": "summary",
+        "type": "markdown",
+        "body": "## Executive Summary\n\n冻结门禁下，5个非基线对照臂全部未通过；不应把第一版静态外部权重加入V3。事件、板块与两者融合在校准期分别带来约1.94、6.30和6.34 bps日均提升，但验证期均转负，复用评估期仍未恢复。全球风险覆盖在最近诊断期显示潜力，却在早期窗口损害收益，说明它更像状态依赖的风险闸门，而不是稳定静态权重。",
+        "sourceId": "restricted_result"
+      },
+      {"id": "metrics", "type": "metric-strip", "cardIds": ["gate_card", "coverage_card", "days_card", "top3_card"]},
+      {
+        "id": "findings",
+        "type": "markdown",
+        "body": "## 关键发现\n\n冻结的一标准误规则选择了事件2.5%、板块2.5%、事件+板块5%；全球风险和三通道组合都退回0%。三个非零选择在验证期与复用评估期的提升均为负，且置信区间未给出稳定正贡献。排序实际变动很小，所测信号没有形成足够强、足够稳定的增量。",
+        "sourceId": "restricted_result"
+      },
+      {"id": "lift_chart_block", "type": "chart", "chartId": "selected_lift_chart"},
+      {
+        "id": "global_section",
+        "type": "markdown",
+        "body": "## 全球状态的状态依赖\n\n固定15%全球风险缩放在最近诊断期约提升10.32 bps/日，但校准期为-7.47 bps/日；四个窗口的置信区间都跨过0。它支持继续研究‘何时启用’，不支持长期固定开启。",
+        "sourceId": "restricted_result"
+      },
+      {"id": "global_chart_block", "type": "chart", "chartId": "global_chart"},
+      {
+        "id": "table_section",
+        "type": "markdown",
+        "body": "## 冻结选择结果\n\n下表仅比较预注册对照臂，不代表精确V3生产组合。收益提升均为相对lambda=0基线的日均5日收益差。",
+        "sourceId": "restricted_result"
+      },
+      {"id": "selected_table_block", "type": "table", "tableId": "selected_table"},
+      {
+        "id": "recommendations",
+        "type": "markdown",
+        "body": "## 建议下一步\n\n1. 保留V3基线lambda=0，不上线静态外部权重。\n2. 停止在同一历史样本继续搜索静态权重；下一轮只预注册一个可解释的状态开关，并以前向数据裁决。\n3. 全球状态只允许降低总体风险敞口；正面新闻仍不得独立触发买入。\n4. 在下一轮前补齐严格历史板块归属与供应商修订链，优先提升事件相关性和可用时间可信度。"
+      },
+      {
+        "id": "questions",
+        "type": "markdown",
+        "body": "## 后续需要回答的问题\n\n- 哪一组事前可观测状态足以区分全球风险缩放有用和有害的时期？\n- 事件覆盖率提高后，个股事件残差能否带来高于当前0.2%–1.3%量级的排序变动？\n- 需要多少前向交易日，才能对门禁作出不依赖单月行情的判断？"
+      },
+      {
+        "id": "caveats",
+        "type": "markdown",
+        "body": "## Caveats & Assumptions\n\n这是同窗复用的受限机制诊断，不是精确生产组合回测，也不是独立留出集。候选池来自既有研究机会集，648个交易日中有127天不足3只候选。事件覆盖仅18.76%；历史板块归属不是严格PIT，供应商修订链也未就绪。所有结果均为离线回放，未联网，且没有改动V3、纸面追踪或实盘候选。",
+        "sourceId": "restricted_dq"
+      }
+    ],
+    "cards": [
+      {
+        "id": "gate_card",
+        "dataset": "headline",
+        "sourceId": "restricted_result",
+        "metrics": [
+          {"label": "通过门禁的外部臂", "field": "passed_arms", "format": "number"},
+          {"label": "测试臂", "field": "tested_arms", "format": "number"}
+        ],
+        "description": "方向门禁要求非零权重且验证期、复用评估期提升均不为负。"
+      },
+      {
+        "id": "coverage_card",
+        "dataset": "headline",
+        "sourceId": "restricted_dq",
+        "metrics": [
+          {"label": "事件覆盖率", "field": "event_coverage", "format": "percent"},
+          {"label": "板块覆盖", "field": "sector_coverage", "format": "percent"}
+        ],
+        "description": "进入受限回测样本的行级外部信息覆盖。"
+      },
+      {
+        "id": "days_card",
+        "dataset": "headline",
+        "sourceId": "restricted_dq",
+        "metrics": [
+          {"label": "有效交易日", "field": "eligible_days", "format": "number"},
+          {"label": "有效行", "field": "eligible_rows", "format": "compact"}
+        ],
+        "description": "通过冻结资格过滤并具有5日结果的研究样本。"
+      },
+      {
+        "id": "top3_card",
+        "dataset": "headline",
+        "sourceId": "restricted_dq",
+        "metrics": [
+          {"label": "可填满Top3天数占比", "field": "full_top3_day_rate", "format": "percent"},
+          {"label": "不足Top3天数", "field": "short_days", "format": "number"}
+        ],
+        "description": "候选机会集的横截面宽度，限制了排序信号发挥空间。"
+      }
+    ],
+    "charts": [
+      {
+        "id": "selected_lift_chart",
+        "title": "冻结权重下的分窗日均收益提升",
+        "subtitle": "校准期的正提升没有延续到验证期与复用评估期。",
+        "type": "bar",
+        "dataset": "selected_lifts",
+        "sourceId": "restricted_result",
+        "encodings": {
+          "x": {"field": "window", "type": "ordinal", "label": "窗口"},
+          "y": {"field": "lift_bps", "type": "quantitative", "label": "日均提升", "unit": "bps"},
+          "color": {"field": "arm", "type": "nominal", "label": "对照臂"},
+          "tooltip": [
+            {"field": "selected_lambda", "type": "quantitative", "label": "冻结权重"},
+            {"field": "ci_low_bps", "type": "quantitative", "label": "CI下界", "unit": "bps"},
+            {"field": "ci_high_bps", "type": "quantitative", "label": "CI上界", "unit": "bps"},
+            {"field": "turnover", "type": "quantitative", "format": "percent", "label": "选股变动率"},
+            {"field": "day_count", "type": "quantitative", "label": "交易日"}
+          ]
+        },
+        "unit": "bps",
+        "layout": "full"
+      },
+      {
+        "id": "global_chart",
+        "title": "固定15%全球风险缩放的分窗日均收益提升",
+        "subtitle": "近期改善与早期损失方向相反，尚不构成稳定证据。",
+        "type": "bar",
+        "dataset": "global_lifts",
+        "sourceId": "restricted_result",
+        "encodings": {
+          "x": {"field": "window", "type": "ordinal", "label": "窗口"},
+          "y": {"field": "lift_bps", "type": "quantitative", "label": "日均提升", "unit": "bps"},
+          "tooltip": [
+            {"field": "ci_low_bps", "type": "quantitative", "label": "CI下界", "unit": "bps"},
+            {"field": "ci_high_bps", "type": "quantitative", "label": "CI上界", "unit": "bps"},
+            {"field": "day_count", "type": "quantitative", "label": "交易日"}
+          ]
+        },
+        "unit": "bps",
+        "layout": "full"
+      }
+    ],
+    "tables": [
+      {
+        "id": "selected_table",
+        "title": "各对照臂冻结权重与分窗提升",
+        "dataset": "selected_arms",
+        "sourceId": "restricted_result",
+        "defaultSort": {"field": "selected_lambda", "direction": "desc"},
+        "density": "dense",
+        "layout": "full",
+        "columns": [
+          {"field": "arm", "label": "对照臂", "type": "text"},
+          {"field": "selected_lambda", "label": "冻结权重", "format": "percent"},
+          {"field": "calibration_bps", "label": "校准期 bps", "format": "number", "movement": true},
+          {"field": "validation_bps", "label": "验证期 bps", "format": "number", "movement": true},
+          {"field": "reused_evaluation_bps", "label": "复用评估期 bps", "format": "number", "movement": true},
+          {"field": "recent_bps", "label": "最近诊断期 bps", "format": "number", "movement": true},
+          {"field": "directional_pass", "label": "通过方向门禁", "type": "text"}
+        ]
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-18T10:03:00+08:00",
+    "status": "ready",
+    "datasets": {
+      "headline": [
+        {
+          "passed_arms": 0,
+          "tested_arms": 5,
+          "event_coverage": 0.18759131197039057,
+          "sector_coverage": 0.9988312067790007,
+          "global_coverage": 1.0,
+          "eligible_days": 648,
+          "eligible_rows": 10267,
+          "full_top3_day_rate": 0.8040123456790124,
+          "short_days": 127
+        }
+      ],
+      "selected_lifts": [
+        {"window": "校准期", "arm": "事件", "selected_lambda": 0.025, "lift_bps": 1.94, "ci_low_bps": 0.0, "ci_high_bps": 5.45, "turnover": 0.00372, "day_count": 179},
+        {"window": "验证期", "arm": "事件", "selected_lambda": 0.025, "lift_bps": -0.75, "ci_low_bps": -4.26, "ci_high_bps": 2.01, "turnover": 0.00304, "day_count": 219},
+        {"window": "复用评估期", "arm": "事件", "selected_lambda": 0.025, "lift_bps": -0.43, "ci_low_bps": -1.3, "ci_high_bps": 0.0, "turnover": 0.00167, "day_count": 200},
+        {"window": "最近诊断期", "arm": "事件", "selected_lambda": 0.025, "lift_bps": 4.79, "ci_low_bps": -1.32, "ci_high_bps": 15.69, "turnover": 0.01333, "day_count": 50},
+        {"window": "校准期", "arm": "板块", "selected_lambda": 0.025, "lift_bps": 6.3, "ci_low_bps": 0.09, "ci_high_bps": 14.69, "turnover": 0.01117, "day_count": 179},
+        {"window": "验证期", "arm": "板块", "selected_lambda": 0.025, "lift_bps": -0.84, "ci_low_bps": -4.63, "ci_high_bps": 2.08, "turnover": 0.01065, "day_count": 219},
+        {"window": "复用评估期", "arm": "板块", "selected_lambda": 0.025, "lift_bps": -0.21, "ci_low_bps": -6.64, "ci_high_bps": 5.68, "turnover": 0.015, "day_count": 200},
+        {"window": "最近诊断期", "arm": "板块", "selected_lambda": 0.025, "lift_bps": 0.74, "ci_low_bps": -5.96, "ci_high_bps": 6.97, "turnover": 0.02667, "day_count": 50},
+        {"window": "校准期", "arm": "事件+板块", "selected_lambda": 0.05, "lift_bps": 6.34, "ci_low_bps": 0.2, "ci_high_bps": 14.47, "turnover": 0.01304, "day_count": 179},
+        {"window": "验证期", "arm": "事件+板块", "selected_lambda": 0.05, "lift_bps": -0.84, "ci_low_bps": -4.66, "ci_high_bps": 2.08, "turnover": 0.01065, "day_count": 219},
+        {"window": "复用评估期", "arm": "事件+板块", "selected_lambda": 0.05, "lift_bps": -0.11, "ci_low_bps": -6.53, "ci_high_bps": 5.82, "turnover": 0.01333, "day_count": 200},
+        {"window": "最近诊断期", "arm": "事件+板块", "selected_lambda": 0.05, "lift_bps": 0.3, "ci_low_bps": -6.12, "ci_high_bps": 6.25, "turnover": 0.03333, "day_count": 50}
+      ],
+      "global_lifts": [
+        {"window": "校准期", "selected_lambda": 0.15, "lift_bps": -7.47, "ci_low_bps": -18.18, "ci_high_bps": 1.6, "day_count": 179},
+        {"window": "验证期", "selected_lambda": 0.15, "lift_bps": -1.21, "ci_low_bps": -12.4, "ci_high_bps": 8.94, "day_count": 219},
+        {"window": "复用评估期", "selected_lambda": 0.15, "lift_bps": 1.64, "ci_low_bps": -3.75, "ci_high_bps": 6.68, "day_count": 200},
+        {"window": "最近诊断期", "selected_lambda": 0.15, "lift_bps": 10.32, "ci_low_bps": -3.8, "ci_high_bps": 32.34, "day_count": 50}
+      ],
+      "selected_arms": [
+        {"arm": "事件", "selected_lambda": 0.025, "calibration_bps": 1.94, "validation_bps": -0.75, "reused_evaluation_bps": -0.43, "recent_bps": 4.79, "directional_pass": "否"},
+        {"arm": "板块", "selected_lambda": 0.025, "calibration_bps": 6.3, "validation_bps": -0.84, "reused_evaluation_bps": -0.21, "recent_bps": 0.74, "directional_pass": "否"},
+        {"arm": "事件+板块", "selected_lambda": 0.05, "calibration_bps": 6.34, "validation_bps": -0.84, "reused_evaluation_bps": -0.11, "recent_bps": 0.3, "directional_pass": "否"},
+        {"arm": "全球风险", "selected_lambda": 0.0, "calibration_bps": 0.0, "validation_bps": 0.0, "reused_evaluation_bps": 0.0, "recent_bps": 0.0, "directional_pass": "否"},
+        {"arm": "三通道组合", "selected_lambda": 0.0, "calibration_bps": 0.0, "validation_bps": 0.0, "reused_evaluation_bps": 0.0, "recent_bps": 0.0, "directional_pass": "否"}
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "restricted_result",
+      "label": "受限历史回测 v2（离线复放）",
+      "path": "data/research_validation_forward_20260808/external/restricted-external-context-backtest-20260818-v2.json",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT * FROM read_json_auto('data/research_validation_forward_20260808/external/restricted-external-context-backtest-20260818-v2.json');",
+        "description": "读取预注册回测结果，再选择各臂冻结的一标准误权重，比较相对 lambda=0 基线的分窗日均五日收益提升。",
+        "executed_at": "2026-08-18T10:03:00+08:00",
+        "filters": ["预注册有效样本"],
+        "metric_definitions": ["分窗日均收益提升与5日移动块Bootstrap置信区间。"],
+        "tables_used": ["restricted-external-context-backtest-20260818-v2.json"]
+      }
+    },
+    {
+      "id": "restricted_dq",
+      "label": "受限历史回测数据质量",
+      "path": "data/research_validation_forward_20260808/external/restricted-external-context-backtest-20260818-v2.json",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT data_quality, selected_weight_daily_rows FROM read_json_auto('data/research_validation_forward_20260808/external/restricted-external-context-backtest-20260818-v2.json');",
+        "description": "读取回测覆盖率、排除原因和候选池规模。",
+        "executed_at": "2026-08-18T10:03:00+08:00",
+        "filters": ["与 restricted_result 相同的预注册样本"],
+        "metric_definitions": ["行级覆盖率=存在对应PIT特征的有效行/全部有效行。"],
+        "tables_used": ["restricted-external-context-backtest-20260818-v2.json"]
+      }
+    }
+  ]
+}
