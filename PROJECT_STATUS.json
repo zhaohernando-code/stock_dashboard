@@ -2,7 +2,7 @@
   "project": "stock_dashboard",
   "status": "in_progress",
   "owner": "hernando_zhao",
-  "updated_at": "2026-08-18T10:05:00+08:00",
+  "updated_at": "2026-08-18T17:40:00+08:00",
   "current_phase": {
     "id": "phase-5",
     "label": "V3 true-forward validation and external-context evidence collection"
@@ -237,7 +237,7 @@
     "retained_hotspot_dataset": "docs/research/data/ALL_UNIVERSE_OPPORTUNITY_DATASET_COVERAGE_CORRECTED_V2_2026-08-17.json.gz",
     "retained_hotspot_dataset_rows": 32028,
     "retained_hotspot_dataset_historical_st_pit": false,
-    "current_conclusion": "exact_core_restricted_test_rejects_static_external_residual_weights_and_preserves_lambda_zero_while_global_state_remains_regime_dependent",
+    "current_conclusion": "static_external_residuals_and_current_hotspot_switches_both_fail; build_a_sector_first_two_stage_challenger_before_any_v3_switch",
     "forbidden_reuse": [
       "more_threshold_scans_on_the_reused_window",
       "positive_news_as_independent_buy_signal",
@@ -246,25 +246,56 @@
       "single_trigger_or_zero_validation_coverage_as_promotion_evidence",
       "same_window_external_weight_or_regularization_rescan",
       "same_window_title_semantic_model_variant_scan",
-      "same_window_static_external_residual_rescan"
+      "same_window_static_external_residual_rescan",
+      "same_window_v1_price_limit_chaser_switch_rescan",
+      "single_stage_all_market_model_as_both_sector_detector_and_stock_selector"
     ]
   },
+  "dynamic_switch_research": {
+    "executed": true,
+    "claim_ceiling": "sequential_reused_history_mechanism_research_not_independent_validation",
+    "window": [
+      "2023-09-15",
+      "2026-06-18"
+    ],
+    "v1_hotspot_candidate_minus_v3_mean_bps": -278.7938,
+    "v1_hotspot_ready_execution_minus_v3_mean_bps": -412.3,
+    "dynamic_families_passed": 0,
+    "learned_challenger_minus_v3_mean_bps": 16.2499,
+    "learned_challenger_ci95_bps": [
+      -44.9863,
+      79.3694
+    ],
+    "learned_challenger_positive_half_years": 3,
+    "learned_challenger_total_half_years": 5,
+    "learned_challenger_2026_h1_lift_bps": -78.403,
+    "switch_evaluation_after_learned_challenger": "not_run_unconditional_candidate_gate_failed",
+    "implementation_retained": false,
+    "tests_retained": false,
+    "report": "docs/research/DYNAMIC_SWITCH_RESEARCH_CLOSEOUT_2026-08-18.md",
+    "v3_signal_changed": false,
+    "paper_tracking_changed": false,
+    "live_order_changed": false
+  },
   "next_step": {
-    "direction": "preregistered_forward_regime_gate_only_after_new_outcomes_and_strict_provider_vintage",
+    "direction": "sector_first_two_stage_challenger_before_any_dynamic_v3_switch",
     "allowed_now": {
-      "scope": "data_collection_and_new_information_design_only",
+      "scope": "PIT_sector_state_data_contract_and_two_stage_challenger_design_only",
       "required_material_change": [
-        "structured_event_revision_or_realization_surprise_with_new_unseen_outcomes",
-        "qualified_provider_published_first_seen_revision_lineage",
-        "new_independent_time_period"
+        "historically_effective_sector_membership_with_explicit_availability_lineage",
+        "daily_sector_breadth_return_dispersion_and_crowding_snapshots",
+        "a_sector_then_stock_challenger_that_passes_unconditional_walk_forward_gates",
+        "new_independent_time_period_before_forward_promotion"
       ],
-      "forbidden_action": "rerun_same_window_weight_window_regularization_or_model_scan"
+      "forbidden_action": "fit_a_v3_switch_before_the_second_strategy_is_independently_historically_coherent"
     },
     "sequence": [
-      "retain_the_qualified_structured_event_PIT_data_layer_without_strategy_activation",
-      "accumulate_new_independent_outcomes_after_2026_08_07",
-      "pre_register_a_non_reused_test",
-      "retain_lambda_zero_until_validation_and_final_are_both_stable"
+      "freeze_PIT_sector_membership_and_daily_sector_state_snapshots",
+      "validate_sector_regime_selection_without_stock_level_outcome_leakage",
+      "validate_within_sector_non_overheated_leader_selection",
+      "require_the_combined_challenger_to_pass_unconditional_walk_forward_gates",
+      "only_then_fit_bounded_dynamic_weight_against_V3",
+      "retain_lambda_zero_and_current_paper_tracking_until_new_forward_evidence"
     ],
     "exact_v3_blocked_until": [
       "strict_historical_sector_availability_or_qualified_vendor_vintage_exists",

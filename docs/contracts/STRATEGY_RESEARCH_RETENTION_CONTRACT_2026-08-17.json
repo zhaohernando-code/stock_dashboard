@@ -93,6 +93,21 @@
       "claim_ceiling": "same_window_reused_provisional_mechanism_diagnostic_not_exact_production_portfolio_backtest_not_strategy_promotion",
       "known_gap": "event coverage 18.76 percent strict historical sector PIT and provider revision lineage unavailable",
       "retention_reason": "compact frozen evidence for the durable failure conclusion; obsolete v1 and duplicate replay removed"
+    },
+    {
+      "path": "data/research_validation_forward_20260808/external/dynamic-switch-market-snapshot-20230914-20260626.sqlite",
+      "role": "reusable_compact_unadjusted_daily_market_snapshot_for_future_sector_first_research",
+      "materialization": "local_ignored_research_artifact_not_git_tracked",
+      "sha256": "fcb00d25088738d08bb0bb4d4e36152aff69ad8fa33907f69f0ae60a00ec611c",
+      "bytes": 294326272,
+      "rows": 1981386,
+      "symbols": 3036,
+      "observed_from": "2023-09-14",
+      "observed_to": "2026-06-26",
+      "network_used": false,
+      "claim_ceiling": "reusable_unadjusted_execution_input_not_strict_historical_universe",
+      "known_gap": "source universe contains currently active securities and therefore retains survivorship and historical status limitations",
+      "retention_reason": "compact reusable input for the next sector-first study; failed model outputs and scripts were removed"
     }
   ],
   "production_impact": {
