@@ -1,0 +1,249 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "行业优先策略为何没有通过",
+    "description": "行业优先、个股第二的两层挑战者相对精确 V3 基线的历史机制研究收口。",
+    "generatedAt": "2026-08-19T10:15:00+08:00",
+    "sources": [
+      {
+        "id": "sector_closeout",
+        "label": "行业优先两层策略紧凑收口",
+        "path": "docs/research/SECTOR_FIRST_TWO_STAGE_CLOSEOUT_2026-08-19.json",
+        "query": {
+          "engine": "duckdb",
+          "language": "sql",
+          "sql": "SELECT * FROM read_json_auto('docs/research/SECTOR_FIRST_TWO_STAGE_CLOSEOUT_2026-08-19.json');",
+          "description": "读取冻结的紧凑收口指标，并展示行业层、个股行业相对残差层、嵌套走步门禁和案例诊断。",
+          "executed_at": "2026-08-19T10:15:00+08:00",
+          "filters": [
+            "signal day between 2023-09-15 and 2026-06-18",
+            "main-board A-share prefixes only",
+            "unadjusted signal close <= CNY 200",
+            "tradable research proxy required",
+            "signal-day return < 9.5 percent",
+            "features available no later than signal day"
+          ],
+          "metric_definitions": [
+            "日度排序相关性是同一交易日预测排名与五日后已实现标签排名的 Spearman 相关系数，再对交易日等权平均。",
+            "日均提升(bps)=10000×mean(挑战者等权五日净收益-精确V3基线等权五日净收益)。",
+            "95%区间按交易日提升做2000次、5日移动块Bootstrap。",
+            "正测试折数只统计挑战者被选中且测试折日均提升大于0的嵌套走步折。"
+          ],
+          "tables_used": [
+            "SECTOR_FIRST_TWO_STAGE_CLOSEOUT_2026-08-19.json",
+            "sector-first-state-snapshot-20230914-20260626.sqlite"
+          ]
+        }
+      },
+      {
+        "id": "sector_notebook",
+        "label": "行业优先收口独立复核笔记",
+        "path": "docs/analysis/sector_first_two_stage_closeout_2026-08-19/analysis.ipynb",
+        "query": {
+          "engine": "python",
+          "language": "python",
+          "description": "独立重算门禁通过数、正收益折数、区间跨零状态，并核对保留SQLite快照的哈希与行数。",
+          "executed_at": "2026-08-19T10:12:00+08:00",
+          "filters": ["no network", "failed model not rebuilt"],
+          "metric_definitions": ["通过门禁数=sum(boolean gate values)。", "快照一致性=SHA-256、行数、行业数和日期边界全部一致。"],
+          "tables_used": ["SECTOR_FIRST_TWO_STAGE_CLOSEOUT_2026-08-19.json", "sector_state"]
+        }
+      }
+    ],
+    "blocks": [
+      {"id": "title", "type": "markdown", "body": "# 行业优先策略为何没有通过"},
+      {
+        "id": "summary",
+        "type": "markdown",
+        "body": "## Executive Summary\n\n- **不能把行业优先挑战者加入 V3。** 294 个嵌套走步交易日平均相对 V3 为 -1.87bp/日，95% 区间跨越零，只有 1/7 个测试折为正。\n- **主要故障在第一层行业判断。** 行业预测的平均日度排序相关性为 -0.009，整体近似随机；2026 上半年模型前三行业未来表现相对全部行业均值反而低约 20.93bp/日。\n- **个股层留下了不同方向的线索。** 个股行业相对残差的平均日度排序相关性为 +0.0747，五个半年均为正；下一轮应去掉行业硬门槛，只研究它能否为 V3 提供有界增量。\n- **本轮没有改产品。** 六项门槛只通过一项，动态权重测试没有运行，V3、纸面追踪和 live 候选都保持不变。",
+        "sourceId": "sector_closeout"
+      },
+      {"id": "metrics", "type": "metric-strip", "cardIds": ["outer_card", "recent_card", "gate_card"]},
+      {
+        "id": "layer_finding",
+        "type": "markdown",
+        "body": "## 行业入口没有形成可用的预测能力\n\n下图把两层模型放在同一尺度比较。行业层在五个半年中只有 2025 上半年为明显正值，最新半年再次转负；个股行业相对残差虽然较弱，却在每个半年都保持正相关。**因此问题不是行业信息完全无用，而是把行业预测变成整批股票的准入门槛。**",
+        "sourceId": "sector_closeout"
+      },
+      {"id": "rank_chart_block", "type": "chart", "chartId": "rank_chart"},
+      {
+        "id": "walk_forward_finding",
+        "type": "markdown",
+        "body": "## 同窗汇总的正收益没有经受走步选择\n\n固定使用3～5个行业的若干组合在完整开发期显示约43～52bp/日的表面领先，但置信区间全部跨零。嵌套走步只在4个测试折启用挑战者，其中仅1折为正；另外3折退回V3。**这说明完整区间均值来自阶段集中，而不是可在事前重复选择的稳定平台。**",
+        "sourceId": "sector_closeout"
+      },
+      {"id": "fold_chart_block", "type": "chart", "chartId": "fold_chart"},
+      {
+        "id": "example_finding",
+        "type": "markdown",
+        "body": "## 两个目标案例都被行业硬门槛提前删除\n\n生益科技与长电科技的目标恢复日里，电子行业分别排第28和第31，因此第二层根本没有机会比较个股。案例不用于调参，但它们直接揭示机制偏差：**判断整个电子行业未来五日是否领先，并不是识别单只复苏股的必要条件。**",
+        "sourceId": "sector_closeout"
+      },
+      {"id": "example_table_block", "type": "table", "tableId": "example_table"},
+      {
+        "id": "recommendations",
+        "type": "markdown",
+        "body": "## 建议下一步\n\n1. 删除行业硬准入，不允许预测靠后的行业整批失去候选资格。\n2. 冻结一份新的“个股优先、行业相对残差”合同：精确 V3 核心分数主导，行业只用于剥离共同涨跌或限制残差幅度。\n3. 不在已打开结果上继续扫权重；`lambda=0` 永久保留，先要求新的候选独立通过同样的嵌套走步门禁。\n4. 历史行业 `first_seen_at`、修订链和新未见时段未补齐前，任何正结果只能称为 provisional 机制证据。"
+      },
+      {
+        "id": "questions",
+        "type": "markdown",
+        "body": "## 后续需要回答的问题\n\n- 个股行业相对残差能否在不限制行业范围时，稳定改善 V3 的 Top3 排序？\n- 该残差的弱正相关是否会在真实交易组合、换手和整手资金约束下消失？\n- 新未见时段里，电子等高全球敏感板块的相对个股信号是否仍有效？"
+      },
+      {
+        "id": "caveats",
+        "type": "markdown",
+        "body": "## Caveats & Assumptions\n\n这是反复使用过的历史窗口上的机制研究，不是独立样本外验证。行业归属有有效期但缺历史首次可见时间、修订ID和供应商vintage；基础股票池仍有幸存者与历史状态缺口。最近16日只是已打开的诊断窗口。所有结果均离线生成，基线在609日实现股票集合100%复现、收益差0bp；独立笔记再次核对了门禁和保留快照，但没有重建失败模型。",
+        "sourceId": "sector_closeout"
+      }
+    ],
+    "cards": [
+      {
+        "id": "outer_card",
+        "dataset": "headline",
+        "sourceId": "sector_closeout",
+        "metrics": [
+          {"label": "走步日均提升", "field": "outer_mean_lift_bps", "format": "number", "signed": true},
+          {"label": "95%下界", "field": "outer_ci_low_bps", "format": "number", "signed": true},
+          {"label": "95%上界", "field": "outer_ci_high_bps", "format": "number", "signed": true}
+        ],
+        "description": "294个嵌套走步交易日相对精确V3基线的五日净收益差，单位bp/日。"
+      },
+      {
+        "id": "recent_card",
+        "dataset": "headline",
+        "sourceId": "sector_closeout",
+        "metrics": [
+          {"label": "最近16日提升", "field": "recent_mean_lift_bps", "format": "number", "signed": true},
+          {"label": "日均换手", "field": "recent_turnover", "format": "percent"}
+        ],
+        "description": "2026-05-27至2026-06-18已打开诊断窗，相对V3的日均五日净收益差。"
+      },
+      {
+        "id": "gate_card",
+        "dataset": "headline",
+        "sourceId": "sector_closeout",
+        "metrics": [
+          {"label": "通过门禁", "field": "passed_gates", "format": "number"},
+          {"label": "总门禁", "field": "total_gates", "format": "number"},
+          {"label": "正收益折", "field": "positive_folds", "format": "number"}
+        ],
+        "description": "只有尾部非劣化通过；收益、区间、折稳定性和近期门禁均失败。"
+      }
+    ],
+    "charts": [
+      {
+        "id": "rank_chart",
+        "title": "两层预测的半年日度排序相关性",
+        "subtitle": "2024上半年至2026上半年；行业层最新转负，个股行业相对残差五期均为正。",
+        "type": "bar",
+        "dataset": "rank_ic",
+        "sourceId": "sector_closeout",
+        "encodings": {
+          "x": {"field": "period", "type": "ordinal", "label": "半年"},
+          "y": {"field": "mean_daily_rank_ic", "type": "quantitative", "label": "平均日度排序相关性"},
+          "color": {"field": "layer", "type": "nominal", "label": "模型层"},
+          "tooltip": [
+            {"field": "day_count", "type": "quantitative", "label": "交易日"},
+            {"field": "top_minus_all_bps", "type": "quantitative", "label": "Top3相对全体", "unit": "bps"},
+            {"field": "positive_day_share", "type": "quantitative", "format": "percent", "label": "正相关日占比"}
+          ]
+        },
+        "layout": "full"
+      },
+      {
+        "id": "fold_chart",
+        "title": "嵌套走步各测试折相对 V3 的日均提升",
+        "subtitle": "每折42个交易日；退回V3的折按0bp显示，启用挑战者的4折中只有1折为正。",
+        "type": "bar",
+        "dataset": "folds",
+        "sourceId": "sector_closeout",
+        "encodings": {
+          "x": {"field": "fold_label", "type": "ordinal", "label": "测试折"},
+          "y": {"field": "mean_lift_bps", "type": "quantitative", "label": "日均提升", "unit": "bps"},
+          "color": {"field": "selection_mode", "type": "nominal", "label": "选择结果"},
+          "tooltip": [
+            {"field": "test_window", "type": "nominal", "label": "测试窗口"},
+            {"field": "selected_arm", "type": "nominal", "label": "选择臂"},
+            {"field": "day_count", "type": "quantitative", "label": "交易日"}
+          ]
+        },
+        "unit": "bps",
+        "layout": "full"
+      }
+    ],
+    "tables": [
+      {
+        "id": "example_table",
+        "title": "目标恢复案例的行业入口诊断",
+        "subtitle": "五日净收益为事后诊断标签；案例不参与晋级门槛或调参。",
+        "dataset": "examples",
+        "sourceId": "sector_closeout",
+        "defaultSort": {"field": "signal_day", "direction": "asc"},
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {"field": "signal_day", "label": "信号日", "type": "date"},
+          {"field": "symbol", "label": "股票", "type": "text"},
+          {"field": "sector", "label": "行业", "type": "text"},
+          {"field": "sector_rank", "label": "行业排名", "format": "number"},
+          {"field": "net_return_5d", "label": "五日净收益", "format": "percent", "movement": true},
+          {"field": "selected", "label": "进入组合", "type": "text"}
+        ]
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-19T10:15:00+08:00",
+    "status": "ready",
+    "datasets": {
+      "headline": [
+        {
+          "outer_mean_lift_bps": -1.8655909,
+          "outer_ci_low_bps": -46.4075906,
+          "outer_ci_high_bps": 48.2470140,
+          "recent_mean_lift_bps": -335.1303348,
+          "recent_turnover": 0.9791667,
+          "passed_gates": 1,
+          "total_gates": 6,
+          "positive_folds": 1,
+          "fold_count": 7,
+          "outer_days": 294,
+          "recent_days": 16
+        }
+      ],
+      "rank_ic": [
+        {"period": "2024-H1", "layer": "行业入口", "mean_daily_rank_ic": -0.0173499104, "top_minus_all_bps": 5.1122134, "positive_day_share": 0.4444444, "day_count": 36},
+        {"period": "2024-H1", "layer": "个股行业相对残差", "mean_daily_rank_ic": 0.0764064751, "top_minus_all_bps": 129.9908426, "positive_day_share": 0.6857143, "day_count": 35},
+        {"period": "2024-H2", "layer": "行业入口", "mean_daily_rank_ic": -0.0274339295, "top_minus_all_bps": 6.4190223, "positive_day_share": 0.4521739, "day_count": 115},
+        {"period": "2024-H2", "layer": "个股行业相对残差", "mean_daily_rank_ic": 0.0784725259, "top_minus_all_bps": 7.4592750, "positive_day_share": 0.6160714, "day_count": 112},
+        {"period": "2025-H1", "layer": "行业入口", "mean_daily_rank_ic": 0.0379575062, "top_minus_all_bps": 1.2709833, "positive_day_share": 0.5192308, "day_count": 104},
+        {"period": "2025-H1", "layer": "个股行业相对残差", "mean_daily_rank_ic": 0.1221360652, "top_minus_all_bps": 92.9909390, "positive_day_share": 0.7115385, "day_count": 104},
+        {"period": "2025-H2", "layer": "行业入口", "mean_daily_rank_ic": -0.0088019471, "top_minus_all_bps": 5.8988500, "positive_day_share": 0.5225225, "day_count": 111},
+        {"period": "2025-H2", "layer": "个股行业相对残差", "mean_daily_rank_ic": 0.0496983998, "top_minus_all_bps": -3.2961268, "positive_day_share": 0.5495495, "day_count": 111},
+        {"period": "2026-H1", "layer": "行业入口", "mean_daily_rank_ic": -0.0327227343, "top_minus_all_bps": -20.9280201, "positive_day_share": 0.4952381, "day_count": 105},
+        {"period": "2026-H1", "layer": "个股行业相对残差", "mean_daily_rank_ic": 0.0494467071, "top_minus_all_bps": 8.8650331, "positive_day_share": 0.5619048, "day_count": 105}
+      ],
+      "folds": [
+        {"fold_label": "折1", "fold": 1, "mean_lift_bps": -16.5888259, "selection_mode": "启用挑战者", "selected_arm": "行业5/残差0%", "test_window": "2024-12-03 至 2025-02-14", "day_count": 42},
+        {"fold_label": "折2", "fold": 2, "mean_lift_bps": 0.0, "selection_mode": "退回V3", "selected_arm": "V3", "test_window": "2025-02-17 至 2025-04-23", "day_count": 42},
+        {"fold_label": "折3", "fold": 3, "mean_lift_bps": 0.0, "selection_mode": "退回V3", "selected_arm": "V3", "test_window": "2025-04-24 至 2025-07-04", "day_count": 42},
+        {"fold_label": "折4", "fold": 4, "mean_lift_bps": -26.0206678, "selection_mode": "启用挑战者", "selected_arm": "行业3/残差0%", "test_window": "2025-07-07 至 2025-09-15", "day_count": 42},
+        {"fold_label": "折5", "fold": 5, "mean_lift_bps": 112.9564996, "selection_mode": "启用挑战者", "selected_arm": "行业3/残差0%", "test_window": "2025-09-16 至 2025-11-21", "day_count": 42},
+        {"fold_label": "折6", "fold": 6, "mean_lift_bps": -83.4061421, "selection_mode": "启用挑战者", "selected_arm": "行业3/残差0%", "test_window": "2025-11-24 至 2026-01-28", "day_count": 42},
+        {"fold_label": "折7", "fold": 7, "mean_lift_bps": 0.0, "selection_mode": "退回V3", "selected_arm": "V3", "test_window": "2026-01-29 至 2026-04-09", "day_count": 42}
+      ],
+      "examples": [
+        {"signal_day": "2026-04-08", "symbol": "生益科技 600183.SH", "sector": "电子", "sector_rank": 28, "net_return_5d": 0.1360909937, "selected": "否", "diagnostic_only": true},
+        {"signal_day": "2026-06-17", "symbol": "长电科技 600584.SH", "sector": "电子", "sector_rank": 31, "net_return_5d": 0.2096459255, "selected": "否", "diagnostic_only": true}
+      ]
+    }
+  },
+  "sources": [
+    {"id": "sector_closeout", "label": "行业优先两层策略紧凑收口", "path": "docs/research/SECTOR_FIRST_TWO_STAGE_CLOSEOUT_2026-08-19.json"},
+    {"id": "sector_notebook", "label": "行业优先收口独立复核笔记", "path": "docs/analysis/sector_first_two_stage_closeout_2026-08-19/analysis.ipynb"}
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "artifact_type": "strategy_research_retention_contract",
   "schema_version": "strategy_research_retention_contract.v1",
-  "as_of": "2026-08-18",
+  "as_of": "2026-08-19",
   "owner": "hernando_zhao",
   "policy": {
     "failed_implementation_retention": "git_history_only",
@@ -108,6 +108,21 @@
       "claim_ceiling": "reusable_unadjusted_execution_input_not_strict_historical_universe",
       "known_gap": "source universe contains currently active securities and therefore retains survivorship and historical status limitations",
       "retention_reason": "compact reusable input for the next sector-first study; failed model outputs and scripts were removed"
+    },
+    {
+      "path": "data/research_validation_forward_20260808/external/sector-first-state-snapshot-20230914-20260626.sqlite",
+      "role": "reusable_compact_daily_sw2021_sector_state_and_forward_research_labels",
+      "materialization": "local_ignored_research_artifact_not_git_tracked",
+      "sha256": "45a8786460f8c378eba723a5104232d8ab4e5804cb2ab8df054a8a6f6f24d479",
+      "bytes": 4956160,
+      "rows": 20150,
+      "sectors": 31,
+      "observed_from": "2023-10-20",
+      "observed_to": "2026-06-26",
+      "network_used": false,
+      "claim_ceiling": "deterministic_provisional_sector_state_research_input_not_strict_historical_vendor_vintage_pit",
+      "known_gap": "effective membership lacks historical first_seen revision lineage and the source stock universe retains survivorship limitations",
+      "retention_reason": "reusable offline sector features independent of the failed top-down selector; failed model script preregistration and daily outputs were removed"
     }
   ],
   "production_impact": {
