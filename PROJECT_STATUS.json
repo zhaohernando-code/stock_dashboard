@@ -2,7 +2,7 @@
   "project": "stock_dashboard",
   "status": "in_progress",
   "owner": "hernando_zhao",
-  "updated_at": "2026-08-19T10:21:00+08:00",
+  "updated_at": "2026-08-19T11:49:00+08:00",
   "current_phase": {
     "id": "phase-5",
     "label": "V3 true-forward validation and external-context evidence collection"
@@ -64,23 +64,23 @@
   },
   "research_governance": {
     "mandatory_preread": "docs/research/STRATEGY_RESEARCH_LEDGER.md",
-    "exploration_guide_version": "2026-08-19.1",
+    "exploration_guide_version": "2026-08-19.2",
     "preregistration_required": true,
     "failed_implementation_retention": "conclusion_only_git_history_for_detail",
     "retention_contract": "docs/contracts/STRATEGY_RESEARCH_RETENTION_CONTRACT_2026-08-17.json",
-    "current_conclusion": "sector_first_hard_gate_failed_retain_v3",
-    "current_open_direction": "stock_first_sector_relative_residual_without_a_sector_hard_gate"
+    "current_conclusion": "stock_first_sector_relative_residual_failed_retain_exact_v3",
+    "current_open_direction": "no_same_window_parameter_direction_prepare_qualified_stock_event_surprise_revision_inputs"
   },
   "next_step": {
-    "scope": "freeze_one_stock_first_sector_relative_residual_contract_then_run_unconditional_walk_forward_only",
+    "scope": "qualify_stock_level_surprise_revision_context_data_and_collect_new_independent_outcomes_before_modeling",
     "required": [
-      "record_current_exploration_guide_version_and_material_novelty",
-      "retain_exact_v3_core_as_primary_score_and_lambda_zero_control",
-      "use_sector_state_only_to_residualize_or_bound_stock_level_increment",
-      "pass_unconditional_walk_forward_before_any_dynamic_weight",
-      "require_new_independent_time_period_before_forward_promotion"
+      "verify_published_at_first_seen_at_available_at_and_revision_lineage",
+      "retain_numeric_expectation_realization_revision_and_context_fields",
+      "freeze_offline_pit_replay_before_strategy_fitting",
+      "retain_exact_v3_core_and_lambda_zero_as_permanent_controls",
+      "require_new_independent_time_period_before_any_model_promotion"
     ],
-    "forbidden": "same_window_sector_count_weight_window_regularization_or_switch_rescan"
+    "forbidden": "same_window_sector_residual_weight_window_regularization_or_model_rescan_before_new_information_and_outcomes"
   },
   "source_authority": {
     "current_status": "PROJECT_STATUS.json",
