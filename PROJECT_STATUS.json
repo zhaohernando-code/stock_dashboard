@@ -278,37 +278,6 @@
     "paper_tracking_changed": false,
     "live_order_changed": false
   },
-  "sector_first_two_stage_research": {
-    "executed": true,
-    "claim_ceiling": "same_history_sequential_provisional_effective_membership_mechanism_research_not_independent_validation_not_production_pit",
-    "window": [
-      "2023-09-15",
-      "2026-06-18"
-    ],
-    "baseline_replay_days": 609,
-    "baseline_exact_symbol_set_match_rate": 1.0,
-    "sector_mean_daily_rank_ic": -0.0090123593,
-    "stock_sector_relative_residual_mean_daily_rank_ic": 0.0746760748,
-    "outer_days": 294,
-    "outer_mean_lift_bps": -1.8655909,
-    "outer_ci95_bps": [
-      -46.4075906,
-      48.247014
-    ],
-    "positive_folds": 1,
-    "folds": 7,
-    "recent_16_day_lift_bps": -335.1303348,
-    "historical_gates_passed": 1,
-    "historical_gates_total": 6,
-    "switch_evaluation": "not_run_challenger_failed_unconditional_historical_gates",
-    "implementation_retained": false,
-    "tests_retained": false,
-    "retained_sector_state_snapshot": "data/research_validation_forward_20260808/external/sector-first-state-snapshot-20230914-20260626.sqlite",
-    "report": "docs/research/SECTOR_FIRST_TWO_STAGE_CLOSEOUT_2026-08-19.md",
-    "v3_signal_changed": false,
-    "paper_tracking_changed": false,
-    "live_order_changed": false
-  },
   "next_step": {
     "direction": "stock_first_sector_relative_residual_without_a_sector_hard_gate",
     "allowed_now": {
@@ -348,8 +317,6 @@
     "source_commit_before_tushare_structured_event_repair": "cab027cacf246b156d6738a41649f71b9e4d680b",
     "default_fast_suite": "1295_passed_181_deselected_6_subtests_passed",
     "policy_audit": "pass",
-    "sector_first_closeout_notebook": "executed_4_code_cells_no_errors_snapshot_hash_and_gate_recomputation_passed",
-    "sector_first_report_artifact": "validated_and_rendered",
     "ruff_changed_files": "pass",
     "origin_main_at_source_commit": true
   }
