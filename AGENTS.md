@@ -35,6 +35,7 @@ cd frontend && npm run dev
 
 ## 强制门禁
 
+- 开始任何选股、持有、退出、权重、热点、板块或外部信息探索前，必须完整阅读 `docs/research/STRATEGY_RESEARCH_LEDGER.md`，并按其中“启动合同”完成预注册；没有记录当前总纲版本和实质新颖性时不得开始实现或运行。
 - 本项目的 Git hooks 使用 `core.hooksPath=../../.githooks`，不是仓库内 `.git/hooks`。如果 hook 没触发，先运行 `bash scripts/install-git-hooks.sh`，确认共享 `../../.githooks/pre-push` 存在且可执行。
 - push 前必须经过 `scripts/hooks/pre-push-stock-dashboard.sh`：工作树必须干净；推 `origin/main` 时必须是本地 `main` tip；自动运行默认 fast pytest 和 policy audit。
 - 默认 `pytest` 是快回归边界。`runtime_integration` 覆盖 Phase 5 日刷、`refresh-runtime-data`、真实分析流水线、seeded workspace 等长链路，不能混回默认测试。

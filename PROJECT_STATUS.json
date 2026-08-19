@@ -2,7 +2,7 @@
   "project": "stock_dashboard",
   "status": "in_progress",
   "owner": "hernando_zhao",
-  "updated_at": "2026-08-19T10:20:00+08:00",
+  "updated_at": "2026-08-19T10:21:00+08:00",
   "current_phase": {
     "id": "phase-5",
     "label": "V3 true-forward validation and external-context evidence collection"
@@ -10,9 +10,9 @@
   "production_state": {
     "core_strategy": "V3 Rank4-only stable-profit frontier",
     "external_production_weight": 0.0,
-    "v3_signal_changed_by_research_cleanup": false,
-    "live_order_changed_by_research_cleanup": false,
-    "runtime_publish_required_by_research_cleanup": false
+    "research_cleanup_changed_v3_signal": false,
+    "research_cleanup_changed_live_orders": false,
+    "runtime_publish_required_by_this_change": false
   },
   "personal_eligibility": {
     "stage": "before_scoring_and_ranking",
@@ -32,292 +32,68 @@
     "comparison_start": "2026-07-08",
     "initial_cash_cny_per_role": 200000.0,
     "roles": 4,
-    "external_shadow_control": {
-      "strategy_id": "round75_exact_share_core_veto_exit_extension_shadow_v1",
-      "contract": "docs/contracts/ROUND75_SHADOW_FORWARD_CONTROL_2026-08-08.json",
-      "display_mode": "same_table_curve_and_trade_ledger",
-      "external_buy_allowed": false,
-      "positive_news_buy_trigger_allowed": false,
-      "signal_registry": "data/shortpick-round75-shadow-signals.json",
-      "historical_tracking": "data/shortpick-round75-shadow-tracking.json",
-      "append_only": true,
-      "minimum_independent_true_forward_triggers_before_reconsideration": 3
-    },
-    "retired_rank5_card_visible": false,
-    "rank5_forward_observation": "data_collection_only_no_buy_no_ui_no_automatic_reopen"
+    "external_shadow_contract": "docs/contracts/ROUND75_SHADOW_FORWARD_CONTROL_2026-08-08.json",
+    "external_shadow_display": "same_table_curve_and_trade_ledger",
+    "external_shadow_can_create_buy": false,
+    "external_shadow_append_only": true,
+    "minimum_independent_true_forward_triggers_before_reconsideration": 3,
+    "rank5": "data_collection_only_no_buy_no_ui_no_automatic_reopen"
   },
   "external_context_data": {
     "production_activation": false,
     "historical_replay_network_access": false,
     "pit_rule": "available_at <= decision_cutoff",
-    "storage_policy": "logical_summary_payload_under_2_GiB_with_user_accepted_uncompressed_small_file_allocation_exception",
-    "required_time_lineage": [
-      "published_at",
-      "first_seen_at",
-      "available_at",
-      "revision_id_or_non_revision_declaration"
-    ],
+    "storage_policy": "summary_and_metadata_only_logical_payload_under_2_GiB",
     "raw_normalized_pit_replay_contract_ready": true,
-    "provider_quality_and_revision_lineage_still_block_production": true,
-    "pit_readiness_audit": {
-      "report": "docs/analysis/external_context_pit_readiness_2026-08-17/report.html",
-      "notebook": "docs/analysis/external_context_pit_readiness_2026-08-17/external_context_pit_readiness.ipynb",
-      "status": "partial_provisional_research_ready_not_v3_weight_backtest_ready",
-      "common_window": [
-        "2023-07-13",
-        "2026-05-26"
-      ],
-      "candidate_rows": 28049,
-      "completed_labels": 26144,
-      "curated_cninfo_events": 155132,
-      "global_instruments": 4,
-      "macro_series": 7,
-      "allowed_now": "collect_structured_event_delta_fields_no_title_model_rescan",
-      "exact_v3_blockers": [
-        "professional_news_history_missing",
-        "production_grade_revision_lineage_missing",
-        "new_independent_outcomes_missing"
-      ],
-      "exact_input_closeout": {
-        "report": "docs/analysis/external_context_exact_inputs_2026-08-17/report.json",
-        "exact_core_path": "data/research_validation_forward_20260808/external/exact-v3-core-scores-candidates-20260817-v3.json",
-        "exact_core_active_window_rows": 30681,
-        "exact_core_active_window_candidate_rows": 30761,
-        "exact_core_active_window_coverage_ratio": 0.997399304313904,
-        "effective_sector_path": "data/research_validation_forward_20260808/external/tushare-sw2021-sector-membership-effective-dated-20260817-v2.json",
-        "effective_sector_rows": 7899,
-        "effective_sector_symbols": 5895,
-        "combined_common_window_rows": 26666,
-        "combined_common_window_candidate_rows": 26782,
-        "combined_common_window_coverage_ratio": 0.9956687327309387,
-        "effective_dated_research_ready": true,
-        "strict_historical_pit_ready": false,
-        "strict_sector_blockers": [
-          "provider_published_at_missing",
-          "historical_first_seen_at_missing",
-          "provider_revision_lineage_missing"
-        ],
-        "same_window_weight_rescan_executed": true,
-        "restricted_static_residual_backtest": {
-          "executed": true,
-          "preregistered": true,
-          "claim_ceiling": "same_window_reused_provisional_mechanism_diagnostic_not_exact_production_portfolio_backtest_not_strategy_promotion",
-          "window": [
-            "2023-09-07",
-            "2026-08-07"
-          ],
-          "eligible_rows": 10267,
-          "eligible_days": 648,
-          "event_coverage_ratio": 0.18759131197039057,
-          "sector_coverage_ratio": 0.9988312067790007,
-          "global_coverage_ratio": 1.0,
-          "selected_weights": {
-            "event_only": 0.025,
-            "sector_only": 0.025,
-            "event_sector_fusion": 0.05,
-            "global_overlay": 0.0,
-            "three_channel_fusion": 0.0
-          },
-          "directional_passed_arms": 0,
-          "tested_external_arms": 5,
-          "status": "failed_cross_period_instability_no_static_weight_promotion",
-          "implementation_retained": false,
-          "tests_retained": false,
-          "report": "docs/analysis/restricted_external_context_backtest_2026-08-18/artifact.json",
-          "preregistration": "docs/research/RESTRICTED_EXTERNAL_CONTEXT_BACKTEST_PREREGISTRATION_2026-08-18.json",
-          "result_content_digest": "9bdd802611099a42224bac8bf8cc1ee2b0008ce6fed428a839929e963fe38e58",
-          "offline_replay_exact_match": true,
-          "v3_signal_changed": false,
-          "paper_tracking_changed": false,
-          "live_order_changed": false
-        },
-        "v3_signal_changed": false
-      },
-      "exact_v3_backtest_executed": false,
-      "restricted_exact_core_mechanism_diagnostic_executed": true,
-      "four_arm_mechanism_screen": {
-        "executed": true,
-        "claim_ceiling": "opportunity_head_mechanism_screen_not_v3_backtest",
-        "window": [
-          "2023-07-13",
-          "2026-05-26"
-        ],
-        "selected_event_weight": 0.0,
-        "selected_global_macro_weight": 0.0,
-        "calibration_best_event_weight": 0.05,
-        "validation_event_mean_lift_percentage_points": 0.3081,
-        "final_event_mean_lift_percentage_points": -0.2396,
-        "status": "failed_no_stable_increment",
-        "implementation_retained": false,
-        "tests_retained": false
-      },
-      "title_semantic_residual_challenger": {
-        "executed": true,
-        "claim_ceiling": "opportunity_head_semantic_screen_not_v3_backtest",
-        "selected_weight": 0.0,
-        "calibration_best_weight": 0.075,
-        "calibration_best_mean_lift_percentage_points": 0.1148,
-        "calibration_best_standard_error_percentage_points": 0.178,
-        "validation_best_scanned_lift_percentage_points": 0.3768,
-        "final_same_weight_lift_percentage_points": -0.2739,
-        "independent_post_20260527_outcomes_opened": false,
-        "status": "failed_cross_period_sign_flip",
-        "implementation_retained": false,
-        "tests_retained": false
-      }
-    },
-    "structured_event_source_poc": {
-      "candidate": "Tushare forecast_express_repurchase_fina_indicator",
-      "field_contract_fit": "promising_for_numeric_event_magnitude",
-      "permission_validated": true,
-      "transport_validated": true,
-      "transport": "https_only_with_legacy_official_http_url_upgraded_before_token_transmission",
-      "pit_revision_lineage_validated": false,
-      "remaining_blocker": "provider_exposes_announcement_date_but_no_provider_revision_id_or_intraday_publish_time",
-      "acquisition": {
-        "window": [
-          "2023-06-13",
-          "2026-08-14"
-        ],
-        "plan_id": "tushare-structured-events-9de1b510de33c04106d65173",
-        "completed_tasks": 71,
-        "total_tasks": 71,
-        "raw_rows": 56885,
-        "retained_main_board_rows": 31197,
-        "manifest_count": 65,
-        "manifest_scope_digest": "54a3b4df93de0d1d8434d3b30e8762c8e2f9aacaa444bedf3710d0efb16db6d5",
-        "offline_verified_file_count": 93591,
-        "offline_network_used": false,
-        "logical_root_bytes": 175409126,
-        "allocated_root_kib": 396200,
-        "hard_cap_bytes": 1879048192
-      },
-      "structured_level_residual_screen": {
-        "status": "failed_one_se_selected_zero_weight",
-        "candidate_rows_after_personal_outer_filter": 29696,
-        "event_present_candidate_rows": 6302,
-        "best_calibration_weight": 0.15,
-        "selected_weight": 0.0,
-        "validation_lift_at_15pct_percentage_points": 0.0402,
-        "independent_final_lift_at_15pct_percentage_points": 0.1826,
-        "claim_ceiling": "opportunity_head_mechanism_screen_not_exact_v3_backtest",
-        "implementation_retained": false,
-        "tests_retained": false,
-        "v3_signal_changed": false
-      }
-    },
-    "post_20260527_cninfo_acquisition": {
-      "status": "complete_plan_ready_not_full713",
-      "window": [
-        "2026-05-27",
-        "2026-08-14"
-      ],
-      "completed_tasks": 1629,
-      "total_tasks": 1629,
-      "completed_symbols": 1629,
-      "partial_symbols": 0,
-      "source_records": 6744,
-      "curated_records": 6744,
-      "manifest_count": 1559,
-      "manifest_scope_digest": "3f20a6a10532e1d13ca026a85c4040ad96096600245d18bac3857900628b0852",
-      "offline_hash_verification": "passed",
-      "offline_verified_file_count": 20922,
-      "plan_ready": true,
-      "full713_window_ready": false,
-      "logical_root_bytes": 1171093112,
-      "allocated_root_bytes": 2514382848,
-      "independent_outcomes_opened_for_failed_title_model": false,
-      "v3_signal_changed": false
-    }
+    "research_readiness": "partial_provisional",
+    "strict_production_pit_ready": false,
+    "qualified_inputs": [
+      "exact_v3_core_snapshot",
+      "unadjusted_daily_bars",
+      "effective_dated_sw2021_sector_membership",
+      "cninfo_research_snapshot",
+      "tushare_structured_event_snapshot"
+    ],
+    "production_blockers": [
+      "historical_sector_first_seen_and_revision_lineage_missing",
+      "professional_news_history_missing",
+      "provider_revision_or_vintage_lineage_missing",
+      "new_independent_outcomes_missing"
+    ],
+    "asset_details_and_hashes": "docs/contracts/STRATEGY_RESEARCH_RETENTION_CONTRACT_2026-08-17.json"
   },
-  "research_closeout": {
-    "status": "failed_engines_retired_reusable_inputs_retained",
-    "authoritative_ledger": "docs/research/STRATEGY_RESEARCH_LEDGER.md",
+  "research_governance": {
+    "mandatory_preread": "docs/research/STRATEGY_RESEARCH_LEDGER.md",
+    "exploration_guide_version": "2026-08-19.1",
+    "preregistration_required": true,
+    "failed_implementation_retention": "conclusion_only_git_history_for_detail",
     "retention_contract": "docs/contracts/STRATEGY_RESEARCH_RETENTION_CONTRACT_2026-08-17.json",
-    "retained_hotspot_dataset": "docs/research/data/ALL_UNIVERSE_OPPORTUNITY_DATASET_COVERAGE_CORRECTED_V2_2026-08-17.json.gz",
-    "retained_hotspot_dataset_rows": 32028,
-    "retained_hotspot_dataset_historical_st_pit": false,
-    "current_conclusion": "sector_first_hard_gate_failed; retain_v3_and_research_only_stock_first_sector_relative_residual_under_a_new_frozen_contract",
-    "forbidden_reuse": [
-      "more_threshold_scans_on_the_reused_window",
-      "positive_news_as_independent_buy_signal",
-      "v3_top20_identity_as_hotspot_hard_gate",
-      "cash_path_side_effects_as_alpha",
-      "single_trigger_or_zero_validation_coverage_as_promotion_evidence",
-      "same_window_external_weight_or_regularization_rescan",
-      "same_window_title_semantic_model_variant_scan",
-      "same_window_static_external_residual_rescan",
-      "same_window_v1_price_limit_chaser_switch_rescan",
-      "single_stage_all_market_model_as_both_sector_detector_and_stock_selector",
-      "same_window_sector_first_hard_gate_parameter_rescan"
-    ]
-  },
-  "dynamic_switch_research": {
-    "executed": true,
-    "claim_ceiling": "sequential_reused_history_mechanism_research_not_independent_validation",
-    "window": [
-      "2023-09-15",
-      "2026-06-18"
-    ],
-    "v1_hotspot_candidate_minus_v3_mean_bps": -278.7938,
-    "v1_hotspot_ready_execution_minus_v3_mean_bps": -412.3,
-    "dynamic_families_passed": 0,
-    "learned_challenger_minus_v3_mean_bps": 16.2499,
-    "learned_challenger_ci95_bps": [
-      -44.9863,
-      79.3694
-    ],
-    "learned_challenger_positive_half_years": 3,
-    "learned_challenger_total_half_years": 5,
-    "learned_challenger_2026_h1_lift_bps": -78.403,
-    "switch_evaluation_after_learned_challenger": "not_run_unconditional_candidate_gate_failed",
-    "implementation_retained": false,
-    "tests_retained": false,
-    "report": "docs/research/DYNAMIC_SWITCH_RESEARCH_CLOSEOUT_2026-08-18.md",
-    "v3_signal_changed": false,
-    "paper_tracking_changed": false,
-    "live_order_changed": false
+    "current_conclusion": "sector_first_hard_gate_failed_retain_v3",
+    "current_open_direction": "stock_first_sector_relative_residual_without_a_sector_hard_gate"
   },
   "next_step": {
-    "direction": "stock_first_sector_relative_residual_without_a_sector_hard_gate",
-    "allowed_now": {
-      "scope": "freeze_one_stock_first_sector_relative_residual_contract_then_run_unconditional_walk_forward_only",
-      "required_material_change": [
-        "remove_sector_rank_as_a_stock_eligibility_gate",
-        "retain_exact_v3_core_as_the_primary_score_and_lambda_zero_control",
-        "use_sector_state_only_to_residualize_or_bound_stock_level_increment",
-        "new_independent_time_period_before_forward_promotion"
-      ],
-      "forbidden_action": "rescan_sector_counts_or_fit_a_v3_switch_before_the_stock_first_challenger_is_independently_historically_coherent"
-    },
-    "sequence": [
-      "freeze_a_new_stock_first_sector_relative_target_and_feature_contract_before_running",
-      "validate_stock_level_increment_without_excluding_whole_sectors",
-      "validate_turnover_cash_and_personal_eligibility_with_exact_v3_replay",
-      "require_the_unconditional_challenger_to_pass_the_same_walk_forward_gates",
-      "only_then_fit_bounded_dynamic_weight_against_V3",
-      "retain_lambda_zero_and_current_paper_tracking_until_new_forward_evidence"
+    "scope": "freeze_one_stock_first_sector_relative_residual_contract_then_run_unconditional_walk_forward_only",
+    "required": [
+      "record_current_exploration_guide_version_and_material_novelty",
+      "retain_exact_v3_core_as_primary_score_and_lambda_zero_control",
+      "use_sector_state_only_to_residualize_or_bound_stock_level_increment",
+      "pass_unconditional_walk_forward_before_any_dynamic_weight",
+      "require_new_independent_time_period_before_forward_promotion"
     ],
-    "exact_v3_blocked_until": [
-      "strict_historical_sector_availability_or_qualified_vendor_vintage_exists",
-      "professional_news_history_is_qualified_or_formally_removed_from_test_scope",
-      "new_independent_outcomes_exist"
-    ]
+    "forbidden": "same_window_sector_count_weight_window_regularization_or_switch_rescan"
   },
   "source_authority": {
     "current_status": "PROJECT_STATUS.json",
     "active_decisions": "DECISIONS.md",
-    "failed_research_and_future_direction": "docs/research/STRATEGY_RESEARCH_LEDGER.md",
+    "strategy_exploration_preread_failed_research_and_future_direction": "docs/research/STRATEGY_RESEARCH_LEDGER.md",
     "research_data_retention": "docs/contracts/STRATEGY_RESEARCH_RETENTION_CONTRACT_2026-08-17.json",
     "engineering_lessons": "PROCESS.md",
     "runtime_truth": "runtime_release_manifest_and_served_API",
     "retired_detail": "git_history_only"
   },
   "last_verified_baseline": {
-    "source_commit_before_tushare_structured_event_repair": "cab027cacf246b156d6738a41649f71b9e4d680b",
     "default_fast_suite": "1295_passed_181_deselected_6_subtests_passed",
     "policy_audit": "pass",
-    "ruff_changed_files": "pass",
     "origin_main_at_source_commit": true
   }
 }

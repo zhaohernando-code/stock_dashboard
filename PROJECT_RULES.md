@@ -19,6 +19,7 @@
 - For this repo, closeout is not complete at a task-branch commit. Unless the user explicitly wants the branch left open, the final repo state must be `main` fast-forwarded or merged to include the task commits, with a clean working tree.
 - Final responses must report whether the change is on `main` or still branch-local. Do not imply “已收尾” while the relevant commits only exist on `task/*`.
 - Durable research or rollout decisions go to `DECISIONS.md`; reusable lessons or rollback causes go to `PROCESS.md`; current progress and blockers go to `PROJECT_STATUS.json`.
+- 任何选股、持有、退出、权重、热点、板块或外部信息探索，必须先完整阅读 `docs/research/STRATEGY_RESEARCH_LEDGER.md`，并在预注册中记录其当前 `exploration_guide_version`、与既有失败方向的重叠和本轮实质新增内容；缺失时不得写策略代码、扫参数或打开结果。
 - Active contracts belong in `docs/contracts/`; historical audit and research notes belong in `docs/archive/`.
 - 用户访问入口当前是 `https://hernando-zhao.cn/stocks`；底层规范挂载路径仍是 `https://hernando-zhao.cn/projects/ashare-dashboard/`。文档和 UI 文案需要区分这两层，不要把业务别名和运行时挂载写成同一个概念。
 - 本项目 UI 风格参考 `VoltAgent/awesome-design-md` 中接近 `Coinbase` 的金融产品规约：强调可信、克制、数据密度与清晰层级；在实现上使用浅色底、蓝绿信号色、强对比标题和证据卡片，而不是通用后台模板。
