@@ -2,17 +2,17 @@
   "project": "stock_dashboard",
   "status": "in_progress",
   "owner": "hernando_zhao",
-  "updated_at": "2026-08-19T11:49:00+08:00",
+  "updated_at": "2026-09-05T08:44:21.438437+00:00",
   "current_phase": {
     "id": "phase-5",
     "label": "V3 true-forward validation and external-context evidence collection"
   },
   "production_state": {
-    "core_strategy": "V3 Rank4-only stable-profit frontier",
+    "core_strategy": "V3 Rank4-only frozen current core; profitability unproven",
     "external_production_weight": 0.0,
     "research_cleanup_changed_v3_signal": false,
     "research_cleanup_changed_live_orders": false,
-    "runtime_publish_required_by_this_change": false
+    "runtime_publish_required_by_this_change": true
   },
   "personal_eligibility": {
     "stage": "before_scoring_and_ranking",
@@ -64,23 +64,23 @@
   },
   "research_governance": {
     "mandatory_preread": "docs/research/STRATEGY_RESEARCH_LEDGER.md",
-    "exploration_guide_version": "2026-08-19.2",
+    "exploration_guide_version": "2026-09-05.1",
     "preregistration_required": true,
     "failed_implementation_retention": "conclusion_only_git_history_for_detail",
     "retention_contract": "docs/contracts/STRATEGY_RESEARCH_RETENTION_CONTRACT_2026-08-17.json",
-    "current_conclusion": "stock_first_sector_relative_residual_failed_retain_exact_v3",
-    "current_open_direction": "no_same_window_parameter_direction_prepare_qualified_stock_event_surprise_revision_inputs"
+    "current_conclusion": "weekly_reserved_orders_challenger_rejected_label_maturity_defect_repaired",
+    "current_open_direction": "foundation_coverage_and_new_independent_evidence_before_further_candidates"
   },
   "next_step": {
-    "scope": "qualify_stock_level_surprise_revision_context_data_and_collect_new_independent_outcomes_before_modeling",
+    "scope": "close_measurement_gaps_then_preregister_incremental_information_candidate_with_new_outcomes",
     "required": [
-      "verify_published_at_first_seen_at_available_at_and_revision_lineage",
-      "retain_numeric_expectation_realization_revision_and_context_fields",
-      "freeze_offline_pit_replay_before_strategy_fitting",
-      "retain_exact_v3_core_and_lambda_zero_as_permanent_controls",
-      "require_new_independent_time_period_before_any_model_promotion"
+      "historical_corporate_actions_and_cash_entitlements",
+      "verified_original_public_event_time_and_version",
+      "true_forward_local_available_time",
+      "same_condition_net_account_controls",
+      "independent_outcome_window_before_promotion"
     ],
-    "forbidden": "same_window_sector_residual_weight_window_regularization_or_model_rescan_before_new_information_and_outcomes"
+    "forbidden": "old_window_parameter_search_or_stable_profit_claim_from_reused_price_replay"
   },
   "source_authority": {
     "current_status": "PROJECT_STATUS.json",
@@ -92,8 +92,24 @@
     "retired_detail": "git_history_only"
   },
   "last_verified_baseline": {
-    "default_fast_suite": "1295_passed_181_deselected_6_subtests_passed",
+    "default_fast_suite": "1316_passed_181_deselected_6_subtests_passed",
     "policy_audit": "pass",
-    "origin_main_at_source_commit": true
+    "origin_main_at_source_commit": false
+  },
+  "foundation_audit": {
+    "training_label_admission": "actual_complete_cohort_outcome_before_first_test_day",
+    "missing_horizon_target": "fail_closed_no_10d_fallback_for_5d_or_20d",
+    "frozen_v3_baseline": "exact_original_and_rank4_replay_pass",
+    "price_lineage": "1420535_overlaps_3_differences_gt_half_cent_no_systematic_adjustment",
+    "new_challenger_promoted": false,
+    "remaining_evidence_gaps": [
+      "corporate_action_accounting_not_complete",
+      "historical_PIT_eligibility_not_fully_certified",
+      "daily_bar_fills_are_proxies",
+      "legacy_learning_evaluation_conditions_on_label_readiness",
+      "independent_future_outcomes_missing"
+    ],
+    "research_contract": "docs/contracts/DAILY_STRATEGY_FOUNDATION_RESEARCH_2026-09-05.json",
+    "historical_eligibility_exception": "one frozen buy:605499.SH signal2024-12-05 raw_price221_exceeds200; historical_status_PIT_unverified"
   }
 }

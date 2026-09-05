@@ -483,6 +483,7 @@ def _label_for_row(
             block_reasons.add(f"{reason}_entry")
 
     exit_dates_by_horizon: dict[str, str | None] = {}
+    benchmark_exit_dates_by_horizon: dict[str, str | None] = {}
     exit_tradability_by_horizon: dict[str, str] = {}
     exit_execution_by_horizon: dict[str, dict[str, Any]] = {}
     for horizon in horizons:
@@ -516,6 +517,9 @@ def _label_for_row(
         )
         horizon_key = str(horizon)
         exit_dates_by_horizon[horizon_key] = exit_execution["date"]
+        benchmark_exit_dates_by_horizon[horizon_key] = (
+            benchmark_exit["observed_date"].isoformat() if benchmark_exit else None
+        )
         exit_execution_by_horizon[horizon_key] = exit_execution
         if stock_exit is None:
             exit_tradability_by_horizon[horizon_key] = "blocked"
@@ -531,6 +535,11 @@ def _label_for_row(
             else:
                 block_reasons.add(f"{reason}_exit_{horizon}d")
 
+    all_outcome_dates = [*exit_dates_by_horizon.values(), *benchmark_exit_dates_by_horizon.values()]
+    # label_status is shared across horizons, including their execution gates.
+    label_row_available_day = (
+        max(all_outcome_dates) if all_outcome_dates and all(all_outcome_dates) else None
+    )
     excess_10d = labels.get("excess_return_10d")
     net_excess_10d = excess_10d - 0.001 if excess_10d is not None else None
     labels["net_excess_return_10d_after_costs"] = net_excess_10d
@@ -550,6 +559,9 @@ def _label_for_row(
         "entry_trade_day_offset": entry_offset,
         "exit_price_source": "future_close_research_proxy",
         "exit_dates_by_horizon": exit_dates_by_horizon,
+        "benchmark_exit_dates_by_horizon": benchmark_exit_dates_by_horizon,
+        "label_available_dates_by_horizon": {str(horizon): label_row_available_day for horizon in horizons},
+        "label_availability_policy": "all_stock_and_benchmark_outcomes_in_shared_status_gate",
         "exit_tradability_by_horizon": exit_tradability_by_horizon,
         "exit_execution_by_horizon": exit_execution_by_horizon,
         "cost_assumption": {"round_trip_cost": 0.001, "stress_multiplier": 2.0},

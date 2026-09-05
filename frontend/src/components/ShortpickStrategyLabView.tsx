@@ -75,7 +75,7 @@ function stringField(source: Record<string, unknown> | undefined, key: string): 
 function configRoleLabel(role?: string | null): string {
   if (role === "primary_forward_observation") return "现行前向基线";
   if (role === "lower_concentration_control") return "低集中对照";
-  if (role === "quality_replacement_rebalance_candidate") return "稳定盈利前沿";
+  if (role === "quality_replacement_rebalance_candidate") return "核心候选（盈利待验证）";
   if (role === "upstream_meta_signal_candidate") return "独立模型对照";
   if (role === "conditional_aggressive_control_candidate") return "条件增强对照";
   if (role === "execution_stability_control_candidate") return "执行稳定对照";
@@ -114,12 +114,12 @@ function configRoleColor(role?: string | null): string {
 }
 
 function statusColor(value?: string | null): string {
-  if (value === "ready" || value === "active" || value === "passed" || value === "stable_profit_frontier") {
+  if (value === "ready" || value === "active" || value === "passed") {
     return "green";
   }
   if (value === "contract_ready" || value === "baseline_control" || value === "active_control") return "blue";
   if (value === "failed" || value === "blocked") return "red";
-  if (value === "holdout" || value === "diagnostic_only") return "gold";
+  if (value === "holdout" || value === "diagnostic_only" || value === "stable_profit_frontier") return "gold";
   return "default";
 }
 
@@ -138,7 +138,7 @@ function readableStatusLabel(value?: string | null): string {
   if (value === "awaiting_first_forward_fill") return "等待首笔前向成交";
   if (value === "active_control") return "对照观察中";
   if (value === "candidate_control") return "候选对照";
-  if (value === "stable_profit_frontier") return "稳定盈利前沿";
+  if (value === "stable_profit_frontier") return "核心候选（盈利待验证）";
   if (value === "static_full_history_ready") return "静态历史指标已就绪";
   if (value === "passed") return "已通过";
   if (value === "failed") return "未通过";
@@ -1196,7 +1196,7 @@ function ShortpickStrategyLabReplayTab({
         showIcon
         type="info"
         message="当前只保留 3 个活跃角色"
-        description="仅 Rank4 替补策略是稳定盈利优化基线，上游元信号保留为独立模型族对照，现行 14 tranche 仅作为前向基线；Rank5 真实买入与其余 5 条被支配或重复策略共 6 条已归档。"
+        description="仅 Rank4 替补策略是当前核心候选，尚未证明稳定盈利。历史年化仅描述已有样本，不能作为未来收益目标；应结合新样本扣费收益、同条件对照、回撤与恢复、分段表现和成交成本判断。其余两个角色继续作为对照。"
       />
 
       {replay?.metric_groups?.length ? (

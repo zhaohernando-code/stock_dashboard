@@ -16,6 +16,7 @@ from typing import Any
 
 from ashare_evidence.phase2.common import spearman_correlation
 from ashare_evidence.research_artifact_store import write_research_validation_artifact
+from ashare_evidence.training_label_maturity import cohort_available_day, mature_training_dates
 
 MODEL_CANDIDATE_RUN_SCHEMA_VERSION = "walk_forward_model_candidate_run.v1"
 TOP_CANDIDATE_INVENTORY_SCHEMA_VERSION = "top_candidate_inventory.v1"
@@ -207,7 +208,7 @@ def _exhaustion_reference_metadata(
 
 def _target(row: dict[str, Any], *, horizon_days: int = 10) -> float | None:
     value = row.get("target_labels_by_horizon", {}).get(str(horizon_days))
-    if value is None:
+    if value is None and horizon_days == 10:
         value = row.get("target_label")
     if value is None:
         return None
@@ -566,6 +567,12 @@ def _build_stream_linear_fit_stats_by_date(
                     continue
                 date_stats = stats_by_horizon_date[horizon_days].setdefault(as_of_date, _empty_linear_fit_stats())
                 _update_linear_fit_stats(date_stats, values, float(target))
+        for horizon_days in horizons:
+            target_rows = [row for row in rows if _target(row, horizon_days=horizon_days) is not None]
+            if as_of_date in stats_by_horizon_date[horizon_days]:
+                stats_by_horizon_date[horizon_days][as_of_date]["label_available_on"] = cohort_available_day(
+                    target_rows, horizon_days=horizon_days
+                )
     return stats_by_horizon_date
 
 
@@ -609,6 +616,9 @@ def _build_stream_tail_capture_fit_stats_by_config_date(
                 min_avg_amount_20d=min_avg_amount_20d,
             )
             date_stats = stats_by_config_date[key].setdefault(as_of_date, _empty_linear_fit_stats())
+            date_stats["label_available_on"] = cohort_available_day(
+                [row for row, _values, _target in candidates], horizon_days=horizon_days
+            )
             for row, values, _target in candidates:
                 binary_target = 1.0 if str(row.get("universe_row_id") or "") in positive_ids else 0.0
                 _update_linear_fit_stats(date_stats, values, binary_target)
@@ -3100,8 +3110,9 @@ def _walk_forward_splits(dates: list[str], *, min_train_dates: int, test_window_
                 "status": "insufficient_dates",
                 "train_dates": dates,
                 "test_dates": [],
-                "purge_days": 20,
-                "embargo_days": 20,
+                "purge_days": 0,
+                "embargo_days": 0,
+                "training_label_policy": "actual_outcome_dates_before_test_start",
             }
         ]
     splits: list[dict[str, Any]] = []
@@ -3117,8 +3128,9 @@ def _walk_forward_splits(dates: list[str], *, min_train_dates: int, test_window_
                 "status": "ready",
                 "train_dates": dates[:start],
                 "test_dates": test_dates,
-                "purge_days": 20,
-                "embargo_days": 20,
+                "purge_days": 0,
+                "embargo_days": 0,
+                "training_label_policy": "actual_outcome_dates_before_test_start",
             }
         )
         split_index += 1
@@ -3762,6 +3774,10 @@ def _label_index_row(label_row: dict[str, Any]) -> tuple[Any, ...] | None:
         labels.get("forward_return_5d"),
         labels.get("forward_return_10d"),
         labels.get("forward_return_20d"),
+        json.dumps({
+            "label_available_dates_by_horizon": label_row.get("label_available_dates_by_horizon"),
+            "exit_dates_by_horizon": label_row.get("exit_dates_by_horizon") or {},
+        }),
     )
 
 
@@ -3792,7 +3808,8 @@ def _build_stream_label_index(
             "excess_return_20d REAL, "
             "forward_return_5d REAL, "
             "forward_return_10d REAL, "
-            "forward_return_20d REAL"
+            "forward_return_20d REAL, "
+            "label_available_dates_json TEXT"
             ")"
         )
         batch: list[tuple[Any, ...]] = []
@@ -3809,10 +3826,10 @@ def _build_stream_label_index(
             ready_date_counts[as_of_date] = ready_date_counts.get(as_of_date, 0) + 1
             indexed_count += 1
             if len(batch) >= STREAM_REPLAY_INSERT_BATCH_SIZE:
-                conn.executemany("INSERT OR REPLACE INTO labels VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", batch)
+                conn.executemany("INSERT OR REPLACE INTO labels VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", batch)
                 batch = []
         if batch:
-            conn.executemany("INSERT OR REPLACE INTO labels VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", batch)
+            conn.executemany("INSERT OR REPLACE INTO labels VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", batch)
         conn.commit()
         return ready_date_counts, indexed_count
     finally:
@@ -3828,9 +3845,11 @@ def _label_index_values(result: tuple[Any, ...]) -> dict[str, Any]:
         forward_return_5d,
         forward_return_10d,
         forward_return_20d,
+        label_available_dates_json,
     ) = result
     return {
         "label_status": label_status,
+        **json.loads(label_available_dates_json or "{}"),
         "target_label": net_excess_return_10d_after_costs,
         "target_labels_by_horizon": {
             "5": excess_return_5d,
@@ -3937,7 +3956,7 @@ def _stream_joined_rows_by_date(
             universe_row_id = str(feature_row.get("universe_row_id") or "")
             cursor.execute(
                 "SELECT label_status, net_excess_return_10d_after_costs, excess_return_5d, excess_return_20d, "
-                "forward_return_5d, forward_return_10d, forward_return_20d "
+                "forward_return_5d, forward_return_10d, forward_return_20d, label_available_dates_json "
                 "FROM labels WHERE universe_row_id = ?",
                 (universe_row_id,),
             )
@@ -3982,7 +4001,7 @@ def _stream_joined_rows(
             universe_row_id = str(feature_row.get("universe_row_id") or "")
             cursor.execute(
                 "SELECT label_status, net_excess_return_10d_after_costs, excess_return_5d, excess_return_20d, "
-                "forward_return_5d, forward_return_10d, forward_return_20d "
+                "forward_return_5d, forward_return_10d, forward_return_20d, label_available_dates_json "
                 "FROM labels WHERE universe_row_id = ?",
                 (universe_row_id,),
             )
@@ -4474,10 +4493,29 @@ def build_streamed_walk_forward_model_candidate_run_artifact(
                 for split in splits:
                     if split.get("status") != "ready":
                         continue
+                    train_dates = [str(day) for day in split["train_dates"]]
+                    candidate_train_date_count = len(train_dates)
+                    requires_fit = spec_type not in _deterministic_score_only_model_types()
+                    if spec_type == "regularized_rank_linear":
+                        training_stats = stream_fit_stats_by_horizon_date.get(horizon_days, {})
+                    elif spec_type == "tail_capture_linear_ranker":
+                        training_stats = tail_capture_stats_by_config_date.get(_tail_capture_config_key(
+                            horizon_days=horizon_days,
+                            positive_top_k=max(1, int(_safe_float(params.get("tail_positive_top_k"), 20.0))),
+                            min_avg_amount_20d=_safe_float(params.get("min_avg_amount_20d"), 0.0),
+                        ), {})
+                    else:
+                        training_stats = {}
+                    if requires_fit:
+                        train_dates = mature_training_dates(
+                            train_dates,
+                            available_by_date={day: stats.get("label_available_on") for day, stats in training_stats.items()},
+                            test_start=str(split["test_dates"][0]),
+                        )
                     if spec_type == "regularized_rank_linear":
                         fitted_model = _fit_stream_model_from_date_stats(
                             stats_by_date=stream_fit_stats_by_horizon_date.get(horizon_days, {}),
-                            train_dates=[str(train_date) for train_date in split["train_dates"]],
+                            train_dates=train_dates,
                             model_spec=spec,
                             params=params,
                         )
@@ -4489,7 +4527,7 @@ def build_streamed_walk_forward_model_candidate_run_artifact(
                         )
                         fitted_model = _fit_stream_tail_capture_model_from_date_stats(
                             stats_by_date=tail_capture_stats_by_config_date.get(config_key, {}),
-                            train_dates=[str(train_date) for train_date in split["train_dates"]],
+                            train_dates=train_dates,
                             model_spec=spec,
                             params=params,
                         )
@@ -4504,11 +4542,18 @@ def build_streamed_walk_forward_model_candidate_run_artifact(
                         }
                     )
                     fitted_models_by_trial_split[(trial_id, str(split["split_id"]))] = fitted_model
-                    train_row_count = sum(ready_date_counts.get(str(train_date), 0) for train_date in split["train_dates"])
+                    train_row_count = int(fitted_model.get("train_row_count") or 0) if requires_fit else sum(ready_date_counts.get(str(day), 0) for day in train_dates)
                     fit_summaries.append(
                         {
                             "split_id": split["split_id"],
-                            "train_date_count": len(split["train_dates"]),
+                            "train_date_count": len(train_dates),
+                            "candidate_train_date_count": candidate_train_date_count,
+                            "excluded_immature_or_unknown_date_count": candidate_train_date_count - len(train_dates),
+                            "fit_status": (
+                                ("blocked_no_mature_training_labels" if not train_row_count
+                                 else "blocked_insufficient_mature_training_dates")
+                                if requires_fit and len(train_dates) < min_train_dates else "ready"
+                            ),
                             "test_date_count": len(split["test_dates"]),
                             "train_row_count": train_row_count,
                             "fitted_model_family": fitted_model.get("model_family"),
@@ -4535,7 +4580,7 @@ def build_streamed_walk_forward_model_candidate_run_artifact(
                 universe_row_id = str(feature_row.get("universe_row_id") or "")
                 label_cursor.execute(
                     "SELECT label_status, net_excess_return_10d_after_costs, excess_return_5d, excess_return_20d, "
-                    "forward_return_5d, forward_return_10d, forward_return_20d "
+                    "forward_return_5d, forward_return_10d, forward_return_20d, label_available_dates_json "
                     "FROM labels WHERE universe_row_id = ?",
                     (universe_row_id,),
                 )
@@ -4568,6 +4613,8 @@ def build_streamed_walk_forward_model_candidate_run_artifact(
                     fit_summary = next(
                         item for item in fit_summaries_by_trial[trial_id] if item["split_id"] == split["split_id"]
                     )
+                    if fit_summary["fit_status"] != "ready":
+                        continue
                     prediction = _make_prediction_from_joined_row(
                         joined=joined,
                         spec=spec,
@@ -4639,11 +4686,17 @@ def build_streamed_walk_forward_model_candidate_run_artifact(
         "feature_version": feature_metadata.get("feature_version"),
         "label_version": label_metadata.get("label_version"),
         "code_version": "unresolved_local_checkout",
-        "config_version": "shortpick_model_candidate_runner:v1:streamed_matrix_replay",
+        "config_version": "shortpick_model_candidate_runner:v2_label_maturity:streamed_matrix_replay",
         "validation_protocol": {
             "runner_policy": "registered_model_specs_only",
             "primary_row_source": "streamed_pit_feature_matrix_joined_to_sqlite_indexed_executable_label_matrix",
             "evaluation_row_policy": "label_status_ready_and_target_label_present_only",
+            "training_label_policy": "complete_cohort_actual_outcome_dates_strictly_before_test_start",
+            "unknown_training_label_dates": "exclude_and_block_if_insufficient_mature_dates",
+            "evaluation_limitations": [
+                "evaluation_conditions_on_future_label_readiness_not_unconditional_account_performance",
+                "legacy_learning_results_require_label_maturity_revalidation",
+            ],
             "production_effect": "forbidden",
             "min_train_dates": min_train_dates,
             "test_window_dates": test_window_dates,
@@ -4993,6 +5046,17 @@ def build_walk_forward_model_candidate_run_artifact(
                     continue
                 train_dates = list(split["train_dates"])
                 test_dates = list(split["test_dates"])
+                requires_fit = str(spec.get("model_type") or "") not in _deterministic_score_only_model_types()
+                candidate_train_date_count = len(train_dates)
+                if requires_fit:
+                    train_dates = mature_training_dates(
+                        train_dates,
+                        available_by_date={
+                            day: cohort_available_day(evaluable_rows_by_date.get(day, []), horizon_days=horizon_days)
+                            for day in train_dates
+                        },
+                        test_start=test_dates[0],
+                    )
                 train_rows = [
                     row
                     for train_date in train_dates
@@ -5015,6 +5079,13 @@ def build_walk_forward_model_candidate_run_artifact(
                     {
                         "split_id": split["split_id"],
                         "train_date_count": len(train_dates),
+                        "candidate_train_date_count": candidate_train_date_count,
+                        "excluded_immature_or_unknown_date_count": candidate_train_date_count - len(train_dates),
+                        "fit_status": (
+                            ("blocked_no_mature_training_labels" if not train_rows
+                             else "blocked_insufficient_mature_training_dates")
+                            if requires_fit and len(train_dates) < min_train_dates else "ready"
+                        ),
                         "test_date_count": len(test_dates),
                         "train_row_count": fitted_model.get("train_row_count"),
                         "fitted_model_family": fitted_model.get("model_family"),
@@ -5022,6 +5093,8 @@ def build_walk_forward_model_candidate_run_artifact(
                         "fitted_model_summary": _fitted_model_summary(fitted_model),
                     }
                 )
+                if requires_fit and len(train_dates) < min_train_dates:
+                    continue
                 for joined in test_rows:
                     selection_allowed, selection_block_reasons = _selection_allowed(
                         joined["feature_values_flat"],
@@ -5134,11 +5207,17 @@ def build_walk_forward_model_candidate_run_artifact(
         "feature_version": feature_matrix.get("feature_version"),
         "label_version": label_matrix.get("label_version"),
         "code_version": "unresolved_local_checkout",
-        "config_version": "shortpick_model_candidate_runner:v1",
+        "config_version": "shortpick_model_candidate_runner:v2_label_maturity",
         "validation_protocol": {
             "runner_policy": "registered_model_specs_only",
             "primary_row_source": "pit_feature_matrix_joined_to_executable_label_matrix",
             "evaluation_row_policy": "label_status_ready_and_target_label_present_only",
+            "training_label_policy": "complete_cohort_actual_outcome_dates_strictly_before_test_start",
+            "unknown_training_label_dates": "exclude_and_block_if_insufficient_mature_dates",
+            "evaluation_limitations": [
+                "evaluation_conditions_on_future_label_readiness_not_unconditional_account_performance",
+                "legacy_learning_results_require_label_maturity_revalidation",
+            ],
             "production_effect": "forbidden",
             "min_train_dates": min_train_dates,
             "test_window_dates": test_window_dates,

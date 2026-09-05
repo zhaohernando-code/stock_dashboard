@@ -1,0 +1,46 @@
+{
+  "exploration_guide_version": "2026-09-05.1",
+  "user_authorization": "2026-09-05: 独立worktree，自主长任务，以稳定盈利为核心，允许底层缺陷修复和大胆路线修正；后续明确允许制定goal",
+  "prior_direction_overlap": [
+    "全部V3参数/风险/持有/行业/量价旧方向",
+    "外部事件PIT与修订输入"
+  ],
+  "material_novelty": "审计并纠正测量/可知性/成交假设，允许与V3独立的更简单决策架构；不把换权重当新增信息，不把旧窗口当新样本",
+  "hypothesis_and_action_space": {
+    "foundation": "若收益证据不真实或不匹配个人执行，先修正评价内核，否则策略排名无意义",
+    "limited_candidates": "最多两个简化挑战者；仅在输入和基线通过后另附固定规则预注册，再打开其收益；支持不买/持有现金，不引入分钟能力",
+    "scope": "数据与回测审计、离线研究代码、具体缺陷修复；无真实资金交易"
+  },
+  "pit_baseline_and_kill_gate": {
+    "baseline": "原始冻结snapshot + Rank4-only重放 + 当前paper账户全额对账",
+    "time": "明确label_available_at和事件首次公开对应版本；决策时间严格早于执行和所用标签可知时间",
+    "eligibility": "同一决策时点主板/200元/可交易资格；无法追溯标记不合格",
+    "evaluation": "旧窗口只开发/诊断；独立验证窗口必须给出此前未用于选方案的证据；重叠持有按时间块分析",
+    "metrics": [
+      "扣费绝对收益",
+      "同条件选股收益差",
+      "最大回撤和恢复时间",
+      "分段稳定性和收益集中度",
+      "现金路径和成交成本压力"
+    ],
+    "kill": [
+      "无法精确复现基线或核平现金",
+      "未来信息/标签泄漏",
+      "数据覆盖不足或历史资格不成立",
+      "结果依赖单事件或事后参数选择",
+      "无独立验证则不能晋级"
+    ],
+    "sample_failure": "数据缺陷属于无效试验，不记为策略无效"
+  },
+  "retention_on_failure": "保留最小归纳结论和独立可复用的审核/测量实现与必要反例测试；失败参数扫描代码和重复大数据输出不进入repo；原始快照只读保存哈希引用",
+  "production_policy": "保持当前生产直到实质改善证据和运行验收完备；线下研究不要求发布。生效代码修复按项目要求测试、policy audit、发布验证、合入main及push。",
+  "status": "research_complete_engineering_verification_in_progress",
+  "results": {
+    "learning_label_maturity": "confirmed_defect_repaired",
+    "target_horizon_fallback": "confirmed_defect_repaired",
+    "price_scaling": "systematic_adjustment_hypothesis_not_supported",
+    "challenger_count": 1,
+    "promoted_challenger_count": 0,
+    "remaining_gaps": "corporate actions, PIT eligibility completeness, unconditional learned evaluation, genuine independent outcomes"
+  }
+}

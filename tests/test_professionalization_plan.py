@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -610,7 +610,9 @@ class ProfessionalizationPlanTests(unittest.TestCase):
             session.commit()
 
         with session_scope(self.database_url) as session:
-            summary = build_data_quality_summary(session, symbols=["600519.SH"])
+            summary = build_data_quality_summary(
+                session, symbols=["600519.SH"], as_of=datetime(2026, 4, 30, tzinfo=UTC)
+            )
 
         item = summary["items"][0]
         self.assertEqual(item["financial_freshness"]["status"], "pass")

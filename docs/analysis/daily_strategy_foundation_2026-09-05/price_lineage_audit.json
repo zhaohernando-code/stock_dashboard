@@ -1,0 +1,60 @@
+{
+  "ashare_dashboard.db": {
+    "overlap": 1420535,
+    "mismatch_gt_half_cent": 3,
+    "max_price_error": 0.04999999999999716,
+    "non_null_adj_factor": 273
+  },
+  "ashare_hot.db": {
+    "overlap": 551092,
+    "mismatch_gt_half_cent": 3,
+    "max_price_error": 0.04999999999999716,
+    "non_null_adj_factor": 273
+  },
+  "mismatch_samples": [
+    {
+      "database": "ashare_dashboard.db",
+      "symbol": "600519.SH",
+      "day": "2026-04-24",
+      "raw_close": 1458.51,
+      "snapshot_close": 1458.49
+    },
+    {
+      "database": "ashare_dashboard.db",
+      "symbol": "601318.SH",
+      "day": "2026-04-24",
+      "raw_close": 57.76,
+      "snapshot_close": 57.78
+    },
+    {
+      "database": "ashare_dashboard.db",
+      "symbol": "002594.SZ",
+      "day": "2026-04-24",
+      "raw_close": 99.41,
+      "snapshot_close": 99.46
+    },
+    {
+      "database": "ashare_hot.db",
+      "symbol": "600519.SH",
+      "day": "2026-04-24",
+      "raw_close": 1458.51,
+      "snapshot_close": 1458.49
+    },
+    {
+      "database": "ashare_hot.db",
+      "symbol": "601318.SH",
+      "day": "2026-04-24",
+      "raw_close": 57.76,
+      "snapshot_close": 57.78
+    },
+    {
+      "database": "ashare_hot.db",
+      "symbol": "002594.SZ",
+      "day": "2026-04-24",
+      "raw_close": 99.41,
+      "snapshot_close": 99.46
+    }
+  ],
+  "conclusion": "冻结快照与归档数据库1420535个重叠价格仅3项有半分钱以上差异，未发现系统复权缩放；该验证不是公司行为现金核算验证。",
+  "read_only": true
+}

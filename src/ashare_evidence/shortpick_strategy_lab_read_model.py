@@ -332,7 +332,7 @@ def _main_config_readout() -> dict[str, Any]:
         "role": "primary_forward_observation",
         "selection_rank": 3,
         "gate_status": "active",
-        "reason": "现行前向运行基线，用于衡量稳定盈利前沿和上游元信号对照；不再作为新增规则的优化候选。",
+        "reason": "现行前向运行基线，用于衡量核心候选（盈利待验证）和上游元信号对照；不再作为新增规则的优化候选。",
         "summary": {
             "total_return": 3.119168564999999,
             "annualized_return": 0.6577172359709627,
@@ -614,7 +614,7 @@ def _quality_replacement_rebalance_control_readout() -> dict[str, Any]:
     return {
         "config_id": QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
         "model_spec_id": NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
-        "label": "稳定盈利前沿：仅 Rank4 可买替补 + 25% 暴露再平衡",
+        "label": "核心候选（盈利待验证）：仅 Rank4 可买替补 + 25% 暴露再平衡",
         "role": "quality_replacement_rebalance_candidate",
         "selection_rank": 1,
         "gate_status": "stable_profit_frontier",
@@ -1207,7 +1207,7 @@ def _paper_display(
                 {
                     "label": "对照组",
                     "value": (
-                        "只保留稳定盈利前沿（仅 Rank4 可买替补）与 25% 暴露再平衡，以及上游元信号独立对照；"
+                        "只保留核心候选（盈利待验证）（仅 Rank4 可买替补）与 25% 暴露再平衡，以及上游元信号独立对照；"
                         "外部信息对照在同一表格和曲线中展示，但不能新增买入；Rank5 不再生成真实买单。"
                     ),
                 },

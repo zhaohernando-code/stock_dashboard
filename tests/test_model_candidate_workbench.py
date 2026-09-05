@@ -287,7 +287,7 @@ class ModelCandidateWorkbenchTests(unittest.TestCase):
         label_path = Path(self.temp_dir.name) / "stream-linear-labels.json"
         rows = []
         labels = []
-        for as_of_date in ["2026-01-01", "2026-01-02", "2026-01-03"]:
+        for as_of_date in ["2026-01-01", "2026-02-02", "2026-03-05"]:
             for index, symbol in enumerate(["A", "B", "C"], start=1):
                 universe_id = f"{as_of_date}-{symbol}"
                 rows.append(
@@ -312,6 +312,7 @@ class ModelCandidateWorkbenchTests(unittest.TestCase):
                         "as_of_date": as_of_date,
                         "symbol": symbol,
                         "label_status": "ready",
+                        "exit_dates_by_horizon": {"20": {"2026-01-01": "2026-01-30", "2026-02-02": "2026-03-03", "2026-03-05": "2026-04-03"}[as_of_date]},
                         "labels": {
                             "net_excess_return_10d_after_costs": 0.01 * index,
                             "excess_return_5d": 0.005 * index,
@@ -365,7 +366,7 @@ class ModelCandidateWorkbenchTests(unittest.TestCase):
         label_path = Path(self.temp_dir.name) / "stream-tail-labels.json"
         rows = []
         labels = []
-        for as_of_date in ["2026-01-01", "2026-01-02", "2026-01-03"]:
+        for as_of_date in ["2026-01-01", "2026-02-02", "2026-03-05"]:
             for index, symbol in enumerate(["A", "B", "C"], start=1):
                 universe_id = f"{as_of_date}-{symbol}"
                 rows.append(
@@ -394,6 +395,7 @@ class ModelCandidateWorkbenchTests(unittest.TestCase):
                         "as_of_date": as_of_date,
                         "symbol": symbol,
                         "label_status": "ready",
+                        "exit_dates_by_horizon": {"20": {"2026-01-01": "2026-01-30", "2026-02-02": "2026-03-03", "2026-03-05": "2026-04-03"}[as_of_date]},
                         "labels": {
                             "net_excess_return_10d_after_costs": 0.01 * index,
                             "excess_return_5d": 0.005 * index,
@@ -3133,6 +3135,9 @@ class ModelCandidateWorkbenchTests(unittest.TestCase):
 
     def test_deterministic_concentrated_specs_do_not_fit_unused_linear_models(self) -> None:
         feature_matrix, label_matrix, registry = self._build_inputs()
+        for row in label_matrix["rows"]:
+            row["labels"]["excess_return_20d"] = 0.02
+
 
         run = build_walk_forward_model_candidate_run_artifact(
             validation_run_id="unit-run",
