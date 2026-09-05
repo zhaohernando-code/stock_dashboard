@@ -2,7 +2,7 @@
   "project": "stock_dashboard",
   "status": "in_progress",
   "owner": "hernando_zhao",
-  "updated_at": "2026-09-05T09:08:32.481120+00:00",
+  "updated_at": "2026-09-05T09:50:01.546273+00:00",
   "current_phase": {
     "id": "phase-5",
     "label": "V3 true-forward validation and external-context evidence collection"
@@ -64,23 +64,22 @@
   },
   "research_governance": {
     "mandatory_preread": "docs/research/STRATEGY_RESEARCH_LEDGER.md",
-    "exploration_guide_version": "2026-09-05.1",
+    "exploration_guide_version": "2026-09-05.2",
     "preregistration_required": true,
     "failed_implementation_retention": "conclusion_only_git_history_for_detail",
     "retention_contract": "docs/contracts/STRATEGY_RESEARCH_RETENTION_CONTRACT_2026-08-17.json",
-    "current_conclusion": "weekly_reserved_orders_challenger_rejected_label_maturity_defect_repaired",
-    "current_open_direction": "foundation_coverage_and_new_independent_evidence_before_further_candidates"
+    "current_conclusion": "recent_rank1_selection_advantage_reversed_generic_entry_exit_fixes_not_qualified",
+    "current_open_direction": "same_full_pool_market_regime_and_ranking_ablation_then_new_forward_outcomes"
   },
   "next_step": {
-    "scope": "close_measurement_gaps_then_preregister_incremental_information_candidate_with_new_outcomes",
+    "scope": "prioritize_stock_selection_market_regime_and_ranking",
     "required": [
-      "historical_corporate_actions_and_cash_entitlements",
-      "verified_original_public_event_time_and_version",
-      "true_forward_local_available_time",
-      "same_condition_net_account_controls",
-      "independent_outcome_window_before_promotion"
+      "frozen_complete_eligible_candidate_pool_per_signal_day",
+      "same_pool_existing_defensive_vs_opportunity_ranking_controls",
+      "observable_daily_inputs_and_next_session_execution",
+      "new_independent_outcomes_before_promotion"
     ],
-    "forbidden": "old_window_parameter_search_or_stable_profit_claim_from_reused_price_replay"
+    "forbidden": "generic_entry_exit_parameter_scan_or_dividend_fee_research_displacing_selection"
   },
   "source_authority": {
     "current_status": "PROJECT_STATUS.json",
@@ -117,5 +116,13 @@
     ],
     "research_contract": "docs/contracts/DAILY_STRATEGY_FOUNDATION_RESEARCH_2026-09-05.json",
     "historical_eligibility_exception": "one frozen buy:605499.SH signal2024-12-05 raw_price221_exceeds200; historical_status_PIT_unverified"
+  },
+  "selection_entry_exit_diagnosis": {
+    "contract": "docs/contracts/SELECTION_ENTRY_EXIT_DIAGNOSIS_2026-09-05.json",
+    "status": "completed_no_production_policy_change",
+    "recent_complete_pool_mature20_dates": 9,
+    "recent_timely_frozen_complete_pool_mature20_dates": 0,
+    "priority": "selection_and_regime_ranking",
+    "production_publish_required": false
   }
 }

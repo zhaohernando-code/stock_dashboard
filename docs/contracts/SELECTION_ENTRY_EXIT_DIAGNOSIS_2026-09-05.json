@@ -1,0 +1,40 @@
+{
+  "exploration_guide_version": "2026-09-05.2",
+  "user_authorization": "明确要求按照选股、买入和卖出时间点研究，费用与分红不再主导；沿用独立worktree和自主研究授权",
+  "prior_direction_overlap": [
+    "旧量价学习及V3持有/退出优化",
+    "2026-09-05周频对照失败",
+    "已有纸面亏损归因"
+  ],
+  "material_novelty": "同一信号、固定股池和统一未来日历的选股/进场/退出三轴拆解，匹配对照与持仓路径；不复跑旧阈值扫描，不声称新增独立数据或新alpha",
+  "hypothesis_and_action_space": {
+    "selection": "原排名1、2-3、4-5、6-10、11-20分别测5/10/20/30交易日收益及同日配对差；主对比rank1对6-20、top3对6-20。若可取得事前完整可买池，仅另加等权市场机会对照。",
+    "entry": "固定原信号和20交易日计划退出，次日开盘、次日收盘、第三交易日开盘比较；延迟时段保持现金，不根据未来低点择时。",
+    "exit": "固定次日开盘买入和20日计划退出；唯一日线对照：持有至少5日后，当日收盘低于此前5交易日最低收盘，次交易日开盘退出，否则到期收盘退出。只定位能否减少回吐，不优化窗口或组合。",
+    "path": "实际核心每笔按收盘路径分解持续未盈利、曾盈利后回吐、期末仍盈利；事后最高点仅潜在空间，绝非可实现收益。",
+    "costs": "主结论先看价格毛收益与配对差，固定买20bp卖25bp作为净收益验收；不进行成本研究或分红补数。"
+  },
+  "pit_baseline_and_kill_gate": {
+    "sources": "冻结history snapshot及纸面lots/market/candidate sources，先存哈希；如读取额外日线，单独冻结只读源及覆盖",
+    "eligibility": "仅普通主板和信号日未复权价<=200；历史ST/退市/存活完整性不能证实则明确限制；不据未来表现筛股",
+    "calendar": "统一沪深300交易日索引；持有h日=入场日索引+h的收盘；缺失bar或停牌/一字日单列，配对分析共用可评价集合，报告缺失率",
+    "samples": "全部旧历史为机制诊断，近期按capture time单列，成熟度严格按未来出口<=数据截止；不把重叠持有看成独立交易，30日时间块区间仅诊断不矫正历史多次研究",
+    "criteria": "优势需跨半年方向一致、近期不反转且同条件超过对照；无新独立结果则不能晋级。单一规则对照失败即停止，不换参数。",
+    "kill": "源或日期不一致先停止相关数值结论；不以事后峰值或未来最优进场解释可实现alpha"
+  },
+  "retention_on_failure": "总纲留一条机制结论；原始冻结输入和可复现诊断保存在用户研究附件，失败交易规则不进入生产模块。",
+  "status": "completed_mechanism_diagnosis_no_strategy_promoted",
+  "created_at": "2026-09-05T09:27:06.640849+00:00",
+  "results": {
+    "primary_priority": "selection_regime_and_ranking_before_generic_entry_exit_changes",
+    "recent_20d_rank1_mean": -0.024159941916902714,
+    "recent_20d_rank1_minus_control": -0.023477079287138988,
+    "recent_20d_complete_pool_dates": 9,
+    "timely_frozen_20d_complete_pool_dates": 0,
+    "generic_delayed_entry": "recent_actual10 positive; reused_history unstable; no activation",
+    "generic_exit": "all6 historical halfyears worse; rejected",
+    "production_policy_changed": false,
+    "post_primary_followup": "Read existing defensive benchmark-zero branch and group paper lots by benchmark sign. Observational follow-up, not causal ablation or independent validation.",
+    "evidence_delivery": "local selection-entry-exit report and frozen inputs; no strategy implementation retained in production"
+  }
+}
