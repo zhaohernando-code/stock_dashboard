@@ -34,13 +34,14 @@
   },
   "retention_on_failure": "保留最小归纳结论和独立可复用的审核/测量实现与必要反例测试；失败参数扫描代码和重复大数据输出不进入repo；原始快照只读保存哈希引用",
   "production_policy": "保持当前生产直到实质改善证据和运行验收完备；线下研究不要求发布。生效代码修复按项目要求测试、policy audit、发布验证、合入main及push。",
-  "status": "research_complete_engineering_verification_in_progress",
+  "status": "bounded_research_and_engineering_complete_no_strategy_promoted",
   "results": {
     "learning_label_maturity": "confirmed_defect_repaired",
     "target_horizon_fallback": "confirmed_defect_repaired",
     "price_scaling": "systematic_adjustment_hypothesis_not_supported",
     "challenger_count": 1,
     "promoted_challenger_count": 0,
-    "remaining_gaps": "corporate actions, PIT eligibility completeness, unconditional learned evaluation, genuine independent outcomes"
+    "remaining_gaps": "corporate actions, PIT eligibility completeness, unconditional learned evaluation, genuine independent outcomes",
+    "engineering": "1317 fast tests and policy audit passed; code502ad4d merged/pushed main and runtime published; canonical V3 browser verified"
   }
 }

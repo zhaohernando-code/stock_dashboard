@@ -2,7 +2,7 @@
   "project": "stock_dashboard",
   "status": "in_progress",
   "owner": "hernando_zhao",
-  "updated_at": "2026-09-05T08:44:21.438437+00:00",
+  "updated_at": "2026-09-05T09:08:32.481120+00:00",
   "current_phase": {
     "id": "phase-5",
     "label": "V3 true-forward validation and external-context evidence collection"
@@ -12,7 +12,7 @@
     "external_production_weight": 0.0,
     "research_cleanup_changed_v3_signal": false,
     "research_cleanup_changed_live_orders": false,
-    "runtime_publish_required_by_this_change": true
+    "runtime_publish_required_by_this_change": false
   },
   "personal_eligibility": {
     "stage": "before_scoring_and_ranking",
@@ -92,9 +92,15 @@
     "retired_detail": "git_history_only"
   },
   "last_verified_baseline": {
-    "default_fast_suite": "1316_passed_181_deselected_6_subtests_passed",
+    "default_fast_suite": "1317_passed_181_deselected_6_subtests_passed",
     "policy_audit": "pass",
-    "origin_main_at_source_commit": false
+    "origin_main_at_source_commit": true,
+    "source_code_commit": "502ad4df6559f46c56de718156dd3bbe29162ecc",
+    "runtime_release_id": "20260905T090023Z-502ad4df6559",
+    "runtime_release_status": "passed",
+    "deploy_checks": "44_passed_0_failed",
+    "canonical_v3_browser": "history_and_paper_verified_profitability_pending_labels_original_ledger_preserved",
+    "closeout_docs": "documentation_only_after_verified_code_release_no_republish_required"
   },
   "foundation_audit": {
     "training_label_admission": "actual_complete_cohort_outcome_before_first_test_day",
