@@ -2,7 +2,7 @@
   "project": "stock_dashboard",
   "status": "in_progress",
   "owner": "hernando_zhao",
-  "updated_at": "2026-09-05T09:50:01.546273+00:00",
+  "updated_at": "2026-09-05T10:30:55.508716+00:00",
   "current_phase": {
     "id": "phase-5",
     "label": "V3 true-forward validation and external-context evidence collection"
@@ -64,22 +64,22 @@
   },
   "research_governance": {
     "mandatory_preread": "docs/research/STRATEGY_RESEARCH_LEDGER.md",
-    "exploration_guide_version": "2026-09-05.2",
+    "exploration_guide_version": "2026-09-05.3",
     "preregistration_required": true,
     "failed_implementation_retention": "conclusion_only_git_history_for_detail",
     "retention_contract": "docs/contracts/STRATEGY_RESEARCH_RETENTION_CONTRACT_2026-08-17.json",
-    "current_conclusion": "recent_rank1_selection_advantage_reversed_generic_entry_exit_fixes_not_qualified",
-    "current_open_direction": "same_full_pool_market_regime_and_ranking_ablation_then_new_forward_outcomes"
+    "current_conclusion": "defensive_branch_historically_useful_both_rankers_recently_lag_same_pool_no_switch_promoted",
+    "current_open_direction": "new_frozen_full_pool_outcomes_before_any_regime_switch_or_ranking_reopen"
   },
   "next_step": {
-    "scope": "prioritize_stock_selection_market_regime_and_ranking",
+    "scope": "observe_new_full_pool_paired_scores_and_test_incremental_opportunity_information",
     "required": [
-      "frozen_complete_eligible_candidate_pool_per_signal_day",
-      "same_pool_existing_defensive_vs_opportunity_ranking_controls",
-      "observable_daily_inputs_and_next_session_execution",
-      "new_independent_outcomes_before_promotion"
+      "mature_outcomes_for_frozen_full_pool_packet_20260905",
+      "separate_same_pool_selection_alpha_from_market_opportunity",
+      "new_information_or_independent_period_before_reopening_failed_fixed_offensive_switch",
+      "daily_observable_inputs_next_session_execution"
     ],
-    "forbidden": "generic_entry_exit_parameter_scan_or_dividend_fee_research_displacing_selection"
+    "forbidden": "same_window_regime_threshold_or_scoring_weight_search_or_treating_reconstruction_as_independent_OOS"
   },
   "source_authority": {
     "current_status": "PROJECT_STATUS.json",
@@ -124,5 +124,16 @@
     "recent_timely_frozen_complete_pool_mature20_dates": 0,
     "priority": "selection_and_regime_ranking",
     "production_publish_required": false
+  },
+  "regime_score_ablation": {
+    "status": "completed_no_strategy_promoted",
+    "guide_at_registration": "2026-09-05.2",
+    "original_saved_scores_exactly_matched": 10111,
+    "historical_top3_paired20_dates": 467,
+    "recent_reconstructed_top3_paired20_dates": 27,
+    "production_policy_changed": false,
+    "runtime_publish_required": false,
+    "forward_packet_sha256": "e4b7bd5aa232902f266d6ff1abca6c88e703621b16d106113d30656a68c4d693",
+    "mature_forward_outcomes": 0
   }
 }
