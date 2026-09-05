@@ -64,6 +64,7 @@ ARCHIVED_STRATEGY_CONFIG_IDS = (
     CONDITIONAL_AGGRESSIVE_CONTROL_ID,
     CONTROL_CONFIG_ID,
 )
+QUALITY_CONTROL_DISPLAY_LABEL = "核心候选（盈利待验证）：仅 Rank4 可买替补 + 25% 暴露再平衡"
 PAPER_STATE_ENV = "ASHARE_SHORTPICK_STRATEGY_LAB_PAPER_STATE"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -177,6 +178,31 @@ def build_shortpick_strategy_lab_historical_replay_read_model() -> dict[str, Any
     }
 
 
+def _paper_state_display_labels(state: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Project current naming without rewriting the immutable paper ledger."""
+    if state is None:
+        return None
+
+    def display_row(row: Any) -> Any:
+        if isinstance(row, dict) and row.get("strategy_id") == QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID:
+            return {**row, "strategy_label": QUALITY_CONTROL_DISPLAY_LABEL}
+        return row
+
+    accounts = state.get("account_states")
+    return {
+        **state,
+        "records": [display_row(row) for row in state.get("records") or []]
+        if isinstance(state.get("records"), list) else [],
+        "planned_orders": [display_row(row) for row in state.get("planned_orders") or []]
+        if isinstance(state.get("planned_orders"), list) else [],
+        "account_states": {
+            key: ({**value, "strategy_label": QUALITY_CONTROL_DISPLAY_LABEL}
+                  if key == QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID and isinstance(value, dict) else value)
+            for key, value in (accounts.items() if isinstance(accounts, dict) else [])
+        },
+    }
+
+
 def build_shortpick_strategy_lab_paper_tracking_read_model(
     *,
     include_records: bool = True,
@@ -191,7 +217,7 @@ def build_shortpick_strategy_lab_paper_tracking_read_model(
 
     today = today or date.today()
     state_path = _resolve_paper_state_path(paper_state_path)
-    state = _read_paper_state(state_path)
+    state = _paper_state_display_labels(_read_paper_state(state_path))
     records = _records_from_state(state) if include_records else []
     planned_orders = _planned_orders_from_state(state)
     raw_account_states = (
@@ -614,7 +640,7 @@ def _quality_replacement_rebalance_control_readout() -> dict[str, Any]:
     return {
         "config_id": QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID,
         "model_spec_id": NEGATIVE_MONTH_RANK_ADJUSTED_MODEL_SPEC_ID,
-        "label": "核心候选（盈利待验证）：仅 Rank4 可买替补 + 25% 暴露再平衡",
+        "label": QUALITY_CONTROL_DISPLAY_LABEL,
         "role": "quality_replacement_rebalance_candidate",
         "selection_rank": 1,
         "gate_status": "stable_profit_frontier",

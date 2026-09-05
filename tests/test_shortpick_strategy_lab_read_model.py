@@ -1301,3 +1301,25 @@ def test_quality_candidate_plans_board_lot_market_exposure_trim(tmp_path) -> Non
     assert orders[0]["exposure_before"] > 0.25
     assert orders[0]["exposure_after"] <= 0.25
     assert diagnostics[0]["reason"] == "market_value_concentration_rebalance"
+
+
+def test_old_persisted_profit_claim_is_relabelled_without_mutating_ledger():
+    from ashare_evidence.shortpick_strategy_lab_read_model import (
+        QUALITY_CONTROL_DISPLAY_LABEL,
+        _paper_state_display_labels,
+    )
+
+    old_label = "稳定盈利前沿：仅 Rank4 可买替补 + 25% 暴露再平衡"
+    row = {"strategy_id": QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID, "strategy_label": old_label,
+           "shares": 2400, "estimated_notional_cny": 11712.0}
+    state = {"records": [dict(row)], "planned_orders": [dict(row)],
+             "account_states": {QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID: {"strategy_label": old_label,
+                                "cash_cny": 72188.327, "latest_nav_cny": 198436.327}}}
+    original = deepcopy(state)
+    projected = _paper_state_display_labels(state)
+    assert state == original
+    assert projected["records"][0]["strategy_label"] == QUALITY_CONTROL_DISPLAY_LABEL
+    assert projected["planned_orders"][0]["shares"] == 2400
+    assert projected["planned_orders"][0]["estimated_notional_cny"] == 11712.0
+    assert projected["account_states"][QUALITY_REPLACEMENT_REBALANCE_CONTROL_ID]["latest_nav_cny"] == 198436.327
+    assert "稳定盈利前沿" not in json.dumps(projected, ensure_ascii=False)
